@@ -1,23 +1,45 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { X, PanelRightClose, PanelRightOpen, Maximize2, Minimize2, Download, Pencil, Eye, FileText } from "lucide-react";
 import { AppIcon } from "@/components/AppIcon";
+import { FileArtifactViewer } from "@/components/FileArtifactViewer";
+import { VersionHistoryDropdown } from "@/components/VersionHistoryDropdown";
 import { useTheme } from "@/contexts/ThemeContext";
+
+// Recover the thread id + session-relative path from a workspace file URL.
+function parseFileRef(fileUrl?: string): { threadId: string; path: string } | null {
+  if (!fileUrl) return null;
+  try {
+    const u = new URL(fileUrl, window.location.origin);
+    const threadId = u.searchParams.get("thread_id");
+    const path = u.searchParams.get("path");
+    return threadId && path ? { threadId, path } : null;
+  } catch {
+    return null;
+  }
+}
 
 const API_BASE = "/api/backend";
 
 export type AppPanelItem = {
   /** Unique ID for this panel instance */
   id: string;
+  /** "app" = MCP App iframe (default). "file" = a generated file artifact
+   *  (code_interpreter HTML/PDF/xlsx/docx/…) rendered by FileArtifactViewer. */
+  kind?: "app" | "file";
   /** HTTP URL to the MCP App HTML */
   httpUrl: string;
-  /** Tool name */
+  /** Tool name (also the dedup key + tab label) */
   toolName: string;
   /** Arguments the LLM passed to the tool */
   toolArguments: Record<string, unknown>;
   /** Timestamp for ordering */
   timestamp: number;
+  /** File artifacts (kind === "file"): served workspace URL + display name + mime. */
+  fileUrl?: string;
+  fileName?: string;
+  mime?: string;
 };
 
 type JsonRpcRequest = {
@@ -36,6 +58,8 @@ type Props = {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onResult?: (toolName: string, result: unknown) => void;
+  /** Remount a file item's viewer (e.g. after a version restore). */
+  onReloadFile?: (id: string) => void;
 };
 
 export function AppPanel({
@@ -47,10 +71,17 @@ export function AppPanel({
   isCollapsed,
   onToggleCollapse,
   onResult,
+  onReloadFile,
 }: Props) {
   // ── Per-item iframe refs (never cleared — iframes stay mounted) ──
   const iframeRefs = useRef<Map<string, HTMLIFrameElement | null>>(new Map());
   const { theme } = useTheme();
+  // Full-screen the panel (for reading/editing file artifacts).
+  const [maximized, setMaximized] = useState(false);
+  // Office files open read-only; the header Edit toggle flips the active file
+  // into ONLYOFFICE edit mode. Reset whenever the active file (or its version)
+  // changes so a reload always lands back in read-only.
+  const [editingFile, setEditingFile] = useState(false);
 
   // ── Per-item ready / error / flash state ────────────────────────
   const [readyMap, setReadyMap] = useState<Record<string, boolean>>({});
@@ -69,6 +100,13 @@ export function AppPanel({
   const timerStartedRef = useRef<Set<string>>(new Set());
 
   const activeItem = items.find((i) => i.id === activeItemId) ?? items[items.length - 1];
+
+  // Only Office docs are editable in-panel (ONLYOFFICE). Reset edit mode when
+  // the active file or its version changes.
+  const activeIsOffice = /\.(docx?|xlsx?|pptx?)$/i.test(activeItem?.fileName ?? "");
+  useEffect(() => {
+    setEditingFile(false);
+  }, [activeItem?.id, activeItem?.fileUrl]);
 
   // ── Low-level send helper ────────────────────────────────────────
   const sendToItem = useCallback((itemId: string, message: unknown) => {
@@ -239,6 +277,8 @@ export function AppPanel({
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     for (const item of items) {
+      // File artifacts don't do the MCP ready handshake — skip the timeout.
+      if (item.kind === "file") continue;
       if (timerStartedRef.current.has(item.id) || readyMap[item.id]) continue;
       timerStartedRef.current.add(item.id);
       const t = setTimeout(() => {
@@ -458,29 +498,98 @@ export function AppPanel({
         aria-label="Dismiss app panel"
       />
 
-      <div className="fixed inset-0 z-40 flex flex-col bg-background xl:static xl:z-auto xl:h-full xl:w-120 xl:shrink-0 xl:border-l xl:border-(--border) 2xl:w-140">
+      <div
+        className={
+          maximized
+            ? "fixed inset-0 z-50 flex flex-col bg-background"
+            : `fixed inset-0 z-40 flex flex-col bg-background xl:static xl:z-auto xl:h-full xl:shrink-0 xl:border-l xl:border-(--border) ${
+                // File artifacts (reports, spreadsheets, docs) need room to be
+                // readable — give them >50% of the viewport; MCP apps stay compact.
+                activeItem?.kind === "file" ? "xl:w-[58vw]" : "xl:w-120 2xl:w-140"
+              }`
+        }
+      >
         {/* Panel Header */}
         <div className="flex items-center justify-between border-b border-(--border) bg-background px-3 py-3 xl:px-3 xl:py-2">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Apps</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded border border-(--border) bg-background font-medium" style={{ color: "var(--accent)" }}>
-              {items.length}
-            </span>
+            {activeItem?.kind === "file" ? (
+              <span className="truncate text-sm font-medium text-foreground">
+                {activeItem.fileName ?? activeItem.toolName}
+              </span>
+            ) : (
+              <>
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Apps</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded border border-(--border) bg-background font-medium" style={{ color: "var(--accent)" }}>
+                  {items.length}
+                </span>
+              </>
+            )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
+            {activeItem?.kind === "file" && activeIsOffice && (
+              <button
+                onClick={() => setEditingFile((v) => !v)}
+                className={`flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium transition-colors ${
+                  editingFile
+                    ? "text-(--accent) hover:bg-(--card-hover)"
+                    : "text-(--muted) hover:bg-(--card-hover) hover:text-foreground"
+                }`}
+                title={editingFile ? "Switch to read-only" : "Edit this file"}
+              >
+                {editingFile ? (
+                  <>
+                    <Eye className="h-3.5 w-3.5" /> View
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </>
+                )}
+              </button>
+            )}
+            {activeItem?.kind === "file" &&
+              (() => {
+                const fref = parseFileRef(activeItem.fileUrl);
+                return fref ? (
+                  <VersionHistoryDropdown
+                    threadId={fref.threadId}
+                    path={fref.path}
+                    onRestored={() => onReloadFile?.(activeItem.id)}
+                  />
+                ) : null;
+              })()}
+            {activeItem?.kind === "file" && activeItem.fileUrl && (
+              <a
+                href={activeItem.fileUrl}
+                download={activeItem.fileName ?? true}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground"
+                title="Download"
+              >
+                <Download className="h-4 w-4" />
+              </a>
+            )}
             <button
-              onClick={onToggleCollapse}
-              className="p-1.5 rounded hover:bg-background text-(--muted) hover:text-foreground transition-colors cursor-pointer"
-              title="Collapse panel"
+              onClick={() => setMaximized((v) => !v)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"
+              title={maximized ? "Exit full screen" : "Full screen"}
             >
-              <PanelRightClose className="w-4 h-4" />
+              {maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
+            {!maximized && (
+              <button
+                onClick={onToggleCollapse}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"
+                title="Collapse panel"
+              >
+                <PanelRightClose className="h-4 w-4" />
+              </button>
+            )}
             <button
-              onClick={onClosePanel}
-              className="p-1.5 rounded hover:bg-background text-(--muted) hover:text-foreground transition-colors cursor-pointer"
-              title="Close all apps"
+              onClick={() => { setMaximized(false); onClosePanel(); }}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"
+              title="Close"
             >
-              <X className="w-4 h-4" />
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -512,10 +621,16 @@ export function AppPanel({
                 style={item.id === activeItem?.id ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
               >
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-background text-foreground">
-                  <AppIcon toolName={item.toolName} className="h-3.5 w-3.5 text-foreground" />
+                  {item.kind === "file" ? (
+                    <FileText className="h-3.5 w-3.5 text-foreground" />
+                  ) : (
+                    <AppIcon toolName={item.toolName} className="h-3.5 w-3.5 text-foreground" />
+                  )}
                 </span>
                 <span className="max-w-30 truncate">
-                  {item.toolName.replace(/_/g, " ")}
+                  {item.kind === "file"
+                    ? (item.fileName ?? item.toolName)
+                    : item.toolName.replace(/_/g, " ")}
                 </span>
                 {/* Close uses <span role="button"> — no nested <button> */}
                 <span
@@ -538,8 +653,8 @@ export function AppPanel({
           </div>
         )}
 
-        {/* Active app name bar */}
-        {activeItem && (
+        {/* Active app name bar (MCP apps only — files show their name in the header) */}
+        {activeItem && activeItem.kind !== "file" && (
           <div className="flex items-center px-3 py-1.5 bg-background border-b border-(--border) text-xs shrink-0">
             <span
               className="inline-block w-2 h-2 rounded-full mr-1.5"
@@ -566,6 +681,27 @@ export function AppPanel({
             const itemUrl = item.httpUrl.startsWith("http")
               ? item.httpUrl
               : `${API_BASE}${item.httpUrl}`;
+
+            // File artifacts (code_interpreter output) render via
+            // FileArtifactViewer instead of the MCP-app iframe. Keyed on
+            // id+fileUrl so a changed server file (e.g. the agent rewrote it)
+            // remounts the viewer and re-fetches.
+            if (item.kind === "file") {
+              return (
+                <div
+                  key={`${item.id}:${item.fileUrl ?? ""}`}
+                  className="absolute inset-0 flex flex-col"
+                  style={{ visibility: isActive ? "visible" : "hidden" }}
+                >
+                  <FileArtifactViewer
+                    fileUrl={item.fileUrl ?? ""}
+                    fileName={item.fileName ?? item.toolName}
+                    mime={item.mime}
+                    editMode={isActive && editingFile}
+                  />
+                </div>
+              );
+            }
 
             return (
               <div

@@ -40,29 +40,6 @@ export type Thread = {
   message_count: number;
 };
 
-export type BackendMessage = {
-  id: string;
-  type: "user_message" | "assistant_message" | "tool_result" | "tool_call" | string; // discriminated union with string fallback
-  name?: string;
-  input?: string;
-  output?: string | string[];
-  created_at: string;
-  generation?: {
-    finish_reason?: string;
-    tool_calls?: Array<{
-      // Persisted ToolUseBlock uses call_id/tool_name; some paths use id/name.
-      id?: string;
-      call_id?: string;
-      name?: string;
-      tool_name?: string;
-      arguments: string | Record<string, unknown>;
-      _meta?: ToolCallMeta;
-    }>;
-  };
-  metadata?: Record<string, unknown>;
-  is_error?: boolean;
-};
-
 export type UploadedFile = {
   id: string;
   thread_id?: string;
@@ -70,4 +47,12 @@ export type UploadedFile = {
   mime: string;
   size: number;
   url?: string;
+  /**
+   * Where the attachment came from. "tool" = auto-captured by a tool run
+   * (e.g. code_interpreter plots) — rendered collapsed so exploratory
+   * re-runs don't flood the chat; the model surfaces the ones worth showing
+   * via `sandbox:` markdown refs instead. Undefined = a user upload or a
+   * model-curated attachment, rendered normally.
+   */
+  origin?: "tool";
 };

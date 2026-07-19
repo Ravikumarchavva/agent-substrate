@@ -1,12 +1,15 @@
 # Frontend Dockerfile for Next.js
-FROM node:20-alpine AS base
+# Node 22 (LTS): pnpm 11.x imports node:sqlite, which requires Node >=22.13.
+FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Pin pnpm to the version that generated pnpm-lock.yaml (not @latest, which
+# drifts and can require a newer Node than the base image ships).
+RUN corepack enable && corepack prepare pnpm@11.5.2 --activate
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -24,7 +27,9 @@ FROM base AS builder
 WORKDIR /app
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Pin pnpm to the version that generated pnpm-lock.yaml (not @latest, which
+# drifts and can require a newer Node than the base image ships).
+RUN corepack enable && corepack prepare pnpm@11.5.2 --activate
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

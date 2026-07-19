@@ -20,7 +20,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { RaviMark } from "@/components/RaviMark";
+import { SubstrateMark } from "@/components/SubstrateMark";
 import { RateLimitBar } from "@/components/RateLimitBar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -90,7 +90,7 @@ function QuickActionButton({ icon: Icon, label, onClick, isActive = false, badge
     <button
       type="button"
       onClick={onClick}
-      className={`ravi-press flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-3 text-left text-sm transition-colors ${isActive ? "bg-foreground text-background" : "text-foreground hover:bg-(--card-hover)"}`}
+      className={`substrate-press flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-3 text-left text-sm transition-colors ${isActive ? "bg-foreground text-background" : "text-foreground hover:bg-(--card-hover)"}`}
     >
       <div className="flex items-center gap-3 min-w-0">
         <Icon className="h-4 w-4 shrink-0" />
@@ -238,7 +238,7 @@ export function Sidebar({
       >
         <div className="flex items-center justify-between px-2 py-2">
           <div className="flex items-center gap-3 ml-2">
-            <RaviMark className="h-6 w-6 text-foreground" />
+            <SubstrateMark className="h-6 w-6 text-foreground" />
           </div>
           {onCollapse && (
             <button
@@ -377,7 +377,7 @@ export function Sidebar({
 
         <div className="mt-auto px-2 pb-3 pt-2" ref={menuRef}>
           {menuOpen && (
-            <div className="ravi-pop-in mb-1.5 overflow-hidden rounded-2xl bg-(--card)" style={{ boxShadow: "var(--shadow-lg)", transformOrigin: "bottom center" }}>
+            <div className="substrate-pop-in mb-1.5 overflow-hidden rounded-2xl bg-(--card)" style={{ boxShadow: "var(--shadow-lg)", transformOrigin: "bottom center" }}>
               {isAuthenticated && user && (
                 <div className="border-b border-(--border) px-2.5 py-3">
                   <div className="truncate text-sm font-medium">{user.name ?? "User"}</div>
@@ -487,7 +487,7 @@ export function Sidebar({
       </aside>
 
       {threadPendingDelete && (
-        <div className="ravi-fade-in fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="substrate-fade-in fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
             className="absolute inset-0 cursor-pointer bg-black/50 backdrop-blur-sm"
@@ -495,7 +495,7 @@ export function Sidebar({
             aria-label="Close delete confirmation"
           />
           <div
-            className="ravi-scale-in relative w-full max-w-md rounded-2xl bg-(--card) p-6"
+            className="substrate-scale-in relative w-full max-w-md rounded-2xl bg-(--card) p-6"
             role="dialog"
             aria-modal="true"
             aria-label="Delete chat thread"
@@ -651,7 +651,7 @@ function ThreadItem({
         </button>
 
         {showMenu && (
-          <div className="ravi-scale-in absolute right-0 top-full z-[100] mt-1 w-32 overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-2xl" style={{ transformOrigin: "top right" }}>
+          <div className="substrate-scale-in absolute right-0 top-full z-[100] mt-1 w-32 overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-2xl" style={{ transformOrigin: "top right" }}>
             <button
               type="button"
               onClick={(e) => {

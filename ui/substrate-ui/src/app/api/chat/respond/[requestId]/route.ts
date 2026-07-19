@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { engineAuthHeader } from "@/lib/engine-auth";
+import { authHeaderFromCookieHeader } from "@/lib/engine-auth";
 
 export async function POST(
   req: NextRequest,
@@ -10,8 +10,11 @@ export async function POST(
 
   try {
     const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const headers: HeadersInit = { "Content-Type": "application/json", ...engineAuthHeader() };
     const cookieHeader = req.headers.get("cookie");
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+      ...authHeaderFromCookieHeader(cookieHeader),
+    };
     if (cookieHeader) (headers as Record<string, string>)["cookie"] = cookieHeader;
 
     const upstream = await fetch(

@@ -2,7 +2,7 @@
  * Generate src/protocol/protocol.gen.ts from the engine's exported JSON Schema.
  *
  * Run the engine export first (writes protocol.schema.json):
- *   cd ../ravi-engine && make protocol-schema
+ *   cd ../agent-substrate && make protocol-schema
  * Then:
  *   pnpm gen:protocol
  *
@@ -19,14 +19,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const SCHEMA_PATH = resolve(
   __dirname,
-  "../../ravi-engine/src/ravi/serving/protocol/protocol.schema.json"
+  "../../agent-substrate/src/substrate/serving/protocol/protocol.schema.json"
 );
 const OUT_PATH = resolve(__dirname, "../src/protocol/protocol.gen.ts");
 
 if (!existsSync(SCHEMA_PATH)) {
   console.error(
     `\nSchema not found at ${SCHEMA_PATH}\n` +
-      `Run the engine export first:  cd ../ravi-engine && make protocol-schema\n`
+      `Run the engine export first:  cd ../agent-substrate && make protocol-schema\n`
   );
   process.exit(1);
 }
@@ -34,12 +34,12 @@ if (!existsSync(SCHEMA_PATH)) {
 const schema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8"));
 const version = schema["x-protocol-version"] ?? "unknown";
 
-const ts = await compile(schema, "RaviProtocol", {
+const ts = await compile(schema, "SubstrateProtocol", {
   bannerComment:
     `/* eslint-disable */\n` +
     `/**\n * GENERATED — DO NOT EDIT.\n` +
-    ` * Source: ravi-engine/src/ravi/serving/protocol/ (Pydantic).\n` +
-    ` * Regenerate: cd ../ravi-engine && make protocol-schema && cd ../ravi-ui && pnpm gen:protocol\n` +
+    ` * Source: agent-substrate/src/substrate/serving/protocol/ (Pydantic).\n` +
+    ` * Regenerate: cd ../agent-substrate && make protocol-schema && cd ../substrate-ui && pnpm gen:protocol\n` +
     ` * Protocol version: ${version}\n */\n`,
   additionalProperties: false,
   declareExternallyReferenced: true,

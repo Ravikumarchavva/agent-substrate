@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCredentialManager } from "@/lib/credentials";
 import { prisma } from "@/lib/prisma";
+import { userAuthHeader, type UserSession } from "@/lib/engine-auth";
 
 const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://localhost:8000";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -20,20 +21,25 @@ interface WorkspaceTokenPayload {
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    // ── 1. Try backend first ──────────────────────────────────────────────────
-    const backendRes = await fetch(`${BACKEND_URL}/auth/workspace/token`, {
-      headers: { Accept: "application/json" },
-    });
-    if (backendRes.ok) {
-      const data = (await backendRes.json()) as { access_token: string };
-      return NextResponse.json({ access_token: data.access_token, connected: true });
+    const session = await resolveUserSession(req);
+
+    // ── 1. Try backend first (only meaningful with a real session — the
+    // route is scoped by caller identity) ──────────────────────────────────
+    if (session) {
+      const backendRes = await fetch(`${BACKEND_URL}/auth/workspace/token`, {
+        headers: { Accept: "application/json", ...userAuthHeader(session) },
+      });
+      if (backendRes.ok) {
+        const data = (await backendRes.json()) as { access_token: string };
+        return NextResponse.json({ access_token: data.access_token, connected: true });
+      }
     }
 
     // ── 2. Backend has no token — try Prisma DB ───────────────────────────────
-    const userId = await resolveUserId(req);
-    if (!userId) {
+    if (!session) {
       return NextResponse.json({ connected: false }, { status: 401 });
     }
+    const userId = session.id;
 
     const cm = getCredentialManager();
     const cred = await prisma.userCredential.findUnique({
@@ -68,7 +74,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    const mirrored = await mirrorWorkspaceTokenToBackend({
+    const mirrored = await mirrorWorkspaceTokenToBackend(session, {
       access_token: accessToken,
       refresh_token: refreshToken,
       expires_in: expiresIn,
@@ -91,19 +97,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
+  const session = await resolveUserSession(req);
+
   // Clear from backend (Redis)
-  try {
-    await fetch(`${BACKEND_URL}/auth/workspace/token`, { method: "DELETE" });
-  } catch (err) {
-    console.error("[Workspace Token] Failed to clear backend token:", err);
+  if (session) {
+    try {
+      await fetch(`${BACKEND_URL}/auth/workspace/token`, {
+        method: "DELETE",
+        headers: userAuthHeader(session),
+      });
+    } catch (err) {
+      console.error("[Workspace Token] Failed to clear backend token:", err);
+    }
   }
 
   // Also clear from Prisma so the fallback path doesn't re-connect
   try {
-    const userId = await resolveUserId(req);
-    if (userId) {
+    if (session) {
       await prisma.userCredential.deleteMany({
-        where: { userId, provider: "google_workspace" },
+        where: { userId: session.id, provider: "google_workspace" },
       });
     }
   } catch (err) {
@@ -113,17 +125,36 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json({ success: true });
 }
 
-async function resolveUserId(req: NextRequest): Promise<string | null> {
+// Prefers the httpOnly `user_session` cookie (set at Google OAuth login,
+// see api/auth/google/callback) since it carries the Prisma user id
+// directly. Falls back to resolving via the readable `google_user` cookie
+// for any request that predates that cookie being set (e.g. a session from
+// before this was added).
+async function resolveUserSession(req: NextRequest): Promise<UserSession | null> {
+  const sessionCookie = req.cookies.get("user_session")?.value;
+  if (sessionCookie) {
+    try {
+      const parsed = JSON.parse(sessionCookie) as UserSession;
+      if (parsed.id && parsed.email) return parsed;
+    } catch (err) {
+      console.error("[Workspace Token] Failed to parse user_session cookie:", err);
+    }
+  }
+
   try {
     const userCookie = req.cookies.get("google_user")?.value;
     if (!userCookie) return null;
-    const userData = JSON.parse(decodeURIComponent(userCookie)) as { email?: string };
+    const userData = JSON.parse(decodeURIComponent(userCookie)) as {
+      email?: string;
+      isAdmin?: boolean;
+    };
     if (!userData.email) return null;
     const dbUser = await prisma.user.findUnique({
       where: { email: userData.email },
       select: { id: true },
     });
-    return dbUser?.id ?? null;
+    if (!dbUser) return null;
+    return { id: dbUser.id, email: userData.email, isAdmin: userData.isAdmin };
   } catch (err) {
     console.error("[Workspace Token] Failed to resolve user:", err);
     return null;
@@ -153,12 +184,13 @@ async function refreshGoogleToken(
 }
 
 async function mirrorWorkspaceTokenToBackend(
+  session: UserSession,
   payload: WorkspaceTokenPayload,
 ): Promise<boolean> {
   try {
     const res = await fetch(`${BACKEND_URL}/auth/workspace/set-token`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...userAuthHeader(session) },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {

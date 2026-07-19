@@ -14,7 +14,7 @@ export const TTS_VOICE_STORAGE_KEY = "tts_voice";
 export const TTS_PLAYBACK_RATE_STORAGE_KEY = "tts_playback_rate";
 export const REALTIME_MODEL_STORAGE_KEY = "realtime_model";
 export const REALTIME_VOICE_STORAGE_KEY = "realtime_voice";
-export const MODEL_PREFERENCES_UPDATED_EVENT = "ravi:model-preferences-updated";
+export const MODEL_PREFERENCES_UPDATED_EVENT = "substrate:model-preferences-updated";
 
 export const DEFAULT_CHAT_MODEL = "google/gemini-3.1-flash-lite";
 export const DEFAULT_STT_MODEL = "openai/gpt-4o-mini-transcribe";

@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { MessageBubble } from "@/components/MessageBubble";
-import { RaviMark } from "@/components/RaviMark";
+import { SubstrateMark } from "@/components/SubstrateMark";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
 import { MaxIterationsCard } from "@/components/MaxIterationsCard";
@@ -21,6 +21,7 @@ import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
 import { Message, UploadedFile, TaskList } from "@/types";
 import { api } from "@/lib/api";
 import { ChatConflictError } from "@/lib/api/chat";
+import { getMessageAttachments, buildWorkspaceFileUrl } from "@/lib/api/_client";
 import {
   getPreferredChatModel,
   CHAT_MODEL_OPTIONS,
@@ -41,9 +42,9 @@ import { useFileAttachments, type AttachedFilePreview } from "@/hooks/useFileAtt
 import { useAppPanel } from "@/hooks/useAppPanel";
 import { useTaskBoards } from "@/hooks/useTaskBoards";
 import { PlanCardStack } from "@/components/PlanCard";
-import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, type LucideIcon } from "lucide-react";
+import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, type LucideIcon } from "lucide-react";
 
-const LAST_ACTIVE_THREAD_STORAGE_KEY = "ravi:last-active-thread";
+const LAST_ACTIVE_THREAD_STORAGE_KEY = "substrate:last-active-thread";
 
 function readLastActiveThreadId(): string | null {
   if (typeof window === "undefined") {
@@ -64,6 +65,15 @@ function writeLastActiveThreadId(threadId: string | null): void {
   }
 
   window.sessionStorage.removeItem(LAST_ACTIVE_THREAD_STORAGE_KEY);
+}
+
+// The first non-image `sandbox:` file ref in an assistant message — the "main
+// artifact" to auto-open in the side panel (Claude-style). Images use the
+// `![](sandbox:)` form and render inline, so the leading-`!` case is excluded.
+const ARTIFACT_LINK_RE = /(^|[^!])\[[^\]]*\]\(sandbox:([^)\s]+)\)/;
+function firstArtifactRef(content: string): string | null {
+  const m = content.match(ARTIFACT_LINK_RE);
+  return m ? m[2].replace(/^\.?\//, "") : null;
 }
 
 function ChatPageContent() {
@@ -255,9 +265,36 @@ function ChatPageContent() {
   const { threads, setThreads, loadThreads, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
     autoSelectFirstThread: !settingsPanelOpen,
   });
-  const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleRemoveFile } = useFileAttachments(currentThreadId, selectThread, setThreads);
+  const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleRemoveFile } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
   const { boards, upsertBoard, clearBoards, settleBoards } = useTaskBoards(currentThreadId);
+  // Tracks which assistant messages we've already auto-opened an artifact for.
+  const autoOpenedArtifactRef = useRef<Set<string>>(new Set());
+
+  // Open a code-interpreter file (a `sandbox:` ref) in the side-panel artifact
+  // viewer. The cache-bust (`&v=`) makes the panel remount the viewer when the
+  // same file is re-opened after a change.
+  const openArtifact = useCallback(
+    (path: string, fileName?: string, threadOverride?: string | null) => {
+      const tid = threadOverride ?? currentThreadId;
+      if (!tid) return;
+      const cleanPath = path.replace(/^sandbox:/, "").replace(/^\.?\//, "");
+      const name = fileName || cleanPath.split("/").pop() || cleanPath;
+      openInPanel({
+        id: `file-${cleanPath}`,
+        kind: "file",
+        httpUrl: "",
+        toolName: "code_interpreter",
+        toolArguments: {},
+        timestamp: Date.now(),
+        fileUrl: `${buildWorkspaceFileUrl(tid, cleanPath)}&v=${Date.now()}`,
+        fileName: name,
+      });
+      // Collapse the left thread rail so the artifact gets more room.
+      setDesktopSidebarOpen(false);
+    },
+    [currentThreadId, openInPanel],
+  );
   // agentId → id of the user message whose turn created the plan, so the inline
   // PlanCard renders in flow beneath that turn.
   const [boardAnchors, setBoardAnchors] = useState<Map<string, string>>(new Map());
@@ -815,6 +852,8 @@ function ChatPageContent() {
               toolName: data.tool_name,
               arguments: data.args,
               context: data.context,
+              risk: data.risk,
+              summary: data.summary,
             },
           },
         ]);
@@ -915,6 +954,14 @@ function ChatPageContent() {
         // Skip rendering if an MCP App UI is already showing this tool's output
         if (data.has_app && !isError) return;
 
+        // Media the tool produced (e.g. code_interpreter charts) — tagged
+        // origin:"tool" so MessageBubble renders them collapsed (exploratory
+        // re-runs shouldn't flood the chat). The model surfaces the ones
+        // worth showing full-size via `sandbox:` markdown refs instead.
+        const toolAttachments = getMessageAttachments({
+          attachments: data.attachments,
+        })?.map((a) => ({ ...a, origin: "tool" as const }));
+
         // Attach result to whichever assistant message owns this tool call.
         // Search all assistant messages (not just the current one) so results
         // from earlier steps still land in the correct bubble.
@@ -933,7 +980,13 @@ function ChatPageContent() {
               if (!matchById && !matchByName) return tc;
               return { ...tc, result: resultText, isError };
             });
-            return { ...msg, toolCalls: updatedCalls };
+            return {
+              ...msg,
+              toolCalls: updatedCalls,
+              attachments: toolAttachments
+                ? [...(msg.attachments ?? []), ...toolAttachments]
+                : msg.attachments,
+            };
           })
         );
         return;
@@ -1115,6 +1168,34 @@ function ChatPageContent() {
             promoteThreadUrl(threadId);
             msgState.isNewThread = false;
           }
+          // Auto-open the main file artifact (Claude-style), once per message.
+          const runThreadId = threadId;
+          setMessages((m) => {
+            for (let i = m.length - 1; i >= 0; i--) {
+              if (m[i].role !== "assistant") continue;
+              const msg = m[i];
+              if (!autoOpenedArtifactRef.current.has(msg.id)) {
+                const ref = firstArtifactRef(msg.content || "");
+                if (ref) {
+                  autoOpenedArtifactRef.current.add(msg.id);
+                  setTimeout(() => openArtifact(ref, undefined, runThreadId), 0);
+                }
+              }
+              break;
+            }
+            return m;
+          });
+          // Reconcile already-open file panels: the agent may have rewritten a
+          // file that's open in the editor. Bump the cache-bust so the viewer
+          // remounts (AppPanel keys on `id:fileUrl`) and re-fetches config —
+          // ONLYOFFICE then reloads on the new checksum-derived document.key.
+          setPanelItems((items) =>
+            items.map((it) =>
+              it.kind === "file" && it.fileUrl?.includes(`thread_id=${runThreadId}`)
+                ? { ...it, fileUrl: it.fileUrl.replace(/&v=\d+/, `&v=${Date.now()}`) }
+                : it,
+            ),
+          );
         }
         return;
       }
@@ -1248,23 +1329,23 @@ function ChatPageContent() {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background px-4">
         <div className="text-center space-y-6 max-w-sm w-full">
-          <div className="ravi-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-xl font-bold bg-foreground text-background">
+          <div className="substrate-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-xl font-bold bg-foreground text-background">
             R
           </div>
-          <div className="ravi-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
+          <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
             <h1 className="text-2xl font-semibold">Welcome</h1>
             <p className="text-sm mt-2 text-(--muted)">
               Sign in to start chatting with your AI assistant
             </p>
           </div>
           {authNotice && (
-            <div className="ravi-fade-up rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" style={{ '--stagger': 2 } as React.CSSProperties}>
+            <div className="substrate-fade-up rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" style={{ '--stagger': 2 } as React.CSSProperties}>
               {authNotice}
             </div>
           )}
           <button
             onClick={loginWithGoogle}
-            className="ravi-fade-up ravi-press flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-2xl text-sm font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
+            className="substrate-fade-up substrate-press flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-2xl text-sm font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
             style={{ '--stagger': 3, boxShadow: "var(--shadow-md)" } as React.CSSProperties}
           >
             {/* Google G */}
@@ -1276,7 +1357,7 @@ function ChatPageContent() {
             </svg>
             Continue with Google
           </button>
-          <p className="ravi-fade-up text-xs text-(--muted)" style={{ '--stagger': 4 } as React.CSSProperties}>
+          <p className="substrate-fade-up text-xs text-(--muted)" style={{ '--stagger': 4 } as React.CSSProperties}>
             Your conversations are private and secure
           </p>
         </div>
@@ -1322,15 +1403,29 @@ function ChatPageContent() {
             >
               <SidebarToggleIcon direction="open" className="h-4 w-4" />
             </button>
+            {/* Collapsed desktop rail — keeps expand + new chat reachable
+                without opening the sidebar (Claude-style). */}
             {!desktopSidebarOpen && (
-              <button
-                type="button"
-                onClick={() => setDesktopSidebarOpen(true)}
-                className="btn-icon pointer-events-auto hidden h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-(--border) bg-(--card)/95 text-(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:flex"
-                aria-label="Open sidebar"
-              >
-                <SidebarToggleIcon direction="open" className="h-4 w-4" />
-              </button>
+              <div className="pointer-events-auto hidden flex-col gap-2 rounded-xl border border-(--border) bg-(--card)/95 p-1 shadow-sm backdrop-blur-sm lg:flex">
+                <button
+                  type="button"
+                  onClick={() => setDesktopSidebarOpen(true)}
+                  className="btn-icon flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-(--muted) transition-colors hover:bg-background hover:text-foreground"
+                  aria-label="Open sidebar"
+                  title="Open sidebar"
+                >
+                  <SidebarToggleIcon direction="open" className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNewChat}
+                  className="btn-icon flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-(--muted) transition-colors hover:bg-background hover:text-foreground"
+                  aria-label="New chat"
+                  title="New chat"
+                >
+                  <SquarePen className="h-4 w-4" />
+                </button>
+              </div>
             )}
           </div>
 
@@ -1354,8 +1449,8 @@ function ChatPageContent() {
                   <div className="flex h-full items-center justify-center">
                     <div className="w-full max-w-2xl px-4 text-center sm:px-6">
                       <div className="space-y-5">
-                        <RaviMark className="ravi-fade-up mx-auto h-10 w-10 text-foreground sm:h-12 sm:w-12" />
-                        <div className="ravi-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
+                        <SubstrateMark className="substrate-fade-up mx-auto h-10 w-10 text-foreground sm:h-12 sm:w-12" />
+                        <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
                           <h2 className="text-xl font-semibold sm:text-2xl">How can I help you today?</h2>
                           <p className="mt-2 text-sm text-(--muted)">
                             Ask me anything and I&apos;ll keep the working area clean and focused.
@@ -1373,7 +1468,7 @@ function ChatPageContent() {
                             <button
                               key={idx}
                               onClick={() => doSendMessage(text)}
-                              className="ravi-pop-in ravi-press flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-(--muted) transition-colors hover:bg-(--card-hover) sm:p-3.5"
+                              className="substrate-pop-in substrate-press flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-(--muted) transition-colors hover:bg-(--card-hover) sm:p-3.5"
                               style={{ '--stagger': idx + 2, background: "var(--card)", boxShadow: "var(--shadow-sm)" } as React.CSSProperties}
                             >
                               <Icon className="h-4 w-4 shrink-0 text-foreground" />
@@ -1403,7 +1498,7 @@ function ChatPageContent() {
                                       });
                                       setPanelCollapsed(false);
                                     }}
-                                    className="ravi-press flex items-center gap-1.5 rounded-xl border border-(--border) bg-(--card) px-3 py-1.5 text-xs text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"
+                                    className="substrate-press flex items-center gap-1.5 rounded-xl border border-(--border) bg-(--card) px-3 py-1.5 text-xs text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"
                                     style={{ boxShadow: "var(--shadow-sm)" }}
                                   >
                                     <span className="h-1.5 w-1.5 rounded-full bg-(--accent) opacity-60" />
@@ -1429,6 +1524,8 @@ function ChatPageContent() {
                                 toolName={m.metadata.toolName as string}
                                 arguments={m.metadata.arguments as Record<string, unknown>}
                                 context={m.metadata.context as string | undefined}
+                                risk={m.metadata.risk as string | undefined}
+                                summary={m.metadata.summary as string | undefined}
                                 onRespond={respondToHITL}
                               />
                             </div>
@@ -1496,6 +1593,8 @@ function ChatPageContent() {
                               toolCalls={m.toolCalls}
                               isToolExecuting={m.isToolExecuting}
                               isContinuation={m.isContinuation}
+                              threadId={currentThreadId}
+                              onOpenArtifact={openArtifact}
                               onOpenInPanel={(tool) => {
                                 const args = typeof tool.arguments === "string"
                                   ? JSON.parse(tool.arguments)
@@ -1613,7 +1712,7 @@ function ChatPageContent() {
                             <button
                               type="button"
                               onClick={handleStop}
-                              className="btn-icon ravi-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-colors"
+                              className="btn-icon substrate-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-colors"
                               aria-label="Stop"
                             >
                               <StopCircle className="h-4 w-4" />
@@ -1622,7 +1721,7 @@ function ChatPageContent() {
                             <button
                               type="submit"
                               disabled={!input.trim()}
-                              className="btn-icon ravi-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-all disabled:cursor-not-allowed disabled:opacity-10"
+                              className="btn-icon substrate-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-all disabled:cursor-not-allowed disabled:opacity-10"
                               aria-label="Send"
                             >
                               <ArrowUp className="h-5 w-5" />
@@ -1672,6 +1771,20 @@ function ChatPageContent() {
             isCollapsed={panelCollapsed}
             onToggleCollapse={() => setPanelCollapsed((c) => !c)}
             onResult={handleMcpAppResult}
+            onReloadFile={(id) =>
+              setPanelItems((items) =>
+                items.map((it) =>
+                  it.id === id && it.fileUrl
+                    ? {
+                        ...it,
+                        fileUrl: it.fileUrl.includes("&v=")
+                          ? it.fileUrl.replace(/&v=\d+/, `&v=${Date.now()}`)
+                          : `${it.fileUrl}&v=${Date.now()}`,
+                      }
+                    : it,
+                ),
+              )
+            }
           />
         )}
 
@@ -1679,7 +1792,7 @@ function ChatPageContent() {
 
       {/* Mobile Sidebar Drawer */}
       {mobileSidebarOpen && (
-        <div className="ravi-fade-in fixed inset-0 z-40 lg:hidden">
+        <div className="substrate-fade-in fixed inset-0 z-40 lg:hidden">
           {/* Backdrop */}
           <button
             type="button"
@@ -1690,7 +1803,7 @@ function ChatPageContent() {
           />
           {/* Sidebar sheet — slides in from the left */}
           <div
-            className="ravi-slide-in-left relative flex h-full flex-col"
+            className="substrate-slide-in-left relative flex h-full flex-col"
             style={{ width: "min(360px, 88vw)" }}
           >
             <Sidebar

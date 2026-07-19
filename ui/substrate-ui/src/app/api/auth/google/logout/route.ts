@@ -15,6 +15,7 @@ export async function POST() {
   res.cookies.delete("google_access_token");
   res.cookies.delete("google_refresh_token");
   res.cookies.delete("google_user");
+  res.cookies.delete("user_session");
 
   return res;
 }

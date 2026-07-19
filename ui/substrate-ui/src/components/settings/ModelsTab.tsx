@@ -135,7 +135,7 @@ function GroupedSelect({
 
       {isOpen && (
         <div
-          className="ravi-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-(--border) p-1 shadow-xl"
+          className="substrate-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-(--border) p-1 shadow-xl"
           style={{ background: "var(--card)" }}
         >
           {groups.map((group) => (
@@ -206,7 +206,7 @@ function CustomSelect({
 
       {isOpen && (
         <div
-          className="ravi-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-(--border) p-1 shadow-xl"
+          className="substrate-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-(--border) p-1 shadow-xl"
           style={{ background: "var(--card)" }}
         >
           <div className="flex flex-col gap-0.5">

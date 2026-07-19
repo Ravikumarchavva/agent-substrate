@@ -82,7 +82,7 @@ export function assertProtocolVersion(engineVersion: string): void {
     console.error(
       `[protocol] version mismatch: engine sent ${engineVersion}, ` +
         `UI generated against ${PROTOCOL_VERSION}. ` +
-        `Run: cd ../ravi-engine && make protocol-schema && cd ../ravi-ui && pnpm gen:protocol`
+        `Run: cd ../agent-substrate && make protocol-schema && cd ../substrate-ui && pnpm gen:protocol`
     );
   }
 }

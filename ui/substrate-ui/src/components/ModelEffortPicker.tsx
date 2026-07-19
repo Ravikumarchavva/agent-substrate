@@ -111,7 +111,7 @@ export function ModelEffortPicker({
           >
             {/* Main panel — relative anchor; flyout floats off its side */}
             <div
-              className="ravi-scale-in relative flex w-60 flex-col gap-0.5 rounded-2xl p-1.5 shadow-2xl"
+              className="substrate-scale-in relative flex w-60 flex-col gap-0.5 rounded-2xl p-1.5 shadow-2xl"
               style={{ background: "var(--card)", border: "1px solid var(--border)", transformOrigin: "bottom right" }}
             >
               {primary.map((m) => (
@@ -153,7 +153,7 @@ export function ModelEffortPicker({
                 >
                   {flyout === "effort" ? (
                     <div
-                      className="ravi-scale-in flex w-64 flex-col rounded-2xl p-1.5 shadow-2xl"
+                      className="substrate-scale-in flex w-64 flex-col rounded-2xl p-1.5 shadow-2xl"
                       style={{ background: "var(--card)", border: "1px solid var(--border)", transformOrigin: layout === "right" ? "bottom left" : "bottom right" }}
                     >
                       <p className="px-3 pb-1.5 pt-2 text-[12px] leading-snug text-(--muted)">
@@ -196,7 +196,7 @@ export function ModelEffortPicker({
                     </div>
                   ) : (
                     <div
-                      className="ravi-scale-in flex w-56 flex-col gap-0.5 rounded-2xl p-1.5 shadow-2xl"
+                      className="substrate-scale-in flex w-56 flex-col gap-0.5 rounded-2xl p-1.5 shadow-2xl"
                       style={{ background: "var(--card)", border: "1px solid var(--border)", transformOrigin: layout === "right" ? "bottom left" : "bottom right" }}
                     >
                       {more.map((m) => (

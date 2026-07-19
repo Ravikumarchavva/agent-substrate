@@ -1,8 +1,8 @@
 /* eslint-disable */
 /**
  * GENERATED — DO NOT EDIT.
- * Source: ravi-engine/src/ravi/serving/protocol/ (Pydantic).
- * Regenerate: cd ../ravi-engine && make protocol-schema && cd ../ravi-ui && pnpm gen:protocol
+ * Source: agent-substrate/src/substrate/serving/protocol/ (Pydantic).
+ * Regenerate: cd ../agent-substrate && make protocol-schema && cd ../substrate-ui && pnpm gen:protocol
  * Protocol version: 1.0.0
  */
 
@@ -26,51 +26,63 @@ export type Output = string;
 export type Error = string | null;
 export type Agent1 = string;
 export type Depth1 = number;
+export type Id = string;
+export type ThreadId = string | null;
+export type Name = string;
+export type Mime = string;
+export type Size = number;
+export type Url = string | null;
+export type Attachments = Attachment[];
 export type Type5 = "agent.handoff";
 export type SourceAgent = string;
 export type TargetAgent = string;
 export type Reason = string;
 export type Depth2 = number;
-export type Type6 = "turn.completed";
+export type Type6 = "user.message";
 export type Text2 = string;
-export type Id = string;
-export type Name = string;
+export type Attachments1 = Attachment[];
+export type Type7 = "turn.completed";
+export type Text3 = string;
+export type Id1 = string;
+export type Name1 = string;
 export type Risk1 = string | null;
 export type ToolCalls = ToolCallSummary[];
-export type Id1 = string;
-export type ThreadId = string | null;
-export type Name1 = string;
-export type Mime = string;
-export type Size = number;
-export type Url = string | null;
-export type Attachments = Attachment[];
+export type Attachments2 = Attachment[];
 export type FinishReason = string;
-export type Type7 = "run.completed";
-export type Type8 = "run.failed";
+export type Type8 = "run.completed";
+export type Reason1 = string;
+export type Type9 = "run.failed";
 export type Error1 = string;
 export type Code = string | null;
-export type Type9 = "run.cancelled";
-export type Type10 = "approval.requested";
+export type Type10 = "run.cancelled";
+export type Type11 = "approval.requested";
 export type RequestId = string;
 export type ToolName2 = string;
-export type Type11 = "input.requested";
+export type Risk2 = string;
+export type Summary = string;
+export type Type12 = "input.requested";
 export type RequestId1 = string;
-export type Prompt = string;
-export type Options = string[] | null;
-export type Type12 = "ui.resource";
+export type Question = string;
+export type Context = string;
+export type Options = {
+  [k: string]: unknown;
+}[];
+export type AllowFreeform = boolean;
+export type RunId = string;
+export type Type13 = "ui.resource";
 export type CallId2 = string;
 export type Uri = string;
 export type MimeType = string;
 export type Render = string;
-export type Text3 = string;
+export type Text4 = string;
 export type Agent2 = string;
 export type Depth3 = number;
-export type Type13 = "error";
+export type Type14 = "error";
 export type Message = string;
 export type Code1 = string | null;
-export type Type14 = "ping";
+export type Type15 = "ping";
 
-export interface RaviProtocol {
+export interface SubstrateProtocol {
   WireEvent?:
     | HelloEvent
     | TextDeltaEvent
@@ -78,6 +90,7 @@ export interface RaviProtocol {
     | ToolCallEvent
     | ToolResultEvent
     | HandoffEvent
+    | UserMessageEvent
     | TurnCompletedEvent
     | RunCompletedEvent
     | RunFailedEvent
@@ -137,7 +150,22 @@ export interface ToolResultEvent {
   error?: Error;
   agent?: Agent1;
   depth?: Depth1;
-  structured_content?: Record<string, unknown>;
+  structured_content?: StructuredContent;
+  attachments?: Attachments;
+}
+export interface StructuredContent {
+  [k: string]: unknown;
+}
+/**
+ * A file produced during the turn (image, document, …).
+ */
+export interface Attachment {
+  id: Id;
+  thread_id?: ThreadId;
+  name: Name;
+  mime?: Mime;
+  size?: Size;
+  url?: Url;
 }
 /**
  * An orchestrator delegated to a subagent.
@@ -150,23 +178,36 @@ export interface HandoffEvent {
   depth?: Depth2;
 }
 /**
+ * The user's turn that started this run — logged once, at run start, so
+ * the EventLogProtocol is a self-complete record of the conversation (the single
+ * source of truth history is projected from; see ``serving/stream/
+ * history.py``). ``text`` is the display text the user actually typed/saw,
+ * which may differ from the LLM-input content a route augments with file
+ * context — see ``ReActAgent``/``OrchestratorAgent``'s ``_handle_message``.
+ */
+export interface UserMessageEvent {
+  type?: Type6;
+  text?: Text2;
+  attachments?: Attachments1;
+}
+/**
  * One assistant turn finished. If ``tool_calls`` is non-empty the agent will
  * continue after the tools run (another turn follows); otherwise this is the
  * final assistant message of the run.
  */
 export interface TurnCompletedEvent {
-  type?: Type6;
-  text?: Text2;
+  type?: Type7;
+  text?: Text3;
   tool_calls?: ToolCalls;
-  attachments?: Attachments;
+  attachments?: Attachments2;
   finish_reason?: FinishReason;
 }
 /**
  * A tool call attached to a completed assistant turn (for history rebuild).
  */
 export interface ToolCallSummary {
-  id?: Id;
-  name: Name;
+  id?: Id1;
+  name: Name1;
   args?: Args1;
   risk?: Risk1;
 }
@@ -174,28 +215,17 @@ export interface Args1 {
   [k: string]: unknown;
 }
 /**
- * A file produced during the turn (image, document, …).
- */
-export interface Attachment {
-  id: Id1;
-  thread_id?: ThreadId;
-  name: Name1;
-  mime?: Mime;
-  size?: Size;
-  url?: Url;
-}
-/**
- * The whole agent run finished successfully.
+ * The whole agent run finished.
  */
 export interface RunCompletedEvent {
-  type?: Type7;
-  reason?: string;
+  type?: Type8;
+  reason?: Reason1;
 }
 /**
  * The run terminated with an unrecoverable error.
  */
 export interface RunFailedEvent {
-  type?: Type8;
+  type?: Type9;
   error?: Error1;
   code?: Code;
 }
@@ -203,30 +233,33 @@ export interface RunFailedEvent {
  * The run was cancelled by the client.
  */
 export interface RunCancelledEvent {
-  type?: Type9;
+  type?: Type10;
 }
 /**
  * The agent is waiting for the human to approve a tool call.
  */
 export interface ApprovalRequestedEvent {
-  type?: Type10;
+  type?: Type11;
   request_id: RequestId;
   tool_name: ToolName2;
   args?: Args2;
+  risk?: Risk2;
+  summary?: Summary;
 }
 export interface Args2 {
   [k: string]: unknown;
 }
 /**
- * The agent is waiting for free-form human input.
+ * The agent is waiting for human input (ask_human tool).
  */
 export interface InputRequestedEvent {
-  type?: Type11;
+  type?: Type12;
   request_id: RequestId1;
-  question: string;
-  context?: string;
-  options?: Array<{ key: string; label: string; description?: string }>;
-  allow_freeform?: boolean;
+  question: Question;
+  context?: Context;
+  options?: Options;
+  allow_freeform?: AllowFreeform;
+  run_id?: RunId;
 }
 /**
  * A tool produced an interactive UI to render in a sandboxed iframe.
@@ -238,24 +271,24 @@ export interface InputRequestedEvent {
  * already-mounted iframe rather than remounting it.
  */
 export interface UIResourceEvent {
-  type?: Type12;
+  type?: Type13;
   call_id?: CallId2;
   uri: Uri;
   mime_type?: MimeType;
-  structured_content?: StructuredContent;
+  structured_content?: StructuredContent1;
   render?: Render;
-  text?: Text3;
+  text?: Text4;
   agent?: Agent2;
   depth?: Depth3;
 }
-export interface StructuredContent {
+export interface StructuredContent1 {
   [k: string]: unknown;
 }
 /**
  * A serving-level error (distinct from ``run.failed`` which is agent-level).
  */
 export interface ErrorEvent {
-  type?: Type13;
+  type?: Type14;
   message: Message;
   code?: Code1;
 }
@@ -263,7 +296,7 @@ export interface ErrorEvent {
  * Keep-alive heartbeat.
  */
 export interface PingEvent {
-  type?: Type14;
+  type?: Type15;
 }
 
 export const GENERATED_PROTOCOL_VERSION = "1.0.0";

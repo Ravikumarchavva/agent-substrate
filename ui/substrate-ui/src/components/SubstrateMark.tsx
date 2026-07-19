@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-export function RaviMark(props: SVGProps<SVGSVGElement>) {
+export function SubstrateMark(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       viewBox="0 0 24 24"

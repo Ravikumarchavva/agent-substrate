@@ -78,8 +78,8 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
     try {
       const data = await api.getScheduledTasks();
       setTasks(data);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to fetch scheduled tasks.");
+    } catch (err) {
+      setErrorMsg((err instanceof Error && err.message) || "Failed to fetch scheduled tasks.");
     } finally {
       setLoading(false);
     }
@@ -129,8 +129,8 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
         auto_disable: parsed.task_type === "monitor", // default monitor tasks to auto_disable if they are alert-oriented
       });
       setShowConfigModal(true);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to interpret text. Please adjust and retry.");
+    } catch (err) {
+      setErrorMsg((err instanceof Error && err.message) || "Failed to interpret text. Please adjust and retry.");
     } finally {
       setIsParsing(false);
     }
@@ -152,8 +152,8 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
       setShowConfigModal(false);
       setNaturalText("");
       fetchTasks();
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to create task.");
+    } catch (err) {
+      setErrorMsg((err instanceof Error && err.message) || "Failed to create task.");
     }
   };
 
@@ -213,8 +213,8 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
       setSelectedTask(updated);
       setIsEditingPrompt(false);
       fetchTasks();
-    } catch (err: any) {
-      alert(err.message || "Failed to save prompt override.");
+    } catch (err) {
+      alert((err instanceof Error && err.message) || "Failed to save prompt override.");
     }
   };
 
@@ -239,8 +239,8 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
         error_message: null,
       };
       setRuns((prev) => [virtualRun, ...prev]);
-    } catch (err: any) {
-      alert(err.message || "Failed to persist feedback.");
+    } catch (err) {
+      alert((err instanceof Error && err.message) || "Failed to persist feedback.");
     } finally {
       setIsSendingFeedback(false);
     }
@@ -603,7 +603,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                 <div className="flex flex-col items-center justify-center py-16 border border-dashed border-(--border) rounded-2xl bg-(--card)/10 text-(--muted) text-center max-w-md mx-auto">
                   <Clock className="w-8 h-8 text-(--muted-foreground) mb-3 animate-pulse" />
                   <p className="text-sm font-bold text-(--foreground)">No run history yet</p>
-                  <p className="text-xs text-(--muted) mt-1">Click "Run Now" to trigger the initial background process manually.</p>
+                  <p className="text-xs text-(--muted) mt-1">Click &quot;Run Now&quot; to trigger the initial background process manually.</p>
                 </div>
               ) : (
                 <div className="space-y-6 relative pl-4 border-l border-(--border)">

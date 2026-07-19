@@ -6,7 +6,9 @@ FROM base AS deps
 WORKDIR /app
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Pin pnpm (not @latest) — pnpm 11.15+ needs Node >=22, but this image is
+# Node 20; 11.5.2 also matches the version that generated pnpm-lock.yaml.
+RUN corepack enable && corepack prepare pnpm@11.5.2 --activate
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -24,7 +26,9 @@ FROM base AS builder
 WORKDIR /app
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Pin pnpm (not @latest) — pnpm 11.15+ needs Node >=22, but this image is
+# Node 20; 11.5.2 also matches the version that generated pnpm-lock.yaml.
+RUN corepack enable && corepack prepare pnpm@11.5.2 --activate
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

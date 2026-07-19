@@ -72,6 +72,7 @@ async def record_version(
     author: str,
     user_id: str | None = None,
     thread_id: str | None = None,
+    restored_from_seq: int | None = None,
 ) -> FileVersion:
     """Snapshot ``data`` as the next version of ``object_key`` and commit."""
     latest = await latest_version(db, object_key)
@@ -83,6 +84,7 @@ async def record_version(
         seq=seq,
         version_key=version_key,
         author=author,
+        restored_from_seq=restored_from_seq,
         checksum_sha256=sha256_hex(data),
         size_bytes=len(data),
         user_id=user_id,

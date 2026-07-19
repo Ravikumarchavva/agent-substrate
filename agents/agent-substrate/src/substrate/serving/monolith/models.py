@@ -260,7 +260,9 @@ class FileVersion(Base):
     object_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     version_key: Mapped[str] = mapped_column(String, nullable=False)
-    author: Mapped[str] = mapped_column(String, nullable=False)  # initial|user|agent
+    author: Mapped[str] = mapped_column(String, nullable=False)  # initial|user|agent|restore
+    # When author == "restore", the seq this snapshot was restored from.
+    restored_from_seq: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     checksum_sha256: Mapped[str] = mapped_column(String, nullable=False, default="")
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)

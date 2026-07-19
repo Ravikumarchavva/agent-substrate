@@ -246,6 +246,7 @@ class WorkspaceVersionEntry(BaseModel):
     checksum_sha256: str
     size_bytes: int
     created_at: float
+    restored_from_seq: int | None = None
 
 
 class WorkspaceVersionsResponse(BaseModel):
@@ -418,6 +419,7 @@ async def get_versions(
                 checksum_sha256=v.checksum_sha256,
                 size_bytes=v.size_bytes,
                 created_at=v.created_at.timestamp() if v.created_at else 0.0,
+                restored_from_seq=v.restored_from_seq,
             )
             for v in versions
         ],
@@ -433,8 +435,9 @@ async def restore_version(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> dict:
     """Restore a prior version: copy that snapshot's bytes to the canonical
-    file as a new ``"user"`` version (non-destructive — the current state was
-    already captured, so it stays in history too)."""
+    file as a new ``"restore"`` version tagged with the seq it came from
+    (non-destructive — the current state was already captured, so it stays in
+    history too)."""
     store = _require_workspace_store(ctx)
     key = _resolve_session_key(store, claims.sub, body.thread_id, body.path)
     version = (
@@ -471,9 +474,10 @@ async def restore_version(
         store,
         object_key=key,
         data=data,
-        author="user",
+        author="restore",
         user_id=claims.sub,
         thread_id=body.thread_id,
+        restored_from_seq=body.seq,
     )
     return {"checksum": new_version.checksum_sha256, "seq": new_version.seq}
 

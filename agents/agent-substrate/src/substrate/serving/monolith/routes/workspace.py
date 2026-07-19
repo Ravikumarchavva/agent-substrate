@@ -183,11 +183,55 @@ def _session_key(sub: str, thread_id: str, path: str) -> str:
     return f"users/{sub}/sessions/{thread_id}/{rel}"
 
 
+def _resolve_session_key(
+    store: WorkspaceFileStore, sub: str, thread_id: str, path: str
+) -> str:
+    """Resolve a session-relative ref to the real object key of an existing file.
+
+    The model sometimes references a generated file by bare name
+    (``report.pptx``) even though its code wrote it into a subdirectory of the
+    run cwd (``out/report.pptx``). Prefer the exact path; if it doesn't exist,
+    fall back to the most-recently-modified file with the same basename anywhere
+    under the session dir (excluding version snapshots). When nothing matches,
+    return the exact key so writes to a brand-new file still land where asked.
+    """
+    exact = _session_key(sub, thread_id, path)
+    if store.exists(exact):
+        return exact
+    base = path.rsplit("/", 1)[-1]
+    prefix = f"users/{sub}/sessions/{thread_id}/"
+    matches = [
+        (key, mtime)
+        for (key, _size, mtime) in store.list_user_files(sub)
+        if key.startswith(prefix)
+        and f"/{VERSIONS_DIR}/" not in key
+        and key.rsplit("/", 1)[-1] == base
+    ]
+    if matches:
+        matches.sort(key=lambda item: item[1], reverse=True)
+        return matches[0][0]
+    return exact
+
+
+def _session_rel(key: str, sub: str, thread_id: str) -> str:
+    """Inverse of `_session_key`: the session-relative path for a resolved key."""
+    prefix = f"users/{sub}/sessions/{thread_id}/"
+    return key[len(prefix) :] if key.startswith(prefix) else key
+
+
 # Only editable documents are worth versioning. Images embedded in an HTML
 # report are fetched through serve_file too, but the user never edits them —
 # skip them so we don't snapshot a version per chart.
 _NON_VERSIONABLE_EXTS = {
-    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif",
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+    "svg",
+    "bmp",
+    "ico",
+    "avif",
 }
 
 
@@ -221,7 +265,9 @@ async def serve_file(
     path: str = Query(
         ..., description="File path relative to the thread's session dir"
     ),
-    seq: int | None = Query(None, description="Serve a specific version (default: latest)"),
+    seq: int | None = Query(
+        None, description="Serve a specific version (default: latest)"
+    ),
     claims: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     ctx: ServerDependencies = Depends(get_ctx),
@@ -239,7 +285,7 @@ async def serve_file(
     history stays honest without a per-turn scan.
     """
     store = _require_workspace_store(ctx)
-    key = _session_key(claims.sub, thread_id, path)
+    key = _resolve_session_key(store, claims.sub, thread_id, path)
 
     if seq is not None:
         version = (
@@ -265,8 +311,12 @@ async def serve_file(
     if seq is None and _is_versionable(name):
         # Capture an out-of-band (agent) change / the initial state.
         await capture_bytes(
-            db, store, object_key=key, data=data,
-            user_id=claims.sub, thread_id=thread_id,
+            db,
+            store,
+            object_key=key,
+            data=data,
+            user_id=claims.sub,
+            thread_id=thread_id,
         )
 
     content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
@@ -303,15 +353,17 @@ async def save_file(
     is already versioned (via serve_file's lazy capture), so nothing is lost.
     """
     store = _require_workspace_store(ctx)
-    key = _session_key(claims.sub, thread_id, path)
+    key = _resolve_session_key(store, claims.sub, thread_id, path)
     body = await request.body()
     base = request.headers.get("X-Base-Checksum", "")
 
+    current: bytes = b""
+    current_checksum = ""
     try:
         current = await store.download(key)
         current_checksum = sha256_hex(current)
     except (WorkspacePathError, KeyError, FileNotFoundError):
-        current_checksum = ""
+        pass
 
     if base and current_checksum and base != current_checksum:
         latest = await latest_version(db, key)
@@ -327,13 +379,22 @@ async def save_file(
     # Ensure the pre-save state is versioned, then write + version the new one.
     if current_checksum:
         await capture_bytes(
-            db, store, object_key=key, data=current,
-            user_id=claims.sub, thread_id=thread_id,
+            db,
+            store,
+            object_key=key,
+            data=current,
+            user_id=claims.sub,
+            thread_id=thread_id,
         )
     await store.upload(key, body)
     version = await record_version(
-        db, store, object_key=key, data=body, author="user",
-        user_id=claims.sub, thread_id=thread_id,
+        db,
+        store,
+        object_key=key,
+        data=body,
+        author="user",
+        user_id=claims.sub,
+        thread_id=thread_id,
     )
     return {"checksum": version.checksum_sha256, "seq": version.seq}
 
@@ -344,8 +405,10 @@ async def get_versions(
     path: str = Query(...),
     claims: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceVersionsResponse:
-    key = _session_key(claims.sub, thread_id, path)
+    store = _require_workspace_store(ctx)
+    key = _resolve_session_key(store, claims.sub, thread_id, path)
     versions = await list_versions(db, key)
     return WorkspaceVersionsResponse(
         versions=[
@@ -373,7 +436,7 @@ async def restore_version(
     file as a new ``"user"`` version (non-destructive — the current state was
     already captured, so it stays in history too)."""
     store = _require_workspace_store(ctx)
-    key = _session_key(claims.sub, body.thread_id, body.path)
+    key = _resolve_session_key(store, claims.sub, body.thread_id, body.path)
     version = (
         await db.execute(
             select(FileVersion).where(
@@ -393,15 +456,24 @@ async def restore_version(
     try:
         current = await store.download(key)
         await capture_bytes(
-            db, store, object_key=key, data=current,
-            user_id=claims.sub, thread_id=body.thread_id,
+            db,
+            store,
+            object_key=key,
+            data=current,
+            user_id=claims.sub,
+            thread_id=body.thread_id,
         )
     except (WorkspacePathError, KeyError, FileNotFoundError):
         pass
     await store.upload(key, data)
     new_version = await record_version(
-        db, store, object_key=key, data=data, author="user",
-        user_id=claims.sub, thread_id=body.thread_id,
+        db,
+        store,
+        object_key=key,
+        data=data,
+        author="user",
+        user_id=claims.sub,
+        thread_id=body.thread_id,
     )
     return {"checksum": new_version.checksum_sha256, "seq": new_version.seq}
 

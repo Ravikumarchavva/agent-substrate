@@ -138,6 +138,19 @@ class SubstrateConfig(BaseSettings):
     DOCLING_AUTH_TOKEN: str = ""
     DOCLING_TIMEOUT_S: int = 90
 
+    # ── ONLYOFFICE Document Server (editable Office files in the panel) ───────
+    # Empty (default) = no editable Office support; the frontend falls back to
+    # the read-only SheetJS/Mammoth preview. Two URLs by design (like
+    # CODE_INTERPRETER_URL vs *_EXTERNAL): ONLYOFFICE_URL is the
+    # browser-reachable doc-server base (for the editor iframe/API); the doc
+    # server reaches OUR backend for document.url / callbackUrl at
+    # ONLYOFFICE_INTERNAL_CALLBACK_BASE (e.g. http://host.docker.internal:8000
+    # in dev). ONLYOFFICE_JWT_SECRET is the shared secret used to sign the
+    # editor config and validate ONLYOFFICE's save callbacks.
+    ONLYOFFICE_URL: str = ""
+    ONLYOFFICE_INTERNAL_CALLBACK_BASE: str = ""
+    ONLYOFFICE_JWT_SECRET: str = ""
+
     FRONTEND_URL: str = "http://127.0.0.1:3000"
 
     model_config = SettingsConfigDict(

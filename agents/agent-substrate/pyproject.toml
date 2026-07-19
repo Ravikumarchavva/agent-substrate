@@ -213,6 +213,7 @@ ignore_imports = [
     # files/workspace routes need WorkspaceFileStore/WorkspaceQuotaExceededError
     "substrate.serving.monolith.routes.files -> substrate.capabilities.storage.workspace",
     "substrate.serving.monolith.routes.workspace -> substrate.capabilities.storage.workspace",
+    "substrate.serving.monolith.routes.onlyoffice -> substrate.capabilities.storage.workspace",
     # chat_context inlines PDF attachment text using the existing PDFLoader
     # (pypdf/pdfplumber) rather than duplicating extraction logic
     "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.loaders.pdf_loader",

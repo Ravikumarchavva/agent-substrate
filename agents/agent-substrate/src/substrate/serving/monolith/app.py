@@ -46,6 +46,7 @@ from substrate.serving.monolith.routes.threads import router as threads_router
 from substrate.serving.monolith.routes.triggers import router as triggers_router
 from substrate.serving.monolith.routes.scheduled import router as scheduled_router
 from substrate.serving.monolith.routes.workspace import router as workspace_router
+from substrate.serving.monolith.routes.onlyoffice import router as onlyoffice_router
 from substrate.serving.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
@@ -270,6 +271,7 @@ def create_app() -> FastAPI:
     app.include_router(rag_router)
     app.include_router(files_router)
     app.include_router(workspace_router)
+    app.include_router(onlyoffice_router)
     app.include_router(rate_limit_router)
 
     @app.get("/health", tags=["infra"])

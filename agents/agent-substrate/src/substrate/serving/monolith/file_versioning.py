@@ -112,12 +112,22 @@ async def capture_bytes(
     latest = await latest_version(db, object_key)
     if latest is None:
         return await record_version(
-            db, store, object_key=object_key, data=data, author="initial",
-            user_id=user_id, thread_id=thread_id,
+            db,
+            store,
+            object_key=object_key,
+            data=data,
+            author="initial",
+            user_id=user_id,
+            thread_id=thread_id,
         )
     if latest.checksum_sha256 != checksum:
         return await record_version(
-            db, store, object_key=object_key, data=data, author=change_author,
-            user_id=user_id, thread_id=thread_id,
+            db,
+            store,
+            object_key=object_key,
+            data=data,
+            author=change_author,
+            user_id=user_id,
+            thread_id=thread_id,
         )
     return None

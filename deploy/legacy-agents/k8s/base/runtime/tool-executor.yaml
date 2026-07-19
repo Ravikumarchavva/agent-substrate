@@ -40,16 +40,12 @@ spec:
           env:
             - name: SERVICE_NAME
               value: tool-executor
-            - name: CODE_INTERPRETER_URL
-              value: http://code-interpreter.af-runtime.svc.cluster.local:8080
             - name: ARTIFACT_SERVICE_URL
               value: http://file-store.af-runtime.svc.cluster.local:8018
-            - name: CI_HEADLESS_SERVICE
-              value: code-interpreter-headless
-            - name: CI_NAMESPACE
+            - name: CI_SANDBOX_TEMPLATE
+              value: python-sandbox-template
+            - name: CI_SANDBOX_NAMESPACE
               value: af-runtime
-            - name: CI_REPLICAS
-              value: "2"
           resources:
             requests:
               cpu: 300m

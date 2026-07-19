@@ -86,6 +86,11 @@ class ToolResultEvent(BaseModel):
     agent: str = ""
     depth: int = 0
     structured_content: dict[str, Any] = Field(default_factory=dict)
+    # Media the tool produced (e.g. matplotlib charts from code_interpreter)
+    # — Attachment.url is a data: URI here, not a file-store link, since
+    # this is built by a pure log-entry→event mapping (protocol/from_log.py)
+    # with no I/O access to fetch/persist anything.
+    attachments: list[Attachment] = Field(default_factory=list)
 
 
 class HandoffEvent(BaseModel):
@@ -182,6 +187,12 @@ class ApprovalRequestedEvent(BaseModel):
     request_id: str
     tool_name: str
     args: dict[str, Any] = Field(default_factory=dict)
+    # Per-call risk tier ("safe"/"high"/"critical") and a plain-language
+    # summary of what the code does — populated for tools that classify risk
+    # dynamically (code_interpreter). The UI colour-codes by risk and shows
+    # the summary above the raw args. Empty for statically-risked tools.
+    risk: str = ""
+    summary: str = ""
 
 
 class InputRequestedEvent(BaseModel):

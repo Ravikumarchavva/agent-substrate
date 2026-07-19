@@ -23,6 +23,9 @@ from substrate.serving.monolith.models import Base
 # substrate_run_queue in infrastructure/runtime/scheduler.py.
 _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("threads", "tenant_id", "VARCHAR"),
+    ("file_metadata", "extracted_text", "TEXT"),
+    ("file_metadata", "extracted_at", "TIMESTAMPTZ"),
+    ("file_metadata", "extraction_engine", "VARCHAR"),
 ]
 
 

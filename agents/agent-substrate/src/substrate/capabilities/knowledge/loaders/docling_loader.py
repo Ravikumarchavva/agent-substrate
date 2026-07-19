@@ -228,8 +228,16 @@ class DoclingLoader(BaseDocumentLoader):
 
         base_meta["output_format"] = self.output_format
 
-        # 2. Convert via Docling
-        result = self._convert(source, path)
+        # 2. Convert via Docling. When source is raw bytes, Docling needs a
+        # real file extension to detect the format (PDF vs DOCX vs PPTX,
+        # etc.) — derive it from the source_label filename hint, defaulting
+        # to .pdf only when nothing better is available (preserves prior
+        # behavior for callers that never passed a filename).
+        if isinstance(source, bytes):
+            suffix = Path(source_label).suffix or ".pdf"
+        else:
+            suffix = ".pdf"
+        result = self._convert(source, path, suffix=suffix)
 
         # 3. Dispatch to the right renderer
         if self.output_format == "html":
@@ -257,13 +265,19 @@ class DoclingLoader(BaseDocumentLoader):
             }
         )
 
-    def _convert(self, source: Union[str, Path, bytes], path: Path | None) -> Any:
+    def _convert(
+        self,
+        source: Union[str, Path, bytes],
+        path: Path | None,
+        *,
+        suffix: str = ".pdf",
+    ) -> Any:
         converter = self._converter()
         if isinstance(source, bytes):
             import os
             import tempfile
 
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
                 tmp.write(source)
                 tmp_path = tmp.name
             try:

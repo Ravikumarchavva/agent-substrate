@@ -5,6 +5,7 @@ Split out of ``chat.py``.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Request
@@ -38,11 +39,35 @@ async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
     }
 
 
-async def _extract_pdf_text(data: bytes, name: str) -> str | None:
-    """Best-effort PDF text extraction (pypdf/pdfplumber) for inlining into
-    the prompt. Returns ``None`` on any failure or an empty/scanned PDF —
-    the caller falls back to metadata-only attachment handling in that case.
-    """
+# Both the K8s agent-sandbox pod and the local sandbox container mount the
+# workspace at this exact path (see sandbox_service.py's
+# workspace_mount_path default and deployment/docker/docker-compose.yml's
+# code-interpreter-sandbox volume). sandbox_runtime.py's /ci/run changes cwd
+# to WORKSPACE_DIR/sessions/{session_id} for every run — nothing currently
+# threads the real chat thread_id into that session_id for direct tool
+# calls (it defaults to "default"), so a workspace-relative path would
+# resolve against the wrong directory. An absolute path sidesteps that
+# entirely regardless of cwd.
+_SANDBOX_WORKSPACE_MOUNT_PATH = "/app/workspace"
+
+# Docling (when DOCLING_SERVICE_URL is configured) can read these too;
+# pypdf/pdfplumber cannot, so without docling they stay metadata-only.
+_DOCLING_ONLY_TYPES = {
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",  # .pptx
+}
+_EXTRACTABLE_TYPES = {"application/pdf", *_DOCLING_ONLY_TYPES}
+
+
+def _truncate(text: str) -> str:
+    max_chars = settings.ATTACHMENT_PDF_MAX_CHARS
+    if len(text) > max_chars:
+        return text[:max_chars] + f"\n\n[...truncated to {max_chars} characters]"
+    return text
+
+
+async def _extract_via_pypdf(data: bytes, name: str) -> str | None:
+    """pypdf/pdfplumber fallback — PDF only, no docling dependency."""
     from substrate.capabilities.knowledge.loaders.pdf_loader import PDFLoader
     from substrate.kernel.core.content import TextBlock
 
@@ -58,13 +83,49 @@ async def _extract_pdf_text(data: bytes, name: str) -> str | None:
         for block in doc.content
         if isinstance(block, TextBlock)
     ).strip()
-    if not text:
-        return None
+    return text or None
 
-    max_chars = settings.ATTACHMENT_PDF_MAX_CHARS
-    if len(text) > max_chars:
-        text = text[:max_chars] + f"\n\n[...truncated to {max_chars} characters]"
-    return text
+
+async def _extract_document_text(
+    data: bytes, name: str, content_type: str
+) -> tuple[str | None, str | None]:
+    """Extract text for inlining into the prompt. Returns ``(text, engine)``;
+    ``(None, None)`` means extraction failed entirely — the caller falls
+    back to metadata-only attachment handling in that case.
+
+    Tries the docling service first (structure-aware: tables, layout, OCR,
+    DOCX/PPTX support) when ``DOCLING_SERVICE_URL`` is configured. Falls
+    back to the lightweight local pypdf/pdfplumber path for PDFs on any
+    docling failure/timeout/non-configuration — DOCX/PPTX have no local
+    fallback (pypdf can't read them), so those just return ``(None, None)``
+    when docling isn't available or fails.
+    """
+    if settings.DOCLING_SERVICE_URL:
+        from substrate.capabilities.knowledge.docling_client import DoclingClient
+
+        client = DoclingClient(
+            base_url=settings.DOCLING_SERVICE_URL,
+            auth_token=settings.DOCLING_AUTH_TOKEN,
+            timeout_s=settings.DOCLING_TIMEOUT_S,
+        )
+        try:
+            result = await client.extract(data, name, content_type)
+        finally:
+            await client.close()
+        if result.success and result.text.strip():
+            return _truncate(result.text.strip()), "docling"
+        logger.info(
+            "Docling extraction unavailable/failed for %r (%s); falling back",
+            name,
+            result.error,
+        )
+
+    if content_type == "application/pdf":
+        text = await _extract_via_pypdf(data, name)
+        if text is not None:
+            return _truncate(text), "pypdf"
+
+    return None, None
 
 
 async def _build_file_context(
@@ -97,27 +158,9 @@ async def _build_file_context(
     text_parts: list[str] = []
     image_inputs: list[_ImagePayload] = []
     attachments: list[dict[str, Any]] = []
+    needs_commit = False
 
-    for meta in rows:
-        data = await ctx.file_store.download(meta.object_key)
-        if meta.content_type.startswith("image/"):
-            image_inputs.append(_ImagePayload(data=data, media_type=meta.content_type))
-            continue
-        elif meta.content_type.startswith("text/"):
-            text_parts.append(
-                f"[File: {meta.original_name}]\n"
-                + data.decode("utf-8", errors="replace")
-            )
-            continue
-        elif meta.content_type == "application/pdf":
-            pdf_text = await _extract_pdf_text(data, meta.original_name)
-            if pdf_text is not None:
-                text_parts.append(f"[File: {meta.original_name}]\n{pdf_text}")
-                continue
-            # Extraction failed (scanned/image-only PDF, corrupt file, or
-            # pypdf/pdfplumber unavailable) — fall through to attachment
-            # metadata below so the model at least knows the file exists.
-
+    def _attachment_dict(meta: Any) -> dict[str, Any]:
         attachment: dict[str, Any] = {
             "id": str(meta.id),
             "name": meta.original_name,
@@ -125,15 +168,77 @@ async def _build_file_context(
             "size": meta.size_bytes,
         }
         # object_key is "users/{uid}/sessions/{tid}/name" under the
-        # WorkspaceFileStore default — that's exactly the path the
-        # code interpreter's sandbox sees at /app/workspace (which
-        # mounts users/{uid}), minus the "users/{uid}/" prefix. Give
-        # the model that relative path so generated code can open the
-        # file directly instead of only knowing its display name.
-        parts = meta.object_key.split("/", 2)
-        if len(parts) == 3 and parts[0] == "users":
-            attachment["workspace_path"] = parts[2]
-        attachments.append(attachment)
+        # WorkspaceFileStore default. What that maps to *inside* the sandbox
+        # depends on how the active code interpreter mounts the workspace —
+        # these two backends use different mount topologies (mirrors the
+        # ci_has_workspace_access gate below) — and the result is always
+        # made absolute (see _SANDBOX_WORKSPACE_MOUNT_PATH) since the
+        # sandbox's execution cwd isn't guaranteed to be the workspace root.
+        relative_path: str | None = None
+        if settings.CI_WORKSPACE_PVC_CLAIM:
+            # K8s agent-sandbox subPath-mounts "users/{uid}" at
+            # /app/workspace (per-user pod — that subPath IS the isolation
+            # boundary), so the prefix must be stripped.
+            parts = meta.object_key.split("/", 2)
+            if len(parts) == 3 and parts[0] == "users":
+                relative_path = parts[2]
+        elif settings.CI_LOCAL_SANDBOX_URL:
+            # Local sandbox is one shared container (not per-user pods) with
+            # the whole workspace root bind-mounted unscoped at
+            # /app/workspace — object_key is already the right relative path.
+            relative_path = meta.object_key
+        if relative_path is not None:
+            attachment["workspace_path"] = (
+                f"{_SANDBOX_WORKSPACE_MOUNT_PATH}/{relative_path}"
+            )
+        return attachment
+
+    for meta in rows:
+        if meta.content_type in _EXTRACTABLE_TYPES:
+            # Cache hit — this exact file was already extracted (by this
+            # thread or any other; files are immutable once uploaded, so
+            # the cached text never goes stale). Skip both the download
+            # and the extraction call entirely.
+            if meta.extracted_text:
+                text_parts.append(
+                    f"[File: {meta.original_name}]\n{meta.extracted_text}"
+                )
+                attachments.append(_attachment_dict(meta))
+                continue
+
+            data = await ctx.file_store.download(meta.object_key)
+            text, engine = await _extract_document_text(
+                data, meta.original_name, meta.content_type
+            )
+            if text is not None:
+                text_parts.append(f"[File: {meta.original_name}]\n{text}")
+                meta.extracted_text = text
+                meta.extracted_at = datetime.now(timezone.utc)
+                meta.extraction_engine = engine
+                needs_commit = True
+                attachments.append(_attachment_dict(meta))
+                continue
+            # Extraction failed (scanned/image-only PDF, corrupt file, no
+            # docling service for DOCX/PPTX, ...) — fall through to
+            # attachment metadata below so the model at least knows the
+            # file exists.
+
+        elif meta.content_type.startswith("image/"):
+            data = await ctx.file_store.download(meta.object_key)
+            image_inputs.append(_ImagePayload(data=data, media_type=meta.content_type))
+            continue
+        elif meta.content_type.startswith("text/"):
+            data = await ctx.file_store.download(meta.object_key)
+            text_parts.append(
+                f"[File: {meta.original_name}]\n"
+                + data.decode("utf-8", errors="replace")
+            )
+            continue
+
+        attachments.append(_attachment_dict(meta))
+
+    if needs_commit:
+        await db.commit()
 
     return "\n\n".join(text_parts), image_inputs, attachments
 

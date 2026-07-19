@@ -2,9 +2,9 @@
 
 Tool chaining allows the LLM to write one Python script that calls multiple
 tools and pipes results between them.  The script runs in the existing
-CodeInterpreter Firecracker/K8s sandbox; every tool call is routed back to
-the framework-side ``ToolInvoker`` (agents layer) for risk/approval/ctx
-enforcement.
+CodeInterpreter sandbox (K8s agent-sandbox or a locally-composed sandbox
+container); every tool call is routed back to the framework-side
+``ToolInvoker`` (agents layer) for risk/approval/ctx enforcement.
 
 This file is kernel-pure: no I/O, no concrete implementations.
 ``ToolInvoker`` (L1/agents), the bridge, prelude, and ``ToolChainTool``
@@ -33,6 +33,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from substrate.kernel.core.content import ImageBlock
 from substrate.kernel.tools.tools import ToolRisk
 
 # ---------------------------------------------------------------------------
@@ -95,6 +96,13 @@ class InvocationResult(BaseModel):
     ``structured``   — ``structured_content`` (or summary dict when offloaded)
     ``artifact_ref`` — set when result was offloaded to ``ArtifactStore``
     ``files``        — media blocks materialised as sandbox workspace files
+                       (``ArtifactStore``-backed — only populated when a
+                       store is configured, e.g. inside a chain run)
+    ``media``        — the same media blocks, inline (bytes preserved), so
+                       callers with no ``ArtifactStore`` (the normal
+                       direct-tool-call path — ``ctx.tool()`` — has none
+                       wired) can still show the model/UI what the tool
+                       produced without an extra store round-trip
     """
 
     status: Literal["ok", "error", "denied"]
@@ -102,6 +110,7 @@ class InvocationResult(BaseModel):
     structured: dict[str, object] = Field(default_factory=dict)
     artifact_ref: str | None = None
     files: list[ChainFile] = Field(default_factory=list)
+    media: list[ImageBlock] = Field(default_factory=list)
 
     model_config = {"frozen": True}
 

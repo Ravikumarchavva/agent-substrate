@@ -56,8 +56,6 @@ spec:
               value: http://file-store.af-runtime.svc.cluster.local:8018
             - name: ADMIN_SERVICE_URL
               value: http://admin.af-platform.svc.cluster.local:8019
-            - name: CODE_INTERPRETER_SERVICE_URL
-              value: http://code-interpreter.af-runtime.svc.cluster.local:8080
             - name: CORS_ALLOWED_ORIGINS
               value: "https://app.example.com"
           resources:

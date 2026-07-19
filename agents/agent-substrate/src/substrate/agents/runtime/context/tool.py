@@ -8,6 +8,8 @@ stubs below.
 
 from __future__ import annotations
 
+import base64
+import uuid
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from substrate.kernel.core.content import JsonObject
@@ -133,6 +135,23 @@ class _ToolMixin:
                 result.model_dump(mode="json"),
             )
             ok = result.status == "ok"
+            # result.media (e.g. matplotlib charts) as data-URI attachments —
+            # this log entry is later mapped to a ToolResultEvent by a pure
+            # function (protocol/from_log.py) with no I/O access, so images
+            # must already be self-contained here rather than a fetchable ref.
+            attachments = [
+                {
+                    "id": uuid.uuid4().hex,
+                    "name": f"{name}-{i}.{(img.media_type or 'image/png').split('/')[-1]}",
+                    "mime": img.media_type or "image/png",
+                    "size": len(img.data or b""),
+                    "url": (
+                        f"data:{img.media_type or 'image/png'};base64,"
+                        f"{base64.b64encode(img.data or b'').decode()}"
+                    ),
+                }
+                for i, img in enumerate(result.media)
+            ]
             await self._log(
                 "tool.result",
                 {
@@ -142,6 +161,7 @@ class _ToolMixin:
                     "output": result.text or "",
                     "error": None if ok else (result.text or "tool error"),
                     "structured_content": result.structured or {},
+                    "attachments": attachments,
                 },
             )
             return result

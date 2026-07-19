@@ -31,7 +31,7 @@ flowchart TB
         TCT ~~~ PRE ~~~ BRIDGE ~~~ REG
     end
 
-    VM["CodeInterpreter — Firecracker VM / K8s sandbox<br/>POST /execute {code, timeout}<br/>returns stdout, exit_code, media_blocks"]:::infra
+    VM["CodeInterpreter — K8s agent-sandbox / local sandbox container<br/>POST /ci/run {code, session_id}<br/>returns stdout, exit_code, media_blocks"]:::infra
     INV["ToolInvoker (L1) · agents/tools/invoker.py<br/>invoke(call, session, ctx)<br/>risk check → approval gate (HIGH/CRITICAL)"]:::l1
     DRS["DataRefStore · pipeline/data_ref.py<br/>< 1MB → Redis · ≥ 1MB → S3/MinIO<br/>returns DataRef.ref_id"]:::data
 
@@ -139,7 +139,7 @@ When a `ToolResult` with a non-`None` `.ref` is passed as a tool argument, the p
 
 ## Wiring
 
-`ToolChainTool` requires an active `CodeInterpreterTool` — if `CODE_INTERPRETER_URL` is unset, the constructor raises `RuntimeError` and the tool is simply not registered.
+`ToolChainTool` requires an active code interpreter (`K8sSandboxCodeInterpreterTool` or `LocalSandboxCodeInterpreterTool`, gated by `CI_LOCAL_SANDBOX_URL`) — if neither is available, the constructor raises `RuntimeError` and the tool is simply not registered.
 
 ```python
 # In lifespan

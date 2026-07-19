@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "RaviProtocol",
+  "title": "SubstrateProtocol",
   "x-protocol-version": "1.0.0",
   "type": "object",
   "properties": {
@@ -21,7 +21,8 @@
           "tool.call": "#/$defs/ToolCallEvent",
           "tool.result": "#/$defs/ToolResultEvent",
           "turn.completed": "#/$defs/TurnCompletedEvent",
-          "ui.resource": "#/$defs/UIResourceEvent"
+          "ui.resource": "#/$defs/UIResourceEvent",
+          "user.message": "#/$defs/UserMessageEvent"
         },
         "propertyName": "type"
       },
@@ -43,6 +44,9 @@
         },
         {
           "$ref": "#/$defs/HandoffEvent"
+        },
+        {
+          "$ref": "#/$defs/UserMessageEvent"
         },
         {
           "$ref": "#/$defs/TurnCompletedEvent"
@@ -96,6 +100,16 @@
           "additionalProperties": true,
           "title": "Args",
           "type": "object"
+        },
+        "risk": {
+          "default": "",
+          "title": "Risk",
+          "type": "string"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
         }
       },
       "required": [
@@ -242,7 +256,7 @@
       "type": "object"
     },
     "InputRequestedEvent": {
-      "description": "The agent is waiting for free-form human input.",
+      "description": "The agent is waiting for human input (ask_human tool).",
       "properties": {
         "type": {
           "const": "input.requested",
@@ -254,29 +268,37 @@
           "title": "Request Id",
           "type": "string"
         },
-        "prompt": {
-          "title": "Prompt",
+        "question": {
+          "title": "Question",
+          "type": "string"
+        },
+        "context": {
+          "default": "",
+          "title": "Context",
           "type": "string"
         },
         "options": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Options"
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Options",
+          "type": "array"
+        },
+        "allow_freeform": {
+          "default": true,
+          "title": "Allow Freeform",
+          "type": "boolean"
+        },
+        "run_id": {
+          "default": "",
+          "title": "Run Id",
+          "type": "string"
         }
       },
       "required": [
         "request_id",
-        "prompt"
+        "question"
       ],
       "title": "InputRequestedEvent",
       "type": "object"
@@ -328,12 +350,17 @@
       "type": "object"
     },
     "RunCompletedEvent": {
-      "description": "The whole agent run finished successfully.",
+      "description": "The whole agent run finished.",
       "properties": {
         "type": {
           "const": "run.completed",
           "default": "run.completed",
           "title": "Type",
+          "type": "string"
+        },
+        "reason": {
+          "default": "success",
+          "title": "Reason",
           "type": "string"
         }
       },
@@ -527,6 +554,18 @@
           "default": 0,
           "title": "Depth",
           "type": "integer"
+        },
+        "structured_content": {
+          "additionalProperties": true,
+          "title": "Structured Content",
+          "type": "object"
+        },
+        "attachments": {
+          "items": {
+            "$ref": "#/$defs/Attachment"
+          },
+          "title": "Attachments",
+          "type": "array"
         }
       },
       "required": [
@@ -625,6 +664,31 @@
         "uri"
       ],
       "title": "UIResourceEvent",
+      "type": "object"
+    },
+    "UserMessageEvent": {
+      "description": "The user's turn that started this run \u2014 logged once, at run start, so\nthe EventLogProtocol is a self-complete record of the conversation (the single\nsource of truth history is projected from; see ``serving/stream/\nhistory.py``). ``text`` is the display text the user actually typed/saw,\nwhich may differ from the LLM-input content a route augments with file\ncontext \u2014 see ``ReActAgent``/``OrchestratorAgent``'s ``_handle_message``.",
+      "properties": {
+        "type": {
+          "const": "user.message",
+          "default": "user.message",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        },
+        "attachments": {
+          "items": {
+            "$ref": "#/$defs/Attachment"
+          },
+          "title": "Attachments",
+          "type": "array"
+        }
+      },
+      "title": "UserMessageEvent",
       "type": "object"
     },
     "ChatRequest": {

@@ -130,7 +130,6 @@ services:
       LIVE_STREAM_SERVICE_URL: http://live-stream:8017
       FILE_STORE_SERVICE_URL: http://file-store:8018
       CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
-      CODE_INTERPRETER_SERVICE_URL: http://code-interpreter:8080
     depends_on:
       postgres:
         condition: service_healthy
@@ -186,55 +185,58 @@ services:
     environment:
       <<: *common-env
       SERVICE_NAME: tool-executor
-      CODE_INTERPRETER_URL: http://code-interpreter:8080
       FILE_STORE_SERVICE_URL: http://file-store:8018
-      CODE_INTERPRETER_URL_EXTERNAL: ${CODE_INTERPRETER_URL:-}
+      CI_LOCAL_SANDBOX_URL: ${CI_LOCAL_SANDBOX_URL:-http://code-interpreter-sandbox:8888}
 
-  # ══════════════════════════════════════════════════════════════════════════  # Code Interpreter (Firecracker microVM execution engine)
-  # Requires /dev/kvm on the host. Docker Desktop on Mac/Win uses a Linux VM,
-  # so /dev/kvm is available by default. On Linux ensure KVM module is loaded.
+  # ══════════════════════════════════════════════════════════════════════════════
+  # Code Interpreter Sandbox — same container image the K8s agent-sandbox
+  # path uses (code_interpreter/agent-sandbox/Dockerfile), run directly here
+  # as a plain container. No privileged mode, no /dev/kvm — this is opt-in
+  # (profile-gated) local-dev tooling, not the production K8s path (see
+  # deployment/k8s/base/runtime/ for the agent-sandbox CRD-based deployment).
   # ══════════════════════════════════════════════════════════════════════════════
 
-  code-interpreter:
-    <<: *service-base
-    # MUST be --workers 1: VMPool is in-process asyncio state
-    command:
-      - uv
-      - run
-      - uvicorn
-      - agent_substrateservices.code_interpreter.app:app
-      - --host
-      - "0.0.0.0"
-      - --port
-      - "8080"
-      - --workers
-      - "1"
-    ports:
-      - "8020:8080"  # host:container
+  code-interpreter-sandbox:
+    profiles:
+      - sandbox
+    build:
+      context: ../..
+      dockerfile: src/substrate/capabilities/tools/code_interpreter/code_interpreter/agent-sandbox/Dockerfile
     environment:
-      <<: *common-env
-      SERVICE_NAME: code-interpreter
-      CI_FC_KERNEL_PATH: /opt/firecracker/vmlinux.bin
-      CI_FC_ROOTFS_PATH: /opt/firecracker/rootfs.ext4
-      CI_FC_VCPU_COUNT: "1"
-      CI_FC_MEM_SIZE_MIB: "256"
-      CI_POOL_SIZE: "2"
-      CI_POOL_MAX_SIZE: "4"
-      CI_DEFAULT_TIMEOUT: "30"
-      CI_MAX_TIMEOUT: "300"
-    devices:
-      - /dev/kvm:/dev/kvm
+      CODE_INTERPRETER_WORKSPACE: /app/workspace
     volumes:
-      - firecracker-assets:/opt/firecracker:ro
-    privileged: true
-    depends_on:
-      - redis
+      - ../../data/workspaces:/app/workspace
+    ports:
+      - "8020:8888"
+    restart: unless-stopped
+    networks:
+      - agent-net
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # Docling document-extraction service — optional, opt-in (profile-gated).
+  # Heavy image (torch/CUDA runtime) built from its own Dockerfile, not the
+  # shared backend.Dockerfile x-service-base build — it needs the `docling`
+  # extra that the base image deliberately excludes.
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  docling:
+    profiles:
+      - docling
+    build:
+      context: ../..
+      dockerfile: deployment/docker/docling.Dockerfile
+    command: ["uvicorn", "substrate.serving.services.docling.app:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8022:8080"
+    restart: unless-stopped
+    networks:
+      - agent-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
-      interval: 10s
+      interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 3
+      start_period: 90s
 
   # ══════════════════════════════════════════════════════════════════════════════  # Wave 4: Human Gate / Live Stream / File Store
   # ══════════════════════════════════════════════════════════════════════════
@@ -390,7 +392,6 @@ volumes:
   lokidata:
   promtaildata:
   file-store-data:
-  firecracker-assets:
   miniodata:
 
 networks:

@@ -15,9 +15,11 @@ Routes:
 
 from __future__ import annotations
 
+import mimetypes
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +30,15 @@ from substrate.capabilities.storage.workspace import (
 )
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.models import FileMetadata, Thread
+from substrate.serving.monolith.file_versioning import (
+    VERSIONS_DIR,
+    capture_bytes,
+    latest_version,
+    list_versions,
+    record_version,
+    sha256_hex,
+)
+from substrate.serving.monolith.models import FileMetadata, FileVersion, Thread
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims
 
@@ -51,6 +61,7 @@ class WorkspaceFileEntry(BaseModel):
     modified_at: float
     session_id: str | None
     session_name: str | None
+    owner: str  # "user" (uploaded) | "agent" (assistant-created)
 
 
 class WorkspaceFilesResponse(BaseModel):
@@ -74,6 +85,20 @@ def _session_id_from_key(key: str) -> str | None:
     return None
 
 
+def _is_inline_type(content_type: str) -> bool:
+    """Types browsers can render inline — everything else forces a download.
+
+    Mirrors routes/files.py::_is_previewable so the same endpoint backs both
+    an inline <img> and a click-to-download link (see the frontend
+    ``sandbox:`` markdown resolver).
+    """
+    return (
+        content_type.startswith("image/")
+        or content_type.startswith("text/")
+        or content_type == "application/pdf"
+    )
+
+
 @router.get("/usage", response_model=WorkspaceUsageResponse)
 async def get_usage(
     claims: AuthClaims = Depends(get_current_user),
@@ -93,7 +118,11 @@ async def list_files(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceFilesResponse:
     store = _require_workspace_store(ctx)
-    entries = store.list_user_files(claims.sub)
+    # Hide the per-file version snapshots (.versions/) — they're internal
+    # history, not user-facing files (see file_versioning.py).
+    entries = [
+        e for e in store.list_user_files(claims.sub) if f"/{VERSIONS_DIR}/" not in e[0]
+    ]
     session_ids_by_key = {key: _session_id_from_key(key) for key, _, _ in entries}
 
     valid_uuids: list[uuid.UUID] = []
@@ -114,6 +143,22 @@ async def list_files(
         ).all()
         thread_names = {str(row.id): row.name for row in rows}
 
+    # A file is user-owned iff it has a (non-deleted) FileMetadata row: uploads
+    # go through routes/files.py which records one, while code-interpreter /
+    # assistant artifacts are written straight to the session dir with none.
+    keys = [key for key, _, _ in entries]
+    uploaded_keys: set[str] = set()
+    if keys:
+        meta_rows = (
+            await db.execute(
+                select(FileMetadata.object_key).where(
+                    FileMetadata.object_key.in_(keys),
+                    FileMetadata.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        uploaded_keys = {row.object_key for row in meta_rows}
+
     files = [
         WorkspaceFileEntry(
             path=key,
@@ -122,10 +167,243 @@ async def list_files(
             modified_at=mtime,
             session_id=session_ids_by_key[key],
             session_name=thread_names.get(session_ids_by_key[key] or ""),
+            owner="user" if key in uploaded_keys else "agent",
         )
         for key, size, mtime in entries
     ]
     return WorkspaceFilesResponse(files=files)
+
+
+def _session_key(sub: str, thread_id: str, path: str) -> str:
+    """Build (and validate) the ownership-scoped canonical key for a
+    session-relative path."""
+    rel = path.lstrip("/")
+    if ".." in rel.split("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    return f"users/{sub}/sessions/{thread_id}/{rel}"
+
+
+# Only editable documents are worth versioning. Images embedded in an HTML
+# report are fetched through serve_file too, but the user never edits them —
+# skip them so we don't snapshot a version per chart.
+_NON_VERSIONABLE_EXTS = {
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif",
+}
+
+
+def _is_versionable(name: str) -> bool:
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    return ext not in _NON_VERSIONABLE_EXTS
+
+
+class WorkspaceVersionEntry(BaseModel):
+    seq: int
+    author: str
+    checksum_sha256: str
+    size_bytes: int
+    created_at: float
+
+
+class WorkspaceVersionsResponse(BaseModel):
+    versions: list[WorkspaceVersionEntry]
+    latest_seq: int | None
+
+
+class RestoreVersionRequest(BaseModel):
+    thread_id: str
+    path: str
+    seq: int
+
+
+@router.get("/file")
+async def serve_file(
+    thread_id: str = Query(..., description="Conversation/thread id (session folder)"),
+    path: str = Query(
+        ..., description="File path relative to the thread's session dir"
+    ),
+    seq: int | None = Query(None, description="Serve a specific version (default: latest)"),
+    claims: AuthClaims = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    ctx: ServerDependencies = Depends(get_ctx),
+) -> StreamingResponse:
+    """Serve a code-interpreter / workspace file by its session-relative path.
+
+    Resolves to ``users/{caller}/sessions/{thread_id}/{path}`` — the same
+    per-thread directory the sandbox runs in (see the code-interpreter tools'
+    ``workspace_dir``). This is what the frontend ``sandbox:<path>`` markdown
+    refs resolve to: images render inline, everything else downloads.
+
+    Serving the *current* file also lazily versions it: a change made outside
+    our save endpoints (i.e. the agent rewrote it via code_interpreter) is
+    captured as an ``"agent"`` ``FileVersion`` here, so the panel's version
+    history stays honest without a per-turn scan.
+    """
+    store = _require_workspace_store(ctx)
+    key = _session_key(claims.sub, thread_id, path)
+
+    if seq is not None:
+        version = (
+            await db.execute(
+                select(FileVersion).where(
+                    FileVersion.object_key == key, FileVersion.seq == seq
+                )
+            )
+        ).scalar_one_or_none()
+        if version is None:
+            raise HTTPException(status_code=404, detail="Version not found")
+        source_key = version.version_key
+    else:
+        source_key = key
+
+    try:
+        data = await store.download(source_key)
+    except (WorkspacePathError, KeyError, FileNotFoundError):
+        raise HTTPException(status_code=404, detail="File not found") from None
+
+    name = key.rsplit("/", 1)[-1]
+    checksum = sha256_hex(data)
+    if seq is None and _is_versionable(name):
+        # Capture an out-of-band (agent) change / the initial state.
+        await capture_bytes(
+            db, store, object_key=key, data=data,
+            user_id=claims.sub, thread_id=thread_id,
+        )
+
+    content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    disposition = "inline" if _is_inline_type(content_type) else "attachment"
+
+    async def _stream():
+        yield data
+
+    return StreamingResponse(
+        _stream(),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f'{disposition}; filename="{name}"',
+            "X-File-Checksum": checksum,
+        },
+    )
+
+
+@router.put("/file", status_code=200)
+async def save_file(
+    request: Request,
+    thread_id: str = Query(...),
+    path: str = Query(...),
+    claims: AuthClaims = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    ctx: ServerDependencies = Depends(get_ctx),
+) -> dict:
+    """Save edited bytes back to a workspace file (used by text/Monaco editors;
+    ONLYOFFICE Office edits arrive via its own callback in M3).
+
+    Optimistic concurrency: the client sends the checksum it loaded in
+    ``X-Base-Checksum``; if the canonical file changed since (the agent wrote
+    it), respond 409 so the UI can offer reload-vs-overwrite. The prior state
+    is already versioned (via serve_file's lazy capture), so nothing is lost.
+    """
+    store = _require_workspace_store(ctx)
+    key = _session_key(claims.sub, thread_id, path)
+    body = await request.body()
+    base = request.headers.get("X-Base-Checksum", "")
+
+    try:
+        current = await store.download(key)
+        current_checksum = sha256_hex(current)
+    except (WorkspacePathError, KeyError, FileNotFoundError):
+        current_checksum = ""
+
+    if base and current_checksum and base != current_checksum:
+        latest = await latest_version(db, key)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "File changed since you opened it.",
+                "current_checksum": current_checksum,
+                "latest_seq": latest.seq if latest else None,
+            },
+        )
+
+    # Ensure the pre-save state is versioned, then write + version the new one.
+    if current_checksum:
+        await capture_bytes(
+            db, store, object_key=key, data=current,
+            user_id=claims.sub, thread_id=thread_id,
+        )
+    await store.upload(key, body)
+    version = await record_version(
+        db, store, object_key=key, data=body, author="user",
+        user_id=claims.sub, thread_id=thread_id,
+    )
+    return {"checksum": version.checksum_sha256, "seq": version.seq}
+
+
+@router.get("/versions", response_model=WorkspaceVersionsResponse)
+async def get_versions(
+    thread_id: str = Query(...),
+    path: str = Query(...),
+    claims: AuthClaims = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceVersionsResponse:
+    key = _session_key(claims.sub, thread_id, path)
+    versions = await list_versions(db, key)
+    return WorkspaceVersionsResponse(
+        versions=[
+            WorkspaceVersionEntry(
+                seq=v.seq,
+                author=v.author,
+                checksum_sha256=v.checksum_sha256,
+                size_bytes=v.size_bytes,
+                created_at=v.created_at.timestamp() if v.created_at else 0.0,
+            )
+            for v in versions
+        ],
+        latest_seq=versions[-1].seq if versions else None,
+    )
+
+
+@router.post("/versions/restore", status_code=200)
+async def restore_version(
+    body: RestoreVersionRequest,
+    claims: AuthClaims = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    ctx: ServerDependencies = Depends(get_ctx),
+) -> dict:
+    """Restore a prior version: copy that snapshot's bytes to the canonical
+    file as a new ``"user"`` version (non-destructive — the current state was
+    already captured, so it stays in history too)."""
+    store = _require_workspace_store(ctx)
+    key = _session_key(claims.sub, body.thread_id, body.path)
+    version = (
+        await db.execute(
+            select(FileVersion).where(
+                FileVersion.object_key == key, FileVersion.seq == body.seq
+            )
+        )
+    ).scalar_one_or_none()
+    if version is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    try:
+        data = await store.download(version.version_key)
+    except (WorkspacePathError, KeyError, FileNotFoundError):
+        raise HTTPException(status_code=404, detail="Snapshot missing") from None
+
+    # Capture the current state first (so restoring doesn't lose it), then write.
+    try:
+        current = await store.download(key)
+        await capture_bytes(
+            db, store, object_key=key, data=current,
+            user_id=claims.sub, thread_id=body.thread_id,
+        )
+    except (WorkspacePathError, KeyError, FileNotFoundError):
+        pass
+    await store.upload(key, data)
+    new_version = await record_version(
+        db, store, object_key=key, data=data, author="user",
+        user_id=claims.sub, thread_id=body.thread_id,
+    )
+    return {"checksum": new_version.checksum_sha256, "seq": new_version.seq}
 
 
 @router.delete("/files", status_code=204)

@@ -16,7 +16,6 @@ from contextlib import asynccontextmanager
 from substrate.serving.services.base import create_service_app
 from substrate.serving.services.gateway.clients import (
     ArtifactClient,
-    CodeInterpreterServiceClient,
     ConversationClient,
     HITLClient,
     IdentityClient,
@@ -27,7 +26,6 @@ from substrate.serving.services.gateway.clients import (
 from substrate.serving.services.gateway.routes import (
     auth_router,
     chat_router,
-    execute_router,
     file_router,
     router,
     thread_router,
@@ -48,7 +46,6 @@ async def lifespan(app):
     hitl_url = os.environ.get("HITL_SERVICE_URL", "http://localhost:8016")
     stream_url = os.environ.get("STREAM_SERVICE_URL", "http://localhost:8017")
     artifact_url = os.environ.get("ARTIFACT_SERVICE_URL", "http://localhost:8018")
-    ci_service_url = os.environ.get("CODE_INTERPRETER_SERVICE_URL", "")
 
     # Initialize service clients
     clients = [
@@ -65,16 +62,6 @@ async def lifespan(app):
         await client.start()
         setattr(app.state, name, client)
 
-    # Code interpreter client is optional — service only exists when CI is deployed
-    if ci_service_url:
-        ci_client = CodeInterpreterServiceClient(ci_service_url)
-        await ci_client.start()
-        app.state.code_interpreter_client = ci_client
-        logger.info("Code Interpreter Service connected: %s", ci_service_url)
-    else:
-        app.state.code_interpreter_client = None
-        logger.info("CODE_INTERPRETER_SERVICE_URL not set — /api/execute disabled")
-
     app.state.jwt_secret = os.environ.get(
         "JWT_SECRET",
         "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET",
@@ -86,8 +73,6 @@ async def lifespan(app):
     # Shutdown
     for name, client in clients:
         await client.close()
-    if app.state.code_interpreter_client:
-        await app.state.code_interpreter_client.close()
 
 
 _cors_raw = os.environ.get("CORS_ALLOWED_ORIGINS", "")
@@ -106,5 +91,4 @@ app.include_router(auth_router)
 app.include_router(thread_router)
 app.include_router(chat_router)
 app.include_router(file_router)
-app.include_router(execute_router)
 app.include_router(router)

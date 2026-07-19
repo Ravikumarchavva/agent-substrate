@@ -21,7 +21,6 @@ k8s/
 │   │   ├── conversation.yaml
 │   │   ├── job-controller.yaml
 │   │   ├── tool-executor.yaml
-│   │   ├── code-interpreter.yaml  ← StatefulSet (Firecracker VMs, requires KVM)
 │   │   ├── human-gate.yaml
 │   │   ├── live-stream.yaml
 │   │   ├── file-store.yaml

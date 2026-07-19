@@ -5,7 +5,8 @@ Python state (variables, installed packages, files) persists across calls within
 same session — exactly like Claude/OpenAI Code Interpreter.
 
 This tool targets cluster deployments (Kind, EKS, GKE, etc.).
-For local / VM isolation use CodeInterpreterTool (Firecracker-based).
+For local dev use LocalSandboxCodeInterpreterTool, which talks to the same
+sandbox_runtime.py server directly over HTTP (no Kubernetes required).
 
 Architecture::
 
@@ -38,17 +39,20 @@ from __future__ import annotations
 from substrate.logger import setup_logging
 
 import asyncio
-import base64
-import json
 import os
 from typing import Any
 
-from substrate.kernel import ImageBlock  # was ImageContent, MediaContent
 from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel import TextBlock
-from substrate.agents.storage.tasks import current_user_id
+from substrate.agents.storage.tasks import current_thread_id, current_user_id
+from substrate.kernel.tools.tools import ToolRisk
 
+from .code_risk import classify_and_summarize
+from .sandbox_response import (
+    PRESENTATION_GUIDANCE,
+    sandbox_error_result,
+    sandbox_result_to_tool_result,
+)
 from .sandbox_service import CodeInterpreterConfig, CodeInterpreterService
 from .session_store import JsonSessionStore, SessionStore
 
@@ -86,7 +90,22 @@ class K8sSandboxCodeInterpreterTool:
         warmpool: str | None = None,
         workspace_pvc_claim: str | None = None,
         workspace_mount_path: str = "/app/workspace",
+        local_sandbox_url: str | None = None,
+        model_client: Any | None = None,
     ) -> None:
+        # Optional LLM client used only to summarize dangerous code for the
+        # approval card (hybrid classifier — see classify_risk).
+        self._model_client = model_client
+        # Explicit param takes precedence — os.environ.get() alone would miss
+        # values pydantic-settings loaded from .env (that loading populates
+        # ServerSettings, not the process environment), so the monolith must
+        # pass this through from cfg.CI_LOCAL_SANDBOX_URL (see
+        # infrastructure/serving_factory.py). Falling back to os.environ
+        # still covers callers that set it as a real env var (e.g. the
+        # tool_executor microservice).
+        self._local_sandbox_url = local_sandbox_url or os.environ.get(
+            "CI_LOCAL_SANDBOX_URL", ""
+        )
         self.name = "code_interpreter"
         self.description = (
             "Execute Python code in a secure, isolated Kubernetes sandbox pod. "
@@ -94,8 +113,8 @@ class K8sSandboxCodeInterpreterTool:
             "are available in the next. "
             "Available packages: numpy, pandas, matplotlib, scipy, scikit-learn, "
             "seaborn, plotly, openpyxl, polars, Pillow, requests. "
-            "Matplotlib and Plotly figures are auto-captured and returned as artifacts. "
             "Print results via print() or return them from expressions."
+            + PRESENTATION_GUIDANCE
         )
         self.input_schema = {
             "type": "object",
@@ -155,6 +174,15 @@ class K8sSandboxCodeInterpreterTool:
 
         self.session_id: str = _DEFAULT_SESSION
 
+    async def classify_risk(
+        self, arguments: dict[str, Any]
+    ) -> tuple[ToolRisk, str | None]:
+        """Per-call risk: exploratory code is SAFE (no approval); dangerous
+        code is CRITICAL and gates with a summary. Consulted by ToolInvoker's
+        risk gate (see local_sandbox_tool.py for the shared rationale)."""
+        code = str(arguments.get("code", ""))
+        return await classify_and_summarize(code, self._model_client)
+
     # ── Tool execution ──────────────────────────────────────────────────────────
 
     async def execute(
@@ -171,7 +199,15 @@ class K8sSandboxCodeInterpreterTool:
         calls), so execution is offloaded to a thread via asyncio.to_thread().
         """
         timeout = max(1, min(timeout, 300))
-        session_id = self.session_id
+        # Prefer the active thread (stamped as a ContextVar inside ReActAgent's
+        # Worker task) so the sandbox pod's run cwd is sessions/{thread_id}
+        # under the per-user subPath mount — where uploads for this thread
+        # live and where the workspace file-serve endpoint resolves. Falls
+        # back to whatever was set on the instance (chain calls set it).
+        thread_id = current_thread_id.get()
+        session_id = (
+            thread_id if thread_id and thread_id != "default" else self.session_id
+        )
         user_id = current_user_id.get()
 
         logger.info(
@@ -191,91 +227,23 @@ class K8sSandboxCodeInterpreterTool:
             )
             if result.get("status") != "ok":
                 raise RuntimeError(f"Sandbox run status is: {result.get('status')}")
-            return self._to_tool_result(result)
+            return sandbox_result_to_tool_result(result)
         except Exception as exc:
+            local_sandbox_url = self._local_sandbox_url
+            if not local_sandbox_url:
+                logger.error(
+                    "k8s_sandbox[%s] failed and no CI_LOCAL_SANDBOX_URL fallback is configured: %s",
+                    session_id,
+                    exc,
+                )
+                return sandbox_error_result(f"Sandbox unavailable: {exc}")
             logger.warning(
-                "k8s_sandbox[%s] failed or is unavailable. Activating local fallback sandbox. Reason: %s",
+                "k8s_sandbox[%s] failed or is unavailable. Activating local sandbox fallback. Reason: %s",
                 session_id,
                 exc,
             )
-            from ..tool import CodeInterpreterTool
+            from .local_sandbox_tool import LocalSandboxCodeInterpreterTool
 
-            local_tool = CodeInterpreterTool()
+            local_tool = LocalSandboxCodeInterpreterTool(base_url=local_sandbox_url)
             local_tool.session_id = self.session_id
             return await local_tool.execute(code=code, timeout=timeout)
-
-    # ── Response conversion ─────────────────────────────────────────────────────
-
-    def _to_tool_result(self, result: dict[str, Any]) -> ToolExecutionResult:
-        """Convert CodeInterpreterService response dict → ToolResult.
-
-        The sandbox runtime (/ci/run) returns::
-
-            {
-                "status": "ok" | "error",
-                "stdout": str,
-                "stderr": str,
-                "exit_code": int,
-                "output_files": [{"name", "mime_type", "content_base64", ...}],
-                "artifacts": [subset of output_files that are images/display],
-                "action": "run_code",
-                "thread_id": str,
-                "session": {...},
-            }
-        """
-        status = result.get("status", "error")
-        success = status == "ok"
-        stdout: str = result.get("stdout", "")
-        stderr: str = result.get("stderr", "")
-        exit_code: int = result.get("exit_code", 0 if success else 1)
-        artifacts: list[dict[str, Any]] = result.get("artifacts", [])
-        output_files: list[dict[str, Any]] = result.get("output_files", [])
-
-        text_parts: list[str] = []
-        media: list[ImageBlock] = []
-
-        if stdout:
-            text_parts.append(stdout.rstrip())
-        if stderr:
-            text_parts.append(f"[stderr] {stderr.rstrip()}")
-
-        # Surface display artifacts (images / plots) in the response
-        for artifact in artifacts:
-            mime: str = artifact.get("mime_type", "")
-            name: str = artifact.get("name", "artifact")
-            content_b64: str = artifact.get("content_base64", "")
-            if mime.startswith("image/") and content_b64:
-                try:
-                    media.append(
-                        ImageBlock(
-                            data=base64.b64decode(content_b64),
-                            media_type=mime,
-                        )
-                    )
-                    text_parts.append(f"[Generated {name}]")
-                except Exception:
-                    text_parts.append(f"[Generated {name}] (image decode failed)")
-            elif content_b64:
-                text_parts.append(f"[File: {name}] ({mime})")
-
-        text = "\n".join(text_parts) if text_parts else "(no output)"
-
-        response_data: dict[str, Any] = {
-            "success": success,
-            "output": text,
-            "exit_code": exit_code,
-        }
-
-        # Include non-image file names so the agent knows what was written
-        non_image_files = [
-            {"name": f.get("name"), "mime_type": f.get("mime_type")}
-            for f in output_files
-            if not str(f.get("mime_type", "")).startswith("image/")
-        ]
-        if non_image_files:
-            response_data["output_files"] = non_image_files
-
-        return ToolExecutionResult(
-            content=[TextBlock(text=json.dumps(response_data)), *media],
-            is_error=not success,
-        )

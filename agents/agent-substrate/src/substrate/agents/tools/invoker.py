@@ -22,7 +22,7 @@ import asyncio
 import hashlib
 import json
 import time
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 from substrate.kernel.tools.approval import (
     ApprovalDecision,
@@ -218,7 +218,19 @@ class ToolInvoker:
             )
 
         # 3. Risk / approval gate
-        tool_risk = ToolRisk(getattr(tool, "risk", ToolRisk.SAFE))
+        # A tool may classify its risk per-call from the actual arguments
+        # (e.g. code_interpreter parses the code: exploratory → SAFE, no
+        # approval; dangerous → CRITICAL + a summary for the human). Static
+        # .risk is the fallback for every other tool.
+        risk_summary: str | None = None
+        classifier = getattr(tool, "classify_risk", None)
+        if callable(classifier):
+            tool_risk, risk_summary = await cast(
+                "Awaitable[tuple[ToolRisk, str | None]]",
+                classifier(dict(call.arguments)),
+            )
+        else:
+            tool_risk = ToolRisk(getattr(tool, "risk", ToolRisk.SAFE))
         max_allowed = policy.max_risk_unapproved
         if _RISK_ORDER[tool_risk] > _RISK_ORDER[max_allowed]:
             if self._approval is None:
@@ -253,6 +265,8 @@ class ToolInvoker:
                     "request_id": request_id,
                     "tool_name": tool_name,
                     "args": dict(call.arguments),
+                    "risk": tool_risk.value,
+                    "summary": risk_summary or "",
                 }
                 try:
                     # log_once, not _log: see the docstring reasoning above —
@@ -271,7 +285,7 @@ class ToolInvoker:
                     risk=tool_risk,
                     agent_id=AgentId(type="chain", key=call.call_id),
                     run_id=call.call_id,
-                    context={"source": "tool_chain"},
+                    context={"source": "tool_chain", "summary": risk_summary or ""},
                 )
                 try:
                     result = await asyncio.wait_for(
@@ -380,11 +394,19 @@ class ToolInvoker:
         content = getattr(exec_result, "content", [])
         policy = self._policy
 
-        # Separate media blocks from text blocks
+        # Separate media blocks from text blocks. These are always kept
+        # inline on InvocationResult.media (bytes preserved) — the normal
+        # direct-tool-call path (ctx.tool(), used for every LLM tool call)
+        # has no ArtifactStore wired (agent.blob_store is never set), so
+        # gating this on self._store would silently drop every chart/image
+        # a tool produces outside of a ToolChainTool-bridged call.
         media_blocks = [b for b in content if isinstance(b, ImageBlock)]
         files: list[ChainFile] = []
+        media = [b for b in media_blocks if b.data is not None]
 
-        # Offload media blocks to artifact store
+        # Additionally offload to the artifact store when one is configured
+        # (chain runs) — lets the sandbox reference the file by workspace
+        # path without inlining bytes across the bridge.
         if media_blocks and self._store is not None:
             for block in media_blocks:
                 if block.data is None:
@@ -413,6 +435,7 @@ class ToolInvoker:
                 text=text,
                 structured=structured,
                 files=files,
+                media=media,
             )
 
         # Offload large text result
@@ -426,6 +449,7 @@ class ToolInvoker:
             structured=structured,
             artifact_ref=ref,
             files=files,
+            media=media,
         )
 
 

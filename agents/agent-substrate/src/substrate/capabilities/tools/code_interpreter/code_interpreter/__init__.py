@@ -1,4 +1,5 @@
-"""CodeInterpreter — executes code in sandboxed Firecracker VM environment."""
+"""CodeInterpreter — executes code in sandboxed container environments
+(Kubernetes agent-sandbox pods, or a locally-composed sandbox container)."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from .agent_sandbox_tools import (
     set_code_interpreter_thread_id,
 )
 from .k8s_tool import K8sSandboxCodeInterpreterTool
+from .local_sandbox_tool import LocalSandboxCodeInterpreterTool
 from .sandbox_service import CodeInterpreterConfig, CodeInterpreterService
 from .session_store import InMemorySessionStore, JsonSessionStore, SandboxSession
 
@@ -24,6 +26,7 @@ __all__ = [
     "main",
     "AgentSandboxTools",
     "K8sSandboxCodeInterpreterTool",
+    "LocalSandboxCodeInterpreterTool",
     "code_interpreter",
     "code_interpreter_thread",
     "configure_default_code_interpreter",

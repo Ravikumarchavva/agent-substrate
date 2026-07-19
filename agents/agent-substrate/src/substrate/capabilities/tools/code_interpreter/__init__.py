@@ -1,32 +1,24 @@
-"""CodeInterpreter — executes code in sandboxed Firecracker VM environment.
+"""CodeInterpreter — executes code in sandboxed container environments.
 
 Two deployment targets:
-
-* **CodeInterpreterTool** — Firecracker microVM isolation.  Local dev and
-  standalone VM deployments.  Requires a privileged pod with nested
-  virtualisation support.
 
 * **K8sSandboxCodeInterpreterTool** — Kubernetes agent-sandbox (kubernetes-sigs).
   One pod-per-session via CRD; no privileged pods required.  Preferred for
   Kind / EKS / GKE cluster deployments.
+
+* **LocalSandboxCodeInterpreterTool** — the same sandbox container
+  (code_interpreter/agent-sandbox/Dockerfile) run directly via docker-compose
+  for local dev, talked to over plain HTTP — no Kubernetes required.
 """
 
 from __future__ import annotations
 
-from .tool import CodeInterpreterTool
-from .http_client import CodeInterpreterClient
-from .vm_manager import VMManager, VMPool
-from .session_manager import SessionManager, SessionInfo
-from .config import CodeInterpreterConfig
-from .code_interpreter import K8sSandboxCodeInterpreterTool
+from .code_interpreter import (
+    K8sSandboxCodeInterpreterTool,
+    LocalSandboxCodeInterpreterTool,
+)
 
 __all__ = [
-    "CodeInterpreterTool",
     "K8sSandboxCodeInterpreterTool",
-    "CodeInterpreterClient",
-    "SessionManager",
-    "SessionInfo",
-    "VMManager",
-    "VMPool",
-    "CodeInterpreterConfig",
+    "LocalSandboxCodeInterpreterTool",
 ]

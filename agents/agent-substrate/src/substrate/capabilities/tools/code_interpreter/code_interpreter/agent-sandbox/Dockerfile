@@ -28,6 +28,11 @@ RUN pip install --no-cache-dir \
 	polars \
 	pdfplumber \
 	Pillow \
+	# --- office document generation (Word / PowerPoint) --- \
+	python-docx \
+	python-pptx \
+	# --- PDF generation --- \
+	reportlab \
 	# --- requests kept for compat --- \
 	requests
 

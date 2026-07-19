@@ -86,7 +86,7 @@ First-occurrence wins — earlier directories take priority if the same package 
 | `task_manager/tool.py` | `TaskManagerTool` | Kanban board (create/update/list tasks) |
 | `utils/current_time.py` | `CurrentTimeTool` | Current UTC timestamp |
 | `utils/tool_search.py` | `ToolSearchTool` | Search the Toolbox by name/description |
-| `code_interpreter/tool.py` | `CodeInterpreterTool` | Execute Python in Firecracker VM / K8s sandbox |
+| `code_interpreter/code_interpreter/k8s_tool.py`, `local_sandbox_tool.py` | `K8sSandboxCodeInterpreterTool`, `LocalSandboxCodeInterpreterTool` | Execute Python in a K8s agent-sandbox pod or a local sandbox container |
 | `skills/tool.py` | `SkillTool` | Discover and activate agent skills |
 | `chain/tool.py` | `ToolChainTool` | Script-driven multi-tool chaining (see page 3) |
 

@@ -31,9 +31,6 @@ from substrate.serving.monolith.routes.workspace_oauth import (
 )
 from substrate.serving.monolith.routes.cancel import router as cancel_router
 from substrate.serving.monolith.routes.chat import router as chat_router
-from substrate.serving.monolith.routes.code_interpreter import (
-    router as code_interpreter_router,
-)
 from substrate.serving.monolith.routes.feedback import router as feedback_router
 from substrate.serving.monolith.routes.files import router as files_router
 from substrate.serving.monolith.routes.hitl import router as hitl_router
@@ -109,6 +106,7 @@ async def lifespan(app: FastAPI):
         session_factory=session_factory,
         bridge_registry=infra.bridge_registry,
         redis_client=infra.redis_client,
+        model_client=llm.model_client,
     )
     app.state.tools = tools.registry
     app.state.task_tool = tools.task_tool
@@ -260,7 +258,6 @@ def create_app() -> FastAPI:
     app.include_router(threads_router)
     app.include_router(chat_router)
     app.include_router(cancel_router)
-    app.include_router(code_interpreter_router)
     app.include_router(hitl_router)
     app.include_router(feedback_router)
     app.include_router(audio_router)

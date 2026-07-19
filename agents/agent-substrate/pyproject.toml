@@ -74,9 +74,11 @@ web = [
     "exa-py>=2.14.0",
     "tavily-python>=0.7.26",
 ]
-# Firecracker/K8s sandboxed code execution (K8sSandboxCodeInterpreterTool).
+# K8s agent-sandbox code execution (K8sSandboxCodeInterpreterTool).
 # Pulls the full kubernetes + kubernetes_asyncio client libraries (~85MB) —
 # only needed if you're actually running the sandbox against a real cluster.
+# LocalSandboxCodeInterpreterTool (local dev, no cluster) needs neither —
+# it's a plain httpx client, already covered by the base install.
 code = ["k8s-agent-sandbox>=0.4.6"]
 # PDF loading for the knowledge/RAG pipeline (PDFLoader, DoclingLoader's
 # pypdf-based fallback path).
@@ -203,21 +205,21 @@ ignore_imports = [
     "substrate.serving.monolith.routes.triggers -> substrate.capabilities.triggers.scheduler",
     # agent_runtime: in-memory fallback Runtime (for RUNTIME_BACKEND=memory env)
     "substrate.serving.services.agent_runtime.app -> substrate.agents.runtime",
-    # tool_executor and code_interpreter ARE capability executors by design
+    # tool_executor IS a capability executor by design
     "substrate.serving.services.tool_executor.app -> substrate.agents.storage.tasks",
-    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.code_interpreter.http_client",
-    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.code_interpreter.tool",
+    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.code_interpreter",
     "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.task_manager.tool",
     "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.web.surfer",
-    "substrate.serving.services.code_interpreter.app -> substrate.capabilities.tools.code_interpreter.config",
-    "substrate.serving.services.code_interpreter.app -> substrate.capabilities.tools.code_interpreter.session_manager",
-    "substrate.serving.services.code_interpreter.schemas -> substrate.capabilities.tools.code_interpreter.schemas",
     # files/workspace routes need WorkspaceFileStore/WorkspaceQuotaExceededError
     "substrate.serving.monolith.routes.files -> substrate.capabilities.storage.workspace",
     "substrate.serving.monolith.routes.workspace -> substrate.capabilities.storage.workspace",
     # chat_context inlines PDF attachment text using the existing PDFLoader
     # (pypdf/pdfplumber) rather than duplicating extraction logic
     "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.loaders.pdf_loader",
+    # docling service + client — same pattern as code_interpreter's http_client
+    "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.docling_client",
+    "substrate.serving.services.docling.app -> substrate.capabilities.knowledge.loaders.docling_loader",
+    "substrate.serving.services.docling.schemas -> substrate.capabilities.knowledge.docling_client",
 ]
 
 # Orthogonal peers (not part of the layer stack):

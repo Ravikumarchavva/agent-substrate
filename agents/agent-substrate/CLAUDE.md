@@ -119,7 +119,7 @@ src/substrate/
 │   │   ├── ai/           ImageGeneratorTool, KnowledgeSearchTool
 │   │   ├── utils/        CurrentTimeTool, ToolSearchTool
 │   │   ├── task_manager/ TaskManagerTool (Kanban board)
-│   │   └── code_interpreter/ CodeInterpreterTool (Firecracker VM / K8s — explicit opt-in)
+│   │   └── code_interpreter/ K8sSandboxCodeInterpreterTool / LocalSandboxCodeInterpreterTool
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore, DurableMemoryStore
 │   ├── history/          RedisHistoryProvider, DurableHistoryProvider
@@ -178,7 +178,6 @@ src/substrate/
 | `live_stream` | — | SSE projector, subscribed to EventBus |
 | `file_store` | `FileRecord` | File upload/download storage |
 | `admin` | `AdminLog` | Admin CRUD (users, stats) |
-| `code_interpreter` | — | Firecracker VM sandbox for code execution |
 
 ### Standard Service File Layout
 
@@ -412,8 +411,8 @@ OTLP_ENDPOINT=http://localhost:4318
 # Auth
 JWT_SECRET=<32+ char random string — required>
 
-# Code interpreter (optional)
-CODE_INTERPRETER_URL=...
+# Code interpreter (optional — local dev sandbox container, see `make infra-up-sandbox`)
+CI_LOCAL_SANDBOX_URL=...
 
 # Agent runtime backend: "postgres" (default, durable) or "memory" (in-process, no infra)
 RUNTIME_BACKEND=postgres

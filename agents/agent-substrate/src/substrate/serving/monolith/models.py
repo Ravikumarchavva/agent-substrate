@@ -199,6 +199,18 @@ class FileMetadata(Base):
     # Extensible properties
     props: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
+    # Extraction cache — populated the first time a chat turn references this
+    # file (see routes/chat_context.py::_build_file_context). Files are
+    # immutable once uploaded, so no invalidation is needed: a cache hit
+    # skips extraction entirely for every later reference to the same file.
+    extracted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    extracted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    extraction_engine: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )  # "docling" | "pypdf"
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -216,6 +228,56 @@ class FileMetadata(Base):
     @property
     def is_deleted(self) -> bool:
         return self.deleted_at is not None
+
+
+# ── File versions ─────────────────────────────────────────────────────────────
+
+
+class FileVersion(Base):
+    """A point-in-time snapshot of a workspace file.
+
+    Both writers of a workspace file get a row here: the human editing it in
+    the side panel (author="user", via PUT / the ONLYOFFICE callback) and the
+    agent rewriting it via code_interpreter (author="agent", captured lazily
+    when the file is next served). The very first captured state is
+    author="initial". Snapshot bytes live at ``version_key`` (a copy under
+    ``.versions/{name}/{seq}{ext}`` in the same session dir); the canonical
+    working file (``object_key``) always mirrors the latest version. This is
+    what makes human and agent edits reconcile instead of clobbering — every
+    state is recoverable, and ``restore`` copies a snapshot back to canonical.
+
+    Scoped by ``object_key`` (which embeds ``users/{uid}/sessions/{tid}/name``,
+    so ownership is enforced by how the key is constructed from the caller's
+    ``claims.sub``). ``user_id``/``thread_id`` are plain strings (not FKs) so
+    the service-account identity ("substrate-ui") and real user UUIDs both fit.
+    """
+
+    __tablename__ = "file_versions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    object_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_key: Mapped[str] = mapped_column(String, nullable=False)
+    author: Mapped[str] = mapped_column(String, nullable=False)  # initial|user|agent
+    checksum_sha256: Mapped[str] = mapped_column(String, nullable=False, default="")
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    thread_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_file_versions_key_seq", "object_key", "seq"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<FileVersion(key={self.object_key!r}, seq={self.seq}, "
+            f"author={self.author!r})>"
+        )
 
 
 # ── Feedbacks ────────────────────────────────────────────────────────────────

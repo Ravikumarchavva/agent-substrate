@@ -79,6 +79,8 @@ class SSEApprovalHandler:
             "call_id": req.call.call_id,
             "arguments": req.call.arguments,
             "context": req.context,
+            "risk": req.risk.value,
+            "summary": req.context.get("summary", ""),
         }
         data = await self._bridge.request_and_wait(
             "tool_approval_request", payload, request_id

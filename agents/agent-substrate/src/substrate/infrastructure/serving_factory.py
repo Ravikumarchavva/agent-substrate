@@ -284,13 +284,14 @@ async def init_tool_registry(
     session_factory: Any,
     bridge_registry: Any,
     redis_client: Any = None,
+    model_client: Any = None,
 ) -> ToolboxResult:
     """Create all tools and return a registry."""
     from substrate.agents.storage.tasks import GlobalTaskStore
     from substrate.agents.tools.toolbox import Toolbox
     from substrate.capabilities.tools.code_interpreter import (
-        CodeInterpreterClient,
         K8sSandboxCodeInterpreterTool,
+        LocalSandboxCodeInterpreterTool,
     )
     from substrate.capabilities.tools.human_input import AskHumanTool
     from substrate.capabilities.tools.task_manager.tool import TaskManagerTool
@@ -319,24 +320,34 @@ async def init_tool_registry(
     ask_tool = AskHumanTool(handler=None, max_requests_per_run=5)  # type: ignore[arg-type]
 
     code_interpreter_tool: Tool | None = None
-    ci_client: CodeInterpreterClient | None = None
+    ci_client: Any | None = None
 
     try:
         code_interpreter_tool = K8sSandboxCodeInterpreterTool(
             template=os.environ.get("CI_SANDBOX_TEMPLATE", "python-sandbox-template"),
             namespace=os.environ.get("CI_SANDBOX_NAMESPACE", "default"),
             workspace_pvc_claim=cfg.CI_WORKSPACE_PVC_CLAIM or None,
+            local_sandbox_url=cfg.CI_LOCAL_SANDBOX_URL or None,
+            model_client=model_client,
         )
         logger.info("Kubernetes agent-sandbox Code Interpreter registered")
     except Exception as exc:
         logger.warning(
             "K8sSandboxCodeInterpreterTool unavailable (%s); using fallback", exc
         )
-        from substrate.capabilities.tools.code_interpreter.tool import (
-            CodeInterpreterTool,
-        )
-
-        code_interpreter_tool = CodeInterpreterTool()
+        if cfg.CI_LOCAL_SANDBOX_URL:
+            code_interpreter_tool = LocalSandboxCodeInterpreterTool(
+                base_url=cfg.CI_LOCAL_SANDBOX_URL, model_client=model_client
+            )
+            logger.info(
+                "Local sandbox Code Interpreter registered (%s)",
+                cfg.CI_LOCAL_SANDBOX_URL,
+            )
+        else:
+            code_interpreter_tool = None
+            logger.info(
+                "No code interpreter available (set CI_LOCAL_SANDBOX_URL for local dev)"
+            )
 
     registry = Toolbox()
     # AskHumanTool.execute() genuinely requires the full RunContext (ctx.uuid(),

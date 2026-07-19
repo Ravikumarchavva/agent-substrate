@@ -233,7 +233,13 @@ class ReActAgent:
             results.append(
                 ToolResultBlock(
                     call_id=tc.call_id,
-                    content=[TextBlock(text=inv_result.text or "")],
+                    # inv_result.media (e.g. matplotlib charts from
+                    # code_interpreter) rides along here so the model
+                    # actually sees what the tool produced — the LLM
+                    # encoder splits media out of the tool-result message
+                    # into a synthetic image message (tool-role messages
+                    # can't carry images on their own).
+                    content=[TextBlock(text=inv_result.text or ""), *inv_result.media],
                     is_error=is_error,
                 )
             )

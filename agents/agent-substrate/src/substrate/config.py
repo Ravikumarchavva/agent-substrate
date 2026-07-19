@@ -113,17 +113,30 @@ class SubstrateConfig(BaseSettings):
     WORKSPACE_USER_DELETE_ALLOWED: bool = True
 
     # ── Code interpreter sandbox ─────────────────────────────────────────────
-    CODE_INTERPRETER_URL: str = ""
-    CI_NAMESPACE: str = "agent-framework"
-    CI_HEADLESS_SERVICE: str = ""
-    CI_REPLICAS: int = 1
+    # LocalSandboxCodeInterpreterTool — a locally docker-composed sandbox
+    # container (see deployment/docker/docker-compose.yml, `--profile
+    # sandbox`), talked to over plain HTTP. Empty (the default) means no
+    # local-dev code interpreter is registered unless the K8s agent-sandbox
+    # backend is available.
+    CI_LOCAL_SANDBOX_URL: str = ""
     # Set only when the K8s agent-sandbox backend is wired to the shared
     # workspace PVC (see capabilities/tools/code_interpreter/code_interpreter/
-    # sandbox_service.py::_ensure_user_template). Empty (the default) means
-    # the running code interpreter — Firecracker, local fallback, or an
-    # unconfigured K8s sandbox — has no view of uploaded files at all, so
-    # chat.py must not tell the model a workspace path is openable.
+    # sandbox_service.py::_ensure_user_template), or when
+    # CI_LOCAL_SANDBOX_URL's bind-mounted workspace is configured. Empty
+    # (the default) means the running code interpreter has no view of
+    # uploaded files at all, so chat.py must not tell the model a workspace
+    # path is openable.
     CI_WORKSPACE_PVC_CLAIM: str = ""
+
+    # ── Docling extraction service ───────────────────────────────────────────
+    # Optional, isolated microservice for structure-aware document parsing
+    # (see serving/services/docling/). Empty (the default) means chat
+    # attachments fall back to the lightweight pypdf/pdfplumber path for
+    # PDFs, and DOCX/PPTX stay metadata-only — see
+    # routes/chat_context.py::_extract_document_text.
+    DOCLING_SERVICE_URL: str = ""
+    DOCLING_AUTH_TOKEN: str = ""
+    DOCLING_TIMEOUT_S: int = 90
 
     FRONTEND_URL: str = "http://127.0.0.1:3000"
 

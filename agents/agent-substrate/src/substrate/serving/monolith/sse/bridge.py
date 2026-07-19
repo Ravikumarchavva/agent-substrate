@@ -94,6 +94,8 @@ def bridge_event_to_wire(data: dict) -> "WireEvent | None":
             request_id=data.get("request_id") or data.get("requestId", ""),
             tool_name=data.get("tool_name", ""),
             args=data.get("arguments") or data.get("input") or {},
+            risk=data.get("risk", ""),
+            summary=data.get("summary", ""),
         )
     if kind == "human_input_request":
         return InputRequestedEvent(

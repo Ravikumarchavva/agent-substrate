@@ -75,6 +75,19 @@ services:
       TTS_VOICE: ${TTS_VOICE:-Kore}
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
+      # Empty by default — chat attachments fall back to the lightweight
+      # pypdf path for PDFs. Only set this if you're also running the
+      # docling service (docker compose --profile docling up):
+      #   DOCLING_SERVICE_URL=http://docling:8080 docker compose --profile docling up
+      DOCLING_SERVICE_URL: ${DOCLING_SERVICE_URL:-}
+      # Empty by default — code_interpreter has no view of uploaded files
+      # unless this points at a sandbox container with the same workspace
+      # directory bind-mounted (see the code-interpreter-sandbox service
+      # below, `--profile sandbox`). If running this `backend` service via
+      # compose (not `uv run start` on the host), use
+      # http://code-interpreter-sandbox:8888 — the bind mount below is
+      # host-relative and only applies to a host-run backend.
+      CI_LOCAL_SANDBOX_URL: ${CI_LOCAL_SANDBOX_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -193,6 +206,42 @@ services:
     restart: unless-stopped
     # profiles:
     #   - storage
+
+  docling:
+    profiles:
+      - docling
+    build:
+      context: ../..
+      dockerfile: deployment/docker/docling.Dockerfile
+    environment:
+      DOCLING_OCR_ENABLED: ${DOCLING_OCR_ENABLED:-true}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "8021:8080"
+    restart: unless-stopped
+
+  code-interpreter-sandbox:
+    profiles:
+      - sandbox
+    build:
+      context: ../..
+      dockerfile: src/substrate/capabilities/tools/code_interpreter/code_interpreter/agent-sandbox/Dockerfile
+    environment:
+      CODE_INTERPRETER_WORKSPACE: /app/workspace
+    volumes:
+      # Same directory the "local" FILE_STORE_BACKEND uses (config.py's
+      # FILE_STORE_ROOT) — chat uploads land here, so code executed in this
+      # container can open them directly (see chat.py::ci_has_workspace_access).
+      - ../../data/workspaces:/app/workspace
+    ports:
+      - "8023:8888"
+    restart: unless-stopped
 
 volumes:
   pgdata18:

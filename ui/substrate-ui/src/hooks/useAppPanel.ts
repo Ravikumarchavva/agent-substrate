@@ -10,8 +10,15 @@ export function useAppPanel() {
 
   const openInPanel = useCallback((item: AppPanelItem) => {
     setPanelItems((prev) => {
-      // Replace existing item with same toolName, or add new
-      const existing = prev.findIndex((p) => p.toolName === item.toolName);
+      // Dedup: MCP apps by toolName; file artifacts by their file path
+      // (fileUrl) — all files share the generic "code_interpreter" toolName,
+      // so re-opening the SAME file replaces its tab (and updates fileUrl so
+      // the viewer remounts on a changed version), while a DIFFERENT file
+      // opens a new tab.
+      const existing =
+        item.kind === "file"
+          ? prev.findIndex((p) => p.kind === "file" && p.fileName === item.fileName)
+          : prev.findIndex((p) => p.kind !== "file" && p.toolName === item.toolName);
       if (existing >= 0) {
         const updated = [...prev];
         updated[existing] = { ...item, id: prev[existing].id };

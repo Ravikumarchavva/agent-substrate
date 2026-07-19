@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
+  HardDrive,
   Puzzle,
   Search,
   Settings,
@@ -56,8 +57,9 @@ import { ConnectorsTab } from "./ConnectorsTab";
 import { ModelsTab } from "./ModelsTab";
 import { SearchTab } from "./SearchTab";
 import { AdminTab } from "./AdminTab";
+import { StorageTab } from "./StorageTab";
 
-export type SettingsTab = "general" | "apps" | "llm" | "search" | "admin";
+export type SettingsTab = "general" | "apps" | "llm" | "search" | "storage" | "admin";
 
 interface SettingsNotice {
   tone: "success" | "info";
@@ -82,6 +84,7 @@ export const SETTINGS_TAB_GROUPS: SettingsNavGroup[] = [
     title: "Personal",
     items: [
       { id: "general", label: "General", description: "Timezone and prompt defaults", icon: Settings },
+      { id: "storage", label: "Storage", description: "Uploaded and generated files", icon: HardDrive },
     ],
   },
   {
@@ -553,6 +556,8 @@ export function SettingsPanel({
             setMultipassIndexing={setMultipassIndexing}
           />
         )}
+
+        {activeTab === "storage" && <StorageTab />}
 
         {activeTab === "admin" && isAdmin && (
           <AdminTab

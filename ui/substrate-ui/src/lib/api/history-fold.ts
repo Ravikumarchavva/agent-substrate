@@ -167,6 +167,15 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
             return { ...tc, result: resultText, isError: !event.ok };
           });
         }
+        // Media the tool produced (e.g. code_interpreter charts) — tagged
+        // origin:"tool" so MessageBubble renders them collapsed rather than
+        // full-size (see the live reducer in page.tsx for the rationale).
+        const toolAttachments = getMessageAttachments({
+          attachments: event.attachments,
+        })?.map((a) => ({ ...a, origin: "tool" as const }));
+        if (current && toolAttachments) {
+          current.attachments = [...(current.attachments ?? []), ...toolAttachments];
+        }
         state.sawToolResult = true;
         break;
       }

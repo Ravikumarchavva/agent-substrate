@@ -3,10 +3,29 @@
  *
  * Adds an engine-scoped JWT so the engine's auth middleware is satisfied.
  * The JWT is signed with ENGINE_JWT_SECRET (same value as agent-substrate JWT_SECRET).
- * A new token is generated per request (short-lived, signed as service account).
+ * A new token is generated per request (short-lived).
+ *
+ * If the request carries an httpOnly `user_session` cookie (set at Google
+ * OAuth login, see api/auth/google/callback), the token is signed with that
+ * real user's id as `sub` so agent-substrate-side scoping (file ownership,
+ * workspace storage) is per-person. Otherwise falls back to the fixed
+ * service-account token — e.g. for requests with no logged-in user.
  */
 import { NextRequest } from "next/server";
-import { engineAuthHeader } from "@/lib/engine-auth";
+import { engineAuthHeader, userAuthHeader, type UserSession } from "@/lib/engine-auth";
+
+function authHeaderFor(req: NextRequest): HeadersInit {
+  const raw = req.cookies.get("user_session")?.value;
+  if (raw) {
+    try {
+      const session = JSON.parse(raw) as UserSession;
+      if (session.id && session.email) return userAuthHeader(session);
+    } catch {
+      // Malformed cookie — fall through to the service-account token.
+    }
+  }
+  return engineAuthHeader();
+}
 
 // Stream responses (SSE) must not be buffered or statically optimized.
 export const runtime = "nodejs";
@@ -29,8 +48,9 @@ async function proxyRequest(req: NextRequest, path: string[]): Promise<Response>
     }
   }
 
-  // Inject engine JWT
-  for (const [k, v] of Object.entries(engineAuthHeader())) headers.set(k, v);
+  // Inject engine JWT — per-user if a session cookie is present, else
+  // the fixed service-account token.
+  for (const [k, v] of Object.entries(authHeaderFor(req))) headers.set(k, v);
 
   const body =
     req.method === "GET" || req.method === "HEAD" ? undefined : req.body;

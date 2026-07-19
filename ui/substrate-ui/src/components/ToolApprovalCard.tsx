@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldAlert } from "lucide-react";
+import { ShieldAlert, ShieldCheck, ChevronRight } from "lucide-react";
 import { PanelShell } from "@/components/PanelShell";
 
 type ToolApprovalCardProps = {
@@ -9,7 +9,18 @@ type ToolApprovalCardProps = {
   toolName: string;
   arguments: Record<string, unknown>;
   context?: string;
+  /** Per-call risk tier from the engine ("safe" | "high" | "critical"). */
+  risk?: string;
+  /** Plain-language summary of what the code does (for code_interpreter). */
+  summary?: string;
   onRespond: (requestId: string, data: Record<string, unknown>) => void;
+};
+
+// Risk tier → accent colour, mirroring the tool-call dots in MessageBubble.
+const RISK_STYLE: Record<string, { color: string; label: string }> = {
+  safe: { color: "#34d399", label: "Low risk" },
+  high: { color: "#f59e0b", label: "Elevated risk" },
+  critical: { color: "#ef4444", label: "High risk" },
 };
 
 export function ToolApprovalCard({
@@ -17,6 +28,8 @@ export function ToolApprovalCard({
   toolName,
   arguments: toolArgs,
   context,
+  risk,
+  summary,
   onRespond,
 }: ToolApprovalCardProps) {
   const [status, setStatus] = useState<
@@ -30,6 +43,12 @@ export function ToolApprovalCard({
   const [jsonError, setJsonError] = useState("");
 
   const isPending = status === "pending";
+  const riskStyle = RISK_STYLE[risk ?? ""] ?? RISK_STYLE.critical;
+
+  // code_interpreter (and similar) carry a `code` string — show it as a code
+  // block rather than dumping the whole args object as JSON.
+  const codeArg =
+    typeof toolArgs.code === "string" ? (toolArgs.code as string) : null;
 
   function handleApprove() {
     setStatus("approved");
@@ -57,10 +76,10 @@ export function ToolApprovalCard({
   }
 
   const statusBadge = {
-    approved: { label: "✅ Approved", cls: "bg-green-600/20 text-green-400" },
-    denied: { label: "❌ Denied", cls: "bg-red-600/20 text-red-400" },
+    approved: { label: "Approved", cls: "bg-green-600/20 text-green-400" },
+    denied: { label: "Denied", cls: "bg-red-600/20 text-red-400" },
     modified: {
-      label: "✏️ Modified & Approved",
+      label: "Modified & approved",
       cls: "bg-blue-600/20 text-blue-400",
     },
     pending: null,
@@ -68,10 +87,17 @@ export function ToolApprovalCard({
 
   const headerBadge = (
     <span
-      className="rounded px-2 py-0.5 text-xs font-mono"
-      style={{ background: "color-mix(in srgb, #f59e0b 15%, transparent)", color: "#f59e0b" }}
+      className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
+      style={{
+        background: `color-mix(in srgb, ${riskStyle.color} 15%, transparent)`,
+        color: riskStyle.color,
+      }}
     >
-      {toolName}
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ background: riskStyle.color }}
+      />
+      {riskStyle.label}
     </span>
   );
 
@@ -79,122 +105,152 @@ export function ToolApprovalCard({
     <div className="flex justify-start">
       <div className="w-full max-w-full text-sm sm:max-w-[85%]">
         <PanelShell
-          icon={<ShieldAlert className="w-4 h-4" style={{ color: "#f59e0b" }} />}
-          title="Tool Approval"
+          icon={
+            isPending ? (
+              <ShieldAlert className="h-4 w-4" style={{ color: riskStyle.color }} />
+            ) : (
+              <ShieldCheck className="h-4 w-4" style={{ color: "var(--muted)" }} />
+            )
+          }
+          title="Approval needed"
           badge={headerBadge}
           collapsible={false}
         >
+          {/* One-line what-and-why. */}
+          <div className="mb-3 flex items-baseline gap-1.5">
+            <span className="text-[13px] font-medium text-foreground">
+              {toolName.replace(/_/g, " ")}
+            </span>
+            {summary && (
+              <span className="text-[13px] text-(--muted)">— {summary}</span>
+            )}
+          </div>
 
-        {context && (
-          <p className="mb-2 text-xs" style={{ color: "var(--muted)" }}>{context}</p>
-        )}
+          {context && (
+            <p className="mb-2 text-xs" style={{ color: "var(--muted)" }}>
+              {context}
+            </p>
+          )}
 
-        {/* Arguments viewer */}
-        <details className="mb-3" open>
-          <summary className="cursor-pointer text-xs font-medium" style={{ color: "var(--foreground)" }}>
-            Arguments
-          </summary>
+          {/* Code / arguments viewer */}
           {showModify && isPending ? (
-            <div className="mt-1">
+            <div className="mb-3">
               <textarea
                 value={editedArgs}
                 onChange={(e) => {
                   setEditedArgs(e.target.value);
                   setJsonError("");
                 }}
-                className="w-full rounded p-2 font-mono text-xs outline-none focus:ring-1"
-                style={{ background: "var(--code-bg)", color: "var(--foreground)", border: "1px solid var(--border)", resize: "vertical" }}
-                rows={Math.min(editedArgs.split("\n").length + 1, 10)}
+                className="w-full rounded-xl p-2.5 font-mono text-xs outline-none focus:ring-1"
+                style={{
+                  background: "var(--code-bg)",
+                  color: "var(--code-fg)",
+                  border: "1px solid var(--border)",
+                  resize: "vertical",
+                }}
+                rows={Math.min(editedArgs.split("\n").length + 1, 14)}
               />
               {jsonError && (
-                <p className="mt-1 text-xs" style={{ color: "#f87171" }}>{jsonError}</p>
+                <p className="mt-1 text-xs" style={{ color: "#f87171" }}>
+                  {jsonError}
+                </p>
               )}
             </div>
           ) : (
-            <pre
-              className="mt-1 overflow-x-auto rounded p-2 font-mono text-xs"
-              style={{ background: "var(--code-bg)", color: "var(--muted)", border: "1px solid var(--border)" }}
-            >
-              {JSON.stringify(toolArgs, null, 2)}
-            </pre>
+            <details className="group mb-3" open>
+              <summary
+                className="mb-1 inline-flex cursor-pointer select-none list-none items-center gap-1 text-[11px] font-semibold uppercase tracking-wider"
+                style={{ color: "var(--muted)" }}
+              >
+                <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+                {codeArg ? "Code to run" : "Arguments"}
+              </summary>
+              <pre
+                className="max-h-72 overflow-auto rounded-xl p-3 font-mono text-[11px] leading-relaxed"
+                style={{
+                  background: "var(--code-bg)",
+                  color: "var(--code-fg)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                {codeArg ?? JSON.stringify(toolArgs, null, 2)}
+              </pre>
+            </details>
           )}
-        </details>
 
-        {/* Status badge (shown after response) */}
-        {statusBadge && (
-          <div
-            className={`inline-block rounded px-2 py-1 text-xs font-medium ${statusBadge.cls}`}
-          >
-            {statusBadge.label}
-            {reason && (
-              <span className="ml-1" style={{ color: "var(--muted)" }}>— {reason}</span>
-            )}
-          </div>
-        )}
-
-        {/* Action buttons (only when pending) */}
-        {isPending && (
-          <div className="space-y-2 mt-1">
-            <input
-              type="text"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Reason (optional)"
-              className="w-full rounded px-2 py-1.5 text-xs outline-none"
-              style={{
-                background: "var(--code-bg)",
-                color: "var(--foreground)",
-                border: "1px solid var(--border)",
-              }}
-            />
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={handleApprove}
-                className="rounded px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer"
-                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-              >
-                Approve
-              </button>
-              <button
-                onClick={handleDeny}
-              className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
-                style={{ background: "#dc2626" }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-              >
-                Deny
-              </button>
-              {showModify ? (
-                <button
-                  onClick={handleModifySubmit}
-                  className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
-                  style={{ background: "#2563eb" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-                >
-                  Save & Approve
-                </button>
-              ) : (
-                <button
-                  onClick={() => setShowModify(true)}
-                  className="rounded px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer"
-                  style={{
-                    background: "var(--card-hover)",
-                    color: "var(--foreground)",
-                    border: "1px solid var(--border)",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.75")}
-                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-                >
-                  Modify
-                </button>
+          {/* Status badge (shown after response) */}
+          {statusBadge && (
+            <div
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium ${statusBadge.cls}`}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {statusBadge.label}
+              {reason && (
+                <span className="ml-1" style={{ color: "var(--muted)" }}>
+                  — {reason}
+                </span>
               )}
             </div>
-          </div>
-        )}
+          )}
+
+          {/* Action buttons (only when pending) */}
+          {isPending && (
+            <div className="mt-1 space-y-2">
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason (optional)"
+                className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none"
+                style={{
+                  background: "var(--code-bg)",
+                  color: "var(--foreground)",
+                  border: "1px solid var(--border)",
+                }}
+              />
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleApprove}
+                  className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-85"
+                  style={{
+                    background: "var(--accent)",
+                    color: "var(--accent-foreground)",
+                  }}
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={handleDeny}
+                  className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-85"
+                  style={{ background: "#dc2626" }}
+                >
+                  Deny
+                </button>
+                {showModify ? (
+                  <button
+                    onClick={handleModifySubmit}
+                    className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-85"
+                    style={{ background: "#2563eb" }}
+                  >
+                    Save &amp; approve
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowModify(true)}
+                    className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-75"
+                    style={{
+                      background: "var(--card-hover)",
+                      color: "var(--foreground)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    Modify
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </PanelShell>
       </div>
     </div>

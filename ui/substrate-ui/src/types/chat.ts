@@ -47,4 +47,12 @@ export type UploadedFile = {
   mime: string;
   size: number;
   url?: string;
+  /**
+   * Where the attachment came from. "tool" = auto-captured by a tool run
+   * (e.g. code_interpreter plots) — rendered collapsed so exploratory
+   * re-runs don't flood the chat; the model surfaces the ones worth showing
+   * via `sandbox:` markdown refs instead. Undefined = a user upload or a
+   * model-curated attachment, rendered normally.
+   */
+  origin?: "tool";
 };

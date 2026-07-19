@@ -32,7 +32,7 @@ function createAttachedFilePreview(file: UploadedFile, sourceFile: File): Attach
 
 export function useFileAttachments(
   currentThreadId: string | null,
-  selectThread: (id: string | null, mode?: "replace" | "push") => void,
+  promoteThreadUrl: (threadId: string) => void,
   setThreads: React.Dispatch<React.SetStateAction<Thread[]>>,
 ) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -71,7 +71,14 @@ export function useFileAttachments(
       try {
         const newThread = await api.createThread("New Chat");
         setThreads((current) => [newThread, ...current]);
-        selectThread(newThread.id, "push");
+        // A real Next.js navigation (router.push) here would change the
+        // /chat/[[...slug]] catch-all segment and REMOUNT the page — which
+        // wipes this hook's just-set attachedFiles state before the user
+        // ever sees the upload succeed (see promoteThreadUrl's own comment
+        // in page.tsx for the identical bug this already fixed for
+        // in-flight assistant messages). Use the same remount-free URL
+        // update instead.
+        promoteThreadUrl(newThread.id);
         threadId = newThread.id;
       } catch {
         console.error("Failed to create thread for file upload");
@@ -90,7 +97,7 @@ export function useFileAttachments(
     } finally {
       setUploadingFile(false);
     }
-  }, [currentThreadId, selectThread, setThreads]);
+  }, [currentThreadId, promoteThreadUrl, setThreads]);
 
   const handleRemoveFile = useCallback(async (fileId: string) => {
     if (!currentThreadId) return;

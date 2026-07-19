@@ -1,15 +1,18 @@
-import { engineAuthHeader } from "@/lib/engine-auth";
+import { authHeaderFromCookieHeader } from "@/lib/engine-auth";
 
 export async function POST(req: Request) {
   const body = await req.json();
 
   const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+  // Per-user identity from the session cookie so the agent (and the files it
+  // creates) are scoped to the same user the /api/backend proxy serves files
+  // as — otherwise generated files 404 when opened.
+  const cookieHeader = req.headers.get("cookie");
   const headers: HeadersInit = {
     "Content-Type": "application/json",
-    ...engineAuthHeader(),
+    ...authHeaderFromCookieHeader(cookieHeader),
   };
-  const cookieHeader = req.headers.get("cookie");
   if (cookieHeader) (headers as Record<string, string>)["cookie"] = cookieHeader;
 
   const res = await fetch(`${BACKEND_URL}/chat`, {

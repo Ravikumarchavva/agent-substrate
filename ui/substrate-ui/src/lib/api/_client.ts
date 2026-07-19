@@ -5,17 +5,30 @@ import { ToolCall, UploadedFile } from "@/types";
 // (/api/backend/* -> backend) to avoid CORS failures.
 export const API_BASE = "/api/backend";
 
-export function buildThreadFileContentUrl(threadId: string, fileId: string): string {
-  return `${API_BASE}/threads/${threadId}/files/${fileId}/content`;
+// Backend route is GET /files/{file_id}/download (agent-substrate
+// routes/files.py) — file id alone is enough, no thread scoping needed.
+export function buildFileContentUrl(fileId: string): string {
+  return `${API_BASE}/files/${fileId}/download`;
+}
+
+// Resolves a `sandbox:<path>` markdown ref (a file the code interpreter saved
+// in its working directory) to the workspace file-serve endpoint
+// (agent-substrate routes/workspace.py::serve_file), scoped to the thread's
+// session dir. Images render inline; other types download.
+export function buildWorkspaceFileUrl(threadId: string, path: string): string {
+  const clean = path.replace(/^sandbox:/, "").replace(/^\.?\//, "");
+  return `${API_BASE}/workspace/file?thread_id=${encodeURIComponent(
+    threadId,
+  )}&path=${encodeURIComponent(clean)}`;
 }
 
 export function withUploadedFileUrl(file: UploadedFile): UploadedFile {
-  if (file.url || !file.thread_id) {
+  if (file.url) {
     return file;
   }
   return {
     ...file,
-    url: buildThreadFileContentUrl(file.thread_id, file.id),
+    url: buildFileContentUrl(file.id),
   };
 }
 

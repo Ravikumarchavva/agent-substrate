@@ -1,7 +1,7 @@
 "use client";
 
 import { createElement, useEffect, useRef, useState, type ComponentPropsWithoutRef } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -19,10 +19,12 @@ import {
   ArrowUpRight,
   X,
   Download,
+  FileText,
 } from "lucide-react";
 import { ToolCall, UploadedFile } from "@/types";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { Mermaid } from "@/components/Mermaid";
+import { buildWorkspaceFileUrl } from "@/lib/api/_client";
 import {
   getAttachmentKind,
   getAttachmentIcon,
@@ -31,6 +33,57 @@ import {
 
 function isPersistentToolCall(toolCall: ToolCall): boolean {
   return Boolean(toolCall._meta?.ui?.httpUrl);
+}
+
+// react-markdown sanitizes URLs by default, blanking any scheme not in its
+// allow-list (http/https/mailto/…). Our code-interpreter refs use a custom
+// `sandbox:` scheme, so pass those through untouched and defer to the default
+// (XSS-safe) transform for everything else.
+function sandboxUrlTransform(url: string): string {
+  return url.startsWith("sandbox:") ? url : defaultUrlTransform(url);
+}
+
+/**
+ * A model-embedded image from markdown. Resolves `sandbox:<path>` refs to the
+ * thread's workspace file endpoint, and degrades gracefully — an empty/
+ * unresolvable src renders nothing (avoids React's empty-`src` warning), and a
+ * failed load (e.g. the model referenced a file it didn't actually save)
+ * collapses to a small caption instead of the browser's broken-image icon.
+ */
+function MarkdownImage({
+  src,
+  alt,
+  threadId,
+}: {
+  src?: string;
+  alt?: string;
+  threadId?: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+  const raw = typeof src === "string" ? src.trim() : "";
+  const resolved = raw.startsWith("sandbox:")
+    ? threadId
+      ? buildWorkspaceFileUrl(threadId, raw)
+      : ""
+    : raw;
+
+  if (!resolved) return null;
+  if (failed) {
+    return (
+      <span className="my-1 inline-block text-xs italic text-(--muted)">
+        {alt ? `${alt} (image unavailable)` : "Image unavailable"}
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={resolved}
+      alt={alt ?? ""}
+      onError={() => setFailed(true)}
+      className="my-2 max-h-[520px] w-auto max-w-full rounded-2xl border border-(--border) bg-(--card) shadow-md"
+    />
+  );
 }
 
 function serializeTableToClipboard(table: HTMLTableElement): string {
@@ -67,8 +120,11 @@ function preprocessMarkdown(content: string): string {
     return `__MATH_BLOCK_${mathBlocks.length - 1}__`;
   });
 
-  // 4. Escape all remaining raw '$' signs (these are guaranteed to be currency)
-  processed = processed.replace(/\$/g, '\\$');
+  // 4. Escape remaining raw '$' signs (guaranteed currency at this point) so
+  //    remark-math doesn't parse "$733 … $736" as inline math. The negative
+  //    lookbehind skips '$' the model already escaped as '\$' — escaping it
+  //    again would produce '\\$', which renders as a visible backslash.
+  processed = processed.replace(/(?<!\\)\$/g, '\\$');
 
   // 5. Restore the safe math blocks with $ and $$ delimiters
   processed = processed.replace(/__MATH_BLOCK_(\d+)__/g, (_, index) => {
@@ -177,7 +233,7 @@ function AttachmentDocumentCard({ attachment }: AttachmentDocumentCardProps) {
   );
 
   if (!attachment.url) {
-    return content;
+    return <div className="w-full sm:w-72">{content}</div>;
   }
 
   return (
@@ -185,7 +241,7 @@ function AttachmentDocumentCard({ attachment }: AttachmentDocumentCardProps) {
       href={attachment.url}
       target="_blank"
       rel="noreferrer"
-      className="block cursor-pointer"
+      className="block w-full cursor-pointer sm:w-72"
     >
       {content}
     </a>
@@ -204,18 +260,24 @@ type Props = {
   onRegenerate?: () => void;
   /** Called when an MCP App should open in the side panel */
   onOpenInPanel?: (toolCall: ToolCall) => void;
+  /** Active thread id — resolves `sandbox:<path>` markdown refs to workspace files. */
+  threadId?: string | null;
+  /** Open a code-interpreter file artifact (sandbox: ref) in the side panel. */
+  onOpenArtifact?: (path: string, fileName: string) => void;
 };
 
-export function MessageBubble({ 
-  role, 
-  content, 
+export function MessageBubble({
+  role,
+  content,
   attachments,
-  reasoning, 
-  timestamp, 
+  reasoning,
+  timestamp,
   toolCalls,
   isToolExecuting,
   onRegenerate,
-  onOpenInPanel
+  onOpenInPanel,
+  threadId,
+  onOpenArtifact,
 }: Props) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
@@ -229,13 +291,19 @@ export function MessageBubble({
   const isLongUserMessage = isUser && (safeContent.length > 300 || safeContent.split("\n").length > 5);
   const visibleToolCalls = toolCalls?.filter((tool) => isToolExecuting || isPersistentToolCall(tool)) ?? [];
   const visibleAttachments = attachments ?? [];
+  // Tool-generated images (code_interpreter plots) render collapsed, separate
+  // from user uploads / model-curated images which render in the main gallery.
+  const toolImageAttachments = visibleAttachments.filter((attachment) => {
+    const kind = getAttachmentKind(attachment.mime, attachment.name);
+    return attachment.origin === "tool" && kind === "image" && Boolean(attachment.url);
+  });
   const imageAttachments = visibleAttachments.filter((attachment) => {
     const kind = getAttachmentKind(attachment.mime, attachment.name);
-    return kind === "image" && Boolean(attachment.url);
+    return attachment.origin !== "tool" && kind === "image" && Boolean(attachment.url);
   });
   const documentAttachments = visibleAttachments.filter((attachment) => {
     const kind = getAttachmentKind(attachment.mime, attachment.name);
-    return kind !== "image" || !attachment.url;
+    return attachment.origin !== "tool" && (kind !== "image" || !attachment.url);
   });
 
   useEffect(() => {
@@ -493,7 +561,7 @@ export function MessageBubble({
               </div>
             )}
             {documentAttachments.length > 0 && (
-              <div className="grid w-full max-w-xl gap-2.5 sm:grid-cols-2">
+              <div className="flex w-full max-w-xl flex-wrap justify-end gap-2.5">
                 {documentAttachments.map((attachment) => (
                   <AttachmentDocumentCard key={attachment.id} attachment={attachment} />
                 ))}
@@ -611,7 +679,7 @@ export function MessageBubble({
                   )}
                   <span className="text-xs font-medium text-(--badge-fg)">
                     {isToolExecuting
-                      ? `Running ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}…`
+                      ? `Running tools… ${visibleToolCalls.filter((t) => t.result !== undefined).length}/${visibleToolCalls.length}`
                       : `Used ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}`}
                   </span>
                   <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/tools:rotate-90 text-(--muted)" />
@@ -734,6 +802,7 @@ export function MessageBubble({
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
+                urlTransform={sandboxUrlTransform}
                 components={{
                   table({ children, ...props }) {
                     return <CopyableMarkdownTable {...props}>{children}</CopyableMarkdownTable>;
@@ -757,6 +826,66 @@ export function MessageBubble({
                   code({ className, children }) {
                     return <code className={className}>{children}</code>;
                   },
+                  img({ src, alt }) {
+                    // Model-curated chart: ![alt](sandbox:name.png) → served
+                    // full-size inline from the thread's workspace.
+                    return (
+                      <MarkdownImage
+                        src={typeof src === "string" ? src : undefined}
+                        alt={alt}
+                        threadId={threadId}
+                      />
+                    );
+                  },
+                  a({ href, children }) {
+                    // Model-referenced file: [label](sandbox:report.xlsx) →
+                    // a card that opens the file in the side-panel artifact
+                    // viewer (Claude-style) with a download fallback.
+                    const raw = typeof href === "string" ? href.trim() : "";
+                    if (raw.startsWith("sandbox:") && threadId) {
+                      const path = raw.replace(/^sandbox:/, "").replace(/^\.?\//, "");
+                      const name = path.split("/").pop() || path;
+                      const url = buildWorkspaceFileUrl(threadId, raw);
+                      return (
+                        <span className="my-1 inline-flex items-center gap-2.5 rounded-xl border border-(--border) bg-(--card) px-3 py-1.5 align-middle shadow-xs hover:shadow-sm hover:bg-(--card-hover) hover:border-(--border-hover) transition-all duration-200">
+                          <FileText className="h-4 w-4 shrink-0 text-(--muted)" />
+                          <span className="truncate text-sm font-medium text-foreground">{name}</span>
+                          {onOpenArtifact && (
+                            <button
+                              onClick={() => onOpenArtifact(path, name)}
+                              className="btn-icon ml-1 shrink-0 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold hover:scale-[1.03] active:scale-[0.97] transition-all"
+                              style={{ 
+                                background: "var(--accent)", 
+                                color: "var(--accent-foreground)",
+                                minWidth: "unset",
+                                minHeight: "unset"
+                              }}
+                            >
+                              Open
+                            </button>
+                          )}
+                          <a
+                            href={url}
+                            download={name}
+                            className="btn-icon shrink-0 rounded-lg p-1.5 text-(--muted) hover:text-foreground hover:bg-(--card-hover) hover:scale-[1.05] active:scale-[0.95] transition-all flex items-center justify-center"
+                            title="Download"
+                            style={{
+                              minWidth: "unset",
+                              minHeight: "unset",
+                              textDecoration: "none"
+                            }}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
+                        </span>
+                      );
+                    }
+                    return (
+                      <a href={raw} target="_blank" rel="noreferrer">
+                        {children}
+                      </a>
+                    );
+                  },
                 }}
               >
                 {preprocessMarkdown(safeContent)}
@@ -773,11 +902,45 @@ export function MessageBubble({
 
           {/* Generated/Attached Documents (left-aligned for assistant) */}
           {documentAttachments.length > 0 && (
-            <div className="grid w-full max-w-xl gap-2.5 sm:grid-cols-2 pt-1">
+            <div className="flex w-full max-w-xl flex-wrap gap-2.5 pt-1">
               {documentAttachments.map((attachment) => (
                 <AttachmentDocumentCard key={attachment.id} attachment={attachment} />
               ))}
             </div>
+          )}
+
+          {/* Tool-generated charts — collapsed so exploratory re-runs don't
+              flood the chat; the model surfaces the key ones inline above via
+              sandbox: markdown refs. */}
+          {toolImageAttachments.length > 0 && (
+            <details className="group/plots w-full">
+              <summary
+                className="inline-flex cursor-pointer select-none list-none items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium text-(--badge-fg) transition-colors hover:bg-(--card-hover)"
+                style={{ background: "var(--badge-bg)" }}
+              >
+                <WrenchIcon className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
+                {`${toolImageAttachments.length} chart${toolImageAttachments.length > 1 ? "s" : ""} generated`}
+                <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open/plots:rotate-90 text-(--muted)" />
+              </summary>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {toolImageAttachments.map((attachment) => (
+                  <a
+                    key={attachment.id}
+                    href={attachment.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-sm"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={attachment.url}
+                      alt={attachment.name}
+                      className="h-28 w-auto max-w-[220px] object-contain"
+                    />
+                  </a>
+                ))}
+              </div>
+            </details>
           )}
 
           {/* Action buttons — fade in on hover */}

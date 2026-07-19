@@ -86,9 +86,10 @@ export async function GET(req: NextRequest) {
 
     // Upsert user in Prisma database
     const isAdmin = ADMIN_EMAILS.has(userInfo?.email ?? "");
+    let dbUserId: string | null = null;
     if (userInfo?.email) {
       try {
-        await prisma.user.upsert({
+        const dbUser = await prisma.user.upsert({
           where: { email: userInfo.email },
           update: {
             name: userInfo.name ?? undefined,
@@ -103,6 +104,7 @@ export async function GET(req: NextRequest) {
             isAdmin,
           },
         });
+        dbUserId = dbUser.id;
       } catch (err) {
         console.error("[Google OAuth] Failed to upsert user:", err);
       }
@@ -155,6 +157,27 @@ export async function GET(req: NextRequest) {
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       });
+    }
+
+    // httpOnly session identity used by the /api/backend proxy to mint a
+    // per-user engine JWT (see src/lib/engine-auth.ts::makeUserToken).
+    // Deliberately separate from the readable `google_user` cookie above:
+    // that one is UI display data a client script can read (and in an XSS
+    // scenario, tamper with); this one carries the actual trust boundary
+    // for "which agent-substrate user does this request act as," so it
+    // must not be script-readable/writable.
+    if (dbUserId && userInfo?.email) {
+      res.cookies.set(
+        "user_session",
+        JSON.stringify({ id: dbUserId, email: userInfo.email, isAdmin }),
+        {
+          httpOnly: true,
+          maxAge: 60 * 60 * 24 * 365,
+          path: "/",
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+        }
+      );
     }
 
     // Clear state cookie

@@ -1,0 +1,49 @@
+# Isolation for code-interpreter sandbox pods (one per session).
+#
+# These pods run LLM-generated, untrusted code, so they get a stronger boundary
+# than the rest of the platform:
+#
+#   1. RuntimeClass "gvisor" — routes the pod through runsc, a user-space kernel
+#      that intercepts syscalls before they reach the host kernel. Chosen over
+#      Kata/Firecracker because it needs no nested virtualization (works on
+#      ordinary managed-Kubernetes nodes), and it is what Google itself uses for
+#      GKE Sandbox and Cloud Run untrusted-code isolation.
+#      Enable by setting SANDBOX_RUNTIME_CLASS=gvisor; the per-user
+#      SandboxTemplate then carries runtimeClassName (see
+#      sandbox_service.py::_ensure_user_template).
+#
+#   2. Default-deny egress for sandbox pods, mirroring SANDBOX_NETWORK_POLICY=deny
+#      on the single-node runtime: code that cannot reach the network cannot
+#      exfiltrate a user's files even if it manages to read them.
+#
+# NOTE: the node must actually have the gVisor runtime installed
+# (GKE: `--sandbox type=gvisor` node pool; self-managed: install runsc +
+# containerd shim). Without it, pods referencing this RuntimeClass stay Pending.
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+handler: runsc
+---
+# Sandbox pods are labelled by the agent-sandbox controller; this denies all
+# egress from them. Ingress is allowed from the runtime namespace only, so the
+# tool_executor / agent_runtime can still reach the in-pod server.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-deny-egress
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: code-interpreter-sandbox
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: af-runtime
+  # No egress rules at all = deny every outbound connection, including DNS.
+  egress: []

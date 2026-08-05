@@ -1,24 +1,33 @@
-"""CodeInterpreter — executes code in sandboxed container environments.
+"""CodeInterpreter — executes agent-generated code in an isolated sandbox.
 
-Two deployment targets:
+One LLM-facing tool (:class:`CodeInterpreterTool`) over a pluggable
+:class:`SandboxRuntime`:
 
-* **K8sSandboxCodeInterpreterTool** — Kubernetes agent-sandbox (kubernetes-sigs).
-  One pod-per-session via CRD; no privileged pods required.  Preferred for
-  Kind / EKS / GKE cluster deployments.
-
-* **LocalSandboxCodeInterpreterTool** — the same sandbox container
-  (code_interpreter/agent-sandbox/Dockerfile) run directly via docker-compose
-  for local dev, talked to over plain HTTP — no Kubernetes required.
+* ``BubblewrapRuntime`` — Linux namespaces on a single host. No daemon, no root,
+  no nested virtualization. The default for single-node deployments.
+* ``K8sRuntime`` — one agent-sandbox pod per session, per-user PVC ``subPath``,
+  optional gVisor RuntimeClass. For cluster deployments.
+* ``InProcessRuntime`` — no isolation; tests/CI only.
 """
 
 from __future__ import annotations
 
 from .code_interpreter import (
-    K8sSandboxCodeInterpreterTool,
-    LocalSandboxCodeInterpreterTool,
+    BubblewrapRuntime,
+    CodeInterpreterTool,
+    InProcessRuntime,
+    NetworkPolicy,
+    SandboxRuntime,
+    SandboxSpec,
+    SandboxUnavailableError,
 )
 
 __all__ = [
-    "K8sSandboxCodeInterpreterTool",
-    "LocalSandboxCodeInterpreterTool",
+    "BubblewrapRuntime",
+    "CodeInterpreterTool",
+    "InProcessRuntime",
+    "NetworkPolicy",
+    "SandboxRuntime",
+    "SandboxSpec",
+    "SandboxUnavailableError",
 ]

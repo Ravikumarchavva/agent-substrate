@@ -223,6 +223,21 @@ async def _run_build_file_context_for_workspace_path(object_key: str):
     return attachments[0]
 
 
+async def test_workspace_path_strips_session_prefix_for_bubblewrap_mode(monkeypatch):
+    """Bubblewrap mounts ONLY the caller's own session dir (see
+    CodeInterpreterTool._session_dir) at /workspace — the full
+    users/{uid}/sessions/{tid}/ prefix must be stripped, not just users/{uid}/."""
+    from substrate.serving.monolith.routes import chat_context
+
+    monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "bubblewrap")
+    monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
+
+    attachment = await _run_build_file_context_for_workspace_path(
+        "users/u1/sessions/t1/data.xlsx"
+    )
+    assert attachment["workspace_path"] == "/workspace/data.xlsx"
+
+
 async def test_workspace_path_strips_user_prefix_for_k8s_pvc_mode(monkeypatch):
     """K8s agent-sandbox subPath-mounts users/{uid} at /app/workspace (the
     subPath IS the per-user isolation boundary), so the prefix is stripped
@@ -231,10 +246,10 @@ async def test_workspace_path_strips_user_prefix_for_k8s_pvc_mode(monkeypatch):
     sessions/{session_id} per run), so a relative path would be wrong."""
     from substrate.serving.monolith.routes import chat_context
 
+    monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "k8s")
     monkeypatch.setattr(
         chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "workspace-pvc"
     )
-    monkeypatch.setattr(chat_context.settings, "CI_LOCAL_SANDBOX_URL", "")
 
     attachment = await _run_build_file_context_for_workspace_path(
         "users/u1/sessions/t1/data.xlsx"
@@ -242,31 +257,11 @@ async def test_workspace_path_strips_user_prefix_for_k8s_pvc_mode(monkeypatch):
     assert attachment["workspace_path"] == "/app/workspace/sessions/t1/data.xlsx"
 
 
-async def test_workspace_path_keeps_full_object_key_for_local_sandbox_mode(monkeypatch):
-    """The local sandbox is one shared container with the whole workspace
-    root bind-mounted unscoped (not per-user pods) — stripping the
-    users/{uid}/ prefix here would point at a path that doesn't exist
-    inside the container (see the docker-compose volume mount)."""
-    from substrate.serving.monolith.routes import chat_context
-
-    monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
-    monkeypatch.setattr(
-        chat_context.settings, "CI_LOCAL_SANDBOX_URL", "http://localhost:8023"
-    )
-
-    attachment = await _run_build_file_context_for_workspace_path(
-        "users/u1/sessions/t1/data.xlsx"
-    )
-    assert (
-        attachment["workspace_path"] == "/app/workspace/users/u1/sessions/t1/data.xlsx"
-    )
-
-
 async def test_workspace_path_absent_when_no_sandbox_configured(monkeypatch):
     from substrate.serving.monolith.routes import chat_context
 
+    monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "inprocess")
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
-    monkeypatch.setattr(chat_context.settings, "CI_LOCAL_SANDBOX_URL", "")
 
     attachment = await _run_build_file_context_for_workspace_path(
         "users/u1/sessions/t1/data.xlsx"

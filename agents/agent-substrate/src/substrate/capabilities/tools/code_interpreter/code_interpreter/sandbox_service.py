@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import mimetypes
+import shlex
 import threading
 from dataclasses import dataclass
 from typing import Any, cast
@@ -30,6 +31,12 @@ class CodeInterpreterConfig:
     # Unset (default) preserves the old shared-template, ephemeral behavior.
     workspace_pvc_claim: str | None = None
     workspace_mount_path: str = "/app/workspace"
+    # Kubernetes RuntimeClass for sandbox pods. "gvisor" routes them through
+    # runsc, a user-space kernel that intercepts syscalls before they reach the
+    # host kernel — the isolation Google itself uses for GKE Sandbox / Cloud Run
+    # untrusted code, and it needs no nested virtualization (unlike Kata /
+    # Firecracker). Empty = cluster default runtime (weaker: shared kernel).
+    runtime_class_name: str = ""
 
 
 class CodeInterpreterService:
@@ -75,6 +82,34 @@ class CodeInterpreterService:
                 json=payload,
             )
             return self._with_session("run_code", thread_id, session, data)
+
+    def run_command(
+        self,
+        thread_id: str,
+        argv: list[str],
+        timeout: int | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Run a shell command in the session's pod (the ``command`` tool path).
+
+        Uses the in-pod ``/execute`` endpoint, which runs the argv with
+        ``cwd=WORKSPACE_DIR`` — inside the per-user ``subPath`` mount, so the
+        same isolation boundary as ``run_code`` applies.
+        """
+        with self._lock_for_thread(thread_id):
+            sandbox, session = self._get_or_create_sandbox(thread_id, user_id=user_id)
+            effective_timeout = timeout or self.config.request_timeout
+            data = self._runtime_json(
+                sandbox,
+                "POST",
+                "execute",
+                timeout=effective_timeout,
+                json={
+                    "command": shlex.join(argv),
+                    "timeout": effective_timeout,
+                },
+            )
+            return self._with_session("run_command", thread_id, session, data)
 
     def upload_file(
         self,
@@ -246,15 +281,24 @@ class CodeInterpreterService:
         # No user identity, or no workspace PVC configured: fall back to the
         # shared template — old ephemeral, non-persistent behavior.
         template = self.config.template
-        if user_id is not None and self.config.workspace_pvc_claim is not None:
-            template = self._ensure_user_template(user_id)
+        per_user_template = (
+            user_id is not None and self.config.workspace_pvc_claim is not None
+        )
+        if per_user_template:
+            template = self._ensure_user_template(str(user_id))
+
+        # Warm pools and per-user isolation are mutually exclusive: a pooled pod
+        # is pre-created and generic, so it cannot carry this user's
+        # `subPath: users/{uid}` mount, and a pod's spec is immutable after
+        # creation. Isolation wins — take the cold-start cost instead.
+        warmpool = None if per_user_template else self.config.warmpool
 
         sandbox = self.client.create_sandbox(
             template=template,
             namespace=self.config.namespace,
             sandbox_ready_timeout=self.config.sandbox_ready_timeout,
             labels=self._labels_for_thread(thread_id),
-            warmpool=self.config.warmpool,
+            warmpool=warmpool,
             shutdown_after_seconds=self.config.shutdown_after_seconds,
         )
         session = SandboxSession(
@@ -349,6 +393,10 @@ class CodeInterpreterService:
                 }
             ]
         pod_spec.setdefault("securityContext", {"runAsNonRoot": True})
+        # Route the pod through gVisor (runsc) when configured, so the sandbox's
+        # syscalls hit a user-space kernel instead of the host's.
+        if self.config.runtime_class_name:
+            pod_spec["runtimeClassName"] = self.config.runtime_class_name
 
         body = {
             "apiVersion": f"{group}/{version}",

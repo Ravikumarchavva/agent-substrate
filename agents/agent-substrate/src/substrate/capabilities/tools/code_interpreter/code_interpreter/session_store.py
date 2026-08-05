@@ -21,6 +21,11 @@ class SandboxSession:
     user_id: str | None = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
+    # Bumped on every *read* too (see InMemorySessionStore.get), because a
+    # session reused across many turns is alive even though nothing about it
+    # changed. Using updated_at alone would let the idle reaper kill a sandbox
+    # that is actively serving a long conversation.
+    last_accessed: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -42,6 +47,7 @@ class SandboxSession:
             ),
             created_at=float(payload.get("created_at") or time.time()),  # type: ignore[arg-type]
             updated_at=float(payload.get("updated_at") or time.time()),  # type: ignore[arg-type]
+            last_accessed=float(payload.get("last_accessed") or time.time()),  # type: ignore[arg-type]
         )
 
 
@@ -56,6 +62,8 @@ class SessionStore(Protocol):
 
     def list(self) -> list[SandboxSession]: ...
 
+    def idle_since(self, cutoff: float) -> list[SandboxSession]: ...
+
 
 class InMemorySessionStore:
     """Process-local session registry."""
@@ -66,11 +74,16 @@ class InMemorySessionStore:
 
     def get(self, thread_id: str) -> SandboxSession | None:
         with self._lock:
-            return self._sessions.get(thread_id)
+            session = self._sessions.get(thread_id)
+            if session is not None:
+                session.last_accessed = time.time()
+            return session
 
     def upsert(self, session: SandboxSession) -> None:
         with self._lock:
-            session.updated_at = time.time()
+            now = time.time()
+            session.updated_at = now
+            session.last_accessed = now
             self._sessions[session.thread_id] = session
             self._after_update()
 
@@ -82,6 +95,11 @@ class InMemorySessionStore:
     def list(self) -> list[SandboxSession]:
         with self._lock:
             return list(self._sessions.values())
+
+    def idle_since(self, cutoff: float) -> list[SandboxSession]:
+        """Sessions untouched since *cutoff* — the reaper's input."""
+        with self._lock:
+            return [s for s in self._sessions.values() if s.last_accessed < cutoff]
 
     def _after_update(self) -> None:
         """Hook for persistent stores."""

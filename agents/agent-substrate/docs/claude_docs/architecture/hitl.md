@@ -67,10 +67,11 @@ setup) — the normal path never calls it.
 
 All three risk-gated tools that used to carry a `# TODO: L4-hitl` marker
 (`capabilities/tools/web/surfer.py`, `capabilities/tools/code_interpreter/
-tool.py`, `capabilities/tools/code_interpreter/code_interpreter/k8s_tool.py`)
-needed no code changes themselves — the durability fix lives entirely in the
-invoker/bridge layer, so any tool declaring `risk = "critical"`/`"sensitive"`
-gets the durable gate automatically. Markers removed.
+tool.py` — since consolidated into a single `CodeInterpreterTool` behind a
+pluggable `SandboxRuntime`) needed no code changes themselves — the durability
+fix lives entirely in the invoker/bridge layer, so any tool declaring
+`risk = "critical"`/`"sensitive"` gets the durable gate automatically. Markers
+removed.
 
 ## 3. `human_gate` microservice — Postgres + Redis pub/sub, now signal-converged
 

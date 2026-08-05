@@ -111,8 +111,8 @@ class ToolChainTool:
     ) -> None:
         if interpreter is None:
             raise RuntimeError(
-                "ToolChainTool requires a CodeInterpreterTool instance. "
-                "Configure the K8s agent-sandbox or set CI_LOCAL_SANDBOX_URL."
+                "ToolChainTool requires a CodeInterpreterTool instance — the "
+                "sandbox runtime failed to initialize (see SANDBOX_RUNTIME)."
             )
         self._invoker = invoker
         self._interpreter = interpreter

@@ -12,10 +12,17 @@ from .agent_sandbox_tools import (
     reset_code_interpreter_thread_id,
     set_code_interpreter_thread_id,
 )
-from .k8s_tool import K8sSandboxCodeInterpreterTool
-from .local_sandbox_tool import LocalSandboxCodeInterpreterTool
+from .runtimes import (
+    BubblewrapRuntime,
+    InProcessRuntime,
+    NetworkPolicy,
+    SandboxRuntime,
+    SandboxSpec,
+    SandboxUnavailableError,
+)
 from .sandbox_service import CodeInterpreterConfig, CodeInterpreterService
 from .session_store import InMemorySessionStore, JsonSessionStore, SandboxSession
+from .tool import CodeInterpreterTool
 
 
 def main() -> None:
@@ -25,8 +32,13 @@ def main() -> None:
 __all__ = [
     "main",
     "AgentSandboxTools",
-    "K8sSandboxCodeInterpreterTool",
-    "LocalSandboxCodeInterpreterTool",
+    "BubblewrapRuntime",
+    "CodeInterpreterTool",
+    "InProcessRuntime",
+    "NetworkPolicy",
+    "SandboxRuntime",
+    "SandboxSpec",
+    "SandboxUnavailableError",
     "code_interpreter",
     "code_interpreter_thread",
     "configure_default_code_interpreter",

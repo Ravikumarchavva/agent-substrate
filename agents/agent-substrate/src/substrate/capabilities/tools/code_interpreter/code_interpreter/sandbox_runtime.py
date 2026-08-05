@@ -26,10 +26,15 @@ MAX_INLINE_FILE_BYTES = int(
     os.getenv("CODE_INTERPRETER_MAX_INLINE_FILE_BYTES", str(10 * 1024 * 1024))
 )
 
-_session_globals: dict[str, Any] = {"__name__": "__code_interpreter__"}
+# Per-session interpreter namespaces, keyed by session id. NOT a single shared
+# dict: this server normally runs one-pod-per-session, but if it is ever fronted
+# by more than one session, a module-global namespace would leak one user's
+# variables (data, pasted credentials) into another user's next execution.
+_session_globals: dict[str, dict[str, Any]] = {}
 _plotly_seen_hashes: dict[str, str] = {}  # keyed by variable name, not id()
 _execution_lock = threading.RLock()
 _artifact_counter = 0
+_DEFAULT_SESSION_KEY = "__default__"
 
 
 class ExecuteRequest(BaseModel):
@@ -118,7 +123,7 @@ def ci_run(request: RunCodeRequest) -> dict[str, Any]:
     with _execution_lock:
         os.makedirs(WORKSPACE_DIR, exist_ok=True)
         os.makedirs(ARTIFACTS_DIR, exist_ok=True)
-        _prepare_repl_globals()
+        namespace = _prepare_repl_globals(request.session_id)
         _install_plotly_show_hook()
 
         before = _snapshot_workspace()
@@ -133,7 +138,7 @@ def ci_run(request: RunCodeRequest) -> dict[str, Any]:
             sys.stdout = stdout_buf
             sys.stderr = stderr_buf
             compiled = compile(request.code, "<agent-code>", "exec")
-            exec(compiled, _session_globals)  # noqa: S102
+            exec(compiled, namespace)  # noqa: S102
         except SystemExit as exc:
             exit_code = exc.code if isinstance(exc.code, int) else 1
         except Exception:
@@ -147,7 +152,7 @@ def ci_run(request: RunCodeRequest) -> dict[str, Any]:
         if request.include_artifacts:
             try:
                 _capture_matplotlib_figures(close_figures=request.close_figures)
-                _capture_plotly_figures()
+                _capture_plotly_figures(namespace)
             except Exception:
                 stderr_buf.write("\nArtifact capture failed:\n")
                 stderr_buf.write(traceback.format_exc())
@@ -221,11 +226,11 @@ def ci_list(request: ListRequest) -> dict[str, Any]:
 
 
 @app.post("/ci/reset")
-def ci_reset() -> dict[str, str]:
+def ci_reset(request: PathRequest | None = None) -> dict[str, str]:
+    """Clear interpreter state. Clears every session's namespace in this pod."""
     global _artifact_counter
     with _execution_lock:
         _session_globals.clear()
-        _session_globals["__name__"] = "__code_interpreter__"
         _plotly_seen_hashes.clear()
         _artifact_counter = 0
     return {"status": "ok", "message": "Python session state cleared."}
@@ -342,9 +347,12 @@ async def repl_reset():
     return JSONResponse(status_code=200, content=ci_reset())
 
 
-def _prepare_repl_globals() -> None:
-    _session_globals.setdefault("__name__", "__code_interpreter__")
-    _session_globals["display"] = _display
+def _prepare_repl_globals(session_id: str | None) -> dict[str, Any]:
+    """Return (creating on first use) the namespace for *session_id*."""
+    key = session_id or _DEFAULT_SESSION_KEY
+    namespace = _session_globals.setdefault(key, {"__name__": "__code_interpreter__"})
+    namespace["display"] = _display
+    return namespace
 
 
 def _display(value: Any = None) -> Any:
@@ -553,9 +561,9 @@ def _install_plotly_show_hook() -> None:
     BaseFigure.show = _show  # type: ignore[assignment]
 
 
-def _capture_plotly_figures() -> list[dict[str, Any]]:
+def _capture_plotly_figures(namespace: dict[str, Any]) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
-    for name, value in list(_session_globals.items()):
+    for name, value in list(namespace.items()):
         if _is_plotly_figure(value):
             digest = _plotly_hash(value)
             if _plotly_seen_hashes.get(name) == digest:

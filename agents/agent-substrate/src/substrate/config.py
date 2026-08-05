@@ -113,20 +113,40 @@ class SubstrateConfig(BaseSettings):
     WORKSPACE_USER_DELETE_ALLOWED: bool = True
 
     # ── Code interpreter sandbox ─────────────────────────────────────────────
-    # LocalSandboxCodeInterpreterTool — a locally docker-composed sandbox
-    # container (see deployment/docker/docker-compose.yml, `--profile
-    # sandbox`), talked to over plain HTTP. Empty (the default) means no
-    # local-dev code interpreter is registered unless the K8s agent-sandbox
-    # backend is available.
-    CI_LOCAL_SANDBOX_URL: str = ""
     # Set only when the K8s agent-sandbox backend is wired to the shared
     # workspace PVC (see capabilities/tools/code_interpreter/code_interpreter/
-    # sandbox_service.py::_ensure_user_template), or when
-    # CI_LOCAL_SANDBOX_URL's bind-mounted workspace is configured. Empty
-    # (the default) means the running code interpreter has no view of
-    # uploaded files at all, so chat.py must not tell the model a workspace
-    # path is openable.
+    # sandbox_service.py::_ensure_user_template). Empty with SANDBOX_RUNTIME=
+    # "k8s" means the running code interpreter has no view of uploaded files
+    # at all, so chat.py must not tell the model a workspace path is openable
+    # (the default "bubblewrap" runtime always has a view — see chat.py's
+    # ci_has_workspace_access).
     CI_WORKSPACE_PVC_CLAIM: str = ""
+    # ── Sandbox isolation (how agent-generated code is contained) ─────────────
+    # "bubblewrap" = Linux namespaces on this host (no daemon, no root, no
+    #   nested virtualization). The default: only the caller's own session
+    #   directory is mounted, so one user's code cannot see another's files.
+    # "k8s"        = one agent-sandbox pod per session (per-user PVC subPath,
+    #   optional gVisor RuntimeClass). For cluster deployments.
+    # "inprocess"  = NO isolation. Tests/CI only — never multi-user.
+    SANDBOX_RUNTIME: str = "bubblewrap"
+    # Network reachable from sandboxed code: "deny" | "pip_only" | "full".
+    # Deny is the default because the code is LLM-generated and untrusted: with
+    # no egress it cannot exfiltrate files even if it reads them.
+    SANDBOX_NETWORK_POLICY: str = "deny"
+    SANDBOX_TIMEOUT_SECONDS: int = 60
+    SANDBOX_MEMORY_BYTES: int = 2 * 1024 * 1024 * 1024
+    # Idle sessions whose sandbox is reaped by the janitor (k8s pods; the
+    # bubblewrap runtime has no long-lived process to reap).
+    SANDBOX_SESSION_TTL_SECONDS: int = 3600
+    # Kubernetes RuntimeClass for sandbox pods, e.g. "gvisor". Empty = cluster
+    # default (shared host kernel).
+    SANDBOX_RUNTIME_CLASS: str = ""
+    # Interpreter the bubblewrap runtime executes. Its environment supplies the
+    # packages the tool advertises (pandas, matplotlib, …) — install the
+    # `sandbox` extra. Empty = the interpreter the engine itself runs under.
+    # Point this at a dedicated venv to keep those packages out of the engine's
+    # own environment; that venv is mounted read-only into the sandbox.
+    SANDBOX_PYTHON: str = ""
 
     # ── Docling extraction service ───────────────────────────────────────────
     # Optional, isolated microservice for structure-aware document parsing

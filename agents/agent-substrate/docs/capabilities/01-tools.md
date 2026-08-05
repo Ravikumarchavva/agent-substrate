@@ -86,7 +86,7 @@ First-occurrence wins — earlier directories take priority if the same package 
 | `task_manager/tool.py` | `TaskManagerTool` | Kanban board (create/update/list tasks) |
 | `utils/current_time.py` | `CurrentTimeTool` | Current UTC timestamp |
 | `utils/tool_search.py` | `ToolSearchTool` | Search the Toolbox by name/description |
-| `code_interpreter/code_interpreter/k8s_tool.py`, `local_sandbox_tool.py` | `K8sSandboxCodeInterpreterTool`, `LocalSandboxCodeInterpreterTool` | Execute Python in a K8s agent-sandbox pod or a local sandbox container |
+| `code_interpreter/code_interpreter/tool.py` | `CodeInterpreterTool` | Execute Python or shell in an isolated sandbox — backend chosen by `SANDBOX_RUNTIME` (`bubblewrap`: Linux namespaces on this host, the single-node default; `k8s`: one agent-sandbox pod per session; `inprocess`: no isolation, tests only) via `runtimes/factory.py::build_runtime` |
 | `skills/tool.py` | `SkillTool` | Discover and activate agent skills |
 | `chain/tool.py` | `ToolChainTool` | Script-driven multi-tool chaining (see page 3) |
 

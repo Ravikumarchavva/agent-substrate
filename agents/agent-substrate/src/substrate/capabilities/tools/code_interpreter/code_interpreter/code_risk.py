@@ -6,7 +6,7 @@ reads / saving files in the workspace) from genuinely dangerous operations
 (shell/subprocess, network egress, file deletion, dynamic code execution,
 writes outside the workspace). Exploratory code runs with no approval;
 dangerous code gates with a human-readable summary — see
-``LocalSandboxCodeInterpreterTool.classify_risk`` and the invoker's risk gate.
+``CodeInterpreterTool.classify_risk`` and the invoker's risk gate.
 
 Deterministic, free, no LLM call — runs on every code-interpreter execution.
 """

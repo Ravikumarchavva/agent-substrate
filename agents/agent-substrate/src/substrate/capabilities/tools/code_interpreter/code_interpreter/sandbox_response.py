@@ -1,10 +1,9 @@
 """Shared response conversion for sandbox_runtime.py's /ci/run wire shape.
 
-Both K8sSandboxCodeInterpreterTool (routes through the k8s_agent_sandbox
-SandboxClient tunnel) and LocalSandboxCodeInterpreterTool (plain HTTP to a
-docker-composed sandbox container) talk to the exact same server
-(code_interpreter/agent-sandbox/sandbox_runtime.py) — this is the one place
-that response dict becomes a ToolExecutionResult.
+Every SandboxRuntime normalises its result to this dict shape (the in-pod
+server's ``/ci/run`` body; local runtimes build it via
+``ExecResult.to_sandbox_response``) — this is the one place it becomes a
+ToolExecutionResult.
 """
 
 from __future__ import annotations

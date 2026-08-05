@@ -80,14 +80,6 @@ services:
       # docling service (docker compose --profile docling up):
       #   DOCLING_SERVICE_URL=http://docling:8080 docker compose --profile docling up
       DOCLING_SERVICE_URL: ${DOCLING_SERVICE_URL:-}
-      # Empty by default — code_interpreter has no view of uploaded files
-      # unless this points at a sandbox container with the same workspace
-      # directory bind-mounted (see the code-interpreter-sandbox service
-      # below, `--profile sandbox`). If running this `backend` service via
-      # compose (not `uv run start` on the host), use
-      # http://code-interpreter-sandbox:8888 — the bind mount below is
-      # host-relative and only applies to a host-run backend.
-      CI_LOCAL_SANDBOX_URL: ${CI_LOCAL_SANDBOX_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -226,6 +218,14 @@ services:
       - "8021:8080"
     restart: unless-stopped
 
+  # LEGACY / opt-in. The default SANDBOX_RUNTIME=bubblewrap needs no container
+  # here at all (see capabilities/tools/code_interpreter/.../runtimes/bubblewrap.py)
+  # — it runs code directly on the host in a Linux namespace. This service
+  # builds the same image real K8s SandboxTemplates run
+  # (code_interpreter/agent-sandbox/README.md) — useful for manually exercising
+  # the sandbox_runtime.py HTTP server (curl its /ci/run etc.) without a real
+  # cluster. K8sRuntime itself always talks to a real cluster via the
+  # kubernetes-sigs/agent-sandbox controller, never a bare HTTP URL like this.
   code-interpreter-sandbox:
     profiles:
       - sandbox
@@ -237,7 +237,7 @@ services:
     volumes:
       # Same directory the "local" FILE_STORE_BACKEND uses (config.py's
       # FILE_STORE_ROOT) — chat uploads land here, so code executed in this
-      # container can open them directly (see chat.py::ci_has_workspace_access).
+      # container can open them directly.
       - ../../data/workspaces:/app/workspace
     ports:
       - "8023:8888"

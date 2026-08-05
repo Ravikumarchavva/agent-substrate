@@ -3,11 +3,16 @@
 # Backend Dockerfile for Python FastAPI
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS base
 
-# Install system dependencies
+# Install system dependencies.
+# bubblewrap: the default SANDBOX_RUNTIME isolates agent-generated code in a
+# Linux namespace scoped to one session directory (no daemon, no root). Running
+# it *inside* this container additionally needs cap_add=SYS_ADMIN and
+# seccomp=unconfined on the container itself — see docker-compose.deploy.yml.
 RUN apt-get update && apt-get install -y \
     curl \
     gcc \
     g++ \
+    bubblewrap \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

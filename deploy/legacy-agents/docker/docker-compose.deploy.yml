@@ -1,0 +1,135 @@
+# Single-box production deploy: engine + chat UI + Postgres + Redis behind
+# Caddy (automatic HTTPS). Everything runs on one VM (e.g. an Oracle Cloud
+# Always-Free Ampere instance). Fill in deploy.env (see deploy.env.example),
+# point your domain's A record at the box, then:
+#
+#   docker compose --env-file deploy.env -f docker-compose.deploy.yml up -d --build
+#
+# Caddy fetches a real TLS cert for $DOMAIN automatically on first boot.
+name: substrate-deploy
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - substrate-ui
+
+  postgres:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: agentdb
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./init-extensions.sql:/docker-entrypoint-initdb.d/10-extensions.sql
+      - ./init-chatbotdb.sh:/docker-entrypoint-initdb.d/20-chatbotdb.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/backend.Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@postgres:5432/agentdb
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      # Per-user workspace filesystem (uploads + code-interpreter workdir).
+      FILE_STORE_BACKEND: local
+      FILE_STORE_ROOT: /data/workspaces
+      # LLM provider — set at least one key and point CHAT_MODEL at it.
+      # Groq and Gemini have real free tiers; use one to keep cost ~$0.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      CHAT_MODEL: ${CHAT_MODEL}
+      ENABLE_BUILDER: "true"
+      FRONTEND_URL: https://${DOMAIN}
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+      # Agent-generated code runs in a bubblewrap namespace scoped to the
+      # caller's own session directory — no separate sandbox service, no Docker
+      # socket. See capabilities/tools/code_interpreter/.../runtimes/bubblewrap.py
+      SANDBOX_RUNTIME: bubblewrap
+      SANDBOX_NETWORK_POLICY: deny
+    volumes:
+      - workspaces:/data/workspaces
+    # bwrap needs to create user+mount namespaces. Docker's default seccomp
+    # profile blocks clone(CLONE_NEWUSER), so the backend container needs these
+    # two relaxations. NOTE this weakens the *outer* container boundary; the
+    # boundary that protects users from each other is the inner bubblewrap
+    # namespace, which still applies. For the strongest posture, run the backend
+    # as a systemd unit on the host instead of in a container (then neither
+    # relaxation is needed) — see deployment/README-single-node.md.
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  substrate-ui:
+    build:
+      context: ../../../substrate-ui
+      dockerfile: Dockerfile
+      args:
+        # Empty → browser uses same-origin relative paths (served via Caddy),
+        # so the SSE stream flows browser → this Node server → backend with no
+        # serverless timeout.
+        NEXT_PUBLIC_API_URL: ""
+    restart: unless-stopped
+    environment:
+      BACKEND_API_URL: http://backend:8000
+      NEXT_PUBLIC_API_URL: ""
+      # MUST equal the engine's JWT_SECRET so the proxy's tokens verify.
+      ENGINE_JWT_SECRET: ${JWT_SECRET}
+      # UI's own Prisma DB (Auth.js sessions) — the chatbotdb the init script
+      # creates on the same Postgres.
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/chatbotdb
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: https://${DOMAIN}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+    depends_on:
+      - backend
+      - postgres
+
+volumes:
+  pgdata:
+  redisdata:
+  workspaces:
+  caddy_data:
+  caddy_config:

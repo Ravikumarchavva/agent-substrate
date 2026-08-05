@@ -170,27 +170,30 @@ async def _build_file_context(
         # object_key is "users/{uid}/sessions/{tid}/name" under the
         # WorkspaceFileStore default. What that maps to *inside* the sandbox
         # depends on how the active code interpreter mounts the workspace —
-        # these two backends use different mount topologies (mirrors the
+        # these backends use different mount topologies (mirrors the
         # ci_has_workspace_access gate below) — and the result is always
-        # made absolute (see _SANDBOX_WORKSPACE_MOUNT_PATH) since the
-        # sandbox's execution cwd isn't guaranteed to be the workspace root.
+        # made absolute since the sandbox's execution cwd isn't guaranteed to
+        # be the workspace root.
         relative_path: str | None = None
-        if settings.CI_WORKSPACE_PVC_CLAIM:
+        mount_path = _SANDBOX_WORKSPACE_MOUNT_PATH
+        if settings.SANDBOX_RUNTIME == "bubblewrap":
+            # Bubblewrap mounts ONLY the caller's own session dir — see
+            # CodeInterpreterTool._session_dir — at /workspace, so the
+            # "users/{uid}/sessions/{tid}/" prefix must be stripped entirely,
+            # not just the "users/{uid}/" part.
+            mount_path = "/workspace"
+            parts = meta.object_key.split("/", 4)
+            if len(parts) == 5 and parts[0] == "users" and parts[2] == "sessions":
+                relative_path = parts[4]
+        elif settings.CI_WORKSPACE_PVC_CLAIM:
             # K8s agent-sandbox subPath-mounts "users/{uid}" at
             # /app/workspace (per-user pod — that subPath IS the isolation
             # boundary), so the prefix must be stripped.
             parts = meta.object_key.split("/", 2)
             if len(parts) == 3 and parts[0] == "users":
                 relative_path = parts[2]
-        elif settings.CI_LOCAL_SANDBOX_URL:
-            # Local sandbox is one shared container (not per-user pods) with
-            # the whole workspace root bind-mounted unscoped at
-            # /app/workspace — object_key is already the right relative path.
-            relative_path = meta.object_key
         if relative_path is not None:
-            attachment["workspace_path"] = (
-                f"{_SANDBOX_WORKSPACE_MOUNT_PATH}/{relative_path}"
-            )
+            attachment["workspace_path"] = f"{mount_path}/{relative_path}"
         return attachment
 
     for meta in rows:

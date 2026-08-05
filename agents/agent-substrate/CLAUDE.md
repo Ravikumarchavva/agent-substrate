@@ -119,7 +119,7 @@ src/substrate/
 │   │   ├── ai/           ImageGeneratorTool, KnowledgeSearchTool
 │   │   ├── utils/        CurrentTimeTool, ToolSearchTool
 │   │   ├── task_manager/ TaskManagerTool (Kanban board)
-│   │   └── code_interpreter/ K8sSandboxCodeInterpreterTool / LocalSandboxCodeInterpreterTool
+│   │   └── code_interpreter/ CodeInterpreterTool + pluggable SandboxRuntime (bubblewrap/k8s/inprocess)
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore, DurableMemoryStore
 │   ├── history/          RedisHistoryProvider, DurableHistoryProvider
@@ -411,8 +411,9 @@ OTLP_ENDPOINT=http://localhost:4318
 # Auth
 JWT_SECRET=<32+ char random string — required>
 
-# Code interpreter (optional — local dev sandbox container, see `make infra-up-sandbox`)
-CI_LOCAL_SANDBOX_URL=...
+# Code interpreter sandbox: "bubblewrap" (default, Linux namespaces on this
+# host, no container) | "k8s" (one agent-sandbox pod per session) | "inprocess"
+SANDBOX_RUNTIME=bubblewrap
 
 # Agent runtime backend: "postgres" (default, durable) or "memory" (in-process, no infra)
 RUNTIME_BACKEND=postgres

@@ -74,12 +74,29 @@ web = [
     "exa-py>=2.14.0",
     "tavily-python>=0.7.26",
 ]
-# K8s agent-sandbox code execution (K8sSandboxCodeInterpreterTool).
-# Pulls the full kubernetes + kubernetes_asyncio client libraries (~85MB) —
-# only needed if you're actually running the sandbox against a real cluster.
-# LocalSandboxCodeInterpreterTool (local dev, no cluster) needs neither —
-# it's a plain httpx client, already covered by the base install.
+# K8s agent-sandbox code execution (SANDBOX_RUNTIME=k8s). Pulls the full
+# kubernetes + kubernetes_asyncio client libraries (~85MB) — only needed if
+# you're actually running sandbox pods against a real cluster. The default
+# bubblewrap runtime needs none of it.
 code = ["k8s-agent-sandbox>=0.4.6"]
+# Data-science packages the code_interpreter tool advertises to the model.
+# With SANDBOX_RUNTIME=bubblewrap the sandbox executes using an interpreter on
+# THIS host (see SANDBOX_PYTHON), so these must be importable from that
+# interpreter's environment — previously they only existed inside the sandbox
+# container image. Install into the engine's own env (simplest), or into a
+# dedicated venv and point SANDBOX_PYTHON at it to keep them out of the engine.
+sandbox = [
+    "pandas>=2.2.0",
+    "matplotlib>=3.9.0",
+    "openpyxl>=3.1.0",
+    "python-docx>=1.1.0",
+    "python-pptx>=1.0.0",
+    "reportlab>=4.2.0",
+    "polars>=1.0.0",
+    "seaborn>=0.13.0",
+    "plotly>=5.24.0",
+    "scikit-learn>=1.5.0",
+]
 # PDF loading for the knowledge/RAG pipeline (PDFLoader, DoclingLoader's
 # pypdf-based fallback path).
 rag = ["pypdf>=6.13.0"]
@@ -89,7 +106,7 @@ s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
 # Everything the reference monolith server (`make infra-up && uv run start`)
 # constructs by default — install this if you're running agent-substrate
 # itself, not just importing it as a library. `make sync` uses this.
-server = ["agent-substrate[web,code,rag,s3]"]
+server = ["agent-substrate[web,code,rag,s3,sandbox]"]
 # Structure-aware document parsing (PDF/DOCX/PPTX layout, tables, OCR) via
 # DoclingLoader (capabilities/knowledge/loaders/docling_loader.py). Pulls in
 # torch + transformers + accelerate for local layout/table-structure models —
@@ -208,6 +225,7 @@ ignore_imports = [
     # tool_executor IS a capability executor by design
     "substrate.serving.services.tool_executor.app -> substrate.agents.storage.tasks",
     "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.code_interpreter",
+    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.factory",
     "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.task_manager.tool",
     "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.web.surfer",
     # files/workspace routes need WorkspaceFileStore/WorkspaceQuotaExceededError

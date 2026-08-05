@@ -219,22 +219,21 @@ async def chat(
         if attachments:
             # workspace_path (see _build_file_context) is only meaningful when
             # the running code interpreter actually mounts the same workspace
-            # directory as chat uploads — either the K8s agent-sandbox path
+            # directory as chat uploads. Two cases: the default bubblewrap
+            # runtime always mounts the caller's own session dir (see
+            # CodeInterpreterTool._session_dir), or the K8s agent-sandbox path
             # (CI_WORKSPACE_PVC_CLAIM configured — see
-            # sandbox_service.py::_ensure_user_template) or the local-dev
-            # sandbox container (CI_LOCAL_SANDBOX_URL — see
-            # deployment/docker/docker-compose.yml, `--profile sandbox`,
-            # which bind-mounts the same ./data/workspaces directory by
-            # construction). Without one of these, the code interpreter has
-            # never seen the uploaded bytes — telling the model a path
-            # exists there just causes it to open a nonexistent path and
-            # hallucinate a plausible-looking prefix (observed: model
-            # invented "/mnt/data/..." from ChatGPT-convention training
-            # bias). Only surface the hint when it's actually true, and
-            # phrase it as relative to the tool's own working directory so
-            # the model doesn't need to guess a root.
+            # sandbox_service.py::_ensure_user_template). Without one of
+            # these, the code interpreter has never seen the uploaded bytes —
+            # telling the model a path exists there just causes it to open a
+            # nonexistent path and hallucinate a plausible-looking prefix
+            # (observed: model invented "/mnt/data/..." from ChatGPT-
+            # convention training bias). Only surface the hint when it's
+            # actually true, and phrase it as relative to the tool's own
+            # working directory so the model doesn't need to guess a root.
             ci_has_workspace_access = bool(
-                settings.CI_WORKSPACE_PVC_CLAIM or settings.CI_LOCAL_SANDBOX_URL
+                settings.SANDBOX_RUNTIME == "bubblewrap"
+                or settings.CI_WORKSPACE_PVC_CLAIM
             )
             attachment_lines = "\n".join(
                 f"- {a['name']} ({a['mime']})"

@@ -30,6 +30,7 @@ resources:
   - runtime/live-stream.yaml
   - runtime/user-workspaces.yaml
   - runtime/admin.yaml
+  - runtime/sandbox-isolation.yaml
 
   # Policies
   - policies/network-policies.yaml

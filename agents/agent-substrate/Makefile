@@ -20,7 +20,7 @@ help:
 	@echo "  make infra-up     - start host-dev support services (Postgres, Redis, MinIO, Loki, Promtail, Grafana, Tempo, MCP server)"
 	@echo "  make infra-up-all - infra-up + code-interpreter sandbox + ONLYOFFICE (everything for file editing; excludes GPU-only docling)"
 	@echo "  make infra-up-docling - build and start the Docling extraction service (opt-in, ~4GB image)"
-	@echo "  make infra-up-sandbox - build and start the local code-interpreter sandbox (opt-in)"
+	@echo "  make infra-up-sandbox - legacy: local code-interpreter sandbox container, for testing the k8s server path without a cluster (default SANDBOX_RUNTIME=bubblewrap needs no container)"
 	@echo "  make infra-up-onlyoffice - start the ONLYOFFICE Document Server for editable Office files (opt-in, ~2GB)"
 	@echo "  make infra-down   - stop the host-dev support services"
 	@echo "  make infra-down-all - stop the core services plus the code-interpreter sandbox and ONLYOFFICE"

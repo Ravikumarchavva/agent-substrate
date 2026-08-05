@@ -289,9 +289,10 @@ async def init_tool_registry(
     """Create all tools and return a registry."""
     from substrate.agents.storage.tasks import GlobalTaskStore
     from substrate.agents.tools.toolbox import Toolbox
-    from substrate.capabilities.tools.code_interpreter import (
-        K8sSandboxCodeInterpreterTool,
-        LocalSandboxCodeInterpreterTool,
+    from substrate.capabilities.tools.code_interpreter import CodeInterpreterTool
+    from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.factory import (
+        build_runtime,
+        network_policy,
     )
     from substrate.capabilities.tools.human_input import AskHumanTool
     from substrate.capabilities.tools.task_manager.tool import TaskManagerTool
@@ -322,32 +323,31 @@ async def init_tool_registry(
     code_interpreter_tool: Tool | None = None
     ci_client: Any | None = None
 
+    # Explicit, fail-closed runtime selection: an unusable sandbox raises here
+    # (at startup) rather than silently degrading to running untrusted code with
+    # no isolation. Without a code interpreter the tool is simply not registered.
     try:
-        code_interpreter_tool = K8sSandboxCodeInterpreterTool(
-            template=os.environ.get("CI_SANDBOX_TEMPLATE", "python-sandbox-template"),
-            namespace=os.environ.get("CI_SANDBOX_NAMESPACE", "default"),
-            workspace_pvc_claim=cfg.CI_WORKSPACE_PVC_CLAIM or None,
-            local_sandbox_url=cfg.CI_LOCAL_SANDBOX_URL or None,
+        code_interpreter_tool = CodeInterpreterTool(
+            build_runtime(
+                cfg.SANDBOX_RUNTIME,
+                workspace_root=cfg.FILE_STORE_ROOT,
+                runtime_class_name=cfg.SANDBOX_RUNTIME_CLASS,
+                workspace_pvc_claim=cfg.CI_WORKSPACE_PVC_CLAIM or None,
+                python_bin=cfg.SANDBOX_PYTHON,
+            ),
+            network=network_policy(cfg.SANDBOX_NETWORK_POLICY),
+            default_timeout_s=cfg.SANDBOX_TIMEOUT_SECONDS,
+            memory_bytes=cfg.SANDBOX_MEMORY_BYTES,
             model_client=model_client,
         )
-        logger.info("Kubernetes agent-sandbox Code Interpreter registered")
-    except Exception as exc:
+        logger.info("Code interpreter registered (runtime=%s)", cfg.SANDBOX_RUNTIME)
+    except Exception as exc:  # noqa: BLE001 - degrade to "no CI", never to "no isolation"
+        code_interpreter_tool = None
         logger.warning(
-            "K8sSandboxCodeInterpreterTool unavailable (%s); using fallback", exc
+            "Code interpreter disabled: sandbox runtime %r unavailable (%s)",
+            cfg.SANDBOX_RUNTIME,
+            exc,
         )
-        if cfg.CI_LOCAL_SANDBOX_URL:
-            code_interpreter_tool = LocalSandboxCodeInterpreterTool(
-                base_url=cfg.CI_LOCAL_SANDBOX_URL, model_client=model_client
-            )
-            logger.info(
-                "Local sandbox Code Interpreter registered (%s)",
-                cfg.CI_LOCAL_SANDBOX_URL,
-            )
-        else:
-            code_interpreter_tool = None
-            logger.info(
-                "No code interpreter available (set CI_LOCAL_SANDBOX_URL for local dev)"
-            )
 
     registry = Toolbox()
     # AskHumanTool.execute() genuinely requires the full RunContext (ctx.uuid(),

@@ -54,7 +54,6 @@ def _load_default_tools(code_interpreter_tool=None) -> list:
 @asynccontextmanager
 async def lifespan(app):
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    ci_local_sandbox_url = os.environ.get("CI_LOCAL_SANDBOX_URL", "")
     artifact_url = os.environ.get("ARTIFACT_SERVICE_URL", "http://localhost:8018")
 
     # Redis + EventBus
@@ -66,36 +65,33 @@ async def lifespan(app):
     await event_bus.connect()
     app.state.event_bus = event_bus
 
-    # Code interpreter — prefer the K8s agent-sandbox (cluster deployments);
-    # fall back to a local sandbox container when no cluster is available
-    # (mirrors infrastructure/serving_factory.py's monolith wiring).
+    # Code interpreter — explicit, fail-closed runtime selection (same switch as
+    # the monolith's infrastructure/serving_factory.py wiring). Defaults to k8s
+    # here since this service only runs in cluster deployments.
     code_interpreter_tool = None
     try:
-        from substrate.capabilities.tools.code_interpreter import (
-            K8sSandboxCodeInterpreterTool,
+        from substrate.capabilities.tools.code_interpreter import CodeInterpreterTool
+        from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.factory import (
+            build_runtime,
+            network_policy,
         )
 
-        code_interpreter_tool = K8sSandboxCodeInterpreterTool(
-            template=os.environ.get("CI_SANDBOX_TEMPLATE", "python-sandbox-template"),
-            namespace=os.environ.get("CI_SANDBOX_NAMESPACE", "default"),
-            workspace_pvc_claim=os.environ.get("CI_WORKSPACE_PVC_CLAIM") or None,
-            local_sandbox_url=ci_local_sandbox_url or None,
+        code_interpreter_tool = CodeInterpreterTool(
+            build_runtime(
+                os.environ.get("SANDBOX_RUNTIME", "k8s"),
+                workspace_root=os.environ.get("FILE_STORE_ROOT", "./data/workspaces"),
+                runtime_class_name=os.environ.get("SANDBOX_RUNTIME_CLASS", ""),
+                workspace_pvc_claim=os.environ.get("CI_WORKSPACE_PVC_CLAIM") or None,
+                python_bin=os.environ.get("SANDBOX_PYTHON", ""),
+            ),
+            network=network_policy(os.environ.get("SANDBOX_NETWORK_POLICY", "deny")),
         )
-        logger.info("K8sSandboxCodeInterpreterTool registered")
-    except Exception as exc:
-        logger.warning("K8sSandboxCodeInterpreterTool unavailable (%s)", exc)
-        if ci_local_sandbox_url:
-            from substrate.capabilities.tools.code_interpreter import (
-                LocalSandboxCodeInterpreterTool,
-            )
-
-            code_interpreter_tool = LocalSandboxCodeInterpreterTool(
-                base_url=ci_local_sandbox_url
-            )
-            logger.info(
-                "LocalSandboxCodeInterpreterTool configured: url=%s",
-                ci_local_sandbox_url,
-            )
+        logger.info(
+            "Code interpreter registered (runtime=%s)",
+            os.environ.get("SANDBOX_RUNTIME", "k8s"),
+        )
+    except Exception as exc:  # noqa: BLE001 - degrade to "no CI", never "no isolation"
+        logger.warning("Code interpreter disabled: sandbox unavailable (%s)", exc)
 
     app.state.ci_client = code_interpreter_tool
     app.state.artifact_url = artifact_url.rstrip("/")

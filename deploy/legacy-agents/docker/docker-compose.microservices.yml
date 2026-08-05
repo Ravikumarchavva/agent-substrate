@@ -186,7 +186,13 @@ services:
       <<: *common-env
       SERVICE_NAME: tool-executor
       FILE_STORE_SERVICE_URL: http://file-store:8018
-      CI_LOCAL_SANDBOX_URL: ${CI_LOCAL_SANDBOX_URL:-http://code-interpreter-sandbox:8888}
+      # This service defaults to SANDBOX_RUNTIME=k8s (see tool_executor/app.py)
+      # and talks to a real cluster via the kubernetes-sigs/agent-sandbox
+      # controller — not to the code-interpreter-sandbox container below,
+      # which is separate opt-in tooling for manually testing that image.
+      SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-k8s}
+      CI_WORKSPACE_PVC_CLAIM: ${CI_WORKSPACE_PVC_CLAIM:-}
+      SANDBOX_RUNTIME_CLASS: ${SANDBOX_RUNTIME_CLASS:-}
 
   # ══════════════════════════════════════════════════════════════════════════════
   # Code Interpreter Sandbox — same container image the K8s agent-sandbox

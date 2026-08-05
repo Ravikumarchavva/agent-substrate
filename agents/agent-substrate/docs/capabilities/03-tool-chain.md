@@ -139,7 +139,7 @@ When a `ToolResult` with a non-`None` `.ref` is passed as a tool argument, the p
 
 ## Wiring
 
-`ToolChainTool` requires an active code interpreter (`K8sSandboxCodeInterpreterTool` or `LocalSandboxCodeInterpreterTool`, gated by `CI_LOCAL_SANDBOX_URL`) — if neither is available, the constructor raises `RuntimeError` and the tool is simply not registered.
+`ToolChainTool` requires an active `CodeInterpreterTool` (built from `SANDBOX_RUNTIME` — see `runtimes/factory.py::build_runtime`) — if the sandbox runtime fails to initialize, the constructor raises `RuntimeError` and the tool is simply not registered.
 
 ```python
 # In lifespan

@@ -1,0 +1,11 @@
+# Automatic HTTPS for your domain. Caddy provisions and renews a Let's Encrypt
+# cert on its own — no manual certbot. The whole app is served by the Next.js
+# container; it proxies /api/* to the backend internally, so only the UI is
+# exposed publicly.
+{$DOMAIN} {
+	encode gzip
+	# Stream SSE without buffering so agent responses arrive token-by-token.
+	reverse_proxy substrate-ui:3000 {
+		flush_interval -1
+	}
+}

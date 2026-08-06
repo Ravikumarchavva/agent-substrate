@@ -27,26 +27,23 @@ router = APIRouter(
 
 
 class IngestRequest(BaseModel):
-    content: str | list[str]
+    content: str
     collection: str = "default"
-    chunker: str = "text"
+    filename: str = "upload.txt"
     metadata: Optional[dict[str, Any]] = None
-    chunk_size: Optional[int] = None
-    chunk_overlap: Optional[int] = None
 
 
 class IngestResponse(BaseModel):
     chunks_stored: int
     collection: str
+    document_id: Optional[str] = None
 
 
 class QueryRequest(BaseModel):
     question: str
     collection: str = "default"
     limit: int = Field(default=5, ge=1, le=100)
-    filter: Optional[dict[str, Any]] = None
     generate_answer: bool = False
-    system_prompt: Optional[str] = None
 
 
 class QueryResult(BaseModel):
@@ -73,15 +70,15 @@ class DeleteCollectionResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _get_pipeline(request: Request):
-    """Get the RAG pipeline from app state."""
-    pipeline = getattr(request.app.state, "rag_pipeline", None)
-    if pipeline is None:
+def _get_backend(request: Request):
+    """Get the RagBackend from app state."""
+    backend = getattr(request.app.state, "rag_backend", None)
+    if backend is None:
         raise HTTPException(
             status_code=503,
-            detail="RAG pipeline not configured. Set EMBEDDING_MODEL and ensure pgvector is available.",
+            detail="RAG backend not configured. Set EMBEDDING_MODEL and ensure pgvector is available.",
         )
-    return pipeline
+    return backend
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -89,31 +86,34 @@ def _get_pipeline(request: Request):
 
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest(body: IngestRequest, request: Request) -> IngestResponse:
-    """Ingest text content into the vector store."""
-    pipeline = _get_pipeline(request)
+    """Ingest text content into the knowledge base."""
+    backend = _get_backend(request)
 
-    chunks = await pipeline.ingest(
-        body.content,
+    metadata = dict(body.metadata or {})
+    metadata.setdefault("filename", body.filename)
+
+    result = await backend.ingest(
+        body.content.encode("utf-8"),
         collection=body.collection,
-        chunker=body.chunker,
-        metadata=body.metadata,
-        chunk_size=body.chunk_size,
-        chunk_overlap=body.chunk_overlap,
+        metadata=metadata,
     )
 
-    return IngestResponse(chunks_stored=chunks, collection=body.collection)
+    return IngestResponse(
+        chunks_stored=result.chunks_indexed,
+        collection=body.collection,
+        document_id=result.document_id,
+    )
 
 
 @router.post("/query", response_model=QueryResponse)
 async def query(body: QueryRequest, request: Request) -> QueryResponse:
-    """Query the vector store for relevant documents."""
-    pipeline = _get_pipeline(request)
+    """Query the knowledge base for relevant documents."""
+    backend = _get_backend(request)
 
-    results = await pipeline.query(
+    results = await backend.query(
         body.question,
         collection=body.collection,
         limit=body.limit,
-        filter=body.filter,
     )
 
     query_results = [
@@ -128,31 +128,36 @@ async def query(body: QueryRequest, request: Request) -> QueryResponse:
 
     answer = None
     if body.generate_answer:
-        model_client = getattr(request.app.state, "model_client", None)
-        if model_client:
-            answer = await pipeline.query_with_context(
-                body.question,
-                collection=body.collection,
-                model_client=model_client,
-                limit=body.limit,
-                system=body.system_prompt,
-                filter=body.filter,
-            )
+        answer = await backend.query_with_context(
+            body.question,
+            collection=body.collection,
+            limit=body.limit,
+        )
 
     return QueryResponse(results=query_results, answer=answer)
 
 
 @router.get("/collections", response_model=CollectionListResponse)
 async def list_collections(request: Request) -> CollectionListResponse:
-    """List all vector store collections."""
-    pipeline = _get_pipeline(request)
-    collections = await pipeline._store.list_collections()
+    """List all vector store collections. Local backend only."""
+    backend = _get_backend(request)
+    if backend.name != "local":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Collection listing isn't supported by the {backend.name!r} backend.",
+        )
+    collections = await backend.list_collections()
     return CollectionListResponse(collections=collections)
 
 
 @router.delete("/collections/{name}", response_model=DeleteCollectionResponse)
 async def delete_collection(name: str, request: Request) -> DeleteCollectionResponse:
-    """Delete all documents in a collection."""
-    pipeline = _get_pipeline(request)
-    deleted = await pipeline._store.delete_collection(name)
+    """Delete all documents in a collection. Local backend only."""
+    backend = _get_backend(request)
+    if backend.name != "local":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Collection deletion isn't supported by the {backend.name!r} backend.",
+        )
+    deleted = await backend.delete_collection(name)
     return DeleteCollectionResponse(deleted=deleted, collection=name)

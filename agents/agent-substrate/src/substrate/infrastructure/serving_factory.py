@@ -51,7 +51,7 @@ class Infrastructure:
     runtime: Any
     session_factory: async_sessionmaker
     vector_store: Any
-    rag_pipeline: Any
+    rag_backend: Any
     data_store: Any
     bridge_registry: Any
     skill_manager: Any
@@ -201,14 +201,17 @@ async def init_infrastructure(
     *,
     engine: AsyncEngine,
     session_factory: async_sessionmaker,
+    model_client: Any = None,
 ) -> Infrastructure:
     """Create Redis, runtime, file store, vector store, RAG, and bridge registry.
 
     ``engine`` and ``session_factory`` come from ``init_db()`` called in lifespan.
+    ``model_client`` is optional — only used by the "local" RAG backend for
+    ``query_with_context`` and its optional reranker.
     """
     import redis.asyncio as aioredis
 
-    from substrate.capabilities.knowledge.pipeline import RAGPipeline
+    from substrate.capabilities.knowledge.backends import build_rag_backend
     from substrate.capabilities.pipeline.data_ref import DataRefStore
     from substrate.capabilities.tools.skills._manager import SkillManager
     from substrate.capabilities.vector.pgvector_store import PgVectorStore
@@ -242,10 +245,27 @@ async def init_infrastructure(
         engine=engine,
         dimensions=1536,
     )
-    rag_pipeline = RAGPipeline(
-        embedding_client=embedding_client,
-        vector_store=vector_store,
-    )
+    # Fail-closed at construction, degrade gracefully at startup: an
+    # unreachable/misconfigured RAG backend (e.g. RAG_BACKEND=pinecone with no
+    # API key) disables RAG rather than crashing the whole server, matching
+    # the code-interpreter sandbox's degrade pattern below.
+    try:
+        rag_backend = build_rag_backend(
+            cfg.RAG_BACKEND,
+            embedding_client=embedding_client,
+            vector_store=vector_store,
+            model_client=model_client,
+            docling_service_url=cfg.DOCLING_SERVICE_URL,
+            docling_auth_token=cfg.DOCLING_AUTH_TOKEN,
+            docling_timeout_s=cfg.DOCLING_TIMEOUT_S,
+            api_key=cfg.PINECONE_API_KEY,
+            assistant_name=cfg.PINECONE_ASSISTANT_NAME,
+        )
+    except Exception as exc:  # noqa: BLE001 - degrade to "no RAG", never crash startup
+        rag_backend = None
+        logger.warning(
+            "RAG backend disabled: %r unavailable (%s)", cfg.RAG_BACKEND, exc
+        )
 
     data_store = DataRefStore(redis_url=cfg.REDIS_URL)
     await data_store.connect()
@@ -265,7 +285,7 @@ async def init_infrastructure(
         runtime=runtime,
         session_factory=session_factory,
         vector_store=vector_store,
-        rag_pipeline=rag_pipeline,
+        rag_backend=rag_backend,
         data_store=data_store,
         bridge_registry=bridge_registry,
         skill_manager=skill_manager,
@@ -285,10 +305,12 @@ async def init_tool_registry(
     bridge_registry: Any,
     redis_client: Any = None,
     model_client: Any = None,
+    rag_backend: Any = None,
 ) -> ToolboxResult:
     """Create all tools and return a registry."""
     from substrate.agents.storage.tasks import GlobalTaskStore
     from substrate.agents.tools.toolbox import Toolbox
+    from substrate.capabilities.tools.ai.knowledge_search import KnowledgeSearchTool
     from substrate.capabilities.tools.code_interpreter import CodeInterpreterTool
     from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.factory import (
         build_runtime,
@@ -378,6 +400,8 @@ async def init_tool_registry(
     registry.add(CurrentTimeTool())
     if code_interpreter_tool:
         registry.add(code_interpreter_tool)
+    if rag_backend:
+        registry.add(KnowledgeSearchTool(rag_backend))
 
     from substrate.capabilities.tools.utils.tool_search import ToolSearchTool
 

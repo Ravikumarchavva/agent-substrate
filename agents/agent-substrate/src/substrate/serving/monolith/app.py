@@ -86,6 +86,7 @@ async def lifespan(app: FastAPI):
         llm.embedding_client,
         engine=engine,
         session_factory=session_factory,
+        model_client=llm.model_client,
     )
     app.state.history = infra.history
     app.state.short_term_memory = infra.short_term_memory
@@ -93,7 +94,7 @@ async def lifespan(app: FastAPI):
     app.state.runtime = infra.runtime
     app.state.runtime_stack = infra.runtime_stack
     app.state.vector_store = infra.vector_store
-    app.state.rag_pipeline = infra.rag_pipeline
+    app.state.rag_backend = infra.rag_backend
     app.state.data_store = infra.data_store
     app.state.bridge_registry = infra.bridge_registry
     app.state.skill_manager = infra.skill_manager
@@ -108,6 +109,7 @@ async def lifespan(app: FastAPI):
         bridge_registry=infra.bridge_registry,
         redis_client=infra.redis_client,
         model_client=llm.model_client,
+        rag_backend=infra.rag_backend,
     )
     app.state.tools = tools.registry
     app.state.task_tool = tools.task_tool

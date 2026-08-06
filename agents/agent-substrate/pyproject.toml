@@ -100,6 +100,10 @@ sandbox = [
 # PDF loading for the knowledge/RAG pipeline (PDFLoader, DoclingLoader's
 # pypdf-based fallback path).
 rag = ["pypdf>=6.13.0"]
+# Managed RAG via Pinecone Assistant (RAG_BACKEND=pinecone) — parsing,
+# chunking, embedding, storage, and retrieval all run on Pinecone's side, so
+# none of the local `rag`/`docling` extras above are needed with this backend.
+rag-pinecone = ["pinecone>=5.0.0"]
 # S3-compatible object storage backend for FILE_STORE_BACKEND=s3 (the default,
 # "local", needs neither of these).
 s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]

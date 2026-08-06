@@ -158,6 +158,17 @@ class SubstrateConfig(BaseSettings):
     DOCLING_AUTH_TOKEN: str = ""
     DOCLING_TIMEOUT_S: int = 90
 
+    # ── RAG backend ───────────────────────────────────────────────────────────
+    # "local" (default) = RAGPipeline + PgVectorStore + Docling-or-pypdf
+    #   loaders, all self-hosted (see capabilities/knowledge/backends/local.py).
+    # "pinecone" = Pinecone Assistant — managed parse+chunk+embed+store+
+    #   retrieve, no local processing at all. Requires PINECONE_API_KEY and
+    #   PINECONE_ASSISTANT_NAME, and the `rag-pinecone` extra installed.
+    # See capabilities/knowledge/backends/factory.py::build_rag_backend.
+    RAG_BACKEND: str = "local"
+    PINECONE_API_KEY: str = ""
+    PINECONE_ASSISTANT_NAME: str = ""
+
     # ── ONLYOFFICE Document Server (editable Office files in the panel) ───────
     # Empty (default) = no editable Office support; the frontend falls back to
     # the read-only SheetJS/Mammoth preview. Two URLs by design (like

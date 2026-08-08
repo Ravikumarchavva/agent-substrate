@@ -148,19 +148,20 @@ class SubstrateConfig(BaseSettings):
     # own environment; that venv is mounted read-only into the sandbox.
     SANDBOX_PYTHON: str = ""
 
-    # ── Docling extraction service ───────────────────────────────────────────
-    # Optional, isolated microservice for structure-aware document parsing
-    # (see serving/services/docling/). Empty (the default) means chat
-    # attachments fall back to the lightweight pypdf/pdfplumber path for
-    # PDFs, and DOCX/PPTX stay metadata-only — see
-    # routes/chat_context.py::_extract_document_text.
-    DOCLING_SERVICE_URL: str = ""
-    DOCLING_AUTH_TOKEN: str = ""
-    DOCLING_TIMEOUT_S: int = 90
+    # ── Document-extraction service ──────────────────────────────────────────
+    # Optional, isolated microservice for layout-aware document parsing:
+    # PaddleOCR layout/chart/table detection + OCR, plus SigLIP multimodal
+    # embedding and a MiniLM reranker (see serving/services/extraction/).
+    # Empty (the default) means chat attachments fall back to the
+    # lightweight pypdf/pdfplumber path for PDFs (no chart images, no
+    # multimodal search) — see routes/chat_context.py::_extract_document_text.
+    EXTRACTION_SERVICE_URL: str = ""
+    EXTRACTION_AUTH_TOKEN: str = ""
+    EXTRACTION_TIMEOUT_S: int = 90
 
     # ── RAG backend ───────────────────────────────────────────────────────────
-    # "local" (default) = RAGPipeline + PgVectorStore + Docling-or-pypdf
-    #   loaders, all self-hosted (see capabilities/knowledge/backends/local.py).
+    # "local" (default) = RAGPipeline + PgVectorStore + extraction-service-or-
+    #   pypdf loaders, all self-hosted (see capabilities/knowledge/backends/local.py).
     # "pinecone" = Pinecone Assistant — managed parse+chunk+embed+store+
     #   retrieve, no local processing at all. Requires PINECONE_API_KEY and
     #   PINECONE_ASSISTANT_NAME, and the `rag-pinecone` extra installed.
@@ -168,6 +169,33 @@ class SubstrateConfig(BaseSettings):
     RAG_BACKEND: str = "local"
     PINECONE_API_KEY: str = ""
     PINECONE_ASSISTANT_NAME: str = ""
+    # Vector dimensionality of EMBEDDING_MODEL's output — must match exactly,
+    # since PgVectorStore's `vector({dimensions})` column is fixed per table
+    # (CREATE TABLE IF NOT EXISTS never widens/narrows an existing column).
+    # Defaults to OpenAI text-embedding-3-small's 1536. Local
+    # sentence-transformers models are much smaller: all-MiniLM-L6-v2 (the
+    # SentenceTransformersEmbeddingClient default) is 384, all-mpnet-base-v2
+    # is 768 — set this to match whichever EMBEDDING_MODEL is configured.
+    RAG_TEXT_EMBEDDING_DIM: int = 1536
+    # Vector dimensionality of the extraction service's image embedding
+    # model (SigLIP-base outputs 768) — needed for the separate image-vector
+    # PgVectorStore table (see backends/local.py's image_store).
+    RAG_IMAGE_EMBEDDING_DIM: int = 768
+    # Caps on RAG-eligible document uploads (currently PDF only — see
+    # EXTRACTABLE_CONTENT_TYPES in routes/chat_context.py), enforced
+    # synchronously at upload time before any storage or extraction cost is
+    # spent — routes/files.py::upload_file.
+    RAG_MAX_DOC_PAGES: int = 20
+    RAG_MAX_DOC_MB: int = 5
+    # Daily per-user commit quota: how many documents can actually be *sent*
+    # in a chat message (promoted from staging into a real thread
+    # collection) — not merely uploaded. See serving/shared/doc_quota.py.
+    RAG_DAILY_DOC_LIMIT: int = 20
+    # Coarser daily cap on raw upload attempts (separate counter) — eager
+    # staging starts unconditionally on upload regardless of the commit
+    # quota above, so this bounds worst-case extraction compute from
+    # repeated upload-then-discard abuse.
+    RAG_DAILY_UPLOAD_ATTEMPT_LIMIT: int = 100
 
     # ── ONLYOFFICE Document Server (editable Office files in the panel) ───────
     # Empty (default) = no editable Office support; the frontend falls back to

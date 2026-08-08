@@ -95,22 +95,45 @@ class MinIOConnector:
         *,
         prefix: str = "",
         bucket: str | None = None,
-        max_keys: int = 100,
+        max_keys: int | None = None,
     ) -> List[Dict[str, Any]]:
-        """List objects in a bucket."""
+        """List objects under *prefix* as ``{key, size, mtime}`` dicts.
+
+        Follows continuation tokens to completion by default. S3 caps a single
+        ``list_objects_v2`` response at 1000 keys regardless of ``MaxKeys``, so
+        a non-paginating version silently truncates — which would make a
+        prefix-sum (storage quota accounting) *under*-report and quietly stop
+        enforcing the limit. ``max_keys`` caps the total returned when a caller
+        genuinely only wants a page; ``None`` means everything.
+        """
         b = bucket or self._default_bucket
+        objects: List[Dict[str, Any]] = []
+        token: str | None = None
         async with self._client_ctx() as client:
-            resp = await client.list_objects_v2(
-                Bucket=b, Prefix=prefix, MaxKeys=max_keys
-            )
-            return [
-                {
-                    "key": obj["Key"],
-                    "size": obj["Size"],
-                    "last_modified": str(obj["LastModified"]),
-                }
-                for obj in resp.get("Contents", [])
-            ]
+            while True:
+                kwargs: Dict[str, Any] = {"Bucket": b, "Prefix": prefix}
+                if token is not None:
+                    kwargs["ContinuationToken"] = token
+                if max_keys is not None:
+                    kwargs["MaxKeys"] = max_keys - len(objects)
+                resp = await client.list_objects_v2(**kwargs)
+                for obj in resp.get("Contents", []):
+                    objects.append(
+                        {
+                            "key": obj["Key"],
+                            "size": obj["Size"],
+                            # A float epoch, matching os.stat().st_mtime, so a
+                            # caller can treat either store's listing alike.
+                            "mtime": obj["LastModified"].timestamp(),
+                        }
+                    )
+                if max_keys is not None and len(objects) >= max_keys:
+                    return objects[:max_keys]
+                if not resp.get("IsTruncated"):
+                    return objects
+                token = resp.get("NextContinuationToken")
+                if not token:
+                    return objects
 
     async def presign_url(
         self,

@@ -9,26 +9,38 @@ Routes:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import io
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
+from substrate.logger import setup_logging
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import FileMetadata, User
+from substrate.serving.monolith.routes.chat_context import EXTRACTABLE_CONTENT_TYPES
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims
 from substrate.serving.shared.contracts.file_store import (
     FileUploadResponse,
     FileUrlResponse,
 )
+from substrate.serving.shared.doc_quota import (
+    check_and_increment,
+    peek,
+    seconds_until_reset,
+)
+from substrate.serving.shared.settings import settings
+
+logger = setup_logging()
 
 router = APIRouter(
     prefix="/files",
@@ -90,9 +102,32 @@ async def _ensure_user(db: AsyncSession, user_id: uuid.UUID, email: str) -> None
         await db.rollback()
 
 
+def _may_access(meta: FileMetadata, claims: AuthClaims) -> bool:
+    """Ownership check for file bytes.
+
+    Not a simple ``user_id == claims.sub`` — ``upload_file`` leaves
+    ``user_id`` NULL whenever ``claims.sub`` isn't a UUID (see
+    ``_ensure_user``'s caller above), so that check alone would lock those
+    users out of files they uploaded themselves. The reliable signal is
+    structural: ``object_key`` is built from ``claims.sub`` at upload time
+    (``users/{sub}/...``), the same way ``routes/workspace.py::serve_file``
+    already derives its access boundary. ``user_id`` is kept as a fallback
+    for rows where that still resolves.
+    """
+    if claims.is_admin:
+        return True
+    same_tenant = meta.org_id in (None, claims.tenant_id)
+    if meta.object_key.startswith(f"users/{claims.sub}/"):
+        return same_tenant
+    if meta.user_id is not None and str(meta.user_id) == claims.sub:
+        return same_tenant
+    return False
+
+
 async def _get_meta(
     file_id: uuid.UUID,
     db: AsyncSession,
+    claims: AuthClaims,
 ) -> FileMetadata:
     row = (
         await db.execute(
@@ -102,13 +137,70 @@ async def _get_meta(
             )
         )
     ).scalar_one_or_none()
-    if row is None:
+    # 404 whether the row is missing or just not this caller's — never a
+    # distinct 403, so this endpoint isn't an existence oracle for file ids
+    # that happen to leak into logs/URLs (same rationale as
+    # thread_service.get_owned_thread).
+    if row is None or not _may_access(row, claims):
         raise HTTPException(status_code=404, detail="File not found")
     return row
 
 
+def _pdf_page_count(data: bytes) -> int:
+    """Cheap page count via pypdf — no OCR/layout model involved. Raises
+    ValueError on a corrupt/unreadable PDF (caller turns that into a 422,
+    same as any other malformed upload)."""
+    from pypdf import PdfReader
+
+    return len(PdfReader(io.BytesIO(data)).pages)
+
+
+async def _stage_uploaded_doc(
+    ctx: ServerDependencies,
+    file_id: uuid.UUID,
+    data: bytes,
+    *,
+    original_name: str,
+    content_type: str,
+) -> None:
+    """Fire-and-forget eager extraction+embedding, staged under a temporary
+    collection — not the real thread collection (see
+    ``LocalRagBackend.promote`` / ``routes/chat_context.py``). Same
+    in-process ``asyncio.create_task`` pattern as ``routes/scheduled.py``'s
+    ``_run_bg`` — no durable job queue in this codebase. If the server
+    restarts mid-task, ``staged_at`` simply never gets set; the send-time
+    path already handles that (blocks with a clear "still processing"
+    error) rather than needing a retry queue."""
+    assert ctx.rag_backend is not None
+    session_factory = ctx.session_factory
+    try:
+        await ctx.rag_backend.ingest(
+            data,
+            collection=f"staging:{file_id}",
+            metadata={
+                "filename": original_name,
+                "content_type": content_type,
+                "file_id": str(file_id),
+            },
+        )
+    except Exception as exc:
+        logger.warning("Eager staging failed for file %s: %s", file_id, exc)
+        async with session_factory() as session:
+            row = await session.get(FileMetadata, file_id)
+            if row is not None:
+                row.staging_error = str(exc)[:500]
+                await session.commit()
+        return
+    async with session_factory() as session:
+        row = await session.get(FileMetadata, file_id)
+        if row is not None:
+            row.staged_at = datetime.now(timezone.utc)
+            await session.commit()
+
+
 @router.post("/upload", response_model=FileUploadResponse, status_code=201)
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     thread_id: Optional[uuid.UUID] = Form(None),
     claims: AuthClaims = Depends(get_current_user),
@@ -122,6 +214,12 @@ async def upload_file(
     the same key layout the code interpreter's per-user PVC subPath mount
     exposes, so a thread-scoped upload lands exactly where that thread's
     sandbox session can see it.
+
+    RAG-eligible types (currently PDF only — see ``EXTRACTABLE_CONTENT_TYPES``)
+    get extra, synchronous-before-storing checks (upload-attempt quota, size
+    cap, page cap) plus eager background staging (extraction+embedding into
+    a temporary collection) once stored — see ``_stage_uploaded_doc``. Other
+    file types are unaffected: pure blob+metadata storage, same as today.
     """
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
@@ -136,6 +234,59 @@ async def upload_file(
     content_type = file.content_type or "application/octet-stream"
     original_name = _safe_filename(file.filename or "upload")
     checksum = hashlib.sha256(data).hexdigest()
+
+    page_count: Optional[int] = None
+    is_extractable = content_type in EXTRACTABLE_CONTENT_TYPES
+    will_stage = (
+        is_extractable
+        and ctx.rag_backend is not None
+        and ctx.rag_backend.name == "local"
+    )
+    if is_extractable:
+        # The upload-attempt quota specifically bounds eager-staging compute
+        # abuse (repeated upload-then-discard) — only meaningful when eager
+        # staging actually runs (local backend). Pinecone stays lazy-on-send
+        # as it always has, so there's no matching compute cost to bound
+        # here; skip straight to the (backend-agnostic) size/page hygiene
+        # checks below.
+        if will_stage:
+            redis = getattr(request.app.state, "redis", None)
+            if redis is not None:
+                allowed, _remaining = await check_and_increment(
+                    redis,
+                    "docquota:upload",
+                    claims.sub,
+                    settings.RAG_DAILY_UPLOAD_ATTEMPT_LIMIT,
+                )
+                if not allowed:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=(
+                            f"Daily upload limit ({settings.RAG_DAILY_UPLOAD_ATTEMPT_LIMIT}) "
+                            "reached — try again tomorrow."
+                        ),
+                    )
+        max_doc_bytes = settings.RAG_MAX_DOC_MB * 1024 * 1024
+        if len(data) > max_doc_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Document exceeds maximum size of {settings.RAG_MAX_DOC_MB} MB",
+            )
+        if content_type == "application/pdf":
+            try:
+                page_count = _pdf_page_count(data)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"Could not read PDF: {exc}"
+                ) from exc
+            if page_count > settings.RAG_MAX_DOC_PAGES:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Document has {page_count} pages, exceeding the "
+                        f"{settings.RAG_MAX_DOC_PAGES}-page limit."
+                    ),
+                )
 
     if thread_id is not None:
         base_key = f"users/{claims.sub}/sessions/{thread_id}/{original_name}"
@@ -165,10 +316,22 @@ async def upload_file(
         user_id=user_uuid,
         thread_id=thread_id,
         scope="uploads",
+        page_count=page_count,
     )
     db.add(meta)
     await db.commit()
     await db.refresh(meta)
+
+    if will_stage and ctx.session_factory is not None:
+        asyncio.create_task(
+            _stage_uploaded_doc(
+                ctx,
+                meta.id,
+                data,
+                original_name=original_name,
+                content_type=content_type,
+            )
+        )
 
     return FileUploadResponse(
         id=meta.id,
@@ -179,9 +342,56 @@ async def upload_file(
     )
 
 
+@router.get("/quota/status")
+async def get_doc_quota_status(
+    request: Request,
+    claims: AuthClaims = Depends(get_current_user),
+) -> dict:
+    """Read-only daily commit-quota usage for the sidebar's document-limit
+    bar (mirrors routes/rate_limit.py's shape/pattern for the message-limit
+    bar). Registered before /{file_id}/status so "quota" is never matched
+    as a file_id path param — Starlette routes match in registration order,
+    not most-specific-first."""
+    redis = getattr(request.app.state, "redis", None)
+    limit = settings.RAG_DAILY_DOC_LIMIT
+    if redis is None:
+        return {"enabled": False, "used": 0, "limit": limit, "reset_in": 0}
+    used, _remaining = await peek(redis, "docquota:commit", claims.sub, limit)
+    return {
+        "enabled": True,
+        "used": used,
+        "limit": limit,
+        "reset_in": seconds_until_reset(),
+    }
+
+
+@router.get("/{file_id}/status")
+async def get_file_status(
+    file_id: uuid.UUID,
+    claims: AuthClaims = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Lightweight polling target for the composer's per-attachment progress
+    ring — never touches file_store, just the metadata row. See
+    ``substrate-ui``'s ``useFileAttachments.ts``: ``page_count``/
+    ``created_at`` drive a simulated (elapsed-time-based) progress estimate
+    since true per-page extraction progress isn't available (PaddleOCR
+    batches internally despite ``predict_iter()`` looking lazy — verified,
+    not assumed); ``staged_at``/``staging_error`` are the real ground truth
+    for when the ring should snap to 100% or show an error state."""
+    meta = await _get_meta(file_id, db, claims)
+    return {
+        "staged_at": meta.staged_at,
+        "staging_error": meta.staging_error,
+        "page_count": meta.page_count,
+        "created_at": meta.created_at,
+    }
+
+
 @router.get("/{file_id}/download")
 async def download_file(
     file_id: uuid.UUID,
+    claims: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> StreamingResponse:
@@ -189,7 +399,7 @@ async def download_file(
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
-    meta = await _get_meta(file_id, db)
+    meta = await _get_meta(file_id, db, claims)
     data = await ctx.file_store.download(meta.object_key)
 
     async def _stream():
@@ -209,6 +419,7 @@ async def download_file(
 async def get_file_url(
     file_id: uuid.UUID,
     expires_in: int = 3600,
+    claims: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> FileUrlResponse:
@@ -216,7 +427,7 @@ async def get_file_url(
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
-    meta = await _get_meta(file_id, db)
+    meta = await _get_meta(file_id, db, claims)
     url = await ctx.file_store.presign_url(meta.object_key, expires_in=expires_in)
 
     if url.startswith("memory://"):
@@ -228,6 +439,7 @@ async def get_file_url(
 @router.delete("/{file_id}", status_code=204)
 async def delete_file(
     file_id: uuid.UUID,
+    claims: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> None:
@@ -235,8 +447,26 @@ async def delete_file(
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
-    meta = await _get_meta(file_id, db)
+    meta = await _get_meta(file_id, db, claims)
     meta.deleted_at = datetime.now(timezone.utc)
     await db.commit()
 
     await ctx.file_store.delete(meta.object_key)
+
+    # Discarded before ever being sent (rag_ingested_at never set) — clean
+    # up its orphaned staging collection so it doesn't linger forever.
+    # Best-effort: a failure here must not surface as a failed delete, since
+    # the file itself is already gone from the store above.
+    if (
+        ctx.rag_backend is not None
+        and ctx.rag_backend.name == "local"
+        and meta.rag_ingested_at is None
+    ):
+        try:
+            await ctx.rag_backend.delete_collection(f"staging:{file_id}")
+        except Exception as exc:
+            logger.warning(
+                "Failed to clean up staging collection for deleted file %s: %s",
+                file_id,
+                exc,
+            )

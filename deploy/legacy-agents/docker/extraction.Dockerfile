@@ -1,12 +1,14 @@
-# docker/docling.Dockerfile — Docling document-extraction service
+# docker/extraction.Dockerfile — Document extraction service
 #
-# Build:   docker build -f docker/docling.Dockerfile -t docling:latest .
-# Run:     docker run -p 8080:8080 docling:latest
+# Build:   docker build -f docker/extraction.Dockerfile -t extraction:latest .
+# Run:     docker run -p 8080:8080 extraction:latest
 #
-# Heavy image: docling pulls torch + transformers + the full CUDA/cuDNN/NCCL
-# runtime even for CPU-only use (see the `docling` extra's own comment in
-# pyproject.toml). Isolated from the main API image entirely — this is the
-# only place that dependency gets installed.
+# Layout-aware document parsing (PaddleOCR: chart/table detection + OCR) plus
+# multimodal embedding (SigLIP) and reranking (MiniLM cross-encoder) via
+# sentence-transformers (see the `extraction` extra's own comment in
+# pyproject.toml). CPU-only — paddlepaddle's CPU wheel (~185MB) is used, no
+# CUDA runtime pulled in. Isolated from the main API image entirely — this is
+# the only place these dependencies get installed.
 
 FROM python:3.13-slim AS base
 
@@ -20,15 +22,15 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN uv pip install --system -e ".[docling]"
+RUN uv pip install --system -e ".[extraction]"
 
 EXPOSE 8080
 
-# Generous --start-period: first boot loads docling's layout/table-structure
-# model weights (real latency, unlike code-interpreter's Firecracker pool
-# which has no model to load).
+# Generous --start-period: first boot loads the OCR/layout and
+# embedding/reranker model weights (real latency, unlike code-interpreter's
+# Firecracker pool which has no model to load).
 HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:8080/v1/health || exit 1
 
-ENTRYPOINT ["uvicorn", "substrate.serving.services.docling.app:app"]
+ENTRYPOINT ["uvicorn", "substrate.serving.services.extraction.app:app"]
 CMD ["--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]

@@ -8,13 +8,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.infrastructure.serving_factory import build_chat_tools
 from substrate.serving.monolith.dependencies import ServerDependencies
 from substrate.serving.monolith.schemas import ChatRequest
 from substrate.serving.monolith.routes.chat_wire import _ImagePayload
+from substrate.serving.shared.auth.claims import AuthClaims
+from substrate.serving.shared.doc_quota import check_and_increment, release
 from substrate.serving.shared.settings import settings
 from substrate.logger import setup_logging
 
@@ -50,13 +52,30 @@ async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
 # entirely regardless of cwd.
 _SANDBOX_WORKSPACE_MOUNT_PATH = "/app/workspace"
 
-# Docling (when DOCLING_SERVICE_URL is configured) can read these too;
-# pypdf/pdfplumber cannot, so without docling they stay metadata-only.
-_DOCLING_ONLY_TYPES = {
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",  # .pptx
-}
-_EXTRACTABLE_TYPES = {"application/pdf", *_DOCLING_ONLY_TYPES}
+# The extraction service (PaddleOCR-based) reads PDF and raster images
+# natively — no DOCX/PPTX parser (verified: paddlex has no docx/pptx reader
+# at all). Those formats stay metadata-only, same as when no extraction
+# service is configured. Public (not `_`-prefixed): also imported by
+# routes/files.py to scope upload-time page/size caps and eager staging to
+# the same set of types this module actually ingests.
+EXTRACTABLE_CONTENT_TYPES = {"application/pdf"}
+
+
+def _session_relative_path(object_key: str) -> str | None:
+    """``users/{uid}/sessions/{tid}/{rest}`` → ``rest``, or ``None`` if
+    *object_key* isn't a thread-scoped upload (e.g. ``users/{uid}/uploads/...``).
+
+    Shared by the bubblewrap workspace-path branch of ``_attachment_dict``
+    below and by the RAG-ingest metadata: both need the path a citation's
+    "open this file" click uses (``routes/workspace.py::serve_file``),
+    relative to the thread's session dir — never ``original_name``, which can
+    differ from the real object-key basename when ``_unique_object_key``
+    (``routes/files.py``) appended a uniquifying suffix.
+    """
+    parts = object_key.split("/", 4)
+    if len(parts) == 5 and parts[0] == "users" and parts[2] == "sessions":
+        return parts[4]
+    return None
 
 
 def _truncate(text: str) -> str:
@@ -67,7 +86,7 @@ def _truncate(text: str) -> str:
 
 
 async def _extract_via_pypdf(data: bytes, name: str) -> str | None:
-    """pypdf/pdfplumber fallback — PDF only, no docling dependency."""
+    """pypdf/pdfplumber fallback — PDF only, no extraction-service dependency."""
     from substrate.capabilities.knowledge.loaders.pdf_loader import PDFLoader
     from substrate.kernel.core.content import TextBlock
 
@@ -93,29 +112,29 @@ async def _extract_document_text(
     ``(None, None)`` means extraction failed entirely — the caller falls
     back to metadata-only attachment handling in that case.
 
-    Tries the docling service first (structure-aware: tables, layout, OCR,
-    DOCX/PPTX support) when ``DOCLING_SERVICE_URL`` is configured. Falls
-    back to the lightweight local pypdf/pdfplumber path for PDFs on any
-    docling failure/timeout/non-configuration — DOCX/PPTX have no local
-    fallback (pypdf can't read them), so those just return ``(None, None)``
-    when docling isn't available or fails.
+    Tries the extraction service first (layout-aware: chart/table detection,
+    OCR) when ``EXTRACTION_SERVICE_URL`` is configured. Falls back to the
+    lightweight local pypdf/pdfplumber path for PDFs on any extraction
+    failure/timeout/non-configuration.
     """
-    if settings.DOCLING_SERVICE_URL:
-        from substrate.capabilities.knowledge.docling_client import DoclingClient
+    if settings.EXTRACTION_SERVICE_URL:
+        from substrate.capabilities.knowledge.extraction_client import (
+            ExtractionClient,
+        )
 
-        client = DoclingClient(
-            base_url=settings.DOCLING_SERVICE_URL,
-            auth_token=settings.DOCLING_AUTH_TOKEN,
-            timeout_s=settings.DOCLING_TIMEOUT_S,
+        client = ExtractionClient(
+            base_url=settings.EXTRACTION_SERVICE_URL,
+            auth_token=settings.EXTRACTION_AUTH_TOKEN,
+            timeout_s=settings.EXTRACTION_TIMEOUT_S,
         )
         try:
             result = await client.extract(data, name, content_type)
         finally:
             await client.close()
         if result.success and result.text.strip():
-            return _truncate(result.text.strip()), "docling"
+            return _truncate(result.text.strip()), "paddleocr"
         logger.info(
-            "Docling extraction unavailable/failed for %r (%s); falling back",
+            "Extraction unavailable/failed for %r (%s); falling back",
             name,
             result.error,
         )
@@ -133,6 +152,7 @@ async def _build_file_context(
     body: ChatRequest,
     request: Request,
     ctx: ServerDependencies,
+    claims: AuthClaims,
 ) -> tuple[str, list[_ImagePayload], list[dict[str, Any]]]:
     """Resolve file_ids to text/image/attachment context for the chat turn."""
     if not body.file_ids or ctx.file_store is None:
@@ -154,6 +174,54 @@ async def _build_file_context(
         .scalars()
         .all()
     )
+
+    # Pre-validation pass, staged/local-backend files only: block the WHOLE
+    # send (not a silent per-file degrade — this session's explicit design
+    # choice) if any referenced file failed eager staging, is still
+    # processing, or would push the caller over today's commit quota.
+    # Raised before any part of the turn proceeds, so a bad file never
+    # results in a partially-built prompt. The frontend is expected to
+    # avoid hitting this in the common case (queued send — see
+    # substrate-ui's composer), so a live 425 here should be rare; it's a
+    # defense-in-depth backstop, not the primary UX.
+    if ctx.rag_backend is not None and ctx.rag_backend.name == "local":
+        new_commits = [
+            m
+            for m in rows
+            if m.content_type in EXTRACTABLE_CONTENT_TYPES and m.rag_ingested_at is None
+        ]
+        if new_commits:
+            for meta in new_commits:
+                if meta.staging_error:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"'{meta.original_name}' failed to process: {meta.staging_error}",
+                    )
+                if meta.staged_at is None:
+                    raise HTTPException(
+                        status_code=425,
+                        detail=f"'{meta.original_name}' is still processing — try again in a moment.",
+                    )
+            redis = getattr(request.app.state, "redis", None)
+            if redis is not None:
+                allowed, _remaining = await check_and_increment(
+                    redis,
+                    "docquota:commit",
+                    claims.sub,
+                    settings.RAG_DAILY_DOC_LIMIT,
+                    count=len(new_commits),
+                )
+                if not allowed:
+                    await release(
+                        redis, "docquota:commit", claims.sub, count=len(new_commits)
+                    )
+                    raise HTTPException(
+                        status_code=429,
+                        detail=(
+                            f"Daily document limit ({settings.RAG_DAILY_DOC_LIMIT}) "
+                            "reached — try again tomorrow."
+                        ),
+                    )
 
     text_parts: list[str] = []
     image_inputs: list[_ImagePayload] = []
@@ -182,9 +250,7 @@ async def _build_file_context(
             # "users/{uid}/sessions/{tid}/" prefix must be stripped entirely,
             # not just the "users/{uid}/" part.
             mount_path = "/workspace"
-            parts = meta.object_key.split("/", 4)
-            if len(parts) == 5 and parts[0] == "users" and parts[2] == "sessions":
-                relative_path = parts[4]
+            relative_path = _session_relative_path(meta.object_key)
         elif settings.CI_WORKSPACE_PVC_CLAIM:
             # K8s agent-sandbox subPath-mounts "users/{uid}" at
             # /app/workspace (per-user pod — that subPath IS the isolation
@@ -197,11 +263,64 @@ async def _build_file_context(
         return attachment
 
     for meta in rows:
-        if meta.content_type in _EXTRACTABLE_TYPES:
-            # Cache hit — this exact file was already extracted (by this
-            # thread or any other; files are immutable once uploaded, so
-            # the cached text never goes stale). Skip both the download
-            # and the extraction call entirely.
+        if meta.content_type in EXTRACTABLE_CONTENT_TYPES:
+            # Extractable docs are ingested into the thread's RagBackend
+            # collection instead of inlined into the prompt — the agent
+            # retrieves relevant passages via the knowledge_search tool.
+            # Cache hit: already ingested (files are immutable once
+            # uploaded), skip re-ingesting on every later reference.
+            if ctx.rag_backend is not None:
+                if meta.rag_ingested_at is None:
+                    if ctx.rag_backend.name == "local" and meta.staged_at is not None:
+                        # Already extracted+embedded eagerly at upload time
+                        # (routes/files.py) — cheap re-key into the real
+                        # thread collection, no re-extraction/re-embedding.
+                        # The pre-validation pass above already confirmed
+                        # staging succeeded and quota was consumed for this
+                        # file before we got here.
+                        try:
+                            await ctx.rag_backend.promote(
+                                file_id=str(meta.id), thread_id=str(body.thread_id)
+                            )
+                        except Exception:
+                            redis = getattr(request.app.state, "redis", None)
+                            if redis is not None:
+                                await release(redis, "docquota:commit", claims.sub)
+                            raise
+                    else:
+                        # Pinecone (no local staging concept — managed
+                        # ingest, unchanged from before this feature). For a
+                        # "local" backend this branch should be unreachable:
+                        # the pre-validation pass above already 425/422'd
+                        # any local-backend new commit whose staged_at
+                        # wasn't set, before this loop ever runs. Kept as a
+                        # defensive fallback, not a designed code path.
+                        data = await ctx.file_store.download(meta.object_key)
+                        await ctx.rag_backend.ingest(
+                            data,
+                            collection=str(body.thread_id),
+                            metadata={
+                                "filename": meta.original_name,
+                                "content_type": meta.content_type,
+                                # Lets a citation open this exact file later: the
+                                # DB id for /files/{id}/download, and the
+                                # thread-relative path /workspace/file expects
+                                # (session_path falls back to original_name in
+                                # capabilities/knowledge/citations.py when this
+                                # is None — e.g. an "uploads/" scoped file with
+                                # no thread session).
+                                "file_id": str(meta.id),
+                                "session_path": _session_relative_path(meta.object_key)
+                                or meta.original_name,
+                            },
+                        )
+                    meta.rag_ingested_at = datetime.now(timezone.utc)
+                    needs_commit = True
+                attachments.append(_attachment_dict(meta))
+                continue
+
+            # No RAG backend configured — fall back to the old inline-extract
+            # path so uploads still work.
             if meta.extracted_text:
                 text_parts.append(
                     f"[File: {meta.original_name}]\n{meta.extracted_text}"
@@ -221,10 +340,9 @@ async def _build_file_context(
                 needs_commit = True
                 attachments.append(_attachment_dict(meta))
                 continue
-            # Extraction failed (scanned/image-only PDF, corrupt file, no
-            # docling service for DOCX/PPTX, ...) — fall through to
-            # attachment metadata below so the model at least knows the
-            # file exists.
+            # Extraction failed (corrupt file, no extraction service
+            # configured, ...) — fall through to attachment metadata below
+            # so the model at least knows the file exists.
 
         elif meta.content_type.startswith("image/"):
             data = await ctx.file_store.download(meta.object_key)

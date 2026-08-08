@@ -16,9 +16,31 @@ from substrate.serving.monolith.routes.chat_context import (
     _build_file_context,
     _extract_document_text,
     _extract_via_pypdf,
+    _session_relative_path,
 )
 
 _FIXTURE = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
+
+
+def test_session_relative_path_extracts_the_rest_of_a_sessions_key():
+    key = "users/u1/sessions/thread-abc/invoice.pdf"
+    assert _session_relative_path(key) == "invoice.pdf"
+
+
+def test_session_relative_path_handles_nested_rest():
+    key = "users/u1/sessions/thread-abc/sub/dir/invoice.pdf"
+    assert _session_relative_path(key) == "sub/dir/invoice.pdf"
+
+
+def test_session_relative_path_none_for_uploads_scoped_key():
+    """Files uploaded with no thread_id land under uploads/, not sessions/ —
+    there's no thread-scoped workspace path to give them."""
+    key = "users/u1/uploads/invoice.pdf"
+    assert _session_relative_path(key) is None
+
+
+def test_session_relative_path_none_for_malformed_key():
+    assert _session_relative_path("not-a-real-key") is None
 
 
 def _pdf_meta(file_id: str, name: str, object_key: str, size: int) -> MagicMock:
@@ -37,6 +59,7 @@ def _pdf_meta(file_id: str, name: str, object_key: str, size: int) -> MagicMock:
     meta.extracted_text = None
     meta.extracted_at = None
     meta.extraction_engine = None
+    meta.rag_ingested_at = None
     return meta
 
 
@@ -56,7 +79,7 @@ async def test_extract_via_pypdf_returns_none_for_garbage_bytes():
 async def test_extract_document_text_truncates_over_configured_cap(monkeypatch):
     from substrate.serving.monolith.routes import chat_context
 
-    monkeypatch.setattr(chat_context.settings, "DOCLING_SERVICE_URL", "")
+    monkeypatch.setattr(chat_context.settings, "EXTRACTION_SERVICE_URL", "")
     monkeypatch.setattr(chat_context.settings, "ATTACHMENT_PDF_MAX_CHARS", 5)
     data = _FIXTURE.read_bytes()
     text, engine = await _extract_document_text(data, "invoice.pdf", "application/pdf")
@@ -66,12 +89,12 @@ async def test_extract_document_text_truncates_over_configured_cap(monkeypatch):
     assert "truncated" in text
 
 
-async def test_extract_document_text_no_docling_configured_uses_pypdf_for_pdf(
+async def test_extract_document_text_no_extraction_service_configured_uses_pypdf_for_pdf(
     monkeypatch,
 ):
     from substrate.serving.monolith.routes import chat_context
 
-    monkeypatch.setattr(chat_context.settings, "DOCLING_SERVICE_URL", "")
+    monkeypatch.setattr(chat_context.settings, "EXTRACTION_SERVICE_URL", "")
     data = _FIXTURE.read_bytes()
     text, engine = await _extract_document_text(data, "invoice.pdf", "application/pdf")
 
@@ -79,9 +102,9 @@ async def test_extract_document_text_no_docling_configured_uses_pypdf_for_pdf(
     assert engine == "pypdf"
 
 
-async def test_extract_document_text_docx_without_docling_returns_none():
-    """No pypdf equivalent exists for DOCX — without a docling service
-    configured this must fail cleanly, not raise."""
+async def test_extract_document_text_docx_returns_none():
+    """No pypdf equivalent exists for DOCX, and PaddleOCR has no DOCX reader
+    either — this must fail cleanly, not raise."""
     text, engine = await _extract_document_text(
         b"fake docx bytes",
         "report.docx",
@@ -97,7 +120,7 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
     UI/history needs the latter regardless of extraction outcome)."""
     from substrate.serving.monolith.routes import chat_context
 
-    monkeypatch.setattr(chat_context.settings, "DOCLING_SERVICE_URL", "")
+    monkeypatch.setattr(chat_context.settings, "EXTRACTION_SERVICE_URL", "")
     file_id = "11111111-1111-1111-1111-111111111111"
     meta = _pdf_meta(
         file_id,
@@ -120,12 +143,14 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
 
     ctx = MagicMock()
     ctx.file_store = file_store
+    # No RAG backend configured — exercises the old inline-extraction path.
+    ctx.rag_backend = None
 
     body = MagicMock()
     body.file_ids = [file_id]
 
     text_block, image_inputs, attachments = await _build_file_context(
-        db, body, request=MagicMock(), ctx=ctx
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
 
     assert "invoice.pdf" in text_block
@@ -164,12 +189,14 @@ async def test_build_file_context_falls_back_to_attachment_on_bad_pdf():
 
     ctx = MagicMock()
     ctx.file_store = file_store
+    # No RAG backend configured — exercises the old inline-extraction path.
+    ctx.rag_backend = None
 
     body = MagicMock()
     body.file_ids = [file_id]
 
     text_block, image_inputs, attachments = await _build_file_context(
-        db, body, request=MagicMock(), ctx=ctx
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
 
     assert text_block == ""
@@ -217,7 +244,7 @@ async def _run_build_file_context_for_workspace_path(object_key: str):
     body.file_ids = [file_id]
 
     _text, _images, attachments = await _build_file_context(
-        db, body, request=MagicMock(), ctx=ctx
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
     assert len(attachments) == 1
     return attachments[0]
@@ -295,16 +322,161 @@ async def test_build_file_context_uses_cached_extracted_text_without_download():
 
     ctx = MagicMock()
     ctx.file_store = file_store
+    # No RAG backend configured — exercises the old inline-extraction path.
+    ctx.rag_backend = None
 
     body = MagicMock()
     body.file_ids = [file_id]
 
     text_block, _images, attachments = await _build_file_context(
-        db, body, request=MagicMock(), ctx=ctx
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
 
     assert "cached invoice contents" in text_block
     assert len(attachments) == 1
     assert attachments[0]["name"] == "invoice.pdf"
     file_store.download.assert_not_awaited()
+
+
+async def test_build_file_context_ingests_pdf_into_rag_backend():
+    """With a RagBackend configured, extractable docs are ingested into the
+    thread's collection instead of inlined — the model retrieves them via
+    the knowledge_search tool."""
+    file_id = "55555555-5555-5555-5555-555555555555"
+    meta = _pdf_meta(
+        file_id, "invoice.pdf", f"users/u1/uploads/{file_id}/invoice.pdf", 1234
+    )
+
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [meta]
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_result
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=execute_result)
+    db.commit = AsyncMock()
+
+    file_store = MagicMock()
+    file_store.download = AsyncMock(return_value=b"pdf bytes")
+
+    rag_backend = MagicMock()
+    rag_backend.ingest = AsyncMock()
+
+    ctx = MagicMock()
+    ctx.file_store = file_store
+    ctx.rag_backend = rag_backend
+
+    body = MagicMock()
+    body.thread_id = "thread-abc"
+    body.file_ids = [file_id]
+
+    text_block, image_inputs, attachments = await _build_file_context(
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
+    )
+
+    assert text_block == ""
+    assert image_inputs == []
+    assert len(attachments) == 1
+    assert attachments[0]["name"] == "invoice.pdf"
+
+    rag_backend.ingest.assert_awaited_once()
+    _args, kwargs = rag_backend.ingest.call_args
+    assert kwargs["collection"] == "thread-abc"
+    assert kwargs["metadata"]["filename"] == "invoice.pdf"
+    assert kwargs["metadata"]["file_id"] == file_id
+    # object_key is "users/u1/uploads/{id}/invoice.pdf" — not a thread
+    # session path, so session_path falls back to original_name.
+    assert kwargs["metadata"]["session_path"] == "invoice.pdf"
+    assert meta.rag_ingested_at is not None
+    db.commit.assert_awaited_once()
+
+
+async def test_build_file_context_ingest_metadata_uses_real_session_path():
+    """A file uploaded scoped to this thread gets its real session-relative
+    path in the ingest metadata — what a citation's "open this file" click
+    needs (routes/workspace.py::serve_file), not just the original filename."""
+    file_id = "77777777-7777-7777-7777-777777777777"
+    thread_id = "thread-xyz"
+    meta = _pdf_meta(
+        file_id,
+        "invoice.pdf",
+        f"users/u1/sessions/{thread_id}/invoice-1.pdf",  # uniquified basename
+        1234,
+    )
+
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [meta]
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_result
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=execute_result)
+    db.commit = AsyncMock()
+
+    file_store = MagicMock()
+    file_store.download = AsyncMock(return_value=b"pdf bytes")
+
+    rag_backend = MagicMock()
+    rag_backend.ingest = AsyncMock()
+
+    ctx = MagicMock()
+    ctx.file_store = file_store
+    ctx.rag_backend = rag_backend
+
+    body = MagicMock()
+    body.thread_id = thread_id
+    body.file_ids = [file_id]
+
+    await _build_file_context(
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
+    )
+
+    _args, kwargs = rag_backend.ingest.call_args
+    # The real object-key basename, not original_name — they differ here
+    # because _unique_object_key uniquified it.
+    assert kwargs["metadata"]["session_path"] == "invoice-1.pdf"
+
+
+async def test_build_file_context_skips_reingest_when_already_indexed():
+    """A file already ingested into the RAG backend must not be re-ingested
+    on every later reference in the same thread."""
+    file_id = "66666666-6666-6666-6666-666666666666"
+    meta = _pdf_meta(
+        file_id, "invoice.pdf", f"users/u1/uploads/{file_id}/invoice.pdf", 1234
+    )
+    meta.rag_ingested_at = "already set"
+
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [meta]
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_result
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=execute_result)
+    db.commit = AsyncMock()
+
+    file_store = MagicMock()
+    file_store.download = AsyncMock(
+        side_effect=AssertionError("must not download an already-indexed file")
+    )
+
+    rag_backend = MagicMock()
+    rag_backend.ingest = AsyncMock()
+
+    ctx = MagicMock()
+    ctx.file_store = file_store
+    ctx.rag_backend = rag_backend
+
+    body = MagicMock()
+    body.thread_id = "thread-abc"
+    body.file_ids = [file_id]
+
+    text_block, _images, attachments = await _build_file_context(
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
+    )
+
+    assert text_block == ""
+    assert len(attachments) == 1
+    rag_backend.ingest.assert_not_awaited()
+    db.commit.assert_not_awaited()
     db.commit.assert_not_awaited()

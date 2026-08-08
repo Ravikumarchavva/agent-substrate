@@ -25,7 +25,7 @@ resources:
   - runtime/job-controller.yaml
   - runtime/agent-runtime.yaml
   - runtime/tool-executor.yaml
-  - runtime/docling.yaml
+  - runtime/extraction.yaml
   - runtime/human-gate.yaml
   - runtime/live-stream.yaml
   - runtime/user-workspaces.yaml

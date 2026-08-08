@@ -77,9 +77,9 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       # Empty by default — chat attachments fall back to the lightweight
       # pypdf path for PDFs. Only set this if you're also running the
-      # docling service (docker compose --profile docling up):
-      #   DOCLING_SERVICE_URL=http://docling:8080 docker compose --profile docling up
-      DOCLING_SERVICE_URL: ${DOCLING_SERVICE_URL:-}
+      # extraction service (docker compose --profile extraction up):
+      #   EXTRACTION_SERVICE_URL=http://extraction:8080 docker compose --profile extraction up
+      EXTRACTION_SERVICE_URL: ${EXTRACTION_SERVICE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -199,21 +199,12 @@ services:
     # profiles:
     #   - storage
 
-  docling:
+  extraction:
     profiles:
-      - docling
+      - extraction
     build:
       context: ../..
-      dockerfile: deployment/docker/docling.Dockerfile
-    environment:
-      DOCLING_OCR_ENABLED: ${DOCLING_OCR_ENABLED:-true}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      dockerfile: deployment/docker/extraction.Dockerfile
     ports:
       - "8021:8080"
     restart: unless-stopped

@@ -211,6 +211,33 @@ class FileMetadata(Base):
         String, nullable=True
     )  # "docling" | "pypdf"
 
+    # RAG ingestion cache — set the first time this file is ingested into the
+    # thread's RagBackend collection (see routes/chat_context.py). Files are
+    # immutable once uploaded, so a non-null value means "already indexed,
+    # don't re-ingest" for every later reference, same pattern as
+    # extracted_at above.
+    rag_ingested_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Eager staged ingestion (see routes/files.py::upload_file /
+    # routes/chat_context.py::_build_file_context). Extraction+embedding
+    # starts as soon as the file is uploaded, written to a temporary
+    # `staging:{file_id}` vector-store collection — not the real thread
+    # collection. `staged_at` set = staging succeeded and is ready to be
+    # cheaply promoted (re-keyed, no re-extraction) into the thread's real
+    # collection at send time; `staging_error` set = it failed and the chat
+    # send referencing this file is blocked until the file is removed.
+    # `page_count` is the cheap pypdf pre-check from upload time (also what
+    # enforces RAG_MAX_DOC_PAGES), reused by the frontend to estimate
+    # progress since true per-page extraction progress isn't available (see
+    # plan notes — PPStructureV3 batches internally despite looking lazy).
+    page_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    staged_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    staging_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

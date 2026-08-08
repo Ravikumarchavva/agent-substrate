@@ -30,10 +30,15 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
     """Construct the backend named by *kind*.
 
     ``kind="local"`` kwargs: ``embedding_client`` (required), ``vector_store``
-    (required), ``model_client`` (optional — needed for ``query_with_context``
-    and for the reranker), ``rerank`` (bool, default ``False``),
-    ``docling_service_url``/``docling_auth_token``/``docling_timeout_s``
-    (optional — parsing falls back to pypdf/pdfplumber without one).
+    (required), ``model_client`` (optional — needed for ``query_with_context``,
+    and as the ``LLMReranker`` fallback when ``rerank=True`` but no
+    extraction service is configured), ``rerank`` (bool, default ``False``),
+    ``image_store`` (optional — a second ``VectorStore`` for chart/table
+    images, dimensionality matching the extraction service's embedding
+    model), ``extraction_service_url``/``extraction_auth_token``/
+    ``extraction_timeout_s`` (optional — layout-aware parsing, chart-image
+    extraction, multimodal embedding, and a local cross-encoder reranker;
+    falls back to pypdf/pdfplumber text-only parsing without one).
 
     ``kind="pinecone"`` kwargs: ``api_key`` (falls back to
     ``PINECONE_API_KEY`` env var), ``assistant_name`` (required).
@@ -54,17 +59,47 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
                 "and vector_store."
             )
         model_client: LLMClient | None = kwargs.get("model_client")
-        reranker = None
-        if kwargs.get("rerank") and model_client is not None:
-            from substrate.capabilities.knowledge.reranker import LLMReranker
+        image_store: VectorStore | None = kwargs.get("image_store")
+        extraction_service_url = kwargs.get("extraction_service_url", "")
+        extraction_auth_token = kwargs.get("extraction_auth_token", "")
+        extraction_timeout_s = kwargs.get("extraction_timeout_s", 90)
 
-            reranker = LLMReranker(model_client)
+        extraction_client = None
+        if extraction_service_url:
+            from substrate.capabilities.knowledge.extraction_client import (
+                ExtractionClient,
+            )
+
+            extraction_client = ExtractionClient(
+                base_url=extraction_service_url,
+                auth_token=extraction_auth_token,
+                timeout_s=extraction_timeout_s,
+            )
+
+        reranker = None
+        if kwargs.get("rerank"):
+            if extraction_client is not None:
+                # Local cross-encoder — no LLM tokens/latency spent on
+                # reranking. Preferred whenever the extraction service (and
+                # therefore its reranker model) is configured.
+                from substrate.capabilities.knowledge.reranker import (
+                    CrossEncoderReranker,
+                )
+
+                reranker = CrossEncoderReranker(extraction_client)
+            elif model_client is not None:
+                from substrate.capabilities.knowledge.reranker import LLMReranker
+
+                reranker = LLMReranker(model_client)
+
         return LocalRagBackend(
             RAGPipeline(embedding_client, vector_store),
             vector_store=vector_store,
-            docling_service_url=kwargs.get("docling_service_url", ""),
-            docling_auth_token=kwargs.get("docling_auth_token", ""),
-            docling_timeout_s=kwargs.get("docling_timeout_s", 90),
+            image_store=image_store,
+            extraction_service_url=extraction_service_url,
+            extraction_auth_token=extraction_auth_token,
+            extraction_timeout_s=extraction_timeout_s,
+            extraction_client=extraction_client,
             reranker=reranker,
             model_client=model_client,
         )

@@ -7,6 +7,9 @@ Usage:
     substrate status         # check if server is running
     substrate chat           # interactive CLI chat with default agent
     substrate chat --model gpt-4o-mini --no-tools
+
+    uv run start             # `start_main` — server only, infra assumed running
+    uv run start-all         # `start_all_main` — `make infra-up-all` then the server
 """
 
 from __future__ import annotations
@@ -432,6 +435,54 @@ def start_main() -> None:
         help="Detach and run in the background instead of foreground",
     )
     args = parser.parse_args()
+    args.foreground = not args.background
+    cmd_start(args)
+
+
+def start_all_main() -> None:
+    """Dedicated entry point for ``uv run start-all``.
+
+    Runs ``make infra-up-all`` (Postgres, Redis, MinIO, observability, the
+    MCP server, the code-interpreter sandbox, and ONLYOFFICE — everything
+    except the GPU-only Docling service) and then starts the server in the
+    foreground, same as ``uv run start``. One command instead of the usual
+    two-step ``make infra-up && uv run start``.
+    """
+    parser = argparse.ArgumentParser(
+        prog="start-all",
+        description="Bring up infra (make infra-up-all) then start the Agent Substrate server",
+    )
+    parser.add_argument(
+        "--host", default="0.0.0.0", help="Bind host  (default: 0.0.0.0)"
+    )
+    parser.add_argument(
+        "--port", "-p", default=8000, type=int, help="Bind port  (default: 8000)"
+    )
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Enable auto-reload (dev mode)",
+    )
+    parser.add_argument(
+        "--workers", default=1, type=int, help="Number of uvicorn workers (default: 1)"
+    )
+    parser.add_argument(
+        "--background",
+        action="store_true",
+        help="Detach and run the server in the background instead of foreground",
+    )
+    parser.add_argument(
+        "--no-infra",
+        action="store_true",
+        help="Skip `make infra-up-all` and just start the server (same as `uv run start`)",
+    )
+    args = parser.parse_args()
+
+    if not args.no_infra:
+        repo_root = Path(__file__).resolve().parents[2]
+        print("Bringing up infra (make infra-up-all)…")
+        subprocess.run(["make", "infra-up-all"], cwd=repo_root, check=True)
+
     args.foreground = not args.background
     cmd_start(args)
 

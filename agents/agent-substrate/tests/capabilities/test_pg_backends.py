@@ -354,6 +354,163 @@ async def test_pg_task_store_add_and_delete() -> None:
     assert len(after_delete.tasks) == 2
 
 
+# ---------------------------------------------------------------------------
+# PgVectorStore — configurable table_name
+# ---------------------------------------------------------------------------
+
+
+async def _pg_async_engine():
+    try:
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        url = _PG_URL.replace("postgresql://", "postgresql+asyncpg://")
+        engine = create_async_engine(url, pool_pre_ping=True)
+        async with engine.connect():
+            pass
+        return engine
+    except Exception:
+        return None
+
+
+def test_pg_vector_store_rejects_invalid_table_name() -> None:
+    """table_name is interpolated directly into SQL (no ORM/param binding
+    for identifiers) — must be validated at construction, not left to fail
+    confusingly (or unsafely) at the first query."""
+    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+
+    with pytest.raises(ValueError):
+        PgVectorStore(
+            session_factory=None, engine=None, table_name="not valid; DROP TABLE x"
+        )
+
+
+async def test_pg_vector_store_custom_table_name_is_isolated_from_default() -> None:
+    """A second PgVectorStore with a different table_name must not share
+    rows (or even its table) with the default-table instance — this is the
+    whole point of the parameter: one Postgres vector(N) column has a fixed
+    width, so a second embedding dimensionality needs its own table."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.kernel.storage.vector import Document
+
+    engine = await _pg_async_engine()
+    if engine is None:
+        pytest.skip("Postgres not reachable")
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    # The default table (dimensions=384) may already exist from other tests
+    # sharing this Postgres instance — ensure_table() is CREATE TABLE IF NOT
+    # EXISTS, so it won't retroactively change an existing table's vector
+    # width. Match that width here rather than assuming a fresh table.
+    default_store = PgVectorStore(
+        session_factory=session_factory, engine=engine, dimensions=384
+    )
+    custom_store = PgVectorStore(
+        session_factory=session_factory,
+        engine=engine,
+        dimensions=3,
+        table_name="vector_documents_test_images",
+    )
+    await default_store.ensure_table()
+    await custom_store.ensure_table()
+
+    default_vec = [0.1] * 384
+    collection = f"isolation-test-{id(object())}"
+    await default_store.add(
+        [Document.from_text("in the default table", embedding=default_vec)],
+        collection=collection,
+    )
+    await custom_store.add(
+        [Document.from_text("in the custom table", embedding=[0.4, 0.5, 0.6])],
+        collection=collection,
+    )
+
+    default_results = await default_store.search(
+        default_vec, collection=collection, limit=10
+    )
+    custom_results = await custom_store.search(
+        [0.4, 0.5, 0.6], collection=collection, limit=10
+    )
+
+    assert len(default_results) == 1
+    assert default_results[0].to_text() == "in the default table"
+    assert len(custom_results) == 1
+    assert custom_results[0].to_text() == "in the custom table"
+
+    await default_store.delete_collection(collection)
+    await custom_store.delete_collection(collection)
+
+
+async def test_pg_vector_store_rename_collection_rekeys_rows() -> None:
+    """rename_collection moves every row from one collection to another —
+    the mechanism LocalRagBackend.promote() uses to move a staged document
+    into a thread's real collection without re-embedding."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.kernel.storage.vector import Document
+
+    engine = await _pg_async_engine()
+    if engine is None:
+        pytest.skip("Postgres not reachable")
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    # Match the default table's existing dimensionality (see the isolation
+    # test above) rather than assuming a fresh table.
+    store = PgVectorStore(
+        session_factory=session_factory, engine=engine, dimensions=384
+    )
+    await store.ensure_table()
+
+    vec = [0.1] * 384
+    old_collection = f"staging-rename-test-{id(object())}"
+    new_collection = f"promoted-rename-test-{id(object())}"
+    await store.add(
+        [
+            Document.from_text("page one", embedding=vec),
+            Document.from_text("page two", embedding=vec),
+        ],
+        collection=old_collection,
+    )
+
+    moved = await store.rename_collection(old_collection, new_collection)
+
+    assert moved == 2
+    assert await store.search(vec, collection=old_collection, limit=10) == []
+    new_results = await store.search(vec, collection=new_collection, limit=10)
+    assert {r.to_text() for r in new_results} == {"page one", "page two"}
+
+    await store.delete_collection(new_collection)
+
+
+async def test_pg_vector_store_rename_collection_noop_when_nothing_matches() -> None:
+    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+
+    engine = await _pg_async_engine()
+    if engine is None:
+        pytest.skip("Postgres not reachable")
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    store = PgVectorStore(
+        session_factory=session_factory, engine=engine, dimensions=384
+    )
+    await store.ensure_table()
+
+    moved = await store.rename_collection(
+        f"nonexistent-{id(object())}", f"also-nonexistent-{id(object())}"
+    )
+    assert moved == 0
+
+
 async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:
     from substrate.infrastructure.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id, RunStatus

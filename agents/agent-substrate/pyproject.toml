@@ -97,13 +97,13 @@ sandbox = [
     "plotly>=5.24.0",
     "scikit-learn>=1.5.0",
 ]
-# PDF loading for the knowledge/RAG pipeline (PDFLoader, DoclingLoader's
-# pypdf-based fallback path).
+# PDF loading for the knowledge/RAG pipeline (PDFLoader — the local,
+# no-extraction-service fallback path).
 rag = ["pypdf>=6.13.0"]
 # Managed RAG via Pinecone Assistant (RAG_BACKEND=pinecone) — parsing,
 # chunking, embedding, storage, and retrieval all run on Pinecone's side, so
-# none of the local `rag`/`docling` extras above are needed with this backend.
-rag-pinecone = ["pinecone>=5.0.0"]
+# none of the local `rag`/`extraction` extras above are needed with this backend.
+rag-pinecone = ["pinecone>=9.0.0"]
 # S3-compatible object storage backend for FILE_STORE_BACKEND=s3 (the default,
 # "local", needs neither of these).
 s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
@@ -111,14 +111,27 @@ s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
 # constructs by default — install this if you're running agent-substrate
 # itself, not just importing it as a library. `make sync` uses this.
 server = ["agent-substrate[web,code,rag,s3,sandbox]"]
-# Structure-aware document parsing (PDF/DOCX/PPTX layout, tables, OCR) via
-# DoclingLoader (capabilities/knowledge/loaders/docling_loader.py). Pulls in
-# torch + transformers + accelerate for local layout/table-structure models —
-# on Linux this drags in the full NVIDIA CUDA/cuDNN/NCCL runtime (~4GB) even
-# for CPU-only use, since that's what the default PyPI torch wheel bundles.
-# Not needed unless you actually parse documents with Docling — the base
-# install already covers CSV/JSON/text/pypdf-based PDF loading without it.
-docling = ["docling>=2.0.0"]
+# Layout-aware document parsing (PDF layout, chart/table detection, OCR) via
+# PaddleOCR, plus multimodal embedding (SigLIP) and reranking (MiniLM
+# cross-encoder) via sentence-transformers — used only by
+# `serving/services/extraction/`, never imported from the main API process.
+# `paddlepaddle` is pinned to the exact CPU-wheel version verified working on
+# this project's target hardware (see `[tool.uv.sources]` below — it comes
+# from PaddlePaddle's own CPU package index, not plain PyPI, and needs a
+# runtime mkldnn-disable workaround for CPUs without AVX-512; see
+# `serving/services/extraction/pipeline.py::_disable_mkldnn`). Not needed
+# unless you actually run the extraction service — the base install already
+# covers CSV/JSON/text/pypdf-based PDF loading without it.
+extraction = [
+    "paddleocr[doc-parser]>=3.7.0",
+    "paddlepaddle==3.3.0",
+    "sentence-transformers>=5.7.0",
+    # Explicit direct dependency (sentence-transformers already pulls it
+    # transitively) — the `[tool.uv.sources]` CPU-index override below only
+    # applies to packages declared directly in this project, not purely
+    # transitive ones.
+    "torch>=2.0.0",
+]
 
 [project.urls]
 Homepage = "https://docs.agent-substrate.com"
@@ -129,6 +142,7 @@ Issues = "https://github.com/Ravikumarchavva/agent-substrate/issues"
 [project.scripts]
 substrate = "substrate.cli:main"
 start = "substrate.cli:start_main"
+start-all = "substrate.cli:start_all_main"
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12"]
@@ -136,6 +150,28 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "substrate"
+
+# paddlepaddle's CPU wheel — plain PyPI also serves a CPU build, but the
+# `extraction` extra's pinned version was verified (via this project's own
+# benchmarking) against PaddlePaddle's official CPU package index, not PyPI's.
+[[tool.uv.index]]
+name = "paddle-cpu"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
+explicit = true
+
+# torch's default PyPI wheel bundles the full NVIDIA CUDA/cuDNN/NCCL runtime
+# even for CPU-only use (confirmed: nvidia-cufile, nvidia-curand, etc. all
+# pulled in by a plain `torch` install here) — sentence-transformers (the
+# `extraction` extra) depends on torch transitively, so route it to
+# PyTorch's own CPU-only wheel index instead.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+paddlepaddle = { index = "paddle-cpu" }
+torch = { index = "pytorch-cpu" }
 
 [dependency-groups]
 dev = [
@@ -239,10 +275,9 @@ ignore_imports = [
     # chat_context inlines PDF attachment text using the existing PDFLoader
     # (pypdf/pdfplumber) rather than duplicating extraction logic
     "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.loaders.pdf_loader",
-    # docling service + client — same pattern as code_interpreter's http_client
-    "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.docling_client",
-    "substrate.serving.services.docling.app -> substrate.capabilities.knowledge.loaders.docling_loader",
-    "substrate.serving.services.docling.schemas -> substrate.capabilities.knowledge.docling_client",
+    # extraction service + client — same pattern as code_interpreter's http_client
+    "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.extraction_client",
+    "substrate.serving.services.extraction.schemas -> substrate.capabilities.knowledge.extraction_client",
 ]
 
 # Orthogonal peers (not part of the layer stack):

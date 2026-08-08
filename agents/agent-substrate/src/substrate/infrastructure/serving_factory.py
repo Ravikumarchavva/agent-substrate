@@ -179,6 +179,7 @@ def _init_file_store(cfg: SubstrateConfig) -> Any:
             secret_key=cfg.FILE_STORE_SECRET_KEY or "",
             bucket=cfg.FILE_STORE_BUCKET,
             region=cfg.FILE_STORE_REGION,
+            user_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES,
         )
     if cfg.FILE_STORE_BACKEND == "memory":
         from substrate.agents.storage.memory import InMemoryFileStore
@@ -243,7 +244,19 @@ async def init_infrastructure(
     vector_store = PgVectorStore(
         session_factory=session_factory,
         engine=engine,
-        dimensions=1536,
+        dimensions=cfg.RAG_TEXT_EMBEDDING_DIM,
+    )
+    # Separate table for chart/table images — a different embedding model
+    # (the extraction service's SigLIP-family model) means a different
+    # vector dimensionality, and PgVectorStore's `vector({dimensions})`
+    # column is fixed per instance/table (see backends/local.py's module
+    # docstring). Built unconditionally; unused (never populated) when no
+    # extraction service is configured, so this costs nothing in that case.
+    image_store = PgVectorStore(
+        session_factory=session_factory,
+        engine=engine,
+        dimensions=cfg.RAG_IMAGE_EMBEDDING_DIM,
+        table_name="vector_documents_images",
     )
     # Fail-closed at construction, degrade gracefully at startup: an
     # unreachable/misconfigured RAG backend (e.g. RAG_BACKEND=pinecone with no
@@ -254,10 +267,17 @@ async def init_infrastructure(
             cfg.RAG_BACKEND,
             embedding_client=embedding_client,
             vector_store=vector_store,
+            image_store=image_store,
             model_client=model_client,
-            docling_service_url=cfg.DOCLING_SERVICE_URL,
-            docling_auth_token=cfg.DOCLING_AUTH_TOKEN,
-            docling_timeout_s=cfg.DOCLING_TIMEOUT_S,
+            # Only turn reranking on by default when it's free — the local
+            # cross-encoder via the extraction service costs no LLM tokens.
+            # Without that service configured this stays off, same default
+            # as before (an LLMReranker fallback would burn LLM tokens/
+            # latency on every query, an unannounced cost change to avoid).
+            rerank=bool(cfg.EXTRACTION_SERVICE_URL),
+            extraction_service_url=cfg.EXTRACTION_SERVICE_URL,
+            extraction_auth_token=cfg.EXTRACTION_AUTH_TOKEN,
+            extraction_timeout_s=cfg.EXTRACTION_TIMEOUT_S,
             api_key=cfg.PINECONE_API_KEY,
             assistant_name=cfg.PINECONE_ASSISTANT_NAME,
         )

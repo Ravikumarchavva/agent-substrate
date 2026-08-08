@@ -219,19 +219,21 @@ services:
       - agent-net
 
   # ══════════════════════════════════════════════════════════════════════════════
-  # Docling document-extraction service — optional, opt-in (profile-gated).
-  # Heavy image (torch/CUDA runtime) built from its own Dockerfile, not the
-  # shared backend.Dockerfile x-service-base build — it needs the `docling`
-  # extra that the base image deliberately excludes.
+  # Extraction service — layout/chart detection + OCR (PaddleOCR) + multimodal
+  # embedding (SigLIP) + reranking (MiniLM cross-encoder). Optional, opt-in
+  # (profile-gated). Built from its own Dockerfile, not the shared
+  # backend.Dockerfile x-service-base build — it needs the `extraction` extra
+  # (paddlepaddle + sentence-transformers) that the base image deliberately
+  # excludes.
   # ══════════════════════════════════════════════════════════════════════════════
 
-  docling:
+  extraction:
     profiles:
-      - docling
+      - extraction
     build:
       context: ../..
-      dockerfile: deployment/docker/docling.Dockerfile
-    command: ["uvicorn", "substrate.serving.services.docling.app:app", "--host", "0.0.0.0", "--port", "8080"]
+      dockerfile: deployment/docker/extraction.Dockerfile
+    command: ["uvicorn", "substrate.serving.services.extraction.app:app", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "8022:8080"
     restart: unless-stopped

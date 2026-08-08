@@ -136,6 +136,7 @@ async def chat(
             body,
             request,
             ctx,
+            user,
         )
         if not body.messages:
             raise HTTPException(status_code=422, detail="messages[] must not be empty")

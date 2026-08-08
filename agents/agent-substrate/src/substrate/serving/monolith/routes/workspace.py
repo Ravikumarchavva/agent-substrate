@@ -1,11 +1,10 @@
 """Workspace storage management — usage, listing, and deletion for the
 per-user filesystem backing uploads and code-interpreter artifacts.
 
-Only meaningful when ``ctx.file_store`` is a ``WorkspaceFileStore``
-(``FILE_STORE_BACKEND=local``, the default — see
-``capabilities/storage/workspace.py``). Under other backends (s3/memory)
-these routes 501, since usage/listing/delete-by-path have no equivalent
-there today.
+Works against any file store that can enumerate a user's files — both
+``WorkspaceFileStore`` (``FILE_STORE_BACKEND=local``, a filesystem tree) and
+``S3FileStore`` (``=s3``, object storage keyed on the same ``users/{id}/...``
+layout) qualify. Stores that can't, like ``InMemoryFileStore``, 501 here.
 
 Routes:
   GET    /workspace/usage   – bytes used vs. quota for the caller
@@ -17,6 +16,7 @@ from __future__ import annotations
 
 import mimetypes
 import uuid
+from typing import Protocol, runtime_checkable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -24,10 +24,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.capabilities.storage.workspace import (
-    WorkspaceFileStore,
-    WorkspacePathError,
-)
+from substrate.capabilities.storage.workspace import WorkspacePathError
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.file_versioning import (
@@ -68,13 +65,38 @@ class WorkspaceFilesResponse(BaseModel):
     files: list[WorkspaceFileEntry]
 
 
-def _require_workspace_store(ctx: ServerDependencies) -> WorkspaceFileStore:
-    if not isinstance(ctx.file_store, WorkspaceFileStore):
+@runtime_checkable
+class _WorkspaceCapableStore(Protocol):
+    """The surface this API needs beyond plain upload/download/delete.
+
+    A capability check rather than ``isinstance(WorkspaceFileStore)``: both
+    ``WorkspaceFileStore`` (filesystem tree) and ``S3FileStore`` (object
+    storage, keyed on the same ``users/{id}/...`` layout) implement it, and the
+    backend is meant to be swappable without touching this API. Stores that
+    can't enumerate a user's files — ``InMemoryFileStore`` — still get a 501.
+    """
+
+    async def exists(self, key: str) -> bool: ...
+    async def usage_bytes(self, user_id: str, *, force: bool = False) -> int: ...
+    async def list_user_files(self, user_id: str) -> list[tuple[str, int, float]]: ...
+    async def download(self, key: str) -> bytes: ...
+    async def upload(
+        self, key: str, data: bytes, *, content_type: str = ...
+    ) -> None: ...
+    async def delete(self, key: str) -> None: ...
+
+
+def _require_workspace_store(ctx: ServerDependencies) -> _WorkspaceCapableStore:
+    store = ctx.file_store
+    if not isinstance(store, _WorkspaceCapableStore):
         raise HTTPException(
             status_code=501,
-            detail="Workspace management is only available with FILE_STORE_BACKEND=local.",
+            detail=(
+                "Workspace management requires a file store that can enumerate "
+                "a user's files (FILE_STORE_BACKEND=local or s3)."
+            ),
         )
-    return ctx.file_store
+    return store
 
 
 def _session_id_from_key(key: str) -> str | None:
@@ -105,7 +127,7 @@ async def get_usage(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceUsageResponse:
     store = _require_workspace_store(ctx)
-    used = store.usage_bytes(claims.sub, force=True)
+    used = await store.usage_bytes(claims.sub, force=True)
     return WorkspaceUsageResponse(
         used_bytes=used, quota_bytes=ctx.workspace_user_quota_bytes
     )
@@ -121,7 +143,9 @@ async def list_files(
     # Hide the per-file version snapshots (.versions/) — they're internal
     # history, not user-facing files (see file_versioning.py).
     entries = [
-        e for e in store.list_user_files(claims.sub) if f"/{VERSIONS_DIR}/" not in e[0]
+        e
+        for e in await store.list_user_files(claims.sub)
+        if f"/{VERSIONS_DIR}/" not in e[0]
     ]
     session_ids_by_key = {key: _session_id_from_key(key) for key, _, _ in entries}
 
@@ -183,8 +207,8 @@ def _session_key(sub: str, thread_id: str, path: str) -> str:
     return f"users/{sub}/sessions/{thread_id}/{rel}"
 
 
-def _resolve_session_key(
-    store: WorkspaceFileStore, sub: str, thread_id: str, path: str
+async def _resolve_session_key(
+    store: _WorkspaceCapableStore, sub: str, thread_id: str, path: str
 ) -> str:
     """Resolve a session-relative ref to the real object key of an existing file.
 
@@ -196,13 +220,13 @@ def _resolve_session_key(
     return the exact key so writes to a brand-new file still land where asked.
     """
     exact = _session_key(sub, thread_id, path)
-    if store.exists(exact):
+    if await store.exists(exact):
         return exact
     base = path.rsplit("/", 1)[-1]
     prefix = f"users/{sub}/sessions/{thread_id}/"
     matches = [
         (key, mtime)
-        for (key, _size, mtime) in store.list_user_files(sub)
+        for (key, _size, mtime) in await store.list_user_files(sub)
         if key.startswith(prefix)
         and f"/{VERSIONS_DIR}/" not in key
         and key.rsplit("/", 1)[-1] == base
@@ -286,7 +310,7 @@ async def serve_file(
     history stays honest without a per-turn scan.
     """
     store = _require_workspace_store(ctx)
-    key = _resolve_session_key(store, claims.sub, thread_id, path)
+    key = await _resolve_session_key(store, claims.sub, thread_id, path)
 
     if seq is not None:
         version = (
@@ -354,7 +378,7 @@ async def save_file(
     is already versioned (via serve_file's lazy capture), so nothing is lost.
     """
     store = _require_workspace_store(ctx)
-    key = _resolve_session_key(store, claims.sub, thread_id, path)
+    key = await _resolve_session_key(store, claims.sub, thread_id, path)
     body = await request.body()
     base = request.headers.get("X-Base-Checksum", "")
 
@@ -409,7 +433,7 @@ async def get_versions(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceVersionsResponse:
     store = _require_workspace_store(ctx)
-    key = _resolve_session_key(store, claims.sub, thread_id, path)
+    key = await _resolve_session_key(store, claims.sub, thread_id, path)
     versions = await list_versions(db, key)
     return WorkspaceVersionsResponse(
         versions=[
@@ -439,7 +463,7 @@ async def restore_version(
     (non-destructive — the current state was already captured, so it stays in
     history too)."""
     store = _require_workspace_store(ctx)
-    key = _resolve_session_key(store, claims.sub, body.thread_id, body.path)
+    key = await _resolve_session_key(store, claims.sub, body.thread_id, body.path)
     version = (
         await db.execute(
             select(FileVersion).where(

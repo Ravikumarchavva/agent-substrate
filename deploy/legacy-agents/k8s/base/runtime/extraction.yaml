@@ -1,10 +1,12 @@
-# Docling Extraction Service — Kubernetes Deployment
+# Extraction Service — Kubernetes Deployment
 #
-# Structure-aware document parsing (PDF/DOCX/PPTX layout, tables, OCR) for
-# chat attachments, isolated from the main API process — it pulls torch +
-# transformers + the full CUDA/cuDNN/NCCL runtime (~4GB) even for CPU-only
-# use, and model inference is slow enough that running it inline would
-# block chat responses (see pyproject.toml's `docling` extra comment).
+# Layout-aware document parsing (PDF layout, chart/table detection, OCR) plus
+# multimodal embedding (SigLIP) and reranking (MiniLM cross-encoder) for chat
+# attachments and the local RAG backend, isolated from the main API process
+# — it pulls paddlepaddle + torch (via sentence-transformers) and model
+# inference is slow enough that running it inline would block chat
+# responses (see pyproject.toml's `extraction` extra comment). CPU-only —
+# no GPU/nvidia device request needed (paddlepaddle's CPU wheel is used).
 #
 # Unlike code-interpreter, this is a plain Deployment, not a StatefulSet:
 # extraction is stateless request/response with no session affinity, so
@@ -13,7 +15,7 @@
 # autoscaling churn costs more than it saves at this scale; scale by
 # editing `replicas` directly if throughput becomes a bottleneck.
 #
-# Optional: the monolith/services only call this when DOCLING_SERVICE_URL
+# Optional: the monolith/services only call this when EXTRACTION_SERVICE_URL
 # is set (see config.py). Not setting it (or this Deployment not existing)
 # just means chat attachments fall back to the lightweight pypdf path for
 # PDFs — no hard dependency.
@@ -21,13 +23,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: docling
+  name: extraction
   namespace: af-runtime
   labels:
-    app: docling
+    app: extraction
 spec:
   selector:
-    app: docling
+    app: extraction
   ports:
     - port: 8080
       targetPort: http
@@ -36,39 +38,39 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: docling
+  name: extraction
   namespace: af-runtime
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: docling
+  name: extraction
   namespace: af-runtime
   labels:
-    app: docling
-    af.service-role: docling
+    app: extraction
+    af.service-role: extraction
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: docling
+      app: extraction
   template:
     metadata:
       labels:
-        app: docling
-        af.service-role: docling
+        app: extraction
+        af.service-role: extraction
     spec:
-      serviceAccountName: docling
+      serviceAccountName: extraction
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
       containers:
-        - name: docling
-          image: ghcr.io/example/agent-framework/docling:0.1.0
+        - name: extraction
+          image: ghcr.io/example/agent-framework/extraction:0.1.0
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false  # docling caches model weights under $HOME
+            readOnlyRootFilesystem: false  # caches model weights under $HOME
             capabilities:
               drop: ["ALL"]
           ports:
@@ -79,7 +81,7 @@ spec:
                 name: runtime-secrets
           env:
             - name: SERVICE_NAME
-              value: docling
+              value: extraction
           resources:
             requests:
               cpu: 1000m

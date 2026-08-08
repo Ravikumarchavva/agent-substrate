@@ -26,6 +26,10 @@ _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("file_metadata", "extracted_text", "TEXT"),
     ("file_metadata", "extracted_at", "TIMESTAMPTZ"),
     ("file_metadata", "extraction_engine", "VARCHAR"),
+    ("file_metadata", "rag_ingested_at", "TIMESTAMPTZ"),
+    ("file_metadata", "page_count", "INTEGER"),
+    ("file_metadata", "staged_at", "TIMESTAMPTZ"),
+    ("file_metadata", "staging_error", "TEXT"),
     ("file_versions", "restored_from_seq", "INTEGER"),
 ]
 

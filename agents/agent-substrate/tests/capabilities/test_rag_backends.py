@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -203,92 +201,201 @@ async def test_local_backend_list_and_delete_collections():
 
 
 # ── PineconeRagBackend ──────────────────────────────────────────────────────
+# Patches the real installed `pinecone` SDK's `Pinecone` client class (the
+# `rag-pinecone` extra is a real dependency here, not faked) — verified
+# against pinecone==9.1.0's actual shape: `pc.assistants.describe/create`
+# returning an `AssistantModel` with `.upload_file`/`.context`/`.chat`.
 
-
-def _install_fake_pinecone_module(mock_assistant) -> None:
-    """Install a minimal fake `pinecone` module so PineconeRagBackend can
-    import it without the real SDK being installed."""
-    fake_module = types.ModuleType("pinecone")
-
-    class FakePinecone:
-        def __init__(self, api_key: str) -> None:
-            self.api_key = api_key
-            self.assistant = MagicMock()
-            self.assistant.Assistant = MagicMock(return_value=mock_assistant)
-
-    fake_module.Pinecone = FakePinecone  # type: ignore[attr-defined]
-    sys.modules["pinecone"] = fake_module
+pinecone = pytest.importorskip("pinecone")
 
 
 @pytest.fixture
-def fake_pinecone_assistant():
+def fake_pinecone_client(monkeypatch):
     assistant = MagicMock()
-    _install_fake_pinecone_module(assistant)
-    yield assistant
-    sys.modules.pop("pinecone", None)
+    client = MagicMock()
+    client.assistants.describe = MagicMock(return_value=assistant)
+    monkeypatch.setattr(pinecone, "Pinecone", MagicMock(return_value=client))
+    return assistant
 
 
-async def test_pinecone_backend_ingest_uploads_file(fake_pinecone_assistant, tmp_path):
+async def test_pinecone_backend_ingest_uploads_file(fake_pinecone_client, tmp_path):
     from substrate.capabilities.knowledge.backends.pinecone import PineconeRagBackend
 
     file_ref = MagicMock(id="file-123")
-    fake_pinecone_assistant.upload_file = MagicMock(return_value=file_ref)
+    fake_pinecone_client.upload_file = MagicMock(return_value=file_ref)
 
     backend = PineconeRagBackend(api_key="key", assistant_name="docs")
     doc = tmp_path / "notes.txt"
     doc.write_text("content")
 
-    result = await backend.ingest(str(doc))
+    result = await backend.ingest(str(doc), collection="thread-1")
 
     assert result.chunks_indexed == -1
     assert result.document_id == "file-123"
-    fake_pinecone_assistant.upload_file.assert_called_once()
+    _, kwargs = fake_pinecone_client.upload_file.call_args
+    assert kwargs["metadata"]["collection"] == "thread-1"
+    # multimodal=True — without it Pinecone only OCRs/reads plain text
+    # layers, silently dropping scanned-image page content.
+    assert kwargs["multimodal"] is True
 
 
-async def test_pinecone_backend_query_maps_snippets(fake_pinecone_assistant):
+async def test_pinecone_backend_query_maps_snippets_and_filters_by_collection(
+    fake_pinecone_client,
+):
     from substrate.capabilities.knowledge.backends.pinecone import PineconeRagBackend
 
     snippet = MagicMock()
-    snippet.text = "relevant passage"
+    snippet.content = "relevant passage"
     snippet.score = 0.87
     snippet.reference.file.id = "file-123"
     response = MagicMock(snippets=[snippet])
-    fake_pinecone_assistant.context = MagicMock(return_value=response)
+    fake_pinecone_client.context = MagicMock(return_value=response)
 
     backend = PineconeRagBackend(api_key="key", assistant_name="docs")
-    results = await backend.query("question", limit=3)
+    results = await backend.query("question", collection="thread-1", limit=3)
 
     assert len(results) == 1
     assert results[0].id == "file-123"
     assert results[0].score == 0.87
     assert results[0].to_text() == "relevant passage"
+    _, kwargs = fake_pinecone_client.context.call_args
+    assert kwargs["filter"] == {"collection": {"$eq": "thread-1"}}
 
 
-async def test_pinecone_backend_query_with_context_chats(fake_pinecone_assistant):
+async def test_pinecone_backend_query_normalizes_citation_metadata(
+    fake_pinecone_client,
+):
+    """SearchResult.metadata must carry filename/pages/page_number and echo
+    back custom ingest metadata (file_id, session_path) — this is what
+    capabilities/knowledge/citations.py builds citations from."""
+    from substrate.capabilities.knowledge.backends.pinecone import PineconeRagBackend
+
+    snippet = MagicMock()
+    snippet.content = "relevant passage"
+    snippet.score = 0.87
+    snippet.reference.pages = [7]
+    snippet.reference.file.id = "pinecone-file-id"
+    snippet.reference.file.name = "tmpabc.pdf"
+    snippet.reference.file.metadata = {
+        "collection": "thread-1",
+        "content_type": "application/pdf",
+        "filename": "Naac_appLetter.pdf",
+        "file_id": "db-file-id",
+        "session_path": "Naac_appLetter.pdf",
+    }
+    response = MagicMock(snippets=[snippet])
+    fake_pinecone_client.context = MagicMock(return_value=response)
+
+    backend = PineconeRagBackend(api_key="key", assistant_name="docs")
+    results = await backend.query("question", collection="thread-1", limit=3)
+
+    metadata = results[0].metadata
+    assert metadata["filename"] == "Naac_appLetter.pdf"
+    assert metadata["file_id"] == "db-file-id"
+    assert metadata["session_path"] == "Naac_appLetter.pdf"
+    assert metadata["pages"] == [7]
+    assert metadata["page_number"] == 7
+    assert metadata["pinecone_file_id"] == "pinecone-file-id"
+
+
+async def test_pinecone_backend_query_metadata_falls_back_to_file_name(
+    fake_pinecone_client,
+):
+    """When no custom `filename` was set at ingest, fall back to Pinecone's
+    own file name rather than leaving the citation unlabelled."""
+    from substrate.capabilities.knowledge.backends.pinecone import PineconeRagBackend
+
+    snippet = MagicMock()
+    snippet.content = "text"
+    snippet.score = 0.5
+    snippet.reference.pages = [1, 2, 3]
+    snippet.reference.file.id = "f1"
+    snippet.reference.file.name = "raw_upload.pdf"
+    snippet.reference.file.metadata = {}
+    fake_pinecone_client.context = MagicMock(return_value=MagicMock(snippets=[snippet]))
+
+    backend = PineconeRagBackend(api_key="key", assistant_name="docs")
+    results = await backend.query("question")
+
+    assert results[0].metadata["filename"] == "raw_upload.pdf"
+    assert results[0].metadata["pages"] == [1, 2, 3]
+    assert results[0].metadata["page_number"] == 1
+
+
+async def test_pinecone_backend_query_missing_reference_yields_empty_metadata(
+    fake_pinecone_client,
+):
+    """A snippet with no reference (or a reshaped future SDK response) must
+    degrade to empty metadata, never raise — a citation is a nice-to-have on
+    top of a working answer."""
+    from substrate.capabilities.knowledge.backends.pinecone import PineconeRagBackend
+
+    snippet = MagicMock()
+    snippet.content = "text"
+    snippet.score = 0.5
+    snippet.reference = None
+    fake_pinecone_client.context = MagicMock(return_value=MagicMock(snippets=[snippet]))
+
+    backend = PineconeRagBackend(api_key="key", assistant_name="docs")
+    results = await backend.query("question")
+
+    assert results[0].metadata == {}
+
+
+async def test_pinecone_backend_query_with_context_chats(fake_pinecone_client):
     from substrate.capabilities.knowledge.backends.pinecone import PineconeRagBackend
 
     response = MagicMock()
     response.message.content = "assistant answer"
-    fake_pinecone_assistant.chat = MagicMock(return_value=response)
+    fake_pinecone_client.chat = MagicMock(return_value=response)
 
     backend = PineconeRagBackend(api_key="key", assistant_name="docs")
-    answer = await backend.query_with_context("question")
+    answer = await backend.query_with_context("question", collection="thread-1")
 
     assert answer == "assistant answer"
+    _, kwargs = fake_pinecone_client.chat.call_args
+    assert kwargs["filter"] == {"collection": {"$eq": "thread-1"}}
 
 
-async def test_pinecone_backend_missing_sdk_raises_unavailable():
-    sys.modules.pop("pinecone", None)
+async def test_pinecone_backend_creates_assistant_when_missing(monkeypatch):
     from substrate.capabilities.knowledge.backends.pinecone import PineconeRagBackend
+
+    client = MagicMock()
+    client.assistants.describe = MagicMock(
+        side_effect=pinecone.exceptions.NotFoundException()
+    )
+    created = MagicMock()
+    client.assistants.create = MagicMock(return_value=created)
+    monkeypatch.setattr(pinecone, "Pinecone", MagicMock(return_value=client))
+
+    backend = PineconeRagBackend(api_key="key", assistant_name="new-assistant")
+
+    client.assistants.create.assert_called_once_with(name="new-assistant")
+    assert backend._assistant is created
+
+
+async def test_pinecone_backend_missing_sdk_raises_unavailable(monkeypatch):
+    import builtins
+
+    from substrate.capabilities.knowledge.backends import pinecone as pinecone_backend
+
+    real_import = builtins.__import__
+
+    def _blocked_import(name, *args, **kwargs):
+        if name == "pinecone":
+            raise ImportError("no pinecone")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _blocked_import)
 
     with pytest.raises(
         RagBackendUnavailableError, match="requires the 'pinecone' package"
     ):
-        PineconeRagBackend(api_key="key", assistant_name="docs")
+        pinecone_backend.PineconeRagBackend(api_key="key", assistant_name="docs")
 
 
 async def test_pinecone_backend_missing_api_key_raises_unavailable(
-    fake_pinecone_assistant,
+    fake_pinecone_client,
 ):
     from substrate.capabilities.knowledge.backends.pinecone import PineconeRagBackend
 

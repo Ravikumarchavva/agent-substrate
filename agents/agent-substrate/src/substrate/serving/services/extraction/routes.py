@@ -1,4 +1,4 @@
-"""REST endpoints for the Docling extraction service.
+"""REST endpoints for the document-extraction service.
 
 All endpoints are prefixed with ``/v1/``.
 Authentication is via ``Bearer <token>`` header (optional, configurable).
@@ -7,26 +7,37 @@ Authentication is via ``Bearer <token>`` header (optional, configurable).
 from __future__ import annotations
 from substrate.logger import setup_logging
 
+import asyncio
 import base64
 import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
-from substrate.kernel.core.content import TextBlock
-
-from .schemas import DoclingExtractResponse, ExtractRequest, HealthResponse
+from .schemas import (
+    EmbedRequest,
+    EmbedResponse,
+    ExtractedImage,
+    ExtractedPageText,
+    ExtractRequest,
+    ExtractResponse,
+    HealthResponse,
+    RerankRequest,
+    RerankResponse,
+)
 
 logger = setup_logging()
 
-router = APIRouter(prefix="/v1", tags=["docling"])
+router = APIRouter(prefix="/v1", tags=["extraction"])
 
+# PaddleOCR/PaddleX reads PDF and raster images natively — no DOCX/PPTX
+# parser (verified: no docx/pptx handling anywhere in paddlex's own readers).
+# DOCX/PPTX chat attachments and RAG ingest fall back to metadata-only, same
+# as when no extraction service is configured at all.
 _SUPPORTED_CONTENT_TYPES = {
     "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",  # .pptx
-    "text/html",
-    "text/markdown",
+    "image/png",
+    "image/jpeg",
 }
 
 
@@ -34,7 +45,7 @@ async def _verify_token(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> None:
-    """Validate Bearer token if DOCLING_AUTH_TOKEN is configured."""
+    """Validate Bearer token if EXTRACTION_AUTH_TOKEN is configured."""
     token = request.app.state.config.auth_token
     if not token:
         return
@@ -47,9 +58,9 @@ async def _verify_token(
 Authed = Annotated[None, Depends(_verify_token)]
 
 
-@router.post("/extract", response_model=DoclingExtractResponse)
+@router.post("/extract", response_model=ExtractResponse)
 async def extract(body: ExtractRequest, request: Request, _: Authed):
-    """Extract structure-aware text from a document."""
+    """Extract layout-aware text + chart/table images from a document."""
     if body.content_type not in _SUPPORTED_CONTENT_TYPES:
         raise HTTPException(
             400,
@@ -68,26 +79,84 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
             413, f"File exceeds maximum size of {cfg.max_upload_bytes} bytes"
         )
 
-    loader = request.app.state.loader
+    pipeline = request.app.state.pipeline
     try:
-        docs = await loader.load(data, metadata={"source": body.filename})
+        # PaddleOCR inference is CPU-bound and synchronous — run off the
+        # event loop so one slow extraction doesn't stall every other
+        # request this service is handling.
+        pages = await asyncio.to_thread(pipeline.extract, data, body.filename)
     except Exception as exc:
-        logger.warning("Docling extraction failed for %r: %s", body.filename, exc)
-        return DoclingExtractResponse(success=False, error=str(exc)[:500])
+        logger.warning("Extraction failed for %r: %s", body.filename, exc)
+        return ExtractResponse(success=False, error=str(exc)[:500])
 
-    text = "\n\n".join(
-        block.text
-        for doc in docs
-        for block in doc.content
-        if isinstance(block, TextBlock)
-    ).strip()
+    page_texts = [
+        ExtractedPageText(page_number=page.page_number, text=page.text)
+        for page in pages
+        if page.text
+    ]
+    text = "\n\n".join(p.text for p in page_texts).strip()
+    images = [
+        ExtractedImage(
+            data_base64=base64.b64encode(img.data).decode("ascii"),
+            media_type=img.media_type,
+            page_number=img.page_number,
+            label=img.label,
+            confidence=img.confidence,
+        )
+        for page in pages
+        for img in page.images
+    ]
 
-    if not text:
-        return DoclingExtractResponse(
-            success=False, error="No extractable text found (empty or scanned document)"
+    if not text and not images:
+        return ExtractResponse(
+            success=False,
+            error="No extractable content found (empty or scanned document)",
         )
 
-    return DoclingExtractResponse(success=True, text=text, page_count=len(docs))
+    return ExtractResponse(
+        success=True,
+        text=text,
+        pages=page_texts,
+        images=images,
+        page_count=len(pages),
+    )
+
+
+@router.post("/embed", response_model=EmbedResponse)
+async def embed(body: EmbedRequest, request: Request, _: Authed):
+    """Embed either an image (``image_base64``) or text (``text``) into the
+    shared multimodal space — exactly one must be set."""
+    if bool(body.image_base64) == bool(body.text):
+        raise HTTPException(
+            400, "Exactly one of image_base64 or text must be provided."
+        )
+
+    embedding_reranker = request.app.state.embedding_reranker
+    try:
+        if body.image_base64:
+            data = base64.b64decode(body.image_base64, validate=True)
+            vector = await asyncio.to_thread(embedding_reranker.embed_image, data)
+        else:
+            assert body.text is not None
+            vector = await asyncio.to_thread(embedding_reranker.embed_text, body.text)
+    except Exception as exc:
+        raise HTTPException(400, f"Embedding failed: {exc}") from exc
+
+    return EmbedResponse(embedding=vector)
+
+
+@router.post("/rerank", response_model=RerankResponse)
+async def rerank(body: RerankRequest, request: Request, _: Authed):
+    """Score each passage's relevance to ``query``, same order as input."""
+    embedding_reranker = request.app.state.embedding_reranker
+    try:
+        scores = await asyncio.to_thread(
+            embedding_reranker.rerank, body.query, body.passages
+        )
+    except Exception as exc:
+        raise HTTPException(400, f"Rerank failed: {exc}") from exc
+
+    return RerankResponse(scores=scores)
 
 
 @router.get("/health", response_model=HealthResponse)

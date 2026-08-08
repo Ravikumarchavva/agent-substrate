@@ -142,7 +142,7 @@ async def get_config(
     store = _require_workspace_store(ctx)
     # Resolve the ref to the real file the model wrote (it may have saved into a
     # subdir like out/ but referenced the bare name) — see _resolve_session_key.
-    key = _resolve_session_key(store, claims.sub, thread_id, path)
+    key = await _resolve_session_key(store, claims.sub, thread_id, path)
     try:
         data = await store.download(key)
     except (WorkspacePathError, KeyError, FileNotFoundError):

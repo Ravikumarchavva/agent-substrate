@@ -1,20 +1,20 @@
-"""DoclingClient — every failure mode (bad status, connection error, timeout)
-must come back as a structured DoclingExtractResponse(success=False), never
+"""ExtractionClient — every failure mode (bad status, connection error, timeout)
+must come back as a structured ExtractResponse(success=False) or None, never
 raise, so callers can always fall back to a lighter local extractor."""
 
 from __future__ import annotations
 
 import httpx
 
-from substrate.capabilities.knowledge.docling_client import DoclingClient
+from substrate.capabilities.knowledge.extraction_client import ExtractionClient
 
 
-def _client_with_transport(transport: httpx.MockTransport) -> DoclingClient:
-    client = DoclingClient(base_url="http://docling-test:8080")
+def _client_with_transport(transport: httpx.MockTransport) -> ExtractionClient:
+    client = ExtractionClient(base_url="http://extraction-test:8080")
     # Route through the fake transport instead of a real socket — same
     # approach httpx itself recommends for testing (MockTransport).
     client._client = httpx.AsyncClient(
-        base_url="http://docling-test:8080", transport=transport
+        base_url="http://extraction-test:8080", transport=transport
     )
     return client
 
@@ -27,7 +27,8 @@ async def test_extract_success():
             json={
                 "success": True,
                 "text": "hello world",
-                "engine": "docling",
+                "pages": [{"page_number": 1, "text": "hello world"}],
+                "engine": "paddleocr",
                 "page_count": 1,
             },
         )
@@ -37,7 +38,8 @@ async def test_extract_success():
 
     assert result.success is True
     assert result.text == "hello world"
-    assert result.engine == "docling"
+    assert result.engine == "paddleocr"
+    assert result.pages[0].page_number == 1
 
 
 async def test_extract_http_error_status_returns_failure_not_raise():
@@ -87,10 +89,74 @@ async def test_extract_bad_content_type_from_service():
     assert result.success is False
 
 
+async def test_embed_image_success():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/embed"
+        return httpx.Response(200, json={"embedding": [0.1, 0.2, 0.3]})
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    result = await client.embed_image(b"fake png bytes")
+
+    assert result == [0.1, 0.2, 0.3]
+
+
+async def test_embed_text_success():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/embed"
+        return httpx.Response(200, json={"embedding": [0.4, 0.5]})
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    result = await client.embed_text("revenue chart")
+
+    assert result == [0.4, 0.5]
+
+
+async def test_embed_returns_none_on_failure_not_raise():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="internal error")
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    result = await client.embed_text("query")
+
+    assert result is None
+
+
+async def test_rerank_success():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/rerank"
+        return httpx.Response(200, json={"scores": [0.9, 0.1]})
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    result = await client.rerank("query", ["passage a", "passage b"])
+
+    assert result == [0.9, 0.1]
+
+
+async def test_rerank_empty_passages_short_circuits():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("should not make an HTTP call for empty passages")
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    result = await client.rerank("query", [])
+
+    assert result == []
+
+
+async def test_rerank_returns_none_on_failure_not_raise():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    result = await client.rerank("query", ["passage"])
+
+    assert result is None
+
+
 async def test_health_true_on_200():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
-            200, json={"status": "ok", "pod_name": "docling-0", "uptime_seconds": 1.0}
+            200,
+            json={"status": "ok", "pod_name": "extraction-0", "uptime_seconds": 1.0},
         )
 
     client = _client_with_transport(httpx.MockTransport(handler))
@@ -112,14 +178,14 @@ async def test_auth_header_sent_when_token_configured():
         seen_headers.update(request.headers)
         return httpx.Response(
             200,
-            json={"success": True, "text": "x", "engine": "docling", "page_count": 1},
+            json={"success": True, "text": "x", "engine": "paddleocr", "page_count": 1},
         )
 
-    client = DoclingClient(
-        base_url="http://docling-test:8080", auth_token="secret-token"
+    client = ExtractionClient(
+        base_url="http://extraction-test:8080", auth_token="secret-token"
     )
     client._client = httpx.AsyncClient(
-        base_url="http://docling-test:8080",
+        base_url="http://extraction-test:8080",
         headers=client._headers,
         transport=httpx.MockTransport(handler),
     )
@@ -129,6 +195,6 @@ async def test_auth_header_sent_when_token_configured():
 
 
 async def test_close_is_idempotent():
-    client = DoclingClient()
+    client = ExtractionClient()
     await client.close()
     await client.close()  # must not raise on a second call

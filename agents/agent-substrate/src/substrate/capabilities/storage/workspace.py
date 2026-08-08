@@ -79,11 +79,12 @@ class WorkspaceFileStore:
             raise WorkspacePathError(f"Key escapes workspace root: {key!r}") from None
         return candidate
 
-    def exists(self, key: str) -> bool:
+    async def exists(self, key: str) -> bool:
         """True if *key* resolves to an existing file within the workspace.
 
         Cheap point check (no directory walk) so callers can try an exact key
-        before falling back to a broader search."""
+        before falling back to a broader search. ``async`` to match
+        ``S3FileStore.exists``, which needs a real round trip."""
         try:
             return self._resolve(key).is_file()
         except WorkspacePathError:
@@ -96,11 +97,15 @@ class WorkspaceFileStore:
             return parts[1]
         return None
 
-    def usage_bytes(self, user_id: str, *, force: bool = False) -> int:
+    async def usage_bytes(self, user_id: str, *, force: bool = False) -> int:
         """Sum of file sizes under ``users/{user_id}``, cached briefly.
 
         Walking the filesystem is the source of truth — it counts files the
         sandbox created directly, not just ones written through ``upload()``.
+
+        ``async`` despite doing no I/O await, so it matches ``S3FileStore``'s
+        signature — the workspace API awaits this without caring which store
+        backs it.
         """
         now = time.monotonic()
         cached = self._usage_cache.get(user_id)
@@ -136,7 +141,7 @@ class WorkspaceFileStore:
         user_id = self._user_id_from_key(key)
         if user_id is not None:
             existing_size = path.stat().st_size if path.exists() else 0
-            used = self.usage_bytes(user_id)
+            used = await self.usage_bytes(user_id)
             if used - existing_size + len(data) > self._quota_bytes:
                 raise WorkspaceQuotaExceededError(user_id, used, self._quota_bytes)
 
@@ -178,9 +183,11 @@ class WorkspaceFileStore:
         # "memory://" sentinel.
         return f"workspace://{key}"
 
-    def list_user_files(self, user_id: str) -> list[tuple[str, int, float]]:
+    async def list_user_files(self, user_id: str) -> list[tuple[str, int, float]]:
         """Yield ``(relative_key, size_bytes, mtime)`` for every file under
-        ``users/{user_id}``, for the workspace management API."""
+        ``users/{user_id}``, for the workspace management API.
+
+        ``async`` to match ``S3FileStore``, as with ``usage_bytes``."""
         user_root = self._root / "users" / user_id
         results: list[tuple[str, int, float]] = []
         if not user_root.is_dir():

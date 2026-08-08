@@ -140,5 +140,9 @@ class VectorStore(Protocol):
 
     async def delete_collection(self, collection: str) -> int: ...
 
+    async def rename_collection(self, old: str, new: str) -> int:
+        """Re-key every document from collection *old* to *new*."""
+        ...
+
 
 __all__ = ["Document", "SearchResult", "VectorStore"]

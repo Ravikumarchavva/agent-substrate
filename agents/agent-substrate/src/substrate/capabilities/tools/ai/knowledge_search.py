@@ -3,13 +3,21 @@
 Thin wrapper around a ``RagBackend`` (``capabilities/knowledge/backends/``) —
 all ingestion/retrieval logic lives there (local pgvector pipeline, or a
 managed service like Pinecone Assistant). This tool only adapts the agent
-tool-call shape to ``backend.ingest``/``backend.query``.
+tool-call shape to ``backend.ingest``/``backend.query``, and labels each
+retrieved passage with a stable citation number (``capabilities/knowledge/
+citations.py``) so the model can cite ``[n]`` and the UI can render a
+clickable, grounded source for it.
 """
 
 from __future__ import annotations
 
+from substrate.agents.storage.tasks import current_thread_id
 from substrate.capabilities.knowledge.backends import RagBackend
-from substrate.kernel import TextBlock
+from substrate.capabilities.knowledge.citations import (
+    CitationLedgerStore,
+    build_citations,
+)
+from substrate.kernel import ImageBlock, TextBlock
 from substrate.kernel.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
 
@@ -40,7 +48,11 @@ class KnowledgeSearchTool:
             },
             "limit": {
                 "type": "integer",
-                "description": "Max results to return (search action, default 5).",
+                "description": (
+                    "Max results to return (search action, default 5, max 20). "
+                    "Use 10-15 for broad requests like summarizing a whole "
+                    "document — the default under-covers multi-section docs."
+                ),
             },
         },
         "required": ["action", "text"],
@@ -49,7 +61,20 @@ class KnowledgeSearchTool:
 
     def __init__(self, backend: RagBackend, *, collection: str = "default") -> None:
         self._backend = backend
-        self._collection = collection
+        self._default_collection = collection
+        # One ledger per collection (chat thread), held for the tool's
+        # lifetime — init_tool_registry runs once in lifespan, so this
+        # instance is process-wide and citation numbers stay stable across
+        # every knowledge_search call in a conversation. See citations.py.
+        self._ledgers = CitationLedgerStore()
+
+    def _collection(self) -> str:
+        # Scope to the active chat thread when running inside a ReActAgent
+        # (stamped by agents/core/react.py::ReActAgent._handle_message, same
+        # ContextVar TaskManagerTool uses) — one user's uploaded docs stay
+        # invisible to every other thread's knowledge_search calls. Falls
+        # back to the constructor default outside a chat context.
+        return current_thread_id.get() or self._default_collection
 
     async def execute(
         self,
@@ -67,8 +92,10 @@ class KnowledgeSearchTool:
                 is_error=True,
             )
 
+        collection = self._collection()
+
         if action == "ingest":
-            result = await self._backend.ingest(text, collection=self._collection)
+            result = await self._backend.ingest(text, collection=collection)
             suffix = (
                 f"{result.chunks_indexed} chunks"
                 if result.chunks_indexed >= 0
@@ -80,18 +107,65 @@ class KnowledgeSearchTool:
 
         if action == "search":
             results = await self._backend.query(
-                text, collection=self._collection, limit=limit
+                text, collection=collection, limit=limit
             )
             if not results:
                 return ToolExecutionResult(
                     content=[TextBlock(text="No matching documents found.")],
                 )
+            cited = build_citations(
+                results,
+                backend_name=self._backend.name,
+                collection=collection,
+                ledger=self._ledgers.get(collection),
+            )
+            citation_by_index = {c.index: c for c in cited.citations}
+            # Full passages, not search-engine-style snippets — the model
+            # reasons over this text directly, so truncating it hard (this
+            # used to cut to 200 chars) starves it of the detail needed for
+            # a specific, confident answer even when retrieval found the
+            # right chunk. Each passage is labelled with its citation number
+            # so the model can cite [n] — see ATTACHMENT_ANALYSIS_INSTRUCTIONS
+            # in routes/chat_intents.py for how it's told to use this.
             lines = [f"Top {len(results)} results for '{text}':"]
-            for i, result in enumerate(results, 1):
-                preview = result.to_text()[:200].replace("\n", " ")
-                lines.append(f"\n{i}. (score: {result.score:.3f})\n   {preview}")
+            image_blocks: list[ImageBlock] = []
+            for i, result in enumerate(results):
+                index = cited.index_for[i]
+                citation = citation_by_index.get(index)
+                label = f"[{index}] {citation.label()}" if citation else "(unlabelled)"
+                # A chart/table hit's content IS the image — forward the real
+                # ImageBlock into the tool result (same path
+                # capabilities/tools/ai/image_generator.py already uses) so a
+                # vision-capable model sees the actual pixels, not just OCR
+                # text of it.
+                #
+                # Attach each image at most once per conversation. A document
+                # usually holds only a handful of chart/table images, so every
+                # search in a turn retrieves the *same* top-k images — attaching
+                # them each time re-sent identical pixels to the model and made
+                # the UI render the same "N charts generated" group once per
+                # call. `first_seen` comes from the citation ledger, which
+                # already tracks per-(file, page) novelty for the life of the
+                # collection, so this also covers repeats within one batch.
+                page_images = [b for b in result.content if isinstance(b, ImageBlock)]
+                is_new = cited.first_seen[i] if i < len(cited.first_seen) else True
+                if is_new:
+                    image_blocks.extend(page_images)
+                if page_images and not any(
+                    True for b in result.content if not isinstance(b, ImageBlock)
+                ):
+                    note = (
+                        "[see attached image]"
+                        if is_new
+                        else "[image already attached earlier in this conversation]"
+                    )
+                    lines.append(f"\n{label} (score: {result.score:.3f})\n{note}")
+                    continue
+                passage = result.to_text()[:4000]
+                lines.append(f"\n{label} (score: {result.score:.3f})\n{passage}")
             return ToolExecutionResult(
-                content=[TextBlock(text="\n".join(lines))],
+                content=[TextBlock(text="\n".join(lines)), *image_blocks],
+                structured_content=cited.to_wire() if cited.citations else {},
             )
 
         return ToolExecutionResult(

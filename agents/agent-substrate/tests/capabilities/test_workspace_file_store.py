@@ -80,7 +80,7 @@ async def test_overwrite_does_not_double_count_against_quota(store):
     # Re-uploading the same key replaces it in place — must not be
     # rejected as if it were 900 (existing) + 900 (new) = 1800 bytes.
     await store.upload(key, b"y" * 900)
-    assert store.usage_bytes("u1", force=True) == 900
+    assert await store.usage_bytes("u1", force=True) == 900
 
 
 async def test_usage_bytes_counts_files_written_outside_upload(store, tmp_path):
@@ -90,7 +90,7 @@ async def test_usage_bytes_counts_files_written_outside_upload(store, tmp_path):
     user_dir = tmp_path / "users" / "u1" / "sessions" / "t1"
     user_dir.mkdir(parents=True)
     (user_dir / "generated.csv").write_bytes(b"z" * 42)
-    assert store.usage_bytes("u1", force=True) == 42
+    assert await store.usage_bytes("u1", force=True) == 42
 
 
 async def test_presign_url_returns_sentinel(store):
@@ -103,7 +103,7 @@ async def test_list_user_files(store):
     await store.upload("users/u1/sessions/t2/b.txt", b"bb")
     await store.upload("users/u2/uploads/c.txt", b"c")
 
-    files = store.list_user_files("u1")
+    files = await store.list_user_files("u1")
     keys = {key for key, _, _ in files}
     assert keys == {"users/u1/sessions/t1/a.txt", "users/u1/sessions/t2/b.txt"}
     sizes = {key: size for key, size, _ in files}

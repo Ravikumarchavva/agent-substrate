@@ -1,7 +1,5 @@
-"""LLM-based reranker for RAG results.
-
-Uses an existing model client to score query-document relevance —
-no external reranking model required.
+"""Rerankers for RAG results — an LLM-judge reranker and a local
+cross-encoder reranker.
 
 Usage::
 
@@ -9,13 +7,21 @@ Usage::
 
     reranker = LLMReranker(model_client=client)
     reranked = await reranker.rerank(query, results, top_k=5)
+
+Or, with a local cross-encoder via the extraction service (no LLM
+tokens/latency spent on reranking)::
+
+    from substrate.capabilities.knowledge.reranker import CrossEncoderReranker
+
+    reranker = CrossEncoderReranker(extraction_client)
+    reranked = await reranker.rerank(query, results, top_k=5)
 """
 
 from __future__ import annotations
 from substrate.logger import setup_logging
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from substrate.kernel.storage.vector import SearchResult
 
@@ -110,3 +116,38 @@ class LLMReranker:
 
         # Fallback: return first top_k by original score
         return results[:top_k]
+
+
+class CrossEncoderReranker:
+    """Rerank search results using the extraction service's local
+    cross-encoder (MiniLM by default — see serving/services/extraction/).
+
+    Duck-types the same shape as ``LLMReranker`` (no formal Protocol exists;
+    ``LocalRagBackend``'s ``reranker`` param accepts either). Unlike
+    ``LLMReranker`` this doesn't burn the chat LLM's tokens/latency — one
+    HTTP call to a purpose-built local model, verified at ~1ms/passage.
+    """
+
+    def __init__(self, extraction_client: Any) -> None:
+        self._client = extraction_client
+
+    async def rerank(
+        self,
+        query: str,
+        results: list[SearchResult],
+        *,
+        top_k: int = 5,
+    ) -> list[SearchResult]:
+        if len(results) <= top_k:
+            return results
+
+        passages = [r.to_text()[:2000] for r in results]
+        scores = await self._client.rerank(query, passages)
+        if scores is None or len(scores) != len(results):
+            logger.warning(
+                "CrossEncoderReranker call failed, falling back to original order"
+            )
+            return results[:top_k]
+
+        ranked = sorted(zip(scores, results), key=lambda pair: pair[0], reverse=True)
+        return [result for _score, result in ranked[:top_k]]

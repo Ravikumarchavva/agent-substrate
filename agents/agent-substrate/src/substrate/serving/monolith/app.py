@@ -182,6 +182,7 @@ async def lifespan(app: FastAPI):
         short_term_memory=app.state.short_term_memory,
         workspace_user_quota_bytes=settings.WORKSPACE_USER_QUOTA_BYTES,
         workspace_user_delete_allowed=settings.WORKSPACE_USER_DELETE_ALLOWED,
+        rag_backend=app.state.rag_backend,
     )
 
     for name in ("httpx", "urllib3", "openai"):

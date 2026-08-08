@@ -4,9 +4,6 @@ description: Writing improvement skill for editing, refining, and enhancing writ
 version: "1.0"
 license: MIT
 allowed-tools: []
-category: creative
-tags: [write, edit, improve, grammar, tone, style, proofread, rewrite]
-aliases: [edit-text, improve-writing, proofread]
 metadata:
   author: agent-framework
 ---

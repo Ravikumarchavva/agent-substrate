@@ -4,9 +4,6 @@ description: Control Spotify playback, search for tracks, and manage queues thro
 version: "1.0"
 license: MIT
 allowed-tools: mcp_spotify_play mcp_spotify_search mcp_spotify_queue mcp_spotify_pause mcp_spotify_skip
-category: media
-tags: [spotify, music, playback, queue, control, play, song, track, audio]
-aliases: [music-control, play-music]
 metadata:
   author: agent-framework
 ---

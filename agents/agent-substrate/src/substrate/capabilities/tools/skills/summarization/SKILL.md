@@ -4,9 +4,6 @@ description: Summarization skill for condensing long texts, documents, and conve
 version: "1.0"
 license: MIT
 allowed-tools: document_analyzer
-category: creative
-tags: [summarize, condense, tldr, digest, brief, abstract, recap, shorten]
-aliases: [summarize-text, tldr, make-summary]
 metadata:
   author: agent-framework
 ---

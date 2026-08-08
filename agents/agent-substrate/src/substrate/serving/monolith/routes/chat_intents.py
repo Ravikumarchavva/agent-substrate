@@ -290,6 +290,58 @@ def _configure_calendar_write_request(
     return routed_tools, updated_instructions, "google_workspace"
 
 
+# ── Pure instruction blocks ──────────────────────────────────────────────
+#
+# Each returns "" when its condition doesn't apply, or the text to append
+# when it does. Unlike the mail/calendar functions above, these never touch
+# `tools`/`tool_choice` — chat.py appends them in one ordered loop rather
+# than a hand-written if-block per one, so the assembly order (which
+# matters — see docs/claude_docs/architecture/prompt-and-skills.md) is
+# visible in one place, and adding a new one is one more function + one
+# more tuple entry.
+
+
+def existing_task_board_block(has_existing_board: bool) -> str:
+    if not has_existing_board:
+        return ""
+    return (
+        "\n\n---\n**Existing task board:**\n"
+        "A Kanban task list already exists for this conversation. "
+        "If the user is providing new details, context, or corrections, "
+        "call manage_tasks action=create_list again with updated, more specific tasks "
+        "that incorporate their new information. "
+        "Otherwise continue working through the existing tasks."
+    )
+
+
+def attachments_block(
+    attachments: list[dict[str, Any]], *, ci_has_workspace_access: bool
+) -> str:
+    if not attachments:
+        return ""
+    attachment_lines = "\n".join(
+        f"- {a['name']} ({a['mime']})"
+        + (
+            f" — readable via code_interpreter at the absolute path: {a['workspace_path']}"
+            if ci_has_workspace_access and "workspace_path" in a
+            else ""
+        )
+        for a in attachments
+    )
+    return (
+        "\n\n---\n**Attached files:**\n"
+        + attachment_lines
+        + "\n\n**Attachment handling instructions:**\n"
+        + ATTACHMENT_ANALYSIS_INSTRUCTIONS
+    )
+
+
+def custom_instructions_block(raw: str | None) -> str:
+    if not raw or not raw.strip():
+        return ""
+    return "\n\n---\n**Additional instructions from user:**\n" + raw.strip()
+
+
 __all__ = [
     "ATTACHMENT_ANALYSIS_INSTRUCTIONS",
     "_tool_name",
@@ -299,4 +351,7 @@ __all__ = [
     "_configure_workspace_mail_request",
     "_should_route_calendar_write_request",
     "_configure_calendar_write_request",
+    "existing_task_board_block",
+    "attachments_block",
+    "custom_instructions_block",
 ]

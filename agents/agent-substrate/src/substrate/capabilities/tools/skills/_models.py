@@ -62,10 +62,6 @@ class SkillMetadata:
     allowed_tools: List[str] = field(default_factory=list)
     version: str = "1.0"
     metadata: Dict[str, str] = field(default_factory=dict)
-    # Catalog metadata for hierarchical discovery
-    category: str = ""
-    tags: List[str] = field(default_factory=list)
-    aliases: List[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         _validate_name(self.name)

@@ -3,9 +3,6 @@ name: code-explainer
 description: Step-by-step procedure for reading, explaining, and documenting code files shared by the user.
 version: "1.0"
 license: MIT
-category: development/execution
-tags: [code, explain, analyze, walkthrough, document, read, understand]
-aliases: [explain-code, code-analyzer]
 metadata:
   author: agent-framework
 ---

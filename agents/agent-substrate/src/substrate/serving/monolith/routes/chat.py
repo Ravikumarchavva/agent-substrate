@@ -59,12 +59,14 @@ from substrate.serving.protocol import PROTOCOL_VERSION, HelloEvent
 from substrate.serving.stream import AgentStreamSession, tail_wire_events
 
 from substrate.serving.monolith.routes.chat_intents import (
-    ATTACHMENT_ANALYSIS_INSTRUCTIONS,
     _tool_name,
     _should_allow_task_planning,
     _should_force_task_planning,
     _configure_workspace_mail_request,
     _configure_calendar_write_request,
+    existing_task_board_block,
+    attachments_block,
+    custom_instructions_block,
 )
 from substrate.serving.monolith.routes.chat_wire import build_user_blocks
 from substrate.serving.monolith.routes.chat_context import (
@@ -203,55 +205,36 @@ async def chat(
         # asking to create a new board (e.g. "make a task board"), in which case we
         # skip the "continue existing" hint.
         force_new_board = _should_force_task_planning(display_content)
+        existing_task_board = None
         if allow_task_planning and not force_new_board:
             _store = request.app.state.task_tool.store
-            _existing = await _store.get_by_conversation(str(body.thread_id))
-            if _existing:
-                deps["system_instructions"] = (
-                    deps["system_instructions"]
-                    + "\n\n---\n**Existing task board:**\n"
-                    + "A Kanban task list already exists for this conversation. "
-                    + "If the user is providing new details, context, or corrections, "
-                    + "call manage_tasks action=create_list again with updated, more specific tasks "
-                    + "that incorporate their new information. "
-                    + "Otherwise continue working through the existing tasks."
-                )
+            existing_task_board = await _store.get_by_conversation(str(body.thread_id))
 
-        if attachments:
-            # workspace_path (see _build_file_context) is only meaningful when
-            # the running code interpreter actually mounts the same workspace
-            # directory as chat uploads. Two cases: the default bubblewrap
-            # runtime always mounts the caller's own session dir (see
-            # CodeInterpreterTool._session_dir), or the K8s agent-sandbox path
-            # (CI_WORKSPACE_PVC_CLAIM configured — see
-            # sandbox_service.py::_ensure_user_template). Without one of
-            # these, the code interpreter has never seen the uploaded bytes —
-            # telling the model a path exists there just causes it to open a
-            # nonexistent path and hallucinate a plausible-looking prefix
-            # (observed: model invented "/mnt/data/..." from ChatGPT-
-            # convention training bias). Only surface the hint when it's
-            # actually true, and phrase it as relative to the tool's own
-            # working directory so the model doesn't need to guess a root.
-            ci_has_workspace_access = bool(
-                settings.SANDBOX_RUNTIME == "bubblewrap"
-                or settings.CI_WORKSPACE_PVC_CLAIM
-            )
-            attachment_lines = "\n".join(
-                f"- {a['name']} ({a['mime']})"
-                + (
-                    f" — readable via code_interpreter at the absolute path: {a['workspace_path']}"
-                    if ci_has_workspace_access and "workspace_path" in a
-                    else ""
-                )
-                for a in attachments
-            )
-            deps["system_instructions"] = (
-                deps["system_instructions"]
-                + "\n\n---\n**Attached files:**\n"
-                + attachment_lines
-                + "\n\n**Attachment handling instructions:**\n"
-                + ATTACHMENT_ANALYSIS_INSTRUCTIONS
-            )
+        # workspace_path (see _build_file_context) is only meaningful when the
+        # running code interpreter actually mounts the same workspace
+        # directory as chat uploads. Two cases: the default bubblewrap
+        # runtime always mounts the caller's own session dir (see
+        # CodeInterpreterTool._session_dir), or the K8s agent-sandbox path
+        # (CI_WORKSPACE_PVC_CLAIM configured — see
+        # sandbox_service.py::_ensure_user_template). Without one of these,
+        # the code interpreter has never seen the uploaded bytes — telling
+        # the model a path exists there just causes it to hallucinate a
+        # plausible-looking prefix (observed: "/mnt/data/..." from ChatGPT-
+        # convention training bias). Only surface the hint when it's true.
+        ci_has_workspace_access = bool(
+            settings.SANDBOX_RUNTIME == "bubblewrap" or settings.CI_WORKSPACE_PVC_CLAIM
+        )
+        # Ordered, declarative instruction blocks — this IS the assembly
+        # order the model sees (primacy matters; see
+        # docs/claude_docs/architecture/prompt-and-skills.md). Each function
+        # returns "" when it doesn't apply, so appending is unconditional.
+        for block in (
+            existing_task_board_block(bool(existing_task_board)),
+            attachments_block(
+                attachments, ci_has_workspace_access=ci_has_workspace_access
+            ),
+        ):
+            deps["system_instructions"] += block
 
         if not allow_task_planning:
             deps["tools"] = [
@@ -301,12 +284,9 @@ async def chat(
                 )
 
         # Append per-request custom instructions if provided by the frontend
-        if body.system_instructions and body.system_instructions.strip():
-            deps["system_instructions"] = (
-                deps["system_instructions"]
-                + "\n\n---\n**Additional instructions from user:**\n"
-                + body.system_instructions.strip()
-            )
+        deps["system_instructions"] += custom_instructions_block(
+            body.system_instructions
+        )
 
         agent = await build_agent_for_thread(
             body.thread_id,

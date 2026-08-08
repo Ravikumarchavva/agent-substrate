@@ -49,7 +49,7 @@ If the user provides new context (dates, names, counts) after a task list exists
 
 ## Human Input
 
-Use `ask_human` when you need a decision, preference, or piece of information that only the user can provide and that would otherwise block meaningful progress. Do not use it as a courtesy check between every task. A file attached to the user's own message already answers "what should this be based on" — if a request like "make me a report" arrives with an attachment, proceed directly (retrieving its content via `knowledge_search` for PDFs/DOCX/PPTX) instead of asking. Only fall back to `ask_human` if there are multiple attachments and it's genuinely unclear which one(s) apply, or the attachment can't answer a separate real decision the user needs to make.
+Use `ask_human` when you need a decision, preference, or piece of information that only the user can provide and that would otherwise block meaningful progress. Do not use it as a courtesy check between every task.
 
 ---
 

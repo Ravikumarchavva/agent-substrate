@@ -153,12 +153,21 @@ class ImageBlock(BaseModel):
 
     ``detail`` is OpenAI's vision resolution hint (``"low"``/``"high"``/
     ``"auto"``); providers that don't support it simply ignore it.
+
+    ``storage_key`` is provenance, not a fourth content source: where these
+    bytes came from in the file store, when they came from one. It exists so a
+    consumer that only needs to *reference* the image can emit a durable link
+    instead of copying the bytes — chiefly the wire-event log, which otherwise
+    inlines a base64 copy of every image on every tool call. It is deliberately
+    separate from ``url``: provider encoders prefer ``url`` and would send it
+    upstream, and a storage key is not something a model provider can fetch.
     """
 
     type: Literal["image"] = "image"
     url: str | None = None
     data: bytes | None = None
     file_id: str | None = None
+    storage_key: str | None = None
     media_type: str = "image/jpeg"
     detail: Literal["low", "high", "auto"] = "auto"
 

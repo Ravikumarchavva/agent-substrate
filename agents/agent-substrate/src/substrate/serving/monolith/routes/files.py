@@ -12,11 +12,21 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
+import mimetypes
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -162,6 +172,7 @@ async def _stage_uploaded_doc(
     *,
     original_name: str,
     content_type: str,
+    owner_sub: str,
 ) -> None:
     """Fire-and-forget eager extraction+embedding, staged under a temporary
     collection — not the real thread collection (see
@@ -181,6 +192,10 @@ async def _stage_uploaded_doc(
                 "filename": original_name,
                 "content_type": content_type,
                 "file_id": str(file_id),
+                # Lets the backend park extracted chart/table images under
+                # users/{sub}/rag/... instead of inlining their bytes into
+                # Postgres — see LocalRagBackend._ingest_images.
+                "user_id": owner_sub,
             },
         )
     except Exception as exc:
@@ -330,6 +345,7 @@ async def upload_file(
                 data,
                 original_name=original_name,
                 content_type=content_type,
+                owner_sub=claims.sub,
             )
         )
 
@@ -363,6 +379,48 @@ async def get_doc_quota_status(
         "limit": limit,
         "reset_in": seconds_until_reset(),
     }
+
+
+@router.get("/object")
+async def serve_object(
+    key: str = Query(..., description="Object key under the caller's users/{sub}/"),
+    claims: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+) -> StreamingResponse:
+    """Serve a stored object by key — the target of the ``/files/object?key=``
+    links in tool-result attachments (see ``agents/runtime/context/tool.py``).
+
+    Deliberately a stable, authenticated app URL rather than a presigned one:
+    the wire-event log is replayed months later, and a presigned link would
+    have expired, leaving old conversations full of dead images.
+
+    Ownership is the key's own ``users/{sub}/`` prefix, so a caller can only
+    ever read their own objects. A mismatch 404s rather than 403s — same
+    rationale as ``_get_meta`` above: this must not become an existence oracle
+    for keys that leak into logs or URLs.
+
+    Registered before ``/{file_id}/status`` so "object" is never matched as a
+    file_id path param (Starlette matches in registration order).
+    """
+    if not key.startswith(f"users/{claims.sub}/"):
+        raise HTTPException(status_code=404, detail="Not found")
+    if ctx.file_store is None:
+        raise HTTPException(status_code=503, detail="File storage is not configured")
+    try:
+        data = await ctx.file_store.download(key)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail="Not found") from exc
+    mime = mimetypes.guess_type(key)[0] or "application/octet-stream"
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type=mime,
+        headers={
+            "Content-Length": str(len(data)),
+            # Objects are immutable once written (a new version gets a new
+            # key), so this can be cached hard.
+            "Cache-Control": "private, max-age=31536000, immutable",
+        },
+    )
 
 
 @router.get("/{file_id}/status")
@@ -469,4 +527,14 @@ async def delete_file(
                 "Failed to clean up staging collection for deleted file %s: %s",
                 file_id,
                 exc,
+            )
+        # The vector rows are gone; their image objects would otherwise linger
+        # in storage against the owner's quota with nothing pointing at them.
+        try:
+            await ctx.rag_backend.delete_file_images(
+                user_id=claims.sub, file_id=str(file_id)
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to clean up RAG images for deleted file %s: %s", file_id, exc
             )

@@ -71,8 +71,37 @@ class StubPipeline:
         return []
 
 
+class StubFileStore:
+    """Duck-types the file store's upload/download/list/delete surface."""
+
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+        self.fail_upload = False
+        self.fail_download = False
+
+    async def upload(self, key, data, *, content_type="") -> None:
+        if self.fail_upload:
+            raise RuntimeError("storage down")
+        self.objects[key] = data
+
+    async def download(self, key: str) -> bytes:
+        if self.fail_download:
+            raise RuntimeError("storage down")
+        return self.objects[key]
+
+    async def delete(self, key: str) -> None:
+        self.objects.pop(key, None)
+
+    async def list_user_files(self, user_id: str):
+        return [
+            (k, len(v), 1000.0)
+            for k, v in self.objects.items()
+            if k.startswith(f"users/{user_id}/")
+        ]
+
+
 def _backend(
-    *, image_store=None, extraction_client=None, vector_store=None
+    *, image_store=None, extraction_client=None, vector_store=None, file_store=None
 ) -> tuple[LocalRagBackend, StubPipeline]:
     pipeline = StubPipeline()
     backend = LocalRagBackend(
@@ -81,8 +110,144 @@ def _backend(
         image_store=image_store,
         extraction_service_url="http://extraction-test:8080",
         extraction_client=extraction_client,
+        file_store=file_store,
     )
     return backend, pipeline
+
+
+IMG_META = {
+    "user_id": "u1",
+    "file_id": "f9",
+    "page_number": 3,
+    "media_type": "image/png",
+}
+
+
+# ── images stored by reference ───────────────────────────────────────────────
+
+
+async def test_ingest_images_stores_bytes_in_the_file_store_not_the_vector_row():
+    """A page image is ~500KB; inlining them made images dwarf the vectors they
+    exist to serve. The row should keep the embedding and a key only."""
+    image_store, store = StubImageStore(), StubFileStore()
+    client = AsyncMock()
+    client.embed_image = AsyncMock(return_value=[0.1, 0.2])
+    backend, _ = _backend(
+        image_store=image_store, extraction_client=client, file_store=store
+    )
+
+    await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
+
+    key = "users/u1/rag/f9/p3-0.png"
+    assert store.objects == {key: b"PNGBYTES"}
+    doc = image_store.documents[0]
+    assert doc.metadata["image_key"] == key
+    assert doc.embedding == [0.1, 0.2]
+    # No raw bytes anywhere in the stored row.
+    assert not any(isinstance(b, ImageBlock) for b in doc.content)
+
+
+async def test_query_images_rehydrates_bytes_from_the_stored_key():
+    """The model must receive real pixels, so resolution happens on read."""
+    image_store, store = StubImageStore(), StubFileStore()
+    client = AsyncMock()
+    client.embed_image = AsyncMock(return_value=[0.1, 0.2])
+    client.embed_text = AsyncMock(return_value=[0.3, 0.4])
+    backend, _ = _backend(
+        image_store=image_store, extraction_client=client, file_store=store
+    )
+    await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
+
+    results = await backend._query_images("chart?", collection="kb", limit=5)
+
+    block = results[0].content[0]
+    assert isinstance(block, ImageBlock)
+    assert block.data == b"PNGBYTES"
+    assert block.media_type == "image/png"
+
+
+async def test_query_images_survives_a_missing_object():
+    """A missing image should degrade the answer, not fail the search."""
+    image_store, store = StubImageStore(), StubFileStore()
+    client = AsyncMock()
+    client.embed_image = AsyncMock(return_value=[0.1, 0.2])
+    client.embed_text = AsyncMock(return_value=[0.3, 0.4])
+    backend, _ = _backend(
+        image_store=image_store, extraction_client=client, file_store=store
+    )
+    await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
+    store.fail_download = True
+
+    results = await backend._query_images("chart?", collection="kb", limit=5)
+
+    assert len(results) == 1  # placeholder text survives, no exception
+
+
+async def test_ingest_images_falls_back_to_inlining_when_the_upload_fails():
+    """Better a fat row than a lost image."""
+    image_store, store = StubImageStore(), StubFileStore()
+    store.fail_upload = True
+    client = AsyncMock()
+    client.embed_image = AsyncMock(return_value=[0.1, 0.2])
+    backend, _ = _backend(
+        image_store=image_store, extraction_client=client, file_store=store
+    )
+
+    await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
+
+    doc = image_store.documents[0]
+    assert isinstance(doc.content[0], ImageBlock)
+    assert doc.content[0].data == b"PNGBYTES"
+    assert "image_key" not in doc.metadata
+
+
+async def test_ingest_images_inlines_when_the_owner_is_unknown():
+    """With no user to attribute it to there is no quota-scoped key to write,
+    so it must not be dumped into some other prefix."""
+    image_store, store = StubImageStore(), StubFileStore()
+    client = AsyncMock()
+    client.embed_image = AsyncMock(return_value=[0.1, 0.2])
+    backend, _ = _backend(
+        image_store=image_store, extraction_client=client, file_store=store
+    )
+
+    await backend._ingest_images([(b"PNGBYTES", {"file_id": "f9"})], collection="kb")
+
+    assert store.objects == {}
+    assert isinstance(image_store.documents[0].content[0], ImageBlock)
+
+
+async def test_image_key_is_independent_of_collection_so_promote_need_not_move_it():
+    image_store, store = StubImageStore(), StubFileStore()
+    client = AsyncMock()
+    client.embed_image = AsyncMock(return_value=[0.1, 0.2])
+    backend, _ = _backend(
+        image_store=image_store, extraction_client=client, file_store=store
+    )
+
+    await backend._ingest_images(
+        [(b"PNGBYTES", dict(IMG_META))], collection="staging:f9"
+    )
+
+    # Keyed by owner+file, never by collection — so promotion re-keys only rows.
+    assert "staging" not in next(iter(store.objects))
+
+
+async def test_delete_file_images_removes_only_that_files_objects():
+    store = StubFileStore()
+    store.objects["users/u1/rag/f9/p1-0.png"] = b"a"
+    store.objects["users/u1/rag/f9/p2-0.png"] = b"b"
+    store.objects["users/u1/rag/OTHER/p1-0.png"] = b"c"
+    store.objects["users/u1/uploads/doc.pdf"] = b"d"
+    backend, _ = _backend(file_store=store)
+
+    deleted = await backend.delete_file_images(user_id="u1", file_id="f9")
+
+    assert deleted == 2
+    assert sorted(store.objects) == [
+        "users/u1/rag/OTHER/p1-0.png",
+        "users/u1/uploads/doc.pdf",
+    ]
 
 
 # ── _ingest_images ──────────────────────────────────────────────────────────

@@ -12,9 +12,40 @@ import base64
 import uuid
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from substrate.kernel.core.content import JsonObject
+from substrate.kernel.core.content import ImageBlock, JsonObject
 from substrate.kernel.runtime.effects import Effect, EffectResult
 from substrate.kernel.tools.chain import InvocationResult
+
+# A bare scheme, not a real path: same precedent as `sandbox:<path>` in
+# assistant markdown (serving/monolith/routes/chat_intents.py) — the backend
+# names the resource, and the *frontend* resolves it to wherever this deployed
+# frontend's authenticated proxy lives (substrate-ui:
+# lib/api/_client.ts::buildObjectUrl → /api/backend/files/object?key=...).
+# Never a real ``/files/...`` path here: agent-substrate doesn't know which
+# frontend (or how many) sit in front of it, and a bare path would either 401
+# (no proxy in between to attach the JWT) or hardcode one specific frontend's
+# routing into the engine.
+#
+# Also never a presigned URL: this log is replayed months later, and a link
+# that expires would leave old conversations full of dead images.
+#
+# The key rides raw, not percent-encoded: same convention as `sandbox:<path>`,
+# whose frontend resolver (buildWorkspaceFileUrl) also strips the scheme then
+# encodes once itself. Encoding here too would double-encode every `/` in the
+# key by the time it reaches a real URL.
+_OBJECT_URL_TEMPLATE = "object:{key}"
+
+
+def _attachment_url(img: ImageBlock) -> str:
+    """Durable reference when the image is backed by the file store, else the
+    bytes inline."""
+    if img.storage_key:
+        return _OBJECT_URL_TEMPLATE.format(key=img.storage_key)
+    return (
+        f"data:{img.media_type or 'image/png'};base64,"
+        f"{base64.b64encode(img.data or b'').decode()}"
+    )
+
 
 if TYPE_CHECKING:
     from substrate.agents.runtime.context import Agent, RunContext
@@ -135,20 +166,25 @@ class _ToolMixin:
                 result.model_dump(mode="json"),
             )
             ok = result.status == "ok"
-            # result.media (e.g. matplotlib charts) as data-URI attachments —
-            # this log entry is later mapped to a ToolResultEvent by a pure
-            # function (protocol/from_log.py) with no I/O access, so images
-            # must already be self-contained here rather than a fetchable ref.
+            # result.media (e.g. matplotlib charts, retrieved page images) as
+            # attachments. This log entry is later mapped to a ToolResultEvent
+            # by a pure function (protocol/from_log.py) with no I/O access, so
+            # whatever goes here must already be resolvable without a lookup.
+            #
+            # An image that came from the file store carries its key, so the
+            # entry can point at a durable, authenticated endpoint instead of
+            # embedding the bytes. That matters because this log is permanent:
+            # inlining meant every image was stored again, base64-inflated
+            # ~1.37x, on every single tool call that returned it. Images with no
+            # key (nothing durable behind them) still inline, so they survive in
+            # the log as before.
             attachments = [
                 {
                     "id": uuid.uuid4().hex,
                     "name": f"{name}-{i}.{(img.media_type or 'image/png').split('/')[-1]}",
                     "mime": img.media_type or "image/png",
                     "size": len(img.data or b""),
-                    "url": (
-                        f"data:{img.media_type or 'image/png'};base64,"
-                        f"{base64.b64encode(img.data or b'').decode()}"
-                    ),
+                    "url": _attachment_url(img),
                 }
                 for i, img in enumerate(result.media)
             ]

@@ -258,6 +258,10 @@ async def init_infrastructure(
         dimensions=cfg.RAG_IMAGE_EMBEDDING_DIM,
         table_name="vector_documents_images",
     )
+    # Built before the RAG backend, which takes it: extracted chart/table
+    # images are written here rather than inlined into the image vector rows.
+    file_store = _init_file_store(cfg)
+    await file_store.connect()
     # Fail-closed at construction, degrade gracefully at startup: an
     # unreachable/misconfigured RAG backend (e.g. RAG_BACKEND=pinecone with no
     # API key) disables RAG rather than crashing the whole server, matching
@@ -278,6 +282,7 @@ async def init_infrastructure(
             extraction_service_url=cfg.EXTRACTION_SERVICE_URL,
             extraction_auth_token=cfg.EXTRACTION_AUTH_TOKEN,
             extraction_timeout_s=cfg.EXTRACTION_TIMEOUT_S,
+            file_store=file_store,
             api_key=cfg.PINECONE_API_KEY,
             assistant_name=cfg.PINECONE_ASSISTANT_NAME,
         )
@@ -296,8 +301,6 @@ async def init_infrastructure(
         scheduler=runtime.scheduler,
     )
     skill_manager = SkillManager(auto_discover=True)
-    file_store = _init_file_store(cfg)
-    await file_store.connect()
 
     return Infrastructure(
         history=history,
@@ -326,8 +329,18 @@ async def init_tool_registry(
     redis_client: Any = None,
     model_client: Any = None,
     rag_backend: Any = None,
+    file_store: Any = None,
+    skill_manager: Any = None,
 ) -> ToolboxResult:
-    """Create all tools and return a registry."""
+    """Create all tools and return a registry.
+
+    ``file_store`` is only needed to stage the code interpreter's workspace when
+    the store is object storage (see ``StagedSandboxRuntime``).
+    ``skill_manager`` registers the ``skills`` tool (list/activate SKILL.md
+    packages under ``capabilities/tools/skills/``) — without it the model has
+    no way to discover or read a skill's instructions, so a skill existing on
+    disk does nothing.
+    """
     from substrate.agents.storage.tasks import GlobalTaskStore
     from substrate.agents.tools.toolbox import Toolbox
     from substrate.capabilities.tools.ai.knowledge_search import KnowledgeSearchTool
@@ -335,6 +348,9 @@ async def init_tool_registry(
     from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.factory import (
         build_runtime,
         network_policy,
+    )
+    from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.staged import (
+        StagedSandboxRuntime,
     )
     from substrate.capabilities.tools.human_input import AskHumanTool
     from substrate.capabilities.tools.task_manager.tool import TaskManagerTool
@@ -369,14 +385,26 @@ async def init_tool_registry(
     # (at startup) rather than silently degrading to running untrusted code with
     # no isolation. Without a code interpreter the tool is simply not registered.
     try:
-        code_interpreter_tool = CodeInterpreterTool(
-            build_runtime(
-                cfg.SANDBOX_RUNTIME,
+        sandbox_runtime: Any = build_runtime(
+            cfg.SANDBOX_RUNTIME,
+            workspace_root=cfg.FILE_STORE_ROOT,
+            runtime_class_name=cfg.SANDBOX_RUNTIME_CLASS,
+            workspace_pvc_claim=cfg.CI_WORKSPACE_PVC_CLAIM or None,
+            python_bin=cfg.SANDBOX_PYTHON,
+        )
+        # Object storage has no filesystem for a sandbox to run in, so stage the
+        # session in and the run's changes back out around each execution, with
+        # FILE_STORE_ROOT demoted to disposable scratch. Unnecessary for the
+        # "local" backend, where that root *is* the store — wrapping it there
+        # would copy every file onto itself.
+        if cfg.FILE_STORE_BACKEND == "s3" and file_store is not None:
+            sandbox_runtime = StagedSandboxRuntime(
+                sandbox_runtime,
+                file_store=file_store,
                 workspace_root=cfg.FILE_STORE_ROOT,
-                runtime_class_name=cfg.SANDBOX_RUNTIME_CLASS,
-                workspace_pvc_claim=cfg.CI_WORKSPACE_PVC_CLAIM or None,
-                python_bin=cfg.SANDBOX_PYTHON,
-            ),
+            )
+        code_interpreter_tool = CodeInterpreterTool(
+            sandbox_runtime,
             network=network_policy(cfg.SANDBOX_NETWORK_POLICY),
             default_timeout_s=cfg.SANDBOX_TIMEOUT_SECONDS,
             memory_bytes=cfg.SANDBOX_MEMORY_BYTES,
@@ -422,6 +450,10 @@ async def init_tool_registry(
         registry.add(code_interpreter_tool)
     if rag_backend:
         registry.add(KnowledgeSearchTool(rag_backend))
+    if skill_manager is not None:
+        from substrate.capabilities.tools.skills.tool import SkillTool
+
+        registry.add(SkillTool(skill_manager))
 
     from substrate.capabilities.tools.utils.tool_search import ToolSearchTool
 

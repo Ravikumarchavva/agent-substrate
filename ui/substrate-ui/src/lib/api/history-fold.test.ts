@@ -154,4 +154,83 @@ describe("foldWireEventsToMessages", () => {
 
     expect(messages).toHaveLength(2);
   });
+
+  // Citations — the reload-survival guarantee. structured_content is
+  // logged durably (see agent-substrate's runtime/context/tool.py), so a
+  // page reload replays these same wire events; this fold must reconstruct
+  // the same `sources` a live SSE session would have attached.
+  describe("citations", () => {
+    const citationEvent = (index: number, fileName: string) => ({
+      type: "tool.result",
+      call_id: `c${index}`,
+      tool_name: "knowledge_search",
+      ok: true,
+      output: `[${index}] (${fileName}, p.${index})`,
+      structured_content: {
+        citations: [{ index, file_name: fileName, page: index }],
+      },
+    });
+
+    it("carries citations onto the bubble started after the tool.result flush", () => {
+      // This is the divergence the live reducer doesn't have: tool.result
+      // sets sawToolResult, so the NEXT text.delta starts a brand-new
+      // bubble (see ensureActive/flush above) — that new bubble must still
+      // inherit the sources gathered so far, or reload silently drops them.
+      const messages = foldWireEventsToMessages([
+        { type: "user.message", text: "who signed it?" },
+        { type: "tool.call", call_id: "c1", tool_name: "knowledge_search", args: {} },
+        citationEvent(1, "doc.pdf"),
+        { type: "text.delta", text: "Dr. Shanthi signed it [1]." },
+      ]);
+
+      const answer = messages.find(
+        (m) => m.role === "assistant" && m.content.includes("Dr. Shanthi")
+      );
+      expect(answer?.sources).toEqual([
+        { index: 1, fileName: "doc.pdf", page: 1 },
+      ]);
+    });
+
+    it("accumulates citations across multiple knowledge_search calls in one turn", () => {
+      const messages = foldWireEventsToMessages([
+        { type: "user.message", text: "summarize this document" },
+        { type: "tool.call", call_id: "c1", tool_name: "knowledge_search", args: {} },
+        citationEvent(1, "doc.pdf"),
+        { type: "tool.call", call_id: "c2", tool_name: "knowledge_search", args: {} },
+        citationEvent(2, "doc.pdf"),
+        { type: "text.delta", text: "Section one [1] and section two [2]." },
+      ]);
+
+      const answer = messages.find((m) => m.role === "assistant" && m.content);
+      expect(answer?.sources).toHaveLength(2);
+      expect(answer?.sources?.map((s) => s.index)).toEqual([1, 2]);
+    });
+
+    it("resets pending sources on a new user turn", () => {
+      const messages = foldWireEventsToMessages([
+        { type: "user.message", text: "first question" },
+        { type: "tool.call", call_id: "c1", tool_name: "knowledge_search", args: {} },
+        citationEvent(1, "doc.pdf"),
+        { type: "text.delta", text: "Answer one [1]." },
+        { type: "user.message", text: "second question, unrelated" },
+        { type: "text.delta", text: "Answer two, no citations." },
+      ]);
+
+      const turnOneAnswer = messages.find((m) => m.content === "Answer one [1].");
+      const turnTwoAnswer = messages.find(
+        (m) => m.content === "Answer two, no citations."
+      );
+      expect(turnOneAnswer?.sources).toHaveLength(1);
+      expect(turnTwoAnswer?.sources).toBeUndefined();
+    });
+
+    it("leaves sources undefined for a turn with no citations", () => {
+      const messages = foldWireEventsToMessages([
+        { type: "user.message", text: "hi" },
+        { type: "text.delta", text: "hello" },
+      ]);
+
+      expect(messages[1].sources).toBeUndefined();
+    });
+  });
 });

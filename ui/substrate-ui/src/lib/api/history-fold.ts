@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
-import { Message, ToolCall } from "@/types";
+import { CitationSource, Message, ToolCall } from "@/types";
+import { mergeSources, parseCitations } from "@/lib/citations";
 import { getMessageAttachments } from "./_client";
 
 /**
@@ -74,9 +75,20 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
   // reassigned from inside a nested function across multiple switch cases
   // (it infers `never` at some read sites) — an object property narrows
   // reliably instead.
-  const state: { active: Message | null; sawToolResult: boolean } = {
+  const state: {
+    active: Message | null;
+    sawToolResult: boolean;
+    // Citations accumulate across the whole turn (possibly several
+    // knowledge_search calls) and must survive the tool.result → new-bubble
+    // flush below — a fresh bubble created after that flush still belongs
+    // to the same answer and should carry the sources gathered so far.
+    // Mirrors the live SSE reducer in page.tsx so replay and live streaming
+    // can't diverge on which bubble ends up with which sources.
+    pendingSources: CitationSource[];
+  } = {
     active: null,
     sawToolResult: false,
+    pendingSources: [],
   };
 
   function flush(): void {
@@ -100,6 +112,7 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
         role: "assistant",
         content: "",
         timestamp: new Date(),
+        sources: state.pendingSources.length ? [...state.pendingSources] : undefined,
       };
     }
     return state.active;
@@ -109,6 +122,7 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
     switch (event.type) {
       case "user.message": {
         flush();
+        state.pendingSources = []; // a new turn's sources are its own
         messages.push({
           id: nanoid(),
           role: "user",
@@ -157,13 +171,27 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
           }
           break;
         }
+        const newCitations = parseCitations(event.structured_content);
+        if (newCitations.length) {
+          state.pendingSources = mergeSources(state.pendingSources, newCitations);
+          if (state.active) state.active.sources = state.pendingSources;
+        }
         const resultText = String((event.ok ? event.output : event.error) ?? "");
         const current: Message | null = state.active;
+        // call_id-authoritative (same rule, same rationale, as the live
+        // reducer in page.tsx): the backend always logs call_id=effect_id
+        // for every tool.result, so name-only matching should never be
+        // needed here — kept only as a last-resort fallback for legacy
+        // events, and scoped to an unresolved call so it can't re-stamp a
+        // call that already has a result when a turn calls the same tool
+        // more than once (e.g. knowledge_search asked several
+        // differently-worded questions in one turn).
         if (current?.toolCalls) {
           current.toolCalls = current.toolCalls.map((tc: ToolCall) => {
-            const matchById = event.call_id && tc.id === event.call_id;
-            const matchByName = tc.name === event.tool_name;
-            if (!matchById && !matchByName) return tc;
+            const matches = event.call_id
+              ? tc.id === event.call_id
+              : tc.name === event.tool_name && !tc.result;
+            if (!matches) return tc;
             return { ...tc, result: resultText, isError: !event.ok };
           });
         }

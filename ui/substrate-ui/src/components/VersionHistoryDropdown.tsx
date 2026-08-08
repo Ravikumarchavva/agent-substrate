@@ -5,10 +5,11 @@ import { History, Loader2, RotateCcw, Bot, User, FileClock } from "lucide-react"
 
 type VersionEntry = {
   seq: number;
-  author: string; // initial | user | agent
+  author: string; // initial | user | agent | restore
   checksum_sha256: string;
   size_bytes: number;
   created_at: number; // epoch seconds
+  restored_from_seq?: number | null;
 };
 
 function relTime(epochSeconds: number): string {
@@ -24,6 +25,7 @@ const AUTHOR_META: Record<string, { label: string; Icon: typeof Bot }> = {
   agent: { label: "Assistant", Icon: Bot },
   user: { label: "You", Icon: User },
   initial: { label: "Original", Icon: FileClock },
+  restore: { label: "Restored", Icon: RotateCcw },
 };
 
 /**
@@ -141,6 +143,7 @@ export function VersionHistoryDropdown({
                       </div>
                       <div className="text-[11px] text-(--muted)">
                         v{v.seq} · {relTime(v.created_at)}
+                        {v.restored_from_seq != null && ` · from v${v.restored_from_seq}`}
                       </div>
                     </div>
                     {!isLatest && (

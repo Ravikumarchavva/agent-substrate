@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useEffect, useRef, useState, type ComponentPropsWithoutRef } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -21,9 +21,11 @@ import {
   Download,
   FileText,
 } from "lucide-react";
-import { ToolCall, UploadedFile } from "@/types";
+import { CitationSource, ToolCall, UploadedFile } from "@/types";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { Mermaid } from "@/components/Mermaid";
+import { CitationChip } from "@/components/CitationChip";
+import { SourcesStrip } from "@/components/SourcesStrip";
 import { buildWorkspaceFileUrl } from "@/lib/api/_client";
 import {
   getAttachmentKind,
@@ -40,7 +42,49 @@ function isPersistentToolCall(toolCall: ToolCall): boolean {
 // `sandbox:` scheme, so pass those through untouched and defer to the default
 // (XSS-safe) transform for everything else.
 function sandboxUrlTransform(url: string): string {
-  return url.startsWith("sandbox:") ? url : defaultUrlTransform(url);
+  return url.startsWith("sandbox:") || url.startsWith("citation:")
+    ? url
+    : defaultUrlTransform(url);
+}
+
+// Rewrites `[1]`/`[1, 2]` citation markers into `[1](citation:1)` links the
+// `a` override below turns into clickable CitationChips — but ONLY when
+// every index is in `validIndices` (a message's real, machine-built source
+// map). An out-of-range or model-hallucinated `[9]` is left as literal
+// text: there is no code path here that can produce a chip pointing at a
+// source that doesn't exist.
+//
+// Fenced/inline code is protected first (extract → rewrite → restore, same
+// idiom preprocessMarkdown uses above for math) so a code sample containing
+// e.g. `arr[1]` is never mistaken for a citation.
+export function linkifyCitations(content: string, validIndices: Set<number>): string {
+  if (!content || validIndices.size === 0) return content;
+
+  const codeBlocks: string[] = [];
+  let processed = content.replace(/```[\s\S]*?```/g, (match) => {
+    codeBlocks.push(match);
+    return `__CITATION_CODE_${codeBlocks.length - 1}__`;
+  });
+  processed = processed.replace(/`[^`\n]*`/g, (match) => {
+    codeBlocks.push(match);
+    return `__CITATION_CODE_${codeBlocks.length - 1}__`;
+  });
+
+  processed = processed.replace(
+    /(!?)\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\](?!\()/g,
+    (fullMatch: string, bang: string, numbers: string) => {
+      if (bang) return fullMatch; // ![1] — image syntax, not a citation
+      const indices = numbers.split(",").map((n) => parseInt(n.trim(), 10));
+      if (!indices.every((n) => validIndices.has(n))) return fullMatch;
+      return indices.map((n) => `[${n}](citation:${n})`).join("");
+    }
+  );
+
+  processed = processed.replace(/__CITATION_CODE_(\d+)__/g, (_, index) => {
+    return codeBlocks[parseInt(index, 10)];
+  });
+
+  return processed;
 }
 
 /**
@@ -108,9 +152,15 @@ function preprocessMarkdown(content: string): string {
     return `__MATH_BLOCK_${mathBlocks.length - 1}__`;
   });
 
-  // 2. Temporarily extract inline math \(...\) and map to single $
+  // 2. Temporarily extract inline math \(...\) — mapped to $$ (double
+  //    dollar), not single $: ReactMarkdown's remarkMath is configured with
+  //    singleDollarTextMath: false (see below) precisely so a bare "$" in
+  //    prose is always currency, never a math delimiter, so a single-$
+  //    restoration here would silently stop being recognized as math too.
+  //    micromark-extension-math accepts $$…$$ inline (same line), not just
+  //    as a block, so this still renders correctly.
   processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, (_, match) => {
-    mathBlocks.push(`$${match}$`);
+    mathBlocks.push(`$$${match}$$`);
     return `__MATH_BLOCK_${mathBlocks.length - 1}__`;
   });
 
@@ -120,11 +170,12 @@ function preprocessMarkdown(content: string): string {
     return `__MATH_BLOCK_${mathBlocks.length - 1}__`;
   });
 
-  // 4. Escape remaining raw '$' signs (guaranteed currency at this point) so
-  //    remark-math doesn't parse "$733 … $736" as inline math. The negative
-  //    lookbehind skips '$' the model already escaped as '\$' — escaping it
-  //    again would produce '\\$', which renders as a visible backslash.
-  processed = processed.replace(/(?<!\\)\$/g, '\\$');
+  // Step 4 used to backslash-escape every remaining bare "$" here so
+  // remark-math wouldn't misparse currency as inline math — with
+  // singleDollarTextMath: false that ambiguity no longer exists, so bare
+  // dollar amounts are left completely alone (removing this step also
+  // removes a real bug: a stray unmatched "\$" was visibly leaking into
+  // rendered output as a literal backslash on some inputs).
 
   // 5. Restore the safe math blocks with $ and $$ delimiters
   processed = processed.replace(/__MATH_BLOCK_(\d+)__/g, (_, index) => {
@@ -264,6 +315,11 @@ type Props = {
   threadId?: string | null;
   /** Open a code-interpreter file artifact (sandbox: ref) in the side panel. */
   onOpenArtifact?: (path: string, fileName: string) => void;
+  /** Grounded source references from knowledge_search — inline [n] chips +
+   * a "Sources" strip. See src/types/citations.ts. */
+  sources?: CitationSource[];
+  /** Open a citation's source file in the side panel, at its cited page. */
+  onOpenSource?: (source: CitationSource) => void;
 };
 
 export function MessageBubble({
@@ -278,25 +334,52 @@ export function MessageBubble({
   onOpenInPanel,
   threadId,
   onOpenArtifact,
+  sources,
+  onOpenSource,
 }: Props) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(-1);
+  // Which gallery the lightbox is currently showing — "main" (user uploads /
+  // model-curated images) or "tool" (chart/table crops from knowledge_search
+  // etc., normally collapsed under "N charts generated"). Both share one
+  // lightbox instead of each needing its own copy of the carousel/keyboard-nav
+  // logic below.
+  const [activeImageSource, setActiveImageSource] = useState<"main" | "tool">("main");
   const [inlineImageIndex, setInlineImageIndex] = useState<number>(0);
   const [isCollapsed, setIsCollapsed] = useState(true);
   
   // Ensure content is always a valid string
   const safeContent = typeof content === 'string' ? content : String(content || "");
   const safeReasoning = typeof reasoning === 'string' ? reasoning : String(reasoning || "");
+  const sourceByIndex = useMemo(
+    () => new Map((sources ?? []).map((s) => [s.index, s])),
+    [sources]
+  );
+  const validCitationIndices = useMemo(
+    () => new Set(sourceByIndex.keys()),
+    [sourceByIndex]
+  );
   const isLongUserMessage = isUser && (safeContent.length > 300 || safeContent.split("\n").length > 5);
   const visibleToolCalls = toolCalls?.filter((tool) => isToolExecuting || isPersistentToolCall(tool)) ?? [];
   const visibleAttachments = attachments ?? [];
-  // Tool-generated images (code_interpreter plots) render collapsed, separate
-  // from user uploads / model-curated images which render in the main gallery.
-  const toolImageAttachments = visibleAttachments.filter((attachment) => {
-    const kind = getAttachmentKind(attachment.mime, attachment.name);
-    return attachment.origin === "tool" && kind === "image" && Boolean(attachment.url);
-  });
+  // Tool-generated images (code_interpreter plots, knowledge_search chart/
+  // table crops) render collapsed, separate from user uploads / model-curated
+  // images which render in the main gallery. Deduped by url: these are
+  // data: URIs (see agents/runtime/context/tool.py), so identical bytes
+  // always produce an identical string — the same image can legitimately be
+  // attached by multiple tool calls in one turn (e.g. the model asking
+  // knowledge_search several differently-worded questions that each surface
+  // the same chart), and without this it renders as N duplicate thumbnails.
+  const toolImageAttachments = visibleAttachments
+    .filter((attachment) => {
+      const kind = getAttachmentKind(attachment.mime, attachment.name);
+      return attachment.origin === "tool" && kind === "image" && Boolean(attachment.url);
+    })
+    .filter(
+      (attachment, index, arr) =>
+        arr.findIndex((a) => a.url === attachment.url) === index
+    );
   const imageAttachments = visibleAttachments.filter((attachment) => {
     const kind = getAttachmentKind(attachment.mime, attachment.name);
     return attachment.origin !== "tool" && kind === "image" && Boolean(attachment.url);
@@ -305,6 +388,15 @@ export function MessageBubble({
     const kind = getAttachmentKind(attachment.mime, attachment.name);
     return attachment.origin !== "tool" && (kind !== "image" || !attachment.url);
   });
+
+  // The lightbox operates over whichever gallery is currently open — see
+  // activeImageSource above.
+  const activeList = activeImageSource === "tool" ? toolImageAttachments : imageAttachments;
+
+  const openLightbox = useCallback((source: "main" | "tool", index: number) => {
+    setActiveImageSource(source);
+    setActiveImageIndex(index);
+  }, []);
 
   useEffect(() => {
     if (activeImageIndex < 0) {
@@ -315,15 +407,15 @@ export function MessageBubble({
       if (event.key === "Escape") {
         setActiveImageIndex(-1);
       } else if (event.key === "ArrowLeft") {
-        setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : imageAttachments.length - 1));
+        setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeList.length - 1));
       } else if (event.key === "ArrowRight") {
-        setActiveImageIndex((prev) => (prev < imageAttachments.length - 1 ? prev + 1 : 0));
+        setActiveImageIndex((prev) => (prev < activeList.length - 1 ? prev + 1 : 0));
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeImageIndex, imageAttachments]);
+  }, [activeImageIndex, activeList]);
 
   const copyToClipboard = async () => {
     await navigator.clipboard.writeText(safeContent);
@@ -356,8 +448,8 @@ export function MessageBubble({
     }
   };
 
-  const currentActiveAttachment = activeImageIndex >= 0 && activeImageIndex < imageAttachments.length
-    ? imageAttachments[activeImageIndex]
+  const currentActiveAttachment = activeImageIndex >= 0 && activeImageIndex < activeList.length
+    ? activeList[activeImageIndex]
     : null;  const imageLightbox = currentActiveAttachment?.url ? (
     <div className="substrate-fade-in fixed inset-0 z-70 flex flex-col items-center justify-center p-3 select-none bg-black/60 backdrop-blur-sm">
       <button
@@ -366,15 +458,26 @@ export function MessageBubble({
         onClick={() => setActiveImageIndex(-1)}
         aria-label="Close image preview"
       />
-      <div className="relative w-full h-full flex flex-col items-center justify-center">
+      <div
+        className="relative w-full h-full flex flex-col items-center justify-center"
+        onClick={(e) => {
+          // This wrapper spans the whole viewport too (w-full h-full), so it
+          // sits on top of — and swallows clicks meant for — the invisible
+          // backdrop button above whenever the click lands on empty space
+          // around the image rather than a real interactive child (image,
+          // buttons, arrows). Only close when the click target is this
+          // wrapper itself, not a bubbled click from one of those children.
+          if (e.target === e.currentTarget) setActiveImageIndex(-1);
+        }}
+      >
         {/* Floating Left Filename and Pagination details */}
         <div className="absolute top-4 left-4 sm:left-6 flex items-center gap-2.5 z-50">
           <div className="truncate text-sm sm:text-sm font-semibold text-white/90 max-w-[120px] sm:max-w-xs" title={currentActiveAttachment.name}>
             {currentActiveAttachment.name}
           </div>
-          {imageAttachments.length > 1 && (
+          {activeList.length > 1 && (
             <span className="shrink-0 text-[10px] bg-white/10 text-white/70 px-2 py-2 rounded-full font-medium border border-white/5">
-              {activeImageIndex + 1} of {imageAttachments.length}
+              {activeImageIndex + 1} of {activeList.length}
             </span>
           )}
         </div>
@@ -399,8 +502,17 @@ export function MessageBubble({
           </button>
         </div>
 
-        {/* Clean Center Image: 100% responsive, fills ~75-80% of viewport area */}
-        <div className="relative w-full h-[65vh] sm:h-[75vh] max-w-[90vw] flex items-center justify-center mt-12 sm:mt-16 animate-in fade-in zoom-in-95 duration-200">
+        {/* Clean Center Image: 100% responsive, fills ~75-80% of viewport area.
+            Also w-full, so it's its own "empty space" trap distinct from the
+            outer wrapper above — same target-check guard needed here too, or
+            a click in this box's letterboxed padding (around a narrower
+            image) never reaches either close handler. */}
+        <div
+          className="relative w-full h-[65vh] sm:h-[75vh] max-w-[90vw] flex items-center justify-center mt-12 sm:mt-16 animate-in fade-in zoom-in-95 duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setActiveImageIndex(-1);
+          }}
+        >
           <img
             src={currentActiveAttachment.url}
             alt={currentActiveAttachment.name}
@@ -409,14 +521,14 @@ export function MessageBubble({
         </div>
 
         {/* Viewport Floating Carousel Arrows */}
-        {imageAttachments.length > 1 && (
+        {activeList.length > 1 && (
           <>
             {/* Left Nav Button */}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : imageAttachments.length - 1));
+                setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeList.length - 1));
               }}
               className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/50 text-white backdrop-blur-md transition-all duration-300 hover:bg-neutral-800 hover:scale-105 active:scale-95 shadow-md z-40 animate-in slide-in-from-left-6 duration-300"
               aria-label="Previous image"
@@ -429,7 +541,7 @@ export function MessageBubble({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setActiveImageIndex((prev) => (prev < imageAttachments.length - 1 ? prev + 1 : 0));
+                setActiveImageIndex((prev) => (prev < activeList.length - 1 ? prev + 1 : 0));
               }}
               className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/50 text-white backdrop-blur-md transition-all duration-300 hover:bg-neutral-800 hover:scale-105 active:scale-95 shadow-md z-40 animate-in slide-in-from-right-6 duration-300"
               aria-label="Next image"
@@ -440,9 +552,9 @@ export function MessageBubble({
         )}
 
         {/* Carousel Bottom Dot Indicators - 25% smaller */}
-        {imageAttachments.length > 1 && (
+        {activeList.length > 1 && (
           <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-50 bg-neutral-900/80 backdrop-blur-md border border-white/10 rounded-full px-3 py-1.5 shadow-md">
-            {imageAttachments.map((_, idx) => (
+            {activeList.map((_, idx) => (
               <button
                 key={idx}
                 type="button"
@@ -470,7 +582,7 @@ export function MessageBubble({
         <div className="w-full max-w-[720px] pt-1">
           <button
             type="button"
-            onClick={() => setActiveImageIndex(0)}
+            onClick={() => openLightbox("main", 0)}
             className="group/image relative block w-full overflow-hidden rounded-2xl cursor-pointer border border-(--border) bg-(--card) shadow-md transition-all duration-300 hover:shadow-lg focus:outline-none"
           >
             <img
@@ -490,7 +602,7 @@ export function MessageBubble({
         <div className="group/carousel relative w-full overflow-hidden rounded-2xl border border-(--border) bg-(--card) shadow-md transition-all duration-300 hover:shadow-lg select-none">
           <button
             type="button"
-            onClick={() => setActiveImageIndex(inlineImageIndex)}
+            onClick={() => openLightbox("main", inlineImageIndex)}
             className="block w-full text-left focus:outline-none cursor-pointer"
           >
             <img
@@ -800,7 +912,19 @@ export function MessageBubble({
           {safeContent && (
             <div className="prose-chat">
               <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
+                // singleDollarTextMath: false — a bare `$...$` is currency,
+                // not math, essentially always in this app (financial RAG
+                // answers are full of dollar amounts). Left on, remark-math
+                // greedily pairs the first `$` it sees with the NEXT `$`
+                // anywhere later in the message as one inline-math span —
+                // observed pairing across several sentences of a 10-Q
+                // summary, which KaTeX then rendered as one formula
+                // (math mode collapses inter-word spacing, and any content
+                // it couldn't parse — like a citation's `(citation:1)` —
+                // leaked out as raw unrendered text). `$$...$$` block math
+                // and `\(...\)`/`\[...\]` (preprocessMarkdown below) still
+                // work for a model that intentionally wants real math.
+                remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
                 rehypePlugins={[rehypeKatex]}
                 urlTransform={sandboxUrlTransform}
                 components={{
@@ -838,10 +962,22 @@ export function MessageBubble({
                     );
                   },
                   a({ href, children }) {
+                    const raw = typeof href === "string" ? href.trim() : "";
+                    // Inline citation marker, rewritten by linkifyCitations
+                    // below from a model's [n] into [n](citation:n) — only
+                    // ever emitted for an index present in sourceByIndex, so
+                    // this never needs its own "not found" UI. Degrading to
+                    // plain children (not null) means even a hypothetical
+                    // future bug here fails safe as literal-looking text
+                    // rather than silently swallowing the marker.
+                    if (raw.startsWith("citation:")) {
+                      const source = sourceByIndex.get(Number(raw.slice(9)));
+                      if (!source) return <>{children}</>;
+                      return <CitationChip source={source} onOpen={onOpenSource} />;
+                    }
                     // Model-referenced file: [label](sandbox:report.xlsx) →
                     // a card that opens the file in the side-panel artifact
                     // viewer (Claude-style) with a download fallback.
-                    const raw = typeof href === "string" ? href.trim() : "";
                     if (raw.startsWith("sandbox:") && threadId) {
                       const path = raw.replace(/^sandbox:/, "").replace(/^\.?\//, "");
                       const name = path.split("/").pop() || path;
@@ -888,8 +1024,11 @@ export function MessageBubble({
                   },
                 }}
               >
-                {preprocessMarkdown(safeContent)}
+                {linkifyCitations(preprocessMarkdown(safeContent), validCitationIndices)}
               </ReactMarkdown>
+              {role === "assistant" && (
+                <SourcesStrip sources={sources} onOpenSource={onOpenSource} />
+              )}
             </div>
           )}
 
@@ -923,13 +1062,12 @@ export function MessageBubble({
                 <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open/plots:rotate-90 text-(--muted)" />
               </summary>
               <div className="mt-2 flex flex-wrap gap-2">
-                {toolImageAttachments.map((attachment) => (
-                  <a
+                {toolImageAttachments.map((attachment, idx) => (
+                  <button
                     key={attachment.id}
-                    href={attachment.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-sm"
+                    type="button"
+                    onClick={() => openLightbox("tool", idx)}
+                    className="block cursor-pointer overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-sm transition-shadow hover:shadow-md"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -937,7 +1075,7 @@ export function MessageBubble({
                       alt={attachment.name}
                       className="h-28 w-auto max-w-[220px] object-contain"
                     />
-                  </a>
+                  </button>
                 ))}
               </div>
             </details>

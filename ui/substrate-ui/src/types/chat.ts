@@ -1,3 +1,5 @@
+import type { CitationSource } from "./citations";
+
 export type ToolCallMeta = {
   ui?: {
     resourceUri: string;
@@ -30,6 +32,9 @@ export type Message = {
   metadata?: Record<string, unknown>;
   /** True for assistant bubbles that continue after a HITL step — suppresses duplicate avatar */
   isContinuation?: boolean;
+  /** Grounded source references from knowledge_search tool.result events —
+   * renders as inline [n] chips and a "Sources" strip. See src/lib/citations.ts. */
+  sources?: CitationSource[];
 };
 
 export type Thread = {

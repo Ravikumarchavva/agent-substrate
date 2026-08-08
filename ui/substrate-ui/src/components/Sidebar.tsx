@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { SubstrateMark } from "@/components/SubstrateMark";
 import { RateLimitBar } from "@/components/RateLimitBar";
+import { DocQuotaBar } from "@/components/DocQuotaBar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -374,6 +375,7 @@ export function Sidebar({
         )}
 
         <RateLimitBar />
+        <DocQuotaBar />
 
         <div className="mt-auto px-2 pb-3 pt-2" ref={menuRef}>
           {menuOpen && (

@@ -9,6 +9,7 @@ import { SubstrateMark } from "@/components/SubstrateMark";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
 import { MaxIterationsCard } from "@/components/MaxIterationsCard";
+import { CircularProgress } from "@/components/CircularProgress";
 import { AppPanel } from "@/components/AppPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
@@ -18,10 +19,11 @@ import { ModelEffortPicker } from "@/components/ModelEffortPicker";
 import type { SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
-import { Message, UploadedFile, TaskList } from "@/types";
+import { Message, UploadedFile, TaskList, CitationSource } from "@/types";
 import { api } from "@/lib/api";
 import { ChatConflictError } from "@/lib/api/chat";
 import { getMessageAttachments, buildWorkspaceFileUrl } from "@/lib/api/_client";
+import { mergeSources, parseCitations } from "@/lib/citations";
 import {
   getPreferredChatModel,
   CHAT_MODEL_OPTIONS,
@@ -38,7 +40,12 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useThreads } from "@/hooks/useThreads";
 import type { WireEvent } from "@/protocol";
-import { useFileAttachments, type AttachedFilePreview } from "@/hooks/useFileAttachments";
+import {
+  useFileAttachments,
+  type AttachedFilePreview,
+  getAttachmentProcessingState,
+  computeSimulatedProgress,
+} from "@/hooks/useFileAttachments";
 import { useAppPanel } from "@/hooks/useAppPanel";
 import { useTaskBoards } from "@/hooks/useTaskBoards";
 import { PlanCardStack } from "@/components/PlanCard";
@@ -89,6 +96,11 @@ function ChatPageContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  // True while a send is queued behind still-processing attachments (see
+  // doSendMessage) — the button shows a spinner but stays in "send" mode,
+  // not "stop" (loading, which drives that, isn't set yet since no stream
+  // has actually started).
+  const [sendQueued, setSendQueued] = useState(false);
   // True while the run is suspended waiting on a HITL card (ask_human / approval).
   // The run is parked server-side (zero compute) — the UI must show a calm
   // "your turn" state, not the active "running" spinners.
@@ -265,7 +277,7 @@ function ChatPageContent() {
   const { threads, setThreads, loadThreads, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
     autoSelectFirstThread: !settingsPanelOpen,
   });
-  const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleRemoveFile } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
+  const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
   const { boards, upsertBoard, clearBoards, settleBoards } = useTaskBoards(currentThreadId);
   // Tracks which assistant messages we've already auto-opened an artifact for.
@@ -275,11 +287,25 @@ function ChatPageContent() {
   // viewer. The cache-bust (`&v=`) makes the panel remount the viewer when the
   // same file is re-opened after a change.
   const openArtifact = useCallback(
-    (path: string, fileName?: string, threadOverride?: string | null) => {
+    (
+      path: string,
+      fileName?: string,
+      threadOverride?: string | null,
+      page?: number | null,
+    ) => {
       const tid = threadOverride ?? currentThreadId;
       if (!tid) return;
       const cleanPath = path.replace(/^sandbox:/, "").replace(/^\.?\//, "");
       const name = fileName || cleanPath.split("/").pop() || cleanPath;
+      // A citation open uses a STABLE cache-bust (not Date.now()) so
+      // re-clicking a different page of the same PDF hits the browser cache
+      // instead of re-downloading it — the panel still remounts because
+      // AppPanel keys the viewer on `id:fileUrl`, and the #page= fragment
+      // (appended last, after &v=) is part of that fileUrl. A regular
+      // code-interpreter artifact open keeps Date.now(): that file's bytes
+      // may have just changed and must never serve a stale cached copy.
+      const bust = page ? "cite" : Date.now();
+      const base = `${buildWorkspaceFileUrl(tid, cleanPath)}&v=${bust}`;
       openInPanel({
         id: `file-${cleanPath}`,
         kind: "file",
@@ -287,13 +313,30 @@ function ChatPageContent() {
         toolName: "code_interpreter",
         toolArguments: {},
         timestamp: Date.now(),
-        fileUrl: `${buildWorkspaceFileUrl(tid, cleanPath)}&v=${Date.now()}`,
+        fileUrl: page ? `${base}#page=${page}` : base,
         fileName: name,
+        mime: name.toLowerCase().endsWith(".pdf") ? "application/pdf" : undefined,
       });
       // Collapse the left thread rail so the artifact gets more room.
       setDesktopSidebarOpen(false);
     },
     [currentThreadId, openInPanel],
+  );
+
+  // Opens a grounded citation's source file at its cited page. sessionPath
+  // falls back to fileName (agent-substrate's build_citations does the same
+  // fallback server-side) so a citation still opens something sensible even
+  // when the underlying upload predates session_path being recorded.
+  const openSource = useCallback(
+    (source: CitationSource) => {
+      openArtifact(
+        source.sessionPath || source.fileName,
+        source.fileName,
+        source.threadId ?? currentThreadId,
+        source.page ?? null,
+      );
+    },
+    [openArtifact, currentThreadId],
   );
   // agentId → id of the user message whose turn created the plan, so the inline
   // PlanCard renders in flow beneath that turn.
@@ -380,6 +423,8 @@ function ChatPageContent() {
     const previewSource = file.previewUrl || file.url || (currentThreadId
       ? `/api/backend/threads/${currentThreadId}/files/${file.id}/content`
       : "");
+    const processingState = getAttachmentProcessingState(file);
+    const showRing = processingState === "pending" || processingState === "error";
 
     return (
       <div key={file.id} className="attachment-card group/attach relative min-w-0 max-w-full p-2 sm:w-65">
@@ -409,10 +454,24 @@ function ChatPageContent() {
           </div>
         )}
 
+        {showRing && (
+          <div className="absolute bottom-2 right-2 z-10 rounded-full bg-background/85 p-0.5">
+            <CircularProgress
+              progress={computeSimulatedProgress(file)}
+              state={processingState === "error" ? "error" : "pending"}
+              size={18}
+            />
+          </div>
+        )}
+
         <div className="min-w-0 flex-1 pr-7">
           <div className="truncate text-sm font-semibold text-foreground">{file.name}</div>
           <div className="mt-1 text-[11px] text-(--muted)">
-            {formatFileSize(file.size)}
+            {processingState === "error"
+              ? <span className="text-red-400">{file.stagingError}</span>
+              : processingState === "pending"
+                ? "Processing…"
+                : formatFileSize(file.size)}
           </div>
         </div>
       </div>
@@ -600,6 +659,7 @@ function ChatPageContent() {
       needsNewBubble: true,
       userMsgId: lastUserMsgId,
       isNewThread: false,
+      pendingSources: [] as CitationSource[],
     };
 
     await runEventStream(threadId, msgState, async (signal) => {
@@ -649,6 +709,37 @@ function ChatPageContent() {
     if (!text.trim() || isSubmittingRef.current) return;
     isSubmittingRef.current = true;
 
+    // Queued send: any attachment still eagerly processing (staged_at not
+    // set yet — see useFileAttachments.ts) blocks the actual request from
+    // firing, not the click itself. The button shows a spinner (sendQueued)
+    // while this resolves; it's not "loading" (that would flip the button
+    // into a Stop-stream affordance for a stream that hasn't started).
+    // Covers every doSendMessage call site (retry, suggested prompts, voice
+    // transcript, the composer's own submit) uniformly, so nothing needs
+    // its own separate wait-and-retry logic.
+    const stillProcessing = attachedFiles.some((f) => {
+      const state = getAttachmentProcessingState(f);
+      return state === "pending" || state === "error";
+    });
+    if (stillProcessing) {
+      setSendQueued(true);
+      const result = await waitForAttachmentsReady();
+      setSendQueued(false);
+      if (!result.ok) {
+        isSubmittingRef.current = false;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nanoid(),
+            role: "assistant" as const,
+            content: `⚠️ ${result.error}`,
+            timestamp: new Date(),
+          },
+        ]);
+        return;
+      }
+    }
+
     const currentInput = text;
     const currentFileIds = attachedFiles.map((f) => f.id);
     const requestedModel = selectedModel;
@@ -674,6 +765,7 @@ function ChatPageContent() {
       needsNewBubble: false,
       userMsgId: nanoid() as string,
       isNewThread: false,
+      pendingSources: [] as CitationSource[],
     };
 
     // Clear input and show user message AND assistant placeholder immediately!
@@ -775,6 +867,7 @@ function ChatPageContent() {
       needsNewBubble: boolean;
       userMsgId: string;
       isNewThread: boolean;
+      pendingSources: CitationSource[];
     },
     streamFactory: (signal: AbortSignal) => Promise<Response>,
   ) {
@@ -783,6 +876,10 @@ function ChatPageContent() {
     // Call before any handler that writes streaming content. If a tool step
     // just finished (needsNewBubble=true), inserts a fresh bubble at the
     // tail of the message list and updates activeAssistantId to point at it.
+    // Seeds `sources` from whatever citations have accumulated so far this
+    // turn (possibly several knowledge_search calls) — mirrors
+    // history-fold.ts's ensureActive() so a page reload reconstructs the
+    // same bubble/sources split the live stream produced.
     function ensureActiveBubble() {
       if (!msgState.needsNewBubble) return;
       const newId = nanoid();
@@ -790,7 +887,15 @@ function ChatPageContent() {
       msgState.needsNewBubble = false;
       setMessages((m) => [
         ...m,
-        { id: newId, role: "assistant" as const, content: "", reasoning: "", timestamp: new Date(), isContinuation: true },
+        {
+          id: newId,
+          role: "assistant" as const,
+          content: "",
+          reasoning: "",
+          timestamp: new Date(),
+          isContinuation: true,
+          sources: msgState.pendingSources.length ? [...msgState.pendingSources] : undefined,
+        },
       ]);
     }
 
@@ -915,8 +1020,40 @@ function ChatPageContent() {
           return;
         }
 
+        // Grounded citations from knowledge_search (or any future tool that
+        // sets structured_content.citations) — accumulate across every call
+        // this turn and apply to whichever bubble is currently active, same
+        // carry-forward rule as history-fold.ts's replay path so a reload
+        // reconstructs an identical result. Does NOT return early: the
+        // ordinary result/isError attachment below still needs to run.
+        const newCitations = parseCitations(data.structured_content);
+        if (newCitations.length) {
+          msgState.pendingSources = mergeSources(msgState.pendingSources, newCitations);
+          const sources = msgState.pendingSources;
+          setMessages((m) =>
+            m.map((msg) =>
+              msg.id === msgState.activeAssistantId ? { ...msg, sources } : msg
+            )
+          );
+        }
+
         const resultText = (data.ok ? data.output : data.error) as string || "";
         const isError = !data.ok;
+
+        // Match by call_id whenever the event carries one (it always should
+        // — the backend logs call_id=effect_id for every tool.result). Only
+        // fall back to matching by tool NAME when call_id is genuinely
+        // absent, and even then only against a call that doesn't already
+        // have a result — a bare name match isn't a unique key: a turn that
+        // calls the same tool more than once (e.g. knowledge_search asked
+        // several differently-worded questions) has multiple toolCalls
+        // sharing one name, possibly split across multiple bubbles, and an
+        // unconditional name-only OR broadcasts one result's attachments
+        // into every bubble that happens to contain a same-named call —
+        // observed as "N charts generated" duplicated identically across
+        // several bubbles instead of appearing once in the right one.
+        const matchesCall = (tc: import("@/types").ToolCall) =>
+          data.call_id ? tc.id === data.call_id : tc.name === data.tool_name && !tc.result;
 
         // For MCP App tools with app_data, merge the data into
         // the tool_call arguments so the iframe receives it
@@ -934,9 +1071,7 @@ function ChatPageContent() {
             m.map((msg) => {
               if (msg.role !== "assistant" || !msg.toolCalls) return msg;
               const updatedCalls = msg.toolCalls.map((tc) => {
-                const matchById = data.call_id && tc.id === data.call_id;
-                const matchByName = tc.name === data.tool_name;
-                if (!matchById && !matchByName) return tc;
+                if (!matchesCall(tc)) return tc;
                 const existingArgs =
                   typeof tc.arguments === "string" ? JSON.parse(tc.arguments) : tc.arguments;
                 return {
@@ -964,20 +1099,17 @@ function ChatPageContent() {
 
         // Attach result to whichever assistant message owns this tool call.
         // Search all assistant messages (not just the current one) so results
-        // from earlier steps still land in the correct bubble.
+        // from earlier steps still land in the correct bubble. matchesCall
+        // (defined above) is call_id-authoritative, so this can't leak one
+        // call's result/attachments into an unrelated bubble that happens to
+        // share the same tool name.
         setMessages((m) =>
           m.map((msg) => {
             if (msg.role !== "assistant" || !msg.toolCalls) return msg;
-            const hasMatch = msg.toolCalls.some(
-              (tc) =>
-                (data.call_id && tc.id === data.call_id) ||
-                tc.name === data.tool_name
-            );
+            const hasMatch = msg.toolCalls.some(matchesCall);
             if (!hasMatch) return msg;
             const updatedCalls = msg.toolCalls.map((tc) => {
-              const matchById = data.call_id && tc.id === data.call_id;
-              const matchByName = tc.name === data.tool_name;
-              if (!matchById && !matchByName) return tc;
+              if (!matchesCall(tc)) return tc;
               return { ...tc, result: resultText, isError };
             });
             return {
@@ -1594,7 +1726,9 @@ function ChatPageContent() {
                               isToolExecuting={m.isToolExecuting}
                               isContinuation={m.isContinuation}
                               threadId={currentThreadId}
+                              sources={m.sources}
                               onOpenArtifact={openArtifact}
+                              onOpenSource={openSource}
                               onOpenInPanel={(tool) => {
                                 const args = typeof tool.arguments === "string"
                                   ? JSON.parse(tool.arguments)
@@ -1720,11 +1854,15 @@ function ChatPageContent() {
                           ) : (
                             <button
                               type="submit"
-                              disabled={!input.trim()}
-                              className="btn-icon substrate-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-all disabled:cursor-not-allowed disabled:opacity-10"
-                              aria-label="Send"
+                              disabled={!input.trim() || sendQueued}
+                              className={`btn-icon substrate-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-all disabled:cursor-not-allowed ${sendQueued ? "disabled:opacity-60" : "disabled:opacity-10"}`}
+                              aria-label={sendQueued ? "Waiting for attachments to finish processing" : "Send"}
                             >
-                              <ArrowUp className="h-5 w-5" />
+                              {sendQueued ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <ArrowUp className="h-5 w-5" />
+                              )}
                             </button>
                           )
                         ) : (
@@ -1776,11 +1914,11 @@ function ChatPageContent() {
                 items.map((it) =>
                   it.id === id && it.fileUrl
                     ? {
-                        ...it,
-                        fileUrl: it.fileUrl.includes("&v=")
-                          ? it.fileUrl.replace(/&v=\d+/, `&v=${Date.now()}`)
-                          : `${it.fileUrl}&v=${Date.now()}`,
-                      }
+                      ...it,
+                      fileUrl: it.fileUrl.includes("&v=")
+                        ? it.fileUrl.replace(/&v=\d+/, `&v=${Date.now()}`)
+                        : `${it.fileUrl}&v=${Date.now()}`,
+                    }
                     : it,
                 ),
               )

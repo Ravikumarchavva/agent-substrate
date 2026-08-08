@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 export type { ToolCallMeta, ToolCall, Message, Thread, UploadedFile } from "./chat";
+export type { CitationSource } from "./citations";
 export type { AdminThread, AdminUser, AdminStats, AdminStep } from "./admin";
 export type { OpenAITTSVoice, GoogleTTSVoice, TTSVoice, TTSPlaybackRate, TranscribeResult, RealtimeToken } from "./audio";
 export type { TaskStatus, Task, TaskList } from "./tasks";

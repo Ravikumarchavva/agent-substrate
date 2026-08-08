@@ -227,7 +227,7 @@ class ReActAgent:
         for tc in tool_calls:
             ctx.check()
             t0 = time.monotonic()
-            inv_result = await ctx.tool(tc.tool_name, **tc.arguments)
+            inv_result = await ctx.tool(tc.tool_name, tc.arguments)
             duration_ms = (time.monotonic() - t0) * 1000
             is_error = inv_result.status != "ok"
             results.append(

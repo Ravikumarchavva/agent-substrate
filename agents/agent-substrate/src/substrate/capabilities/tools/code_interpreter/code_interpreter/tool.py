@@ -70,7 +70,7 @@ class CodeInterpreterTool:
             "read and write there persist across turns, and no other user's files "
             "are visible. Available packages: numpy, pandas, matplotlib, scipy, "
             "scikit-learn, seaborn, plotly, openpyxl, polars, Pillow, requests, "
-            "python-docx, python-pptx, reportlab. "
+            "python-docx, python-pptx, reportlab, pdfplumber. "
             "Each execution runs in a fresh interpreter, so Python variables do NOT "
             "persist between calls — save anything you need later to a file. "
             "Network access is disabled by default." + PRESENTATION_GUIDANCE
@@ -141,7 +141,7 @@ class CodeInterpreterTool:
         spec = SandboxSpec(
             user_id=user_id,
             thread_id=session_id,
-            session_dir=_session_dir(user_id, session_id),
+            session_dir=session_dir(user_id, session_id),
             code=code or None,
             argv=shlex.split(command) if command else None,
             timeout_s=timeout_s,
@@ -172,17 +172,20 @@ class CodeInterpreterTool:
         await self._runtime.stop()
 
 
-def _session_dir(user_id: str | None, thread_id: str) -> str:
+def session_dir(user_id: str | None, thread_id: str) -> str:
     """The store-relative session key the runtime scopes execution to.
 
     Mirrors ``routes/workspace.py::_session_key`` so the sandbox writes exactly
     where the file-serving endpoint, ``sandbox:`` refs, and versioning read.
     Without a user identity there is no per-user tree to scope into, so fall
-    back to a session-only path.
+    back to a session-only path. Public (not `_session_dir`) because
+    `SkillTool` also needs this exact key to stage a skill's `scripts/` files
+    into the same session before the sandbox runs — see
+    `skills/tool.py::_activate`.
     """
     if user_id:
         return f"users/{user_id}/sessions/{thread_id}"
     return f"sessions/{thread_id}"
 
 
-__all__ = ["CodeInterpreterTool"]
+__all__ = ["CodeInterpreterTool", "session_dir"]

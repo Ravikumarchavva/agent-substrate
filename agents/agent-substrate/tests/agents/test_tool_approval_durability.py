@@ -106,7 +106,7 @@ async def test_tool_approval_survives_restart_and_resumes_when_approved():
     # nothing resolves the approval yet.
     ctx1 = await _fresh_ctx(event_log, run_id)
     with pytest.raises(SuspendInterrupt):
-        await ctx1.tool("send_email", to="user@example.com")
+        await ctx1.tool("send_email", {"to": "user@example.com"})
 
     entries = [e async for e in event_log.read(run_id)]
     request_id = _extract_request_id(entries)
@@ -127,7 +127,7 @@ async def test_tool_approval_survives_restart_and_resumes_when_approved():
     # no shared Python object with ctx1 except event_log itself.
     ctx2 = await _fresh_ctx(event_log, run_id)
     ctx2._signal_bus = ctx1._signal_bus  # type: ignore[attr-defined]
-    result = await ctx2.tool("send_email", to="user@example.com")
+    result = await ctx2.tool("send_email", {"to": "user@example.com"})
 
     assert result.status == "ok"
     assert result.text is not None
@@ -140,7 +140,7 @@ async def test_tool_approval_survives_restart_and_denies_when_rejected():
 
     ctx1 = await _fresh_ctx(event_log, run_id)
     with pytest.raises(SuspendInterrupt):
-        await ctx1.tool("send_email", to="user@example.com")
+        await ctx1.tool("send_email", {"to": "user@example.com"})
 
     entries = [e async for e in event_log.read(run_id)]
     request_id = _extract_request_id(entries)
@@ -151,7 +151,7 @@ async def test_tool_approval_survives_restart_and_denies_when_rejected():
 
     ctx2 = await _fresh_ctx(event_log, run_id)
     ctx2._signal_bus = ctx1._signal_bus  # type: ignore[attr-defined]
-    result = await ctx2.tool("send_email", to="user@example.com")
+    result = await ctx2.tool("send_email", {"to": "user@example.com"})
 
     assert result.status == "denied"
 
@@ -165,7 +165,7 @@ async def test_tool_approval_request_id_is_replay_stable():
 
     ctx1 = await _fresh_ctx(event_log, run_id)
     with pytest.raises(SuspendInterrupt):
-        await ctx1.tool("send_email", to="user@example.com")
+        await ctx1.tool("send_email", {"to": "user@example.com"})
     first_entries = [e async for e in event_log.read(run_id)]
     first_id = _extract_request_id(first_entries)
 
@@ -174,7 +174,7 @@ async def test_tool_approval_request_id_is_replay_stable():
     ctx2 = await _fresh_ctx(event_log, run_id)
     ctx2._signal_bus = ctx1._signal_bus  # type: ignore[attr-defined]
     with pytest.raises(SuspendInterrupt):
-        await ctx2.tool("send_email", to="user@example.com")
+        await ctx2.tool("send_email", {"to": "user@example.com"})
 
     second_entries = [e async for e in event_log.read(run_id)]
     approval_entries = [e for e in second_entries if e.kind == "approval.requested"]

@@ -74,8 +74,27 @@ class _ToolMixin:
         ) -> None: ...
         async def _resolve_effect_value(self, result: EffectResult) -> JsonObject: ...
 
-    async def tool(self, name: str, **args: Any) -> InvocationResult:
-        """Journaled tool call via ToolInvoker.  At-most-once: won't re-execute on replay."""
+    async def tool(
+        self, name: str, args: dict[str, Any] | None = None
+    ) -> InvocationResult:
+        """Journaled tool call via ToolInvoker.  At-most-once: won't re-execute on replay.
+
+        ``args`` is one explicit dict, deliberately not ``**kwargs`` — the
+        LLM-driven dispatch path (``react.py::_execute_tool_calls``) calls
+        ``ctx.tool(tc.tool_name, tc.arguments)`` with ``tc.arguments`` being
+        whatever arbitrary dict the model supplied for that tool's own
+        input_schema. Splatting an untrusted, arbitrary-shaped dict into a
+        method's own keyword arguments (the previous signature) means ANY
+        key that happens to match one of this method's own parameter names
+        — ``name`` today, potentially something else if this signature ever
+        grows — collides with "got multiple values for argument 'x'" the
+        first time a tool's schema actually uses that name (this is exactly
+        how the ``skills`` tool's ``name`` argument, the name of the skill to
+        activate, broke every call to it). Keeping the tool's arguments in
+        their own namespace, never merged into this method's, closes that
+        whole class of bug rather than papering over the one collision found
+        so far.
+        """
         from substrate.kernel.tools import ToolCallRequest
 
         if self._tool_invoker is None:
@@ -88,6 +107,7 @@ class _ToolMixin:
             self._invoker_session = tool_invoker.open_session()
         invoker_session = self._invoker_session
 
+        args = args or {}
         call = ToolCallRequest(name=name, arguments=args)
         effect_args: JsonObject = {"name": name, "args_keys": sorted(args.keys())}
         path = self._alloc_path()

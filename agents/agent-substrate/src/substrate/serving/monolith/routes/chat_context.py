@@ -244,6 +244,20 @@ async def _build_file_context(
         # be the workspace root.
         relative_path: str | None = None
         mount_path = _SANDBOX_WORKSPACE_MOUNT_PATH
+        # Extractable types (PDF today) are already ingested into the RagBackend
+        # and readable via knowledge_search — never also hand the model a real,
+        # working code_interpreter path to the same file. Offering both isn't
+        # harmless redundancy: a prose instruction to "prefer knowledge_search"
+        # loses every time to a concrete, correct absolute path sitting right
+        # next to it, because reading the raw file *feels* more certain than a
+        # semantic-search result even when it isn't. Observed directly — the
+        # model reached for `pypdf.PdfReader(workspace_path)` on an already-
+        # successfully-searched document, repeatedly, specifically because this
+        # hint told it that path existed and was readable. Non-extractable types
+        # (csv, images, etc.) still get the hint below — for those,
+        # code_interpreter genuinely is the only way to read the file.
+        if meta.content_type in EXTRACTABLE_CONTENT_TYPES:
+            return attachment
         if settings.SANDBOX_RUNTIME == "bubblewrap":
             # Bubblewrap mounts ONLY the caller's own session dir — see
             # CodeInterpreterTool._session_dir — at /workspace, so the

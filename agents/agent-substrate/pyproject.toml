@@ -96,6 +96,7 @@ sandbox = [
     "seaborn>=0.13.0",
     "plotly>=5.24.0",
     "scikit-learn>=1.5.0",
+    "pdfplumber>=0.11.0",
 ]
 # PDF loading for the knowledge/RAG pipeline (PDFLoader — the local,
 # no-extraction-service fallback path).

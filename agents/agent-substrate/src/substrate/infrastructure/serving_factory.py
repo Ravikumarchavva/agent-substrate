@@ -334,8 +334,10 @@ async def init_tool_registry(
 ) -> ToolboxResult:
     """Create all tools and return a registry.
 
-    ``file_store`` is only needed to stage the code interpreter's workspace when
-    the store is object storage (see ``StagedSandboxRuntime``).
+    ``file_store`` stages the code interpreter's workspace when the store is
+    object storage (see ``StagedSandboxRuntime``), and is also handed to
+    ``SkillTool`` so an activated skill's ``scripts/*.py`` get copied into the
+    caller's own sandbox session and become importable there.
     ``skill_manager`` registers the ``skills`` tool (list/activate SKILL.md
     packages under ``capabilities/tools/skills/``) — without it the model has
     no way to discover or read a skill's instructions, so a skill existing on
@@ -453,7 +455,7 @@ async def init_tool_registry(
     if skill_manager is not None:
         from substrate.capabilities.tools.skills.tool import SkillTool
 
-        registry.add(SkillTool(skill_manager))
+        registry.add(SkillTool(skill_manager, file_store=file_store))
 
     from substrate.capabilities.tools.utils.tool_search import ToolSearchTool
 

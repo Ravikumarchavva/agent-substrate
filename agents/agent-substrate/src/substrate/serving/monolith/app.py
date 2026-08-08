@@ -110,6 +110,8 @@ async def lifespan(app: FastAPI):
         redis_client=infra.redis_client,
         model_client=llm.model_client,
         rag_backend=infra.rag_backend,
+        file_store=infra.file_store,
+        skill_manager=infra.skill_manager,
     )
     app.state.tools = tools.registry
     app.state.task_tool = tools.task_tool
@@ -129,7 +131,13 @@ async def lifespan(app: FastAPI):
     _prompt_path = (
         __import__("pathlib").Path(__file__).parent / "prompts" / "default_system.md"
     )
-    app.state.system_instructions = _prompt_path.read_text(encoding="utf-8").strip()
+    # Append the discovered-skills roster (name + description + SKILL.md path
+    # for each) so the model knows skills exist at all — the `skills` tool
+    # registered above lets it read one on demand, but without this suffix it
+    # has no reason to ever call `skills(action="list")` in the first place.
+    app.state.system_instructions = infra.skill_manager.inject_into_prompt(
+        _prompt_path.read_text(encoding="utf-8").strip()
+    )
 
     app.state.mcp_servers = {}
 

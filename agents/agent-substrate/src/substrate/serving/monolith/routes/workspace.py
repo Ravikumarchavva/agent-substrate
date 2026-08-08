@@ -99,6 +99,17 @@ def _require_workspace_store(ctx: ServerDependencies) -> _WorkspaceCapableStore:
     return store
 
 
+def _is_version_key(key: str) -> bool:
+    """True for a snapshot under ``users/{uid}/versions/...``.
+
+    Anchored at the owner prefix rather than matching ``/versions/`` anywhere:
+    a user is perfectly entitled to a folder of their own called ``versions``,
+    and it must not vanish from their file list.
+    """
+    parts = key.split("/")
+    return len(parts) >= 3 and parts[0] == "users" and parts[2] == VERSIONS_DIR
+
+
 def _session_id_from_key(key: str) -> str | None:
     parts = key.split("/")
     # users/{uid}/sessions/{thread_id}/...
@@ -140,12 +151,10 @@ async def list_files(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceFilesResponse:
     store = _require_workspace_store(ctx)
-    # Hide the per-file version snapshots (.versions/) — they're internal
-    # history, not user-facing files (see file_versioning.py).
+    # Hide the per-file version snapshots — they're internal history, not
+    # user-facing files (see file_versioning.py).
     entries = [
-        e
-        for e in await store.list_user_files(claims.sub)
-        if f"/{VERSIONS_DIR}/" not in e[0]
+        e for e in await store.list_user_files(claims.sub) if not _is_version_key(e[0])
     ]
     session_ids_by_key = {key: _session_id_from_key(key) for key, _, _ in entries}
 
@@ -228,7 +237,7 @@ async def _resolve_session_key(
         (key, mtime)
         for (key, _size, mtime) in await store.list_user_files(sub)
         if key.startswith(prefix)
-        and f"/{VERSIONS_DIR}/" not in key
+        and not _is_version_key(key)
         and key.rsplit("/", 1)[-1] == base
     ]
     if matches:

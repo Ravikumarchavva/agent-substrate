@@ -8,7 +8,20 @@ served). Every state becomes a recoverable ``FileVersion`` snapshot, so the two
 never silently clobber each other and any version can be restored.
 
 The canonical working file (``object_key``) always mirrors the latest version;
-snapshots are copies at ``.versions/{name}/{seq}{ext}`` in the same session dir.
+snapshots are copies under a sibling ``users/{uid}/versions/...`` prefix.
+
+Snapshots deliberately live *outside* the working tree rather than in a hidden
+directory beside the file. They are system-managed data, not the user's files,
+and keeping them in their own prefix makes that separation structural instead of
+a naming convention every component has to remember:
+
+* The code interpreter mounts only ``users/{uid}/sessions/{tid}``, so a snapshot
+  is physically unreachable from a sandbox run — it cannot be read, clobbered,
+  or re-reported as a generated output. Previously only a leading dot (which
+  ``runtimes/_files.py`` happens to prune) kept that from happening.
+* Object stores are not filesystems: SeaweedFS omits keys nested under a
+  dot-directory from S3 ``LIST`` entirely, which silently excluded snapshots
+  from per-user usage totals while they still consumed space.
 """
 
 from __future__ import annotations
@@ -22,9 +35,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.serving.monolith.models import FileVersion
 
-# Hidden per-file version store, kept out of the Storage listing (see
-# routes/workspace.py::list_files, which filters this segment).
-VERSIONS_DIR = ".versions"
+# Per-user snapshot prefix, a sibling of `sessions/` and `uploads/` rather than
+# a directory inside them. routes/workspace.py::list_files hides it from the
+# Storage browser — a presentation choice now, not a correctness requirement.
+VERSIONS_DIR = "versions"
 
 
 def sha256_hex(data: bytes) -> str:
@@ -33,8 +47,21 @@ def sha256_hex(data: bytes) -> str:
 
 def _version_key(object_key: str, seq: int) -> str:
     """`users/{uid}/sessions/{tid}/report.xlsx` →
-    `users/{uid}/sessions/{tid}/.versions/report.xlsx/{seq}.xlsx`."""
+    `users/{uid}/versions/sessions/{tid}/report.xlsx/{seq}.xlsx`.
+
+    The whole path below ``users/{uid}/`` is preserved under the prefix, so the
+    mapping is total (uploads version the same way as session files) and
+    reversible by inspection. Keys that aren't user-owned are left in place —
+    there is no user prefix to hang the snapshot off.
+    """
     p = PurePosixPath(object_key)
+    parts = p.parts
+    if len(parts) >= 3 and parts[0] == "users":
+        owner = parts[1]
+        rest = PurePosixPath(*parts[2:])
+        return str(
+            PurePosixPath("users") / owner / VERSIONS_DIR / rest / f"{seq}{p.suffix}"
+        )
     return str(p.parent / VERSIONS_DIR / p.name / f"{seq}{p.suffix}")
 
 

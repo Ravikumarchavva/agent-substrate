@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "SeaweedFS S3 gateway identities. Without this file the S3 API allows",
+    "anonymous access, so it is required rather than optional.",
+    "These are LOCAL DEV credentials only — a real deployment mounts its own",
+    "copy from a secret and never uses these values."
+  ],
+  "identities": [
+    {
+      "name": "substrate",
+      "credentials": [
+        {
+          "accessKey": "substrate",
+          "secretKey": "substrate-dev-secret"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

@@ -76,7 +76,38 @@ async def _cleanup(db: AsyncSession, key: str) -> None:
 
 def test_version_key_layout():
     key = "users/u1/sessions/t1/report.xlsx"
-    assert _version_key(key, 3) == "users/u1/sessions/t1/.versions/report.xlsx/3.xlsx"
+    assert _version_key(key, 3) == "users/u1/versions/sessions/t1/report.xlsx/3.xlsx"
+
+
+def test_version_key_is_outside_the_sandbox_session_tree():
+    """The code interpreter mounts only users/{uid}/sessions/{tid}. Snapshots
+    living outside it is what makes them unreadable and unclobberable from a
+    run, structurally rather than by naming convention."""
+    key = "users/u1/sessions/t1/report.xlsx"
+    assert not _version_key(key, 1).startswith("users/u1/sessions/")
+
+
+def test_version_key_has_no_hidden_path_segment():
+    """A dot-prefixed segment is invisible to SeaweedFS's S3 LIST, which
+    silently excluded snapshots from per-user usage totals."""
+    assert not any(
+        part.startswith(".")
+        for part in _version_key("users/u1/sessions/t1/report.xlsx", 1).split("/")
+    )
+
+
+def test_version_key_handles_uploads_as_well_as_sessions():
+    """The whole path below users/{uid}/ is preserved, so the mapping is total
+    rather than session-specific."""
+    assert _version_key("users/u1/uploads/notes.md", 2) == (
+        "users/u1/versions/uploads/notes.md/2.md"
+    )
+
+
+def test_version_keys_of_same_name_in_different_threads_do_not_collide():
+    a = _version_key("users/u1/sessions/t1/report.xlsx", 1)
+    b = _version_key("users/u1/sessions/t2/report.xlsx", 1)
+    assert a != b
 
 
 def test_sha256_hex_stable():

@@ -102,6 +102,7 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
             extraction_client=extraction_client,
             reranker=reranker,
             model_client=model_client,
+            file_store=kwargs.get("file_store"),
         )
 
     if name == "pinecone":

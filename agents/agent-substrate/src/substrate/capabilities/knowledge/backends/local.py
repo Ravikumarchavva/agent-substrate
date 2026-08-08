@@ -23,13 +23,17 @@ second ``VectorStore`` with its own embedding dimensionality (SigLIP-base:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.core.content import ImageBlock
+from substrate.kernel.core.content import ImageBlock, TextBlock
 from substrate.kernel.storage.vector import Document, SearchResult
+from substrate.logger import setup_logging
 
 from .base import IngestResult
+
+logger = setup_logging("substrate.knowledge.local")
 
 if TYPE_CHECKING:
     from substrate.capabilities.knowledge.extraction_client import ExtractionClient
@@ -64,6 +68,10 @@ class LocalRagBackend:
         # service — see backends/factory.py. Lazily constructed from
         # extraction_service_url when not given.
         extraction_client: "ExtractionClient | None" = None,
+        # Duck-typed file store (WorkspaceFileStore/S3FileStore). When given,
+        # extracted chart/table images are written here and only a storage key
+        # is kept in the vector row — see _ingest_images.
+        file_store: Any | None = None,
     ) -> None:
         self._pipeline = pipeline
         self._vector_store = vector_store
@@ -74,6 +82,7 @@ class LocalRagBackend:
         self._reranker = reranker
         self._model_client = model_client
         self._extraction_client = extraction_client
+        self._file_store = file_store
 
     def _get_extraction_client(self) -> "ExtractionClient | None":
         if not self._extraction_url:
@@ -168,13 +177,44 @@ class LocalRagBackend:
             deleted += await self._image_store.delete_collection(collection)
         return deleted
 
+    async def delete_file_images(self, *, user_id: str, file_id: str) -> int:
+        """Delete the stored image objects for one file.
+
+        ``delete_collection`` only removes vector rows; without this the image
+        objects behind them would be orphaned in storage forever, still counting
+        against the owner's quota. Called when an upload is discarded.
+        """
+        if self._file_store is None or not user_id or not file_id:
+            return 0
+        prefix = f"users/{user_id}/rag/{file_id}/"
+        try:
+            entries = await self._file_store.list_user_files(user_id)
+        except Exception as exc:
+            logger.warning("Listing RAG images for cleanup failed: %s", exc)
+            return 0
+        deleted = 0
+        for key, _size, _mtime in entries:
+            if not key.startswith(prefix):
+                continue
+            try:
+                await self._file_store.delete(key)
+                deleted += 1
+            except Exception as exc:
+                logger.warning("Deleting RAG image %s failed: %s", key, exc)
+        return deleted
+
     async def promote(self, *, file_id: str, thread_id: str) -> int:
         """Move a staged document's chunks (text + any chart/table images)
         from its temporary ``staging:{file_id}`` collection into the real
         thread collection — a cheap re-key, no re-extraction or
         re-embedding. See ``routes/files.py``'s eager-staging background
         task (writes to the staging collection at upload time) and
-        ``routes/chat_context.py`` (calls this at send time)."""
+        ``routes/chat_context.py`` (calls this at send time).
+
+        Only the vector rows move. Extracted image objects are keyed
+        ``users/{uid}/rag/{file_id}/...`` with no collection in the path
+        precisely so promotion never has to rewrite object storage — the
+        ``image_key`` held by a row stays valid as it changes collection."""
         moved = 0
         staging_collection = f"staging:{file_id}"
         if self._vector_store is not None:
@@ -199,23 +239,65 @@ class LocalRagBackend:
             return
 
         documents: list[Document] = []
-        for data, meta in items:
+        for i, (data, meta) in enumerate(items):
             vector = await client.embed_image(data)
             if vector is None:
                 continue  # one bad image must not fail the whole ingest
-            documents.append(
-                Document(
-                    content=[
-                        ImageBlock(
-                            data=data, media_type=meta.get("media_type", "image/png")
-                        )
-                    ],
-                    embedding=vector,
-                    metadata=meta,
+            media_type = meta.get("media_type", "image/png")
+            key = await self._store_image_bytes(data, meta, index=i)
+            if key is not None:
+                # Reference, not bytes: a page image is ~500KB, and inlining
+                # them made the images dwarf the vectors they exist to serve
+                # (5.6MB of images against 248KB of text vectors). The row keeps
+                # the embedding — the only part search needs — and _query_images
+                # resolves the key back to bytes on the way out.
+                documents.append(
+                    Document(
+                        content=[TextBlock(text=f"[{meta.get('label') or 'image'}]")],
+                        embedding=vector,
+                        metadata={**meta, "image_key": key, "media_type": media_type},
+                    )
                 )
-            )
+            else:
+                # No file store (or the write failed): keep the old inline
+                # behaviour rather than dropping the image entirely.
+                documents.append(
+                    Document(
+                        content=[ImageBlock(data=data, media_type=media_type)],
+                        embedding=vector,
+                        metadata=meta,
+                    )
+                )
         if documents:
             await self._image_store.add(documents, collection=collection)
+
+    async def _store_image_bytes(
+        self, data: bytes, meta: dict[str, Any], *, index: int
+    ) -> str | None:
+        """Write one extracted image to the file store, returning its key.
+
+        Keyed under the owning user so it is covered by the same per-user
+        quota, listing and deletion as everything else they own. Returns
+        ``None`` when there is nothing to write to or no owner to attribute it
+        to, which the caller treats as "fall back to inlining".
+        """
+        if self._file_store is None:
+            return None
+        user_id = str(meta.get("user_id") or "")
+        file_id = str(meta.get("file_id") or "")
+        if not user_id or not file_id:
+            return None
+        media_type = str(meta.get("media_type") or "image/png")
+        ext = media_type.rsplit("/", 1)[-1] or "png"
+        page = meta.get("page_number")
+        name = f"p{page}-{index}.{ext}" if page is not None else f"{index}.{ext}"
+        key = f"users/{user_id}/rag/{file_id}/{name}"
+        try:
+            await self._file_store.upload(key, data, content_type=media_type)
+        except Exception as exc:
+            logger.warning("Storing RAG image %s failed: %s", key, exc)
+            return None
+        return key
 
     async def _query_images(
         self, question: str, *, collection: str, limit: int
@@ -228,8 +310,43 @@ class LocalRagBackend:
         query_vector = await client.embed_text(question)
         if query_vector is None:
             return []
-        return await self._image_store.search(
+        results = await self._image_store.search(
             query_vector, collection=collection, limit=limit
+        )
+        return [await self._rehydrate_image(r) for r in results]
+
+    async def _rehydrate_image(self, result: SearchResult) -> SearchResult:
+        """Swap a stored ``image_key`` back for the real pixels.
+
+        Resolution happens here, on every read, rather than being baked into the
+        stored row — so a conversation that resumes a week later (a paused HITL
+        turn, a reopened thread) still gets the image, and nothing durable ever
+        holds a URL that could expire. Callers upstream (``knowledge_search``,
+        and through it the model) keep seeing an ordinary ``ImageBlock``.
+        """
+        key = (result.metadata or {}).get("image_key")
+        if not key or self._file_store is None:
+            return result
+        try:
+            data = await self._file_store.download(str(key))
+        except Exception as exc:
+            # Leave the placeholder text in place: a missing image should
+            # degrade the answer, not fail the search.
+            logger.warning("Loading RAG image %s failed: %s", key, exc)
+            return result
+        media_type = str((result.metadata or {}).get("media_type") or "image/png")
+        return replace(
+            result,
+            content=[
+                ImageBlock(
+                    data=data,
+                    media_type=media_type,
+                    # Carried alongside the bytes so downstream consumers that
+                    # only need a reference (the wire-event log) can link rather
+                    # than inline a base64 copy. Model encoders ignore it.
+                    storage_key=str(key),
+                )
+            ],
         )
 
     # ── internals ────────────────────────────────────────────────────────────

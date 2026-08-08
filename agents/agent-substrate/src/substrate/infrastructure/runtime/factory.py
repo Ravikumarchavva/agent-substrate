@@ -51,11 +51,17 @@ async def build_postgres_runtime(
     Postgres tables are created on entry (``IF NOT EXISTS``).  The asyncpg
     pool is owned by this context manager and closed on exit.
 
-    ``reclaim_orphans=True`` is for **single-worker** deployments (e.g. the
-    monolith): on startup every ``running`` row is necessarily orphaned by the
-    previous process, so it is requeued immediately instead of waiting out the
-    lease.  Leave it ``False`` for multi-replica workers (lease expiry handles
-    orphans safely there).
+    ``reclaim_orphans=True`` runs one immediate expired-lease sweep
+    (``Scheduler.reclaim_orphans()``) before ``resume_pending_runs()`` reads
+    ``pending`` rows to rebuild agents — without it, a run genuinely orphaned
+    by a crashed previous process wouldn't show up as ``pending`` until its
+    lease naturally expires and a live ``Worker`` polls again, which could
+    leave cold-resume seeing nothing to rebuild for up to the full lease TTL.
+    Safe for single- or multi-worker deployments alike: it only ever reclaims
+    a lease whose ``expires_at`` has already passed, so it can never steal a
+    still-live process's run (see that method's docstring for why "single
+    worker" used to be treated as license to skip the expiry check, and the
+    race that caused).
 
     ``pool_min_size``/``pool_max_size`` bound this runtime's OWN asyncpg pool —
     separate from any ORM engine pool (e.g. the monolith's SQLAlchemy Thread/
@@ -87,7 +93,7 @@ async def build_postgres_runtime(
         await scheduler.setup()
         await supervisor.setup()
         if reclaim_orphans:
-            n = await scheduler.reclaim_orphans(all_running=True)
+            n = await scheduler.reclaim_orphans()
             if n:
                 logger.info("Reclaimed %d orphaned run(s) from previous process", n)
 

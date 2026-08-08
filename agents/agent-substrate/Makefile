@@ -17,7 +17,7 @@ help:
 	@echo "  make sync         - install project dependencies"
 	@echo "  make start        - start the backend in foreground via uv run start"
 	@echo "  make start-reload - start the backend with auto-reload (requires make infra-up)"
-	@echo "  make infra-up     - start host-dev support services (Postgres, Redis, MinIO, Loki, Promtail, Grafana, Tempo, MCP server)"
+	@echo "  make infra-up     - start host-dev support services (Postgres, Redis, SeaweedFS, Loki, Promtail, Grafana, Tempo, MCP server)"
 	@echo "  make infra-up-all - infra-up + code-interpreter sandbox + ONLYOFFICE (everything for file editing; excludes the opt-in extraction service)"
 	@echo "  make infra-up-extraction - build and start the document-extraction service (opt-in, CPU-only, ~1GB image)"
 	@echo "  make infra-up-sandbox - legacy: local code-interpreter sandbox container, for testing the k8s server path without a cluster (default SANDBOX_RUNTIME=bubblewrap needs no container)"
@@ -44,7 +44,7 @@ start-reload:
 	uv run start --reload
 
 infra-up:
-	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime up -d --remove-orphans postgres redis minio loki promtail tempo grafana mcp-server
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime up -d --remove-orphans postgres redis seaweedfs loki promtail tempo grafana mcp-server
 
 infra-up-all: infra-up infra-up-sandbox infra-up-onlyoffice
 
@@ -58,13 +58,13 @@ infra-up-onlyoffice:
 	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile onlyoffice up -d onlyoffice
 
 infra-down:
-	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime stop postgres redis minio loki promtail tempo grafana mcp-server
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime stop postgres redis seaweedfs loki promtail tempo grafana mcp-server
 
 infra-down-all:
-	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime --profile sandbox --profile onlyoffice stop postgres redis minio loki promtail tempo grafana mcp-server code-interpreter-sandbox onlyoffice
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime --profile sandbox --profile onlyoffice stop postgres redis seaweedfs loki promtail tempo grafana mcp-server code-interpreter-sandbox onlyoffice
 
 docker-up:
-	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime up -d --build --remove-orphans backend postgres redis minio loki promtail tempo grafana mcp-server
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime up -d --build --remove-orphans backend postgres redis seaweedfs loki promtail tempo grafana mcp-server
 
 docker-down:
 	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml down --remove-orphans

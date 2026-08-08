@@ -99,6 +99,73 @@ def test_no_owner_signal_at_all_denied():
     assert _may_access(meta, STRANGER) is False
 
 
+# ── GET /files/object — key-based, no FileMetadata row involved at all ────────
+#
+# The target of tool-result `object:` attachment refs (RAG images, potentially
+# code-interpreter charts) — ownership here is the key's own users/{sub}/
+# prefix, not a DB lookup, so it gets its own fixture rather than _seed_file.
+
+
+@pytest.fixture
+def object_route_app():
+    app = FastAPI()
+    app.include_router(router)
+    file_store = InMemoryFileStore()
+    app.dependency_overrides[get_ctx] = lambda: ServerDependencies(
+        model_client=None,
+        history=None,
+        tools=None,
+        bridge_registry=None,
+        tools_requiring_approval=[],
+        system_instructions="",
+        tool_timeout=60.0,
+        file_store=file_store,
+    )
+    yield app, file_store
+    app.dependency_overrides.clear()
+
+
+async def test_object_route_serves_the_owners_key(object_route_app):
+    app, file_store = object_route_app
+    await file_store.upload("users/owner-user/rag/f1/p1.png", b"PNGBYTES")
+    app.dependency_overrides[get_current_user] = lambda: OWNER
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        resp = await http.get(
+            "/files/object", params={"key": "users/owner-user/rag/f1/p1.png"}
+        )
+    assert resp.status_code == 200
+    assert resp.content == b"PNGBYTES"
+
+
+async def test_object_route_denies_a_key_under_another_users_prefix(object_route_app):
+    app, file_store = object_route_app
+    await file_store.upload("users/owner-user/rag/f1/p1.png", b"PNGBYTES")
+    app.dependency_overrides[get_current_user] = lambda: STRANGER
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        resp = await http.get(
+            "/files/object", params={"key": "users/owner-user/rag/f1/p1.png"}
+        )
+    # 404, not 403: this must not become an existence oracle for keys that
+    # leak into logs/URLs (same rationale as _get_meta above).
+    assert resp.status_code == 404
+
+
+async def test_object_route_404s_on_a_missing_key_not_a_500(object_route_app):
+    app, _file_store = object_route_app
+    app.dependency_overrides[get_current_user] = lambda: OWNER
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        resp = await http.get(
+            "/files/object", params={"key": "users/owner-user/rag/f1/missing.png"}
+        )
+    assert resp.status_code == 404
+
+
 # ── _get_meta against a real row ─────────────────────────────────────────────
 
 

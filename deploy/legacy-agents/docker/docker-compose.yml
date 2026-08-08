@@ -48,14 +48,14 @@ services:
       # "local" = per-user workspace filesystem (uploads + code-interpreter
       # workdir, one source of truth — see capabilities/storage/workspace.py).
       # Set FILE_STORE_BACKEND=s3 (and the FILE_STORE_* vars below) to use
-      # the minio service instead; both stay defined here for convenience.
+      # the seaweedfs service instead; both stay defined here for convenience.
       FILE_STORE_BACKEND: ${FILE_STORE_BACKEND:-local}
       FILE_STORE_ROOT: /data/workspaces
       FILE_STORE_BUCKET: agent-files
-      FILE_STORE_ENDPOINT: http://minio:9000
+      FILE_STORE_ENDPOINT: http://seaweedfs:8333
       FILE_STORE_REGION: us-east-1
-      FILE_STORE_ACCESS_KEY: minioadmin
-      FILE_STORE_SECRET_KEY: ${FILE_STORE_SECRET_KEY:-minioadmin}
+      FILE_STORE_ACCESS_KEY: ${FILE_STORE_ACCESS_KEY:-substrate}
+      FILE_STORE_SECRET_KEY: ${FILE_STORE_SECRET_KEY:-substrate-dev-secret}
       ENABLE_BUILDER: "true"
       FRONTEND_URL: ${FRONTEND_URL:-http://host.docker.internal:3000}
       CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002
@@ -85,7 +85,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      seaweedfs:
         condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -178,26 +178,61 @@ services:
     init: true
     restart: unless-stopped
 
-  # ── MinIO (S3-compatible object store for file storage) ────────────────
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  # ── SeaweedFS (S3-compatible object store for file storage) ─────────────
+  # Replaces MinIO, whose Community Edition was archived in Feb 2026 (no
+  # further development, security patches, or prebuilt binaries). SeaweedFS is
+  # Apache 2.0, has a decade of production use at petabyte scale, and is
+  # optimised for exactly this access pattern — many small objects (~40 bytes
+  # of metadata per file, O(1) reads regardless of file count).
+  #
+  # `weed server` runs master + volume + filer + S3 gateway in one process,
+  # which is all a single-machine dev/compose setup needs; a real deployment
+  # splits those roles. The engine only ever speaks the S3 API (see
+  # capabilities/storage/s3.py), so swapping this for any S3-compatible
+  # service — Garage, R2, AWS S3 — is a compose/env change with no code change.
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: >
+      server -dir=/data -s3 -s3.port=8333
+      -s3.config=/etc/seaweedfs/s3.json
+      -master.volumeSizeLimitMB=1024
     ports:
-      - "9100:9000"   # S3 API
-      - "9101:9001"   # MinIO Console
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      - "8333:8333"   # S3 API  → FILE_STORE_ENDPOINT
+      - "8888:8888"   # Filer UI — bare file browser over users/{id}/...
+      - "9333:9333"   # Master UI — cluster/volume status
     volumes:
-      - miniodata:/data
+      - seaweedfsdata:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # SeaweedFS binds to the container's own IP, not 127.0.0.1, so localhost
+      # is refused — hence CMD-SHELL and `hostname -i`. Probes the S3 port
+      # because that is the only interface the engine actually uses.
+      test: ["CMD-SHELL", "wget -qO- http://$$(hostname -i):8333/status || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    # profiles:
-    #   - storage
+
+  # ── SeaweedFS admin console ─────────────────────────────────────────────
+  # The MinIO-Console equivalent: buckets, object browser, volume/cluster
+  # health, and maintenance tasks. `weed server` does not start it, so it runs
+  # as its own process. The bare filer UI on :8888 stays available and is
+  # fine for a quick look at users/{id}/... — this is the richer view.
+  seaweedfs-admin:
+    image: chrislusf/seaweedfs:latest
+    command: >
+      admin -port=23646 -master=seaweedfs:9333
+      -dataDir=/data
+      -adminUser=${SEAWEEDFS_ADMIN_USER:-admin}
+      -adminPassword=${SEAWEEDFS_ADMIN_PASSWORD:-admin}
+    ports:
+      - "23646:23646"   # Admin console UI
+    volumes:
+      - seaweedfsadmin:/data
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    restart: unless-stopped
 
   extraction:
     profiles:
@@ -261,5 +296,6 @@ volumes:
   redisdata:
   lokidata:
   promtaildata:
-  miniodata:
+  seaweedfsdata:
+  seaweedfsadmin:
   workspaces:

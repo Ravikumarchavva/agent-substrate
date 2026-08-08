@@ -208,28 +208,41 @@ class Scheduler:
             result.append((RunId(row["run_id"]), AgentId(type=type_, key=key), spec))
         return result
 
-    async def reclaim_orphans(self, *, all_running: bool = False) -> int:
-        """Requeue runs left ``running`` by a crashed worker, at startup.
+    async def reclaim_orphans(self) -> int:
+        """Requeue runs left ``running`` whose lease has actually expired.
 
-        ``all_running=False`` (default, multi-worker safe): only leases whose
-        ``expires_at`` has passed — never steals a live peer's run.
-        ``all_running=True`` (single-worker deployments, e.g. the monolith): a
-        fresh process owns no leases, so every ``running`` row is orphaned and
-        is requeued immediately rather than waiting out the lease.
+        Always ``expires_at < now()`` — never a blind "every running row is
+        orphaned" bypass. Postgres alone cannot tell a genuinely-crashed
+        worker apart from a live one whose lease simply hasn't expired yet:
+        a live worker renews ``expires_at`` every ``_HEARTBEAT_INTERVAL``
+        (15s), comfortably inside the ``_LEASE_SECONDS`` (30s) TTL, so its
+        row's lease is always in the future. Stealing a row on any weaker
+        signal than expiry — e.g. "this is a fresh single-worker process, so
+        nothing else can hold a lease" — was exactly what let a process
+        restarted while a run was still finishing race the still-live old
+        process: both ended up executing the same run and writing to the
+        same EventLogProtocol, surfacing as ``ConcurrentAppendError`` (see
+        git history for the incident this replaced).
+
+        This makes recovery of a genuine crash (SIGKILL, OOM — no chance for
+        the worker's own ``except CancelledError`` handler to release its
+        lease) bounded by the lease TTL rather than instant. A *graceful*
+        shutdown doesn't pay that cost at all: ``Worker.stop()`` cancels its
+        in-flight tasks and awaits them, and cancellation there already
+        calls ``release(..., status=CANCELLED)``, clearing the row before
+        the process exits — so the common restart path finds nothing left
+        to reclaim here in the first place.
 
         Requeued runs become ``pending``; when their agent is (re-)registered
-        the worker leases them and the kernel replays from the EventLogProtocol (the
-        journal makes completed effects at-most-once).  Returns the count.
+        the worker leases them and the kernel replays from the EventLogProtocol
+        (the journal makes completed effects at-most-once). Returns the count.
         """
-        where = "status = 'running'"
-        if not all_running:
-            where += " AND expires_at < now()"
         async with self._pool.acquire() as conn:
             result = await conn.execute(
-                f"""
+                """
                 UPDATE substrate_run_queue
                 SET status = 'pending', worker_id = NULL, expires_at = NULL
-                WHERE {where}
+                WHERE status = 'running' AND expires_at < now()
                 """
             )
         # asyncpg returns e.g. "UPDATE 3"

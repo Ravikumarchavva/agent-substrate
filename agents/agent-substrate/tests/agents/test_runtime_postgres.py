@@ -374,9 +374,9 @@ async def _collect_events(session) -> list:
 # ---------------------------------------------------------------------------
 
 
-async def test_pg_reclaim_orphans() -> None:
+async def test_pg_reclaim_orphans_requeues_an_expired_lease() -> None:
     """A run left 'running' by a crashed worker is requeued to 'pending'
-    on startup when reclaim_orphans=True (single-worker deployments)."""
+    once its lease has actually expired."""
     if not await _pg_reachable():
         pytest.skip("Postgres not reachable")
     import asyncpg
@@ -389,26 +389,19 @@ async def test_pg_reclaim_orphans() -> None:
         await scheduler.setup()
 
         run_id = f"orphan-{id(object())}"
-        # Simulate a crash: a row stuck in 'running' with a live (future) lease.
+        # A crashed worker's lease that has already run out — nothing is
+        # renewing it, unlike a live worker's (heartbeat every 15s, well
+        # inside the 30s TTL).
         async with pool.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO substrate_run_queue (run_id, status, worker_id, expires_at)
-                VALUES ($1, 'running', 'dead-worker', now() + interval '30 seconds')
+                VALUES ($1, 'running', 'dead-worker', now() - interval '1 second')
                 """,
                 run_id,
             )
 
-        # Default (expired-only) must NOT touch a still-future lease.
-        assert await scheduler.reclaim_orphans(all_running=False) == 0
-        async with pool.acquire() as conn:
-            status = await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
-            )
-        assert status == "running"
-
-        # Single-worker reclaim requeues it immediately.
-        reclaimed = await scheduler.reclaim_orphans(all_running=True)
+        reclaimed = await scheduler.reclaim_orphans()
         assert reclaimed >= 1
         async with pool.acquire() as conn:
             status = await conn.fetchval(
@@ -418,6 +411,47 @@ async def test_pg_reclaim_orphans() -> None:
                 "DELETE FROM substrate_run_queue WHERE run_id = $1", run_id
             )
         assert status == "pending"
+    finally:
+        await pool.close()
+
+
+async def test_pg_reclaim_orphans_never_steals_a_still_live_lease() -> None:
+    """A row with a future ``expires_at`` might belong to a process that is
+    still genuinely running it (its heartbeat just hasn't lapsed) — reclaim
+    must never touch it, regardless of how confident a caller is that it's
+    the only worker. Stealing on a weaker signal than actual expiry is
+    exactly what let a restarted process race a still-finishing old one into
+    executing the same run twice, both writing to the same EventLogProtocol."""
+    if not await _pg_reachable():
+        pytest.skip("Postgres not reachable")
+    import asyncpg
+
+    from substrate.infrastructure.runtime.scheduler import Scheduler
+
+    pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
+    try:
+        scheduler = Scheduler(pool)
+        await scheduler.setup()
+
+        run_id = f"live-{id(object())}"
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO substrate_run_queue (run_id, status, worker_id, expires_at)
+                VALUES ($1, 'running', 'live-worker', now() + interval '30 seconds')
+                """,
+                run_id,
+            )
+
+        assert await scheduler.reclaim_orphans() == 0
+        async with pool.acquire() as conn:
+            status = await conn.fetchval(
+                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+            )
+            await conn.execute(
+                "DELETE FROM substrate_run_queue WHERE run_id = $1", run_id
+            )
+        assert status == "running"
     finally:
         await pool.close()
 
@@ -432,8 +466,10 @@ async def test_pg_cold_resume() -> None:
 
     Flow:
       1. Runtime A: register agent, submit message, save spec, tear down.
-      2. Runtime B: reclaim_orphans(all_running=True), read pending_run_specs,
-         rebuild agent, register it — assert the run completes.
+      2. Runtime B: insert an orphaned row directly as 'pending' (standing in
+         for what reclaim_orphans() would have produced from an expired
+         lease), read pending_run_specs, rebuild agent, register it — assert
+         the run completes.
     """
     if not await _pg_reachable():
         pytest.skip("Postgres not reachable")

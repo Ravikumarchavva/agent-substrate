@@ -4,9 +4,6 @@ description: Systematic debugging skill for diagnosing and fixing errors in code
 version: "1.0"
 license: MIT
 allowed-tools: code_interpreter file_manager
-category: development/execution
-tags: [debug, error, trace, fix, diagnose, troubleshoot, bug, exception, stack]
-aliases: [debug-code, troubleshoot, fix-error]
 metadata:
   author: agent-framework
 ---

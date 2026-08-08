@@ -4,9 +4,6 @@ description: Project planning skill for breaking down work into milestones, esti
 version: "1.0"
 license: MIT
 allowed-tools: manage_tasks
-category: productivity
-tags: [plan, project, milestone, timeline, scope, estimate, roadmap, breakdown]
-aliases: [plan-project, create-plan, project-roadmap]
 metadata:
   author: agent-framework
 ---

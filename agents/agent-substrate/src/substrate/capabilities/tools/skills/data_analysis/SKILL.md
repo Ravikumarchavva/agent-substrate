@@ -4,9 +4,6 @@ description: Data analysis workflow skill for exploring, cleaning, and deriving 
 version: "1.0"
 license: MIT
 allowed-tools: code_interpreter data_visualizer file_manager
-category: research
-tags: [data, analyze, statistics, trend, insight, csv, pandas, explore]
-aliases: [analyze-data, data-exploration, data-insights]
 metadata:
   author: agent-framework
 ---

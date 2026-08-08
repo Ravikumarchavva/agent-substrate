@@ -174,21 +174,6 @@ class SkillLoader:
         else:
             allowed_tools = str(allowed_tools_raw).split() if allowed_tools_raw else []
 
-        # Parse catalog metadata (tags, aliases, category)
-        tags_raw = fm.get("tags") or []
-        if isinstance(tags_raw, list):
-            tags = [str(t).lower() for t in tags_raw]
-        else:
-            tags = str(tags_raw).split() if tags_raw else []
-
-        aliases_raw = fm.get("aliases") or []
-        if isinstance(aliases_raw, list):
-            aliases = [str(a).lower() for a in aliases_raw]
-        else:
-            aliases = str(aliases_raw).split() if aliases_raw else []
-
-        category = str(fm.get("category") or "")
-
         try:
             return SkillMetadata(
                 name=str(name),
@@ -200,9 +185,6 @@ class SkillLoader:
                 compatibility=fm.get("compatibility"),
                 allowed_tools=allowed_tools,
                 metadata={k: str(v) for k, v in (fm.get("metadata") or {}).items()},
-                category=category,
-                tags=tags,
-                aliases=aliases,
             )
         except ValueError as exc:
             logger.warning("Invalid skill at %s: %s", skill_dir, exc)

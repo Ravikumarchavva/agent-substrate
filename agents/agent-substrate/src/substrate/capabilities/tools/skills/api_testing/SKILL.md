@@ -4,9 +4,6 @@ description: Systematic API testing skill for validating endpoints, checking sta
 version: "1.0"
 license: MIT
 allowed-tools: http_request code_interpreter
-category: development/execution
-tags: [api, test, endpoint, status, validation, contract, rest, http]
-aliases: [test-api, endpoint-testing, api-validation]
 metadata:
   author: agent-framework
 ---

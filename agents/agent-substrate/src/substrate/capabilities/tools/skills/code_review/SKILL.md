@@ -4,9 +4,6 @@ description: Structured code review skill for evaluating code quality, identifyi
 version: "1.0"
 license: MIT
 allowed-tools: code_interpreter file_manager
-category: development/project
-tags: [review, quality, lint, refactor, best-practice, clean, code, assess]
-aliases: [review-code, code-quality, pr-review]
 metadata:
   author: agent-framework
 ---

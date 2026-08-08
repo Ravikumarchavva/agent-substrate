@@ -14,9 +14,6 @@ description: A mock skill for testing skill loader.
 license: MIT
 version: "1.2"
 allowed-tools: echo risky
-tags:
-  - test
-  - mock
 ---
 
 # Mock Skill
@@ -33,7 +30,6 @@ This is the mock skill instructions body.
     assert meta.license == "MIT"
     assert meta.version == "1.2"
     assert meta.allowed_tools == ["echo", "risky"]
-    assert meta.tags == ["test", "mock"]
 
     # Verify lazy load full activation
     skill = loader.load_skill("mock-skill")

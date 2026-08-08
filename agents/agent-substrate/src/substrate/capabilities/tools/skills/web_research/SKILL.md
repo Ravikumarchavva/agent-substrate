@@ -4,9 +4,6 @@ description: Multi-step web research procedure for answering questions that requ
 version: "1.0"
 license: MIT
 allowed-tools: web_search web_fetch
-category: research
-tags: [research, web, search, synthesis, sources, cite, gather, information]
-aliases: [internet-research, web-lookup]
 metadata:
   author: agent-framework
 ---

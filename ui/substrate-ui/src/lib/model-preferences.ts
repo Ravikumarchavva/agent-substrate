@@ -50,6 +50,13 @@ export const CHAT_MODEL_OPTIONS: ModelOption[] = [
     thinkingLevels: ["off", "low", "medium", "high", "xhigh"],
   },
   {
+    id: "openai/gpt-5.4",
+    label: "GPT-5.4",
+    provider: "openai",
+    description: "Full-size OpenAI model — higher quality than Mini, more expensive.",
+    thinkingLevels: ["off", "low", "medium", "high", "xhigh"],
+  },
+  {
     id: "nvidia/moonshotai/kimi-k2.6",
     label: "Kimi K2.6",
     provider: "nvidia",

@@ -141,6 +141,10 @@ function ChatPageContent() {
   }, [isAuthenticated, authLoading]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Tracks whether the user is currently near the bottom of the scroll
+  // container. Read (not state) so it doesn't trigger re-renders on scroll.
+  const isNearBottomRef = useRef(true);
+  const autoScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // Tracks the active AbortController for the current SSE fetch so we can
   // cancel the stream when the user clicks Stop.
@@ -517,6 +521,12 @@ function ChatPageContent() {
     // loadMessages call will fetch from DB rather than skip.
     if (currentThreadId !== streamedThreadRef.current) {
       streamedThreadRef.current = null;
+      // isNearBottomRef persists for the page's lifetime, not per-thread —
+      // without resetting it, scrolling up to read something in one thread
+      // left it `false`, which then silently suppressed auto-scroll-to-bottom
+      // in the NEXT thread opened, landing on whatever the first few lines
+      // happened to be instead of the latest messages.
+      isNearBottomRef.current = true;
     }
 
     clearAttachedFiles();
@@ -540,13 +550,25 @@ function ChatPageContent() {
   }, [canLoadData, clearAttachedFiles, currentThreadId, setPanelItems, setActivePanelId]);
 
   useEffect(() => {
-    // Auto-scroll to bottom whenever messages change
+    // Auto-scroll to bottom whenever messages change — but only if the user
+    // was already near the bottom. A burst of tool-call/result events (e.g.
+    // 8+ tools running) fires this effect repeatedly; without the "near
+    // bottom" check and without clearing the previous timeout, each firing
+    // re-scheduled another forced scrollTo that fought the user's manual
+    // scroll, making it impossible to scroll down to read a tool_approval /
+    // human_input card that appeared below a long-running tool list.
+    if (autoScrollTimeoutRef.current) {
+      clearTimeout(autoScrollTimeoutRef.current);
+    }
     const el = containerRef.current;
-    if (!el) return;
+    if (!el || !isNearBottomRef.current) return;
     // Use setTimeout to ensure DOM is updated
-    setTimeout(() => {
+    autoScrollTimeoutRef.current = setTimeout(() => {
       el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     }, 100);
+    return () => {
+      if (autoScrollTimeoutRef.current) clearTimeout(autoScrollTimeoutRef.current);
+    };
   }, [messages, loading]);
 
   // Auto-resize textarea
@@ -1575,6 +1597,13 @@ function ChatPageContent() {
             <>
               <div
                 ref={containerRef}
+                onScroll={(e) => {
+                  const el = e.currentTarget;
+                  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+                  // 150px slack so a small streaming-driven scrollHeight change
+                  // doesn't flip this back to true while the user is reading.
+                  isNearBottomRef.current = distanceFromBottom < 150;
+                }}
                 className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"
               >
                 {messages.length === 0 ? (

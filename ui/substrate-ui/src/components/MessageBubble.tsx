@@ -348,7 +348,7 @@ export function MessageBubble({
   const [activeImageSource, setActiveImageSource] = useState<"main" | "tool">("main");
   const [inlineImageIndex, setInlineImageIndex] = useState<number>(0);
   const [isCollapsed, setIsCollapsed] = useState(true);
-  
+
   // Ensure content is always a valid string
   const safeContent = typeof content === 'string' ? content : String(content || "");
   const safeReasoning = typeof reasoning === 'string' ? reasoning : String(reasoning || "");
@@ -450,128 +450,127 @@ export function MessageBubble({
 
   const currentActiveAttachment = activeImageIndex >= 0 && activeImageIndex < activeList.length
     ? activeList[activeImageIndex]
-    : null;  const imageLightbox = currentActiveAttachment?.url ? (
-    <div className="substrate-fade-in fixed inset-0 z-70 flex flex-col items-center justify-center p-3 select-none bg-black/60 backdrop-blur-sm">
-      <button
-        type="button"
-        className="absolute inset-0 bg-transparent cursor-default"
-        onClick={() => setActiveImageIndex(-1)}
-        aria-label="Close image preview"
-      />
-      <div
-        className="relative w-full h-full flex flex-col items-center justify-center"
-        onClick={(e) => {
-          // This wrapper spans the whole viewport too (w-full h-full), so it
-          // sits on top of — and swallows clicks meant for — the invisible
-          // backdrop button above whenever the click lands on empty space
-          // around the image rather than a real interactive child (image,
-          // buttons, arrows). Only close when the click target is this
-          // wrapper itself, not a bubbled click from one of those children.
-          if (e.target === e.currentTarget) setActiveImageIndex(-1);
-        }}
-      >
-        {/* Floating Left Filename and Pagination details */}
-        <div className="absolute top-4 left-4 sm:left-6 flex items-center gap-2.5 z-50">
-          <div className="truncate text-sm sm:text-sm font-semibold text-white/90 max-w-[120px] sm:max-w-xs" title={currentActiveAttachment.name}>
-            {currentActiveAttachment.name}
+    : null; const imageLightbox = currentActiveAttachment?.url ? (
+      <div className="substrate-fade-in fixed inset-0 z-70 flex flex-col items-center justify-center p-3 select-none bg-black/60 backdrop-blur-sm">
+        <button
+          type="button"
+          className="absolute inset-0 bg-transparent cursor-default"
+          onClick={() => setActiveImageIndex(-1)}
+          aria-label="Close image preview"
+        />
+        <div
+          className="relative w-full h-full flex flex-col items-center justify-center"
+          onClick={(e) => {
+            // This wrapper spans the whole viewport too (w-full h-full), so it
+            // sits on top of — and swallows clicks meant for — the invisible
+            // backdrop button above whenever the click lands on empty space
+            // around the image rather than a real interactive child (image,
+            // buttons, arrows). Only close when the click target is this
+            // wrapper itself, not a bubbled click from one of those children.
+            if (e.target === e.currentTarget) setActiveImageIndex(-1);
+          }}
+        >
+          {/* Floating Left Filename and Pagination details */}
+          <div className="absolute top-4 left-4 sm:left-6 flex items-center gap-2.5 z-50">
+            <div className="truncate text-sm sm:text-sm font-semibold text-white/90 max-w-[120px] sm:max-w-xs" title={currentActiveAttachment.name}>
+              {currentActiveAttachment.name}
+            </div>
+            {activeList.length > 1 && (
+              <span className="shrink-0 text-[10px] bg-white/10 text-white/70 px-2 py-2 rounded-full font-medium border border-white/5">
+                {activeImageIndex + 1} of {activeList.length}
+              </span>
+            )}
           </div>
-          {activeList.length > 1 && (
-            <span className="shrink-0 text-[10px] bg-white/10 text-white/70 px-2 py-2 rounded-full font-medium border border-white/5">
-              {activeImageIndex + 1} of {activeList.length}
-            </span>
-          )}
-        </div>
 
-        {/* Floating Right perfectly-centered Download and Close Icon buttons */}
-        <div className="absolute top-4 right-4 sm:right-6 flex items-center gap-2 z-50">
-          <button
-            type="button"
-            onClick={() => handleDownload(currentActiveAttachment.url!, currentActiveAttachment.name)}
-            className="flex items-center justify-center h-8 w-8 rounded-xl border border-white/10 bg-black/40 text-white/80 transition-all hover:bg-neutral-800 hover:scale-105 active:scale-95 cursor-pointer"
-            title="Download image"
-          >
-            <Download className="h-4 w-4 shrink-0" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveImageIndex(-1)}
-            className="flex items-center justify-center h-8 w-8 rounded-xl border border-white/10 bg-black/40 text-white/80 transition-all hover:bg-red-500 hover:text-white hover:border-red-500 hover:scale-105 active:scale-95 cursor-pointer"
-            aria-label="Close image preview"
-          >
-            <X className="h-4 w-4 shrink-0" />
-          </button>
-        </div>
+          {/* Floating Right perfectly-centered Download and Close Icon buttons */}
+          <div className="absolute top-4 right-4 sm:right-6 flex items-center gap-2 z-50">
+            <button
+              type="button"
+              onClick={() => handleDownload(currentActiveAttachment.url!, currentActiveAttachment.name)}
+              className="flex items-center justify-center h-8 w-8 rounded-xl border border-white/10 bg-black/40 text-white/80 transition-all hover:bg-neutral-800 hover:scale-105 active:scale-95 cursor-pointer"
+              title="Download image"
+            >
+              <Download className="h-4 w-4 shrink-0" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveImageIndex(-1)}
+              className="flex items-center justify-center h-8 w-8 rounded-xl border border-white/10 bg-black/40 text-white/80 transition-all hover:bg-red-500 hover:text-white hover:border-red-500 hover:scale-105 active:scale-95 cursor-pointer"
+              aria-label="Close image preview"
+            >
+              <X className="h-4 w-4 shrink-0" />
+            </button>
+          </div>
 
-        {/* Clean Center Image: 100% responsive, fills ~75-80% of viewport area.
+          {/* Clean Center Image: 100% responsive, fills ~75-80% of viewport area.
             Also w-full, so it's its own "empty space" trap distinct from the
             outer wrapper above — same target-check guard needed here too, or
             a click in this box's letterboxed padding (around a narrower
             image) never reaches either close handler. */}
-        <div
-          className="relative w-full h-[65vh] sm:h-[75vh] max-w-[90vw] flex items-center justify-center mt-12 sm:mt-16 animate-in fade-in zoom-in-95 duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setActiveImageIndex(-1);
-          }}
-        >
-          <img
-            src={currentActiveAttachment.url}
-            alt={currentActiveAttachment.name}
-            className="max-w-full max-h-full object-contain rounded-xl"
-          />
-        </div>
+          <div
+            className="relative w-full h-[65vh] sm:h-[75vh] max-w-[90vw] flex items-center justify-center mt-12 sm:mt-16 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setActiveImageIndex(-1);
+            }}
+          >
+            <img
+              src={currentActiveAttachment.url}
+              alt={currentActiveAttachment.name}
+              className="max-w-full max-h-full object-contain rounded-xl"
+            />
+          </div>
 
-        {/* Viewport Floating Carousel Arrows */}
-        {activeList.length > 1 && (
-          <>
-            {/* Left Nav Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeList.length - 1));
-              }}
-              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/50 text-white backdrop-blur-md transition-all duration-300 hover:bg-neutral-800 hover:scale-105 active:scale-95 shadow-md z-40 animate-in slide-in-from-left-6 duration-300"
-              aria-label="Previous image"
-            >
-              <ChevronLeft className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-            </button>
-
-            {/* Right Nav Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveImageIndex((prev) => (prev < activeList.length - 1 ? prev + 1 : 0));
-              }}
-              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/50 text-white backdrop-blur-md transition-all duration-300 hover:bg-neutral-800 hover:scale-105 active:scale-95 shadow-md z-40 animate-in slide-in-from-right-6 duration-300"
-              aria-label="Next image"
-            >
-              <ChevronRight className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-            </button>
-          </>
-        )}
-
-        {/* Carousel Bottom Dot Indicators - 25% smaller */}
-        {activeList.length > 1 && (
-          <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-50 bg-neutral-900/80 backdrop-blur-md border border-white/10 rounded-full px-3 py-1.5 shadow-md">
-            {activeList.map((_, idx) => (
+          {/* Viewport Floating Carousel Arrows */}
+          {activeList.length > 1 && (
+            <>
+              {/* Left Nav Button */}
               <button
-                key={idx}
                 type="button"
-                onClick={() => setActiveImageIndex(idx)}
-                className={`h-1.5 cursor-pointer rounded-full transition-all duration-300 ${
-                  idx === activeImageIndex
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeList.length - 1));
+                }}
+                className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/50 text-white backdrop-blur-md transition-all duration-300 hover:bg-neutral-800 hover:scale-105 active:scale-95 shadow-md z-40 animate-in slide-in-from-left-6 duration-300"
+                aria-label="Previous image"
+              >
+                <ChevronLeft className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
+              </button>
+
+              {/* Right Nav Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveImageIndex((prev) => (prev < activeList.length - 1 ? prev + 1 : 0));
+                }}
+                className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/50 text-white backdrop-blur-md transition-all duration-300 hover:bg-neutral-800 hover:scale-105 active:scale-95 shadow-md z-40 animate-in slide-in-from-right-6 duration-300"
+                aria-label="Next image"
+              >
+                <ChevronRight className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
+              </button>
+            </>
+          )}
+
+          {/* Carousel Bottom Dot Indicators - 25% smaller */}
+          {activeList.length > 1 && (
+            <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-50 bg-neutral-900/80 backdrop-blur-md border border-white/10 rounded-full px-3 py-1.5 shadow-md">
+              {activeList.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveImageIndex(idx)}
+                  className={`h-1.5 cursor-pointer rounded-full transition-all duration-300 ${idx === activeImageIndex
                     ? "bg-white w-3.5"
                     : "bg-white/30 hover:bg-white/60 w-1.5"
-                }`}
-                aria-label={`Go to image ${idx + 1}`}
-              />
-            ))}
-          </div>
-        )}
+                    }`}
+                  aria-label={`Go to image ${idx + 1}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  ) : null;
+    ) : null;
 
   const renderImageGallery = () => {
     if (imageAttachments.length === 0) return null;
@@ -648,9 +647,8 @@ export function MessageBubble({
                   e.stopPropagation();
                   setInlineImageIndex(idx);
                 }}
-                className={`h-1.5 w-1.5 cursor-pointer rounded-full transition-all ${
-                  idx === inlineImageIndex ? "bg-white w-3" : "bg-white/50 hover:bg-white/80"
-                }`}
+                className={`h-1.5 w-1.5 cursor-pointer rounded-full transition-all ${idx === inlineImageIndex ? "bg-white w-3" : "bg-white/50 hover:bg-white/80"
+                  }`}
                 aria-label={`Go to slide ${idx + 1}`}
               />
             ))}
@@ -666,101 +664,100 @@ export function MessageBubble({
       <>
         <div className="substrate-fade-up group px-4 sm:px-6">
           <div className="mx-auto max-w-(--chat-width) flex justify-end">
-          <div className="flex max-w-[85%] flex-col items-end gap-2 sm:max-w-[75%]">
-            {imageAttachments.length > 0 && (
-              <div className="flex justify-end w-full">
-                {renderImageGallery()}
-              </div>
-            )}
-            {documentAttachments.length > 0 && (
-              <div className="flex w-full max-w-xl flex-wrap justify-end gap-2.5">
-                {documentAttachments.map((attachment) => (
-                  <AttachmentDocumentCard key={attachment.id} attachment={attachment} />
-                ))}
-              </div>
-            )}
-            {safeContent && (
-              <div
-                className="user-bubble-md overflow-hidden flex flex-col"
-                style={{
-                  background: "var(--user-bubble)",
-                  borderRadius: "20px 20px 4px 20px",
-                }}
-              >
+            <div className="flex max-w-[85%] flex-col items-end gap-2 sm:max-w-[75%]">
+              {imageAttachments.length > 0 && (
+                <div className="flex justify-end w-full">
+                  {renderImageGallery()}
+                </div>
+              )}
+              {documentAttachments.length > 0 && (
+                <div className="flex w-full max-w-xl flex-wrap justify-end gap-2.5">
+                  {documentAttachments.map((attachment) => (
+                    <AttachmentDocumentCard key={attachment.id} attachment={attachment} />
+                  ))}
+                </div>
+              )}
+              {safeContent && (
                 <div
-                  className={`px-4 pt-3 text-[15px] leading-relaxed relative ${
-                    isLongUserMessage && isCollapsed ? "max-h-[140px] overflow-hidden" : "pb-3"
-                  }`}
+                  className="user-bubble-md overflow-hidden flex flex-col"
+                  style={{
+                    background: "var(--user-bubble)",
+                    borderRadius: "20px 20px 4px 20px",
+                  }}
                 >
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      p({ children }) { return <p className="mb-1 last:mb-0">{children}</p>; },
-                      ul({ children }) { return <ul className="list-disc pl-4 mb-1 space-y-0.5">{children}</ul>; },
-                      ol({ children }) { return <ol className="list-decimal pl-4 mb-1 space-y-0.5">{children}</ol>; },
-                      li({ children }) { return <li className="leading-snug">{children}</li>; },
-                      strong({ children }) { return <strong className="font-semibold">{children}</strong>; },
-                      code({ children }) { return <code className="bg-black/20 rounded px-1 text-[13px] font-mono">{children}</code>; },
-                    }}
+                  <div
+                    className={`px-4 pt-3 text-[15px] leading-relaxed relative ${isLongUserMessage && isCollapsed ? "max-h-[140px] overflow-hidden" : "pb-3"
+                      }`}
                   >
-                    {safeContent}
-                  </ReactMarkdown>
-                  {isLongUserMessage && isCollapsed && (
-                    <div 
-                      className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none" 
-                      style={{
-                        background: "linear-gradient(to top, var(--user-bubble) 20%, transparent 100%)"
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p({ children }) { return <p className="mb-1 last:mb-0">{children}</p>; },
+                        ul({ children }) { return <ul className="list-disc pl-4 mb-1 space-y-0.5">{children}</ul>; },
+                        ol({ children }) { return <ol className="list-decimal pl-4 mb-1 space-y-0.5">{children}</ol>; },
+                        li({ children }) { return <li className="leading-snug">{children}</li>; },
+                        strong({ children }) { return <strong className="font-semibold">{children}</strong>; },
+                        code({ children }) { return <code className="bg-black/20 rounded px-1 text-[13px] font-mono">{children}</code>; },
                       }}
-                    />
+                    >
+                      {safeContent}
+                    </ReactMarkdown>
+                    {isLongUserMessage && isCollapsed && (
+                      <div
+                        className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none"
+                        style={{
+                          background: "linear-gradient(to top, var(--user-bubble) 20%, transparent 100%)"
+                        }}
+                      />
+                    )}
+                  </div>
+                  {isLongUserMessage && (
+                    <div className="px-4 pb-2.5 pt-1 flex justify-start">
+                      <button
+                        type="button"
+                        onClick={() => setIsCollapsed(!isCollapsed)}
+                        className="text-[11px] font-semibold text-(--muted) hover:text-foreground transition-colors cursor-pointer flex items-center gap-1 select-none btn-icon"
+                        style={{ minHeight: "unset", minWidth: "unset" }}
+                      >
+                        {isCollapsed ? (
+                          <>
+                            Show more
+                            <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                          </>
+                        ) : (
+                          <>
+                            Show less
+                            <ChevronUp className="w-3.5 h-3.5 shrink-0" />
+                          </>
+                        )}
+                      </button>
+                    </div>
                   )}
                 </div>
-                {isLongUserMessage && (
-                  <div className="px-4 pb-2.5 pt-1 flex justify-start">
-                    <button
-                      type="button"
-                      onClick={() => setIsCollapsed(!isCollapsed)}
-                      className="text-[11px] font-semibold text-(--muted) hover:text-foreground transition-colors cursor-pointer flex items-center gap-1 select-none btn-icon"
-                      style={{ minHeight: "unset", minWidth: "unset" }}
-                    >
-                      {isCollapsed ? (
-                        <>
-                          Show more
-                          <ChevronDown className="w-3.5 h-3.5 shrink-0" />
-                        </>
-                      ) : (
-                        <>
-                          Show less
-                          <ChevronUp className="w-3.5 h-3.5 shrink-0" />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-            {(safeContent || timestamp) && (
-              <div className="flex items-center gap-2 mt-1 pr-1">
-                {safeContent && (
-                  <div className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 flex items-center">
-                    <button
-                      type="button"
-                      onClick={copyToClipboard}
-                      className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
-                      title="Copy message"
-                      style={{ minWidth: "unset", minHeight: "unset" }}
-                    >
-                      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                )}
-                {timestamp && (
-                  <span className="text-[11px] text-(--muted) select-none">
-                    {formatTime(timestamp)}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+              {(safeContent || timestamp) && (
+                <div className="flex items-center gap-2 mt-1 pr-1">
+                  {safeContent && (
+                    <div className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 flex items-center">
+                      <button
+                        type="button"
+                        onClick={copyToClipboard}
+                        className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                        title="Copy message"
+                        style={{ minWidth: "unset", minHeight: "unset" }}
+                      >
+                        {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  )}
+                  {timestamp && (
+                    <span className="text-[11px] text-(--muted) select-none">
+                      {formatTime(timestamp)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         {imageLightbox}
@@ -772,346 +769,346 @@ export function MessageBubble({
   return (
     <>
       <div className="substrate-fade-up group relative px-4 sm:px-6">
-      <div className="mx-auto max-w-(--chat-width)">
-        {/* Content column */}
-        <div className="space-y-3">
-          {/* Tool Calls — pill-style inline display */}
-          {visibleToolCalls.length > 0 && (
-            <div className="space-y-1.5">
-              {/* Summary pill */}
-              <details className="group/tools" open={false}>
+        <div className="mx-auto max-w-(--chat-width)">
+          {/* Content column */}
+          <div className="space-y-3">
+            {/* Tool Calls — pill-style inline display */}
+            {visibleToolCalls.length > 0 && (
+              <div className="space-y-1.5">
+                {/* Summary pill */}
+                <details className="group/tools" open={false}>
+                  <summary
+                    className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-(--card-hover)"
+                    style={{ background: "var(--badge-bg)" }}
+                  >
+                    {isToolExecuting ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-(--muted)" />
+                    ) : (
+                      <WrenchIcon className="w-3.5 h-3.5 shrink-0 text-(--muted)" />
+                    )}
+                    <span className="text-xs font-medium text-(--badge-fg)">
+                      {isToolExecuting
+                        ? `Running tools… ${visibleToolCalls.filter((t) => t.result !== undefined).length}/${visibleToolCalls.length}`
+                        : `Used ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}`}
+                    </span>
+                    <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/tools:rotate-90 text-(--muted)" />
+                  </summary>
+
+                  <div
+                    className="mt-2 rounded-2xl overflow-hidden"
+                    style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
+                  >
+                    {visibleToolCalls.map((tool, idx) => {
+                      const hasApp = tool._meta?.ui?.httpUrl;
+                      const isDone = tool.result !== undefined;
+                      const isErr = tool.isError;
+                      const riskColors: Record<string, string> = {
+                        safe: "#34d399",
+                        sensitive: "#f59e0b",
+                        critical: "#ef4444",
+                      };
+                      const riskColor = riskColors[tool.color ?? tool.risk ?? "safe"] ?? "#34d399";
+                      return (
+                        <div key={tool.id}>
+                          {idx > 0 && <div className="border-t border-(--border)" />}
+                          <details className="group">
+                            <summary className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-(--card-hover) transition-colors list-none">
+                              <span className="shrink-0">
+                                {!isDone ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-(--muted)" />
+                                ) : isErr ? (
+                                  <span className="text-red-400 text-xs leading-none">✕</span>
+                                ) : (
+                                  <span className="text-emerald-500 text-xs leading-none">✓</span>
+                                )}
+                              </span>
+                              <span
+                                title={`Risk: ${tool.risk ?? "safe"}`}
+                                className="shrink-0 w-2 h-2 rounded-full"
+                                style={{ background: riskColor }}
+                              />
+                              <span className="text-[13px] font-medium flex-1 text-foreground">
+                                {tool.name.replace(/_/g, " ")}
+                              </span>
+                              {hasApp && (
+                                <span className="text-[10px] px-2 py-0.5 rounded-lg bg-(--badge-bg) text-(--badge-fg) font-medium">
+                                  App
+                                </span>
+                              )}
+                              <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open:rotate-90 text-(--muted)" />
+                            </summary>
+
+                            <div className="px-4 pb-3 space-y-2 border-t border-(--border)">
+                              <div className="pt-2.5">
+                                <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-(--muted)">Input</div>
+                                <pre className="text-[11px] p-3 rounded-xl overflow-x-auto" style={{ background: "var(--code-bg)", color: "var(--code-fg)" }}>
+                                  {JSON.stringify(
+                                    typeof tool.arguments === "string"
+                                      ? (() => { try { return JSON.parse(tool.arguments); } catch { return tool.arguments; } })()
+                                      : tool.arguments,
+                                    null, 2
+                                  )}
+                                </pre>
+                              </div>
+                              {tool.result && tool.result !== "Completed" && (
+                                <div>
+                                  <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: isErr ? "#ef4444" : "var(--muted)" }}>Result</div>
+                                  <div
+                                    className="text-[11px] p-3 rounded-xl max-h-32 overflow-y-auto whitespace-pre-wrap"
+                                    style={{
+                                      background: isErr ? "color-mix(in srgb, #ef4444 8%, var(--code-bg))" : "var(--code-bg)",
+                                      color: isErr ? "#fca5a5" : "var(--code-fg)",
+                                    }}
+                                  >
+                                    {tool.result}
+                                  </div>
+                                </div>
+                              )}
+                              {hasApp && (
+                                <button
+                                  onClick={() => onOpenInPanel?.(tool)}
+                                  className="flex items-center gap-1.5 text-xs py-1 transition-colors cursor-pointer text-(--muted) hover:text-foreground"
+                                >
+                                  <PanelRightOpen className="w-3.5 h-3.5" />
+                                  Open {tool.name.replace(/_/g, " ")}
+                                </button>
+                              )}
+                            </div>
+                          </details>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              </div>
+            )}
+
+            {/* Reasoning — expandable thinking card */}
+            {safeReasoning && (
+              <details className="group/think" open={isToolExecuting}>
                 <summary
                   className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-(--card-hover)"
                   style={{ background: "var(--badge-bg)" }}
                 >
-                  {isToolExecuting ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-(--muted)" />
-                  ) : (
-                    <WrenchIcon className="w-3.5 h-3.5 shrink-0 text-(--muted)" />
-                  )}
-                  <span className="text-xs font-medium text-(--badge-fg)">
-                    {isToolExecuting
-                      ? `Running tools… ${visibleToolCalls.filter((t) => t.result !== undefined).length}/${visibleToolCalls.length}`
-                      : `Used ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}`}
-                  </span>
-                  <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/tools:rotate-90 text-(--muted)" />
+                  <span className="text-xs">💭</span>
+                  <span className="text-xs font-medium text-(--badge-fg)">Thinking</span>
+                  <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/think:rotate-90 text-(--muted)" />
                 </summary>
-
                 <div
-                  className="mt-2 rounded-2xl overflow-hidden"
+                  className="mt-2 rounded-2xl px-4 py-3"
                   style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
                 >
-                  {visibleToolCalls.map((tool, idx) => {
-                    const hasApp = tool._meta?.ui?.httpUrl;
-                    const isDone = tool.result !== undefined;
-                    const isErr = tool.isError;
-                    const riskColors: Record<string, string> = {
-                      safe:      "#34d399",
-                      sensitive: "#f59e0b",
-                      critical:  "#ef4444",
-                    };
-                    const riskColor = riskColors[tool.color ?? tool.risk ?? "safe"] ?? "#34d399";
-                    return (
-                      <div key={tool.id}>
-                        {idx > 0 && <div className="border-t border-(--border)" />}
-                        <details className="group">
-                          <summary className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-(--card-hover) transition-colors list-none">
-                            <span className="shrink-0">
-                              {!isDone ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-(--muted)" />
-                              ) : isErr ? (
-                                <span className="text-red-400 text-xs leading-none">✕</span>
-                              ) : (
-                                <span className="text-emerald-500 text-xs leading-none">✓</span>
-                              )}
-                            </span>
-                            <span
-                              title={`Risk: ${tool.risk ?? "safe"}`}
-                              className="shrink-0 w-2 h-2 rounded-full"
-                              style={{ background: riskColor }}
-                            />
-                            <span className="text-[13px] font-medium flex-1 text-foreground">
-                              {tool.name.replace(/_/g, " ")}
-                            </span>
-                            {hasApp && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-lg bg-(--badge-bg) text-(--badge-fg) font-medium">
-                                App
-                              </span>
-                            )}
-                            <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open:rotate-90 text-(--muted)" />
-                          </summary>
-
-                          <div className="px-4 pb-3 space-y-2 border-t border-(--border)">
-                            <div className="pt-2.5">
-                              <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-(--muted)">Input</div>
-                              <pre className="text-[11px] p-3 rounded-xl overflow-x-auto" style={{ background: "var(--code-bg)", color: "var(--code-fg)" }}>
-                                {JSON.stringify(
-                                  typeof tool.arguments === "string"
-                                    ? (() => { try { return JSON.parse(tool.arguments); } catch { return tool.arguments; } })()
-                                    : tool.arguments,
-                                  null, 2
-                                )}
-                              </pre>
-                            </div>
-                            {tool.result && tool.result !== "Completed" && (
-                              <div>
-                                <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: isErr ? "#ef4444" : "var(--muted)" }}>Result</div>
-                                <div
-                                  className="text-[11px] p-3 rounded-xl max-h-32 overflow-y-auto whitespace-pre-wrap"
-                                  style={{
-                                    background: isErr ? "color-mix(in srgb, #ef4444 8%, var(--code-bg))" : "var(--code-bg)",
-                                    color: isErr ? "#fca5a5" : "var(--code-fg)",
-                                  }}
-                                >
-                                  {tool.result}
-                                </div>
-                              </div>
-                            )}
-                            {hasApp && (
-                              <button
-                                onClick={() => onOpenInPanel?.(tool)}
-                                className="flex items-center gap-1.5 text-xs py-1 transition-colors cursor-pointer text-(--muted) hover:text-foreground"
-                              >
-                                <PanelRightOpen className="w-3.5 h-3.5" />
-                                Open {tool.name.replace(/_/g, " ")}
-                              </button>
-                            )}
-                          </div>
-                        </details>
-                      </div>
-                    );
-                  })}
+                  <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-(--muted)">
+                    {safeReasoning}
+                  </div>
                 </div>
               </details>
-            </div>
-          )}
+            )}
 
-          {/* Reasoning — expandable thinking card */}
-          {safeReasoning && (
-            <details className="group/think" open={isToolExecuting}>
-              <summary
-                className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-(--card-hover)"
-                style={{ background: "var(--badge-bg)" }}
-              >
-                <span className="text-xs">💭</span>
-                <span className="text-xs font-medium text-(--badge-fg)">Thinking</span>
-                <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/think:rotate-90 text-(--muted)" />
-              </summary>
-              <div
-                className="mt-2 rounded-2xl px-4 py-3"
-                style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
-              >
-                <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-(--muted)">
-                  {safeReasoning}
-                </div>
-              </div>
-            </details>
-          )}
-
-          {/* Main markdown content */}
-          {safeContent && (
-            <div className="prose-chat">
-              <ReactMarkdown
-                // singleDollarTextMath: false — a bare `$...$` is currency,
-                // not math, essentially always in this app (financial RAG
-                // answers are full of dollar amounts). Left on, remark-math
-                // greedily pairs the first `$` it sees with the NEXT `$`
-                // anywhere later in the message as one inline-math span —
-                // observed pairing across several sentences of a 10-Q
-                // summary, which KaTeX then rendered as one formula
-                // (math mode collapses inter-word spacing, and any content
-                // it couldn't parse — like a citation's `(citation:1)` —
-                // leaked out as raw unrendered text). `$$...$$` block math
-                // and `\(...\)`/`\[...\]` (preprocessMarkdown below) still
-                // work for a model that intentionally wants real math.
-                remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
-                rehypePlugins={[rehypeKatex]}
-                urlTransform={sandboxUrlTransform}
-                components={{
-                  table({ children, ...props }) {
-                    return <CopyableMarkdownTable {...props}>{children}</CopyableMarkdownTable>;
-                  },
-                  pre({ children, className }) {
-                    // ReactMarkdown wraps fenced code in <pre><code>. For mermaid we
-                    // must render OUTSIDE the <pre> — otherwise the .prose-chat pre
-                    // card styling (bg/border/padding) boxes the diagram. Detect a
-                    // mermaid child and render the diagram unwrapped.
-                    const child = Array.isArray(children) ? children[0] : children;
-                    const childClass =
-                      (child as { props?: { className?: string } } | undefined)?.props
-                        ?.className || "";
-                    if (/language-mermaid/.test(childClass)) {
-                      const raw = (child as { props?: { children?: unknown } }).props
-                        ?.children;
-                      return <Mermaid chart={String(raw).replace(/\n$/, "")} />;
-                    }
-                    return <CopyablePre className={className}>{children}</CopyablePre>;
-                  },
-                  code({ className, children }) {
-                    return <code className={className}>{children}</code>;
-                  },
-                  img({ src, alt }) {
-                    // Model-curated chart: ![alt](sandbox:name.png) → served
-                    // full-size inline from the thread's workspace.
-                    return (
-                      <MarkdownImage
-                        src={typeof src === "string" ? src : undefined}
-                        alt={alt}
-                        threadId={threadId}
-                      />
-                    );
-                  },
-                  a({ href, children }) {
-                    const raw = typeof href === "string" ? href.trim() : "";
-                    // Inline citation marker, rewritten by linkifyCitations
-                    // below from a model's [n] into [n](citation:n) — only
-                    // ever emitted for an index present in sourceByIndex, so
-                    // this never needs its own "not found" UI. Degrading to
-                    // plain children (not null) means even a hypothetical
-                    // future bug here fails safe as literal-looking text
-                    // rather than silently swallowing the marker.
-                    if (raw.startsWith("citation:")) {
-                      const source = sourceByIndex.get(Number(raw.slice(9)));
-                      if (!source) return <>{children}</>;
-                      return <CitationChip source={source} onOpen={onOpenSource} />;
-                    }
-                    // Model-referenced file: [label](sandbox:report.xlsx) →
-                    // a card that opens the file in the side-panel artifact
-                    // viewer (Claude-style) with a download fallback.
-                    if (raw.startsWith("sandbox:") && threadId) {
-                      const path = raw.replace(/^sandbox:/, "").replace(/^\.?\//, "");
-                      const name = path.split("/").pop() || path;
-                      const url = buildWorkspaceFileUrl(threadId, raw);
+            {/* Main markdown content */}
+            {safeContent && (
+              <div className="prose-chat">
+                <ReactMarkdown
+                  // singleDollarTextMath: false — a bare `$...$` is currency,
+                  // not math, essentially always in this app (financial RAG
+                  // answers are full of dollar amounts). Left on, remark-math
+                  // greedily pairs the first `$` it sees with the NEXT `$`
+                  // anywhere later in the message as one inline-math span —
+                  // observed pairing across several sentences of a 10-Q
+                  // summary, which KaTeX then rendered as one formula
+                  // (math mode collapses inter-word spacing, and any content
+                  // it couldn't parse — like a citation's `(citation:1)` —
+                  // leaked out as raw unrendered text). `$$...$$` block math
+                  // and `\(...\)`/`\[...\]` (preprocessMarkdown below) still
+                  // work for a model that intentionally wants real math.
+                  remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
+                  rehypePlugins={[rehypeKatex]}
+                  urlTransform={sandboxUrlTransform}
+                  components={{
+                    table({ children, ...props }) {
+                      return <CopyableMarkdownTable {...props}>{children}</CopyableMarkdownTable>;
+                    },
+                    pre({ children, className }) {
+                      // ReactMarkdown wraps fenced code in <pre><code>. For mermaid we
+                      // must render OUTSIDE the <pre> — otherwise the .prose-chat pre
+                      // card styling (bg/border/padding) boxes the diagram. Detect a
+                      // mermaid child and render the diagram unwrapped.
+                      const child = Array.isArray(children) ? children[0] : children;
+                      const childClass =
+                        (child as { props?: { className?: string } } | undefined)?.props
+                          ?.className || "";
+                      if (/language-mermaid/.test(childClass)) {
+                        const raw = (child as { props?: { children?: unknown } }).props
+                          ?.children;
+                        return <Mermaid chart={String(raw).replace(/\n$/, "")} />;
+                      }
+                      return <CopyablePre className={className}>{children}</CopyablePre>;
+                    },
+                    code({ className, children }) {
+                      return <code className={className}>{children}</code>;
+                    },
+                    img({ src, alt }) {
+                      // Model-curated chart: ![alt](sandbox:name.png) → served
+                      // full-size inline from the thread's workspace.
                       return (
-                        <span className="my-1 inline-flex items-center gap-2.5 rounded-xl border border-(--border) bg-(--card) px-3 py-1.5 align-middle shadow-xs hover:shadow-sm hover:bg-(--card-hover) hover:border-(--border-hover) transition-all duration-200">
-                          <FileText className="h-4 w-4 shrink-0 text-(--muted)" />
-                          <span className="truncate text-sm font-medium text-foreground">{name}</span>
-                          {onOpenArtifact && (
-                            <button
-                              onClick={() => onOpenArtifact(path, name)}
-                              className="btn-icon ml-1 shrink-0 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold hover:scale-[1.03] active:scale-[0.97] transition-all"
-                              style={{ 
-                                background: "var(--accent)", 
-                                color: "var(--accent-foreground)",
+                        <MarkdownImage
+                          src={typeof src === "string" ? src : undefined}
+                          alt={alt}
+                          threadId={threadId}
+                        />
+                      );
+                    },
+                    a({ href, children }) {
+                      const raw = typeof href === "string" ? href.trim() : "";
+                      // Inline citation marker, rewritten by linkifyCitations
+                      // below from a model's [n] into [n](citation:n) — only
+                      // ever emitted for an index present in sourceByIndex, so
+                      // this never needs its own "not found" UI. Degrading to
+                      // plain children (not null) means even a hypothetical
+                      // future bug here fails safe as literal-looking text
+                      // rather than silently swallowing the marker.
+                      if (raw.startsWith("citation:")) {
+                        const source = sourceByIndex.get(Number(raw.slice(9)));
+                        if (!source) return <>{children}</>;
+                        return <CitationChip source={source} onOpen={onOpenSource} />;
+                      }
+                      // Model-referenced file: [label](sandbox:report.xlsx) →
+                      // a card that opens the file in the side-panel artifact
+                      // viewer (Claude-style) with a download fallback.
+                      if (raw.startsWith("sandbox:") && threadId) {
+                        const path = raw.replace(/^sandbox:/, "").replace(/^\.?\//, "");
+                        const name = path.split("/").pop() || path;
+                        const url = buildWorkspaceFileUrl(threadId, raw);
+                        return (
+                          <span className="my-1 inline-flex items-center gap-2.5 rounded-xl border border-(--border) bg-(--card) px-3 py-1.5 align-middle shadow-xs hover:shadow-sm hover:bg-(--card-hover) hover:border-(--border-hover) transition-all duration-200">
+                            <FileText className="h-4 w-4 shrink-0 text-(--muted)" />
+                            <span className="truncate text-sm font-medium text-foreground">{name}</span>
+                            {onOpenArtifact && (
+                              <button
+                                onClick={() => onOpenArtifact(path, name)}
+                                className="btn-icon ml-1 shrink-0 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold hover:scale-[1.03] active:scale-[0.97] transition-all"
+                                style={{
+                                  background: "var(--accent)",
+                                  color: "var(--accent-foreground)",
+                                  minWidth: "unset",
+                                  minHeight: "unset"
+                                }}
+                              >
+                                Open
+                              </button>
+                            )}
+                            <a
+                              href={url}
+                              download={name}
+                              className="btn-icon shrink-0 rounded-lg p-1.5 text-(--muted) hover:text-foreground hover:bg-(--card-hover) hover:scale-[1.05] active:scale-[0.95] transition-all flex items-center justify-center"
+                              title="Download"
+                              style={{
                                 minWidth: "unset",
-                                minHeight: "unset"
+                                minHeight: "unset",
+                                textDecoration: "none"
                               }}
                             >
-                              Open
-                            </button>
-                          )}
-                          <a
-                            href={url}
-                            download={name}
-                            className="btn-icon shrink-0 rounded-lg p-1.5 text-(--muted) hover:text-foreground hover:bg-(--card-hover) hover:scale-[1.05] active:scale-[0.95] transition-all flex items-center justify-center"
-                            title="Download"
-                            style={{
-                              minWidth: "unset",
-                              minHeight: "unset",
-                              textDecoration: "none"
-                            }}
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </a>
-                        </span>
+                              <Download className="h-3.5 w-3.5" />
+                            </a>
+                          </span>
+                        );
+                      }
+                      return (
+                        <a href={raw} target="_blank" rel="noreferrer">
+                          {children}
+                        </a>
                       );
-                    }
-                    return (
-                      <a href={raw} target="_blank" rel="noreferrer">
-                        {children}
-                      </a>
-                    );
-                  },
-                }}
-              >
-                {linkifyCitations(preprocessMarkdown(safeContent), validCitationIndices)}
-              </ReactMarkdown>
-              {role === "assistant" && (
-                <SourcesStrip sources={sources} onOpenSource={onOpenSource} />
-              )}
-            </div>
-          )}
+                    },
+                  }}
+                >
+                  {linkifyCitations(preprocessMarkdown(safeContent), validCitationIndices)}
+                </ReactMarkdown>
+                {role === "assistant" && (
+                  <SourcesStrip sources={sources} onOpenSource={onOpenSource} />
+                )}
+              </div>
+            )}
 
-          {/* Generated/Attached Images (left-aligned for assistant) */}
-          {imageAttachments.length > 0 && (
-            <div className="flex justify-start w-full">
-              {renderImageGallery()}
-            </div>
-          )}
+            {/* Generated/Attached Images (left-aligned for assistant) */}
+            {imageAttachments.length > 0 && (
+              <div className="flex justify-start w-full">
+                {renderImageGallery()}
+              </div>
+            )}
 
-          {/* Generated/Attached Documents (left-aligned for assistant) */}
-          {documentAttachments.length > 0 && (
-            <div className="flex w-full max-w-xl flex-wrap gap-2.5 pt-1">
-              {documentAttachments.map((attachment) => (
-                <AttachmentDocumentCard key={attachment.id} attachment={attachment} />
-              ))}
-            </div>
-          )}
-
-          {/* Tool-generated charts — collapsed so exploratory re-runs don't
-              flood the chat; the model surfaces the key ones inline above via
-              sandbox: markdown refs. */}
-          {toolImageAttachments.length > 0 && (
-            <details className="group/plots w-full">
-              <summary
-                className="inline-flex cursor-pointer select-none list-none items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium text-(--badge-fg) transition-colors hover:bg-(--card-hover)"
-                style={{ background: "var(--badge-bg)" }}
-              >
-                <WrenchIcon className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
-                {`${toolImageAttachments.length} chart${toolImageAttachments.length > 1 ? "s" : ""} generated`}
-                <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open/plots:rotate-90 text-(--muted)" />
-              </summary>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {toolImageAttachments.map((attachment, idx) => (
-                  <button
-                    key={attachment.id}
-                    type="button"
-                    onClick={() => openLightbox("tool", idx)}
-                    className="block cursor-pointer overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-sm transition-shadow hover:shadow-md"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={attachment.url}
-                      alt={attachment.name}
-                      className="h-28 w-auto max-w-[220px] object-contain"
-                    />
-                  </button>
+            {/* Generated/Attached Documents (left-aligned for assistant) */}
+            {documentAttachments.length > 0 && (
+              <div className="flex w-full max-w-xl flex-wrap gap-2.5 pt-1">
+                {documentAttachments.map((attachment) => (
+                  <AttachmentDocumentCard key={attachment.id} attachment={attachment} />
                 ))}
               </div>
-            </details>
-          )}
+            )}
 
-          {/* Action buttons — fade in on hover */}
-          {safeContent && (
-            <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-              <button
-                onClick={copyToClipboard}
-                className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
-                title="Copy"
-              >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
-              <AudioPlayer text={safeContent} />
-              {onRegenerate && (
-                <button
-                  onClick={onRegenerate}
-                  className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
-                  title="Regenerate"
+            {/* Tool-generated charts — collapsed so exploratory re-runs don't
+              flood the chat; the model surfaces the key ones inline above via
+              sandbox: markdown refs. */}
+            {toolImageAttachments.length > 0 && (
+              <details className="group/plots w-full">
+                <summary
+                  className="inline-flex cursor-pointer select-none list-none items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium text-(--badge-fg) transition-colors hover:bg-(--card-hover)"
+                  style={{ background: "var(--badge-bg)" }}
                 >
-                  <RotateCw className="w-3.5 h-3.5" />
+                  <WrenchIcon className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
+                  {`${toolImageAttachments.length} chart${toolImageAttachments.length > 1 ? "s" : ""} generated`}
+                  <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open/plots:rotate-90 text-(--muted)" />
+                </summary>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {toolImageAttachments.map((attachment, idx) => (
+                    <button
+                      key={attachment.id}
+                      type="button"
+                      onClick={() => openLightbox("tool", idx)}
+                      className="block cursor-pointer overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-sm transition-shadow hover:shadow-md"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={attachment.url}
+                        alt={attachment.name}
+                        className="h-28 w-auto max-w-[220px] object-contain"
+                      />
+                    </button>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {/* Action buttons — fade in on hover */}
+            {safeContent && (
+              <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                <button
+                  onClick={copyToClipboard}
+                  className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                  title="Copy"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
-              )}
-              {timestamp && (
-                <span className="text-[11px] ml-1.5 text-(--muted)">
-                  {formatTime(timestamp)}
-                </span>
-              )}
-            </div>
-          )}
+                <AudioPlayer text={safeContent} />
+                {onRegenerate && (
+                  <button
+                    onClick={onRegenerate}
+                    className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                    title="Regenerate"
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {timestamp && (
+                  <span className="text-[11px] ml-1.5 text-(--muted)">
+                    {formatTime(timestamp)}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-    {imageLightbox}
-  </>
+      {imageLightbox}
+    </>
   );
 }

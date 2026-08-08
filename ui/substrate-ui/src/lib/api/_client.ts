@@ -22,7 +22,21 @@ export function buildWorkspaceFileUrl(threadId: string, path: string): string {
   )}&path=${encodeURIComponent(clean)}`;
 }
 
+// Resolves an `object:<key>` reference — a tool-result image the backend
+// resolved by reference rather than inlining as a base64 data URI (see
+// agent-substrate agents/runtime/context/tool.py::_attachment_url and its
+// module docstring for why the backend emits a bare scheme instead of a real
+// path). Same shape as buildWorkspaceFileUrl's `sandbox:` resolution — the
+// engine names the resource, this frontend's authenticated proxy serves it.
+export function buildObjectUrl(ref: string): string {
+  const key = ref.replace(/^object:/, "");
+  return `${API_BASE}/files/object?key=${encodeURIComponent(key)}`;
+}
+
 export function withUploadedFileUrl(file: UploadedFile): UploadedFile {
+  if (file.url?.startsWith("object:")) {
+    return { ...file, url: buildObjectUrl(file.url) };
+  }
   if (file.url) {
     return file;
   }

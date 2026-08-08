@@ -89,10 +89,15 @@ export function FileArtifactViewer({
   return <UnsupportedView fileUrl={fileUrl} fileName={fileName} />;
 }
 
-type Kind =
+export type Kind =
   | "html" | "pdf" | "image" | "text" | "csv" | "xlsx" | "docx" | "pptx" | "other";
 
-function artifactKind(name: string, mime?: string): Kind {
+// Exported so callers outside the viewer (AppPanel's own Download button)
+// can make kind-specific UI decisions — e.g. a PDF renders via a plain
+// <iframe>, which means the *browser's own* native PDF viewer already
+// provides a prominent download control inside it, making a second one in
+// our surrounding chrome pure duplication.
+export function artifactKind(name: string, mime?: string): Kind {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "html" || ext === "htm" || mime === "text/html") return "html";
   if (ext === "pdf" || mime === "application/pdf") return "pdf";

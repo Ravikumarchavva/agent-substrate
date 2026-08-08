@@ -8,11 +8,18 @@
  * If the request carries an httpOnly `user_session` cookie (set at Google
  * OAuth login, see api/auth/google/callback), the token is signed with that
  * real user's id as `sub` so agent-substrate-side scoping (file ownership,
- * workspace storage) is per-person. Otherwise falls back to the fixed
- * service-account token — e.g. for requests with no logged-in user.
+ * workspace storage) is per-person. With no login it falls back to the
+ * per-browser `anon_id` cookie, and only to the shared service-account token
+ * if even that is missing.
  */
 import { NextRequest } from "next/server";
-import { engineAuthHeader, userAuthHeader, type UserSession } from "@/lib/engine-auth";
+import {
+  ANON_COOKIE,
+  anonAuthHeader,
+  engineAuthHeader,
+  userAuthHeader,
+  type UserSession,
+} from "@/lib/engine-auth";
 
 function authHeaderFor(req: NextRequest): HeadersInit {
   const raw = req.cookies.get("user_session")?.value;
@@ -21,9 +28,13 @@ function authHeaderFor(req: NextRequest): HeadersInit {
       const session = JSON.parse(raw) as UserSession;
       if (session.id && session.email) return userAuthHeader(session);
     } catch {
-      // Malformed cookie — fall through to the service-account token.
+      // Malformed cookie — fall through to a weaker identity.
     }
   }
+  // No login: a per-browser anonymous id (planted by middleware.ts) keeps this
+  // visitor's workspace and quota separate from every other visitor's.
+  const anonId = req.cookies.get(ANON_COOKIE)?.value;
+  if (anonId) return anonAuthHeader(anonId);
   return engineAuthHeader();
 }
 

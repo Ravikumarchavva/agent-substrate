@@ -3,9 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X, PanelRightClose, PanelRightOpen, Maximize2, Minimize2, Download, Pencil, Eye, FileText } from "lucide-react";
 import { AppIcon } from "@/components/AppIcon";
-import { FileArtifactViewer } from "@/components/FileArtifactViewer";
+import { artifactKind, FileArtifactViewer } from "@/components/FileArtifactViewer";
 import { VersionHistoryDropdown } from "@/components/VersionHistoryDropdown";
 import { useTheme } from "@/contexts/ThemeContext";
+
+// Strip a `#page=N` viewer fragment for the download link's href. The
+// fragment steers FileArtifactViewer to a citation's page — it does nothing
+// for an actual file download (browsers never send the hash, so it can't
+// affect the bytes received), but leaving it in means hovering "Download"
+// shows a URL ending `#page=3` in the status bar, which reads as broken even
+// though the download itself was always correct.
+function stripPageFragment(fileUrl: string): string {
+  const hashIndex = fileUrl.indexOf("#");
+  return hashIndex === -1 ? fileUrl : fileUrl.slice(0, hashIndex);
+}
 
 // Recover the thread id + session-relative path from a workspace file URL.
 function parseFileRef(fileUrl?: string): { threadId: string; path: string } | null {
@@ -558,16 +569,21 @@ export function AppPanel({
                   />
                 ) : null;
               })()}
-            {activeItem?.kind === "file" && activeItem.fileUrl && (
-              <a
-                href={activeItem.fileUrl}
-                download={activeItem.fileName ?? true}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground"
-                title="Download"
-              >
-                <Download className="h-4 w-4" />
-              </a>
-            )}
+            {activeItem?.kind === "file" &&
+              activeItem.fileUrl &&
+              // A PDF renders via a plain <iframe> (FileArtifactViewer), so
+              // the browser's own native PDF viewer already shows a
+              // download control inside it — ours would just duplicate it.
+              artifactKind(activeItem.fileName ?? "", activeItem.mime) !== "pdf" && (
+                <a
+                  href={stripPageFragment(activeItem.fileUrl)}
+                  download={activeItem.fileName ?? true}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground"
+                  title="Download"
+                >
+                  <Download className="h-4 w-4" />
+                </a>
+              )}
             <button
               onClick={() => setMaximized((v) => !v)}
               className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"

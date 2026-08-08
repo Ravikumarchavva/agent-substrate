@@ -296,6 +296,55 @@ async def test_workspace_path_absent_when_no_sandbox_configured(monkeypatch):
     assert "workspace_path" not in attachment
 
 
+async def test_workspace_path_absent_for_a_pdf_even_with_bubblewrap_configured(
+    monkeypatch,
+):
+    """A PDF is already ingested into the RagBackend and readable via
+    knowledge_search — it must never ALSO get a code_interpreter workspace_path,
+    even when bubblewrap genuinely does mount the file there.
+
+    Real incident this pins: with the hint present, the model was handed a
+    working `pypdf.PdfReader(workspace_path)`-able path in the very same
+    system prompt that told it to use knowledge_search for this exact file —
+    and it reliably chose the raw-file route over the RAG one, on a document
+    it had already searched successfully, because a concrete path reads as
+    more certain than a semantic-search result. Removing the hint for
+    extractable types is the actual fix; the prose instruction alone
+    (chat_intents.py::ATTACHMENT_ANALYSIS_INSTRUCTIONS) couldn't win against
+    a real, working path sitting right next to it.
+    """
+    from substrate.serving.monolith.routes import chat_context
+
+    monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "bubblewrap")
+
+    file_id = "55555555-5555-5555-5555-555555555555"
+    meta = _pdf_meta(file_id, "report.pdf", f"users/u1/sessions/t1/{file_id}.pdf", 999)
+    meta.extracted_text = "cached report contents"  # cache hit, no download needed
+
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [meta]
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_result
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=execute_result)
+    db.commit = AsyncMock()
+
+    ctx = MagicMock()
+    ctx.file_store = MagicMock()
+    ctx.rag_backend = None  # exercises the old inline-extraction cache-hit path
+
+    body = MagicMock()
+    body.file_ids = [file_id]
+
+    _text, _images, attachments = await _build_file_context(
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
+    )
+
+    assert len(attachments) == 1
+    assert "workspace_path" not in attachments[0]
+
+
 async def test_build_file_context_uses_cached_extracted_text_without_download():
     """A file that was already extracted (extracted_text set) must skip
     both the file-store download and re-extraction entirely."""

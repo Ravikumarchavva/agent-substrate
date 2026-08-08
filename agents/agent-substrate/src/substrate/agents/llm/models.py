@@ -152,6 +152,7 @@ _MODELS: list[ModelProfile] = [
         supports_audio_input=True,
         supports_audio_output=True,
         modalities=("text", "image", "audio"),
+        aliases=("gpt-5.4",),
     ),
     ModelProfile(
         name="gpt-5-mini",

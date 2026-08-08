@@ -871,7 +871,7 @@ async def test_pg_tool_approval_survives_full_pool_close_and_reopen() -> None:
     try:
         ctx1 = await _build_ctx(pool_a, run_id)
         with pytest.raises(SuspendInterrupt):
-            await ctx1.tool("send_email", to="user@example.com")
+            await ctx1.tool("send_email", {"to": "user@example.com"})
 
         request_id = None
         async for entry in ctx1._event_log.read(run_id):  # type: ignore[attr-defined]
@@ -899,7 +899,7 @@ async def test_pg_tool_approval_survives_full_pool_close_and_reopen() -> None:
     pool_b = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
     try:
         ctx2 = await _build_ctx(pool_b, run_id)
-        result = await ctx2.tool("send_email", to="user@example.com")
+        result = await ctx2.tool("send_email", {"to": "user@example.com"})
         assert result.status == "ok"
         assert result.text is not None
         assert "user@example.com" in result.text

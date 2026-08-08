@@ -13,7 +13,7 @@ The author writes normal async code.  Durability is transparent:
 
     async def run(self, ctx: AgentRunContext, inbox: list[Message]) -> None:
         for msg in inbox:
-            result = await ctx.tool("summarise", content=msg.payload)  # journaled
+            result = await ctx.tool("summarise", {"content": msg.payload})  # journaled
             await ctx.emit(self.output_topic, result)                   # journaled effect
         await ctx.sleep_until_signal("new_item")                        # suspend → 0 cost
 

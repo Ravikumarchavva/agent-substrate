@@ -529,3 +529,125 @@ async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:
     rid, status = result
     assert rid == run_id
     assert status == RunStatus.PENDING
+
+
+# ---------------------------------------------------------------------------
+# PgVectorStore — hybrid_search / lexical_search
+# ---------------------------------------------------------------------------
+
+
+async def _hybrid_test_store():
+    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+
+    engine = await _pg_async_engine()
+    if engine is None:
+        return None
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    # Match the default table's existing dimensionality (see the isolation
+    # test above) rather than assuming a fresh table.
+    store = PgVectorStore(
+        session_factory=session_factory, engine=engine, dimensions=384
+    )
+    await store.ensure_table()
+    return store
+
+
+def _vec384(*nonzero: tuple[int, float]) -> list[float]:
+    """A 384-dim vector (the shared default table's fixed width) with the
+    given (index, value) pairs set, zero elsewhere."""
+    v = [0.0] * 384
+    for i, val in nonzero:
+        v[i] = val
+    return v
+
+
+async def test_pg_vector_store_lexical_search_ranks_by_ts_rank() -> None:
+    from substrate.kernel.storage.vector import Document
+
+    store = await _hybrid_test_store()
+    if store is None:
+        pytest.skip("Postgres not reachable")
+    collection = f"lexical-test-{id(object())}"
+    await store.add(
+        [
+            Document.from_text(
+                "quarterly revenue grew 20 percent", embedding=_vec384((0, 1.0))
+            ),
+            Document.from_text(
+                "the weather was sunny in San Francisco", embedding=_vec384((0, 1.0))
+            ),
+        ],
+        collection=collection,
+    )
+
+    results = await store.lexical_search("revenue", collection=collection, limit=10)
+
+    assert len(results) == 1
+    assert "revenue" in results[0].to_text()
+
+    await store.delete_collection(collection)
+
+
+async def test_pg_vector_store_hybrid_search_fuses_dense_and_lexical_rank() -> None:
+    """Reproduces the exact scenario hybrid search exists for: a document
+    that's an exact lexical match AND a decent semantic match should outrank
+    a document that's only a semantic-adjacent match, which should in turn
+    outrank a document that's neither."""
+    from substrate.kernel.storage.vector import Document
+
+    store = await _hybrid_test_store()
+    if store is None:
+        pytest.skip("Postgres not reachable")
+    collection = f"hybrid-test-{id(object())}"
+    query_vec = _vec384((0, 1.0))
+    both = Document.from_text(
+        "quarterly revenue grew 20 percent", embedding=_vec384((0, 0.95), (1, 0.05))
+    )
+    semantic_only = Document.from_text(
+        "sales figures for the last quarter", embedding=_vec384((0, 0.9), (1, 0.1))
+    )
+    irrelevant = Document.from_text(
+        "the weather was sunny in San Francisco", embedding=_vec384((2, 1.0))
+    )
+    await store.add([both, semantic_only, irrelevant], collection=collection)
+
+    # dense_k=2 caps the dense candidate list to the two closest embeddings
+    # (both, semantic_only) — irrelevant's orthogonal embedding falls out of
+    # it, and it has no lexical match either, so it must be fully excluded.
+    results = await store.hybrid_search(
+        query_vec, "revenue", collection=collection, dense_k=2, lexical_k=10, fused_k=10
+    )
+    ids = [r.id for r in results]
+
+    assert ids.index(both.id) < ids.index(semantic_only.id)
+    assert irrelevant.id not in ids
+
+    await store.delete_collection(collection)
+
+
+async def test_pg_vector_store_hybrid_search_applies_filter() -> None:
+    from substrate.kernel.storage.vector import Document
+
+    store = await _hybrid_test_store()
+    if store is None:
+        pytest.skip("Postgres not reachable")
+    collection = f"hybrid-filter-test-{id(object())}"
+    keep = Document.from_text(
+        "revenue report", embedding=_vec384((0, 1.0)), metadata={"file_id": "keep"}
+    )
+    drop = Document.from_text(
+        "revenue report", embedding=_vec384((0, 1.0)), metadata={"file_id": "drop"}
+    )
+    await store.add([keep, drop], collection=collection)
+
+    results = await store.hybrid_search(
+        _vec384((0, 1.0)), "revenue", collection=collection, filter={"file_id": "keep"}
+    )
+
+    assert [r.id for r in results] == [keep.id]
+
+    await store.delete_collection(collection)

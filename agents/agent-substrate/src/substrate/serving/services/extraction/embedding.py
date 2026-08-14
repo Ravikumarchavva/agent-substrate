@@ -4,10 +4,16 @@ Both are real ``llama-server`` processes (see ``deployment/docker/docker-compose
 serving Qwen3-VL-Embedding-2B (``--embedding --pooling last``, ``POST
 /embeddings``) and Qwen3-VL-Reranker-2B (``--reranking``, ``POST /rerank``)
 respectively — replacing the previous in-process SentenceTransformer/
-CrossEncoder models. Request/response shapes for text embedding and rerank
-were verified via real ``curl`` calls against the running sidecars; see
-``docs/claude_docs/decisions.md``. Image embedding wire format is NOT
-verified — see the ``TODO`` on ``embed_image`` below.
+CrossEncoder models. Request/response shapes for text embedding, image
+embedding, and rerank were all verified via real calls against the running
+sidecars (not assumed from docs) — see ``docs/claude_docs/decisions.md``.
+Two real bugs were caught this way and fixed: ``/embeddings``' response
+nests one level deeper than expected (``embedding`` is a list of
+per-sequence vectors, not a flat vector), and the OpenAI-compatible
+chat-completions image_url shape does not work against this server's
+``/embeddings`` at all — the real accepted shape is
+``{"prompt_string": ..., "multimodal_data": [base64, ...]}``, found by
+reading llama.cpp's own source.
 """
 
 from __future__ import annotations
@@ -36,6 +42,7 @@ class EmbeddingReranker:
         self._embed_url = embed_server_url.rstrip("/")
         self._rerank_url = rerank_server_url.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout)
+        self._cached_media_marker: str | None = None
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -48,22 +55,36 @@ class EmbeddingReranker:
             logger.info("Embedding/rerank sidecar warmup skipped (%s)", exc)
 
     async def embed_image(self, data: bytes) -> list[float]:
-        # TODO: verify image embedding wire format against real llama-server
-        # /embeddings call. This uses the OpenAI-compatible multimodal
-        # content-part shape (data URL under `image_url.url`), which is
-        # llama.cpp's convention for image input elsewhere (e.g.
-        # /v1/chat/completions with mtmd), but this exact shape has NOT been
-        # curl-verified against /embeddings the way the text path has.
+        # Verified against the real running llama-embed sidecar (not the
+        # OpenAI-compatible chat-completions image_url shape, which this
+        # server's /embeddings rejects outright with a 500). The real
+        # accepted shape, confirmed by reading llama.cpp's own
+        # tokenize_input_subprompt() source: `input` (== "prompt") as
+        # `{"prompt_string": ..., "multimodal_data": [base64, ...]}`, where
+        # prompt_string must contain the server's media-placeholder marker
+        # (`get_media_marker()` in server-common.cpp) at the position the
+        # image tokens should be inserted — the marker is randomized per
+        # server instance unless `LLAMA_MEDIA_MARKER` is pinned, so it's
+        # fetched from `/props` rather than hardcoded.
+        marker = await self._media_marker()
         b64 = base64.b64encode(data).decode("ascii")
-        payload = {
-            "input": [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{b64}"},
-                }
-            ]
-        }
+        payload = {"input": {"prompt_string": marker, "multimodal_data": [b64]}}
         return await self._embed(payload)
+
+    async def _media_marker(self) -> str:
+        marker = self._cached_media_marker
+        if marker is None:
+            try:
+                resp = await self._client.get(f"{self._embed_url}/props")
+                resp.raise_for_status()
+                marker = str(resp.json()["media_marker"])
+            except (httpx.HTTPError, KeyError) as exc:
+                raise EmbeddingServiceError(
+                    f"Could not fetch media_marker from llama-embed /props "
+                    f"({self._embed_url}): {exc}"
+                ) from exc
+            self._cached_media_marker = marker
+        return marker
 
     async def embed_text(self, text: str) -> list[float]:
         return await self._embed({"input": text})
@@ -80,7 +101,16 @@ class EmbeddingReranker:
             ) from exc
         data = resp.json()
         try:
-            return list(data[0]["embedding"])
+            # `embedding` is itself a list of per-sequence vectors (llama-server's
+            # OAI-compatible /embeddings shape) — one row per pooled sequence, not
+            # a flat vector directly. With --pooling last there is exactly one row
+            # per input, so [0] is the real vector. Confirmed against the real
+            # running sidecar (not assumed from docs): `data[0]["embedding"]` is
+            # `[[float, ...]]`, a single-element wrapper around the actual 2048
+            # floats — an earlier version of this method returned that wrapper
+            # unflattened, which would have hard-failed Postgres's vector(2048)
+            # cast on first real write.
+            return list(data[0]["embedding"][0])
         except (KeyError, IndexError, TypeError) as exc:
             raise EmbeddingServiceError(
                 f"Unexpected /embeddings response shape: {data!r}"

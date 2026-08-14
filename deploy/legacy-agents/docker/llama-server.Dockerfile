@@ -2,10 +2,12 @@
 # Qwen3-VL-Embedding-2B / Qwen3-VL-Reranker-2B sidecars (see extraction
 # service's embedding.py). Builds the `llama-server` binary only — model
 # weights are NOT baked into the image; each service downloads its own GGUF
-# on first start via `llama-server -hf <repo>:<quant>` into a persistent
+# on first start via `llama-server --hf-repo/--hf-file` into a persistent
 # named volume (LLAMA_CACHE), so a rebuild of this image never re-downloads
-# a ~1GB file. Verified buildable/runnable this way in agent-substrate's own
-# dev session — see docs/claude_docs/decisions.md for the model choice.
+# a ~1GB file. See docs/claude_docs/decisions.md for the model choice — the
+# model behavior itself was verified via a bare (non-Docker) llama-server
+# build earlier in that session; this containerized build/download path was
+# verified separately, after catching a real LLAMA_CURL=OFF/libgomp bug.
 #
 # Build:   docker build -f docker/llama-server.Dockerfile -t llama-server:latest .
 # Run:     docker run -e LLAMA_CACHE=/cache -v llama-cache:/cache llama-server:latest \
@@ -14,7 +16,7 @@
 FROM debian:trixie-slim AS build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake git ca-certificates \
+    build-essential cmake git ca-certificates libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
@@ -27,15 +29,18 @@ WORKDIR /src
 RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp .
 
 # CPU-native build, no CUDA/GPU backend — matches this deployment's actual
-# hardware. -DLLAMA_CURL=OFF: the -hf download flag still works via a
-# built-in fallback fetcher; skips needing libcurl-dev in the build image.
-RUN cmake -B build -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF \
+# hardware. LLAMA_CURL=ON (default): verified this session that
+# LLAMA_CURL=OFF's built-in fallback HTTPS fetcher has no TLS backend
+# compiled in at all ("HTTPS is not supported... rebuild with
+# -DLLAMA_BUILD_BORINGSSL/-DLLAMA_OPENSSL") — it can't resolve `--hf-repo`
+# downloads, full stop. libcurl is the well-supported path instead.
+RUN cmake -B build -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=ON \
     && cmake --build build -j"$(nproc)" --target llama-server
 
 FROM debian:trixie-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl \
+    ca-certificates curl libgomp1 libcurl4 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /src/build/bin/llama-server /usr/local/bin/llama-server

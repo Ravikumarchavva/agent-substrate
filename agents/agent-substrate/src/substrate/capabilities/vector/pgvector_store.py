@@ -65,7 +65,7 @@ class PgVectorStore:
             ``PgVectorStore`` instances with different ``dimensions`` coexist
             — one Postgres column can't hold two vector widths, e.g. the
             local RAG backend's text store (1536, OpenAI) and its image
-            store (768, SigLIP) — see ``backends/local.py``.
+            store (2048, Qwen3-VL-Embedding-2B) — see ``backends/local.py``.
     """
 
     def __init__(
@@ -387,6 +387,56 @@ class PgVectorStore:
                 id=str(row.id),
                 content=_blocks_from_json(row.content_json),
                 score=float(row.similarity),
+                metadata=row.metadata or {},
+            )
+            for row in rows
+        ]
+
+    async def lexical_search(
+        self,
+        query_text: str,
+        *,
+        collection: str = "default",
+        limit: int = 5,
+        filter: Optional[dict[str, Any]] = None,
+    ) -> list[SearchResult]:
+        """Lexical-only (full-text) search via ``ts_rank`` — no dense/RRF
+        component. Exists mainly so the eval harness (``tests/eval/``) can
+        measure Lexical Recall@K standalone, separate from the fused
+        ``hybrid_search()`` number; ``score`` here is a raw ``ts_rank``
+        value, not comparable across queries the way the RRF score is."""
+        await self.ensure_table()
+
+        where_clauses = [
+            "collection = :collection",
+            "search_vec @@ plainto_tsquery('english', :query_text)",
+        ]
+        params: dict[str, Any] = {
+            "collection": collection,
+            "query_text": query_text,
+            "limit": limit,
+        }
+        where_clauses += self._filter_clauses(filter, params)
+        where_sql = " AND ".join(where_clauses)
+
+        sql = text(f"""
+            SELECT id, text, content_json, metadata,
+                   ts_rank(search_vec, plainto_tsquery('english', :query_text)) AS rank
+            FROM {self._table}
+            WHERE {where_sql}
+            ORDER BY rank DESC
+            LIMIT :limit
+        """)
+
+        async with self._engine.connect() as conn:
+            result = await conn.execute(sql, params)
+            rows = result.all()
+
+        return [
+            SearchResult(
+                id=str(row.id),
+                content=_blocks_from_json(row.content_json),
+                score=float(row.rank),
                 metadata=row.metadata or {},
             )
             for row in rows

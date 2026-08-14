@@ -250,6 +250,12 @@ services:
     environment:
       EXTRACTION_EMBED_SERVER_URL: http://llama-embed:8031
       EXTRACTION_RERANK_SERVER_URL: http://llama-rerank:8032
+    # PaddleOCR/PaddleX download their model weights from HuggingFace into
+    # ~/.paddlex on first use, not at build time — without a persistent
+    # volume that repeats on every container restart. Same rationale as
+    # llama-embed/llama-rerank's LLAMA_CACHE volume below.
+    volumes:
+      - paddlex-model-cache:/root/.paddlex
     restart: unless-stopped
 
   # Qwen3-VL-Embedding-2B sidecar (dense multimodal embedding). See
@@ -375,3 +381,4 @@ volumes:
   seaweedfsadmin:
   workspaces:
   llama-model-cache:
+  paddlex-model-cache:

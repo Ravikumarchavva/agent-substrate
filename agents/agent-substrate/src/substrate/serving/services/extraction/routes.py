@@ -102,6 +102,7 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
             page_number=img.page_number,
             label=img.label,
             confidence=img.confidence,
+            caption=img.caption,
         )
         for page in pages
         for img in page.images
@@ -135,10 +136,10 @@ async def embed(body: EmbedRequest, request: Request, _: Authed):
     try:
         if body.image_base64:
             data = base64.b64decode(body.image_base64, validate=True)
-            vector = await asyncio.to_thread(embedding_reranker.embed_image, data)
+            vector = await embedding_reranker.embed_image(data)
         else:
             assert body.text is not None
-            vector = await asyncio.to_thread(embedding_reranker.embed_text, body.text)
+            vector = await embedding_reranker.embed_text(body.text)
     except Exception as exc:
         raise HTTPException(400, f"Embedding failed: {exc}") from exc
 
@@ -150,9 +151,7 @@ async def rerank(body: RerankRequest, request: Request, _: Authed):
     """Score each passage's relevance to ``query``, same order as input."""
     embedding_reranker = request.app.state.embedding_reranker
     try:
-        scores = await asyncio.to_thread(
-            embedding_reranker.rerank, body.query, body.passages
-        )
+        scores = await embedding_reranker.rerank(body.query, body.passages)
     except Exception as exc:
         raise HTTPException(400, f"Rerank failed: {exc}") from exc
 

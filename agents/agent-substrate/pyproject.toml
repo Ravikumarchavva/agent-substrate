@@ -113,25 +113,21 @@ s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
 # itself, not just importing it as a library. `make sync` uses this.
 server = ["agent-substrate[web,code,rag,s3,sandbox]"]
 # Layout-aware document parsing (PDF layout, chart/table detection, OCR) via
-# PaddleOCR, plus multimodal embedding (SigLIP) and reranking (MiniLM
-# cross-encoder) via sentence-transformers — used only by
-# `serving/services/extraction/`, never imported from the main API process.
-# `paddlepaddle` is pinned to the exact CPU-wheel version verified working on
-# this project's target hardware (see `[tool.uv.sources]` below — it comes
-# from PaddlePaddle's own CPU package index, not plain PyPI, and needs a
-# runtime mkldnn-disable workaround for CPUs without AVX-512; see
+# PaddleOCR — used only by `serving/services/extraction/`, never imported
+# from the main API process. Multimodal embedding and reranking are no
+# longer in-process (SentenceTransformer/CrossEncoder) — they're thin HTTP
+# calls to the llama-embed/llama-rerank `llama-server` sidecars
+# (docker-compose.yml), so sentence-transformers/torch are no longer needed
+# here. `paddlepaddle` is pinned to the exact CPU-wheel version verified
+# working on this project's target hardware (see `[tool.uv.sources]` below —
+# it comes from PaddlePaddle's own CPU package index, not plain PyPI, and
+# needs a runtime mkldnn-disable workaround for CPUs without AVX-512; see
 # `serving/services/extraction/pipeline.py::_disable_mkldnn`). Not needed
 # unless you actually run the extraction service — the base install already
 # covers CSV/JSON/text/pypdf-based PDF loading without it.
 extraction = [
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle==3.3.0",
-    "sentence-transformers>=5.7.0",
-    # Explicit direct dependency (sentence-transformers already pulls it
-    # transitively) — the `[tool.uv.sources]` CPU-index override below only
-    # applies to packages declared directly in this project, not purely
-    # transitive ones.
-    "torch>=2.0.0",
 ]
 
 [project.urls]
@@ -279,6 +275,10 @@ ignore_imports = [
     # extraction service + client — same pattern as code_interpreter's http_client
     "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.extraction_client",
     "substrate.serving.services.extraction.schemas -> substrate.capabilities.knowledge.extraction_client",
+    # files.py's .extracted.md sidecar write mirrors chat_context's same
+    # extraction-service call for the same reason (page-marked text for
+    # code_interpreter) — same exception as chat_context above.
+    "substrate.serving.monolith.routes.files -> substrate.capabilities.knowledge.extraction_client",
 ]
 
 # Orthogonal peers (not part of the layer stack):

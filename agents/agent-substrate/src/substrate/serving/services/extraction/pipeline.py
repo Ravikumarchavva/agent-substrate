@@ -46,6 +46,11 @@ class ExtractedImage:
     page_number: int | None = None
     label: str = "chart"
     confidence: float = 0.0
+    # OCR'd text for this block, already computed by the same layout pass
+    # (``block.content``) — kept alongside the crop so a confident
+    # chart/table is still findable by lexical/exact-text search, not only
+    # by visual similarity. ``None`` when OCR produced no text for the block.
+    caption: str | None = None
 
 
 @dataclass(slots=True)
@@ -134,12 +139,14 @@ class ExtractionPipeline:
                     if pil_img is not None:
                         buf = io.BytesIO()
                         pil_img.convert("RGB").save(buf, format="PNG")
+                        caption = (getattr(block, "content", "") or "").strip() or None
                         images.append(
                             ExtractedImage(
                                 data=buf.getvalue(),
                                 page_number=page_no,
                                 label=label,
                                 confidence=confidence,
+                                caption=caption,
                             )
                         )
                         continue

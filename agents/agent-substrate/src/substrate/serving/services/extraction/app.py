@@ -1,6 +1,6 @@
 """Standalone FastAPI application for the document-extraction service.
 
-Deploy this as its own low-replica Deployment (heavy paddlepaddle/torch
+Deploy this as its own low-replica Deployment (heavy paddlepaddle OCR
 runtime, model-loaded pods — see deployment/k8s/base/runtime/extraction.yaml).
 The main backend calls it via HTTP through ExtractionClient
 (capabilities/knowledge/extraction_client.py), only when
@@ -52,8 +52,8 @@ async def lifespan(app: FastAPI):
 
     pipeline = ExtractionPipeline(ocr_size=svc_config.ocr_size)
     embedding_reranker = EmbeddingReranker(
-        embedding_model=svc_config.embedding_model,
-        reranker_model=svc_config.reranker_model,
+        embed_server_url=svc_config.embed_server_url,
+        rerank_server_url=svc_config.rerank_server_url,
     )
 
     app.state.pipeline = pipeline
@@ -63,16 +63,18 @@ async def lifespan(app: FastAPI):
 
     try:
         pipeline.warmup()
-        embedding_reranker.warmup()
+        await embedding_reranker.warmup()
     except Exception as exc:
         # Warmup is best-effort — a failure here must not block startup;
-        # real requests still trigger a (slower, one-time) model load.
+        # real requests still trigger a (slower, one-time) model load /
+        # sidecar round-trip.
         logger.info("Extraction service warmup skipped (%s)", exc)
 
     logger.info("Extraction service ready  pod=%s", svc_config.pod_name)
 
     yield
 
+    await embedding_reranker.aclose()
     logger.info("Extraction service stopped  pod=%s", svc_config.pod_name)
 
 
@@ -85,7 +87,7 @@ def create_app() -> FastAPI:
             "Layout-aware document parsing (PDF layout, chart/table "
             "detection, OCR), multimodal embedding, and reranking for chat "
             "attachments and RAG — isolated from the main API process due "
-            "to its heavy paddlepaddle/torch runtime footprint."
+            "to its heavy paddlepaddle OCR runtime footprint."
         ),
         lifespan=lifespan,
     )

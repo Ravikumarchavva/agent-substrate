@@ -274,6 +274,85 @@ async def test_upload_triggers_eager_staging_for_local_backend(monkeypatch):
     assert kwargs["collection"].startswith("staging:")
 
 
+async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
+    """After successful staging, a page-marked `.extracted.md` sidecar is
+    written next to the original object, via the same file_store.upload
+    path — so code_interpreter (which mounts the same session dir) can read
+    it instead of re-parsing the PDF's raw bytes."""
+    from substrate.serving.monolith.routes import files as files_module
+
+    monkeypatch.setattr(files_module.settings, "EXTRACTION_SERVICE_URL", "")
+    captured_coros = []
+    monkeypatch.setattr(
+        files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
+    )
+
+    rag_backend = MagicMock()
+    rag_backend.name = "local"
+    rag_backend.ingest = AsyncMock()
+    data = _pdf_bytes(2)
+    ctx = _ctx_mock(rag_backend=rag_backend)
+
+    await upload_file(
+        request=_request_mock(_FakeRedis()),
+        file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
+        thread_id=None,
+        claims=_claims_mock(),
+        db=_db_mock(),
+        ctx=ctx,
+    )
+
+    assert len(captured_coros) == 1
+    await captured_coros[0]  # run the staging task synchronously
+
+    sidecar_calls = [
+        call
+        for call in ctx.file_store.upload.call_args_list
+        if call.args[0] == "users/test-user/uploads/doc.pdf.extracted.md"
+    ]
+    assert len(sidecar_calls) == 1
+    sidecar_text = sidecar_calls[0].args[1].decode("utf-8")
+    assert "## Page 1" in sidecar_text
+    assert "## Page 2" in sidecar_text
+    assert sidecar_calls[0].kwargs["content_type"] == "text/markdown"
+
+
+async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
+    """The sidecar write is best-effort — a failure there must not surface
+    as a staging_error on the file."""
+    from substrate.serving.monolith.routes import files as files_module
+
+    monkeypatch.setattr(files_module.settings, "EXTRACTION_SERVICE_URL", "")
+    captured_coros = []
+    monkeypatch.setattr(
+        files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
+    )
+
+    rag_backend = MagicMock()
+    rag_backend.name = "local"
+    rag_backend.ingest = AsyncMock()
+    data = _pdf_bytes(1)
+    ctx = _ctx_mock(rag_backend=rag_backend)
+
+    async def _upload_side_effect(key, *_args, **_kwargs):
+        if key.endswith(".extracted.md"):
+            raise RuntimeError("boom")
+
+    ctx.file_store.upload = AsyncMock(side_effect=_upload_side_effect)
+
+    await upload_file(
+        request=_request_mock(_FakeRedis()),
+        file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
+        thread_id=None,
+        claims=_claims_mock(),
+        db=_db_mock(),
+        ctx=ctx,
+    )
+
+    assert len(captured_coros) == 1
+    await captured_coros[0]  # must not raise
+
+
 async def test_upload_pinecone_backend_skips_eager_staging(monkeypatch):
     from substrate.serving.monolith.routes import files as files_module
 

@@ -58,7 +58,8 @@ class StubImageStore:
 
 class StubPipeline:
     """Stands in for RAGPipeline — image ingest bypasses it entirely, so
-    these tests only need ingest_documents/query to exist and be callable."""
+    these tests only need ingest_documents/embed_query to exist and be
+    callable."""
 
     def __init__(self) -> None:
         self.ingested: list = []
@@ -67,8 +68,8 @@ class StubPipeline:
         self.ingested.extend(documents)
         return len(documents)
 
-    async def query(self, question, *, collection: str = "default", limit: int = 5):
-        return []
+    async def embed_query(self, question: str) -> list[float]:
+        return [0.1, 0.2]
 
 
 class StubFileStore:
@@ -147,8 +148,9 @@ async def test_ingest_images_stores_bytes_in_the_file_store_not_the_vector_row()
     assert not any(isinstance(b, ImageBlock) for b in doc.content)
 
 
-async def test_query_images_rehydrates_bytes_from_the_stored_key():
-    """The model must receive real pixels, so resolution happens on read."""
+async def test_query_rehydrates_image_bytes_from_the_stored_key():
+    """The model must receive real pixels, so resolution happens on read —
+    via query()'s unconditional _rehydrate_image pass over final results."""
     image_store, store = StubImageStore(), StubFileStore()
     client = AsyncMock()
     client.embed_image = AsyncMock(return_value=[0.1, 0.2])
@@ -158,7 +160,7 @@ async def test_query_images_rehydrates_bytes_from_the_stored_key():
     )
     await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
 
-    results = await backend._query_images("chart?", collection="kb", limit=5)
+    results = await backend.query("chart?", collection="kb", limit=5)
 
     block = results[0].content[0]
     assert isinstance(block, ImageBlock)
@@ -166,7 +168,7 @@ async def test_query_images_rehydrates_bytes_from_the_stored_key():
     assert block.media_type == "image/png"
 
 
-async def test_query_images_survives_a_missing_object():
+async def test_query_survives_a_missing_image_object():
     """A missing image should degrade the answer, not fail the search."""
     image_store, store = StubImageStore(), StubFileStore()
     client = AsyncMock()
@@ -178,7 +180,7 @@ async def test_query_images_survives_a_missing_object():
     await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
     store.fail_download = True
 
-    results = await backend._query_images("chart?", collection="kb", limit=5)
+    results = await backend.query("chart?", collection="kb", limit=5)
 
     assert len(results) == 1  # placeholder text survives, no exception
 
@@ -281,26 +283,30 @@ async def test_ingest_images_noop_without_image_store():
     client.embed_image.assert_not_called()
 
 
-# ── _query_images ────────────────────────────────────────────────────────────
+# ── _hybrid_candidates — the image half (dense-only fallback since
+# StubImageStore doesn't implement hybrid_search) ──────────────────────────
 
 
-async def test_query_images_returns_empty_without_image_store():
-    backend, _ = _backend(image_store=None, extraction_client=AsyncMock())
-    assert await backend._query_images("q", collection="kb", limit=5) == []
+async def test_hybrid_candidates_returns_empty_without_any_store():
+    backend, _ = _backend(vector_store=None, image_store=None)
+    candidates = await backend._hybrid_candidates("q", collection="kb", filter=None)
+    assert candidates == []
 
 
-async def test_query_images_returns_empty_when_embed_text_fails():
+async def test_hybrid_candidates_skips_image_search_when_embed_text_fails():
     image_store = StubImageStore()
     client = AsyncMock()
     client.embed_text = AsyncMock(return_value=None)
     backend, _ = _backend(image_store=image_store, extraction_client=client)
 
-    results = await backend._query_images("show me the chart", collection="kb", limit=5)
+    candidates = await backend._hybrid_candidates(
+        "show me the chart", collection="kb", filter=None
+    )
 
-    assert results == []
+    assert candidates == []
 
 
-async def test_query_images_searches_image_store_with_embedded_query():
+async def test_hybrid_candidates_searches_image_store_with_embedded_query():
     image_store = StubImageStore()
     image_store.documents = [
         Document(
@@ -311,16 +317,22 @@ async def test_query_images_searches_image_store_with_embedded_query():
     client.embed_text = AsyncMock(return_value=[0.9, 0.1])
     backend, _ = _backend(image_store=image_store, extraction_client=client)
 
-    results = await backend._query_images("show me the chart", collection="kb", limit=5)
+    candidates = await backend._hybrid_candidates(
+        "show me the chart", collection="kb", filter=None
+    )
 
-    assert len(results) == 1
+    assert len(candidates) == 1
     assert image_store.searched_with == [[0.9, 0.1]]
 
 
-# ── query() — text reranked, then images appended (not merged into rerank) ──
+# ── query() — text and image candidates merged before one rerank pass ──────
 
 
-async def test_query_appends_image_results_after_text_reranking():
+async def test_query_merges_text_and_image_candidates_before_reranking():
+    vector_store = StubImageStore()  # generic search()-only stub, reused
+    vector_store.documents = [
+        Document(content=[TextBlock(text="hello")], embedding=[0.1])
+    ]
     image_store = StubImageStore()
     image_store.documents = [
         Document(
@@ -329,20 +341,15 @@ async def test_query_appends_image_results_after_text_reranking():
     ]
     client = AsyncMock()
     client.embed_text = AsyncMock(return_value=[0.9])
-    backend, pipeline = _backend(image_store=image_store, extraction_client=client)
-
-    text_result = SearchResult(id="t1", content=[TextBlock(text="hello")], score=0.7)
-
-    async def fake_query(question, *, collection="default", limit=5):
-        return [text_result]
-
-    pipeline.query = fake_query
+    backend, _ = _backend(
+        vector_store=vector_store, image_store=image_store, extraction_client=client
+    )
 
     results = await backend.query("show me the chart", collection="kb", limit=5)
 
-    assert results[0] is text_result
     assert len(results) == 2
-    assert isinstance(results[1].content[0], ImageBlock)
+    assert any(isinstance(b, TextBlock) for r in results for b in r.content)
+    assert any(isinstance(b, ImageBlock) for r in results for b in r.content)
 
 
 # ── _load_via_extraction_service — splits text pages and images ────────────

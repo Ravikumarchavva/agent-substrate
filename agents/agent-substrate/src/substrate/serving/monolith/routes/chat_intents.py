@@ -81,7 +81,12 @@ ATTACHMENT_ANALYSIS_INSTRUCTIONS = (
     "them. Keep prose-with-inline-'[n]'-at-point-of-claim for an answer "
     "that is genuinely narrative (explaining, reasoning, a single specific "
     "question) — don't force a table onto content that isn't naturally "
-    "row-shaped."
+    "row-shaped. "
+    "If you need code_interpreter to work with an attached PDF directly "
+    "(e.g. charting its numbers), read the '{filename}.extracted.md' sibling "
+    "file in your working directory instead of re-parsing the PDF's raw "
+    "bytes with pypdf/pdfplumber — it's already OCR'd, page-marked, and "
+    "includes captions raw extraction would miss."
 )
 
 ATTACHMENT_PLANNING_KEYWORDS = (

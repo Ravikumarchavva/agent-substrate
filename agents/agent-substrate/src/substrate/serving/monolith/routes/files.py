@@ -165,11 +165,96 @@ def _pdf_page_count(data: bytes) -> int:
     return len(PdfReader(io.BytesIO(data)).pages)
 
 
+async def _build_extracted_sidecar_text(
+    data: bytes, name: str, content_type: str
+) -> Optional[str]:
+    """Best-effort, page-marked plain text for ``code_interpreter`` to read
+    instead of re-parsing a PDF's raw bytes. Mirrors the extraction fallback
+    chain in ``routes/chat_context.py::_extract_document_text`` (extraction
+    service, then local pypdf), but keeps page boundaries — and any
+    image/table captions the extraction service returned — instead of
+    joining everything into one blob. Returns ``None`` when nothing could be
+    extracted."""
+    pages: list[tuple[int, str]] = []
+    captions_by_page: dict[int, list[str]] = {}
+
+    if settings.EXTRACTION_SERVICE_URL:
+        from substrate.capabilities.knowledge.extraction_client import ExtractionClient
+
+        client = ExtractionClient(
+            base_url=settings.EXTRACTION_SERVICE_URL,
+            auth_token=settings.EXTRACTION_AUTH_TOKEN,
+            timeout_s=settings.EXTRACTION_TIMEOUT_S,
+        )
+        try:
+            result = await client.extract(data, name, content_type)
+        finally:
+            await client.close()
+        if result.success and result.pages:
+            pages = [(p.page_number, p.text) for p in result.pages]
+            for image in result.images:
+                if image.caption and image.page_number is not None:
+                    captions_by_page.setdefault(image.page_number, []).append(
+                        image.caption
+                    )
+
+    if not pages and content_type == "application/pdf":
+        from pypdf import PdfReader
+
+        try:
+            reader = PdfReader(io.BytesIO(data))
+            pages = [
+                (i + 1, page.extract_text() or "")
+                for i, page in enumerate(reader.pages)
+            ]
+        except Exception:
+            return None
+
+    if not pages:
+        return None
+
+    sections: list[str] = []
+    for page_number, text in pages:
+        sections.append(f"## Page {page_number}\n\n{text.strip()}")
+        for caption in captions_by_page.get(page_number, []):
+            sections.append(f"> Image/table caption: {caption}")
+    return "\n\n".join(sections).strip() or None
+
+
+async def _write_extracted_sidecar(
+    ctx: ServerDependencies,
+    file_id: uuid.UUID,
+    data: bytes,
+    *,
+    object_key: str,
+    original_name: str,
+    content_type: str,
+) -> None:
+    """Write a ``{original_name}.extracted.md`` sidecar next to the uploaded
+    file, in the same session workspace directory — so ``code_interpreter``
+    (which mounts that same directory) can read pipeline-quality extracted
+    text instead of pypdf-ing the raw PDF bytes itself. Best-effort: never
+    raises, never affects staging success/failure."""
+    try:
+        if ctx.file_store is None:
+            return
+        text = await _build_extracted_sidecar_text(data, original_name, content_type)
+        if not text:
+            return
+        sidecar_key = f"{object_key}.extracted.md"
+        await ctx.file_store.upload(
+            sidecar_key, text.encode("utf-8"), content_type="text/markdown"
+        )
+    except Exception as exc:
+        logger.warning("Writing extracted sidecar failed for file %s: %s", file_id, exc)
+
+
 async def _stage_uploaded_doc(
     ctx: ServerDependencies,
     file_id: uuid.UUID,
     data: bytes,
     *,
+    object_key: str,
     original_name: str,
     content_type: str,
     owner_sub: str,
@@ -206,6 +291,14 @@ async def _stage_uploaded_doc(
                 row.staging_error = str(exc)[:500]
                 await session.commit()
         return
+    await _write_extracted_sidecar(
+        ctx,
+        file_id,
+        data,
+        object_key=object_key,
+        original_name=original_name,
+        content_type=content_type,
+    )
     async with session_factory() as session:
         row = await session.get(FileMetadata, file_id)
         if row is not None:
@@ -343,6 +436,7 @@ async def upload_file(
                 ctx,
                 meta.id,
                 data,
+                object_key=object_key,
                 original_name=original_name,
                 content_type=content_type,
                 owner_sub=claims.sub,

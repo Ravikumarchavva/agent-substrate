@@ -285,6 +285,10 @@ async def init_infrastructure(
             file_store=file_store,
             api_key=cfg.PINECONE_API_KEY,
             assistant_name=cfg.PINECONE_ASSISTANT_NAME,
+            dense_k=cfg.RAG_DENSE_K,
+            lexical_k=cfg.RAG_LEXICAL_K,
+            fused_k=cfg.RAG_FUSED_K,
+            rerank_top_n=cfg.RAG_RERANK_TOP_N,
         )
     except Exception as exc:  # noqa: BLE001 - degrade to "no RAG", never crash startup
         rag_backend = None

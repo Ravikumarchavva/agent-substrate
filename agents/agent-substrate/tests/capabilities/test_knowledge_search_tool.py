@@ -21,8 +21,8 @@ class FakeRagBackend:
         self.ingest_calls.append((source, collection, metadata))
         return IngestResult(chunks_indexed=3)
 
-    async def query(self, question, *, collection="default", limit=5):
-        self.query_calls.append((question, collection, limit))
+    async def query(self, question, *, collection="default", limit=5, filter=None):
+        self.query_calls.append((question, collection, limit, filter))
         return [
             SearchResult(
                 id="1",
@@ -44,9 +44,33 @@ async def test_knowledge_search_tool_search_calls_backend_query():
 
     result = await tool.execute(action="search", text="what is X?", limit=3)
 
-    assert backend.query_calls == [("what is X?", "default", 3)]
+    assert backend.query_calls == [("what is X?", "default", 3, None)]
     assert not result.is_error
     assert "relevant text" in result.content[0].text
+
+
+async def test_knowledge_search_tool_threads_file_id_and_page_number_as_filter():
+    """Explicit page-navigation: file_id/page_number become a filter dict
+    forwarded to backend.query(), not baked into the query text."""
+    backend = FakeRagBackend()
+    tool = KnowledgeSearchTool(backend)
+
+    await tool.execute(
+        action="search", text="next section", file_id="f9", page_number=14
+    )
+
+    assert backend.query_calls == [
+        ("next section", "default", 5, {"file_id": "f9", "page_number": 14})
+    ]
+
+
+async def test_knowledge_search_tool_omits_filter_when_no_navigation_args():
+    backend = FakeRagBackend()
+    tool = KnowledgeSearchTool(backend)
+
+    await tool.execute(action="search", text="what is X?")
+
+    assert backend.query_calls[0][3] is None
 
 
 async def test_knowledge_search_tool_ingest_calls_backend_ingest():
@@ -71,7 +95,7 @@ async def test_knowledge_search_tool_requires_text():
 
 async def test_knowledge_search_tool_no_results():
     class EmptyBackend(FakeRagBackend):
-        async def query(self, question, *, collection="default", limit=5):
+        async def query(self, question, *, collection="default", limit=5, filter=None):
             return []
 
     tool = KnowledgeSearchTool(EmptyBackend())
@@ -95,8 +119,8 @@ class CitableRagBackend(FakeRagBackend):
         super().__init__()
         self._results = results
 
-    async def query(self, question, *, collection="default", limit=5):
-        self.query_calls.append((question, collection, limit))
+    async def query(self, question, *, collection="default", limit=5, filter=None):
+        self.query_calls.append((question, collection, limit, filter))
         if self._results is not None:
             return self._results
         return [

@@ -32,7 +32,12 @@ class KnowledgeSearchTool:
     description: str = (
         "Search or ingest into the project's knowledge base. "
         "action=search: retrieve passages relevant to a query. "
-        "action=ingest: index a document's text."
+        "action=ingest: index a document's text. "
+        "Page navigation: after a search result names a file_id and "
+        "page_number (see its label), pass those back on a follow-up search "
+        "to jump straight to a specific page of a specific file instead of "
+        "searching by similarity again — e.g. to read the page right after "
+        "a match that looked cut off."
     )
     input_schema: dict = {
         "type": "object",
@@ -52,6 +57,21 @@ class KnowledgeSearchTool:
                     "Max results to return (search action, default 5, max 20). "
                     "Use 10-15 for broad requests like summarizing a whole "
                     "document — the default under-covers multi-section docs."
+                ),
+            },
+            "file_id": {
+                "type": "string",
+                "description": (
+                    "search action only. Restrict results to one file "
+                    "(from a prior result's citation metadata) — pair with "
+                    "page_number for explicit page navigation."
+                ),
+            },
+            "page_number": {
+                "type": "integer",
+                "description": (
+                    "search action only. Restrict results to one page of "
+                    "the file named by file_id."
                 ),
             },
         },
@@ -82,6 +102,8 @@ class KnowledgeSearchTool:
         action: str,
         text: str = "",
         limit: int = 5,
+        file_id: str = "",
+        page_number: int | None = None,
         **_: object,
     ) -> ToolExecutionResult:
         limit = max(1, min(limit, 20))
@@ -106,8 +128,13 @@ class KnowledgeSearchTool:
             )
 
         if action == "search":
+            filter_: dict[str, object] = {}
+            if file_id:
+                filter_["file_id"] = file_id
+            if page_number is not None:
+                filter_["page_number"] = page_number
             results = await self._backend.query(
-                text, collection=collection, limit=limit
+                text, collection=collection, limit=limit, filter=filter_ or None
             )
             if not results:
                 return ToolExecutionResult(

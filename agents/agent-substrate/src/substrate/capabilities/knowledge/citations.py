@@ -17,8 +17,9 @@ same number for the life of a collection.
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field, replace
+from difflib import SequenceMatcher
 from typing import Any
 
 from substrate.kernel.storage.vector import SearchResult
@@ -27,6 +28,21 @@ from substrate.kernel.storage.vector import SearchResult
 # recognise the quote, short enough that a dozen citations don't bloat the SSE
 # payload (the full passage already went to the model in the tool's text output).
 _SNIPPET_CHARS = 240
+
+# Matches config.RAG_MIN_RERANK_SCORE's value. Kept as a plain default here
+# rather than importing substrate.config — this module has no config
+# dependency today and shouldn't be the first to add one; callers that care
+# about the real configured value pass it explicitly.
+_DEFAULT_MIN_SCORE = 0.1
+
+# "Near-duplicate" for overlap-window chunks: literal text overlap, not
+# semantic similarity. difflib's ratio is good enough for that and needs no
+# new dependency.
+_DEFAULT_DEDUP_SIMILARITY = 0.9
+
+# Characters a chunk boundary can end/start with and still count as "ends a
+# sentence cleanly" — used by the mid-sentence-boundary heuristic below.
+_TERMINAL_END_CHARS = (".", "!", "?", '"', "'", ")", "]", "”", "’")
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +66,13 @@ class Citation:
     score: float = 0.0
     snippet: str = ""
     backend: str = ""
+    # Adjacent-chunk text attached only when a continuity signal holds (see
+    # attach_adjacency_context()). Kept separate from `snippet`/the passage
+    # text sent to the model — never silently concatenated — so a caller can
+    # render "...continues from previous page: ..." as clearly-labelled
+    # surrounding context rather than passing it off as the matched passage.
+    preceding_context: str = ""
+    following_context: str = ""
 
     def label(self) -> str:
         """Human-readable source tag, e.g. ``(report.pdf, p.5)``.
@@ -77,6 +100,8 @@ class Citation:
             "score": round(self.score, 4),
             "snippet": self.snippet,
             "backend": self.backend,
+            "preceding_context": self.preceding_context,
+            "following_context": self.following_context,
         }
 
 
@@ -120,6 +145,142 @@ def _pages_of(metadata: dict[str, Any]) -> tuple[int, ...]:
 
 def _snippet_of(result: SearchResult) -> str:
     return " ".join(result.to_text().split())[:_SNIPPET_CHARS]
+
+
+# ── Score threshold + near-duplicate suppression ────────────────────────────
+#
+# Both run as a pre-pass inside build_citations(), in this order: score
+# threshold first (cheap, and there's no reason to run dedup comparisons over
+# results that are getting dropped anyway), then near-duplicate suppression
+# over the survivors. Filtered-out results are *not* removed from the
+# result list — build_citations() still walks every result positionally
+# (index_for/first_seen must stay aligned with the caller's `results` list,
+# since callers like knowledge_search.py zip them together) — they're just
+# routed down the same "uncitable" path already used for results with no
+# filename: index 0, first_seen False.
+
+
+def filter_by_score(
+    results: list[SearchResult], min_score: float = _DEFAULT_MIN_SCORE
+) -> list[SearchResult]:
+    """Drop results scoring below *min_score*.
+
+    If every result is below threshold, returns an empty list — not an
+    error. Telling the model "no confident match found" is the caller's
+    job; this just produces the (possibly empty) citable set.
+    """
+    return [r for r in results if r.score >= min_score]
+
+
+def suppress_near_duplicates(
+    results: list[SearchResult],
+    similarity_threshold: float = _DEFAULT_DEDUP_SIMILARITY,
+) -> list[SearchResult]:
+    """Drop results whose text is a near-duplicate of an already-kept one.
+
+    "Near-duplicate" means ``SequenceMatcher(None, a, b).ratio()`` exceeds
+    *similarity_threshold* — literal text overlap, the kind two overlap-
+    window chunks of the same passage produce, not semantic similarity.
+    Highest-scoring result of a duplicate cluster wins; the rest are
+    dropped. Survivors are returned in their original relative order.
+    """
+    winners_first = sorted(range(len(results)), key=lambda i: (-results[i].score, i))
+    kept_ids: set[int] = set()
+    kept_texts: list[str] = []
+    for i in winners_first:
+        text = results[i].to_text()
+        if any(
+            SequenceMatcher(None, text, kept).ratio() > similarity_threshold
+            for kept in kept_texts
+        ):
+            continue
+        kept_ids.add(i)
+        kept_texts.append(text)
+    return [r for i, r in enumerate(results) if i in kept_ids]
+
+
+# ── Continuity-gated adjacency context ──────────────────────────────────────
+
+ChunkLookup = Callable[[str], Awaitable[SearchResult | None]]
+
+
+def _looks_open_at_start(text: str) -> bool:
+    """Cheap mid-sentence heuristic: starts lowercase → likely continues a
+    sentence the previous chunk began."""
+    stripped = text.lstrip()
+    return bool(stripped) and stripped[0].islower()
+
+
+def _looks_open_at_end(text: str) -> bool:
+    """Cheap mid-sentence heuristic: no terminal punctuation → likely cut off
+    mid-sentence, continuing into the next chunk."""
+    stripped = text.rstrip()
+    return bool(stripped) and stripped[-1] not in _TERMINAL_END_CHARS
+
+
+def _same_section(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    section_a = a.get("section_id")
+    section_b = b.get("section_id")
+    return section_a is not None and section_a == section_b
+
+
+async def attach_adjacency_context(
+    citation: Citation,
+    result: SearchResult,
+    *,
+    get_chunk_by_id: ChunkLookup,
+) -> Citation:
+    """Return *citation* with neighbouring-chunk text attached, gated by a
+    continuity signal per side.
+
+    ``result.metadata`` is expected to carry ``StructureAwareChunker``'s
+    ``prev_chunk_id`` / ``next_chunk_id`` / ``section_id`` keys. For each
+    side, the neighbour (fetched via the injected *get_chunk_by_id*) is
+    attached only when a continuity signal holds for that side:
+
+    - the neighbour shares the current chunk's ``section_id``, OR
+    - the current chunk's own text looks cut off on that side (starts
+      lowercase for the preceding side, has no terminal punctuation for the
+      following side — see ``_looks_open_at_start``/``_looks_open_at_end``).
+
+    Neither signal holding means no neighbour is attached on that side. A
+    missing chunk id, or a lookup that returns ``None``, also leaves that
+    side unattached. Never mutates *citation* or concatenates neighbour text
+    into its primary fields — returns a new ``Citation`` (or the same one,
+    unchanged, when nothing qualifies).
+    """
+    metadata = result.metadata or {}
+    text = result.to_text()
+    prev_id = metadata.get("prev_chunk_id")
+    next_id = metadata.get("next_chunk_id")
+
+    preceding_context = citation.preceding_context
+    following_context = citation.following_context
+
+    if prev_id:
+        prev = await get_chunk_by_id(prev_id)
+        if prev is not None and (
+            _same_section(metadata, prev.metadata or {}) or _looks_open_at_start(text)
+        ):
+            preceding_context = prev.to_text()
+
+    if next_id:
+        nxt = await get_chunk_by_id(next_id)
+        if nxt is not None and (
+            _same_section(metadata, nxt.metadata or {}) or _looks_open_at_end(text)
+        ):
+            following_context = nxt.to_text()
+
+    if (
+        preceding_context == citation.preceding_context
+        and following_context == citation.following_context
+    ):
+        return citation
+    return replace(
+        citation,
+        preceding_context=preceding_context,
+        following_context=following_context,
+    )
 
 
 class CitationLedger:
@@ -222,22 +383,50 @@ def build_citations(
     backend_name: str,
     collection: str,
     ledger: CitationLedger,
+    min_score: float = _DEFAULT_MIN_SCORE,
+    dedup_similarity_threshold: float | None = None,
 ) -> CitationSet:
     """Assign stable citation indices to *results*.
 
     Deduplicates on ``(file, page)`` before numbering, so two chunks retrieved
     from the same page of the same file share one index — the model citing it
     twice is then correct rather than contradictory.
+
+    Before that, up to two more passes run over *results* (see
+    ``filter_by_score``/``suppress_near_duplicates`` docstrings for the exact
+    semantics): results scoring below ``min_score`` are always dropped first;
+    then, only when *dedup_similarity_threshold* is given, near-duplicate
+    results losing to a higher-scoring match are dropped too.
+    ``dedup_similarity_threshold`` defaults to ``None`` (disabled) rather than
+    ``_DEFAULT_DEDUP_SIMILARITY`` — literal text-overlap dedup is blunt enough
+    (it doesn't know two results come from different files/pages) that it
+    should be an opt-in a caller reaches for, not silently on for everyone
+    calling ``build_citations`` today. Pass ``_DEFAULT_DEDUP_SIMILARITY``
+    (0.9) to enable it with the documented default.
+
+    Either way, dropped results are routed down the same "uncitable" path as
+    a result with no filename — index 0, ``first_seen`` False — rather than
+    removed from ``results``, so ``index_for``/``first_seen`` stay
+    positionally aligned with the input list for callers that zip them
+    together.
     """
+    citable_results = filter_by_score(results, min_score)
+    if dedup_similarity_threshold is not None:
+        citable_results = suppress_near_duplicates(
+            citable_results, dedup_similarity_threshold
+        )
+    citable_ids = {id(r) for r in citable_results}
+
     index_for: list[int] = []
     first_seen: list[bool] = []
     for result in results:
         metadata = result.metadata or {}
         file_name = str(metadata.get("filename") or "").strip()
-        if not file_name:
-            # Nothing servable to link to. No index means the passage is
-            # labelled as uncitable and the model has no number to cite —
-            # preferable to a chip that opens nothing.
+        if not file_name or id(result) not in citable_ids:
+            # Nothing servable to link to (no filename), or filtered out by
+            # score/dedup above. No index means the passage is labelled as
+            # uncitable and the model has no number to cite — preferable to
+            # a chip that opens nothing.
             index_for.append(0)
             first_seen.append(False)
             continue
@@ -276,9 +465,13 @@ def build_citations(
 
 
 __all__ = [
+    "ChunkLookup",
     "Citation",
     "CitationLedger",
     "CitationLedgerStore",
     "CitationSet",
+    "attach_adjacency_context",
     "build_citations",
+    "filter_by_score",
+    "suppress_near_duplicates",
 ]

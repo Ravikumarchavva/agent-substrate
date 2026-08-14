@@ -42,15 +42,15 @@ class _FakeEmbeddingReranker:
         self.embed_image_calls: list[bytes] = []
         self.embed_text_calls: list[str] = []
 
-    def embed_image(self, data: bytes) -> list[float]:
+    async def embed_image(self, data: bytes) -> list[float]:
         self.embed_image_calls.append(data)
         return [0.1, 0.2, 0.3]
 
-    def embed_text(self, text: str) -> list[float]:
+    async def embed_text(self, text: str) -> list[float]:
         self.embed_text_calls.append(text)
         return [0.4, 0.5, 0.6]
 
-    def rerank(self, query: str, passages: list[str]) -> list[float]:
+    async def rerank(self, query: str, passages: list[str]) -> list[float]:
         return [1.0 - i * 0.1 for i in range(len(passages))]
 
 

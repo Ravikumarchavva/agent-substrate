@@ -28,9 +28,18 @@ PRESENTATION_GUIDANCE = (
     "![short description](sandbox:cost_variance.png). To offer a file for "
     "download, write it as a markdown link: [Download report](sandbox:report.csv). "
     "Use a relative filename (it resolves against your working directory). Do "
-    "NOT paste base64 or data URIs. Prefer saving a small number of clear, "
-    "final figures over many exploratory ones; use os.listdir('.') to see what "
-    "you've saved."
+    "NOT paste base64 or data URIs in your chat answer. Prefer saving a small "
+    "number of clear, final figures over many exploratory ones; use "
+    "os.listdir('.') to see what you've saved. "
+    "If you are generating a separate HTML FILE as a deliverable (not your "
+    "chat answer) and it needs to show a chart, embed each image as a base64 "
+    'data URI directly in that file\'s own <img src="data:image/png;base64,..."> '
+    'tag — neither `sandbox:` nor a plain relative filename (src="chart.png") '
+    "resolves when that HTML is opened later: it's served from a different URL "
+    "than the image file, so a relative path 404s and `sandbox:` isn't a real "
+    "protocol outside the chat UI. Read the PNG's bytes and "
+    "base64.b64encode() them into the tag rather than linking to the sibling "
+    "file."
 )
 
 

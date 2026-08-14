@@ -242,6 +242,81 @@ services:
       dockerfile: deployment/docker/extraction.Dockerfile
     ports:
       - "8021:8080"
+    depends_on:
+      llama-embed:
+        condition: service_healthy
+      llama-rerank:
+        condition: service_healthy
+    environment:
+      EMBED_SERVER_URL: http://llama-embed:8031
+      RERANK_SERVER_URL: http://llama-rerank:8032
+    restart: unless-stopped
+
+  # Qwen3-VL-Embedding-2B sidecar (dense multimodal embedding). See
+  # docs/claude_docs/decisions.md for why this pair of models + llama-server
+  # was chosen — real, measured evidence (no GPU, CPU-only, ~2GB RSS each),
+  # not an estimate. --parallel is a conservative launch default; see the
+  # RAG redesign plan's Concurrency section before raising it.
+  llama-embed:
+    profiles:
+      - extraction
+    build:
+      context: ../..
+      dockerfile: deployment/docker/llama-server.Dockerfile
+    command:
+      - --hf-repo
+      - Rizwan313/Qwen3-VL-Embedding-2B-GGUF
+      - --hf-file
+      - qwen3-vl-embedding-2b-Q4_K_M.gguf
+      - --embedding
+      - --pooling
+      - last
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8031"
+      - --ctx-size
+      - "2048"
+      - --parallel
+      - "2"
+    environment:
+      PORT: "8031"
+    ports:
+      - "8031:8031"
+    volumes:
+      - llama-model-cache:/cache
+    restart: unless-stopped
+
+  # Qwen3-VL-Reranker-2B sidecar (multimodal cross-encoder reranking).
+  # --parallel 1: the most expensive stage per query — bounded, predictable
+  # CPU behavior over throughput until real load-tested. Don't raise without
+  # benchmarking (see the RAG redesign plan).
+  llama-rerank:
+    profiles:
+      - extraction
+    build:
+      context: ../..
+      dockerfile: deployment/docker/llama-server.Dockerfile
+    command:
+      - --hf-repo
+      - staralt/Qwen3-VL-Reranker-2B-Q4_K_M-GGUF
+      - --hf-file
+      - qwen3-vl-reranker-2b-q4_k_m-imat.gguf
+      - --reranking
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8032"
+      - --ctx-size
+      - "2048"
+      - --parallel
+      - "1"
+    environment:
+      PORT: "8032"
+    ports:
+      - "8032:8032"
+    volumes:
+      - llama-model-cache:/cache
     restart: unless-stopped
 
   # LEGACY / opt-in. The default SANDBOX_RUNTIME=bubblewrap needs no container
@@ -299,3 +374,4 @@ volumes:
   seaweedfsdata:
   seaweedfsadmin:
   workspaces:
+  llama-model-cache:

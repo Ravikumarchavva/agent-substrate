@@ -453,3 +453,56 @@ with only in-memory/mocked backends will not catch this class of bug; (3) if
 a removal is in the same pass as several others, don't assume catching one
 mistake clears the rest — re-run the full check against each remaining
 removal candidate, don't stop at the first one that turns out fine.
+
+---
+
+## Extraction-service embedding/reranking: Qwen3-VL pair via llama-server sidecars, not SigLIP+MiniLM in-process
+
+**Decision:** the extraction service's embedding and reranking models are
+`Qwen3-VL-Embedding-2B` and `Qwen3-VL-Reranker-2B` (both Q4_K_M GGUF, Apache
+2.0), served as two separate `llama-server` HTTP sidecars
+(`deployment/docker/llama-server.Dockerfile`, `docker-compose.yml`'s
+`llama-embed`/`llama-rerank` services) — not loaded in-process via
+`sentence-transformers`/`CrossEncoder` the way SigLIP + `ms-marco-MiniLM`
+were before this. `EmbeddingReranker` (`serving/services/extraction/embedding.py`)
+is a thin HTTP client to these two services.
+
+**Why:** the deployment target has no GPU. Real candidates were narrowed and
+verified by actually running them, not by reading spec sheets:
+- `jina-clip-v2` / `jina-embeddings-v5-omni-nano` (dense+multimodal,
+  otherwise attractive) — ruled out: CC BY-NC-4.0, non-commercial only;
+  self-hosting inside a commercial SaaS product is exactly the use that
+  license excludes.
+- `UEmbed-2B` (Alibaba) — MLX-quantized community builds are Apple-Silicon
+  only; the base model needs a GPU or heavy full-precision CPU inference;
+  too new (days old at evaluation time) for a mature non-MLX quantization.
+- `Qwen3-VL-Embedding-2B` / `Qwen3-VL-Reranker-2B` — real Qwen/Alibaba team
+  pair (same paper), Apache 2.0, genuinely multimodal (text/image/video in
+  one space), published benchmarks (MMEB-v2 73.2/75.1). Verified by
+  building `llama-server` from source and running both for real: correct
+  2048-dim embeddings (cosine 0.82 similar-pair / 0.13 dissimilar-pair),
+  correct reranking (0.50 relevant / 0.22 irrelevant), ~2.0-2.1GB RSS each.
+
+The in-process Python path was tried first and doesn't work for these two
+models: `llama-cpp-python`'s generic embedding call does not expose correct
+pooling for either model (first attempt produced inconsistent embedding
+dimensions per call — silently wrong, not an error) — only passing
+`pooling_type` explicitly fixed the embedder, and the reranker only works at
+all via `llama-server`'s dedicated `--reranking` mode + `/rerank` endpoint,
+not via any generic embedding call with `pooling_type=RANK`, which produced
+garbage (denormalized/uninitialized-looking floats) even after specifying
+the pooling type correctly for the embedder case.
+
+**Ruled out:** trusting a model's file size or download page as sufficient
+evidence it works — the first GGUF conversion tried (`TitleOS/...` for the
+embedder) loaded without error and *looked* fine until dimensions were
+actually compared across calls. A clean load + no exception is not proof of
+correct output; only checking the actual output shape and running a
+real cosine-similarity/relevance sanity check caught it.
+
+**How to apply:** don't raise `llama-embed`/`llama-rerank`'s `--parallel`
+above the conservative launch defaults (2 and 1 respectively) without
+benchmarking real RSS and latency first — this session's own default,
+unset `--ctx-size` run pushed the reranker to ~9.5GB before being caught.
+See the RAG pipeline redesign plan for the full pipeline this pair feeds
+into (hybrid retrieval, reranking, page-adjacency context).

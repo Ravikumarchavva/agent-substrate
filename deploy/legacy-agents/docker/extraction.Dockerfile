@@ -3,12 +3,13 @@
 # Build:   docker build -f docker/extraction.Dockerfile -t extraction:latest .
 # Run:     docker run -p 8080:8080 extraction:latest
 #
-# Layout-aware document parsing (PaddleOCR: chart/table detection + OCR) plus
-# multimodal embedding (SigLIP) and reranking (MiniLM cross-encoder) via
-# sentence-transformers (see the `extraction` extra's own comment in
-# pyproject.toml). CPU-only — paddlepaddle's CPU wheel (~185MB) is used, no
-# CUDA runtime pulled in. Isolated from the main API image entirely — this is
-# the only place these dependencies get installed.
+# Layout-aware document parsing (PaddleOCR: chart/table detection + OCR).
+# Multimodal embedding and reranking are NOT loaded in-process here — this
+# service calls the llama-embed/llama-rerank sidecars over HTTP instead (see
+# EmbeddingReranker in embedding.py and docs/claude_docs/decisions.md for
+# why). CPU-only — paddlepaddle's CPU wheel (~185MB) is used, no CUDA
+# runtime pulled in. Isolated from the main API image entirely — this is the
+# only place these dependencies get installed.
 
 FROM python:3.13-slim AS base
 

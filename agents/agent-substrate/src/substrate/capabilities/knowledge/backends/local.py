@@ -16,9 +16,12 @@ Reuses, unchanged:
 Chart/table images extracted by the service bypass ``RAGPipeline`` entirely
 (it always re-embeds via the text embedding client, ignoring any pre-set
 ``Document.embedding`` — see ``pipeline.py::ingest_documents``) and go
-through a separate multimodal ingest/query path into ``image_store``, a
-second ``VectorStore`` with its own embedding dimensionality (SigLIP-base:
-768) that can't share a table with the text store's dimensionality.
+through a separate multimodal ingest path into ``image_store``, a second
+``VectorStore`` with its own embedding dimensionality (Qwen3-VL-Embedding-2B:
+2048, see docs/claude_docs/decisions.md) that can't share a table with the
+text store's dimensionality. At query time, though, its candidates are
+merged with the text store's into one pool before reranking — see
+``query()``/``_hybrid_candidates()`` below — not kept in a separate path.
 """
 
 from __future__ import annotations
@@ -72,6 +75,13 @@ class LocalRagBackend:
         # extracted chart/table images are written here and only a storage key
         # is kept in the vector row — see _ingest_images.
         file_store: Any | None = None,
+        # Hybrid-retrieval budgets — see config.py's RAG_DENSE_K/RAG_LEXICAL_K/
+        # RAG_FUSED_K/RAG_RERANK_TOP_N for the defaults these mirror and
+        # docs/claude_docs/decisions.md for why each stage is sized this way.
+        dense_k: int = 50,
+        lexical_k: int = 50,
+        fused_k: int = 50,
+        rerank_top_n: int = 10,
     ) -> None:
         self._pipeline = pipeline
         self._vector_store = vector_store
@@ -83,6 +93,10 @@ class LocalRagBackend:
         self._model_client = model_client
         self._extraction_client = extraction_client
         self._file_store = file_store
+        self._dense_k = dense_k
+        self._lexical_k = lexical_k
+        self._fused_k = fused_k
+        self._rerank_top_n = rerank_top_n
 
     def _get_extraction_client(self) -> "ExtractionClient | None":
         if not self._extraction_url:
@@ -125,21 +139,105 @@ class LocalRagBackend:
         *,
         collection: str = "default",
         limit: int = 5,
+        filter: dict[str, Any] | None = None,
     ) -> list[SearchResult]:
-        fetch_limit = limit * 3 if self._reranker else limit
-        results = await self._pipeline.query(
-            question, collection=collection, limit=fetch_limit
+        """Hybrid (dense + lexical) retrieval, merged across text and image
+        stores into one candidate pool, pre-filtered, then reranked.
+
+        ``filter`` (metadata equality, e.g. ``{"file_id": ..., "page_number":
+        13}``) is forwarded to both stores' ``hybrid_search()`` — the
+        explicit page-navigation path documented on ``KnowledgeSearchTool``.
+
+        Text and image candidates share one reranker call rather than two
+        separately-ranked lists appended together: the reranker (llama-rerank,
+        via ``CrossEncoderReranker``) only accepts text input — confirmed
+        from the real llama.cpp server source (`/rerank`'s ``documents``
+        field is ``vector<string>``, no image field at all) — so an image
+        candidate reranks on its caption/OCR text, the same text lexical
+        search already indexes for it. Not the original plan's "image +
+        caption together" design; that capability doesn't exist in this
+        server build.
+        """
+        candidates = await self._hybrid_candidates(
+            question, collection=collection, filter=filter
         )
+        if not candidates:
+            return []
+
+        from substrate.capabilities.knowledge.reranker import prefilter_candidates
+
+        prefiltered = prefilter_candidates(candidates, top_n=self._rerank_top_n)
+
         if self._reranker:
-            results = await self._reranker.rerank(question, results, top_k=limit)
-        # Image hits are ranked by the multimodal embedding's own similarity
-        # search, not the text reranker (a cross-encoder scoring the query
-        # against an ImageBlock's placeholder text repr would be meaningless)
-        # — appended after reranking, not merged into it.
-        image_results = await self._query_images(
-            question, collection=collection, limit=limit
+            results = await self._reranker.rerank(question, prefiltered, top_k=limit)
+        else:
+            results = sorted(prefiltered, key=lambda r: r.score, reverse=True)[:limit]
+
+        # Resolve any image_key back to real pixels — a no-op for text rows
+        # (they carry no image_key), so safe to map over the whole list.
+        return [await self._rehydrate_image(r) for r in results]
+
+    async def _hybrid_candidates(
+        self,
+        question: str,
+        *,
+        collection: str,
+        filter: dict[str, Any] | None,
+    ) -> list[SearchResult]:
+        """Dense+lexical hybrid search against the text store and, when
+        configured, the image store — merged into one list. Falls back to
+        dense-only ``search()`` for a store that doesn't implement
+        ``hybrid_search`` (duck-typed check, not every ``VectorStore`` does)."""
+        candidates: list[SearchResult] = []
+
+        if self._vector_store is not None:
+            text_vec = await self._pipeline.embed_query(question)
+            candidates += await self._hybrid_or_dense(
+                self._vector_store,
+                text_vec,
+                question,
+                collection=collection,
+                filter=filter,
+            )
+
+        if self._image_store is not None:
+            client = self._get_extraction_client()
+            if client is not None:
+                image_vec = await client.embed_text(question)
+                if image_vec is not None:
+                    candidates += await self._hybrid_or_dense(
+                        self._image_store,
+                        image_vec,
+                        question,
+                        collection=collection,
+                        filter=filter,
+                    )
+
+        return candidates
+
+    async def _hybrid_or_dense(
+        self,
+        store: "VectorStore",
+        query_vec: list[float],
+        query_text: str,
+        *,
+        collection: str,
+        filter: dict[str, Any] | None,
+    ) -> list[SearchResult]:
+        hybrid = getattr(store, "hybrid_search", None)
+        if hybrid is not None:
+            return await hybrid(
+                query_vec,
+                query_text,
+                collection=collection,
+                dense_k=self._dense_k,
+                lexical_k=self._lexical_k,
+                fused_k=self._fused_k,
+                filter=filter,
+            )
+        return await store.search(
+            query_vec, collection=collection, limit=self._fused_k, filter=filter
         )
-        return results + image_results
 
     async def query_with_context(
         self,
@@ -244,16 +342,23 @@ class LocalRagBackend:
             if vector is None:
                 continue  # one bad image must not fail the whole ingest
             media_type = meta.get("media_type", "image/png")
+            # OCR'd text for the block, already computed by the extraction
+            # service's layout pass — kept as the row's text so lexical
+            # search can still find a confident chart/table, not only
+            # visual similarity search.
+            caption = meta.get("caption")
+            label_text = f"[{meta.get('label') or 'image'}]"
+            text = f"{label_text} {caption}" if caption else label_text
             key = await self._store_image_bytes(data, meta, index=i)
             if key is not None:
                 # Reference, not bytes: a page image is ~500KB, and inlining
                 # them made the images dwarf the vectors they exist to serve
                 # (5.6MB of images against 248KB of text vectors). The row keeps
-                # the embedding — the only part search needs — and _query_images
-                # resolves the key back to bytes on the way out.
+                # the embedding — the only part search needs — and
+                # _rehydrate_image resolves the key back to bytes on the way out.
                 documents.append(
                     Document(
-                        content=[TextBlock(text=f"[{meta.get('label') or 'image'}]")],
+                        content=[TextBlock(text=text)],
                         embedding=vector,
                         metadata={**meta, "image_key": key, "media_type": media_type},
                     )
@@ -298,22 +403,6 @@ class LocalRagBackend:
             logger.warning("Storing RAG image %s failed: %s", key, exc)
             return None
         return key
-
-    async def _query_images(
-        self, question: str, *, collection: str, limit: int
-    ) -> list[SearchResult]:
-        if self._image_store is None:
-            return []
-        client = self._get_extraction_client()
-        if client is None:
-            return []
-        query_vector = await client.embed_text(question)
-        if query_vector is None:
-            return []
-        results = await self._image_store.search(
-            query_vector, collection=collection, limit=limit
-        )
-        return [await self._rehydrate_image(r) for r in results]
 
     async def _rehydrate_image(self, result: SearchResult) -> SearchResult:
         """Swap a stored ``image_key`` back for the real pixels.
@@ -414,6 +503,7 @@ class LocalRagBackend:
                     "label": img.label,
                     "confidence": img.confidence,
                     "media_type": img.media_type,
+                    "caption": img.caption,
                 },
             )
             for img in result.images

@@ -31,9 +31,14 @@ class ServiceConfig(BaseSettings):
     max_upload_bytes: int = 50 * 1024 * 1024
 
     # ── Multimodal embedding + reranker ─────────────────────────────────
-    embedding_model: str = "google/siglip-base-patch16-224"
-    embedding_dim: int = 768
-    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # Qwen3-VL-Embedding-2B / Qwen3-VL-Reranker-2B, served by the
+    # llama-embed/llama-rerank sidecars (docker-compose.yml) — see
+    # docs/claude_docs/decisions.md for why these replaced SigLIP + MiniLM
+    # cross-encoder loaded in-process. embedding_dim=2048 is the model's
+    # native output width, verified via a real embed call, not assumed.
+    embed_server_url: str = "http://llama-embed:8031"
+    rerank_server_url: str = "http://llama-rerank:8032"
+    embedding_dim: int = 2048
 
     # ── Pod identity (k8s Downward API) ──────────────────────────────────
     pod_name: str = "extraction-0"

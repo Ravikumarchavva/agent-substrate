@@ -156,7 +156,12 @@ class PineconeRagBackend:
         *,
         collection: str = "default",
         limit: int = 5,
+        filter: dict[str, Any] | None = None,
     ) -> list[SearchResult]:
+        # `filter` (generic metadata-equality dict, e.g. page navigation) has
+        # no Pinecone Assistant equivalent to map onto — ignored here, same
+        # as base.py's Protocol docstring says. Only `collection` isolation
+        # is enforced, as before.
         response = await asyncio.to_thread(
             self._assistant.context,
             query=question,

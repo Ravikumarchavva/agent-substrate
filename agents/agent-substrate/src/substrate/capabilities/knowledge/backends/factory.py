@@ -39,6 +39,9 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
     ``extraction_timeout_s`` (optional — layout-aware parsing, chart-image
     extraction, multimodal embedding, and a local cross-encoder reranker;
     falls back to pypdf/pdfplumber text-only parsing without one).
+    ``dense_k``/``lexical_k``/``fused_k``/``rerank_top_n`` (optional —
+    hybrid-retrieval budgets, forwarded to ``LocalRagBackend``; see
+    config.py's ``RAG_DENSE_K`` etc. for the defaults these mirror).
 
     ``kind="pinecone"`` kwargs: ``api_key`` (falls back to
     ``PINECONE_API_KEY`` env var), ``assistant_name`` (required).
@@ -103,6 +106,10 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
             reranker=reranker,
             model_client=model_client,
             file_store=kwargs.get("file_store"),
+            dense_k=kwargs.get("dense_k", 50),
+            lexical_k=kwargs.get("lexical_k", 50),
+            fused_k=kwargs.get("fused_k", 50),
+            rerank_top_n=kwargs.get("rerank_top_n", 10),
         )
 
     if name == "pinecone":

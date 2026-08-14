@@ -154,13 +154,22 @@ class RAGPipeline:
 
         Returns the top-``limit`` most similar documents.
         """
-        query_vec = await self._embedding.embed_single(question)
+        query_vec = await self.embed_query(question)
         return await self._store.search(
             query_vec,
             collection=collection,
             limit=limit,
             filter=filter,
         )
+
+    async def embed_query(self, question: str) -> list[float]:
+        """Embed a query string with the pipeline's configured embedding client.
+
+        Exposed so callers that need to drive retrieval themselves (e.g.
+        hybrid search across dense + lexical signals) can get a query vector
+        without reaching into the pipeline's private embedding client.
+        """
+        return await self._embedding.embed_single(question)
 
     async def query_with_context(
         self,

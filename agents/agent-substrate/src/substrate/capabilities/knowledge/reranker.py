@@ -31,6 +31,30 @@ if TYPE_CHECKING:
 logger = setup_logging()
 
 
+def prefilter_candidates(
+    results: list[SearchResult],
+    *,
+    top_n: int,
+    dedup_similarity_threshold: float = 0.9,
+) -> list[SearchResult]:
+    """Deliberately dumb pre-filter between RRF fusion and the reranker.
+
+    The reranker is the expensive stage (multi-second on long CPU inputs);
+    this narrows a fused candidate pool (``fused_k``, typically 50) down to
+    ``top_n`` (typically 10) with no learned scoring, on purpose — a
+    "smarter" pre-filter that quietly becomes the new recall bottleneck is
+    worse than a dumb one that doesn't. Any metadata/collection constraints
+    are already applied upstream, at the store's ``hybrid_search()`` call —
+    this only dedups (reusing ``citations.suppress_near_duplicates``'s >90%
+    textual-overlap check) and takes the top ``top_n`` by RRF score.
+    """
+    from substrate.capabilities.knowledge.citations import suppress_near_duplicates
+
+    deduped = suppress_near_duplicates(results, dedup_similarity_threshold)
+    ranked = sorted(deduped, key=lambda r: r.score, reverse=True)
+    return ranked[:top_n]
+
+
 class LLMReranker:
     """Rerank search results using an LLM as a cross-encoder judge.
 

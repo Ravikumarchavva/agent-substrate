@@ -32,6 +32,10 @@ class ExtractedImage(BaseModel):
     page_number: int | None = None
     label: str = "chart"
     confidence: float = 0.0
+    # OCR'd text for this block, already computed by the same layout pass —
+    # see ExtractionPipeline.extract(). Kept so lexical/exact-text search can
+    # still find a confident chart/table, not only visual similarity search.
+    caption: str | None = None
 
 
 class ExtractedPageText(BaseModel):

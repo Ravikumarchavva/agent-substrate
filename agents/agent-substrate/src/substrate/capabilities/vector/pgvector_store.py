@@ -121,6 +121,26 @@ class PgVectorStore:
                 WITH (m = 16, ef_construction = 64)
             """)
             )
+            # Lexical/term-based retrieval (PostgreSQL full-text search — not
+            # literally BM25, `ts_rank` uses a different scoring function)
+            # alongside the dense vector column, so hybrid_search() can fuse
+            # both signals without a second store. ADD COLUMN IF NOT EXISTS
+            # (idempotent) so this also migrates a table created before this
+            # column existed, not just fresh ones. Mirrors the exact GENERATED
+            # ... STORED + GIN pattern already proven in this codebase for
+            # long-term memory (capabilities/memory/durable_memory_store.py).
+            await conn.execute(
+                text(f"""
+                ALTER TABLE {self._table} ADD COLUMN IF NOT EXISTS search_vec tsvector
+                GENERATED ALWAYS AS (to_tsvector('english', text)) STORED
+            """)
+            )
+            await conn.execute(
+                text(f"""
+                CREATE INDEX IF NOT EXISTS ix_{self._table}_search_vec
+                ON {self._table} USING gin (search_vec)
+            """)
+            )
 
         self._table_ensured = True
         logger.info("%s table ensured (dimensions=%d)", self._table, self._dimensions)
@@ -312,6 +332,21 @@ class PgVectorStore:
 
     # ── Read ──────────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _filter_clauses(
+        filter: Optional[dict[str, Any]], params: dict[str, Any]
+    ) -> list[str]:
+        """Build ``metadata->>'key' = :param`` clauses for an optional filter
+        dict, mutating *params* in place. Shared by ``search()`` and
+        ``hybrid_search()`` so both apply filters identically."""
+        clauses: list[str] = []
+        if filter:
+            for i, (key, value) in enumerate(filter.items()):
+                param_key = f"filter_{i}"
+                clauses.append(f"metadata->>'{key}' = :{param_key}")
+                params[param_key] = str(value)
+        return clauses
+
     async def search(
         self,
         query_embedding: list[float],
@@ -330,12 +365,7 @@ class PgVectorStore:
             "embedding": emb_str,
             "limit": limit,
         }
-
-        if filter:
-            for i, (key, value) in enumerate(filter.items()):
-                param_key = f"filter_{i}"
-                where_clauses.append(f"metadata->>'{key}' = :{param_key}")
-                params[param_key] = str(value)
+        where_clauses += self._filter_clauses(filter, params)
 
         where_sql = " AND ".join(where_clauses)
 
@@ -357,6 +387,89 @@ class PgVectorStore:
                 id=str(row.id),
                 content=_blocks_from_json(row.content_json),
                 score=float(row.similarity),
+                metadata=row.metadata or {},
+            )
+            for row in rows
+        ]
+
+    async def hybrid_search(
+        self,
+        query_embedding: list[float],
+        query_text: str,
+        *,
+        collection: str = "default",
+        dense_k: int = 50,
+        lexical_k: int = 50,
+        fused_k: int = 50,
+        rrf_k: int = 60,
+        filter: Optional[dict[str, Any]] = None,
+    ) -> list[SearchResult]:
+        """Dense vector search + lexical (full-text) search, fused with
+        Reciprocal Rank Fusion — ``score = sum(1 / (rrf_k + rank))`` across
+        whichever of the two ranked lists a row appears in (0 contribution
+        from a list it's absent from). ``rrf_k=60`` is the standard constant
+        used by Elastic/Weaviate/Vespa's default hybrid search — no score
+        calibration between cosine similarity and ``ts_rank`` needed, since
+        RRF only ever looks at rank position, not the raw scores themselves.
+
+        ``score`` on the returned ``SearchResult`` is the RRF score (not a
+        cosine similarity or ts_rank value) — comparable across results from
+        this method, not comparable to a plain ``search()`` call's scores.
+        """
+        await self.ensure_table()
+
+        emb_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+
+        params: dict[str, Any] = {
+            "collection": collection,
+            "embedding": emb_str,
+            "query_text": query_text,
+            "dense_k": dense_k,
+            "lexical_k": lexical_k,
+            "fused_k": fused_k,
+            "rrf_k": rrf_k,
+        }
+        filter_clauses = self._filter_clauses(filter, params)
+        filter_sql = ("AND " + " AND ".join(filter_clauses)) if filter_clauses else ""
+
+        sql = text(f"""
+            WITH dense AS (
+                SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> CAST(:embedding AS vector)) AS rank
+                FROM {self._table}
+                WHERE collection = :collection {filter_sql}
+                ORDER BY embedding <=> CAST(:embedding AS vector)
+                LIMIT :dense_k
+            ),
+            lexical AS (
+                SELECT id, ROW_NUMBER() OVER (
+                    ORDER BY ts_rank(search_vec, plainto_tsquery('english', :query_text)) DESC
+                ) AS rank
+                FROM {self._table}
+                WHERE collection = :collection {filter_sql}
+                  AND search_vec @@ plainto_tsquery('english', :query_text)
+                ORDER BY ts_rank(search_vec, plainto_tsquery('english', :query_text)) DESC
+                LIMIT :lexical_k
+            )
+            SELECT t.id, t.text, t.content_json, t.metadata,
+                   COALESCE(1.0 / (:rrf_k + d.rank), 0.0)
+                 + COALESCE(1.0 / (:rrf_k + l.rank), 0.0) AS rrf_score
+            FROM {self._table} t
+            LEFT JOIN dense d ON d.id = t.id
+            LEFT JOIN lexical l ON l.id = t.id
+            WHERE d.id IS NOT NULL OR l.id IS NOT NULL
+            ORDER BY rrf_score DESC
+            LIMIT :fused_k
+        """)
+
+        async with self._engine.connect() as conn:
+            result = await conn.execute(sql, params)
+            rows = result.all()
+
+        return [
+            SearchResult(
+                id=str(row.id),
+                content=_blocks_from_json(row.content_json),
+                score=float(row.rrf_score),
                 metadata=row.metadata or {},
             )
             for row in rows

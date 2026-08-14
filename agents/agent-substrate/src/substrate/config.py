@@ -178,9 +178,13 @@ class SubstrateConfig(BaseSettings):
     # is 768 — set this to match whichever EMBEDDING_MODEL is configured.
     RAG_TEXT_EMBEDDING_DIM: int = 1536
     # Vector dimensionality of the extraction service's image embedding
-    # model (SigLIP-base outputs 768) — needed for the separate image-vector
-    # PgVectorStore table (see backends/local.py's image_store).
-    RAG_IMAGE_EMBEDDING_DIM: int = 768
+    # model — needed for the separate image-vector PgVectorStore table (see
+    # backends/local.py's image_store). Qwen3-VL-Embedding-2B (2048) now
+    # embeds both text and images into the SAME space (see
+    # docs/claude_docs/decisions.md) — this must match EXTRACTION_EMBEDDING_DIM
+    # in serving/services/extraction/config.py, or image ingestion hard-fails
+    # on a vector-column-width mismatch the first time it actually runs.
+    RAG_IMAGE_EMBEDDING_DIM: int = 2048
     # Caps on RAG-eligible document uploads (currently PDF only — see
     # EXTRACTABLE_CONTENT_TYPES in routes/chat_context.py), enforced
     # synchronously at upload time before any storage or extraction cost is
@@ -196,6 +200,24 @@ class SubstrateConfig(BaseSettings):
     # quota above, so this bounds worst-case extraction compute from
     # repeated upload-then-discard abuse.
     RAG_DAILY_UPLOAD_ATTEMPT_LIMIT: int = 100
+    # Structure-aware chunking (capabilities/knowledge/chunking.py).
+    RAG_CHUNK_SIZE: int = 512
+    RAG_CHUNK_OVERLAP: int = 128
+    # Hybrid retrieval budgets (capabilities/vector/pgvector_store.py::hybrid_search,
+    # capabilities/knowledge/reranker.py) — explicit and named rather than
+    # inline magic numbers, per the RAG pipeline redesign
+    # (docs/claude_docs/decisions.md). Each stage narrows the candidate set:
+    # dense/lexical retrieval (50 each) → RRF fusion (50) → a deliberately
+    # dumb pre-filter (10) → the expensive multimodal reranker (5 final).
+    RAG_DENSE_K: int = 50
+    RAG_LEXICAL_K: int = 50
+    RAG_FUSED_K: int = 50
+    RAG_RERANK_TOP_N: int = 10
+    RAG_FINAL_K: int = 5
+    # Minimum reranker relevance score to surface a result at all — below
+    # this for every candidate means "no confident match," not "force the
+    # weakest 5 through anyway."
+    RAG_MIN_RERANK_SCORE: float = 0.1
 
     # ── ONLYOFFICE Document Server (editable Office files in the panel) ───────
     # Empty (default) = no editable Office support; the frontend falls back to

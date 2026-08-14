@@ -58,7 +58,14 @@ class RagBackend(Protocol):
         *,
         collection: str = "default",
         limit: int = 5,
-    ) -> list[SearchResult]: ...
+        filter: dict[str, Any] | None = None,
+    ) -> list[SearchResult]:
+        """``filter`` restricts results by metadata equality (e.g.
+        ``{"file_id": ..., "page_number": 13}`` for explicit page
+        navigation) — currently only honored by ``LocalRagBackend``;
+        ``PineconeRagBackend`` accepts and ignores it (Assistant has its own
+        opaque filtering, no generic metadata-equality seam)."""
+        ...
 
     async def query_with_context(
         self,

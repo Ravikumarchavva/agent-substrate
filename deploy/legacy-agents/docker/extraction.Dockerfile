@@ -13,9 +13,14 @@
 
 FROM python:3.13-slim AS base
 
+# libgomp1: paddle's compiled core (libpaddle.so) needs it directly and
+# fails ImportError at startup without it. This was masked while `torch`
+# was still an extraction-extra dependency (its wheel bundles its own
+# libgomp copy) — surfaced as a real startup crash once torch was removed
+# (see docs/claude_docs/decisions.md's Qwen3-VL entry for why).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates \
-    libgl1 libglib2.0-0 libxcb1 libxext6 libsm6 \
+    libgl1 libglib2.0-0 libxcb1 libxext6 libsm6 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv

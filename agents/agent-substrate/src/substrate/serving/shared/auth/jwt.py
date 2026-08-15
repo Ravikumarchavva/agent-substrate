@@ -153,4 +153,5 @@ def verify_token(
         token_type=payload.get("type", "access"),
         thread_id=payload.get("thread_id"),
         permissions=payload.get("permissions"),
+        daily_message_limit=payload.get("daily_message_limit"),
     )

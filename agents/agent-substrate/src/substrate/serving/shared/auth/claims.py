@@ -28,6 +28,11 @@ class AuthClaims(BaseModel):
     # Agent context fields (optional)
     thread_id: Optional[str] = None
     permissions: Optional[list[str]] = None
+    # Plan-derived daily message cap (ravi's createEngineToken embeds this
+    # from Project.plan — see src/lib/plan-limits.ts on that side). None ⇒
+    # no limit enforced — the default for any caller not yet passing one
+    # (direct substrate-ui dev usage, service tokens, …).
+    daily_message_limit: Optional[int] = None
 
     @property
     def is_admin(self) -> bool:

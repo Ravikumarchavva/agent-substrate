@@ -55,6 +55,7 @@ from substrate.serving.monolith.services import get_owned_thread
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.sse.bridge import WebHITLBridge
 from substrate.serving.shared.rate_limit import rate_limit
+from substrate.serving.shared.doc_quota import check_and_increment, seconds_until_reset
 from substrate.serving.protocol import PROTOCOL_VERSION, HelloEvent
 from substrate.serving.stream import AgentStreamSession, tail_wire_events
 
@@ -81,6 +82,19 @@ router = APIRouter(
     tags=["chat"],
     dependencies=[Depends(rate_limit), Depends(get_current_user)],
 )
+
+
+def plan_quota_key(user: AuthClaims) -> str:
+    """Redis key suffix for the daily plan-message quota.
+
+    ``tenant_id`` when set to a real project (a project-scoped deployed
+    chatbot — every visitor, anonymous or logged-in, shares one quota so a
+    project's BYOK key/plan governs total usage under it, not each visitor
+    individually). Falls back to ``sub`` when ``tenant_id`` is still the
+    "default" placeholder (today's implicit per-caller behavior — e.g. the
+    ravi builder's own test-chat, a single user acting alone).
+    """
+    return user.tenant_id if user.tenant_id != "default" else user.sub
 
 
 @router.post("/chat")
@@ -130,6 +144,27 @@ async def chat(
                 "Cancel it first via POST /chat/{thread_id}/cancel."
             ),
         )
+
+    # 2b. Plan-derived daily message quota — only enforced when the caller's
+    # token carries daily_message_limit (ravi embeds it from Project.plan;
+    # absent for direct/dev usage, so this is a no-op unless ravi is in the
+    # request path).
+    if user.daily_message_limit is not None:
+        quota_key = plan_quota_key(user)
+        redis = getattr(request.app.state, "redis", None)
+        if redis is not None:
+            allowed, remaining = await check_and_increment(
+                redis, "planquota:message", quota_key, limit=user.daily_message_limit
+            )
+            if not allowed:
+                raise HTTPException(
+                    status_code=429,
+                    detail=(
+                        f"Daily message limit ({user.daily_message_limit}) reached. "
+                        f"Resets in {seconds_until_reset()} seconds."
+                    ),
+                    headers={"Retry-After": str(seconds_until_reset())},
+                )
 
     # 3. Build agent with restored memory + per-thread HITL bridge
     try:

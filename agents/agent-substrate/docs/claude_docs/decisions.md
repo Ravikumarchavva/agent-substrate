@@ -1,5 +1,55 @@
 # Decisions — Check Here Before Re-litigating
 
+## Text-input safety model: Prompt Guard 2 86M, not Opir-edge-multilang
+
+**Decision:** the live-chat-turn jailbreak/prompt-attack classifier is
+`meta-llama/Llama-Prompt-Guard-2-86M` (community ONNX export, INT8, via
+`onnxruntime` + `tokenizers` — no torch/transformers), not
+`knowledgator/opir-edge-multilang-v1.0`, despite Opir winning on nearly
+every static axis: Apache 2.0 (vs. Prompt Guard's Llama Community license,
+a real obligation — acceptable-use policy + attribution + 700M-MAU clause),
+23 languages (vs. 8), 1024-token context (vs. 512, halving document
+chunking), and consolidating jailbreak + harmful-content detection into one
+model instead of two.
+
+**Why:** real measurement, not the model card. The ONNX export itself
+worked and was numerically correct (verified: max abs probability delta
+1.27e-07 vs. the original PyTorch model, across benign/jailbreak/Hindi/
+long-input/empty-string fixtures) — but at **685-851ms per 512-token scan**,
+roughly 50x the card's own claimed 15.6ms p50, and far over the ~250ms
+hot-path budget. Root cause not fully chased down (plausibly the exported
+graph lacks a fused kernel for ModernBERT's alternating full/sliding-window
+attention), because two independent INT8 quantization attempts (default
+dynamic, and `MatMul`-only + per-channel) both broke the model outright
+(max abs delta 0.996 and 0.729 respectively against the same 1e-3 gate) —
+INT8 wasn't a viable path to close the latency gap. Prompt Guard's own
+community ONNX/INT8 export, measured the same way on the same hardware,
+runs in 20-35ms for short chat-length text.
+
+**Ruled out:** shipping Opir at fp32 anyway (572MB, correct, but 700-850ms
+would put a visible stall on every flagged turn) or accepting a
+"documents-only, chat-text-only-gets-Prompt-Guard" split just to use Opir
+somewhere — the whole point of the Opir bet was consolidating two models
+into one; a split defeats that and Prompt Guard already has to be present
+for chat text regardless.
+
+**Consequence accepted:** two text models instead of one — Prompt Guard for
+jailbreak/prompt-attack, `gravitee-io/bert-mini-toxicity` (11.2M params, 14
+languages claimed, OpenRAIL++ — another restricted license, acknowledged)
+for content-safety on the document-upload path only, not live chat text.
+Both license obligations (Llama Community + OpenRAIL++) are therefore live,
+not hypothetical.
+
+**Revisit when:** someone has time to properly fix Opir's ONNX export path
+(likely: `onnxruntime-transformers`-specific conversion tooling instead of
+raw `torch.onnx.export`, or static INT8 with real calibration data instead
+of dynamic) — if that closes the latency gap without breaking correctness,
+it's still the better model on every other axis and would let both
+`bert-mini-toxicity` and its OpenRAIL++ license go away too.
+
+---
+
+
 Short ADR-style entries: the decision, why, and what it rules out. Edit in
 place when a decision changes; note the date and reason for the change rather
 than deleting history.

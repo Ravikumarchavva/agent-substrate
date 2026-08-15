@@ -278,6 +278,33 @@ so the decision is visible, not silently dropped.
 
 ## Recently shipped (prune over time)
 
+- **Multimodal input safety guardrail** (2026-08-15). The regex-only
+  guardrails in `agents/middleware/guardrails/` had existed for a while but
+  were never actually wired into the live chat path — confirmed via grep
+  that `build_agent_for_thread()` never passed `middleware=[...]` into
+  `create_assistant_agent()`. New `MultimodalSafetyMiddleware` fixes that:
+  runs on every chat turn, group-evaluates text (normalized + regex +
+  `Llama-Prompt-Guard-2-86M` via onnxruntime) and any directly-attached
+  image (`OwenElliott/image-safety-classifier-xs`), and — the genuinely new
+  mechanism — persists a flagged message in thread history (visible, badged
+  via a new `MessageFlaggedEvent`) while excluding its raw text from every
+  *future* turn's LLM context (`agents/factory.py::step_rows_from_log`'s
+  redaction pass). See [`decisions.md`](decisions.md) for why
+  `Opir-edge-multilang` (the original one-model target) was rejected after
+  real measurement, and the licensing tradeoff that decision reopened.
+  Also shipped: `capabilities/safety/document_scanner.py` (thin wrapper
+  over `doc-firewall`, verified against both a clean and a synthetically
+  malicious PDF) gating the extraction service's `/v1/extract` — runs on
+  raw bytes before PaddleOCR/PaddleX ever parses them — and paste-to-
+  document (a composer paste over ~2000 chars becomes a `text/markdown`
+  attachment through the *existing* upload/staging pipeline, no new
+  endpoint). New kernel contracts: `kernel/agent/safety.py`
+  (`SafetyVerdict`, `Severity`, `TextSafetyClassifier`/`ImageSafetyClassifier`
+  Protocols). New agents-layer module: `agents/safety/normalize.py` (NFKC +
+  UTS-39 confusables-skeleton homoglyph defense — deliberately NOT folded
+  into kernel, and deliberately not left in `capabilities/` after a real
+  import-linter violation caught it there first, since an L1 middleware
+  needs it too and L1 can't import L2).
 - **Whole-codebase dead-symbol scan** (2026-07-12, same day as the kernel
   audit below, follow-on session). New `scripts/find_dead_symbols.py`
   (`make audit-dead-symbols`) — AST-based, module-level only, deliberately

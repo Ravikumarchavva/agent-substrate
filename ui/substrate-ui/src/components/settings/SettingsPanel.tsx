@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
+  BrainCircuit,
   HardDrive,
   Puzzle,
   Search,
@@ -58,8 +59,16 @@ import { ModelsTab } from "./ModelsTab";
 import { SearchTab } from "./SearchTab";
 import { AdminTab } from "./AdminTab";
 import { StorageTab } from "./StorageTab";
+import { MemoryTab } from "./MemoryTab";
 
-export type SettingsTab = "general" | "apps" | "llm" | "search" | "storage" | "admin";
+export type SettingsTab =
+  | "general"
+  | "apps"
+  | "llm"
+  | "search"
+  | "storage"
+  | "memory"
+  | "admin";
 
 interface SettingsNotice {
   tone: "success" | "info";
@@ -84,6 +93,7 @@ export const SETTINGS_TAB_GROUPS: SettingsNavGroup[] = [
     title: "Personal",
     items: [
       { id: "general", label: "General", description: "Timezone and prompt defaults", icon: Settings },
+      { id: "memory", label: "Memory", description: "What the assistant remembers about you", icon: BrainCircuit },
       { id: "storage", label: "Storage", description: "Uploaded and generated files", icon: HardDrive },
     ],
   },
@@ -558,6 +568,8 @@ export function SettingsPanel({
         )}
 
         {activeTab === "storage" && <StorageTab />}
+
+        {activeTab === "memory" && <MemoryTab />}
 
         {activeTab === "admin" && isAdmin && (
           <AdminTab

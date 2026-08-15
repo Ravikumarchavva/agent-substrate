@@ -11,4 +11,5 @@ export type { ModelProvider, ModelOption, VoiceOption } from "./models";
 export type { User, AuthUser, Element, InstructionValidationResult } from "./user";
 export type { ScheduledTask, ScheduledTaskRun, CreateScheduledTaskBody, UpdateScheduledTaskBody, ScheduledTaskParseResponse } from "./scheduled";
 export type { WorkspaceUsage, WorkspaceFile, WorkspaceFileOwner } from "./workspace";
+export type { Memory } from "./memory";
 

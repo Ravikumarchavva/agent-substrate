@@ -7,6 +7,7 @@ import { adminApi } from "./admin";
 import { audioApi } from "./audio";
 import { scheduledApi } from "./scheduled";
 import { workspaceApi } from "./workspace";
+import { memoryApi } from "./memory";
 
 export const api = {
   ...threadApi,
@@ -18,6 +19,7 @@ export const api = {
   ...audioApi,
   ...scheduledApi,
   ...workspaceApi,
+  ...memoryApi,
 };
 
 export type { ChatStreamRequest } from "./_client";

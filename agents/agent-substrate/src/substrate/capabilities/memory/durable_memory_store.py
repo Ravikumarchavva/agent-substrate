@@ -180,6 +180,43 @@ class DurableMemoryStore:
                 for row in rows
             ]
 
+    async def list_all(
+        self,
+        agent_id: AgentId,
+        *,
+        namespace: str = "default",
+        limit: int = 20,
+    ) -> list[Memory]:
+        """Every memory for *agent_id* in *namespace*, most recent first —
+        no query string involved (``search()`` requires a non-empty
+        ``plainto_tsquery`` match, which can't express "everything").  Used
+        to build a bounded standing-context block at session start rather
+        than relying on the model remembering to call ``recall``."""
+        async with self._eng().begin() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT id, content, metadata FROM agent_memories "
+                    "WHERE agent_name = :agent_name AND namespace = :namespace "
+                    "ORDER BY created_at DESC "
+                    "LIMIT :limit"
+                ),
+                {
+                    "agent_name": str(agent_id),
+                    "namespace": namespace,
+                    "limit": limit,
+                },
+            )
+            return [
+                Memory(
+                    id=row.id,
+                    content=row.content,
+                    metadata=row.metadata
+                    if isinstance(row.metadata, dict)
+                    else json.loads(row.metadata),
+                )
+                for row in rows
+            ]
+
     async def get(
         self,
         agent_id: AgentId,

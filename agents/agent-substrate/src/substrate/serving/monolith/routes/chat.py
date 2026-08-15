@@ -65,6 +65,7 @@ from substrate.serving.monolith.routes.chat_intents import (
     _configure_workspace_mail_request,
     _configure_calendar_write_request,
     existing_task_board_block,
+    readonly_kb_block,
     attachments_block,
     custom_instructions_block,
 )
@@ -230,6 +231,7 @@ async def chat(
         # returns "" when it doesn't apply, so appending is unconditional.
         for block in (
             existing_task_board_block(bool(existing_task_board)),
+            readonly_kb_block(ci_has_workspace_access),
             attachments_block(
                 attachments, ci_has_workspace_access=ci_has_workspace_access
             ),
@@ -296,6 +298,8 @@ async def chat(
             cfg=settings,
             history=ctx.history,
             short_term_memory=ctx.short_term_memory,
+            long_term_memory=ctx.long_term_memory,
+            user_id=user.sub,
             model_context_window=settings.MODEL_CONTEXT_WINDOW,
             runtime=deps["runtime"],
             initial_tool_choice=initial_tool_choice or None,

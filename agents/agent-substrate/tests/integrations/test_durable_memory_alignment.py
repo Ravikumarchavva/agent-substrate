@@ -115,6 +115,53 @@ async def test_postgres_memory_store_tenancy():
         await store.disconnect()
 
 
+@pytest.mark.asyncio
+async def test_durable_memory_store_list_all():
+    """list_all() — no query string, unlike search(); the read path a
+    standing-context injection needs at session start."""
+    if not await check_db_available():
+        pytest.skip("PostgreSQL database not available")
+
+    db_url = get_db_url()
+    store = DurableMemoryStore(db_url)
+    await store.connect()
+    await store.create_tables()
+
+    agent_id = AgentId(type="user", key="list-all-test-user")
+    other_agent_id = AgentId(type="user", key="list-all-test-other-user")
+
+    try:
+        await store.clear(agent_id, namespace="preference")
+        await store.clear(other_agent_id, namespace="preference")
+
+        await store.save(agent_id, "Always answer in French", namespace="preference")
+        await store.save(agent_id, "Prefers concise answers", namespace="preference")
+        await store.save(
+            other_agent_id, "Not this user's memory", namespace="preference"
+        )
+
+        results = await store.list_all(agent_id, namespace="preference", limit=20)
+
+        assert len(results) == 2
+        contents = {m.content for m in results}
+        assert contents == {"Always answer in French", "Prefers concise answers"}
+        # Most-recent-first ordering: the second save() is newer.
+        assert results[0].content == "Prefers concise answers"
+
+        # limit is honored.
+        capped = await store.list_all(agent_id, namespace="preference", limit=1)
+        assert len(capped) == 1
+
+        # Doesn't leak across agents (users).
+        other_results = await store.list_all(other_agent_id, namespace="preference")
+        assert len(other_results) == 1
+        assert other_results[0].content == "Not this user's memory"
+    finally:
+        await store.clear(agent_id, namespace="preference")
+        await store.clear(other_agent_id, namespace="preference")
+        await store.disconnect()
+
+
 # ── 3. DurableHistoryProvider Protocol Tests ────────────────────────────────
 
 

@@ -370,6 +370,20 @@ class CodeInterpreterService:
                 "persistentVolumeClaim": {"claimName": self.config.workspace_pvc_claim},
             }
         ]
+        # Same PVC, a second mount: the user's standing knowledge-base
+        # content, read-only — the k8s equivalent of BubblewrapRuntime's
+        # conditional --ro-bind for users/{uid}/kb (runtimes/bubblewrap.py).
+        # A pod spec can't be conditioned per-execution the way a bwrap argv
+        # is built fresh each call, so this mount is unconditional (not
+        # gated on the directory already existing, unlike bwrap's is_dir()
+        # check) — per k8s's documented subPath behavior, a subPath that
+        # doesn't yet exist on the volume is created automatically, so a
+        # user with no KB content yet gets an empty read-only directory
+        # rather than a mount failure. NOT verified against a live cluster
+        # in this dev setup (no k8s environment available) — review this
+        # pod-spec diff carefully, and confirm this behavior for real,
+        # before relying on it in a k8s deployment.
+        kb_mount_path = self.config.workspace_mount_path.rstrip("/") + "/.kb"
         for container in containers:
             container["volumeMounts"] = [
                 m
@@ -380,7 +394,13 @@ class CodeInterpreterService:
                     "name": volume_name,
                     "mountPath": self.config.workspace_mount_path,
                     "subPath": f"users/{user_id}",
-                }
+                },
+                {
+                    "name": volume_name,
+                    "mountPath": kb_mount_path,
+                    "subPath": f"users/{user_id}/kb",
+                    "readOnly": True,
+                },
             ]
             container["env"] = [
                 e

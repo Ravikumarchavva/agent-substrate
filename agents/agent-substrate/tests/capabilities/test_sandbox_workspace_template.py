@@ -87,9 +87,17 @@ def test_ensure_user_template_creates_volume_and_mount(service) -> None:
     assert volume["persistentVolumeClaim"]["claimName"] == "user-workspaces"
 
     [container] = pod_spec["containers"]
-    [mount] = container["volumeMounts"]
+    mount, kb_mount = container["volumeMounts"]
     assert mount["mountPath"] == "/app/workspace"
     assert mount["subPath"] == "users/user-42"
+    assert not mount.get("readOnly")
+
+    # Second mount: the same PVC, read-only, for standing KB content — the
+    # k8s equivalent of BubblewrapRuntime's conditional --ro-bind.
+    assert kb_mount["mountPath"] == "/app/workspace/.kb"
+    assert kb_mount["subPath"] == "users/user-42/kb"
+    assert kb_mount["readOnly"] is True
+    assert kb_mount["name"] == mount["name"]
 
     env_names = {e["name"] for e in container["env"]}
     assert "CODE_INTERPRETER_WORKSPACE" in env_names

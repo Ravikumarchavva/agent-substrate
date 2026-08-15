@@ -11,11 +11,19 @@ Judge0, CSES) have used to run strangers' code for three decades, and what
 OpenAI's Codex CLI uses for the same job.
 
 The isolation that matters here: only ``spec.session_dir`` is bind-mounted into
-the sandbox, at ``/workspace``. Every other user's directory is *absent from the
-mount namespace* — not merely permission-denied — so a traversal like
-``../../other_user`` resolves to nothing. Writes land straight on the durable
-host volume, so the session directory doubles as persistent storage with no sync
-layer (``sandbox:`` refs and ``FileVersion`` versioning keep working unchanged).
+the sandbox, at ``/workspace`` (read-write). Every other user's directory is
+*absent from the mount namespace* — not merely permission-denied — so a
+traversal like ``../../other_user`` resolves to nothing. Writes land straight
+on the durable host volume, so the session directory doubles as persistent
+storage with no sync layer (``sandbox:`` refs and ``FileVersion`` versioning
+keep working unchanged).
+
+One deliberate, narrow exception to "only session_dir is mounted": if the
+calling user has a ``users/{uid}/kb`` directory (their standing knowledge-base
+content), it is additionally bind-mounted at ``/workspace/.kb`` — **read-only**
+(``--ro-bind``, not ``--bind``), so the model can read it but never delete or
+overwrite it. Same traversal-rejecting resolution as the writable mount; see
+``_bwrap_argv()``.
 
 Each execution is a **fresh process**: no interpreter state survives between
 turns, which removes cross-user variable leakage by construction (the previous
@@ -249,6 +257,20 @@ class BubblewrapRuntime:
             argv += ["--ro-bind", prefix, prefix]
         # THE isolation boundary: only this session's directory is present.
         argv += ["--bind", str(session_path), "/workspace", "--chdir", "/workspace"]
+
+        # A second, deliberate exception to that boundary: a user's own
+        # standing knowledge-base content, read-only. Resolved through the
+        # same traversal-rejecting _resolve_session() the writable mount
+        # above uses, not a hand-rolled path join. Existence-checked in
+        # Python (matching _RO_HOST_PATHS's pattern above) rather than
+        # relying on a `--ro-bind-try`-style flag, so a user with no KB
+        # content yet gets no extra mount and nothing new can break for the
+        # common case. See chat_intents.py for the matching system-prompt
+        # note telling the model this path is read-only.
+        if spec.user_id:
+            kb_path = self._resolve_session(f"users/{spec.user_id}/kb")
+            if kb_path.is_dir():
+                argv += ["--ro-bind", str(kb_path), "/workspace/.kb"]
 
         # PIP_ONLY mounts a prepared venv read-only; the user's code still gets
         # no network (the install ran earlier, in its own sandbox).

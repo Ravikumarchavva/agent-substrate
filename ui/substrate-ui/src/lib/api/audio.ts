@@ -20,7 +20,7 @@ export const audioApi = {
     const form = new FormData();
     form.append("file", blob, `recording.${ext}`);
     form.append("model", getPreferredSTTModel());
-    const res = await fetch("/api/audio/transcribe", { method: "POST", body: form });
+    const res = await fetch("/chat/api/audio/transcribe", { method: "POST", body: form });
     if (!res.ok) throw new Error(`Transcription failed: ${res.statusText}`);
     return res.json();
   },
@@ -37,7 +37,7 @@ export const audioApi = {
           ? voice
           : getDefaultVoiceForModel(preferredModel))
       : getPreferredTTSVoice(preferredModel);
-    const res = await fetch("/api/audio/tts", {
+    const res = await fetch("/chat/api/audio/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

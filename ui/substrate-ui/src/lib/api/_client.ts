@@ -3,7 +3,14 @@ import { ToolCall, UploadedFile } from "@/types";
 // API service layer for backend communication
 // All browser requests go through the Next.js rewrite proxy
 // (/api/backend/* -> backend) to avoid CORS failures.
-export const API_BASE = "/api/backend";
+//
+// This app is mounted at basePath: "/chat" (see next.config.ts) behind
+// agent-substrate-platform's proxy. Next.js rewrites next/link hrefs and
+// route-handler paths to include that prefix automatically, but a raw
+// fetch("/api/backend/...") is just a literal browser request and is NOT
+// basePath-aware — it has to be spelled out here or every call site would
+// silently 404 in production.
+export const API_BASE = "/chat/api/backend";
 
 // Backend route is GET /files/{file_id}/download (agent-substrate
 // routes/files.py) — file id alone is enough, no thread scoping needed.

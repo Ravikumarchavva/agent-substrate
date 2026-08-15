@@ -214,14 +214,24 @@ function ChatPageContent() {
   const selectThread = useCallback(
     (threadId: string | null, mode: "replace" | "push" = "replace") => {
       updateLastActiveThreadId(threadId);
+      setScheduledPanelOpen(false);
       const nextUrl = buildChatPath(threadId);
+      // A real Next.js navigation here (router.push/replace) changes the
+      // optional-catch-all slug and REMOUNTS this whole page component,
+      // wiping `messages` back to [] for a tick before loadMessages'
+      // fetch resolves — the "no conversation for a second" flash when
+      // switching threads from the sidebar. Raw History API updates the
+      // URL bar with no remount; the currentThreadId-change effect below
+      // still picks up the new thread (via lastActiveThreadId, updated
+      // above) and calls loadMessages normally. Same technique
+      // promoteThreadUrl already uses for the brand-new-thread case.
       if (mode === "push") {
-        router.push(nextUrl, { scroll: false });
+        window.history.pushState(window.history.state, "", nextUrl);
       } else {
-        router.replace(nextUrl, { scroll: false });
+        window.history.replaceState(window.history.state, "", nextUrl);
       }
     },
-    [router, updateLastActiveThreadId],
+    [updateLastActiveThreadId],
   );
 
   // Promote a freshly-created thread into the URL. Called immediately after
@@ -400,7 +410,7 @@ function ChatPageContent() {
   type ManifestEntry = { tool_name: string; http_url: string; resource_uri: string };
   const [mcpManifest, setMcpManifest] = useState<ManifestEntry[]>([]);
   useEffect(() => {
-    fetch("/api/backend/mcp-apps/manifest")
+    fetch("/chat/api/backend/mcp-apps/manifest")
       .then((r) => (r.ok ? r.json() : []))
       .then((data: ManifestEntry[]) => setMcpManifest(data))
       .catch(() => { });

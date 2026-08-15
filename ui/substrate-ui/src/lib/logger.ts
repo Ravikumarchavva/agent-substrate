@@ -55,7 +55,7 @@ class Logger {
     const entries = [...this.buffer];
     this.buffer = [];
     try {
-      await fetch("/api/logs", {
+      await fetch("/chat/api/logs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entries }),

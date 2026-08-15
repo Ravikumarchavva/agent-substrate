@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-const ADMIN_EMAILS = new Set(["chavvaravikumarreddy2004@gmail.com"]);
+const ADMIN_EMAILS = new Set(process.env.ADMIN_EMAIL ? [process.env.ADMIN_EMAIL.toLowerCase().trim()] : []);
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Upsert user in Prisma database
-    const isAdmin = ADMIN_EMAILS.has(userInfo?.email ?? "");
+    const isAdmin = ADMIN_EMAILS.has((userInfo?.email ?? "").toLowerCase().trim());
     let dbUserId: string | null = null;
     if (userInfo?.email) {
       try {
@@ -209,13 +209,13 @@ function buildCallbackHTML(
 <body>
   <h1>❌ Sign-In Failed</h1>
   <p>${error || "Unknown error"}</p>
-  <p><a href="/" style="color:#4285f4">Return to Home</a></p>
+  <p><a href="/chat" style="color:#4285f4">Return to Home</a></p>
   <script>
     if (window.opener) {
       window.opener.postMessage({ type: "google_auth_error", error: "${error || 'Unknown error'}" }, window.location.origin);
       setTimeout(() => window.close(), 3000);
     } else {
-      setTimeout(() => window.location.href = "/", 3000);
+      setTimeout(() => window.location.href = "/chat", 3000);
     }
   </script>
 </body>
@@ -253,7 +253,7 @@ function buildCallbackHTML(
       setTimeout(() => window.close(), 500);
     } else {
       // Not a popup — redirect directly
-      setTimeout(() => window.location.href = "/", 1500);
+      setTimeout(() => window.location.href = "/chat", 1500);
     }
   </script>
 </body>

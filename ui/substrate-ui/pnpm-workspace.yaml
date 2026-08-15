@@ -4,6 +4,7 @@ packages:
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
+  '@sentry/cli': false
   prisma: true
   sharp: true
   unrs-resolver: true
@@ -11,6 +12,7 @@ allowBuilds:
 ignoredBuiltDependencies:
   - '@prisma/client'
   - '@prisma/engines'
+  - '@sentry/cli'
   - prisma
   - sharp
   - unrs-resolver

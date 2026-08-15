@@ -57,7 +57,7 @@ export const chatApi = {
   },
 
   async cancelChat(threadId: string): Promise<void> {
-    const res = await fetch("/api/chat/cancel", {
+    const res = await fetch("/chat/api/chat/cancel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ thread_id: threadId }),
@@ -71,7 +71,7 @@ export const chatApi = {
     payload: Omit<ChatStreamRequest, "model"> & { model?: string },
     signal: AbortSignal,
   ): Promise<Response> {
-    const res = await fetch("/api/chat", {
+    const res = await fetch("/chat/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify({ ...payload, model: payload.model ?? getPreferredChatModel() }),

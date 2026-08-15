@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 
-const ADMIN_EMAIL = "chavvaravikumarreddy2004@gmail.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "";
 const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 function getAdminEmail(req: NextRequest): string | null {

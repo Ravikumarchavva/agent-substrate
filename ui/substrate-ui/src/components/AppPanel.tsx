@@ -155,7 +155,7 @@ export function AppPanel({
         try { token = sessionStorage.getItem("spotify_access_token"); } catch { /* no sessionStorage */ }
       }
       if (!token) {
-        const res = await fetch("/api/spotify/token");
+        const res = await fetch("/chat/api/spotify/token");
         if (res.ok) {
           const data = await res.json() as { access_token?: string };
           token = data.access_token ?? null;
@@ -181,7 +181,7 @@ export function AppPanel({
   // ── Google Workspace: broadcast token to every loaded iframe ─────
   const fetchAndSendWorkspaceToken = useCallback(async () => {
     try {
-      const res = await fetch("/api/workspace/token");
+      const res = await fetch("/chat/api/workspace/token");
       if (!res.ok) return;
       const data = await res.json() as { access_token?: string; connected?: boolean };
       if (!data.access_token) return;

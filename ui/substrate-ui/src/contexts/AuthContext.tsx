@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         if (!existingUser) {
-          const googleRes = await fetch("/api/auth/google/token", {
+          const googleRes = await fetch("/chat/api/auth/google/token", {
             credentials: "include",
           });
 
@@ -84,12 +84,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setGoogleAuth(true);
             }
           }
+
+          // No local session yet — check whether the platform
+          // (agent-substrate-platform) already has one. Same origin means
+          // its session cookie is already on this request; /api/auth/platform
+          // asks the platform to confirm it and, if valid, mints the same
+          // local cookies the Google flow above would have set.
+          if (!nextGoogleAuth) {
+            const platformRes = await fetch("/chat/api/auth/platform", {
+              credentials: "include",
+            });
+            if (platformRes.ok) {
+              const platformData = await platformRes.json();
+              if (platformData.authenticated) {
+                nextGoogleAuth = true;
+                nextUser = readGoogleUserCookie();
+                setUser(nextUser);
+                setGoogleAuth(true);
+              }
+            }
+          }
         }
 
         if (nextGoogleAuth) {
           const [spotifyRes, workspaceRes] = await Promise.all([
-            fetch("/api/spotify/token", { credentials: "include" }),
-            fetch("/api/workspace/token", { credentials: "include" }),
+            fetch("/chat/api/spotify/token", { credentials: "include" }),
+            fetch("/chat/api/workspace/token", { credentials: "include" }),
           ]);
 
           if (spotifyRes.ok) {
@@ -229,21 +249,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       if (googleAuth) {
-        await fetch("/api/auth/google/logout", {
+        await fetch("/chat/api/auth/google/logout", {
           method: "POST",
           credentials: "include",
         });
       }
 
       if (spotifyAuth) {
-        await fetch("/api/spotify/token", {
+        await fetch("/chat/api/spotify/token", {
           method: "DELETE",
           credentials: "include",
         });
       }
 
       if (workspaceAuth) {
-        await fetch("/api/workspace/token", {
+        await fetch("/chat/api/workspace/token", {
           method: "DELETE",
           credentials: "include",
         });
@@ -267,7 +287,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isAuthenticated: googleAuth,
-        isAdmin: !!(user?.isAdmin || user?.email === "chavvaravikumarreddy2004@gmail.com"),
+        isAdmin: !!user?.isAdmin,
         isLoading,
         googleAuth,
         spotifyAuth,

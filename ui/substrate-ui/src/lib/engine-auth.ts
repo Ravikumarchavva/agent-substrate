@@ -17,17 +17,37 @@
  *     sub="substrate-ui". Last resort only: any request reaching it shares
  *     one identity with all others, so it must never be the normal path for
  *     user-owned data.
+ *
+ * All three also carry tenant_id = RAVI_PROJECT_ID when this instance was
+ * deployed by ravi for a specific project — every visitor's sub stays
+ * distinct (workspace/quota isolation unchanged), but agent-substrate's
+ * per-project rate limiting groups them under one shared daily quota.
  */
 import jwt from "jsonwebtoken";
 
 const ENGINE_JWT_SECRET = process.env.ENGINE_JWT_SECRET ?? "";
+
+// Set by ravi at deploy time when this instance belongs to a project (see
+// docs/claude_docs/roadmap.md's "Explicitly deferred" entry on real Instance
+// provisioning) — scopes agent-substrate's per-tenant rate limiting so every
+// visitor to THIS deployed chatbot (anonymous or logged-in) shares one
+// project-level quota instead of each getting their own. Empty/unset ⇒
+// tenant_id is omitted from every token below and agent-substrate's
+// AuthClaims falls back to its own "default" (today's behavior, unchanged
+// for local dev / a not-yet-provisioned instance).
+const RAVI_PROJECT_ID = process.env.RAVI_PROJECT_ID ?? "";
 
 export const ANON_COOKIE = "anon_id";
 
 export function makeEngineToken(): string {
   if (!ENGINE_JWT_SECRET) return "";
   return jwt.sign(
-    { sub: "substrate-ui", email: "ui@substrate-ui.local", type: "access" },
+    {
+      sub: "substrate-ui",
+      email: "ui@substrate-ui.local",
+      type: "access",
+      ...(RAVI_PROJECT_ID && { tenant_id: RAVI_PROJECT_ID }),
+    },
     ENGINE_JWT_SECRET,
     { expiresIn: "1h" }
   );
@@ -52,6 +72,7 @@ export function makeUserToken(user: UserSession): string {
       email: user.email,
       role: user.isAdmin ? "platform_admin" : "end_user",
       type: "access",
+      ...(RAVI_PROJECT_ID && { tenant_id: RAVI_PROJECT_ID }),
     },
     ENGINE_JWT_SECRET,
     { expiresIn: "1h" }
@@ -76,6 +97,7 @@ export function makeAnonToken(anonId: string): string {
       email: `anon-${anonId}@substrate-ui.local`,
       role: "end_user",
       type: "access",
+      ...(RAVI_PROJECT_ID && { tenant_id: RAVI_PROJECT_ID }),
     },
     ENGINE_JWT_SECRET,
     { expiresIn: "1h" }

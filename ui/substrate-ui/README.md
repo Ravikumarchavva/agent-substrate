@@ -104,11 +104,11 @@ Copy `.env.local.example` → `.env.local`:
 | `BACKEND_API_URL` | Engine URL for server-side routes / the `/api/backend/*` proxy (default `http://localhost:8000`). |
 | `NEXT_PUBLIC_API_URL` | Engine URL baked into the browser bundle. Leave empty on Kubernetes so the browser uses ingress-relative paths. |
 | `ENGINE_JWT_SECRET` | Must equal the engine's `JWT_SECRET`. The proxy signs a per-request JWT identifying the caller (per-user when logged in, else a service account). |
-| `DATABASE_URL` | Prisma database for Auth.js sessions/accounts. |
-| `NEXTAUTH_SECRET` / `NEXTAUTH_URL` | Auth.js config (`openssl rand -hex 32`). |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth login. |
-| `CREDENTIAL_ENCRYPTION_KEY` | Encrypts stored workspace OAuth tokens (`openssl rand -hex 32`). |
+| `DATABASE_URL` | Prisma database for this app's own `User`/`UserCredential` tables. Auth here is hand-rolled Google OAuth + httpOnly cookies, not Auth.js/NextAuth — no `NEXTAUTH_*` vars are read anywhere. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | Google OAuth login. |
+| `ENCRYPTION_KEY` | Encrypts stored Spotify/Workspace OAuth tokens (`openssl rand -hex 32`). Must be this exact name. |
 | `ADMIN_EMAIL` | Grants access to `/api/admin/*`. |
+| `BYPASS_OAUTH` | Dev-only: skip real Google OAuth and sign in as a placeholder account. Only takes effect when `NODE_ENV !== "production"` — never a live risk in a real deployment. |
 
 > **Identity note:** `/api/chat` and the `/api/backend/*` proxy sign tokens from
 > the same `user_session` cookie, so agent-written files and browser reads share

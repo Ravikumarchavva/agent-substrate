@@ -8,7 +8,17 @@ const WS_BACKEND_URL = PUBLIC_BACKEND_URL.replace(/^http/, "ws");
 
 const nextConfig: NextConfig = {
   output: 'standalone', // For Docker builds
-  allowedDevOrigins: ['127.0.0.1', '192.168.0.6', 'coagulant-stump-starlet.ngrok-free.dev'],
+  // Mounted at /chat behind agent-substrate-platform's rewrite proxy, so the
+  // whole product lives under one origin (fixes the shared-Google-OAuth-client
+  // port collision between the two apps). basePath makes Next.js rewrite all
+  // of substrate-ui's own routes, _next/static asset URLs, and Link hrefs to
+  // include the /chat prefix automatically — a plain reverse-proxy rewrite
+  // without this would silently break asset loading.
+  basePath: '/chat',
+  // Add your own LAN IP or tunnel hostname (ngrok, etc.) here for local
+  // testing from another device — left to just localhost by default so
+  // this file doesn't ship anyone's personal dev environment.
+  allowedDevOrigins: ['127.0.0.1'],
   experimental: {
     // Enable if needed
   },

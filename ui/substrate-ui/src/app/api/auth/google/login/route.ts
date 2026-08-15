@@ -1,7 +1,17 @@
 /**
  * Google OAuth – Login
  * GET /api/auth/google/login → Redirects to Google OAuth consent screen
- * Supports bypass parameter or auto-bypass in dev/unconfigured environment
+ *
+ * Dev-only bypass: requires BOTH NODE_ENV !== "production" AND
+ * BYPASS_OAUTH=true set explicitly. Previously this also auto-activated
+ * whenever GOOGLE_CLIENT_ID was unset, which meant a fresh clone that
+ * hadn't configured OAuth yet would silently log every visitor in as a
+ * hardcoded admin identity — a real problem for a project meant to be
+ * cloned and self-hosted. An unconfigured GOOGLE_CLIENT_ID now fails
+ * loudly instead (see below) so misconfiguration is visible, not a
+ * silent admin backdoor. The bypass identity is a generic placeholder,
+ * not a real person, and is never admin by default — set ADMIN_EMAIL to
+ * this address if you need admin access while developing locally.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
@@ -18,12 +28,15 @@ const SCOPES = [
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const bypass = searchParams.get("bypass") === "true" || process.env.BYPASS_OAUTH === "true" || !process.env.GOOGLE_CLIENT_ID;
+  const bypass =
+    process.env.NODE_ENV !== "production" &&
+    (searchParams.get("bypass") === "true" || process.env.BYPASS_OAUTH === "true");
 
   if (bypass) {
-    const email = "chavvaravikumarreddy2004@gmail.com";
-    const name = "Ravikumar Chavva";
-    const isAdmin = true;
+    const email = "dev@localhost";
+    const name = "Dev User";
+    const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+    const isAdmin = !!adminEmail && adminEmail === email;
 
     // Upsert user in database
     try {
@@ -35,7 +48,7 @@ export async function GET(req: NextRequest) {
         },
         create: {
           email,
-          googleId: "mock-google-id",
+          googleId: "dev-bypass",
           name,
           isAdmin,
         },
@@ -70,7 +83,7 @@ export async function GET(req: NextRequest) {
       }, window.location.origin);
       setTimeout(() => window.close(), 500);
     } else {
-      setTimeout(() => window.location.href = "/", 1500);
+      setTimeout(() => window.location.href = "/chat", 1500);
     }
   </script>
 </body>

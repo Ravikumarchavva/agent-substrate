@@ -6,10 +6,14 @@ import { type AttachmentKind, getFileExtension, getAttachmentKind } from "@/lib/
 import { api } from "@/lib/api";
 import { useToast } from "@/contexts/ToastContext";
 
-// Only PDFs go through eager staged extraction+embedding today (see
-// EXTRACTABLE_CONTENT_TYPES in agent-substrate's chat_context.py) — other
-// types never get staged_at/staging_error and don't need polling.
-const STAGED_MIME_TYPES = new Set(["application/pdf"]);
+// PDFs and pasted-text documents go through eager staged extraction+
+// embedding today (see EXTRACTABLE_CONTENT_TYPES in agent-substrate's
+// chat_context.py) — other types never get staged_at/staging_error and
+// don't need polling. text/markdown is how a large paste becomes a
+// document (see the composer's paste handler) — it skips OCR entirely
+// (local TextLoader, not the extraction service) so staging is fast, but
+// it's still staged_at/staging_error-bearing, so it still needs polling.
+const STAGED_MIME_TYPES = new Set(["application/pdf", "text/markdown"]);
 
 // This session's own measured baseline for the "tiny" OCR variant (see
 // agent-substrate's extraction pipeline benchmarking) — used only to
@@ -158,11 +162,12 @@ export function useFileAttachments(
     return () => clearInterval(id);
   }, [pollFileIds]);
 
-  const handleFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
+  // Shared by handleFileSelected (the [+] button / native file picker) and
+  // handleFilesPasted (paste-to-document, see the composer's paste handler)
+  // — both just need to get File[] into the exact same upload+poll+error
+  // path; only how the File[] is obtained differs.
+  const uploadFiles = useCallback(async (files: File[]) => {
     if (!files.length) return;
-    // Reset so the same file can be re-selected
-    e.target.value = "";
 
     // Ensure we have a thread before uploading
     let threadId = currentThreadId;
@@ -209,6 +214,21 @@ export function useFileAttachments(
       setUploadingFile(false);
     }
   }, [currentThreadId, promoteThreadUrl, setThreads, pollFileIds, showToast]);
+
+  const handleFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    // Reset so the same file can be re-selected
+    e.target.value = "";
+    await uploadFiles(files);
+  }, [uploadFiles]);
+
+  // Paste-to-document: the composer synthesizes a text/markdown File from
+  // pasted content over the length threshold and hands it here — reuses
+  // the exact same upload/staging/promote pipeline a manual attach does,
+  // no separate code path.
+  const handleFilesPasted = useCallback(async (files: File[]) => {
+    await uploadFiles(files);
+  }, [uploadFiles]);
 
   const handleRemoveFile = useCallback(async (fileId: string) => {
     if (!currentThreadId) return;
@@ -274,6 +294,7 @@ export function useFileAttachments(
     fileInputRef,
     clearAttachedFiles,
     handleFileSelected,
+    handleFilesPasted,
     handleRemoveFile,
     waitForAttachmentsReady,
   };

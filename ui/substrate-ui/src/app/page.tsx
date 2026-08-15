@@ -53,6 +53,18 @@ import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loade
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "substrate:last-active-thread";
 
+// Paste-to-document: a paste this long or longer becomes an attached
+// document (chunked+embedded via the same staging pipeline a manual
+// upload uses — see EXTRACTABLE_CONTENT_TYPES in agent-substrate) instead
+// of dumping raw text into the composer. Matches ChatGPT/Claude.ai's own
+// paste-to-artifact threshold — roughly one screen of text.
+const PASTE_TO_DOCUMENT_THRESHOLD = 2000;
+
+function buildPastedDocumentFile(text: string): File {
+  const name = `pasted-${Date.now()}.md`;
+  return new File([text], name, { type: "text/markdown" });
+}
+
 function readLastActiveThreadId(): string | null {
   if (typeof window === "undefined") {
     return null;
@@ -281,7 +293,7 @@ function ChatPageContent() {
   const { threads, setThreads, loadThreads, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
     autoSelectFirstThread: !settingsPanelOpen,
   });
-  const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
+  const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
   const { boards, upsertBoard, clearBoards, settleBoards } = useTaskBoards(currentThreadId);
   // Tracks which assistant messages we've already auto-opened an artifact for.
@@ -1834,6 +1846,15 @@ function ChatPageContent() {
                       ref={textareaRef}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
+                      onPaste={(e) => {
+                        const text = e.clipboardData.getData("text/plain");
+                        if (text.length < PASTE_TO_DOCUMENT_THRESHOLD) return;
+                        // Long paste becomes a document attachment instead
+                        // of filling the composer — don't let the default
+                        // paste insert the raw text too.
+                        e.preventDefault();
+                        void handleFilesPasted([buildPastedDocumentFile(text)]);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();

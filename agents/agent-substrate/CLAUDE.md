@@ -88,7 +88,8 @@ src/substrate/
 │   │                     skills.py, approval.py (ApprovalHandler, ApprovalResult)
 │   ├── agent/            context.py (CompactionStrategy), middleware.py (Interceptor),
 │   │                     supervision.py (Supervision, SpawnBudget, Priority),
-│   │                     runtime_context.py (RunMeta)
+│   │                     runtime_context.py (RunMeta), safety.py (SafetyVerdict,
+│   │                     TextSafetyClassifier/ImageSafetyClassifier Protocols)
 │   └── runtime/          agent.py (Agent), inbox.py, scheduler.py, supervisor.py,
 │                         effects.py, fanout.py, follow_graph.py, log_entry.py, ids.py, …
 │
@@ -97,7 +98,10 @@ src/substrate/
 │   │                     InformationAgent, PersonalFeedAgent
 │   ├── context/          AgentContext, InMemoryHistoryProvider, compaction/ strategies
 │   ├── llm/              model registry, SemanticCache, FallbackClient, ModelRouter
-│   ├── middleware/       MiddlewarePipeline, guardrails/, AuditLogger, RateLimiter, …
+│   ├── middleware/       MiddlewarePipeline, guardrails/ (incl. MultimodalSafetyMiddleware),
+│   │                     AuditLogger, RateLimiter, …
+│   ├── safety/           normalize() — NFKC + UTS-39 confusables-skeleton homoglyph
+│   │                     defense, shared by the L1 guardrail and L2 classifiers
 │   ├── runtime/          Runtime facade + Worker + backends/ (in-process asyncio dispatch)
 │   ├── tools/            Toolbox (ToolRegistry impl), ToolInvoker (chain dispatch, L1)
 │   ├── storage/          InMemoryFileStore, TaskStore/GlobalTaskStore

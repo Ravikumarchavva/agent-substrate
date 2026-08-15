@@ -36,6 +36,11 @@ class SubstrateConfig(BaseSettings):
     OPENROUTER_SITE_URL: str = "http://localhost:3000"
     OPENROUTER_APP_NAME: str = "Agent Substrate"
 
+    # huggingface_hub/tokenizers read this env var directly (not through this
+    # Settings object) for authenticated model downloads — see
+    # cli.py::cmd_start(), which forwards it into the uvicorn subprocess env.
+    HF_TOKEN: str = ""
+
     # ── Database ─────────────────────────────────────────────────────────────
     DATABASE_URL: str = ""
     ASYNC_DATABASE_URL: str = ""

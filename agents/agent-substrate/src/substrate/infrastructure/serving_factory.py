@@ -965,8 +965,11 @@ async def build_user_memory_context_block(
         return ""
     from substrate.kernel.core.identity import AgentId
 
+    # namespace="default": MemoryTool.remember() never passes a namespace,
+    # so every fact it saves lands in DurableMemoryStore's default one —
+    # this must read from the same place things are actually written to.
     memories = await long_term_memory.list_all(
-        AgentId(type="user", key=user_id), namespace="preference", limit=limit
+        AgentId(type="user", key=user_id), limit=limit
     )
     if not memories:
         return ""

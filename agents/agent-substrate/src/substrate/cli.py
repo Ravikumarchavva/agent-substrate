@@ -102,11 +102,21 @@ def cmd_start(args: argparse.Namespace) -> None:
     elif workers > 1:
         cmd += ["--workers", str(workers)]
 
+    # huggingface_hub/tokenizers read HF_TOKEN directly from the process env,
+    # not through ServerSettings — forward the one value ServerSettings
+    # already parsed from .env into the uvicorn subprocess's env so it's not
+    # duplicated by a second, separate .env parse here.
+    env = os.environ.copy()
+    from substrate.serving.shared.settings import settings as server_settings
+
+    if server_settings.HF_TOKEN:
+        env["HF_TOKEN"] = server_settings.HF_TOKEN
+
     if args.foreground or reload:
         # Run in the foreground (Ctrl+C to stop); no PID file needed.
         print(f"Starting Agent Framework on http://{host}:{port} (foreground)…")
         try:
-            subprocess.run(cmd, check=True)
+            subprocess.run(cmd, check=True, env=env)
         except KeyboardInterrupt:
             pass
         return
@@ -131,6 +141,7 @@ def cmd_start(args: argparse.Namespace) -> None:
         cmd,
         stdout=log_fp,
         stderr=log_fp,
+        env=env,
         **kwargs,
     )
     _write_pid(proc.pid)

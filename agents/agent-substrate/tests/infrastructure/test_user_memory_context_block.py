@@ -65,13 +65,16 @@ async def test_framed_as_background_not_instruction():
     assert "judgment" in block.lower()
 
 
-async def test_queried_with_preference_namespace_and_user_scoped_agent_id():
+async def test_queried_with_default_namespace_and_user_scoped_agent_id():
+    """namespace must match what MemoryTool.remember() actually writes to
+    (it never overrides the store's default) — querying a different
+    namespace here would silently return nothing forever."""
     store = _FakeLongTermMemory([_FakeMemory("fact")])
     await build_user_memory_context_block(store, "user-42", limit=5)
 
     assert len(store.calls) == 1
     agent_id_str, namespace, limit = store.calls[0]
-    assert namespace == "preference"
+    assert namespace == "default"
     assert limit == 5
     assert "user-42" in agent_id_str
 

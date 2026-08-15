@@ -250,6 +250,9 @@ services:
     environment:
       EXTRACTION_EMBED_SERVER_URL: http://llama-embed:8031
       EXTRACTION_RERANK_SERVER_URL: http://llama-rerank:8032
+      # huggingface_hub (paddlex's downloader) reads HF_TOKEN automatically.
+      # Blank is fine — falls back to unauthenticated, lower rate limits.
+      HF_TOKEN: ${HF_TOKEN:-}
     # PaddleOCR/PaddleX download their model weights from HuggingFace into
     # ~/.paddlex on first use, not at build time — without a persistent
     # volume that repeats on every container restart. Same rationale as
@@ -287,6 +290,10 @@ services:
       - "2"
     environment:
       PORT: "8031"
+      # NOT verified against a real llama-server --help output whether its
+      # built-in -hf downloader honors this — matches huggingface_hub's
+      # standard env var name on the chance it does; harmless if ignored.
+      HF_TOKEN: ${HF_TOKEN:-}
     ports:
       - "8031:8031"
     volumes:
@@ -319,6 +326,7 @@ services:
       - "1"
     environment:
       PORT: "8032"
+      HF_TOKEN: ${HF_TOKEN:-}
     ports:
       - "8032:8032"
     volumes:

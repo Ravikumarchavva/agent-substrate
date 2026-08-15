@@ -24,6 +24,7 @@ _ADAPTER: TypeAdapter[WireEvent] = TypeAdapter(WireEvent)
 STREAMING_KINDS = frozenset(
     {
         "user.message",
+        "user.message.flagged",
         "text.delta",
         "reasoning.delta",
         "tool.call",

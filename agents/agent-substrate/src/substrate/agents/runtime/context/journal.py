@@ -102,7 +102,7 @@ class _JournalMixin:
         finally:
             self._exit_scope()
 
-    async def _log(self, kind: str, payload: JsonObject = {}) -> None:
+    async def _log(self, kind: str, payload: JsonObject = {}) -> int:
         seq = self._seq_cursor + 1
         await self._event_log.append(
             self.run_id,
@@ -110,8 +110,9 @@ class _JournalMixin:
             expected_seq=self._seq_cursor,
         )
         self._seq_cursor = seq
+        return seq
 
-    async def log_once(self, kind: str, payload: JsonObject | None = None) -> None:
+    async def log_once(self, kind: str, payload: JsonObject | None = None) -> int:
         """Journaled EventLogProtocol append — happens at most once across all replay
         attempts, unlike plain ``_log`` (which appends unconditionally on
         every call).
@@ -128,13 +129,24 @@ class _JournalMixin:
         duplicate UI card, once per suspend/resume cycle. This doesn't:
         the first attempt logs it and records a marker effect; every
         subsequent replay hits that marker and skips the append entirely.
+
+        Returns the entry's seq either way — on a fresh append that's the
+        seq `_log` just assigned; on a replay-skip, `self._seq_cursor` is
+        unchanged by this call and already correctly reflects that earlier
+        entry's position (it's restored from `effect_cache.last_seq` at
+        `RunContext` construction, so it accounts for entries from a prior
+        attempt too) — correct in both cases without an extra lookup, valid
+        for any caller where nothing else appends between this call and
+        reading the return value (true for `log_user_message`, its only
+        current caller needing the seq).
         """
         path = self._alloc_path()
         effect_id = Effect.make_id(self.run_id, path, "log_once", {"kind": kind})
         if self._lookup_effect(effect_id) is not None:
-            return
-        await self._log(kind, payload or {})
+            return self._seq_cursor
+        seq = await self._log(kind, payload or {})
         await self._record_effect(effect_id, "ok", {})
+        return seq
 
     # ------------------------------------------------------------------
     # Effect cache — lookup/record against the EventLogProtocol (replaces Journal)

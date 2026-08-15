@@ -48,6 +48,7 @@ class ServerDependencies:
     workspace_user_quota_bytes: int = 1024 * 1024 * 1024
     workspace_user_delete_allowed: bool = True
     rag_backend: Optional[Any] = None
+    safety_middleware: Optional[Any] = None
 
 
 def get_ctx(request: Request) -> ServerDependencies:

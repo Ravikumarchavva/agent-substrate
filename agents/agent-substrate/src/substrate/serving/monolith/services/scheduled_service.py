@@ -116,6 +116,7 @@ async def execute_scheduled_task(
                 long_term_memory=app_state.long_term_memory,
                 user_id=str(task.user_id) if task.user_id else None,
                 runtime=app_state.runtime,
+                safety_middleware=app_state.safety_middleware,
             )
 
             # 6. Submit to runtime

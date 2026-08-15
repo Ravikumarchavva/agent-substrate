@@ -304,6 +304,7 @@ async def chat(
             runtime=deps["runtime"],
             initial_tool_choice=initial_tool_choice or None,
             bridge=deps["bridge"],
+            safety_middleware=ctx.safety_middleware,
         )
 
         # 4. Extract user content from last message

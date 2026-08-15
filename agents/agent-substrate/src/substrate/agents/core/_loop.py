@@ -34,7 +34,7 @@ def message_to_chat(msg: Message) -> ChatMessage:
 
 async def log_user_message(
     ctx: RunContext, msg: Message, user_turn: ChatMessage
-) -> None:
+) -> int:
     """Journal the turn that started this run as a ``user.message`` EventLogProtocol
     entry, so the log is a self-complete record of the conversation (history
     is projected from it — see ``serving/stream/history.py``).
@@ -47,11 +47,18 @@ async def log_user_message(
     ``log_once``, not ``_log``: this call itself re-executes on every replay
     attempt (it happens before any suspension point), so it must be at-most-
     once across attempts like any other side effect.
+
+    Returns the entry's seq — used by ``ReActAgent._handle_message`` to give
+    a TURN-stage safety middleware a stable reference back to this specific
+    message (e.g. to log a companion ``user.message.flagged`` marker and,
+    later, to redact this one entry from replayed context — see
+    ``agents/middleware/guardrails/multimodal_safety.py`` and
+    ``agents/factory.py::step_rows_from_log``).
     """
     display_text = msg.metadata.get("display_text")
     if display_text is None:
         display_text = content_blocks_to_str(user_turn.content)  # type: ignore[arg-type]
-    await ctx.log_once(
+    return await ctx.log_once(
         "user.message",
         {
             "text": display_text,

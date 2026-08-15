@@ -54,17 +54,26 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers", "requires_redis: skip when Redis is not reachable"
     )
+    config.addinivalue_line(
+        "markers",
+        "requires_model_download: downloads a real model from the HF Hub "
+        "(100MB+) — skip in offline/constrained CI via SKIP_MODEL_DOWNLOAD_TESTS=1",
+    )
 
 
 @pytest.fixture(autouse=True)
 async def _skip_if_infra_missing(request: pytest.FixtureRequest) -> None:
-    """Auto-skip any test marked requires_postgres / requires_redis."""
+    """Auto-skip any test marked requires_postgres / requires_redis /
+    requires_model_download."""
     if request.node.get_closest_marker("requires_postgres"):
         if not await _check_pg():
             pytest.skip("Postgres not reachable — run `make infra-up` first")
     if request.node.get_closest_marker("requires_redis"):
         if not await _check_redis():
             pytest.skip("Redis not reachable — run `make infra-up` first")
+    if request.node.get_closest_marker("requires_model_download"):
+        if os.environ.get("SKIP_MODEL_DOWNLOAD_TESTS"):
+            pytest.skip("SKIP_MODEL_DOWNLOAD_TESTS=1")
 
 
 # ---------------------------------------------------------------------------

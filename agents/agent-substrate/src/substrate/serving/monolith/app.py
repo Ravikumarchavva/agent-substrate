@@ -92,6 +92,7 @@ async def lifespan(app: FastAPI):
     app.state.history = infra.history
     app.state.short_term_memory = infra.short_term_memory
     app.state.long_term_memory = infra.long_term_memory
+    app.state.safety_middleware = infra.safety_middleware
     app.state.redis_client = infra.redis_client
     app.state.runtime = infra.runtime
     app.state.runtime_stack = infra.runtime_stack
@@ -191,6 +192,7 @@ async def lifespan(app: FastAPI):
         trigger_scheduler=app.state.trigger_scheduler,
         short_term_memory=app.state.short_term_memory,
         long_term_memory=app.state.long_term_memory,
+        safety_middleware=app.state.safety_middleware,
         workspace_user_quota_bytes=settings.WORKSPACE_USER_QUOTA_BYTES,
         workspace_user_delete_allowed=settings.WORKSPACE_USER_DELETE_ALLOWED,
         rag_backend=app.state.rag_backend,

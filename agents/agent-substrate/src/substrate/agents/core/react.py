@@ -146,7 +146,7 @@ class ReActAgent:
 
         history_messages = await load_history(self._context, self.id, session_id)
         user_turn = message_to_chat(msg)
-        await log_user_message(ctx, msg, user_turn)
+        user_message_seq = await log_user_message(ctx, msg, user_turn)
         messages: list[ChatMessage] = history_messages + [user_turn]
 
         call_ctx = MiddlewareContext(
@@ -155,6 +155,8 @@ class ReActAgent:
             run_id=ctx.run_id,
             session_id=session_id,
             messages=messages,
+            user_message_seq=user_message_seq,
+            run_context=ctx,
         )
 
         async def _final(c: MiddlewareContext) -> None:

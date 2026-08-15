@@ -333,31 +333,6 @@ services:
       - llama-model-cache:/cache
     restart: unless-stopped
 
-  # LEGACY / opt-in. The default SANDBOX_RUNTIME=bubblewrap needs no container
-  # here at all (see capabilities/tools/code_interpreter/.../runtimes/bubblewrap.py)
-  # — it runs code directly on the host in a Linux namespace. This service
-  # builds the same image real K8s SandboxTemplates run
-  # (code_interpreter/agent-sandbox/README.md) — useful for manually exercising
-  # the sandbox_runtime.py HTTP server (curl its /ci/run etc.) without a real
-  # cluster. K8sRuntime itself always talks to a real cluster via the
-  # kubernetes-sigs/agent-sandbox controller, never a bare HTTP URL like this.
-  code-interpreter-sandbox:
-    profiles:
-      - sandbox
-    build:
-      context: ../..
-      dockerfile: src/substrate/capabilities/tools/code_interpreter/code_interpreter/agent-sandbox/Dockerfile
-    environment:
-      CODE_INTERPRETER_WORKSPACE: /app/workspace
-    volumes:
-      # Same directory the "local" FILE_STORE_BACKEND uses (config.py's
-      # FILE_STORE_ROOT) — chat uploads land here, so code executed in this
-      # container can open them directly.
-      - ../../data/workspaces:/app/workspace
-    ports:
-      - "8023:8888"
-    restart: unless-stopped
-
   # ONLYOFFICE Document Server — editable Word/Excel/PowerPoint in the panel.
   # Opt-in (heavy ~2GB image). The JWT_SECRET here MUST equal the backend's
   # ONLYOFFICE_JWT_SECRET so the signed editor config + save callbacks verify.

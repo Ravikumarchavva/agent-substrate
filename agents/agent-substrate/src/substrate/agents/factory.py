@@ -79,6 +79,11 @@ async def rebuild_messages_from_steps(
             continue
 
         if step_type == "user_message":
+            # `step_rows_from_log` already replaces `input` with a
+            # placeholder for any message a safety guardrail flagged (see
+            # that function's own redaction pass) — this branch has nothing
+            # extra to do; the substitution already happened upstream, so
+            # a flagged message's raw content never reaches this point.
             messages.append(
                 ChatMessage(
                     role="user",
@@ -168,8 +173,25 @@ async def step_rows_from_log(
     arriving after a ``tool.result`` starts a new ``assistant_message`` row —
     each real LLM generation's text + tool-use calls land in one row, exactly
     matching how the live react loop actually shaped them.
+
+    Redaction: any ``user_message`` row whose ``user.message`` entry was
+    later flagged by a safety guardrail (a companion ``user.message.flagged``
+    entry referencing its seq — see ``agents/middleware/guardrails/
+    multimodal_safety.py``) has its ``input`` replaced with a fixed
+    placeholder before this function returns. This is what makes
+    "persist-but-exclude" real for *future* turns: the flagged message stays
+    visible via the EventLogProtocol/wire-event history a client reads
+    directly (``serving/stream/history.py::project_thread``, untouched by
+    this function), but never re-enters the ``messages`` list an LLM call
+    actually sees on any turn after the one it was flagged on. The marker
+    always appears after its target within the same run (the guardrail logs
+    it mid-turn, after the message it's flagging was already journaled), so
+    a single pass — collect flagged seqs, redact at the end — is sufficient;
+    no need to buffer or reorder anything.
     """
+    _REDACTED_TEXT = "[Message removed — flagged for policy violation]"
     rows: list[dict] = []
+    flagged_seqs: set[int] = set()
     current: dict | None = None
     saw_tool_result = False
 
@@ -188,7 +210,21 @@ async def step_rows_from_log(
 
             if kind == "user.message":
                 _flush()
-                rows.append({"type": "user_message", "input": payload.get("text", "")})
+                rows.append(
+                    {
+                        "type": "user_message",
+                        "input": payload.get("text", ""),
+                        "metadata": {"seq": entry.seq},
+                    }
+                )
+                continue
+
+            if kind == "user.message.flagged":
+                # Not a message in the conversation itself — a marker
+                # referencing one. No row of its own; redacted below.
+                seq = payload.get("seq")
+                if isinstance(seq, int):
+                    flagged_seqs.add(seq)
                 continue
 
             if kind == "text.delta":
@@ -251,6 +287,15 @@ async def step_rows_from_log(
                 continue
 
     _flush()
+
+    if flagged_seqs:
+        for row in rows:
+            if row.get("type") != "user_message":
+                continue
+            seq = (row.get("metadata") or {}).get("seq")
+            if seq in flagged_seqs:
+                row["input"] = _REDACTED_TEXT
+
     return rows
 
 

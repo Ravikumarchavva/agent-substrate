@@ -79,6 +79,25 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
             413, f"File exceeds maximum size of {cfg.max_upload_bytes} bytes"
         )
 
+    # Structural/security scan on the RAW bytes, before the parser touches
+    # them — a hostile file must not get a chance to exploit PaddleOCR/
+    # PaddleX's own parsing first. See capabilities/safety/document_scanner.py
+    # for what's actually verified working here (not just wired up).
+    if getattr(cfg, "enable_document_security_scan", True):
+        from substrate.capabilities.safety.document_scanner import scan_document
+
+        scan_verdict = await asyncio.to_thread(
+            scan_document, data, filename=body.filename
+        )
+        if scan_verdict.flagged:
+            logger.warning(
+                "doc-firewall flagged %r: %s", body.filename, scan_verdict.detail
+            )
+            return ExtractResponse(
+                success=False,
+                error=f"Document failed security scan: {scan_verdict.detail}"[:500],
+            )
+
     pipeline = request.app.state.pipeline
     try:
         # PaddleOCR inference is CPU-bound and synchronous — run off the

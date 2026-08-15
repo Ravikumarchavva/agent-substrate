@@ -19,6 +19,9 @@ from substrate.agents.middleware.guardrails.content_filter import (
 )
 from substrate.agents.middleware.guardrails.llm_judge import LLMJudgeMiddleware
 from substrate.agents.middleware.guardrails.max_token import MaxTokenMiddleware
+from substrate.agents.middleware.guardrails.multimodal_safety import (
+    MultimodalSafetyMiddleware,
+)
 from substrate.agents.middleware.guardrails.pii import PIIDetectionMiddleware
 from substrate.agents.middleware.guardrails.prompt_injection import (
     PromptInjectionMiddleware,
@@ -31,6 +34,7 @@ __all__ = [
     "ContentFilterMiddleware",
     "LLMJudgeMiddleware",
     "MaxTokenMiddleware",
+    "MultimodalSafetyMiddleware",
     "PIIDetectionMiddleware",
     "PromptInjectionMiddleware",
     "ToolCallValidationMiddleware",

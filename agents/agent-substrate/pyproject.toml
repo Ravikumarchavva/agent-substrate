@@ -60,6 +60,19 @@ dependencies = [
     "opentelemetry-exporter-otlp",
     "opentelemetry-instrumentation-fastapi<0.60b1",
     "httpx2>=2.7.0",
+    "confusable-homoglyphs>=3.3.1",
+    # capabilities/safety/ — input-safety classifiers (prompt-attack, image
+    # NSFW), run in-process in the monolith on the live chat-turn hot path.
+    # Deliberately onnxruntime + tokenizers, NOT torch/transformers — this
+    # is the one place a real ML dependency was added to the base install;
+    # everything else in this codebase already avoided torch (see the
+    # `extraction` extra's own comment below), and keeping this pairing
+    # narrow instead of pulling in the full transformers stack preserves
+    # that. Model weights are downloaded from the Hub lazily and cached, not
+    # vendored — see capabilities/safety/text_classifier.py.
+    "onnxruntime>=1.20.0",
+    "tokenizers>=0.20.0",
+    "huggingface-hub>=0.25.0",
 ]
 
 [project.optional-dependencies]
@@ -126,6 +139,7 @@ server = ["agent-substrate[web,code,rag,s3,sandbox]"]
 # unless you actually run the extraction service — the base install already
 # covers CSV/JSON/text/pypdf-based PDF loading without it.
 extraction = [
+    "doc-firewall>=0.5.1",
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle==3.3.0",
 ]
@@ -279,6 +293,10 @@ ignore_imports = [
     # extraction-service call for the same reason (page-marked text for
     # code_interpreter) — same exception as chat_context above.
     "substrate.serving.monolith.routes.files -> substrate.capabilities.knowledge.extraction_client",
+    # extraction service's own upload-time security scan — same "legal
+    # meeting point" reasoning as the extraction_client exceptions above,
+    # applied to capabilities/safety/ instead of capabilities/knowledge/.
+    "substrate.serving.services.extraction.routes -> substrate.capabilities.safety.document_scanner",
 ]
 
 # Orthogonal peers (not part of the layer stack):

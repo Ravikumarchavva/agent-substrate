@@ -188,35 +188,11 @@ services:
       FILE_STORE_SERVICE_URL: http://file-store:8018
       # This service defaults to SANDBOX_RUNTIME=k8s (see tool_executor/app.py)
       # and talks to a real cluster via the kubernetes-sigs/agent-sandbox
-      # controller — not to the code-interpreter-sandbox container below,
-      # which is separate opt-in tooling for manually testing that image.
+      # controller. Build/deploy that image via
+      # code_interpreter/agent-sandbox/README.md.
       SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-k8s}
       CI_WORKSPACE_PVC_CLAIM: ${CI_WORKSPACE_PVC_CLAIM:-}
       SANDBOX_RUNTIME_CLASS: ${SANDBOX_RUNTIME_CLASS:-}
-
-  # ══════════════════════════════════════════════════════════════════════════════
-  # Code Interpreter Sandbox — same container image the K8s agent-sandbox
-  # path uses (code_interpreter/agent-sandbox/Dockerfile), run directly here
-  # as a plain container. No privileged mode, no /dev/kvm — this is opt-in
-  # (profile-gated) local-dev tooling, not the production K8s path (see
-  # deployment/k8s/base/runtime/ for the agent-sandbox CRD-based deployment).
-  # ══════════════════════════════════════════════════════════════════════════════
-
-  code-interpreter-sandbox:
-    profiles:
-      - sandbox
-    build:
-      context: ../..
-      dockerfile: src/substrate/capabilities/tools/code_interpreter/code_interpreter/agent-sandbox/Dockerfile
-    environment:
-      CODE_INTERPRETER_WORKSPACE: /app/workspace
-    volumes:
-      - ../../data/workspaces:/app/workspace
-    ports:
-      - "8020:8888"
-    restart: unless-stopped
-    networks:
-      - agent-net
 
   # ══════════════════════════════════════════════════════════════════════════════
   # Extraction service — layout/chart detection + OCR (PaddleOCR) + multimodal

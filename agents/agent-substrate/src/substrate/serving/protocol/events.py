@@ -142,6 +142,28 @@ class UserMessageEvent(BaseModel):
     attachments: list["Attachment"] = Field(default_factory=list)
 
 
+class MessageFlaggedEvent(BaseModel):
+    """A prior ``user.message`` in this thread was flagged by a safety
+    guardrail (``agents/middleware/guardrails/multimodal_safety.py``) —
+    logged as a companion ``user.message.flagged`` entry referencing that
+    message's ``seq``. Surfaced as its own streaming event (both live, via
+    SSE at the moment it's flagged, and on reload, since it's in
+    ``STREAMING_KINDS``) so the client can render a flagged badge under the
+    specific message it targets. The flagged message's own text stays
+    exactly as the user typed it in ``UserMessageEvent`` — this event is
+    metadata about it, not a redaction of it (redaction only applies to
+    what a future LLM call sees, via ``agents/factory.py::step_rows_from_log``,
+    never to what the user/admin sees in the thread itself).
+    """
+
+    type: Literal["user.message.flagged"] = "user.message.flagged"
+    seq: int
+    detector: str = ""
+    severity: str = ""
+    scores: dict[str, float] = Field(default_factory=dict)
+    modality: str = "text"
+
+
 class TurnCompletedEvent(BaseModel):
     """One assistant turn finished. If ``tool_calls`` is non-empty the agent will
     continue after the tools run (another turn follows); otherwise this is the
@@ -265,6 +287,7 @@ WireEvent = Annotated[
         ToolResultEvent,
         HandoffEvent,
         UserMessageEvent,
+        MessageFlaggedEvent,
         TurnCompletedEvent,
         RunCompletedEvent,
         RunFailedEvent,
@@ -289,6 +312,7 @@ __all__ = [
     "ToolCallSummary",
     "Attachment",
     "UserMessageEvent",
+    "MessageFlaggedEvent",
     "TurnCompletedEvent",
     "RunCompletedEvent",
     "RunFailedEvent",

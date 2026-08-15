@@ -43,6 +43,7 @@ from substrate.serving.monolith.routes.connector_tokens import (
 )
 from substrate.serving.monolith.routes.tasks import router as tasks_router
 from substrate.serving.monolith.routes.threads import router as threads_router
+from substrate.serving.monolith.routes.memory import router as memory_router
 from substrate.serving.monolith.routes.triggers import router as triggers_router
 from substrate.serving.monolith.routes.scheduled import router as scheduled_router
 from substrate.serving.monolith.routes.workspace import router as workspace_router
@@ -272,6 +273,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(workspace_oauth_router)
     app.include_router(threads_router)
+    app.include_router(memory_router)
     app.include_router(chat_router)
     app.include_router(cancel_router)
     app.include_router(hitl_router)

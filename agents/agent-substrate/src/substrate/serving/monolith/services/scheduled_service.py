@@ -113,6 +113,8 @@ async def execute_scheduled_task(
                 cfg=settings,
                 history=app_state.history,
                 short_term_memory=app_state.short_term_memory,
+                long_term_memory=app_state.long_term_memory,
+                user_id=str(task.user_id) if task.user_id else None,
                 runtime=app_state.runtime,
             )
 

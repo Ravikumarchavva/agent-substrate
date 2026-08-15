@@ -211,3 +211,110 @@ async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
                     assert del_resp.status_code == 404
             finally:
                 app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.requires_postgres
+async def test_serve_file_sets_etag_and_honors_if_none_match(tmp_path) -> None:
+    """serve_file previously had no cache headers at all — every inline
+    chart image in a chat message re-triggered a full backend round trip
+    (auth + DB + object-storage download) on every page load. An unchanged
+    file must now round-trip as a cheap 304 with no body."""
+    async with app.router.lifespan_context(app):
+        app.state.ctx.file_store = WorkspaceFileStore(
+            root=tmp_path, user_quota_bytes=10_000
+        )
+        app.state.ctx.workspace_user_quota_bytes = 10_000
+
+        async with (
+            _registered_user() as user_id,
+            _registered_thread("44444444-4444-4444-4444-444444444444") as thread_id,
+        ):
+            app.dependency_overrides[get_current_user] = lambda: _claims_for(user_id)
+            try:
+                async with AsyncClient(
+                    transport=ASGITransport(app=app), base_url="http://test"
+                ) as client:
+                    await client.post(
+                        "/files/upload",
+                        data={"thread_id": thread_id},
+                        files={"file": ("chart.png", b"fake-png-bytes", "image/png")},
+                    )
+
+                    first = await client.get(
+                        "/workspace/file",
+                        params={"thread_id": thread_id, "path": "chart.png"},
+                    )
+                    assert first.status_code == 200
+                    etag = first.headers["etag"]
+                    assert etag
+                    assert first.headers["cache-control"] == "private, no-cache"
+
+                    # Unmodified: If-None-Match round-trips as a bodyless 304.
+                    cached = await client.get(
+                        "/workspace/file",
+                        params={"thread_id": thread_id, "path": "chart.png"},
+                        headers={"if-none-match": etag},
+                    )
+                    assert cached.status_code == 304
+                    assert cached.content == b""
+                    assert cached.headers["etag"] == etag
+
+                    # A stale/foreign ETag must still get the real file back.
+                    stale = await client.get(
+                        "/workspace/file",
+                        params={"thread_id": thread_id, "path": "chart.png"},
+                        headers={"if-none-match": '"not-the-real-etag"'},
+                    )
+                    assert stale.status_code == 200
+                    assert stale.content == b"fake-png-bytes"
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.requires_postgres
+async def test_serve_file_pinned_version_is_cached_immutable(tmp_path) -> None:
+    """A `seq`-pinned historical version's bytes never change — safe to
+    cache aggressively, unlike the mutable "latest" file."""
+    async with app.router.lifespan_context(app):
+        app.state.ctx.file_store = WorkspaceFileStore(
+            root=tmp_path, user_quota_bytes=10_000
+        )
+        app.state.ctx.workspace_user_quota_bytes = 10_000
+
+        async with (
+            _registered_user() as user_id,
+            _registered_thread("55555555-5555-5555-5555-555555555555") as thread_id,
+        ):
+            app.dependency_overrides[get_current_user] = lambda: _claims_for(user_id)
+            try:
+                async with AsyncClient(
+                    transport=ASGITransport(app=app), base_url="http://test"
+                ) as client:
+                    await client.post(
+                        "/files/upload",
+                        data={"thread_id": thread_id},
+                        files={"file": ("notes.txt", b"v1", "text/plain")},
+                    )
+                    # serve_file lazily captures a FileVersion on its first
+                    # (unpinned) read (see its docstring) — a version row
+                    # doesn't exist purely from the upload itself.
+                    await client.get(
+                        "/workspace/file",
+                        params={"thread_id": thread_id, "path": "notes.txt"},
+                    )
+
+                    resp = await client.get(
+                        "/workspace/file",
+                        params={
+                            "thread_id": thread_id,
+                            "path": "notes.txt",
+                            "seq": 1,
+                        },
+                    )
+                    assert resp.status_code == 200
+                    assert (
+                        resp.headers["cache-control"]
+                        == "public, max-age=31536000, immutable"
+                    )
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)

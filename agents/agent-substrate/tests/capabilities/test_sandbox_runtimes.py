@@ -253,3 +253,72 @@ async def test_inprocess_runtime_does_not_isolate(workspace: Path) -> None:
     bob_file = workspace / "users/bob/sessions/s2/private.xlsx"
     result = await runtime.execute(spec(code=f"print(open({str(bob_file)!r}).read())"))
     assert BOB_SECRET in result.stdout
+
+
+# ── read-only knowledge-base mount ───────────────────────────────────────────
+
+
+def test_bwrap_argv_omits_kb_mount_when_no_kb_directory_exists(workspace: Path) -> None:
+    """No users/alice/kb dir on the host -> no extra bind at all, not an
+    error — the common case (most users have no KB content yet)."""
+    runtime = BubblewrapRuntime(workspace)
+    argv = runtime._bwrap_argv(spec())
+    assert "/workspace/.kb" not in argv
+
+
+def test_bwrap_argv_adds_readonly_kb_mount_when_directory_exists(
+    workspace: Path,
+) -> None:
+    kb_dir = workspace / "users/alice/kb"
+    kb_dir.mkdir(parents=True)
+
+    runtime = BubblewrapRuntime(workspace)
+    argv = runtime._bwrap_argv(spec())
+
+    assert "/workspace/.kb" in argv
+    kb_index = argv.index("/workspace/.kb")
+    # --ro-bind <src> <dst>, never --bind (which would be writable).
+    assert argv[kb_index - 2] == "--ro-bind"
+    assert argv[kb_index - 1] == str(kb_dir.resolve())
+
+
+async def test_kb_mount_is_actually_read_only_at_runtime(workspace: Path) -> None:
+    """The pure-argv tests above check what's *asked for*; this confirms
+    bwrap actually enforces it — code_interpreter can read but not delete or
+    overwrite anything under the mount."""
+    kb_dir = workspace / "users/alice/kb"
+    kb_dir.mkdir(parents=True)
+    (kb_dir / "notes.md").write_text("standing knowledge-base content")
+
+    runtime = _bwrap_or_skip(workspace)
+    result = await runtime.execute(
+        spec(
+            code=(
+                "print('read:' + open('/workspace/.kb/notes.md').read())\n"
+                "try:\n"
+                "    open('/workspace/.kb/notes.md', 'w').write('overwritten')\n"
+                "    print('WROTE')\n"
+                "except Exception as exc:\n"
+                "    print('write_blocked:' + type(exc).__name__)\n"
+                "try:\n"
+                "    import os; os.remove('/workspace/.kb/notes.md')\n"
+                "    print('DELETED')\n"
+                "except Exception as exc:\n"
+                "    print('delete_blocked:' + type(exc).__name__)\n"
+                # The rest of /workspace must still be fully writable.
+                "open('/workspace/scratch.txt', 'w').write('ok')\n"
+                "print('scratch_write:ok')\n"
+            )
+        )
+    )
+    assert "read:standing knowledge-base content" in result.stdout
+    assert "WROTE" not in result.stdout
+    assert (
+        "write_blocked:OSError" in result.stdout
+        or "write_blocked:PermissionError" in result.stdout
+    )
+    assert "DELETED" not in result.stdout
+    assert "delete_blocked:" in result.stdout
+    assert "scratch_write:ok" in result.stdout
+    # And the host file itself is untouched.
+    assert (kb_dir / "notes.md").read_text() == "standing knowledge-base content"

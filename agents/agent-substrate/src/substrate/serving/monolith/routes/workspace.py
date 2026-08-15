@@ -19,7 +19,7 @@ import uuid
 from typing import Protocol, runtime_checkable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -293,8 +293,9 @@ class RestoreVersionRequest(BaseModel):
     seq: int
 
 
-@router.get("/file")
+@router.get("/file", response_model=None)
 async def serve_file(
+    request: Request,
     thread_id: str = Query(..., description="Conversation/thread id (session folder)"),
     path: str = Query(
         ..., description="File path relative to the thread's session dir"
@@ -305,7 +306,7 @@ async def serve_file(
     claims: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     ctx: ServerDependencies = Depends(get_ctx),
-) -> StreamingResponse:
+) -> StreamingResponse | Response:
     """Serve a code-interpreter / workspace file by its session-relative path.
 
     Resolves to ``users/{caller}/sessions/{thread_id}/{path}`` — the same
@@ -356,6 +357,27 @@ async def serve_file(
     content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
     disposition = "inline" if _is_inline_type(content_type) else "attachment"
 
+    # No cache headers at all here previously — every inline chart/image in
+    # a message re-triggered a full backend round trip (auth + DB lookup +
+    # object-storage download) on every page load, noticeably slow for a
+    # message with several charts. A `seq`-pinned version is genuinely
+    # immutable (a specific historical version's bytes never change) and can
+    # be cached aggressively; the unpinned "latest" file can change (an
+    # agent rewrite), so it's revalidate-before-use rather than cached
+    # outright — `ETag` + `if-none-match` still turns a repeat load into a
+    # cheap 304 (no response body) instead of re-transferring the file.
+    etag = f'"{checksum}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=304,
+            headers={
+                "ETag": etag,
+                "Cache-Control": "public, max-age=31536000, immutable"
+                if seq is not None
+                else "private, no-cache",
+            },
+        )
+
     async def _stream():
         yield data
 
@@ -365,6 +387,10 @@ async def serve_file(
         headers={
             "Content-Disposition": f'{disposition}; filename="{name}"',
             "X-File-Checksum": checksum,
+            "ETag": etag,
+            "Cache-Control": "public, max-age=31536000, immutable"
+            if seq is not None
+            else "private, no-cache",
         },
     )
 

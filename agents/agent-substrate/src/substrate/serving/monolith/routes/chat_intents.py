@@ -319,6 +319,23 @@ def existing_task_board_block(has_existing_board: bool) -> str:
     )
 
 
+def readonly_kb_block(ci_has_workspace_access: bool) -> str:
+    """Not attachment-specific (unlike attachments_block above) — this is
+    about code_interpreter's filesystem generally, so it's unconditional on
+    ci_has_workspace_access alone, not on any particular upload existing.
+    See BubblewrapRuntime._bwrap_argv()/sandbox_service.py's per-user
+    SandboxTemplate for what actually gets mounted at /workspace/.kb."""
+    if not ci_has_workspace_access:
+        return ""
+    return (
+        "\n\n---\n**Read-only knowledge base:**\n"
+        "If /workspace/.kb exists, it holds the user's standing knowledge-base "
+        "content, made available for reference — do not attempt to write, "
+        "modify, or delete anything under it; that path is read-only and any "
+        "such attempt will fail. Read from it freely."
+    )
+
+
 def attachments_block(
     attachments: list[dict[str, Any]], *, ci_has_workspace_access: bool
 ) -> str:
@@ -357,6 +374,7 @@ __all__ = [
     "_should_route_calendar_write_request",
     "_configure_calendar_write_request",
     "existing_task_board_block",
+    "readonly_kb_block",
     "attachments_block",
     "custom_instructions_block",
 ]

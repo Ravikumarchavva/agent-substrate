@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Protocol
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Protocol
 
 from substrate.kernel import ChatMessage
 from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.llm import LLMResponse
 from substrate.kernel.tools.chain import InvocationResult
 from substrate.kernel.tools.tools import AnyTool
+
+if TYPE_CHECKING:
+    from substrate.agents.runtime.context import RunContext
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +86,16 @@ class MiddlewareContext:
     session_id: str | None = None
     messages: list[ChatMessage] | None = None  # also the CHAT-stage per-call window
     turn_result: AgentRunResult | None = None
+    # The just-logged seq of messages[-1] (the ``user.message`` EventLog
+    # entry `_handle_message` wrote before invoking this pipeline) and the
+    # live `RunContext`, so a TURN middleware can journal a companion
+    # marker entry referencing that exact message (see
+    # `agents/middleware/guardrails/multimodal_safety.py`) — both None
+    # outside TURN stage. `RunContext` is TYPE_CHECKING-only here (no
+    # runtime import, no cycle risk) — `from __future__ import annotations`
+    # already makes every annotation in this file a string at runtime.
+    user_message_seq: int | None = None
+    run_context: RunContext | None = None
 
     # CHAT — one model.generate() call
     system_instructions: str | None = None

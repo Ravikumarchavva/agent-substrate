@@ -61,6 +61,16 @@ class ServerSettings(SubstrateConfig):
 
     # ── Feature flags ────────────────────────────────────────────────────────
     ENABLE_BUILDER: bool = False
+    # Multimodal input safety guardrail (agents/middleware/guardrails/
+    # multimodal_safety.py) — jailbreak/prompt-attack + NSFW image scoring
+    # on every live chat turn. True by default; the only reason to disable
+    # is dev/testing without the ~280MB Prompt Guard model downloaded, or a
+    # deployment that hasn't reviewed the licensing note (see the
+    # implementation plan) yet.
+    ENABLE_TEXT_SAFETY_GUARD: bool = True
+    SAFETY_TEXT_THRESHOLD: float = 0.9
+    SAFETY_IMAGE_NSFW_THRESHOLD: float = 0.5
+    SAFETY_IMAGE_NSFL_THRESHOLD: float = 0.3
 
     model_config = SettingsConfigDict(
         env_file=".env",  # relative to CWD — where `uv run start` is invoked

@@ -8,6 +8,13 @@ from .supervision import (
 from .context import CompactionStrategy, AgentContextProtocol
 from .middleware import MiddlewareStage
 from .runtime_context import CancellationToken, RunMeta
+from .safety import (
+    Severity,
+    max_severity,
+    SafetyVerdict,
+    TextSafetyClassifier,
+    ImageSafetyClassifier,
+)
 
 __all__ = [
     "Supervision",
@@ -20,4 +27,9 @@ __all__ = [
     "MiddlewareStage",
     "CancellationToken",
     "RunMeta",
+    "Severity",
+    "max_severity",
+    "SafetyVerdict",
+    "TextSafetyClassifier",
+    "ImageSafetyClassifier",
 ]

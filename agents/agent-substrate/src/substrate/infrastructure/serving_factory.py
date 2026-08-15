@@ -10,6 +10,7 @@ from substrate.agents and substrate.capabilities are permitted here.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from contextlib import AsyncExitStack
@@ -59,6 +60,7 @@ class Infrastructure:
     short_term_memory: Any = None
     long_term_memory: Any = None
     runtime_stack: AsyncExitStack | None = None
+    safety_middleware: Any = None
 
 
 @dataclass
@@ -235,6 +237,11 @@ async def init_infrastructure(
         cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL
     )
 
+    # Blocking I/O (HF Hub model download on first run + onnxruntime
+    # session construction) — off the event loop via to_thread, same as
+    # any other startup-time blocking call in this function would need.
+    safety_middleware = await asyncio.to_thread(build_safety_middleware, cfg)
+
     redis_client = aioredis.from_url(cfg.REDIS_URL, decode_responses=True)
 
     runtime, runtime_stack = await init_runtime(cfg)
@@ -327,6 +334,7 @@ async def init_infrastructure(
         short_term_memory=short_term_memory,
         long_term_memory=long_term_memory,
         runtime_stack=runtime_stack,
+        safety_middleware=safety_middleware,
     )
 
 
@@ -669,8 +677,19 @@ async def build_agent_for_thread(
     runtime: Any = None,
     initial_tool_choice: str | None = None,
     bridge: Any = None,
+    safety_middleware: Any = None,
 ) -> Any:
     """Build and register a kernel Agent for this thread.
+
+    ``safety_middleware`` (built once at startup by ``build_safety_middleware``,
+    threaded through ``app.state``) is appended to the assistant agent's
+    TURN-stage middleware — the previously-unused hook this whole guardrail
+    system exists to finally wire up. Only applies to the default
+    single-assistant path (``cfg.AGENT_MODE != "orchestrator"``); the
+    orchestrator's sub-agents are each independent kernel Agents built by
+    ``build_research_orchestrator`` and don't currently route through this
+    middleware list — a named gap, not an oversight, matching this pass's
+    MVP scope (single-assistant is the default and by far the common case).
 
     Returns a ``ReActAgent`` or ``OrchestratorAgent``.  Serving code
     must treat the return type as ``Any``; the concrete type lives in
@@ -780,6 +799,7 @@ async def build_agent_for_thread(
         max_iterations=max_iterations,
         initial_tool_choice=initial_tool_choice,
         approval_handler=approval_handler,
+        middleware=[safety_middleware] if safety_middleware is not None else None,
     )
     await runtime.register(agent)
     return agent
@@ -858,6 +878,64 @@ async def build_long_term_memory(database_url: str) -> Any:
     )
 
     return await _build(database_url)
+
+
+def build_safety_middleware(cfg: SubstrateConfig) -> Any:
+    """Build the multimodal input-safety guardrail (jailbreak/prompt-attack
+    text + NSFW image scoring on every live chat turn), or ``None`` if
+    disabled.
+
+    Called once, at startup (``init_infrastructure()``) — the classifiers
+    load real ONNX model weights (downloading them from the HF Hub on first
+    run if not already cached), which must happen eagerly, not lazily on
+    the first live request, matching the same "no first-request latency
+    cliff" reasoning ``PromptGuardClassifier``/``ImageSafetyClassifier``'s
+    own docstrings give for their internal eager session construction.
+
+    Thin pass-through to concrete L1/L2 types, same "legal meeting point"
+    convention as ``build_short_term_memory``/``build_long_term_memory``
+    above — this module is the one place serving/'s dependency chain is
+    allowed to construct agents/capabilities concrete types.
+    """
+    enabled = getattr(cfg, "ENABLE_TEXT_SAFETY_GUARD", True)
+    if not enabled:
+        logger.info(
+            "MultimodalSafetyMiddleware disabled (ENABLE_TEXT_SAFETY_GUARD=false)"
+        )
+        return None
+
+    from substrate.agents.middleware.guardrails.multimodal_safety import (
+        MultimodalSafetyMiddleware,
+    )
+    from substrate.capabilities.safety.image_classifier import ImageSafetyClassifier
+    from substrate.capabilities.safety.text_classifier import PromptGuardClassifier
+
+    text_threshold = getattr(cfg, "SAFETY_TEXT_THRESHOLD", 0.9)
+    nsfw_threshold = getattr(cfg, "SAFETY_IMAGE_NSFW_THRESHOLD", 0.5)
+    nsfl_threshold = getattr(cfg, "SAFETY_IMAGE_NSFL_THRESHOLD", 0.3)
+
+    try:
+        text_classifier = PromptGuardClassifier(threshold=text_threshold)
+        image_classifier = ImageSafetyClassifier(
+            nsfw_threshold=nsfw_threshold, nsfl_threshold=nsfl_threshold
+        )
+    except Exception:
+        # Fail-open on infrastructure failure (model didn't load, no network
+        # to the Hub on first run, etc.) — a bad deploy must not take down
+        # all chat. A missing guardrail is logged loudly; a down monolith
+        # is not an acceptable tradeoff for it. See the plan's production-
+        # hardening notes for the fail-open/fail-closed split (this is the
+        # infrastructure-failure half; an actual malicious verdict still
+        # fails closed inside the middleware itself).
+        logger.exception(
+            "MultimodalSafetyMiddleware failed to initialize — chat will run "
+            "WITHOUT the safety guardrail. Fix and restart to re-enable."
+        )
+        return None
+
+    return MultimodalSafetyMiddleware(
+        text_classifier=text_classifier, image_classifier=image_classifier
+    )
 
 
 async def build_cached_history_for_thread(

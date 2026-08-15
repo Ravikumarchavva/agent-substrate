@@ -58,7 +58,15 @@ _SANDBOX_WORKSPACE_MOUNT_PATH = "/app/workspace"
 # service is configured. Public (not `_`-prefixed): also imported by
 # routes/files.py to scope upload-time page/size caps and eager staging to
 # the same set of types this module actually ingests.
-EXTRACTABLE_CONTENT_TYPES = {"application/pdf"}
+#
+# text/markdown: NOT routed through the extraction service at all —
+# LocalRagBackend._load() already dispatches .txt/.md straight to the local
+# TextLoader (no OCR, no PaddleOCR call — see backends/local.py's
+# _LOCAL_FALLBACK_EXTENSIONS). Added here purely to make files.py's existing
+# will_stage/_stage_uploaded_doc eligibility check include it, so a large
+# paste-to-document upload gets chunked+embedded+staged the same way a PDF
+# does — same mechanism, not a new one.
+EXTRACTABLE_CONTENT_TYPES = {"application/pdf", "text/markdown"}
 
 
 def _session_relative_path(object_key: str) -> str | None:

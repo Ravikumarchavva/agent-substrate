@@ -17,6 +17,7 @@ from substrate.serving.protocol import (
     ToolResultEvent,
     wire_from_log,
 )
+from substrate.serving.protocol.events import MessageFlaggedEvent
 
 
 # ---------------------------------------------------------------------------
@@ -98,3 +99,26 @@ def test_bridge_input_request() -> None:
 
 def test_bridge_unknown_returns_none() -> None:
     assert bridge_event_to_wire({"type": "something_else"}) is None
+
+
+def test_user_message_flagged_survives_reload_via_streaming_kinds() -> None:
+    """The reload-visibility half of persist-but-exclude: a flagged
+    message's marker must be a real streaming kind (not just live-SSE-only,
+    like run.failed today), or the badge would vanish on page refresh."""
+    ev = wire_from_log(
+        "user.message.flagged",
+        {
+            "seq": 7,
+            "detector": "prompt_guard",
+            "severity": "high",
+            "scores": {"malicious": 0.97},
+            "modality": "text",
+        },
+    )
+    assert ev == MessageFlaggedEvent(
+        seq=7,
+        detector="prompt_guard",
+        severity="high",
+        scores={"malicious": 0.97},
+        modality="text",
+    )

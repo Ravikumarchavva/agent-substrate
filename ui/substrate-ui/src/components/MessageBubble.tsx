@@ -98,10 +98,12 @@ function MarkdownImage({
   src,
   alt,
   threadId,
+  onOpen,
 }: {
   src?: string;
   alt?: string;
   threadId?: string | null;
+  onOpen?: () => void;
 }) {
   const [failed, setFailed] = useState(false);
   const raw = typeof src === "string" ? src.trim() : "";
@@ -120,13 +122,19 @@ function MarkdownImage({
     );
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={resolved}
-      alt={alt ?? ""}
-      onError={() => setFailed(true)}
-      className="my-2 max-h-[520px] w-auto max-w-full rounded-2xl border border-(--border) bg-(--card) shadow-md"
-    />
+    <button
+      type="button"
+      onClick={() => onOpen?.()}
+      className="group/inline-image block cursor-pointer text-left focus:outline-none"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={resolved}
+        alt={alt ?? ""}
+        onError={() => setFailed(true)}
+        className="my-2 max-h-[520px] w-auto max-w-full rounded-2xl border border-(--border) bg-(--card) shadow-md transition-shadow duration-200 group-hover/inline-image:shadow-lg"
+      />
+    </button>
   );
 }
 
@@ -341,17 +349,55 @@ export function MessageBubble({
   const [copied, setCopied] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(-1);
   // Which gallery the lightbox is currently showing — "main" (user uploads /
-  // model-curated images) or "tool" (chart/table crops from knowledge_search
-  // etc., normally collapsed under "N charts generated"). Both share one
-  // lightbox instead of each needing its own copy of the carousel/keyboard-nav
-  // logic below.
-  const [activeImageSource, setActiveImageSource] = useState<"main" | "tool">("main");
+  // model-curated images), "tool" (chart/table crops from knowledge_search
+  // etc., normally collapsed under "N charts generated"), or "inline" (every
+  // image the model embedded directly in this message's markdown text via
+  // ![alt](sandbox:...), navigable among each other — see
+  // inlineImageAttachments above for why this isn't matched against the
+  // "tool" gallery instead). All three share one lightbox instead of each
+  // needing its own copy of the carousel/keyboard-nav logic below.
+  const [activeImageSource, setActiveImageSource] = useState<"main" | "tool" | "inline">("main");
   const [inlineImageIndex, setInlineImageIndex] = useState<number>(0);
   const [isCollapsed, setIsCollapsed] = useState(true);
 
   // Ensure content is always a valid string
   const safeContent = typeof content === 'string' ? content : String(content || "");
   const safeReasoning = typeof reasoning === 'string' ? reasoning : String(reasoning || "");
+  // Every markdown image ref in THIS message's raw content, in document
+  // order, deduped — the navigable list for the "inline" lightbox below.
+  // Not matched against toolImageAttachments: that gallery's `name` is a
+  // synthetic sequential name the backend assigns when auto-capturing tool
+  // output (`code_interpreter-0.png`, `-1.png`, ...), decoupled from
+  // whatever real filename the model wrote and references here via
+  // `sandbox:...` — matching by name only works by coincidence. Extracting
+  // straight from this message's own markdown instead is correct regardless
+  // of naming on either side.
+  const inlineImageRefs = useMemo(() => {
+    const refs: string[] = [];
+    const seen = new Set<string>();
+    const re = /!\[[^\]]*\]\(([^)\s]+)\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(safeContent)) !== null) {
+      const ref = match[1];
+      if (!seen.has(ref)) {
+        seen.add(ref);
+        refs.push(ref);
+      }
+    }
+    return refs;
+  }, [safeContent]);
+  const inlineImageAttachments = useMemo(
+    () =>
+      inlineImageRefs.map((raw) => {
+        const resolved = raw.startsWith("sandbox:")
+          ? threadId
+            ? buildWorkspaceFileUrl(threadId, raw)
+            : ""
+          : raw;
+        return { id: `inline:${raw}`, name: raw, mime: "image/*", size: 0, url: resolved };
+      }),
+    [inlineImageRefs, threadId]
+  );
   const sourceByIndex = useMemo(
     () => new Map((sources ?? []).map((s) => [s.index, s])),
     [sources]
@@ -391,10 +437,20 @@ export function MessageBubble({
 
   // The lightbox operates over whichever gallery is currently open — see
   // activeImageSource above.
-  const activeList = activeImageSource === "tool" ? toolImageAttachments : imageAttachments;
+  const activeList =
+    activeImageSource === "tool"
+      ? toolImageAttachments
+      : activeImageSource === "inline"
+        ? inlineImageAttachments
+        : imageAttachments;
 
   const openLightbox = useCallback((source: "main" | "tool", index: number) => {
     setActiveImageSource(source);
+    setActiveImageIndex(index);
+  }, []);
+
+  const openInlineLightbox = useCallback((index: number) => {
+    setActiveImageSource("inline");
     setActiveImageIndex(index);
   }, []);
 
@@ -949,12 +1005,21 @@ export function MessageBubble({
                     },
                     img({ src, alt }) {
                       // Model-curated chart: ![alt](sandbox:name.png) → served
-                      // full-size inline from the thread's workspace.
+                      // full-size inline from the thread's workspace. Opens
+                      // the "inline" lightbox — navigable across every image
+                      // in THIS message, in the order they appear — not the
+                      // "tool" gallery: that gallery's `name` is a synthetic
+                      // sequential name the backend assigns when
+                      // auto-capturing tool output, decoupled from whatever
+                      // real filename the model references here.
+                      const raw = typeof src === "string" ? src.trim() : "";
+                      const galleryIndex = inlineImageRefs.indexOf(raw);
                       return (
                         <MarkdownImage
                           src={typeof src === "string" ? src : undefined}
                           alt={alt}
                           threadId={threadId}
+                          onOpen={() => openInlineLightbox(Math.max(galleryIndex, 0))}
                         />
                       );
                     },

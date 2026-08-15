@@ -13,6 +13,7 @@ services:
       - pgdata18:/var/lib/postgresql
       - ./init-extensions.sql:/docker-entrypoint-initdb.d/10-extensions.sql
       - ./init-chatbotdb.sh:/docker-entrypoint-initdb.d/20-chatbotdb.sh
+      - ./init-glitchtipdb.sh:/docker-entrypoint-initdb.d/30-glitchtipdb.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -354,6 +355,51 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # GlitchTip — self-hosted, MIT-licensed, Sentry-protocol-compatible browser
+  # error tracking for ravi + substrate-ui (NEXT_PUBLIC_GLITCHTIP_DSN in each
+  # app's .env). Opt-in (profile-gated) — reuses the existing postgres/redis
+  # services above rather than standing up dedicated ones. First-time setup:
+  #   docker compose --profile glitchtip up -d
+  #   docker compose run --rm glitchtip-web ./manage.py createsuperuser
+  # then open http://localhost:8025, create an org + project, and paste the
+  # project's DSN into each app's NEXT_PUBLIC_GLITCHTIP_DSN.
+  # ══════════════════════════════════════════════════════════════════════════════
+  glitchtip-web: &glitchtip
+    profiles:
+      - glitchtip
+    image: glitchtip/glitchtip:latest
+    ports:
+      - "8025:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/glitchtipdb
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:-CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET}
+      # Separate Redis logical DB (index 2) from the main app's (index 0) —
+      # same Redis server, no dedicated container needed.
+      REDIS_URL: redis://redis:6379/2
+      PORT: 8000
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8025}
+      DEFAULT_FROM_EMAIL: ${GLITCHTIP_FROM_EMAIL:-glitchtip@agent-substrate.com}
+      ENABLE_ORGANIZATION_CREATION: "True"
+      CELERY_WORKER_AUTOSCALE: "1,1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  glitchtip-worker:
+    <<: *glitchtip
+    ports: []
+    command: ./bin/run-celery-with-beat.sh
+
+  glitchtip-migrate:
+    <<: *glitchtip
+    ports: []
+    restart: "no"
+    command: ./manage.py migrate
 
 volumes:
   pgdata18:

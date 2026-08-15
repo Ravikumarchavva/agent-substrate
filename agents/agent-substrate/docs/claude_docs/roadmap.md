@@ -276,8 +276,70 @@ so the decision is visible, not silently dropped.
   `execute_tool`, so `tool.execution_completed` never fired even though
   the publishing code existed and was correct).
 
+- **Real `Instance` (deployed-chatbot) provisioning in `ravi`** (found
+  2026-08-15, cross-repo investigation while wiring a `tenant_id`
+  identity/quota seam between `ravi` and `substrate-ui`). `ravi`'s
+  `Instance` model (`prisma/schema.prisma`) has real-looking fields —
+  `port`, `containerId`, `healthUrl`, `externalUrl` — but nothing in `ravi`
+  ever populates them. A `CHATBOT` `Instance` row is auto-seeded at
+  `status: STOPPED` the first time a project's dashboard is viewed
+  (`project-catalog.ts::ensureProjectBlueprint`, called from three places,
+  none a user "deploy" action), and the chatbots management page
+  (`chatbots/page.tsx`) is entirely read-only — its own copy admits this
+  ("...and **later** point at a provisioned chat UI instance"). Repo-wide
+  search for Docker/k8s/`spawn`/`exec`/`provision` in `ravi/src`: zero hits.
+  **There is no code anywhere that spins up a `substrate-ui` container/pod
+  per chatbot.** Building this is a substantial infra project (container or
+  k8s pod orchestration, health-check polling, `externalUrl` assignment,
+  teardown) — scoped out of the identity-seam work specifically so it could
+  land without waiting on this. What *did* ship as groundwork: `ravi`'s
+  `createEngineToken` and `substrate-ui`'s `engine-auth.ts` both now support
+  an optional project-scoped `tenant_id` claim (`RAVI_PROJECT_ID` env var on
+  the substrate-ui side) — so once real provisioning exists, it's "set one
+  env var on the deployed container," not another auth rewrite. A real
+  deploy action also needs to precede this: today even the *manual* "point
+  at a provisioned chat UI instance" step doesn't exist as a UI affordance.
+- **Project-scoping in the `ravi` builder** (found the same session as
+  above). The visual pipeline builder (`dashboard/builder/page.tsx`) and
+  its API client (`builder-api.ts`) have no project-selection concept at
+  all — no `projectId` in any call, despite `Workflow.projectId` existing
+  as a real FK in the schema. This blocked passing a real `tenant_id` into
+  the builder's own test-chat proxy (which now sends a real per-user JWT
+  instead of the completely unauthenticated request it sent before, but
+  still falls back to `tenant_id: "default"`, not a real project). Fixing
+  this means deciding how a user picks/switches which project they're
+  building for, which is a real UX design question, not implemented here.
+
 ## Recently shipped (prune over time)
 
+- **`ravi` plan/BYOK model + passwordless auth + `tenant_id` identity seam +
+  self-hosted error tracking** (2026-08-15, same session as the safety
+  guardrail below). `ravi`'s `Plan` enum went from a fictional
+  FREE/PRO/ENTERPRISE billing-tier list (nothing enforced it, no payment
+  processor wired up) to FREE/EXPLORER — FREE capped at 5 messages/day
+  against Ravi's own credentials, EXPLORER unlocked by connecting your own
+  LLM API key (`Project.byokProvider`/`byokKeyEncrypted`, AES-256-GCM at
+  rest via `src/lib/byok-crypto.ts`) and capped at 100/day. Enforcement is
+  real: `agent-substrate`'s `chat.py` checks a Redis daily counter
+  (`plan_quota_key()`, reusing the existing `doc_quota.py` primitive) keyed
+  by a `daily_message_limit` JWT claim `ravi` embeds from `Project.plan`.
+  Auth went fully passwordless — `next-auth`'s first-party `resend`
+  provider (no nodemailer needed), `Credentials`/`passwordHash` deleted
+  outright, `/login` and `/register` unified into one "enter your email"
+  flow. The builder's own test-chat proxy went from **zero auth at all**
+  (a bare `next.config.ts` rewrite) to a real per-user signed JWT. A new
+  `tenant_id` identity seam now runs through both `ravi`'s
+  `createEngineToken` and `substrate-ui`'s `engine-auth.ts` (env var
+  `RAVI_PROJECT_ID`) — inert until real Instance provisioning exists (see
+  the "Explicitly deferred" entry above) but means that, once it does, a
+  deployed chatbot's entire visitor base (anonymous or logged-in) shares
+  one project-level quota by setting a single env var, not another auth
+  rewrite. Error tracking: self-hosted GlitchTip (MIT, Sentry-protocol-
+  compatible — `deployment/docker/docker-compose.yml`'s `glitchtip-*`
+  services, `profile: glitchtip`) wired into both `ravi` and `substrate-ui`
+  via `@sentry/nextjs`, client-side only (server-side errors already flow
+  into the existing Promtail→Loki path). Also shipped: real Terms/Privacy
+  pages (previously 404 in production).
 - **Multimodal input safety guardrail** (2026-08-15). The regex-only
   guardrails in `agents/middleware/guardrails/` had existed for a while but
   were never actually wired into the live chat path — confirmed via grep

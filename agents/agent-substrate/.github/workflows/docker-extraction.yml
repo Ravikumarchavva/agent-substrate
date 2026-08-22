@@ -1,0 +1,73 @@
+name: Publish extraction service images
+
+# Real, robust distribution for the extraction service (heavy PaddleOCR
+# runtime — never meant to be `pip install`-ed by a service consumer, only
+# by something embedding the pipeline in-process; see extraction/
+# extraction-gpu extras in pyproject.toml for that case instead). This is
+# the pattern real GPU/CPU-split inference services use (Ollama, LocalAI,
+# llama.cpp server) — matrix-build a CPU and a GPU image variant, publish
+# both to GHCR under distinct tags, and let ANY downstream consumer
+# (pdfqa-rag or otherwise) just `docker run` the tag they need. No
+# dependency on cloning this repo, no docker-compose, no local path
+# overrides — same as how nobody vendors ollama/ollama's Dockerfile either.
+#
+# Fires on the same GitHub Release event as publish.yml (PyPI), so a
+# release always ships both the library and the runnable service images
+# for that version; workflow_dispatch is available for a manual rebuild
+# (e.g. to pick up an upstream base-image security patch) without cutting
+# a new release.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # Hardcoded lowercase — GHCR image paths must be lowercase even though
+  # the GitHub org/user (Ravikumarchavva) isn't; ${{ github.actor }} is
+  # only used for registry auth below, not the image path.
+  IMAGE_BASE: ghcr.io/ravikumarchavva/agent-substrate-extraction
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - variant: cpu
+            dockerfile: deployment/docker/extraction.Dockerfile
+          - variant: gpu
+            dockerfile: deployment/docker/extraction.gpu.Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags
+        id: tags
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${{ github.event_name }}" != "release" ]; then
+            VERSION="dev-${GITHUB_SHA::12}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}:${{ matrix.variant }}
+            ${{ env.IMAGE_BASE }}:${{ steps.tags.outputs.version }}-${{ matrix.variant }}
+          cache-from: type=gha,scope=extraction-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=extraction-${{ matrix.variant }}

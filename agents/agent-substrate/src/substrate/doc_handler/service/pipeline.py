@@ -26,8 +26,14 @@ from typing import Any
 
 # Labels PaddleOCR's layout model can produce that we treat as extractable
 # images rather than OCR'd text — a chart/table crop is more useful to a
-# vision-capable agent than reflowed OCR text of its contents.
-_IMAGE_LABELS = {"chart", "table", "figure"}
+# vision-capable agent than reflowed OCR text of its contents. "image" was
+# a real, found-not-assumed gap: a plain photo/logo/decorative graphic (no
+# chart/table structure) gets labeled "image", not "figure" — verified
+# against a real 2-page marketing brochure where 3 such blocks (a photo,
+# a logo, a branded graphic) were silently falling through to the text
+# branch, leaking their garbled OCR'd fragments into the plain-text output
+# as if they were real prose, instead of becoming cropped images.
+_IMAGE_LABELS = {"chart", "table", "figure", "image"}
 
 # Below this detection confidence, a chart/table/figure region is treated as
 # a marginal/spurious call, not extracted as an image. Real numbers from this

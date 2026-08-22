@@ -153,10 +153,27 @@ class ExtractionPipeline:
         from paddleocr import PPStructureV3
 
         det_model, rec_model = _OCR_MODELS[ocr_size]
+        # PPStructureV3 leaves text_recognition_batch_size/
+        # textline_orientation_batch_size at None, which paddlex's
+        # BatchSampler defaults to 1 (verified: base_batch_sampler.py's
+        # __init__(self, batch_size: int = 1)) — every OCR'd text region on
+        # a page (there can be dozens: paragraphs, table cells, ...) gets
+        # its own separate inference call. On CPU that's already how the
+        # work has to be split up, but on GPU it means dozens of tiny
+        # sequential launches instead of one batched one — real, measured
+        # as a sawtooth GPU-utilization pattern (repeated short spikes, not
+        # sustained load) rather than a bug in this pipeline's own code.
+        # 16 is a conservative batch for a 4GB-class laptop GPU (this
+        # project's own dev GPU) — PP-StructureV3 already holds layout +
+        # table + OCR models resident at once, so headroom is tighter than
+        # a single-model server.
+        batch_size = 16 if device.startswith("gpu") else None
         self._pipeline = PPStructureV3(
             text_detection_model_name=det_model,
             text_recognition_model_name=rec_model,
             device=device,
+            text_recognition_batch_size=batch_size,
+            textline_orientation_batch_size=batch_size,
             # Table structure recognition (SLANet, bundled in PP-StructureV3)
             # gives real row/column HTML for table blocks — converted to a
             # markdown table below — instead of just an OCR'd caption. The

@@ -45,12 +45,15 @@ async def lifespan(app: FastAPI):
     isn't also paying first-load latency."""
     svc_config = ServiceConfig()
     logger.info(
-        "Starting extraction service  pod=%s  ocr_size=%s",
+        "Starting extraction service  pod=%s  ocr_size=%s  device=%s",
         svc_config.pod_name,
         svc_config.ocr_size,
+        svc_config.device,
     )
 
-    pipeline = ExtractionPipeline(ocr_size=svc_config.ocr_size)
+    pipeline = ExtractionPipeline(
+        ocr_size=svc_config.ocr_size, device=svc_config.device
+    )
     embedding_reranker = EmbeddingReranker(
         embed_server_url=svc_config.embed_server_url,
         rerank_server_url=svc_config.rerank_server_url,

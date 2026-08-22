@@ -30,6 +30,13 @@ class ServiceConfig(BaseSettings):
     ocr_size: Literal["tiny", "small", "medium"] = "tiny"
     max_upload_bytes: int = 50 * 1024 * 1024
 
+    # "cpu" (default — cheap to host, no CUDA image) or e.g. "gpu:0" for
+    # local dev on an NVIDIA GPU. GPU requires the `extraction-gpu` install
+    # extra (paddlepaddle-gpu, matching CUDA index — see pyproject.toml)
+    # instead of the default CPU wheel; passed straight through to
+    # PPStructureV3(device=...) in pipeline.py.
+    device: str = "cpu"
+
     # ── Document security scan (doc-firewall, capabilities/safety/) ─────
     # Runs on raw bytes before PaddleOCR/PaddleX parses them — see
     # routes.py::extract(). True by default; disable only for local

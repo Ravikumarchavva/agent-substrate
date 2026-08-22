@@ -1,7 +1,7 @@
-# docker/extraction.Dockerfile — Document extraction service
+# docker/doc-handler.Dockerfile — Document extraction service
 #
-# Build:   docker build -f docker/extraction.Dockerfile -t extraction:latest .
-# Run:     docker run -p 8080:8080 extraction:latest
+# Build:   docker build -f docker/doc-handler.Dockerfile -t doc-handler:latest .
+# Run:     docker run -p 8080:8080 doc-handler:latest
 #
 # Layout-aware document parsing (PaddleOCR: chart/table detection + OCR).
 # Multimodal embedding and reranking are NOT loaded in-process here — this
@@ -15,7 +15,7 @@ FROM python:3.13-slim AS base
 
 # libgomp1: paddle's compiled core (libpaddle.so) needs it directly and
 # fails ImportError at startup without it. This was masked while `torch`
-# was still an extraction-extra dependency (its wheel bundles its own
+# was still a doc-handler-extra dependency (its wheel bundles its own
 # libgomp copy) — surfaced as a real startup crash once torch was removed
 # (see docs/claude_docs/decisions.md's Qwen3-VL entry for why).
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -28,7 +28,7 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN uv pip install --system -e ".[extraction]"
+RUN uv pip install --system -e ".[doc-handler]"
 
 EXPOSE 8080
 
@@ -38,5 +38,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:8080/v1/health || exit 1
 
-ENTRYPOINT ["uvicorn", "substrate.serving.services.extraction.app:app"]
+ENTRYPOINT ["uvicorn", "substrate.doc_handler.service.app:app"]
 CMD ["--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]

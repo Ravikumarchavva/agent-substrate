@@ -1,6 +1,6 @@
 """Wire schemas for the extraction service.
 
-Re-exports the canonical response shapes from the capabilities layer (single
+Re-exports the canonical response shapes from doc_handler/client.py (single
 source of truth — mirrors the code_interpreter service's schemas.py, which
 does the same for its own request/response types) and adds the
 service-local request shapes.
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from substrate.capabilities.knowledge.extraction_client import (
+from substrate.doc_handler.client import (
     ExtractedImage,
     ExtractedPageText,
     ExtractResponse,

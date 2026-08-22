@@ -1,23 +1,23 @@
-# docker/extraction.gpu.Dockerfile — Document extraction service, GPU variant
+# docker/doc-handler.gpu.Dockerfile — Document extraction service, GPU variant
 #
-# Build:   docker build -f deployment/docker/extraction.gpu.Dockerfile -t extraction-gpu:latest .
-# Run:     docker compose --profile extraction-gpu up
+# Build:   docker build -f deployment/docker/doc-handler.gpu.Dockerfile -t doc-handler-gpu:latest .
+# Run:     docker compose --profile doc-handler-gpu up
 #
-# Same service as extraction.Dockerfile, but installs the CUDA 13.0
-# `paddlepaddle-gpu` wheel (extraction-gpu extra, pyproject.toml) instead of
+# Same service as doc-handler.Dockerfile, but installs the CUDA 13.0
+# `paddlepaddle-gpu` wheel (doc-handler-gpu extra, pyproject.toml) instead of
 # the CPU one — for local dev on an NVIDIA GPU, not for cheap hosting (that's
-# what extraction.Dockerfile/the default `extraction` profile is for).
+# what doc-handler.Dockerfile/the default `doc-handler` profile is for).
 # Requires the host's Docker to have the NVIDIA Container Toolkit configured
 # (`docker info` lists an `nvidia` runtime) and a driver new enough for CUDA
 # 13.0 — verify with `nvidia-smi` on the host before building. Unlike
-# extraction.Dockerfile's `python:3.13-slim` base, this starts from an
+# doc-handler.Dockerfile's `python:3.13-slim` base, this starts from an
 # nvidia/cuda runtime+cuDNN image (paddle needs the matching CUDA/cuDNN
 # shared libs actually present, not just a driver) and installs Python 3.13
 # via uv since the CUDA base image ships none.
 
 FROM nvidia/cuda:13.0.3-cudnn-runtime-ubuntu24.04 AS base
 
-# Same native deps as extraction.Dockerfile's base image, see there for why
+# Same native deps as doc-handler.Dockerfile's base image, see there for why
 # each is needed (libgomp1 for libpaddle.so, libgl1/libglib etc. for OpenCV
 # used by PaddleX's image preprocessing).
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -34,7 +34,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN uv venv --python 3.13 /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
-RUN uv pip install --python /opt/venv/bin/python -e ".[extraction-gpu]"
+RUN uv pip install --python /opt/venv/bin/python -e ".[doc-handler-gpu]"
 
 EXPOSE 8080
 
@@ -44,5 +44,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:8080/v1/health || exit 1
 
-ENTRYPOINT ["uvicorn", "substrate.serving.services.extraction.app:app"]
+ENTRYPOINT ["uvicorn", "substrate.doc_handler.service.app:app"]
 CMD ["--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]

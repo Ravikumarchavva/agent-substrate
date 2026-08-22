@@ -19,7 +19,7 @@ natural starting corpus — and hand-label relevant chunk ids per query), then
 call ``run_retrieval_eval`` the same way. The runner itself doesn't change.
 The image-category queries here use a chart/table caption as their
 document text — the real image path (Qwen3-VL embeddings) additionally
-needs the ``llama-embed`` sidecar (``docker compose --profile extraction
+needs the ``llama-embed`` sidecar (``docker compose --profile doc-handler
 up``) and an ``image_store`` argument passed through the same way; not
 covered by this file today.
 """

@@ -3,7 +3,7 @@
 Used by chat_context.py to get layout-aware document text and chart/table
 images, and by LocalRagBackend for multimodal embedding + reranking, without
 loading paddlepaddle/torch into the main API process — see
-serving/services/extraction/ for the service itself.
+doc_handler/service/ for the service itself.
 
 Single-URL only (no consistent-hash routing): every endpoint here is
 stateless request/response, so one low-replica service is enough and there's
@@ -25,7 +25,7 @@ _DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=10.0, pool=5.0)
 
 class ExtractedImage(BaseModel):
     """A chart/table/figure region cropped from a page — see
-    serving/services/extraction/pipeline.py::ExtractionPipeline."""
+    doc_handler/service/pipeline.py::ExtractionPipeline."""
 
     data_base64: str
     media_type: str = "image/png"
@@ -36,6 +36,9 @@ class ExtractedImage(BaseModel):
     # see ExtractionPipeline.extract(). Kept so lexical/exact-text search can
     # still find a confident chart/table, not only visual similarity search.
     caption: str | None = None
+    # Stable id (e.g. "img-p3-0") cross-referenced by ExtractedPageText.markdown
+    # / ExtractResponse.markdown's "cid:{id}" image links — see pipeline.py.
+    id: str = ""
 
 
 class ExtractedPageText(BaseModel):
@@ -46,10 +49,15 @@ class ExtractedPageText(BaseModel):
 
     page_number: int
     text: str
+    # This page's PaddleX-native markdown — real reading order, images
+    # embedded inline via "cid:{id}" links (resolve against ExtractResponse.
+    # images), tables as HTML. Faithful/human-readable rendering; `text`
+    # above stays the plain-text stream used for embeddings/lexical search.
+    markdown: str = ""
 
 
 class ExtractResponse(BaseModel):
-    """Response shape shared with serving/services/extraction/schemas.py
+    """Response shape shared with doc_handler/service/schemas.py
     (re-exported there, mirroring the code_interpreter service's pattern —
     this module is the single source of truth for the wire shape)."""
 
@@ -62,6 +70,9 @@ class ExtractResponse(BaseModel):
     engine: str = "paddleocr"
     page_count: int = 0
     error: str | None = None
+    # Whole-document markdown (pages joined via PaddleX's CJK-aware
+    # concatenate_markdown_pages) — see ExtractedPageText.markdown.
+    markdown: str = ""
 
 
 class ExtractionClient:
@@ -69,7 +80,7 @@ class ExtractionClient:
 
     def __init__(
         self,
-        base_url: str = "http://extraction:8080",
+        base_url: str = "http://doc-handler:8080",
         auth_token: str = "",
         timeout_s: float = 90.0,
     ) -> None:

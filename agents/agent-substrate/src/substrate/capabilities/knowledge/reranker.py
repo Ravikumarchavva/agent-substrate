@@ -144,7 +144,7 @@ class LLMReranker:
 
 class CrossEncoderReranker:
     """Rerank search results using the extraction service's local
-    cross-encoder (MiniLM by default — see serving/services/extraction/).
+    cross-encoder (MiniLM by default — see doc_handler/service/).
 
     Duck-types the same shape as ``LLMReranker`` (no formal Protocol exists;
     ``LocalRagBackend``'s ``reranker`` param accepts either). Unlike

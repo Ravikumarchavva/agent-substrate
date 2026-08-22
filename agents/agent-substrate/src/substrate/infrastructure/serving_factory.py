@@ -292,10 +292,10 @@ async def init_infrastructure(
             # Without that service configured this stays off, same default
             # as before (an LLMReranker fallback would burn LLM tokens/
             # latency on every query, an unannounced cost change to avoid).
-            rerank=bool(cfg.EXTRACTION_SERVICE_URL),
-            extraction_service_url=cfg.EXTRACTION_SERVICE_URL,
-            extraction_auth_token=cfg.EXTRACTION_AUTH_TOKEN,
-            extraction_timeout_s=cfg.EXTRACTION_TIMEOUT_S,
+            rerank=bool(cfg.DOC_HANDLER_SERVICE_URL),
+            extraction_service_url=cfg.DOC_HANDLER_SERVICE_URL,
+            extraction_auth_token=cfg.DOC_HANDLER_AUTH_TOKEN,
+            extraction_timeout_s=cfg.DOC_HANDLER_TIMEOUT_S,
             file_store=file_store,
             api_key=cfg.PINECONE_API_KEY,
             assistant_name=cfg.PINECONE_ASSISTANT_NAME,

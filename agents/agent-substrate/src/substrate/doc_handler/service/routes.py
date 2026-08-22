@@ -28,7 +28,7 @@ from .schemas import (
 
 logger = setup_logging()
 
-router = APIRouter(prefix="/v1", tags=["extraction"])
+router = APIRouter(prefix="/v1", tags=["doc-handler"])
 
 # PaddleOCR/PaddleX reads PDF and raster images natively — no DOCX/PPTX
 # parser (verified: no docx/pptx handling anywhere in paddlex's own readers).
@@ -45,7 +45,7 @@ async def _verify_token(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> None:
-    """Validate Bearer token if EXTRACTION_AUTH_TOKEN is configured."""
+    """Validate Bearer token if DOC_HANDLER_AUTH_TOKEN is configured."""
     token = request.app.state.config.auth_token
     if not token:
         return
@@ -81,10 +81,10 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
 
     # Structural/security scan on the RAW bytes, before the parser touches
     # them — a hostile file must not get a chance to exploit PaddleOCR/
-    # PaddleX's own parsing first. See capabilities/safety/document_scanner.py
+    # PaddleX's own parsing first. See doc_handler/security_scan.py
     # for what's actually verified working here (not just wired up).
     if getattr(cfg, "enable_document_security_scan", True):
-        from substrate.capabilities.safety.document_scanner import scan_document
+        from substrate.doc_handler.security_scan import scan_document
 
         scan_verdict = await asyncio.to_thread(
             scan_document, data, filename=body.filename
@@ -103,13 +103,16 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
         # PaddleOCR inference is CPU-bound and synchronous — run off the
         # event loop so one slow extraction doesn't stall every other
         # request this service is handling.
-        pages = await asyncio.to_thread(pipeline.extract, data, body.filename)
+        result = await asyncio.to_thread(pipeline.extract, data, body.filename)
     except Exception as exc:
         logger.warning("Extraction failed for %r: %s", body.filename, exc)
         return ExtractResponse(success=False, error=str(exc)[:500])
 
+    pages = result.pages
     page_texts = [
-        ExtractedPageText(page_number=page.page_number, text=page.text)
+        ExtractedPageText(
+            page_number=page.page_number, text=page.text, markdown=page.markdown
+        )
         for page in pages
         if page.text
     ]
@@ -122,6 +125,7 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
             label=img.label,
             confidence=img.confidence,
             caption=img.caption,
+            id=img.id,
         )
         for page in pages
         for img in page.images
@@ -139,6 +143,7 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
         pages=page_texts,
         images=images,
         page_count=len(pages),
+        markdown=result.markdown,
     )
 
 

@@ -1,9 +1,9 @@
-name: Publish extraction service images
+name: Publish doc-handler service images
 
-# Real, robust distribution for the extraction service (heavy PaddleOCR
+# Real, robust distribution for the document-handling service (heavy PaddleOCR
 # runtime — never meant to be `pip install`-ed by a service consumer, only
-# by something embedding the pipeline in-process; see extraction/
-# extraction-gpu extras in pyproject.toml for that case instead). This is
+# by something embedding the pipeline in-process; see doc-handler/
+# doc-handler-gpu extras in pyproject.toml for that case instead). This is
 # the pattern real GPU/CPU-split inference services use (Ollama, LocalAI,
 # llama.cpp server) — matrix-build a CPU and a GPU image variant, publish
 # both to GHCR under distinct tags, and let ANY downstream consumer
@@ -26,7 +26,7 @@ env:
   # Hardcoded lowercase — GHCR image paths must be lowercase even though
   # the GitHub org/user (Ravikumarchavva) isn't; ${{ github.actor }} is
   # only used for registry auth below, not the image path.
-  IMAGE_BASE: ghcr.io/ravikumarchavva/agent-substrate-extraction
+  IMAGE_BASE: ghcr.io/ravikumarchavva/agent-substrate-doc-handler
 
 jobs:
   build-and-push:
@@ -38,9 +38,9 @@ jobs:
       matrix:
         include:
           - variant: cpu
-            dockerfile: deployment/docker/extraction.Dockerfile
+            dockerfile: deployment/docker/doc-handler.Dockerfile
           - variant: gpu
-            dockerfile: deployment/docker/extraction.gpu.Dockerfile
+            dockerfile: deployment/docker/doc-handler.gpu.Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -69,5 +69,5 @@ jobs:
           tags: |
             ${{ env.IMAGE_BASE }}:${{ matrix.variant }}
             ${{ env.IMAGE_BASE }}:${{ steps.tags.outputs.version }}-${{ matrix.variant }}
-          cache-from: type=gha,scope=extraction-${{ matrix.variant }}
-          cache-to: type=gha,mode=max,scope=extraction-${{ matrix.variant }}
+          cache-from: type=gha,scope=doc-handler-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=doc-handler-${{ matrix.variant }}

@@ -79,7 +79,7 @@ async def test_extract_via_pypdf_returns_none_for_garbage_bytes():
 async def test_extract_document_text_truncates_over_configured_cap(monkeypatch):
     from substrate.serving.monolith.routes import chat_context
 
-    monkeypatch.setattr(chat_context.settings, "EXTRACTION_SERVICE_URL", "")
+    monkeypatch.setattr(chat_context.settings, "DOC_HANDLER_SERVICE_URL", "")
     monkeypatch.setattr(chat_context.settings, "ATTACHMENT_PDF_MAX_CHARS", 5)
     data = _FIXTURE.read_bytes()
     text, engine = await _extract_document_text(data, "invoice.pdf", "application/pdf")
@@ -94,7 +94,7 @@ async def test_extract_document_text_no_extraction_service_configured_uses_pypdf
 ):
     from substrate.serving.monolith.routes import chat_context
 
-    monkeypatch.setattr(chat_context.settings, "EXTRACTION_SERVICE_URL", "")
+    monkeypatch.setattr(chat_context.settings, "DOC_HANDLER_SERVICE_URL", "")
     data = _FIXTURE.read_bytes()
     text, engine = await _extract_document_text(data, "invoice.pdf", "application/pdf")
 
@@ -120,7 +120,7 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
     UI/history needs the latter regardless of extraction outcome)."""
     from substrate.serving.monolith.routes import chat_context
 
-    monkeypatch.setattr(chat_context.settings, "EXTRACTION_SERVICE_URL", "")
+    monkeypatch.setattr(chat_context.settings, "DOC_HANDLER_SERVICE_URL", "")
     file_id = "11111111-1111-1111-1111-111111111111"
     meta = _pdf_meta(
         file_id,

@@ -1,8 +1,8 @@
 """Extraction service routes — exercised against fake pipeline/embedding
 objects on app.state, never the real paddleocr/sentence-transformers models
-(those are covered by test_extraction_pipeline.py / test_extraction_embedding.py).
+(those are covered by test_pipeline.py / test_embedding.py).
 A bare FastAPI app with no lifespan is built here so constructing it never
-touches the heavy `extraction` extra at all."""
+touches the heavy `doc-handler` extra at all."""
 
 from __future__ import annotations
 
@@ -13,15 +13,19 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from substrate.serving.services.extraction.pipeline import ExtractedImage, ExtractedPage
-from substrate.serving.services.extraction.routes import router
+from substrate.doc_handler.service.pipeline import (
+    ExtractedImage,
+    ExtractedPage,
+    ExtractionResult,
+)
+from substrate.doc_handler.service.routes import router
 
 
 @dataclass
 class _FakeConfig:
     auth_token: str = ""
     max_upload_bytes: int = 50 * 1024 * 1024
-    pod_name: str = "extraction-test"
+    pod_name: str = "doc-handler-test"
 
 
 class _FakePipeline:
@@ -31,10 +35,10 @@ class _FakePipeline:
         self._pages = pages if pages is not None else []
         self._error = error
 
-    def extract(self, data: bytes, filename: str) -> list[ExtractedPage]:
+    def extract(self, data: bytes, filename: str) -> ExtractionResult:
         if self._error is not None:
             raise self._error
-        return self._pages
+        return ExtractionResult(pages=self._pages)
 
 
 class _FakeEmbeddingReranker:
@@ -96,7 +100,7 @@ def test_extract_success_returns_pages_and_images():
     body = resp.json()
     assert body["success"] is True
     assert body["text"] == "hello world"
-    assert body["pages"] == [{"page_number": 1, "text": "hello world"}]
+    assert body["pages"] == [{"page_number": 1, "text": "hello world", "markdown": ""}]
     assert len(body["images"]) == 1
     assert body["images"][0]["label"] == "chart"
     assert base64.b64decode(body["images"][0]["data_base64"]) == b"png-bytes"
@@ -224,12 +228,12 @@ def test_rerank_returns_one_score_per_passage():
 
 
 def test_health_returns_ok():
-    client = _client(config=_FakeConfig(pod_name="extraction-7"))
+    client = _client(config=_FakeConfig(pod_name="doc-handler-7"))
     resp = client.get("/v1/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
-    assert body["pod_name"] == "extraction-7"
+    assert body["pod_name"] == "doc-handler-7"
     assert body["uptime_seconds"] >= 0
 
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import httpx
 
-from substrate.capabilities.knowledge.extraction_client import ExtractionClient
+from substrate.doc_handler.client import ExtractionClient
 
 
 def _client_with_transport(transport: httpx.MockTransport) -> ExtractionClient:

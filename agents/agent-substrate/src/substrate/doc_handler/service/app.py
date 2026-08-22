@@ -1,16 +1,16 @@
 """Standalone FastAPI application for the document-extraction service.
 
 Deploy this as its own low-replica Deployment (heavy paddlepaddle OCR
-runtime, model-loaded pods — see deployment/k8s/base/runtime/extraction.yaml).
+runtime, model-loaded pods — see deployment/k8s/base/runtime/doc-handler.yaml).
 The main backend calls it via HTTP through ExtractionClient
-(capabilities/knowledge/extraction_client.py), only when
-EXTRACTION_SERVICE_URL is configured; otherwise chat attachments fall back to
+(doc_handler/client.py), only when
+DOC_HANDLER_SERVICE_URL is configured; otherwise chat attachments fall back to
 the lightweight pypdf path for PDFs and the local RAG backend has no
 chart-image or multimodal-embedding capability.
 
 Usage::
 
-    uvicorn substrate.serving.services.extraction.app:app \
+    uvicorn substrate.doc_handler.service.app:app \
         --host 0.0.0.0 --port 8080
 """
 

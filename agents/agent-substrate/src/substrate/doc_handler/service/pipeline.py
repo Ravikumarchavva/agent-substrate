@@ -53,6 +53,10 @@ class ExtractedImage:
     # chart/table is still findable by lexical/exact-text search, not only
     # by visual similarity. ``None`` when OCR produced no text for the block.
     caption: str | None = None
+    # Stable id (e.g. "img-p3-0") — the markdown field below references
+    # this image via a "cid:{id}" link instead of PaddleX's own
+    # filesystem-relative path, which isn't resolvable outside the process.
+    id: str = ""
 
 
 @dataclass(slots=True)
@@ -60,6 +64,18 @@ class ExtractedPage:
     page_number: int
     text: str
     images: list[ExtractedImage] = field(default_factory=list)
+    # This page's PaddleX-native markdown (real XY-cut reading order, images
+    # inline via "cid:{id}" links, tables as HTML) — see extract().
+    markdown: str = ""
+
+
+@dataclass(slots=True)
+class ExtractionResult:
+    pages: list[ExtractedPage]
+    # Whole-document markdown, pages joined via PaddleX's own CJK-aware
+    # concatenate_markdown_pages (paragraph continuation across a page
+    # break, not a naive "\n\n".join()).
+    markdown: str = ""
 
 
 def _disable_mkldnn() -> None:
@@ -143,6 +159,42 @@ def _html_table_to_markdown(html: str) -> str:
     return re.sub(r"<[^>]+>", " ", html).strip()
 
 
+def _rewrite_markdown_images(
+    markdown_texts: str, kept: dict[str, str], dropped: set[str]
+) -> str:
+    """Rewrite PaddleX's native ``<img src="{synthetic_path}">`` tags:
+    *kept* paths (cleared ``_MIN_IMAGE_CONFIDENCE`` and became a cropped
+    ``ExtractedImage``) get ``src="cid:{id}"``, resolvable against
+    ``ExtractResponse.images`` by id; *dropped* paths (confidence-gated
+    out, or an image-carrying block outside ``_IMAGE_LABELS``) have their
+    whole rendered wrapper removed so no filesystem-relative, unresolvable
+    path leaks into the response. Never raises — a regex miss on an
+    unexpected wrapper shape just leaves that one image cosmetically
+    visible rather than failing the request, consistent with this file's
+    existing "never raises" extraction philosophy."""
+    for path, img_id in kept.items():
+        markdown_texts = markdown_texts.replace(f'src="{path}"', f'src="cid:{img_id}"')
+    for path in dropped:
+        try:
+            # format_image_scaled_by_html's real output shape:
+            # <div style="text-align: center;"><img src="{path}" alt="Image"
+            # width="N%" /></div>\n — strip the whole wrapper, not just the tag.
+            wrapped = re.compile(
+                r"<div[^>]*>\s*<img[^>]*src=\""
+                + re.escape(path)
+                + r"\"[^>]*/?>\s*</div>\n*"
+            )
+            new_text, n = wrapped.subn("", markdown_texts)
+            if n:
+                markdown_texts = new_text
+                continue
+            bare = re.compile(r'<img[^>]*src="' + re.escape(path) + r'"[^>]*/?>')
+            markdown_texts = bare.sub("", markdown_texts)
+        except re.error:
+            continue
+    return markdown_texts
+
+
 class ExtractionPipeline:
     """One PaddleOCR ``PPStructureV3`` pipeline: layout + chart/table
     detection + OCR, in a single call per document."""
@@ -193,7 +245,7 @@ class ExtractionPipeline:
         except Exception:
             pass  # best-effort — a real request pays this cost otherwise
 
-    def extract(self, data: bytes, filename: str) -> list[ExtractedPage]:
+    def extract(self, data: bytes, filename: str) -> ExtractionResult:
         """Run layout+chart detection + OCR over every page of *data*."""
         suffix = Path(filename).suffix or ".pdf"
         with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
@@ -202,6 +254,7 @@ class ExtractionPipeline:
             results = list(self._pipeline.predict(tmp.name))
 
         pages: list[ExtractedPage] = []
+        markdown_pages: list[dict[str, Any]] = []
         for res in results:
             page_no = int(res.get("page_index") or 0) + 1
             # ``parsing_res_list`` (reading-order blocks, has .image crops)
@@ -212,6 +265,8 @@ class ExtractionPipeline:
 
             text_parts: list[str] = []
             images: list[ExtractedImage] = []
+            kept_image_paths: dict[str, str] = {}
+            dropped_image_paths: set[str] = set()
             for block in res.get("parsing_res_list") or []:
                 label = getattr(block, "label", "") or ""
                 confidence = _nearest_score(score_by_bbox, getattr(block, "bbox", None))
@@ -223,27 +278,45 @@ class ExtractionPipeline:
                 md_table = (
                     _html_table_to_markdown(raw_content) if label == "table" else ""
                 )
-                if label in _IMAGE_LABELS and confidence >= _MIN_IMAGE_CONFIDENCE:
-                    img_dict = getattr(block, "image", None)
-                    pil_img = (
-                        img_dict.get("img") if isinstance(img_dict, dict) else None
-                    )
-                    if pil_img is not None:
-                        buf = io.BytesIO()
-                        pil_img.convert("RGB").save(buf, format="PNG")
-                        caption = md_table or raw_content or None
-                        images.append(
-                            ExtractedImage(
-                                data=buf.getvalue(),
-                                page_number=page_no,
-                                label=label,
-                                confidence=confidence,
-                                caption=caption,
-                            )
+                img_dict = getattr(block, "image", None)
+                img_path = img_dict.get("path") if isinstance(img_dict, dict) else None
+                pil_img = img_dict.get("img") if isinstance(img_dict, dict) else None
+
+                # One gate drives both the images[] list and the markdown
+                # kept/dropped decision — a block only becomes a cropped
+                # image AND a cid: markdown reference if it clears all three
+                # checks; anything else that carried an image blob (a
+                # low-confidence chart/table, or a label outside
+                # _IMAGE_LABELS PaddleX still populated block.image for)
+                # gets recorded as dropped so its <img> tag never leaks an
+                # unresolvable filesystem path into the markdown field.
+                keep_as_image = (
+                    label in _IMAGE_LABELS
+                    and confidence >= _MIN_IMAGE_CONFIDENCE
+                    and pil_img is not None
+                )
+                if keep_as_image and pil_img is not None:
+                    buf = io.BytesIO()
+                    pil_img.convert("RGB").save(buf, format="PNG")
+                    caption = md_table or raw_content or None
+                    img_id = f"img-p{page_no}-{len(images)}"
+                    images.append(
+                        ExtractedImage(
+                            data=buf.getvalue(),
+                            page_number=page_no,
+                            label=label,
+                            confidence=confidence,
+                            caption=caption,
+                            id=img_id,
                         )
-                        if md_table:
-                            text_parts.append(md_table)
-                        continue
+                    )
+                    if img_path:
+                        kept_image_paths[img_path] = img_id
+                    if md_table:
+                        text_parts.append(md_table)
+                    continue
+                if img_path:
+                    dropped_image_paths.add(img_path)
                 # Non-image blocks, and image-labeled blocks below the
                 # confidence bar, fall through here — a marginal chart/table
                 # detection still surfaces whatever text it has (markdown for
@@ -252,14 +325,48 @@ class ExtractionPipeline:
                 content = md_table or raw_content
                 if content:
                     text_parts.append(content)
+
+            # Second pass over the same (already-computed) parsing_res_list,
+            # via PaddleX's own markdown assembly — confirmed cheap (pure
+            # string formatting, no re-inference) and safe to call after the
+            # loop above (parsing_res_list is a stored list, not a
+            # generator, so consuming it once doesn't exhaust it).
+            page_md = res.markdown
+            page_markdown_text = _rewrite_markdown_images(
+                page_md.get("markdown_texts", ""), kept_image_paths, dropped_image_paths
+            )
+            # Deliberately drop markdown_images (PIL refs) here — the real
+            # bytes are already captured in images[]/ExtractedImage.data;
+            # retaining a second full-res PIL copy per embedded image for
+            # every page of a 60+ page document is unnecessary memory
+            # pressure for a value we don't otherwise use.
+            markdown_pages.append(
+                {
+                    "markdown_texts": page_markdown_text,
+                    "page_continuation_flags": page_md.get(
+                        "page_continuation_flags", (True, True)
+                    ),
+                }
+            )
+
             pages.append(
                 ExtractedPage(
                     page_number=page_no,
                     text="\n\n".join(text_parts),
                     images=images,
+                    markdown=page_markdown_text,
                 )
             )
-        return pages
+
+        document_markdown = ""
+        if markdown_pages:
+            try:
+                document_markdown = self._pipeline.concatenate_markdown_pages(
+                    markdown_pages
+                ).get("markdown_texts", "")
+            except Exception:
+                document_markdown = "\n\n".join(p.markdown for p in pages)
+        return ExtractionResult(pages=pages, markdown=document_markdown)
 
 
 def _score_lookup(
@@ -300,4 +407,4 @@ def _nearest_score(
     return best_score
 
 
-__all__ = ["ExtractedImage", "ExtractedPage", "ExtractionPipeline"]
+__all__ = ["ExtractedImage", "ExtractedPage", "ExtractionResult", "ExtractionPipeline"]

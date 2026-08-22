@@ -195,21 +195,21 @@ services:
       SANDBOX_RUNTIME_CLASS: ${SANDBOX_RUNTIME_CLASS:-}
 
   # ══════════════════════════════════════════════════════════════════════════════
-  # Extraction service — layout/chart detection + OCR (PaddleOCR) + multimodal
+  # Document-handling service — layout/chart detection + OCR (PaddleOCR) + multimodal
   # embedding (SigLIP) + reranking (MiniLM cross-encoder). Optional, opt-in
   # (profile-gated). Built from its own Dockerfile, not the shared
-  # backend.Dockerfile x-service-base build — it needs the `extraction` extra
+  # backend.Dockerfile x-service-base build — it needs the `doc-handler` extra
   # (paddlepaddle + sentence-transformers) that the base image deliberately
   # excludes.
   # ══════════════════════════════════════════════════════════════════════════════
 
-  extraction:
+  doc-handler:
     profiles:
-      - extraction
+      - doc-handler
     build:
       context: ../..
-      dockerfile: deployment/docker/extraction.Dockerfile
-    command: ["uvicorn", "substrate.serving.services.extraction.app:app", "--host", "0.0.0.0", "--port", "8080"]
+      dockerfile: deployment/docker/doc-handler.Dockerfile
+    command: ["uvicorn", "substrate.doc_handler.service.app:app", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "8022:8080"
     restart: unless-stopped

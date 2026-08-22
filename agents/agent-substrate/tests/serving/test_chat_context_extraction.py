@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from substrate.capabilities.knowledge.extraction_client import ExtractResponse
+from substrate.doc_handler.client import ExtractResponse
 from substrate.serving.monolith.routes.chat_context import _extract_document_text
 
 _FIXTURE = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
@@ -27,7 +27,7 @@ def _mock_extraction_client(response: ExtractResponse):
     instance.extract = AsyncMock(return_value=response)
     instance.close = AsyncMock()
     return patch(
-        "substrate.capabilities.knowledge.extraction_client.ExtractionClient",
+        "substrate.doc_handler.client.ExtractionClient",
         return_value=instance,
     )
 
@@ -36,7 +36,7 @@ async def test_extraction_configured_and_succeeds_for_pdf(monkeypatch):
     from substrate.serving.monolith.routes import chat_context
 
     monkeypatch.setattr(
-        chat_context.settings, "EXTRACTION_SERVICE_URL", "http://extraction-test:8080"
+        chat_context.settings, "DOC_HANDLER_SERVICE_URL", "http://extraction-test:8080"
     )
 
     with _mock_extraction_client(
@@ -56,7 +56,7 @@ async def test_extraction_configured_but_fails_falls_back_to_pypdf_for_pdf(
     from substrate.serving.monolith.routes import chat_context
 
     monkeypatch.setattr(
-        chat_context.settings, "EXTRACTION_SERVICE_URL", "http://extraction-test:8080"
+        chat_context.settings, "DOC_HANDLER_SERVICE_URL", "http://extraction-test:8080"
     )
 
     with _mock_extraction_client(
@@ -77,7 +77,7 @@ async def test_extraction_empty_text_success_treated_as_failure(monkeypatch):
     from substrate.serving.monolith.routes import chat_context
 
     monkeypatch.setattr(
-        chat_context.settings, "EXTRACTION_SERVICE_URL", "http://extraction-test:8080"
+        chat_context.settings, "DOC_HANDLER_SERVICE_URL", "http://extraction-test:8080"
     )
 
     with _mock_extraction_client(

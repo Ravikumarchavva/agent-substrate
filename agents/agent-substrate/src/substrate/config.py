@@ -156,13 +156,13 @@ class SubstrateConfig(BaseSettings):
     # ── Document-extraction service ──────────────────────────────────────────
     # Optional, isolated microservice for layout-aware document parsing:
     # PaddleOCR layout/chart/table detection + OCR, plus SigLIP multimodal
-    # embedding and a MiniLM reranker (see serving/services/extraction/).
+    # embedding and a MiniLM reranker (see doc_handler/service/).
     # Empty (the default) means chat attachments fall back to the
     # lightweight pypdf/pdfplumber path for PDFs (no chart images, no
     # multimodal search) — see routes/chat_context.py::_extract_document_text.
-    EXTRACTION_SERVICE_URL: str = ""
-    EXTRACTION_AUTH_TOKEN: str = ""
-    EXTRACTION_TIMEOUT_S: int = 90
+    DOC_HANDLER_SERVICE_URL: str = ""
+    DOC_HANDLER_AUTH_TOKEN: str = ""
+    DOC_HANDLER_TIMEOUT_S: int = 90
 
     # ── RAG backend ───────────────────────────────────────────────────────────
     # "local" (default) = RAGPipeline + PgVectorStore + extraction-service-or-
@@ -186,8 +186,8 @@ class SubstrateConfig(BaseSettings):
     # model — needed for the separate image-vector PgVectorStore table (see
     # backends/local.py's image_store). Qwen3-VL-Embedding-2B (2048) now
     # embeds both text and images into the SAME space (see
-    # docs/claude_docs/decisions.md) — this must match EXTRACTION_EMBEDDING_DIM
-    # in serving/services/extraction/config.py, or image ingestion hard-fails
+    # docs/claude_docs/decisions.md) — this must match DOC_HANDLER_EMBEDDING_DIM
+    # in doc_handler/service/config.py, or image ingestion hard-fails
     # on a vector-column-width mismatch the first time it actually runs.
     RAG_IMAGE_EMBEDDING_DIM: int = 2048
     # Caps on RAG-eligible document uploads (currently PDF only — see

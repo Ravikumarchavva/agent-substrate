@@ -39,7 +39,7 @@ from .base import IngestResult
 logger = setup_logging("substrate.knowledge.local")
 
 if TYPE_CHECKING:
-    from substrate.capabilities.knowledge.extraction_client import ExtractionClient
+    from substrate.doc_handler.client import ExtractionClient
     from substrate.capabilities.knowledge.pipeline import RAGPipeline
     from substrate.kernel.llm import LLMClient
     from substrate.kernel.storage.vector import VectorStore
@@ -102,7 +102,7 @@ class LocalRagBackend:
         if not self._extraction_url:
             return None
         if self._extraction_client is None:
-            from substrate.capabilities.knowledge.extraction_client import (
+            from substrate.doc_handler.client import (
                 ExtractionClient,
             )
 

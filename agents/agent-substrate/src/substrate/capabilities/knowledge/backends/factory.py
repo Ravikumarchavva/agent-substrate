@@ -69,7 +69,7 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
 
         extraction_client = None
         if extraction_service_url:
-            from substrate.capabilities.knowledge.extraction_client import (
+            from substrate.doc_handler.client import (
                 ExtractionClient,
             )
 

@@ -514,7 +514,7 @@ removal candidate, don't stop at the first one that turns out fine.
 (`deployment/docker/llama-server.Dockerfile`, `docker-compose.yml`'s
 `llama-embed`/`llama-rerank` services) — not loaded in-process via
 `sentence-transformers`/`CrossEncoder` the way SigLIP + `ms-marco-MiniLM`
-were before this. `EmbeddingReranker` (`serving/services/extraction/embedding.py`)
+were before this. `EmbeddingReranker` (`doc_handler/service/embedding.py`)
 is a thin HTTP client to these two services.
 
 **Why:** the deployment target has no GPU. Real candidates were narrowed and

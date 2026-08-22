@@ -10,7 +10,7 @@ else
 RUN_TEST_CI = DATABASE_URL=$(TEST_DATABASE_URL) REDIS_URL=$(TEST_REDIS_URL) OPENAI_API_KEY=$(TEST_OPENAI_API_KEY) JWT_SECRET=$(TEST_JWT_SECRET) uv run pytest --tb=short -q --junitxml=test-results.xml
 endif
 
-.PHONY: sync lint lint-apply lint-imports protocol-schema format-check typecheck typecheck-soft test test-ci build security security-soft ci help start start-reload infra-up infra-up-all infra-up-extraction infra-up-onlyoffice infra-down infra-down-all docker-up docker-down observability-up observability-down
+.PHONY: sync lint lint-apply lint-imports protocol-schema format-check typecheck typecheck-soft test test-ci build security security-soft ci help start start-reload infra-up infra-up-all infra-up-doc-handler infra-up-onlyoffice infra-down infra-down-all docker-up docker-down observability-up observability-down
 
 help:
 	@echo "Available targets:"
@@ -18,8 +18,8 @@ help:
 	@echo "  make start        - start the backend in foreground via uv run start"
 	@echo "  make start-reload - start the backend with auto-reload (requires make infra-up)"
 	@echo "  make infra-up     - start host-dev support services (Postgres, Redis, SeaweedFS, Loki, Promtail, Grafana, Tempo, MCP server)"
-	@echo "  make infra-up-all - infra-up + ONLYOFFICE (everything for file editing; excludes the opt-in extraction service)"
-	@echo "  make infra-up-extraction - build and start the document-extraction service (opt-in, CPU-only, ~1GB image)"
+	@echo "  make infra-up-all - infra-up + ONLYOFFICE (everything for file editing; excludes the opt-in doc-handler service)"
+	@echo "  make infra-up-doc-handler - build and start the document-handling service (opt-in, CPU-only, ~1GB image)"
 	@echo "  make infra-up-onlyoffice - start the ONLYOFFICE Document Server for editable Office files (opt-in, ~2GB)"
 	@echo "  make infra-down   - stop the host-dev support services"
 	@echo "  make infra-down-all - stop the core services plus ONLYOFFICE"
@@ -47,8 +47,8 @@ infra-up:
 
 infra-up-all: infra-up infra-up-onlyoffice
 
-infra-up-extraction:
-	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile extraction up -d --build extraction
+infra-up-doc-handler:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile doc-handler up -d --build doc-handler
 
 infra-up-onlyoffice:
 	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile onlyoffice up -d onlyoffice

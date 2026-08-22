@@ -354,9 +354,9 @@ so the decision is visible, not silently dropped.
   redaction pass). See [`decisions.md`](decisions.md) for why
   `Opir-edge-multilang` (the original one-model target) was rejected after
   real measurement, and the licensing tradeoff that decision reopened.
-  Also shipped: `capabilities/safety/document_scanner.py` (thin wrapper
+  Also shipped: `doc_handler/security_scan.py` (thin wrapper
   over `doc-firewall`, verified against both a clean and a synthetically
-  malicious PDF) gating the extraction service's `/v1/extract` — runs on
+  malicious PDF) gating the doc-handler service's `/v1/extract` — runs on
   raw bytes before PaddleOCR/PaddleX ever parses them — and paste-to-
   document (a composer paste over ~2000 chars becomes a `text/markdown`
   attachment through the *existing* upload/staging pipeline, no new

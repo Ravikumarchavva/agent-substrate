@@ -22,7 +22,7 @@ resolution-markers = [
 
 [[package]]
 name = "agent-substrate"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
@@ -63,12 +63,12 @@ dependencies = [
 code = [
     { name = "k8s-agent-sandbox" },
 ]
-extraction = [
+doc-handler = [
     { name = "doc-firewall" },
     { name = "paddleocr", extra = ["doc-parser"] },
     { name = "paddlepaddle" },
 ]
-extraction-gpu = [
+doc-handler-gpu = [
     { name = "doc-firewall" },
     { name = "paddleocr", extra = ["doc-parser"] },
     { name = "paddlepaddle-gpu" },
@@ -155,8 +155,8 @@ requires-dist = [
     { name = "crawl4ai", marker = "extra == 'web'", specifier = ">=0.8.7" },
     { name = "cryptography", specifier = ">=46.0.6" },
     { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.14.4" },
-    { name = "doc-firewall", marker = "extra == 'extraction'", specifier = ">=0.5.1" },
-    { name = "doc-firewall", marker = "extra == 'extraction-gpu'", specifier = ">=0.5.1" },
+    { name = "doc-firewall", marker = "extra == 'doc-handler'", specifier = ">=0.5.1" },
+    { name = "doc-firewall", marker = "extra == 'doc-handler-gpu'", specifier = ">=0.5.1" },
     { name = "exa-py", marker = "extra == 'web'", specifier = ">=2.14.0" },
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "google-genai", specifier = ">=1.73.0" },
@@ -174,10 +174,10 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = "<0.60b1" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
-    { name = "paddleocr", extras = ["doc-parser"], marker = "extra == 'extraction'", specifier = ">=3.7.0" },
-    { name = "paddleocr", extras = ["doc-parser"], marker = "extra == 'extraction-gpu'", specifier = ">=3.7.0" },
-    { name = "paddlepaddle", marker = "extra == 'extraction'", specifier = "==3.3.0", index = "https://www.paddlepaddle.org.cn/packages/stable/cpu/" },
-    { name = "paddlepaddle-gpu", marker = "extra == 'extraction-gpu'", specifier = "==3.3.0", index = "https://www.paddlepaddle.org.cn/packages/stable/cu130/" },
+    { name = "paddleocr", extras = ["doc-parser"], marker = "extra == 'doc-handler'", specifier = ">=3.7.0" },
+    { name = "paddleocr", extras = ["doc-parser"], marker = "extra == 'doc-handler-gpu'", specifier = ">=3.7.0" },
+    { name = "paddlepaddle", marker = "extra == 'doc-handler'", specifier = "==3.3.0", index = "https://www.paddlepaddle.org.cn/packages/stable/cpu/" },
+    { name = "paddlepaddle-gpu", marker = "extra == 'doc-handler-gpu'", specifier = "==3.3.0", index = "https://www.paddlepaddle.org.cn/packages/stable/cu130/" },
     { name = "pandas", marker = "extra == 'sandbox'", specifier = ">=2.2.0" },
     { name = "pdfplumber", marker = "extra == 'sandbox'", specifier = ">=0.11.0" },
     { name = "pillow", specifier = ">=10.4.0" },
@@ -207,7 +207,7 @@ requires-dist = [
     { name = "tokenizers", specifier = ">=0.20.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
-provides-extras = ["web", "code", "sandbox", "rag", "rag-pinecone", "s3", "server", "extraction", "extraction-gpu", "sentence-transformers"]
+provides-extras = ["web", "code", "sandbox", "rag", "rag-pinecone", "s3", "server", "doc-handler", "doc-handler-gpu", "sentence-transformers"]
 
 [package.metadata.requires-dev]
 dev = [

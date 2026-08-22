@@ -11,7 +11,7 @@ import base64
 from unittest.mock import AsyncMock
 
 from substrate.capabilities.knowledge.backends.local import LocalRagBackend
-from substrate.capabilities.knowledge.extraction_client import (
+from substrate.doc_handler.client import (
     ExtractedImage,
     ExtractedPageText,
     ExtractResponse,

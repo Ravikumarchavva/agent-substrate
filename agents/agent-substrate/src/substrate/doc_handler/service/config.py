@@ -1,6 +1,6 @@
 """Environment-based configuration for the document-extraction service.
 
-All settings are read from environment variables with the ``EXTRACTION_``
+All settings are read from environment variables with the ``DOC_HANDLER_``
 prefix.
 """
 
@@ -31,13 +31,13 @@ class ServiceConfig(BaseSettings):
     max_upload_bytes: int = 50 * 1024 * 1024
 
     # "cpu" (default — cheap to host, no CUDA image) or e.g. "gpu:0" for
-    # local dev on an NVIDIA GPU. GPU requires the `extraction-gpu` install
+    # local dev on an NVIDIA GPU. GPU requires the `doc-handler-gpu` install
     # extra (paddlepaddle-gpu, matching CUDA index — see pyproject.toml)
     # instead of the default CPU wheel; passed straight through to
     # PPStructureV3(device=...) in pipeline.py.
     device: str = "cpu"
 
-    # ── Document security scan (doc-firewall, capabilities/safety/) ─────
+    # ── Document security scan (doc-firewall, doc_handler/security_scan.py) ─
     # Runs on raw bytes before PaddleOCR/PaddleX parses them — see
     # routes.py::extract(). True by default; disable only for local
     # debugging of the extraction pipeline itself.
@@ -54,6 +54,6 @@ class ServiceConfig(BaseSettings):
     embedding_dim: int = 2048
 
     # ── Pod identity (k8s Downward API) ──────────────────────────────────
-    pod_name: str = "extraction-0"
+    pod_name: str = "doc-handler-0"
 
-    model_config = {"env_prefix": "EXTRACTION_"}
+    model_config = {"env_prefix": "DOC_HANDLER_"}

@@ -1,7 +1,7 @@
-"""The document-security-scan gate in extraction routes.py::extract() —
-real doc-firewall scan on real PDF bytes, exercised through the actual
-FastAPI route (not just capabilities/safety/document_scanner.py directly,
-which test_document_scanner.py already covers at the unit level).
+"""The document-security-scan gate in doc_handler service routes.py::extract()
+— real doc-firewall scan on real PDF bytes, exercised through the actual
+FastAPI route (not just doc_handler/security_scan.py directly,
+which test_security_scan.py already covers at the unit level).
 
 Verifies the gate actually short-circuits BEFORE the (fake) pipeline runs —
 a hostile file must never reach the parser, per the plan's ordering
@@ -18,15 +18,15 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from substrate.serving.services.extraction.pipeline import ExtractedPage
-from substrate.serving.services.extraction.routes import router
+from substrate.doc_handler.service.pipeline import ExtractedPage, ExtractionResult
+from substrate.doc_handler.service.routes import router
 
 
 @dataclass
 class _FakeConfig:
     auth_token: str = ""
     max_upload_bytes: int = 50 * 1024 * 1024
-    pod_name: str = "extraction-test"
+    pod_name: str = "doc-handler-test"
     enable_document_security_scan: bool = True
 
 
@@ -34,9 +34,12 @@ class _FakePipeline:
     def __init__(self) -> None:
         self.extract_calls: list[bytes] = []
 
-    def extract(self, data: bytes, filename: str) -> list[ExtractedPage]:
+    def extract(self, data: bytes, filename: str) -> ExtractionResult:
         self.extract_calls.append(data)
-        return [ExtractedPage(page_number=1, text="parsed content", images=[])]
+        return ExtractionResult(
+            pages=[ExtractedPage(page_number=1, text="parsed content", images=[])],
+            markdown="parsed content",
+        )
 
 
 def _client(

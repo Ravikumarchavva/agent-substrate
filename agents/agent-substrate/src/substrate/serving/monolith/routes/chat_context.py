@@ -121,19 +121,19 @@ async def _extract_document_text(
     back to metadata-only attachment handling in that case.
 
     Tries the extraction service first (layout-aware: chart/table detection,
-    OCR) when ``EXTRACTION_SERVICE_URL`` is configured. Falls back to the
+    OCR) when ``DOC_HANDLER_SERVICE_URL`` is configured. Falls back to the
     lightweight local pypdf/pdfplumber path for PDFs on any extraction
     failure/timeout/non-configuration.
     """
-    if settings.EXTRACTION_SERVICE_URL:
-        from substrate.capabilities.knowledge.extraction_client import (
+    if settings.DOC_HANDLER_SERVICE_URL:
+        from substrate.doc_handler.client import (
             ExtractionClient,
         )
 
         client = ExtractionClient(
-            base_url=settings.EXTRACTION_SERVICE_URL,
-            auth_token=settings.EXTRACTION_AUTH_TOKEN,
-            timeout_s=settings.EXTRACTION_TIMEOUT_S,
+            base_url=settings.DOC_HANDLER_SERVICE_URL,
+            auth_token=settings.DOC_HANDLER_AUTH_TOKEN,
+            timeout_s=settings.DOC_HANDLER_TIMEOUT_S,
         )
         try:
             result = await client.extract(data, name, content_type)

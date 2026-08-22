@@ -1,6 +1,6 @@
 [project]
 name = "agent-substrate"
-version = "0.2.0"
+version = "0.3.0"
 description = "Production-ready async Python framework for building autonomous AI agents with tool calling, memory, and durable execution."
 readme = "README.md"
 license = { text = "MIT" }
@@ -126,7 +126,7 @@ s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
 # itself, not just importing it as a library. `make sync` uses this.
 server = ["agent-substrate[web,code,rag,s3,sandbox]"]
 # Layout-aware document parsing (PDF layout, chart/table detection, OCR) via
-# PaddleOCR — used only by `serving/services/extraction/`, never imported
+# PaddleOCR — used only by `doc_handler/service/`, never imported
 # from the main API process. Multimodal embedding and reranking are no
 # longer in-process (SentenceTransformer/CrossEncoder) — they're thin HTTP
 # calls to the llama-embed/llama-rerank `llama-server` sidecars
@@ -135,7 +135,7 @@ server = ["agent-substrate[web,code,rag,s3,sandbox]"]
 # working on this project's target hardware (see `[tool.uv.sources]` below —
 # it comes from PaddlePaddle's own CPU package index, not plain PyPI, and
 # needs a runtime mkldnn-disable workaround for CPUs without AVX-512; see
-# `serving/services/extraction/pipeline.py::_disable_mkldnn`). Not needed
+# `doc_handler/service/pipeline.py::_disable_mkldnn`). Not needed
 # unless you actually run the extraction service — the base install already
 # covers CSV/JSON/text/pypdf-based PDF loading without it. Note for
 # downstream consumers: `[tool.uv.sources]`/`[[tool.uv.index]]` below only
@@ -144,18 +144,18 @@ server = ["agent-substrate[web,code,rag,s3,sandbox]"]
 # PyPI also serves a CPU wheel (that's what a downstream resolver will use),
 # just not the exact one verified here; replicate the same `tool.uv.sources`
 # entry in your own project if you need that specific match.
-extraction = [
+doc-handler = [
     "doc-firewall>=0.5.1",
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle==3.3.0",
 ]
-# Same as `extraction`, but the CUDA 13.0 GPU wheel instead of the CPU one —
-# for local dev on an NVIDIA GPU (set EXTRACTION_DEVICE=gpu:0). Mutually
-# exclusive with `extraction`: pick one, not both, since paddlepaddle and
+# Same as `doc-handler`, but the CUDA 13.0 GPU wheel instead of the CPU one —
+# for local dev on an NVIDIA GPU (set DOC_HANDLER_DEVICE=gpu:0). Mutually
+# exclusive with `doc-handler`: pick one, not both, since paddlepaddle and
 # paddlepaddle-gpu both provide the `paddle` import and will conflict.
 # Pick the CUDA index (cu118/cu126/cu130/...) matching your driver — cu130
 # is what this project's own dev GPU (CUDA 13.1 driver) uses.
-extraction-gpu = [
+doc-handler-gpu = [
     "doc-firewall>=0.5.1",
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle-gpu==3.3.0",
@@ -163,7 +163,7 @@ extraction-gpu = [
 # `create_embedding_client("sentence-transformers/<model>")`
 # (integrations/llm/factory.py) — local, CPU-or-CUDA, no API key, no
 # external server. This is the one place torch comes back after being
-# deliberately removed everywhere else (see the `extraction` extra's own
+# deliberately removed everywhere else (see the `doc-handler` extra's own
 # comment) — genuinely needed here, not an oversight, since
 # sentence-transformers has no lighter runtime. Opt-in only: without this
 # extra, selecting this provider raises a clean ModuleNotFoundError instead
@@ -320,17 +320,12 @@ ignore_imports = [
     # chat_context inlines PDF attachment text using the existing PDFLoader
     # (pypdf/pdfplumber) rather than duplicating extraction logic
     "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.loaders.pdf_loader",
-    # extraction service + client — same pattern as code_interpreter's http_client
-    "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.extraction_client",
-    "substrate.serving.services.extraction.schemas -> substrate.capabilities.knowledge.extraction_client",
-    # files.py's .extracted.md sidecar write mirrors chat_context's same
-    # extraction-service call for the same reason (page-marked text for
-    # code_interpreter) — same exception as chat_context above.
-    "substrate.serving.monolith.routes.files -> substrate.capabilities.knowledge.extraction_client",
-    # extraction service's own upload-time security scan — same "legal
-    # meeting point" reasoning as the extraction_client exceptions above,
-    # applied to capabilities/safety/ instead of capabilities/knowledge/.
-    "substrate.serving.services.extraction.routes -> substrate.capabilities.safety.document_scanner",
+    # Note: chat_context.py/files.py's ExtractionClient import, and
+    # doc_handler/service/{schemas,routes}.py's import of client.py/
+    # security_scan.py, no longer need an exception here — doc_handler is
+    # a new orthogonal top-level package (like serving/integrations/
+    # infrastructure), not under capabilities, so this "serving cannot
+    # import agents or capabilities" contract doesn't apply to those edges.
 ]
 
 # Orthogonal peers (not part of the layer stack):

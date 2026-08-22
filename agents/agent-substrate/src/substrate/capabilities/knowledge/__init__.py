@@ -9,6 +9,7 @@ from substrate.capabilities.knowledge.pipeline import RAGPipeline
 from substrate.capabilities.knowledge.graph_rag import GraphRAGPipeline
 from substrate.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
 from substrate.capabilities.knowledge.protocol import RAGProvider
+from substrate.capabilities.knowledge.loaders.pdf_loader import PDFLoader
 from substrate.capabilities.knowledge.chunking import (
     TextChunker,
     SentenceChunker,
@@ -29,6 +30,7 @@ __all__ = [
     "GraphRAGPipeline",
     "PageIndexRAGPipeline",
     "RAGProvider",
+    "PDFLoader",
     "TextChunker",
     "SentenceChunker",
     "PageChunker",

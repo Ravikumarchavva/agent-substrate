@@ -1,8 +1,7 @@
-"""Extraction service routes — exercised against fake pipeline/embedding
-objects on app.state, never the real paddleocr/sentence-transformers models
-(those are covered by test_pipeline.py / test_embedding.py).
-A bare FastAPI app with no lifespan is built here so constructing it never
-touches the heavy `doc-handler` extra at all."""
+"""Embedding-reranker service routes — exercised against a fake
+embedding_reranker on app.state, never the real llama-embed/llama-rerank
+sidecars (those are covered by test_embedding.py). A bare FastAPI app with
+no lifespan is built here so constructing it never makes a real HTTP call."""
 
 from __future__ import annotations
 
@@ -13,32 +12,13 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from substrate.doc_handler.service.pipeline import (
-    ExtractedImage,
-    ExtractedPage,
-    ExtractionResult,
-)
-from substrate.doc_handler.service.routes import router
+from substrate.runtimes.embedding_reranker.service.routes import router
 
 
 @dataclass
 class _FakeConfig:
     auth_token: str = ""
-    max_upload_bytes: int = 50 * 1024 * 1024
-    pod_name: str = "doc-handler-test"
-
-
-class _FakePipeline:
-    def __init__(
-        self, pages: list[ExtractedPage] | None = None, error: Exception | None = None
-    ):
-        self._pages = pages if pages is not None else []
-        self._error = error
-
-    def extract(self, data: bytes, filename: str) -> ExtractionResult:
-        if self._error is not None:
-            raise self._error
-        return ExtractionResult(pages=self._pages)
+    pod_name: str = "embedding-reranker-test"
 
 
 class _FakeEmbeddingReranker:
@@ -58,12 +38,9 @@ class _FakeEmbeddingReranker:
         return [1.0 - i * 0.1 for i in range(len(passages))]
 
 
-def _client(
-    *, pipeline: _FakePipeline | None = None, embedding_reranker=None, config=None
-) -> TestClient:
+def _client(*, embedding_reranker=None, config=None) -> TestClient:
     app = FastAPI()
     app.include_router(router)
-    app.state.pipeline = pipeline or _FakePipeline()
     app.state.embedding_reranker = embedding_reranker or _FakeEmbeddingReranker()
     app.state.config = config or _FakeConfig()
     app.state.start_time = time.monotonic()
@@ -72,109 +49,6 @@ def _client(
 
 def _b64(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii")
-
-
-# ── /v1/extract ──────────────────────────────────────────────────────────────
-
-
-def test_extract_success_returns_pages_and_images():
-    pages = [
-        ExtractedPage(
-            page_number=1,
-            text="hello world",
-            images=[ExtractedImage(data=b"png-bytes", label="chart", confidence=0.97)],
-        )
-    ]
-    client = _client(pipeline=_FakePipeline(pages=pages))
-
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": _b64(b"fake pdf bytes"),
-            "filename": "test.pdf",
-            "content_type": "application/pdf",
-        },
-    )
-
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["success"] is True
-    assert body["text"] == "hello world"
-    assert body["pages"] == [{"page_number": 1, "text": "hello world", "markdown": ""}]
-    assert len(body["images"]) == 1
-    assert body["images"][0]["label"] == "chart"
-    assert base64.b64decode(body["images"][0]["data_base64"]) == b"png-bytes"
-
-
-def test_extract_unsupported_content_type_returns_400():
-    client = _client()
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": _b64(b"data"),
-            "filename": "report.docx",
-            "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        },
-    )
-    assert resp.status_code == 400
-
-
-def test_extract_invalid_base64_returns_400():
-    client = _client()
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": "not-valid-base64!!!",
-            "filename": "test.pdf",
-            "content_type": "application/pdf",
-        },
-    )
-    assert resp.status_code == 400
-
-
-def test_extract_oversized_file_returns_413():
-    client = _client(config=_FakeConfig(max_upload_bytes=4))
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": _b64(b"way too big"),
-            "filename": "test.pdf",
-            "content_type": "application/pdf",
-        },
-    )
-    assert resp.status_code == 413
-
-
-def test_extract_pipeline_exception_returns_structured_failure_not_500():
-    client = _client(pipeline=_FakePipeline(error=RuntimeError("mkldnn boom")))
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": _b64(b"data"),
-            "filename": "test.pdf",
-            "content_type": "application/pdf",
-        },
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["success"] is False
-    assert "mkldnn boom" in body["error"]
-
-
-def test_extract_empty_result_returns_structured_failure():
-    client = _client(
-        pipeline=_FakePipeline(pages=[ExtractedPage(page_number=1, text="")])
-    )
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": _b64(b"data"),
-            "filename": "test.pdf",
-            "content_type": "application/pdf",
-        },
-    )
-    body = resp.json()
-    assert body["success"] is False
 
 
 # ── /v1/embed ────────────────────────────────────────────────────────────────
@@ -228,12 +102,12 @@ def test_rerank_returns_one_score_per_passage():
 
 
 def test_health_returns_ok():
-    client = _client(config=_FakeConfig(pod_name="doc-handler-7"))
+    client = _client(config=_FakeConfig(pod_name="embedding-reranker-7"))
     resp = client.get("/v1/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
-    assert body["pod_name"] == "doc-handler-7"
+    assert body["pod_name"] == "embedding-reranker-7"
     assert body["uptime_seconds"] >= 0
 
 

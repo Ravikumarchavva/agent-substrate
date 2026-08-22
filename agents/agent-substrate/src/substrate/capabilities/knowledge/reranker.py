@@ -143,8 +143,8 @@ class LLMReranker:
 
 
 class CrossEncoderReranker:
-    """Rerank search results using the extraction service's local
-    cross-encoder (MiniLM by default — see doc_handler/service/).
+    """Rerank search results using the embedding-reranker service's local
+    cross-encoder (Qwen3-VL-Reranker-2B — see runtimes/embedding_reranker/).
 
     Duck-types the same shape as ``LLMReranker`` (no formal Protocol exists;
     ``LocalRagBackend``'s ``reranker`` param accepts either). Unlike
@@ -152,8 +152,8 @@ class CrossEncoderReranker:
     HTTP call to a purpose-built local model, verified at ~1ms/passage.
     """
 
-    def __init__(self, extraction_client: Any) -> None:
-        self._client = extraction_client
+    def __init__(self, embedding_reranker_client: Any) -> None:
+        self._client = embedding_reranker_client
 
     async def rerank(
         self,

@@ -514,8 +514,11 @@ removal candidate, don't stop at the first one that turns out fine.
 (`deployment/docker/llama-server.Dockerfile`, `docker-compose.yml`'s
 `llama-embed`/`llama-rerank` services) — not loaded in-process via
 `sentence-transformers`/`CrossEncoder` the way SigLIP + `ms-marco-MiniLM`
-were before this. `EmbeddingReranker` (`doc_handler/service/embedding.py`)
-is a thin HTTP client to these two services.
+were before this. `EmbeddingReranker`
+(`runtimes/embedding_reranker/service/embedding.py`) is a thin HTTP client
+to these two services — split into its own `runtimes/embedding_reranker`
+service (see the "runtimes/ grouping" entry below) since it shares no code
+or state with document-intelligence's OCR/layout pipeline.
 
 **Why:** the deployment target has no GPU. Real candidates were narrowed and
 verified by actually running them, not by reading spec sheets:
@@ -556,3 +559,67 @@ benchmarking real RSS and latency first — this session's own default,
 unset `--ctx-size` run pushed the reranker to ~9.5GB before being caught.
 See the RAG pipeline redesign plan for the full pipeline this pair feeds
 into (hybrid retrieval, reranking, page-adjacency context).
+
+---
+
+## `runtimes/` top-level grouping; `doc_handler` renamed `document_intelligence`; `embedding_reranker` split out
+
+**Decision:** `src/substrate/runtimes/` is a new orthogonal top-level
+package (same tier as `serving/`/`integrations/`/`infrastructure/`, outside
+the L0-L3 import-linter layer stack) for independently-deployable,
+heavy-dependency, HTTP-only-consumed first-party services. The old
+`doc_handler` package moved there and was renamed `document_intelligence`
+(a deliberately more professional name — `doc_handler` was informal,
+never a considered choice). Its embedding/reranking proxy
+(`service/embedding.py`'s `EmbeddingReranker`) was split out into a
+sibling `runtimes/embedding_reranker/` package with its own client, config,
+FastAPI service, Dockerfile, compose service, and k8s manifest.
+
+**Placement rule for `runtimes/`:** a package belongs there when **both**
+(a) it has a heavy/optional dependency footprint the main API process must
+never import, and (b) callers only ever reach it via a thin,
+always-importable HTTP client — never direct Python import of its service
+internals. Contrast with `capabilities/tools/code_interpreter/.../
+agent-sandbox/` (a k8s pod template tied 1:1 to one tool, not a
+general-purpose HTTP service other parts of the framework call) and
+`llama-embed`/`llama-rerank` (no `src/substrate` package at all — pure
+`llama-server` binaries, thin client lives inside whichever `runtimes/`
+package consumes them).
+
+**Why the split:** `document_intelligence` (PaddleOCR/PPStructureV3 layout
++ OCR) and `embedding_reranker` (a thin httpx proxy to the llama-embed/
+llama-rerank sidecars) shared zero code or state — they were co-located
+inside one FastAPI app purely by convenience. Splitting lets one person own
+document extraction and another own embedding/reranking infra without
+touching each other's files, and gives `embedding_reranker` its own,
+much lighter deployment footprint (no local model, no `paddlepaddle`
+dependency) instead of inheriting `document_intelligence`'s heavy image.
+
+**Why now, not just documented for later:** no prior decision recorded why
+`doc_handler` was a bare top-level package (confirmed absent from this
+file and `roadmap.md` via full-file grep) — this was genuinely undecided
+precedent, not something worth preserving out of caution.
+
+**Full rename map:** Python package
+`doc_handler` → `runtimes/document_intelligence`; pyproject extras
+`doc-handler`/`doc-handler-gpu` → `document-intelligence`/
+`document-intelligence-gpu`; env prefix `DOC_HANDLER_` →
+`DOCUMENT_INTELLIGENCE_` (embedding_reranker gets its own new
+`EMBEDDING_RERANKER_` prefix); Dockerfiles, compose services/profiles, k8s
+manifest, CI workflow, and Makefile targets renamed to match
+(`document-intelligence`/`document-intelligence-gpu`); new
+`embedding-reranker` Dockerfile/compose service (port 8023)/k8s manifest/
+Makefile target added.
+
+**Also added in the same pass:** a `DocumentExtractor` kernel Protocol
+(`kernel/storage/document.py`, mirroring `VectorStore`/`GraphStore`/
+`HistoryProvider`'s shape) with `ExtractionPipeline`
+(`PPStructureV3`-backed, `runtimes/document_intelligence`) as one real
+implementation and a new `capabilities/knowledge/loaders/
+xycut_extractor.py` (pdfplumber word-level bboxes + a fixed
+`recursive_xy_cut` — upstream paddlex's version crashes on an empty
+x-interval chunk at word-level granularity; the fix is a one-line guard) as
+a second, lightweight, no-OCR-needed implementation for digital PDFs. Also
+wired `ExtractionClient` into `PDFLoader` itself (previously only
+`LocalRagBackend` called it directly, not `PDFLoader` when constructed
+bare).

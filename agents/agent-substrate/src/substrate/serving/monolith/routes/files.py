@@ -178,13 +178,13 @@ async def _build_extracted_sidecar_text(
     pages: list[tuple[int, str]] = []
     captions_by_page: dict[int, list[str]] = {}
 
-    if settings.DOC_HANDLER_SERVICE_URL:
-        from substrate.doc_handler.client import ExtractionClient
+    if settings.DOCUMENT_INTELLIGENCE_SERVICE_URL:
+        from substrate.runtimes.document_intelligence.client import ExtractionClient
 
         client = ExtractionClient(
-            base_url=settings.DOC_HANDLER_SERVICE_URL,
-            auth_token=settings.DOC_HANDLER_AUTH_TOKEN,
-            timeout_s=settings.DOC_HANDLER_TIMEOUT_S,
+            base_url=settings.DOCUMENT_INTELLIGENCE_SERVICE_URL,
+            auth_token=settings.DOCUMENT_INTELLIGENCE_AUTH_TOKEN,
+            timeout_s=settings.DOCUMENT_INTELLIGENCE_TIMEOUT_S,
         )
         try:
             result = await client.extract(data, name, content_type)

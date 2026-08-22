@@ -20,7 +20,7 @@ from __future__ import annotations
 from substrate.kernel.agent.safety import SafetyVerdict, Severity
 from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.doc_handler.security_scan")
+logger = setup_logging("substrate.runtimes.document_intelligence.security_scan")
 
 # doc-firewall's own verdict -> our severity. FLAG is a real, structural
 # finding worth blocking on (not a soft "maybe") — same "any hit is a hit"

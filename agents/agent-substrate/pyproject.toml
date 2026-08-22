@@ -126,36 +126,37 @@ s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
 # itself, not just importing it as a library. `make sync` uses this.
 server = ["agent-substrate[web,code,rag,s3,sandbox]"]
 # Layout-aware document parsing (PDF layout, chart/table detection, OCR) via
-# PaddleOCR — used only by `doc_handler/service/`, never imported
-# from the main API process. Multimodal embedding and reranking are no
-# longer in-process (SentenceTransformer/CrossEncoder) — they're thin HTTP
-# calls to the llama-embed/llama-rerank `llama-server` sidecars
-# (docker-compose.yml), so sentence-transformers/torch are no longer needed
-# here. `paddlepaddle` is pinned to the exact CPU-wheel version verified
-# working on this project's target hardware (see `[tool.uv.sources]` below —
-# it comes from PaddlePaddle's own CPU package index, not plain PyPI, and
-# needs a runtime mkldnn-disable workaround for CPUs without AVX-512; see
-# `doc_handler/service/pipeline.py::_disable_mkldnn`). Not needed
-# unless you actually run the extraction service — the base install already
-# covers CSV/JSON/text/pypdf-based PDF loading without it. Note for
-# downstream consumers: `[tool.uv.sources]`/`[[tool.uv.index]]` below only
-# apply when THIS repo's pyproject.toml is the active uv project — they
-# don't propagate to a project that merely depends on `agent-substrate`.
+# PaddleOCR — used only by `runtimes/document_intelligence/service/`, never
+# imported from the main API process. Multimodal embedding and reranking are
+# a separate service now (`runtimes/embedding_reranker/`) — thin HTTP calls
+# to the llama-embed/llama-rerank `llama-server` sidecars (docker-compose.yml),
+# so sentence-transformers/torch are not needed here either.
+# `paddlepaddle` is pinned to the exact CPU-wheel version verified working
+# on this project's target hardware (see `[tool.uv.sources]` below — it
+# comes from PaddlePaddle's own CPU package index, not plain PyPI, and needs
+# a runtime mkldnn-disable workaround for CPUs without AVX-512; see
+# `runtimes/document_intelligence/service/pipeline.py::_disable_mkldnn`).
+# Not needed unless you actually run the document-intelligence service — the
+# base install already covers CSV/JSON/text/pypdf-based PDF loading without
+# it. Note for downstream consumers: `[tool.uv.sources]`/`[[tool.uv.index]]`
+# below only apply when THIS repo's pyproject.toml is the active uv project —
+# they don't propagate to a project that merely depends on `agent-substrate`.
 # PyPI also serves a CPU wheel (that's what a downstream resolver will use),
 # just not the exact one verified here; replicate the same `tool.uv.sources`
 # entry in your own project if you need that specific match.
-doc-handler = [
+document-intelligence = [
     "doc-firewall>=0.5.1",
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle==3.3.0",
 ]
-# Same as `doc-handler`, but the CUDA 13.0 GPU wheel instead of the CPU one —
-# for local dev on an NVIDIA GPU (set DOC_HANDLER_DEVICE=gpu:0). Mutually
-# exclusive with `doc-handler`: pick one, not both, since paddlepaddle and
+# Same as `document-intelligence`, but the CUDA 13.0 GPU wheel instead of the
+# CPU one — for local dev on an NVIDIA GPU (set
+# DOCUMENT_INTELLIGENCE_DEVICE=gpu:0). Mutually exclusive with
+# `document-intelligence`: pick one, not both, since paddlepaddle and
 # paddlepaddle-gpu both provide the `paddle` import and will conflict.
 # Pick the CUDA index (cu118/cu126/cu130/...) matching your driver — cu130
 # is what this project's own dev GPU (CUDA 13.1 driver) uses.
-doc-handler-gpu = [
+document-intelligence-gpu = [
     "doc-firewall>=0.5.1",
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle-gpu==3.3.0",
@@ -163,8 +164,8 @@ doc-handler-gpu = [
 # `create_embedding_client("sentence-transformers/<model>")`
 # (integrations/llm/factory.py) — local, CPU-or-CUDA, no API key, no
 # external server. This is the one place torch comes back after being
-# deliberately removed everywhere else (see the `doc-handler` extra's own
-# comment) — genuinely needed here, not an oversight, since
+# deliberately removed everywhere else (see the `document-intelligence`
+# extra's own comment) — genuinely needed here, not an oversight, since
 # sentence-transformers has no lighter runtime. Opt-in only: without this
 # extra, selecting this provider raises a clean ModuleNotFoundError instead
 # of silently working.
@@ -196,8 +197,8 @@ name = "paddle-cpu"
 url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
 explicit = true
 
-# paddlepaddle-gpu's CUDA 13.0 wheel (extraction-gpu extra above) — same
-# PaddlePaddle package server as paddle-cpu, different channel.
+# paddlepaddle-gpu's CUDA 13.0 wheel (document-intelligence-gpu extra above) —
+# same PaddlePaddle package server as paddle-cpu, different channel.
 [[tool.uv.index]]
 name = "paddle-cu130"
 url = "https://www.paddlepaddle.org.cn/packages/stable/cu130/"
@@ -321,15 +322,18 @@ ignore_imports = [
     # (pypdf/pdfplumber) rather than duplicating extraction logic
     "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.loaders.pdf_loader",
     # Note: chat_context.py/files.py's ExtractionClient import, and
-    # doc_handler/service/{schemas,routes}.py's import of client.py/
-    # security_scan.py, no longer need an exception here — doc_handler is
-    # a new orthogonal top-level package (like serving/integrations/
-    # infrastructure), not under capabilities, so this "serving cannot
-    # import agents or capabilities" contract doesn't apply to those edges.
+    # runtimes/document_intelligence/service/{schemas,routes}.py's import of
+    # client.py/security_scan.py, no longer need an exception here —
+    # runtimes/ is a new orthogonal top-level package (like serving/
+    # integrations/infrastructure), not under capabilities, so this
+    # "serving cannot import agents or capabilities" contract doesn't apply
+    # to those edges.
 ]
 
 # Orthogonal peers (not part of the layer stack):
 # integrations/ — concrete I/O ports (LLM clients, memory backends, vector stores)
 # serving/      — FastAPI monolith + microservices + shared infra
+# runtimes/     — independently-deployable, heavy-dependency, HTTP-only
+#                 services (document_intelligence, embedding_reranker)
 # These carry cross-layer edges by design (e.g. an integration implements a kernel
 # Protocol; serving wires all layers together in lifespan).

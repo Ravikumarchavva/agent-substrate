@@ -11,7 +11,7 @@ import base64
 from unittest.mock import AsyncMock
 
 from substrate.capabilities.knowledge.backends.local import LocalRagBackend
-from substrate.doc_handler.client import (
+from substrate.runtimes.document_intelligence.client import (
     ExtractedImage,
     ExtractedPageText,
     ExtractResponse,
@@ -102,7 +102,12 @@ class StubFileStore:
 
 
 def _backend(
-    *, image_store=None, extraction_client=None, vector_store=None, file_store=None
+    *,
+    image_store=None,
+    extraction_client=None,
+    embedding_reranker_client=None,
+    vector_store=None,
+    file_store=None,
 ) -> tuple[LocalRagBackend, StubPipeline]:
     pipeline = StubPipeline()
     backend = LocalRagBackend(
@@ -111,6 +116,8 @@ def _backend(
         image_store=image_store,
         extraction_service_url="http://extraction-test:8080",
         extraction_client=extraction_client,
+        embedding_reranker_service_url="http://embedding-reranker-test:8080",
+        embedding_reranker_client=embedding_reranker_client,
         file_store=file_store,
     )
     return backend, pipeline
@@ -134,7 +141,7 @@ async def test_ingest_images_stores_bytes_in_the_file_store_not_the_vector_row()
     client = AsyncMock()
     client.embed_image = AsyncMock(return_value=[0.1, 0.2])
     backend, _ = _backend(
-        image_store=image_store, extraction_client=client, file_store=store
+        image_store=image_store, embedding_reranker_client=client, file_store=store
     )
 
     await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
@@ -156,7 +163,7 @@ async def test_query_rehydrates_image_bytes_from_the_stored_key():
     client.embed_image = AsyncMock(return_value=[0.1, 0.2])
     client.embed_text = AsyncMock(return_value=[0.3, 0.4])
     backend, _ = _backend(
-        image_store=image_store, extraction_client=client, file_store=store
+        image_store=image_store, embedding_reranker_client=client, file_store=store
     )
     await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
 
@@ -175,7 +182,7 @@ async def test_query_survives_a_missing_image_object():
     client.embed_image = AsyncMock(return_value=[0.1, 0.2])
     client.embed_text = AsyncMock(return_value=[0.3, 0.4])
     backend, _ = _backend(
-        image_store=image_store, extraction_client=client, file_store=store
+        image_store=image_store, embedding_reranker_client=client, file_store=store
     )
     await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
     store.fail_download = True
@@ -192,7 +199,7 @@ async def test_ingest_images_falls_back_to_inlining_when_the_upload_fails():
     client = AsyncMock()
     client.embed_image = AsyncMock(return_value=[0.1, 0.2])
     backend, _ = _backend(
-        image_store=image_store, extraction_client=client, file_store=store
+        image_store=image_store, embedding_reranker_client=client, file_store=store
     )
 
     await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
@@ -210,7 +217,7 @@ async def test_ingest_images_inlines_when_the_owner_is_unknown():
     client = AsyncMock()
     client.embed_image = AsyncMock(return_value=[0.1, 0.2])
     backend, _ = _backend(
-        image_store=image_store, extraction_client=client, file_store=store
+        image_store=image_store, embedding_reranker_client=client, file_store=store
     )
 
     await backend._ingest_images([(b"PNGBYTES", {"file_id": "f9"})], collection="kb")
@@ -224,7 +231,7 @@ async def test_image_key_is_independent_of_collection_so_promote_need_not_move_i
     client = AsyncMock()
     client.embed_image = AsyncMock(return_value=[0.1, 0.2])
     backend, _ = _backend(
-        image_store=image_store, extraction_client=client, file_store=store
+        image_store=image_store, embedding_reranker_client=client, file_store=store
     )
 
     await backend._ingest_images(
@@ -259,7 +266,7 @@ async def test_ingest_images_skips_one_bad_image_without_failing_the_rest():
     image_store = StubImageStore()
     client = AsyncMock()
     client.embed_image = AsyncMock(side_effect=[None, [0.1, 0.2]])
-    backend, _ = _backend(image_store=image_store, extraction_client=client)
+    backend, _ = _backend(image_store=image_store, embedding_reranker_client=client)
 
     items = [
         (b"bad-image-bytes", {"label": "chart", "page_number": 1}),
@@ -276,7 +283,7 @@ async def test_ingest_images_skips_one_bad_image_without_failing_the_rest():
 
 async def test_ingest_images_noop_without_image_store():
     client = AsyncMock()
-    backend, _ = _backend(image_store=None, extraction_client=client)
+    backend, _ = _backend(image_store=None, embedding_reranker_client=client)
 
     await backend._ingest_images([(b"data", {})], collection="kb")
 
@@ -297,7 +304,7 @@ async def test_hybrid_candidates_skips_image_search_when_embed_text_fails():
     image_store = StubImageStore()
     client = AsyncMock()
     client.embed_text = AsyncMock(return_value=None)
-    backend, _ = _backend(image_store=image_store, extraction_client=client)
+    backend, _ = _backend(image_store=image_store, embedding_reranker_client=client)
 
     candidates = await backend._hybrid_candidates(
         "show me the chart", collection="kb", filter=None
@@ -315,7 +322,7 @@ async def test_hybrid_candidates_searches_image_store_with_embedded_query():
     ]
     client = AsyncMock()
     client.embed_text = AsyncMock(return_value=[0.9, 0.1])
-    backend, _ = _backend(image_store=image_store, extraction_client=client)
+    backend, _ = _backend(image_store=image_store, embedding_reranker_client=client)
 
     candidates = await backend._hybrid_candidates(
         "show me the chart", collection="kb", filter=None
@@ -342,7 +349,9 @@ async def test_query_merges_text_and_image_candidates_before_reranking():
     client = AsyncMock()
     client.embed_text = AsyncMock(return_value=[0.9])
     backend, _ = _backend(
-        vector_store=vector_store, image_store=image_store, extraction_client=client
+        vector_store=vector_store,
+        image_store=image_store,
+        embedding_reranker_client=client,
     )
 
     results = await backend.query("show me the chart", collection="kb", limit=5)
@@ -436,7 +445,11 @@ async def test_ingest_routes_pdf_text_through_pipeline_and_images_through_image_
         )
     )
     client.embed_image = AsyncMock(return_value=[0.1, 0.2])
-    backend, pipeline = _backend(image_store=image_store, extraction_client=client)
+    backend, pipeline = _backend(
+        image_store=image_store,
+        extraction_client=client,
+        embedding_reranker_client=client,
+    )
 
     result = await backend.ingest(
         b"pdf bytes", collection="kb", metadata={"filename": "report.pdf"}

@@ -1,0 +1,101 @@
+# Embedding-Reranker Service — Kubernetes Deployment
+#
+# Multimodal embedding and reranking (Qwen3-VL-Embedding-2B /
+# Qwen3-VL-Reranker-2B via the llama-embed/llama-rerank sidecars) for chat
+# attachments and the local RAG backend — a thin httpx proxy, no local
+# model, isolated from document-intelligence since it shares no code or
+# state with the OCR/layout pipeline (see docs/claude_docs/decisions.md).
+# Much lighter resource footprint than document-intelligence as a result.
+#
+# Plain Deployment, not a StatefulSet: stateless request/response, no
+# session affinity. No HPA either, consistent with document-intelligence's
+# reasoning — scale by editing `replicas` directly if needed.
+#
+# Optional: the monolith/services only call this when
+# EMBEDDING_RERANKER_SERVICE_URL is set (see config.py). Not setting it (or
+# this Deployment not existing) just means image ingestion and reranking
+# are unavailable.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding-reranker
+  namespace: af-runtime
+  labels:
+    app: embedding-reranker
+spec:
+  selector:
+    app: embedding-reranker
+  ports:
+    - port: 8080
+      targetPort: http
+      name: http
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: embedding-reranker
+  namespace: af-runtime
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding-reranker
+  namespace: af-runtime
+  labels:
+    app: embedding-reranker
+    af.service-role: embedding-reranker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: embedding-reranker
+  template:
+    metadata:
+      labels:
+        app: embedding-reranker
+        af.service-role: embedding-reranker
+    spec:
+      serviceAccountName: embedding-reranker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: embedding-reranker
+          image: ghcr.io/example/agent-framework/embedding-reranker:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: embedding-reranker
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3

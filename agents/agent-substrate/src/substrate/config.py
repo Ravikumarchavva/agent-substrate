@@ -153,16 +153,27 @@ class SubstrateConfig(BaseSettings):
     # own environment; that venv is mounted read-only into the sandbox.
     SANDBOX_PYTHON: str = ""
 
-    # ── Document-extraction service ──────────────────────────────────────────
+    # ── Document-intelligence service ────────────────────────────────────────
     # Optional, isolated microservice for layout-aware document parsing:
-    # PaddleOCR layout/chart/table detection + OCR, plus SigLIP multimodal
-    # embedding and a MiniLM reranker (see doc_handler/service/).
-    # Empty (the default) means chat attachments fall back to the
-    # lightweight pypdf/pdfplumber path for PDFs (no chart images, no
-    # multimodal search) — see routes/chat_context.py::_extract_document_text.
-    DOC_HANDLER_SERVICE_URL: str = ""
-    DOC_HANDLER_AUTH_TOKEN: str = ""
-    DOC_HANDLER_TIMEOUT_S: int = 90
+    # PaddleOCR layout/chart/table detection + OCR (see
+    # runtimes/document_intelligence/service/). Empty (the default) means
+    # chat attachments fall back to the lightweight pypdf/pdfplumber path
+    # for PDFs (no chart images) — see
+    # routes/chat_context.py::_extract_document_text.
+    DOCUMENT_INTELLIGENCE_SERVICE_URL: str = ""
+    DOCUMENT_INTELLIGENCE_AUTH_TOKEN: str = ""
+    DOCUMENT_INTELLIGENCE_TIMEOUT_S: int = 90
+
+    # ── Embedding + reranking service ────────────────────────────────────────
+    # Optional, isolated microservice proxying to the llama-embed/llama-rerank
+    # sidecars for multimodal embedding + reranking (see
+    # runtimes/embedding_reranker/service/) — a separate concern from
+    # document-intelligence's OCR/layout extraction, split out since it
+    # shares no code or state with it. Empty (the default) means image
+    # ingestion/multimodal search and reranking are unavailable.
+    EMBEDDING_RERANKER_SERVICE_URL: str = ""
+    EMBEDDING_RERANKER_AUTH_TOKEN: str = ""
+    EMBEDDING_RERANKER_TIMEOUT_S: int = 30
 
     # ── RAG backend ───────────────────────────────────────────────────────────
     # "local" (default) = RAGPipeline + PgVectorStore + extraction-service-or-
@@ -182,13 +193,15 @@ class SubstrateConfig(BaseSettings):
     # SentenceTransformersEmbeddingClient default) is 384, all-mpnet-base-v2
     # is 768 — set this to match whichever EMBEDDING_MODEL is configured.
     RAG_TEXT_EMBEDDING_DIM: int = 1536
-    # Vector dimensionality of the extraction service's image embedding
-    # model — needed for the separate image-vector PgVectorStore table (see
-    # backends/local.py's image_store). Qwen3-VL-Embedding-2B (2048) now
-    # embeds both text and images into the SAME space (see
-    # docs/claude_docs/decisions.md) — this must match DOC_HANDLER_EMBEDDING_DIM
-    # in doc_handler/service/config.py, or image ingestion hard-fails
-    # on a vector-column-width mismatch the first time it actually runs.
+    # Vector dimensionality of the embedding-reranker service's image
+    # embedding model — needed for the separate image-vector PgVectorStore
+    # table (see backends/local.py's image_store). Qwen3-VL-Embedding-2B
+    # (2048) now embeds both text and images into the SAME space (see
+    # docs/claude_docs/decisions.md) — this must match
+    # EMBEDDING_RERANKER_EMBEDDING_DIM in
+    # runtimes/embedding_reranker/service/config.py, or image ingestion
+    # hard-fails on a vector-column-width mismatch the first time it
+    # actually runs.
     RAG_IMAGE_EMBEDDING_DIM: int = 2048
     # Caps on RAG-eligible document uploads (currently PDF only — see
     # EXTRACTABLE_CONTENT_TYPES in routes/chat_context.py), enforced

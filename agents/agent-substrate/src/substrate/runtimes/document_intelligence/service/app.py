@@ -1,16 +1,18 @@
-"""Standalone FastAPI application for the document-extraction service.
+"""Standalone FastAPI application for the document-intelligence service.
 
 Deploy this as its own low-replica Deployment (heavy paddlepaddle OCR
-runtime, model-loaded pods — see deployment/k8s/base/runtime/doc-handler.yaml).
-The main backend calls it via HTTP through ExtractionClient
-(doc_handler/client.py), only when
-DOC_HANDLER_SERVICE_URL is configured; otherwise chat attachments fall back to
-the lightweight pypdf path for PDFs and the local RAG backend has no
-chart-image or multimodal-embedding capability.
+runtime, model-loaded pods — see
+deployment/k8s/base/runtime/document-intelligence.yaml). The main backend
+calls it via HTTP through ExtractionClient
+(runtimes/document_intelligence/client.py), only when
+DOCUMENT_INTELLIGENCE_SERVICE_URL is configured; otherwise chat attachments
+fall back to the lightweight pypdf path for PDFs and the local RAG backend
+has no chart-image extraction capability. Multimodal embedding/reranking is
+a separate service now — see runtimes/embedding_reranker/.
 
 Usage::
 
-    uvicorn substrate.doc_handler.service.app:app \
+    uvicorn substrate.runtimes.document_intelligence.service.app:app \
         --host 0.0.0.0 --port 8080
 """
 
@@ -26,7 +28,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import ServiceConfig
-from .embedding import EmbeddingReranker
 from .pipeline import ExtractionPipeline
 from .routes import router
 
@@ -40,12 +41,12 @@ logger = setup_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Build the extraction pipeline, embedding model, and reranker on boot,
-    and warm each with a tiny synthetic input so the first real request
-    isn't also paying first-load latency."""
+    """Build the extraction pipeline on boot, and warm it with a tiny
+    synthetic input so the first real request isn't also paying first-load
+    latency."""
     svc_config = ServiceConfig()
     logger.info(
-        "Starting extraction service  pod=%s  ocr_size=%s  device=%s",
+        "Starting document-intelligence service  pod=%s  ocr_size=%s  device=%s",
         svc_config.pod_name,
         svc_config.ocr_size,
         svc_config.device,
@@ -54,43 +55,35 @@ async def lifespan(app: FastAPI):
     pipeline = ExtractionPipeline(
         ocr_size=svc_config.ocr_size, device=svc_config.device
     )
-    embedding_reranker = EmbeddingReranker(
-        embed_server_url=svc_config.embed_server_url,
-        rerank_server_url=svc_config.rerank_server_url,
-    )
 
     app.state.pipeline = pipeline
-    app.state.embedding_reranker = embedding_reranker
     app.state.config = svc_config
     app.state.start_time = time.monotonic()
 
     try:
         pipeline.warmup()
-        await embedding_reranker.warmup()
     except Exception as exc:
         # Warmup is best-effort — a failure here must not block startup;
-        # real requests still trigger a (slower, one-time) model load /
-        # sidecar round-trip.
-        logger.info("Extraction service warmup skipped (%s)", exc)
+        # real requests still trigger a (slower, one-time) model load.
+        logger.info("Document-intelligence service warmup skipped (%s)", exc)
 
-    logger.info("Extraction service ready  pod=%s", svc_config.pod_name)
+    logger.info("Document-intelligence service ready  pod=%s", svc_config.pod_name)
 
     yield
 
-    await embedding_reranker.aclose()
-    logger.info("Extraction service stopped  pod=%s", svc_config.pod_name)
+    logger.info("Document-intelligence service stopped  pod=%s", svc_config.pod_name)
 
 
 def create_app() -> FastAPI:
     """Build and return the FastAPI application."""
     application = FastAPI(
-        title="Document Extraction Service",
+        title="Document Intelligence Service",
         version="1.0.0",
         description=(
             "Layout-aware document parsing (PDF layout, chart/table "
-            "detection, OCR), multimodal embedding, and reranking for chat "
-            "attachments and RAG — isolated from the main API process due "
-            "to its heavy paddlepaddle OCR runtime footprint."
+            "detection, OCR) for chat attachments and RAG — isolated from "
+            "the main API process due to its heavy paddlepaddle OCR "
+            "runtime footprint."
         ),
         lifespan=lifespan,
     )

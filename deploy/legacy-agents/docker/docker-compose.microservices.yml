@@ -195,21 +195,22 @@ services:
       SANDBOX_RUNTIME_CLASS: ${SANDBOX_RUNTIME_CLASS:-}
 
   # ══════════════════════════════════════════════════════════════════════════════
-  # Document-handling service — layout/chart detection + OCR (PaddleOCR) + multimodal
-  # embedding (SigLIP) + reranking (MiniLM cross-encoder). Optional, opt-in
-  # (profile-gated). Built from its own Dockerfile, not the shared
-  # backend.Dockerfile x-service-base build — it needs the `doc-handler` extra
-  # (paddlepaddle + sentence-transformers) that the base image deliberately
-  # excludes.
+  # Document-intelligence service — layout/chart detection + OCR (PaddleOCR).
+  # Optional, opt-in (profile-gated). Built from its own Dockerfile, not the
+  # shared backend.Dockerfile x-service-base build — it needs the
+  # `document-intelligence` extra (paddlepaddle) that the base image
+  # deliberately excludes. Multimodal embedding/reranking (the
+  # embedding-reranker service) is not yet wired up for the microservices
+  # deployment — same pre-existing gap as before this rename.
   # ══════════════════════════════════════════════════════════════════════════════
 
-  doc-handler:
+  document-intelligence:
     profiles:
-      - doc-handler
+      - document-intelligence
     build:
       context: ../..
-      dockerfile: deployment/docker/doc-handler.Dockerfile
-    command: ["uvicorn", "substrate.doc_handler.service.app:app", "--host", "0.0.0.0", "--port", "8080"]
+      dockerfile: deployment/docker/document-intelligence.Dockerfile
+    command: ["uvicorn", "substrate.runtimes.document_intelligence.service.app:app", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "8022:8080"
     restart: unless-stopped

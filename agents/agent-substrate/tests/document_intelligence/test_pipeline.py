@@ -1,6 +1,6 @@
 """ExtractionPipeline — bbox-matching helpers (pure Python, no paddleocr
 import needed) plus a real end-to-end chart-detection test guarded by
-``importorskip`` (paddleocr/paddlepaddle are the optional `doc-handler`
+``importorskip`` (paddleocr/paddlepaddle are the optional `document-intelligence`
 extra, not part of the default install — see pyproject.toml)."""
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from substrate.doc_handler.service.pipeline import (
+from substrate.runtimes.document_intelligence.service.pipeline import (
     _nearest_score,
     _rewrite_markdown_images,
     _score_lookup,
@@ -155,7 +155,9 @@ def _pipeline_with_fake_result(blocks, *, boxes, markdown_texts=""):
     real, but whose underlying paddlex ``.predict()`` call is faked — avoids
     constructing a real (heavy, model-loading) PPStructureV3 pipeline just to
     test the confidence-gating branch."""
-    from substrate.doc_handler.service.pipeline import ExtractionPipeline
+    from substrate.runtimes.document_intelligence.service.pipeline import (
+        ExtractionPipeline,
+    )
 
     pipeline = object.__new__(ExtractionPipeline)
     fake_result = _FakeResult(
@@ -233,7 +235,9 @@ pytest.importorskip("paddleocr")
 def test_extraction_pipeline_detects_chart_in_real_pdf():
     """Real, non-mocked chart detection — verifies the mkldnn workaround and
     the layout-model chart label end to end, not just unit-level plumbing."""
-    from substrate.doc_handler.service.pipeline import ExtractionPipeline
+    from substrate.runtimes.document_intelligence.service.pipeline import (
+        ExtractionPipeline,
+    )
 
     pipeline = ExtractionPipeline(ocr_size="tiny")
     result = pipeline.extract(_CHART_FIXTURE.read_bytes(), "chart_page.pdf")

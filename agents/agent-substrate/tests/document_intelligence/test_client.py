@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import httpx
 
-from substrate.doc_handler.client import ExtractionClient
+from substrate.runtimes.document_intelligence.client import ExtractionClient
 
 
 def _client_with_transport(transport: httpx.MockTransport) -> ExtractionClient:
@@ -87,69 +87,6 @@ async def test_extract_bad_content_type_from_service():
     result = await client.extract(b"data", "test.zip", "application/zip")
 
     assert result.success is False
-
-
-async def test_embed_image_success():
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/v1/embed"
-        return httpx.Response(200, json={"embedding": [0.1, 0.2, 0.3]})
-
-    client = _client_with_transport(httpx.MockTransport(handler))
-    result = await client.embed_image(b"fake png bytes")
-
-    assert result == [0.1, 0.2, 0.3]
-
-
-async def test_embed_text_success():
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/v1/embed"
-        return httpx.Response(200, json={"embedding": [0.4, 0.5]})
-
-    client = _client_with_transport(httpx.MockTransport(handler))
-    result = await client.embed_text("revenue chart")
-
-    assert result == [0.4, 0.5]
-
-
-async def test_embed_returns_none_on_failure_not_raise():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, text="internal error")
-
-    client = _client_with_transport(httpx.MockTransport(handler))
-    result = await client.embed_text("query")
-
-    assert result is None
-
-
-async def test_rerank_success():
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/v1/rerank"
-        return httpx.Response(200, json={"scores": [0.9, 0.1]})
-
-    client = _client_with_transport(httpx.MockTransport(handler))
-    result = await client.rerank("query", ["passage a", "passage b"])
-
-    assert result == [0.9, 0.1]
-
-
-async def test_rerank_empty_passages_short_circuits():
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise AssertionError("should not make an HTTP call for empty passages")
-
-    client = _client_with_transport(httpx.MockTransport(handler))
-    result = await client.rerank("query", [])
-
-    assert result == []
-
-
-async def test_rerank_returns_none_on_failure_not_raise():
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
-
-    client = _client_with_transport(httpx.MockTransport(handler))
-    result = await client.rerank("query", ["passage"])
-
-    assert result is None
 
 
 async def test_health_true_on_200():

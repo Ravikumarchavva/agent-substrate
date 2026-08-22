@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from substrate.doc_handler.security_scan import scan_document
+from substrate.runtimes.document_intelligence.security_scan import scan_document
 from substrate.kernel.agent.safety import Severity
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"

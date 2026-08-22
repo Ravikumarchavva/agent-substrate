@@ -158,6 +158,10 @@ src/substrate/
 │   │                     `from_log.wire_from_log(kind, payload)` converts log entries to WireEvents
 │   └── stream/           AgentStreamSession — tails EventLog, maps entries via wire_from_log
 │
+├── runtimes/     independently-deployable, heavy-dependency, HTTP-only services (orthogonal to layers)
+│   ├── document_intelligence/  PaddleOCR layout/chart/table extraction + OCR (client.py always importable)
+│   └── embedding_reranker/     Qwen3-VL embedding + reranking proxy service (client.py always importable)
+│
 ├── config.py     Pydantic Settings (reads .env)
 ├── exceptions.py public exceptions (GuardrailTripwireError, …)
 ├── logger.py     setup_logging()

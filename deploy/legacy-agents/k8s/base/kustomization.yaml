@@ -25,7 +25,8 @@ resources:
   - runtime/job-controller.yaml
   - runtime/agent-runtime.yaml
   - runtime/tool-executor.yaml
-  - runtime/doc-handler.yaml
+  - runtime/document-intelligence.yaml
+  - runtime/embedding-reranker.yaml
   - runtime/human-gate.yaml
   - runtime/live-stream.yaml
   - runtime/user-workspaces.yaml

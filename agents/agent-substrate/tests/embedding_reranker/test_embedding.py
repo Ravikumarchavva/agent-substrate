@@ -13,7 +13,7 @@ import json
 import httpx
 import pytest
 
-from substrate.doc_handler.service.embedding import (
+from substrate.runtimes.embedding_reranker.service.embedding import (
     EmbeddingReranker,
     EmbeddingServiceError,
 )
@@ -173,7 +173,9 @@ async def test_rerank_with_image_falls_back_to_text_only_and_warns(caplog):
     # entirely, so the assertion doesn't depend on suite ordering.
     import logging
 
-    target_logger = logging.getLogger("substrate.doc_handler.service.embedding")
+    target_logger = logging.getLogger(
+        "substrate.runtimes.embedding_reranker.service.embedding"
+    )
     target_logger.addHandler(caplog.handler)
     target_logger.setLevel(logging.WARNING)
     try:

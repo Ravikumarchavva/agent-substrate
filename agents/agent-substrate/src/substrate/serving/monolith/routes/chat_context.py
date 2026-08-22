@@ -120,20 +120,20 @@ async def _extract_document_text(
     ``(None, None)`` means extraction failed entirely — the caller falls
     back to metadata-only attachment handling in that case.
 
-    Tries the extraction service first (layout-aware: chart/table detection,
-    OCR) when ``DOC_HANDLER_SERVICE_URL`` is configured. Falls back to the
-    lightweight local pypdf/pdfplumber path for PDFs on any extraction
-    failure/timeout/non-configuration.
+    Tries the document-intelligence service first (layout-aware: chart/table
+    detection, OCR) when ``DOCUMENT_INTELLIGENCE_SERVICE_URL`` is configured.
+    Falls back to the lightweight local pypdf/pdfplumber path for PDFs on
+    any extraction failure/timeout/non-configuration.
     """
-    if settings.DOC_HANDLER_SERVICE_URL:
-        from substrate.doc_handler.client import (
+    if settings.DOCUMENT_INTELLIGENCE_SERVICE_URL:
+        from substrate.runtimes.document_intelligence.client import (
             ExtractionClient,
         )
 
         client = ExtractionClient(
-            base_url=settings.DOC_HANDLER_SERVICE_URL,
-            auth_token=settings.DOC_HANDLER_AUTH_TOKEN,
-            timeout_s=settings.DOC_HANDLER_TIMEOUT_S,
+            base_url=settings.DOCUMENT_INTELLIGENCE_SERVICE_URL,
+            auth_token=settings.DOCUMENT_INTELLIGENCE_AUTH_TOKEN,
+            timeout_s=settings.DOCUMENT_INTELLIGENCE_TIMEOUT_S,
         )
         try:
             result = await client.extract(data, name, content_type)

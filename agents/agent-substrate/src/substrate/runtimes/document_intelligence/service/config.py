@@ -1,7 +1,7 @@
-"""Environment-based configuration for the document-extraction service.
+"""Environment-based configuration for the document-intelligence service.
 
-All settings are read from environment variables with the ``DOC_HANDLER_``
-prefix.
+All settings are read from environment variables with the
+``DOCUMENT_INTELLIGENCE_`` prefix.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings
 
 
 class ServiceConfig(BaseSettings):
-    """Document-extraction service configuration."""
+    """Document-intelligence service configuration."""
 
     # ── Server ───────────────────────────────────────────────────────────
     host: str = "0.0.0.0"
@@ -31,29 +31,19 @@ class ServiceConfig(BaseSettings):
     max_upload_bytes: int = 50 * 1024 * 1024
 
     # "cpu" (default — cheap to host, no CUDA image) or e.g. "gpu:0" for
-    # local dev on an NVIDIA GPU. GPU requires the `doc-handler-gpu` install
-    # extra (paddlepaddle-gpu, matching CUDA index — see pyproject.toml)
-    # instead of the default CPU wheel; passed straight through to
-    # PPStructureV3(device=...) in pipeline.py.
+    # local dev on an NVIDIA GPU. GPU requires the `document-intelligence-gpu`
+    # install extra (paddlepaddle-gpu, matching CUDA index — see
+    # pyproject.toml) instead of the default CPU wheel; passed straight
+    # through to PPStructureV3(device=...) in pipeline.py.
     device: str = "cpu"
 
-    # ── Document security scan (doc-firewall, doc_handler/security_scan.py) ─
+    # ── Document security scan (doc-firewall, security_scan.py) ──────────
     # Runs on raw bytes before PaddleOCR/PaddleX parses them — see
     # routes.py::extract(). True by default; disable only for local
     # debugging of the extraction pipeline itself.
     enable_document_security_scan: bool = True
 
-    # ── Multimodal embedding + reranker ─────────────────────────────────
-    # Qwen3-VL-Embedding-2B / Qwen3-VL-Reranker-2B, served by the
-    # llama-embed/llama-rerank sidecars (docker-compose.yml) — see
-    # docs/claude_docs/decisions.md for why these replaced SigLIP + MiniLM
-    # cross-encoder loaded in-process. embedding_dim=2048 is the model's
-    # native output width, verified via a real embed call, not assumed.
-    embed_server_url: str = "http://llama-embed:8031"
-    rerank_server_url: str = "http://llama-rerank:8032"
-    embedding_dim: int = 2048
-
     # ── Pod identity (k8s Downward API) ──────────────────────────────────
-    pod_name: str = "doc-handler-0"
+    pod_name: str = "document-intelligence-0"
 
-    model_config = {"env_prefix": "DOC_HANDLER_"}
+    model_config = {"env_prefix": "DOCUMENT_INTELLIGENCE_"}

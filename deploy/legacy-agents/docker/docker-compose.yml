@@ -78,9 +78,10 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       # Empty by default — chat attachments fall back to the lightweight
       # pypdf path for PDFs. Only set this if you're also running the
-      # document-handling service (docker compose --profile doc-handler up):
-      #   DOC_HANDLER_SERVICE_URL=http://doc-handler:8080 docker compose --profile doc-handler up
-      DOC_HANDLER_SERVICE_URL: ${DOC_HANDLER_SERVICE_URL:-}
+      # document-intelligence service (docker compose --profile document-intelligence up):
+      #   DOCUMENT_INTELLIGENCE_SERVICE_URL=http://document-intelligence:8080 docker compose --profile document-intelligence up
+      DOCUMENT_INTELLIGENCE_SERVICE_URL: ${DOCUMENT_INTELLIGENCE_SERVICE_URL:-}
+      EMBEDDING_RERANKER_SERVICE_URL: ${EMBEDDING_RERANKER_SERVICE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -235,23 +236,16 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  doc-handler:
+  document-intelligence:
     profiles:
-      - doc-handler
+      - document-intelligence
     build:
       context: ../..
-      dockerfile: deployment/docker/doc-handler.Dockerfile
+      dockerfile: deployment/docker/document-intelligence.Dockerfile
     ports:
       - "8021:8080"
-    depends_on:
-      llama-embed:
-        condition: service_healthy
-      llama-rerank:
-        condition: service_healthy
     environment:
-      DOC_HANDLER_EMBED_SERVER_URL: http://llama-embed:8031
-      DOC_HANDLER_RERANK_SERVER_URL: http://llama-rerank:8032
-      DOC_HANDLER_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOC_HANDLER_ENABLE_DOCUMENT_SECURITY_SCAN:-true}
+      DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-true}
       # huggingface_hub (paddlex's downloader) reads HF_TOKEN automatically.
       # Blank is fine — falls back to unauthenticated, lower rate limits.
       HF_TOKEN: ${HF_TOKEN:-}
@@ -263,29 +257,23 @@ services:
       - paddlex-model-cache:/root/.paddlex
     restart: unless-stopped
 
-  # GPU variant of `doc-handler` above — local dev speedup on an NVIDIA GPU,
-  # not for hosting (that stays CPU-only/cheap by default). Use one profile
-  # or the other, not both (`docker compose --profile doc-handler-gpu up`);
-  # they'd otherwise collide on host port 8021. Requires the NVIDIA
-  # Container Toolkit configured for Docker on the host.
-  doc-handler-gpu:
+  # GPU variant of `document-intelligence` above — local dev speedup on an
+  # NVIDIA GPU, not for hosting (that stays CPU-only/cheap by default). Use
+  # one profile or the other, not both
+  # (`docker compose --profile document-intelligence-gpu up`); they'd
+  # otherwise collide on host port 8021. Requires the NVIDIA Container
+  # Toolkit configured for Docker on the host.
+  document-intelligence-gpu:
     profiles:
-      - doc-handler-gpu
+      - document-intelligence-gpu
     build:
       context: ../..
-      dockerfile: deployment/docker/doc-handler.gpu.Dockerfile
+      dockerfile: deployment/docker/document-intelligence.gpu.Dockerfile
     ports:
       - "8021:8080"
-    depends_on:
-      llama-embed:
-        condition: service_healthy
-      llama-rerank:
-        condition: service_healthy
     environment:
-      DOC_HANDLER_EMBED_SERVER_URL: http://llama-embed:8031
-      DOC_HANDLER_RERANK_SERVER_URL: http://llama-rerank:8032
-      DOC_HANDLER_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOC_HANDLER_ENABLE_DOCUMENT_SECURITY_SCAN:-true}
-      DOC_HANDLER_DEVICE: ${DOC_HANDLER_DEVICE:-gpu:0}
+      DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-true}
+      DOCUMENT_INTELLIGENCE_DEVICE: ${DOCUMENT_INTELLIGENCE_DEVICE:-gpu:0}
       HF_TOKEN: ${HF_TOKEN:-}
     deploy:
       resources:
@@ -298,6 +286,27 @@ services:
       - paddlex-model-cache:/root/.paddlex
     restart: unless-stopped
 
+  # Thin httpx proxy to the llama-embed/llama-rerank sidecars — a separate
+  # service from document-intelligence since it shares no code or state
+  # with the OCR/layout pipeline (see docs/claude_docs/decisions.md).
+  embedding-reranker:
+    profiles:
+      - embedding-reranker
+    build:
+      context: ../..
+      dockerfile: deployment/docker/embedding-reranker.Dockerfile
+    ports:
+      - "8023:8080"
+    depends_on:
+      llama-embed:
+        condition: service_healthy
+      llama-rerank:
+        condition: service_healthy
+    environment:
+      EMBEDDING_RERANKER_EMBED_SERVER_URL: http://llama-embed:8031
+      EMBEDDING_RERANKER_RERANK_SERVER_URL: http://llama-rerank:8032
+    restart: unless-stopped
+
   # Qwen3-VL-Embedding-2B sidecar (dense multimodal embedding). See
   # docs/claude_docs/decisions.md for why this pair of models + llama-server
   # was chosen — real, measured evidence (no GPU, CPU-only, ~2GB RSS each),
@@ -305,8 +314,7 @@ services:
   # RAG redesign plan's Concurrency section before raising it.
   llama-embed:
     profiles:
-      - doc-handler
-      - doc-handler-gpu
+      - embedding-reranker
     build:
       context: ../..
       dockerfile: deployment/docker/llama-server.Dockerfile
@@ -344,8 +352,7 @@ services:
   # benchmarking (see the RAG redesign plan).
   llama-rerank:
     profiles:
-      - doc-handler
-      - doc-handler-gpu
+      - embedding-reranker
     build:
       context: ../..
       dockerfile: deployment/docker/llama-server.Dockerfile

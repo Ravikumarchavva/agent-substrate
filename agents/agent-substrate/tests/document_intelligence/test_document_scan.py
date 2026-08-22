@@ -1,6 +1,6 @@
-"""The document-security-scan gate in doc_handler service routes.py::extract()
+"""The document-security-scan gate in document-intelligence service routes.py::extract()
 — real doc-firewall scan on real PDF bytes, exercised through the actual
-FastAPI route (not just doc_handler/security_scan.py directly,
+FastAPI route (not just runtimes/document_intelligence/security_scan.py directly,
 which test_security_scan.py already covers at the unit level).
 
 Verifies the gate actually short-circuits BEFORE the (fake) pipeline runs —
@@ -18,15 +18,18 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from substrate.doc_handler.service.pipeline import ExtractedPage, ExtractionResult
-from substrate.doc_handler.service.routes import router
+from substrate.runtimes.document_intelligence.service.pipeline import (
+    ExtractedPage,
+    ExtractionResult,
+)
+from substrate.runtimes.document_intelligence.service.routes import router
 
 
 @dataclass
 class _FakeConfig:
     auth_token: str = ""
     max_upload_bytes: int = 50 * 1024 * 1024
-    pod_name: str = "doc-handler-test"
+    pod_name: str = "document-intelligence-test"
     enable_document_security_scan: bool = True
 
 

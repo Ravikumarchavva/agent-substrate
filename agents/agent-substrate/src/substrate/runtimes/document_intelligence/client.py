@@ -1,9 +1,10 @@
 """HTTP client for the document-extraction service.
 
-Used by chat_context.py to get layout-aware document text and chart/table
-images, and by LocalRagBackend for multimodal embedding + reranking, without
-loading paddlepaddle/torch into the main API process — see
-doc_handler/service/ for the service itself.
+Used by chat_context.py and LocalRagBackend to get layout-aware document
+text and chart/table images, without loading paddlepaddle into the main API
+process — see document_intelligence/service/ for the service itself.
+Multimodal embedding + reranking is a separate concern/service now — see
+substrate.runtimes.embedding_reranker.client.EmbeddingRerankerClient.
 
 Single-URL only (no consistent-hash routing): every endpoint here is
 stateless request/response, so one low-replica service is enough and there's
@@ -25,7 +26,7 @@ _DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=10.0, pool=5.0)
 
 class ExtractedImage(BaseModel):
     """A chart/table/figure region cropped from a page — see
-    doc_handler/service/pipeline.py::ExtractionPipeline."""
+    document_intelligence/service/pipeline.py::ExtractionPipeline."""
 
     data_base64: str
     media_type: str = "image/png"
@@ -57,7 +58,7 @@ class ExtractedPageText(BaseModel):
 
 
 class ExtractResponse(BaseModel):
-    """Response shape shared with doc_handler/service/schemas.py
+    """Response shape shared with document_intelligence/service/schemas.py
     (re-exported there, mirroring the code_interpreter service's pattern —
     this module is the single source of truth for the wire shape)."""
 
@@ -80,7 +81,7 @@ class ExtractionClient:
 
     def __init__(
         self,
-        base_url: str = "http://doc-handler:8080",
+        base_url: str = "http://document-intelligence:8080",
         auth_token: str = "",
         timeout_s: float = 90.0,
     ) -> None:
@@ -143,48 +144,6 @@ class ExtractionClient:
         except httpx.RequestError as exc:
             logger.error("Extract connection error: %s", exc)
             return ExtractResponse(success=False, error=f"Connection error: {exc}")
-
-    async def embed_image(self, data: bytes) -> list[float] | None:
-        """Embed a chart/table image. Returns ``None`` on any failure —
-        callers should skip indexing that one image, not fail the whole
-        ingest."""
-        import base64
-
-        try:
-            resp = await self._request(
-                "POST",
-                "/v1/embed",
-                json={"image_base64": base64.b64encode(data).decode("ascii")},
-            )
-            return resp.json()["embedding"]
-        except (httpx.HTTPError, KeyError) as exc:
-            logger.warning("embed_image failed: %s", exc)
-            return None
-
-    async def embed_text(self, text: str) -> list[float] | None:
-        """Embed a text query into the same space as ``embed_image`` (used
-        to search the image collection). Returns ``None`` on any failure."""
-        try:
-            resp = await self._request("POST", "/v1/embed", json={"text": text})
-            return resp.json()["embedding"]
-        except (httpx.HTTPError, KeyError) as exc:
-            logger.warning("embed_text failed: %s", exc)
-            return None
-
-    async def rerank(self, query: str, passages: list[str]) -> list[float] | None:
-        """Score each passage's relevance to *query*, same order as input.
-        Returns ``None`` on any failure — callers should fall back to the
-        unreranked order, not fail the whole query."""
-        if not passages:
-            return []
-        try:
-            resp = await self._request(
-                "POST", "/v1/rerank", json={"query": query, "passages": passages}
-            )
-            return resp.json()["scores"]
-        except (httpx.HTTPError, KeyError) as exc:
-            logger.warning("rerank failed: %s", exc)
-            return None
 
     async def health(self) -> bool:
         try:

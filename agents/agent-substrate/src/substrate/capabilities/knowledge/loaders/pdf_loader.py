@@ -13,11 +13,14 @@ import hashlib
 import io
 import uuid
 from pathlib import Path
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from substrate.capabilities.knowledge.loaders.base import BaseDocumentLoader
 from substrate.kernel.core.content import TextBlock
 from substrate.kernel.storage.vector import Document
+
+if TYPE_CHECKING:
+    from substrate.runtimes.document_intelligence.client import ExtractionClient
 
 logger = setup_logging()
 
@@ -37,12 +40,23 @@ def _page_id(source: str, page_number: int, text: str) -> str:
 class PDFLoader(BaseDocumentLoader):
     """Load PDF files — one ``Document`` per page.
 
-    Uses ``pdfplumber`` for layout-aware text + table extraction.
-    Falls back to ``pypdf`` if pdfplumber is not installed.
+    Tries the document-intelligence service first when *extraction_client*
+    is given (layout-aware: chart/table detection, OCR) — same behavior as
+    ``LocalRagBackend._load_via_extraction_service``, pushed down into this
+    loader for callers that instantiate it bare. Falls back to
+    ``pdfplumber`` for layout-aware text + table extraction on any service
+    failure or when no client is configured, and further to ``pypdf`` if
+    pdfplumber is not installed.
     """
 
-    def __init__(self, extract_tables: bool = True) -> None:
+    def __init__(
+        self,
+        extract_tables: bool = True,
+        *,
+        extraction_client: "ExtractionClient | None" = None,
+    ) -> None:
         self.extract_tables = extract_tables
+        self._extraction_client = extraction_client
 
     async def load(
         self,
@@ -51,8 +65,16 @@ class PDFLoader(BaseDocumentLoader):
         metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
         metadata = metadata or {}
-        docs: list[Document] = []
 
+        if self._extraction_client is not None:
+            docs = await self._load_via_extraction_service(source, metadata)
+            if docs is not None:
+                return docs
+            logger.info(
+                "Extraction service failed/unavailable, falling back to local parse"
+            )
+
+        docs: list[Document] = []
         try:
             docs = await self._load_with_pdfplumber(source, metadata)
         except ImportError:
@@ -60,6 +82,39 @@ class PDFLoader(BaseDocumentLoader):
             docs = await self._load_with_pypdf(source, metadata)
 
         return docs
+
+    async def _load_via_extraction_service(
+        self,
+        source: Union[str, Path, bytes],
+        metadata: dict[str, Any],
+    ) -> list[Document] | None:
+        assert self._extraction_client is not None
+        data = source if isinstance(source, bytes) else Path(source).read_bytes()
+        name = str(
+            metadata.get("filename")
+            or metadata.get("source")
+            or (source if isinstance(source, (str, Path)) else "document.pdf")
+        )
+        result = await self._extraction_client.extract(data, name, "application/pdf")
+        if not result.success:
+            return None
+
+        source_str = str(metadata.get("source", ""))
+        docs = [
+            Document(
+                content=[TextBlock(text=page.text)],
+                metadata={
+                    **metadata,
+                    "engine": result.engine,
+                    "page_number": page.page_number,
+                    "total_pages": result.page_count,
+                },
+                id=_page_id(source_str, page.page_number, page.text),
+            )
+            for page in result.pages
+            if page.text.strip()
+        ]
+        return docs or None
 
     async def _load_with_pdfplumber(
         self,

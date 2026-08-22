@@ -281,7 +281,7 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
     it instead of re-parsing the PDF's raw bytes."""
     from substrate.serving.monolith.routes import files as files_module
 
-    monkeypatch.setattr(files_module.settings, "DOC_HANDLER_SERVICE_URL", "")
+    monkeypatch.setattr(files_module.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "")
     captured_coros = []
     monkeypatch.setattr(
         files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
@@ -322,7 +322,7 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
     as a staging_error on the file."""
     from substrate.serving.monolith.routes import files as files_module
 
-    monkeypatch.setattr(files_module.settings, "DOC_HANDLER_SERVICE_URL", "")
+    monkeypatch.setattr(files_module.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "")
     captured_coros = []
     monkeypatch.setattr(
         files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)

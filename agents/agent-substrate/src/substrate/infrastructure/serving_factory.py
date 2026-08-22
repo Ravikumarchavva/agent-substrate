@@ -288,14 +288,18 @@ async def init_infrastructure(
             image_store=image_store,
             model_client=model_client,
             # Only turn reranking on by default when it's free — the local
-            # cross-encoder via the extraction service costs no LLM tokens.
-            # Without that service configured this stays off, same default
-            # as before (an LLMReranker fallback would burn LLM tokens/
-            # latency on every query, an unannounced cost change to avoid).
-            rerank=bool(cfg.DOC_HANDLER_SERVICE_URL),
-            extraction_service_url=cfg.DOC_HANDLER_SERVICE_URL,
-            extraction_auth_token=cfg.DOC_HANDLER_AUTH_TOKEN,
-            extraction_timeout_s=cfg.DOC_HANDLER_TIMEOUT_S,
+            # cross-encoder via the embedding-reranker service costs no LLM
+            # tokens. Without that service configured this stays off, same
+            # default as before (an LLMReranker fallback would burn LLM
+            # tokens/latency on every query, an unannounced cost change to
+            # avoid).
+            rerank=bool(cfg.EMBEDDING_RERANKER_SERVICE_URL),
+            extraction_service_url=cfg.DOCUMENT_INTELLIGENCE_SERVICE_URL,
+            extraction_auth_token=cfg.DOCUMENT_INTELLIGENCE_AUTH_TOKEN,
+            extraction_timeout_s=cfg.DOCUMENT_INTELLIGENCE_TIMEOUT_S,
+            embedding_reranker_service_url=cfg.EMBEDDING_RERANKER_SERVICE_URL,
+            embedding_reranker_auth_token=cfg.EMBEDDING_RERANKER_AUTH_TOKEN,
+            embedding_reranker_timeout_s=cfg.EMBEDDING_RERANKER_TIMEOUT_S,
             file_store=file_store,
             api_key=cfg.PINECONE_API_KEY,
             assistant_name=cfg.PINECONE_ASSISTANT_NAME,

@@ -35,7 +35,7 @@ from substrate.kernel.agent.supervision import (
     Supervision,
     HistoryRetention,
     Priority,
-    SpawnBudget,
+    SpawnBudget,  
     ExecutionBudget,
 )
 from substrate.kernel.tools.tools import (

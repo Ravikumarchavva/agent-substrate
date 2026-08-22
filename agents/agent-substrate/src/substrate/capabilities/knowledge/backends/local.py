@@ -1,11 +1,15 @@
 """LocalRagBackend — a thin façade over the existing, working local pipeline.
 
 Reuses, unchanged:
-  * ``ExtractionClient`` → the remote extraction service when
+  * ``ExtractionClient`` → the document-intelligence service when
     ``extraction_service_url`` is configured (layout-aware: chart/table
-    detection, OCR, multimodal embedding, reranking) — the same call
+    detection, OCR) — the same call
     ``routes/chat_context.py::_extract_document_text`` makes for chat
     attachments, so parsing behavior is identical between the two paths.
+  * ``EmbeddingRerankerClient`` → the embedding-reranker service when
+    ``embedding_reranker_service_url`` is configured (multimodal embedding,
+    reranking) — a separate service from extraction, see
+    runtimes/embedding_reranker/.
   * ``PDFLoader``/``TextLoader``/``CSVLoader``/``JSONLoader`` — the local,
     no-service fallback (PDF/text/csv/json only; DOCX/PPTX have no
     extraction path at all — the extraction service doesn't parse them
@@ -39,7 +43,8 @@ from .base import IngestResult
 logger = setup_logging("substrate.knowledge.local")
 
 if TYPE_CHECKING:
-    from substrate.doc_handler.client import ExtractionClient
+    from substrate.runtimes.document_intelligence.client import ExtractionClient
+    from substrate.runtimes.embedding_reranker.client import EmbeddingRerankerClient
     from substrate.capabilities.knowledge.pipeline import RAGPipeline
     from substrate.kernel.llm import LLMClient
     from substrate.kernel.storage.vector import VectorStore
@@ -62,15 +67,19 @@ class LocalRagBackend:
         extraction_service_url: str = "",
         extraction_auth_token: str = "",
         extraction_timeout_s: int = 90,
+        embedding_reranker_service_url: str = "",
+        embedding_reranker_auth_token: str = "",
+        embedding_reranker_timeout_s: int = 30,
         # LLMReranker or CrossEncoderReranker — no formal Protocol exists,
         # both duck-type `async rerank(query, results, *, top_k) -> list[SearchResult]`.
         reranker: Any | None = None,
         model_client: "LLMClient | None" = None,
-        # Pre-built client, e.g. shared with a CrossEncoderReranker so the
-        # two don't each open a separate HTTP connection to the same
-        # service — see backends/factory.py. Lazily constructed from
-        # extraction_service_url when not given.
+        # Pre-built clients, e.g. shared with a CrossEncoderReranker so it
+        # doesn't open a separate HTTP connection to the same service — see
+        # backends/factory.py. Lazily constructed from their *_service_url
+        # when not given.
         extraction_client: "ExtractionClient | None" = None,
+        embedding_reranker_client: "EmbeddingRerankerClient | None" = None,
         # Duck-typed file store (WorkspaceFileStore/S3FileStore). When given,
         # extracted chart/table images are written here and only a storage key
         # is kept in the vector row — see _ingest_images.
@@ -89,9 +98,13 @@ class LocalRagBackend:
         self._extraction_url = extraction_service_url
         self._extraction_auth_token = extraction_auth_token
         self._extraction_timeout_s = extraction_timeout_s
+        self._embedding_reranker_url = embedding_reranker_service_url
+        self._embedding_reranker_auth_token = embedding_reranker_auth_token
+        self._embedding_reranker_timeout_s = embedding_reranker_timeout_s
         self._reranker = reranker
         self._model_client = model_client
         self._extraction_client = extraction_client
+        self._embedding_reranker_client = embedding_reranker_client
         self._file_store = file_store
         self._dense_k = dense_k
         self._lexical_k = lexical_k
@@ -102,7 +115,7 @@ class LocalRagBackend:
         if not self._extraction_url:
             return None
         if self._extraction_client is None:
-            from substrate.doc_handler.client import (
+            from substrate.runtimes.document_intelligence.client import (
                 ExtractionClient,
             )
 
@@ -112,6 +125,21 @@ class LocalRagBackend:
                 timeout_s=self._extraction_timeout_s,
             )
         return self._extraction_client
+
+    def _get_embedding_reranker_client(self) -> "EmbeddingRerankerClient | None":
+        if not self._embedding_reranker_url:
+            return None
+        if self._embedding_reranker_client is None:
+            from substrate.runtimes.embedding_reranker.client import (
+                EmbeddingRerankerClient,
+            )
+
+            self._embedding_reranker_client = EmbeddingRerankerClient(
+                base_url=self._embedding_reranker_url,
+                auth_token=self._embedding_reranker_auth_token,
+                timeout_s=self._embedding_reranker_timeout_s,
+            )
+        return self._embedding_reranker_client
 
     async def ingest(
         self,
@@ -201,7 +229,7 @@ class LocalRagBackend:
             )
 
         if self._image_store is not None:
-            client = self._get_extraction_client()
+            client = self._get_embedding_reranker_client()
             if client is not None:
                 image_vec = await client.embed_text(question)
                 if image_vec is not None:
@@ -332,7 +360,7 @@ class LocalRagBackend:
     ) -> None:
         if self._image_store is None:
             return
-        client = self._get_extraction_client()
+        client = self._get_embedding_reranker_client()
         if client is None:
             return
 
@@ -528,7 +556,13 @@ class LocalRagBackend:
         )
 
         registry = DocumentLoaderRegistry()
-        registry.register(".pdf", PDFLoader())
+        # Passing the extraction client too (not just relying on _load's own
+        # earlier extraction-service attempt) so PDFLoader itself benefits
+        # when reached directly — e.g. a future caller that instantiates the
+        # registry without going through _load's two-tier fallback first.
+        registry.register(
+            ".pdf", PDFLoader(extraction_client=self._get_extraction_client())
+        )
         for text_ext in (".txt", ".md"):
             registry.register(text_ext, TextLoader())
         registry.register(".csv", CSVLoader())

@@ -1,0 +1,105 @@
+# Document-Intelligence Service — Kubernetes Deployment
+#
+# Layout-aware document parsing (PDF layout, chart/table detection, OCR) for
+# chat attachments and the local RAG backend, isolated from the main API
+# process — it pulls paddlepaddle and model inference is slow enough that
+# running it inline would block chat responses (see pyproject.toml's
+# `document-intelligence` extra comment). CPU-only — no GPU/nvidia device
+# request needed (paddlepaddle's CPU wheel is used). Multimodal embedding
+# and reranking is a separate service now — see embedding-reranker.yaml.
+#
+# Unlike code-interpreter, this is a plain Deployment, not a StatefulSet:
+# document-intelligence is stateless request/response with no session
+# affinity, so there's no need for consistent-hash routing or per-pod
+# identity. No HPA either — model-loaded pods are expensive to spin up, so
+# CPU-based autoscaling churn costs more than it saves at this scale; scale
+# by editing `replicas` directly if throughput becomes a bottleneck.
+#
+# Optional: the monolith/services only call this when
+# DOCUMENT_INTELLIGENCE_SERVICE_URL is set (see config.py). Not setting it
+# (or this Deployment not existing) just means chat attachments fall back
+# to the lightweight pypdf path for PDFs — no hard dependency.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: document-intelligence
+  namespace: af-runtime
+  labels:
+    app: document-intelligence
+spec:
+  selector:
+    app: document-intelligence
+  ports:
+    - port: 8080
+      targetPort: http
+      name: http
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: document-intelligence
+  namespace: af-runtime
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-intelligence
+  namespace: af-runtime
+  labels:
+    app: document-intelligence
+    af.service-role: document-intelligence
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: document-intelligence
+  template:
+    metadata:
+      labels:
+        app: document-intelligence
+        af.service-role: document-intelligence
+    spec:
+      serviceAccountName: document-intelligence
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: document-intelligence
+          image: ghcr.io/example/agent-framework/document-intelligence:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # caches model weights under $HOME
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: document-intelligence
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+            limits:
+              cpu: 4000m
+              memory: 6Gi
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 3

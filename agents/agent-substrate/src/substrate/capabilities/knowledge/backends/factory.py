@@ -34,11 +34,14 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
     and as the ``LLMReranker`` fallback when ``rerank=True`` but no
     extraction service is configured), ``rerank`` (bool, default ``False``),
     ``image_store`` (optional — a second ``VectorStore`` for chart/table
-    images, dimensionality matching the extraction service's embedding
-    model), ``extraction_service_url``/``extraction_auth_token``/
+    images, dimensionality matching the embedding-reranker service's
+    embedding model), ``extraction_service_url``/``extraction_auth_token``/
     ``extraction_timeout_s`` (optional — layout-aware parsing, chart-image
-    extraction, multimodal embedding, and a local cross-encoder reranker;
-    falls back to pypdf/pdfplumber text-only parsing without one).
+    extraction; falls back to pypdf/pdfplumber text-only parsing without
+    one), ``embedding_reranker_service_url``/
+    ``embedding_reranker_auth_token``/``embedding_reranker_timeout_s``
+    (optional — multimodal embedding and a local cross-encoder reranker;
+    falls back to an ``LLMReranker`` when ``rerank=True`` but not configured).
     ``dense_k``/``lexical_k``/``fused_k``/``rerank_top_n`` (optional —
     hybrid-retrieval budgets, forwarded to ``LocalRagBackend``; see
     config.py's ``RAG_DENSE_K`` etc. for the defaults these mirror).
@@ -69,7 +72,7 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
 
         extraction_client = None
         if extraction_service_url:
-            from substrate.doc_handler.client import (
+            from substrate.runtimes.document_intelligence.client import (
                 ExtractionClient,
             )
 
@@ -79,17 +82,35 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
                 timeout_s=extraction_timeout_s,
             )
 
+        embedding_reranker_service_url = kwargs.get(
+            "embedding_reranker_service_url", ""
+        )
+        embedding_reranker_auth_token = kwargs.get("embedding_reranker_auth_token", "")
+        embedding_reranker_timeout_s = kwargs.get("embedding_reranker_timeout_s", 30)
+
+        embedding_reranker_client = None
+        if embedding_reranker_service_url:
+            from substrate.runtimes.embedding_reranker.client import (
+                EmbeddingRerankerClient,
+            )
+
+            embedding_reranker_client = EmbeddingRerankerClient(
+                base_url=embedding_reranker_service_url,
+                auth_token=embedding_reranker_auth_token,
+                timeout_s=embedding_reranker_timeout_s,
+            )
+
         reranker = None
         if kwargs.get("rerank"):
-            if extraction_client is not None:
+            if embedding_reranker_client is not None:
                 # Local cross-encoder — no LLM tokens/latency spent on
-                # reranking. Preferred whenever the extraction service (and
-                # therefore its reranker model) is configured.
+                # reranking. Preferred whenever the embedding-reranker
+                # service (and therefore its reranker model) is configured.
                 from substrate.capabilities.knowledge.reranker import (
                     CrossEncoderReranker,
                 )
 
-                reranker = CrossEncoderReranker(extraction_client)
+                reranker = CrossEncoderReranker(embedding_reranker_client)
             elif model_client is not None:
                 from substrate.capabilities.knowledge.reranker import LLMReranker
 
@@ -103,6 +124,10 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
             extraction_auth_token=extraction_auth_token,
             extraction_timeout_s=extraction_timeout_s,
             extraction_client=extraction_client,
+            embedding_reranker_service_url=embedding_reranker_service_url,
+            embedding_reranker_auth_token=embedding_reranker_auth_token,
+            embedding_reranker_timeout_s=embedding_reranker_timeout_s,
+            embedding_reranker_client=embedding_reranker_client,
             reranker=reranker,
             model_client=model_client,
             file_store=kwargs.get("file_store"),

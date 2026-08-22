@@ -1,15 +1,16 @@
-name: Publish doc-handler service images
+name: Publish document-intelligence service images
 
-# Real, robust distribution for the document-handling service (heavy PaddleOCR
-# runtime — never meant to be `pip install`-ed by a service consumer, only
-# by something embedding the pipeline in-process; see doc-handler/
-# doc-handler-gpu extras in pyproject.toml for that case instead). This is
-# the pattern real GPU/CPU-split inference services use (Ollama, LocalAI,
-# llama.cpp server) — matrix-build a CPU and a GPU image variant, publish
-# both to GHCR under distinct tags, and let ANY downstream consumer
-# (pdfqa-rag or otherwise) just `docker run` the tag they need. No
-# dependency on cloning this repo, no docker-compose, no local path
-# overrides — same as how nobody vendors ollama/ollama's Dockerfile either.
+# Real, robust distribution for the document-intelligence service (heavy
+# PaddleOCR runtime — never meant to be `pip install`-ed by a service
+# consumer, only by something embedding the pipeline in-process; see
+# document-intelligence/document-intelligence-gpu extras in pyproject.toml
+# for that case instead). This is the pattern real GPU/CPU-split inference
+# services use (Ollama, LocalAI, llama.cpp server) — matrix-build a CPU and
+# a GPU image variant, publish both to GHCR under distinct tags, and let
+# ANY downstream consumer (pdfqa-rag or otherwise) just `docker run` the
+# tag they need. No dependency on cloning this repo, no docker-compose, no
+# local path overrides — same as how nobody vendors ollama/ollama's
+# Dockerfile either.
 #
 # Fires on the same GitHub Release event as publish.yml (PyPI), so a
 # release always ships both the library and the runnable service images
@@ -26,7 +27,7 @@ env:
   # Hardcoded lowercase — GHCR image paths must be lowercase even though
   # the GitHub org/user (Ravikumarchavva) isn't; ${{ github.actor }} is
   # only used for registry auth below, not the image path.
-  IMAGE_BASE: ghcr.io/ravikumarchavva/agent-substrate-doc-handler
+  IMAGE_BASE: ghcr.io/ravikumarchavva/agent-substrate-document-intelligence
 
 jobs:
   build-and-push:
@@ -38,9 +39,9 @@ jobs:
       matrix:
         include:
           - variant: cpu
-            dockerfile: deployment/docker/doc-handler.Dockerfile
+            dockerfile: deployment/docker/document-intelligence.Dockerfile
           - variant: gpu
-            dockerfile: deployment/docker/doc-handler.gpu.Dockerfile
+            dockerfile: deployment/docker/document-intelligence.gpu.Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -69,5 +70,5 @@ jobs:
           tags: |
             ${{ env.IMAGE_BASE }}:${{ matrix.variant }}
             ${{ env.IMAGE_BASE }}:${{ steps.tags.outputs.version }}-${{ matrix.variant }}
-          cache-from: type=gha,scope=doc-handler-${{ matrix.variant }}
-          cache-to: type=gha,mode=max,scope=doc-handler-${{ matrix.variant }}
+          cache-from: type=gha,scope=document-intelligence-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=document-intelligence-${{ matrix.variant }}

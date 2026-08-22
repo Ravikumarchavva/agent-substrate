@@ -251,6 +251,7 @@ services:
     environment:
       EXTRACTION_EMBED_SERVER_URL: http://llama-embed:8031
       EXTRACTION_RERANK_SERVER_URL: http://llama-rerank:8032
+      EXTRACTION_ENABLE_DOCUMENT_SECURITY_SCAN: ${EXTRACTION_ENABLE_DOCUMENT_SECURITY_SCAN:-true}
       # huggingface_hub (paddlex's downloader) reads HF_TOKEN automatically.
       # Blank is fine — falls back to unauthenticated, lower rate limits.
       HF_TOKEN: ${HF_TOKEN:-}
@@ -258,6 +259,41 @@ services:
     # ~/.paddlex on first use, not at build time — without a persistent
     # volume that repeats on every container restart. Same rationale as
     # llama-embed/llama-rerank's LLAMA_CACHE volume below.
+    volumes:
+      - paddlex-model-cache:/root/.paddlex
+    restart: unless-stopped
+
+  # GPU variant of `extraction` above — local dev speedup on an NVIDIA GPU,
+  # not for hosting (that stays CPU-only/cheap by default). Use one profile
+  # or the other, not both (`docker compose --profile extraction-gpu up`);
+  # they'd otherwise collide on host port 8021. Requires the NVIDIA
+  # Container Toolkit configured for Docker on the host.
+  extraction-gpu:
+    profiles:
+      - extraction-gpu
+    build:
+      context: ../..
+      dockerfile: deployment/docker/extraction.gpu.Dockerfile
+    ports:
+      - "8021:8080"
+    depends_on:
+      llama-embed:
+        condition: service_healthy
+      llama-rerank:
+        condition: service_healthy
+    environment:
+      EXTRACTION_EMBED_SERVER_URL: http://llama-embed:8031
+      EXTRACTION_RERANK_SERVER_URL: http://llama-rerank:8032
+      EXTRACTION_ENABLE_DOCUMENT_SECURITY_SCAN: ${EXTRACTION_ENABLE_DOCUMENT_SECURITY_SCAN:-true}
+      EXTRACTION_DEVICE: ${EXTRACTION_DEVICE:-gpu:0}
+      HF_TOKEN: ${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     volumes:
       - paddlex-model-cache:/root/.paddlex
     restart: unless-stopped
@@ -270,6 +306,7 @@ services:
   llama-embed:
     profiles:
       - extraction
+      - extraction-gpu
     build:
       context: ../..
       dockerfile: deployment/docker/llama-server.Dockerfile
@@ -308,6 +345,7 @@ services:
   llama-rerank:
     profiles:
       - extraction
+      - extraction-gpu
     build:
       context: ../..
       dockerfile: deployment/docker/llama-server.Dockerfile

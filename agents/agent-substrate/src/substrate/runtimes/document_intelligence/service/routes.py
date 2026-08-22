@@ -81,6 +81,7 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
     # runtimes/document_intelligence/security_scan.py for what's actually
     # verified working here (not just wired up).
     if getattr(cfg, "enable_document_security_scan", True):
+        from substrate.kernel.agent.safety import Severity
         from substrate.runtimes.document_intelligence.security_scan import scan_document
 
         scan_verdict = await asyncio.to_thread(
@@ -88,8 +89,16 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
         )
         if scan_verdict.flagged:
             logger.warning(
-                "doc-firewall flagged %r: %s", body.filename, scan_verdict.detail
+                "doc-firewall flagged %r (%s): %s",
+                body.filename,
+                scan_verdict.severity,
+                scan_verdict.detail,
             )
+        # Only HIGH/CRITICAL (doc-firewall's own BLOCK verdict — definitive
+        # evidence) hard-rejects. MEDIUM (FLAG — review-worthy heuristics,
+        # not confirmed malicious, see security_scan.py's _VERDICT_SEVERITY
+        # comment) is logged above but doesn't stop extraction.
+        if scan_verdict.severity in (Severity.HIGH, Severity.CRITICAL):
             return ExtractResponse(
                 success=False,
                 error=f"Document failed security scan: {scan_verdict.detail}"[:500],

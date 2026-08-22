@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from html.parser import HTMLParser
 from typing import Any
 
 from substrate.kernel.core.content import TextBlock
@@ -139,6 +140,99 @@ class PageChunker:
 
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+
+# Matches a raw HTML <table>...</table> block — document-intelligence's
+# extraction markdown embeds some detected tables this way (ones not
+# confident enough to be cropped as a separate image; see
+# runtimes/document_intelligence/service/pipeline.py's _IMAGE_LABELS/
+# confidence gate). An HTML table has ~no ". "/"! "/"? " boundaries, so
+# SentenceChunker's regex sees it as one giant unsplittable "sentence" —
+# _split_oversized_table below is what actually breaks it up.
+_TABLE_RE = re.compile(r"<table\b.*?</table>", re.IGNORECASE | re.DOTALL)
+
+
+class _TableRowParser(HTMLParser):
+    """Minimal ``<table>`` row/cell extractor — same technique as
+    document_intelligence's own ``_TableHTMLToMarkdown`` (not imported
+    directly: that lives in the ``runtimes/`` layer, which ``capabilities/``
+    must not depend on — see this repo's layered-architecture rules).
+    Stdlib-only, no new dependency; spans/nested tables are not
+    reconstructed, matching that same precedent's documented limitation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[list[str]] = []
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "tr":
+            self._row = []
+        elif tag in ("td", "th"):
+            self._cell = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in ("td", "th") and self._cell is not None and self._row is not None:
+            self._row.append(" ".join("".join(self._cell).split()))
+            self._cell = None
+        elif tag == "tr" and self._row is not None:
+            self.rows.append(self._row)
+            self._row = None
+
+    def handle_data(self, data: str) -> None:
+        if self._cell is not None:
+            self._cell.append(data)
+
+
+def _rows_to_markdown(rows: list[list[str]]) -> str:
+    """Render row groups as a compact GFM markdown table — more
+    token-efficient than re-emitting HTML tags, which is all that matters
+    once this is headed for an embedding call, not a renderer."""
+    if not rows:
+        return ""
+    width = max(len(r) for r in rows)
+    padded = [r + [""] * (width - len(r)) for r in rows]
+    lines = [
+        "| " + " | ".join(padded[0]) + " |",
+        "| " + " | ".join(["---"] * width) + " |",
+    ]
+    lines += ["| " + " | ".join(r) + " |" for r in padded[1:]]
+    return "\n".join(lines)
+
+
+def _split_oversized_table(html: str, max_size: int) -> list[str]:
+    """Split an HTML ``<table>`` too large to embed as one chunk into
+    row-group pieces, each rendered as its own markdown table with the
+    header row repeated — so every piece stays independently meaningful,
+    not an arbitrary character split through the middle of a row. Falls
+    back to returning ``[html]`` unchanged if parsing yields fewer than 2
+    rows (nothing to split) or fails outright — the caller's existing
+    skip-on-embed-failure handling covers that case same as before this
+    function existed.
+    """
+    parser = _TableRowParser()
+    try:
+        parser.feed(html)
+    except Exception:
+        return [html]
+    rows = parser.rows
+    if len(rows) < 2:
+        return [html]
+
+    header, body = rows[0], rows[1:]
+    pieces: list[str] = []
+    current = [header]
+    for row in body:
+        candidate = current + [row]
+        rendered = _rows_to_markdown(candidate)
+        if len(rendered) > max_size and len(current) > 1:
+            pieces.append(_rows_to_markdown(current))
+            current = [header, row]
+        else:
+            current = candidate
+    if len(current) > 1:
+        pieces.append(_rows_to_markdown(current))
+    return pieces or [html]
 
 
 class StructureAwareChunker:
@@ -302,6 +396,7 @@ class StructureAwareChunker:
 
     def _pack_sentences(self, text: str) -> list[str]:
         sentences = [s.strip() for s in self._SENTENCE_RE.split(text) if s.strip()]
+        sentences = self._expand_oversized_tables(sentences)
         chunks: list[str] = []
         current: list[str] = []
         current_len = 0
@@ -318,6 +413,15 @@ class StructureAwareChunker:
                         break
                     overlap_sentences.insert(0, s)
                     overlap_len += len(s) + 1
+                if len(overlap_sentences) == len(current):
+                    # Overlap window retained every sentence from the flushed
+                    # chunk (none were trimmed) — carrying it forward would
+                    # reproduce the exact same `current`, and if the next
+                    # sentence alone still doesn't fit, the loop would flush
+                    # this identical chunk forever without `i` advancing.
+                    # Drop the overlap here so `current` strictly shrinks.
+                    overlap_sentences = []
+                    overlap_len = 0
                 current = overlap_sentences
                 current_len = overlap_len
                 continue
@@ -329,6 +433,31 @@ class StructureAwareChunker:
             chunks.append(" ".join(current))
 
         return chunks
+
+    def _expand_oversized_tables(self, sentences: list[str]) -> list[str]:
+        """Break any "sentence" that's really an over-``chunk_size`` HTML
+        ``<table>`` (see ``_TABLE_RE``'s comment) into several smaller
+        table pieces via ``_split_oversized_table``, so packing sees
+        several embeddable-sized entries instead of one unsplittable
+        oversized one. Non-table sentences, and tables that already fit,
+        pass through unchanged.
+        """
+        expanded: list[str] = []
+        for s in sentences:
+            if len(s) <= self.chunk_size:
+                expanded.append(s)
+                continue
+            match = _TABLE_RE.search(s)
+            if not match:
+                expanded.append(s)
+                continue
+            before, table_html, after = s[: match.start()], match.group(0), s[match.end() :]
+            if before.strip():
+                expanded.append(before.strip())
+            expanded.extend(_split_oversized_table(table_html, self.chunk_size))
+            if after.strip():
+                expanded.append(after.strip())
+        return expanded
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────

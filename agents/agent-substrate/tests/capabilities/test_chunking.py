@@ -102,3 +102,51 @@ def test_respects_chunk_size_and_overlap() -> None:
         docs[i].to_text().split()[-1] in docs[i + 1].to_text()
         for i in range(len(docs) - 1)
     )
+
+
+def _html_table(n_rows: int) -> str:
+    header = "<tr><th>Date</th><th>Event</th><th>Venue</th></tr>"
+    rows = "".join(
+        f"<tr><td>Day {i}</td><td>Event {i}</td><td>Venue {i}</td></tr>"
+        for i in range(n_rows)
+    )
+    return f"<table>{header}{rows}</table>"
+
+
+def test_oversized_html_table_is_split_not_dropped() -> None:
+    # A real shape seen from document-intelligence extraction: an HTML
+    # table with no ". "/"! "/"? " boundaries wrapped in surrounding prose.
+    table = _html_table(n_rows=80)  # comfortably over chunk_size on its own
+    text = (
+        "# Schedule\n"
+        "Intro sentence before the table. Another lead-in sentence.\n\n"
+        f"{table}\n\n"
+        "Outro sentence after the table. Another trailing sentence.\n"
+    )
+    chunker = StructureAwareChunker(chunk_size=500, overlap=100)
+    docs = chunker.chunk(text)
+
+    assert all(len(doc.to_text()) <= 500 for doc in docs)
+
+    table_docs = [doc for doc in docs if "| Date | Event | Venue |" in doc.to_text()]
+    assert len(table_docs) > 1, "a table this large must split into multiple pieces"
+    # Every piece keeps the header row, not just the first.
+    for doc in table_docs:
+        assert "| --- | --- | --- |" in doc.to_text()
+    # No row's data was silently dropped between pieces.
+    combined = " ".join(doc.to_text() for doc in table_docs)
+    assert "Event 0" in combined
+    assert "Event 79" in combined
+
+
+def test_small_html_table_is_kept_whole() -> None:
+    # A table that already fits within chunk_size is left completely
+    # untouched (still raw HTML) — only oversized tables get split and
+    # converted to markdown; there's no reason to alter one that fits.
+    table = _html_table(n_rows=2)
+    text = f"Intro sentence.\n\n{table}\n\nOutro sentence.\n"
+    chunker = StructureAwareChunker(chunk_size=2000, overlap=100)
+    docs = chunker.chunk(text)
+
+    table_docs = [doc for doc in docs if table in doc.to_text()]
+    assert len(table_docs) == 1

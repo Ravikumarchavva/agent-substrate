@@ -40,6 +40,15 @@ dependencies = [
     "fastapi>=0.128.0",
     "redis[hiredis]>=5.0.0",
     "sqlalchemy>=2.0.46",
+    "greenlet>=3.0.0",
+    # sqlalchemy.ext.asyncio (used unconditionally by capabilities/vector/
+    # pgvector_store.py) imports greenlet at module load time, not just at
+    # actual async-engine use — without it pinned explicitly here, a
+    # consumer project resolving agent-substrate as an editable dependency
+    # can end up with a venv missing it (only pulled in transitively by
+    # some other package in THIS repo's own lock, not guaranteed in
+    # another project's), breaking on `from substrate.capabilities.vector
+    # import ...` even when that project never touches Postgres.
     "asyncpg>=0.30.0",
     # Never imported directly in src/ — SQLAlchemy loads it dynamically for
     # the monolith's `postgresql+psycopg://` DATABASE_URL (the ORM engine
@@ -112,8 +121,10 @@ sandbox = [
     "pdfplumber>=0.11.0",
 ]
 # PDF loading for the knowledge/RAG pipeline (PDFLoader — the local,
-# no-extraction-service fallback path).
-rag = ["pypdf>=6.13.0"]
+# no-extraction-service fallback path) plus LanceDBVectorStore (embedded,
+# file-based vector store — capabilities/vector/lancedb_store.py), ~110MB
+# combined (lancedb + pyarrow) — not needed unless you actually use either.
+rag = ["pypdf>=6.13.0", "lancedb>=0.37.1"]
 # Managed RAG via Pinecone Assistant (RAG_BACKEND=pinecone) — parsing,
 # chunking, embedding, storage, and retrieval all run on Pinecone's side, so
 # none of the local `rag`/`extraction` extras above are needed with this backend.

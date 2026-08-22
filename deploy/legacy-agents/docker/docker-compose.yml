@@ -303,8 +303,11 @@ services:
       llama-rerank:
         condition: service_healthy
     environment:
-      EMBEDDING_RERANKER_EMBED_SERVER_URL: http://llama-embed:8031
-      EMBEDDING_RERANKER_RERANK_SERVER_URL: http://llama-rerank:8032
+      # Overridable so this can point at the GPU sidecars instead
+      # (llama-embed-gpu/llama-rerank-gpu below) — compose service discovery
+      # is by name, and those are separate service names on the same ports.
+      EMBEDDING_RERANKER_EMBED_SERVER_URL: ${EMBEDDING_RERANKER_EMBED_SERVER_URL:-http://llama-embed:8031}
+      EMBEDDING_RERANKER_RERANK_SERVER_URL: ${EMBEDDING_RERANKER_RERANK_SERVER_URL:-http://llama-rerank:8032}
     restart: unless-stopped
 
   # Qwen3-VL-Embedding-2B sidecar (dense multimodal embedding). See
@@ -375,6 +378,110 @@ services:
       HF_TOKEN: ${HF_TOKEN:-}
     ports:
       - "8032:8032"
+    volumes:
+      - llama-model-cache:/cache
+    restart: unless-stopped
+
+  # ── GPU variants of llama-embed/llama-rerank above — same models, same
+  # serving flags, CUDA build instead of CPU-native (see
+  # llama-server.gpu.Dockerfile). Mutually exclusive with their CPU
+  # counterparts on the same ports (8031/8032) — pick one profile, not both.
+  #
+  # VRAM budget — real measured number, not an estimate: llama-embed-gpu +
+  # llama-rerank-gpu together use 4515MiB (~4.4GB) on a single GPU (measured
+  # via `nvidia-smi --query-gpu=memory.used`, both containers pinned to one
+  # device with `--gpus '"device=0"'`, same --ctx-size/--parallel flags as
+  # below) — noticeably higher than a naive per-model weight-size estimate
+  # would suggest; -ngl 99 full offload plus per-process CUDA context
+  # overhead adds up fast on top of the actual model weights.
+  #
+  # Real, significant consequence for this project's own 4GB dev laptop GPU:
+  # **these two sidecars alone already consume effectively the entire card**
+  # — there is no real headroom left for document-intelligence-gpu
+  # alongside them on that hardware, not just "risky," genuinely won't fit.
+  # On a single constrained (~4GB) GPU: run document-intelligence on CPU and
+  # reserve the GPU for just one of llama-embed-gpu/llama-rerank-gpu at a
+  # time if testing individually, or get a bigger card (any card with real
+  # headroom above ~5GB comfortably fits both sidecars together, plus
+  # document-intelligence-gpu on top if it has real free VRAM beyond that —
+  # see that service's own block above for its footprint). OCR/layout
+  # extraction is already fast enough on CPU (`tiny` OCR: ~11.5s/page,
+  # measured) as a practical fallback, while embedding/reranking sit on the
+  # hot per-query retrieval path where GPU latency actually matters more.
+  llama-embed-gpu:
+    profiles:
+      - llama-gpu
+    build:
+      context: ../..
+      dockerfile: deployment/docker/llama-server.gpu.Dockerfile
+    command:
+      - --hf-repo
+      - Rizwan313/Qwen3-VL-Embedding-2B-GGUF
+      - --hf-file
+      - qwen3-vl-embedding-2b-Q4_K_M.gguf
+      - --embedding
+      - --pooling
+      - last
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8031"
+      - --ctx-size
+      - "2048"
+      - --parallel
+      - "2"
+      - -ngl
+      - "99"
+    environment:
+      PORT: "8031"
+      HF_TOKEN: ${HF_TOKEN:-}
+    ports:
+      - "8031:8031"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - llama-model-cache:/cache
+    restart: unless-stopped
+
+  llama-rerank-gpu:
+    profiles:
+      - llama-gpu
+    build:
+      context: ../..
+      dockerfile: deployment/docker/llama-server.gpu.Dockerfile
+    command:
+      - --hf-repo
+      - staralt/Qwen3-VL-Reranker-2B-Q4_K_M-GGUF
+      - --hf-file
+      - qwen3-vl-reranker-2b-q4_k_m-imat.gguf
+      - --reranking
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8032"
+      - --ctx-size
+      - "2048"
+      - --parallel
+      - "1"
+      - -ngl
+      - "99"
+    environment:
+      PORT: "8032"
+      HF_TOKEN: ${HF_TOKEN:-}
+    ports:
+      - "8032:8032"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     volumes:
       - llama-model-cache:/cache
     restart: unless-stopped

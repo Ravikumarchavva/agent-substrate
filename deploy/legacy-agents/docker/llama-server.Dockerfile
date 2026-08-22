@@ -16,25 +16,34 @@
 FROM debian:trixie-slim AS build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake git ca-certificates libcurl4-openssl-dev \
+    build-essential cmake git ca-certificates libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
-# Pinned to a known-good commit rather than a moving branch — llama.cpp's
-# Qwen3-VL support is very recent (days old, per this session's own
-# research) and still landing fixes; unpin only after confirming a newer
-# commit still passes this project's own verification (real embed/rerank
-# calls with sane, correctly-shaped output — see the plan's Verification
-# section, not just "it compiles").
+# NOT actually pinned to a commit despite this comment's original framing —
+# `git clone --depth 1` with no ref just takes whatever HEAD is at build
+# time. Real, found-not-assumed consequence, hit while building
+# llama-server.gpu.Dockerfile from a fresh clone: a newer llama.cpp commit
+# has deprecated LLAMA_CURL entirely ("LLAMA_CURL is deprecated and will be
+# ignored" at configure time), which silently falls through to a TLS-less
+# HF fetcher that can't resolve any --hf-repo download at all — see the
+# LLAMA_OPENSSL flag below, which is the actual fix, not just a comment
+# correction. unpin only after confirming a newer commit still passes this
+# project's own verification (real embed/rerank calls with sane,
+# correctly-shaped output — see the plan's Verification section, not just
+# "it compiles").
 RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp .
 
 # CPU-native build, no CUDA/GPU backend — matches this deployment's actual
-# hardware. LLAMA_CURL=ON (default): verified this session that
-# LLAMA_CURL=OFF's built-in fallback HTTPS fetcher has no TLS backend
-# compiled in at all ("HTTPS is not supported... rebuild with
-# -DLLAMA_BUILD_BORINGSSL/-DLLAMA_OPENSSL") — it can't resolve `--hf-repo`
-# downloads, full stop. libcurl is the well-supported path instead.
-RUN cmake -B build -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=ON \
+# hardware. LLAMA_OPENSSL=ON (not the deprecated LLAMA_CURL=ON): real,
+# found-not-assumed — confirmed via an actual failed `docker run` against
+# this exact flag combination that LLAMA_CURL is silently ignored on
+# current llama.cpp, and the resulting TLS-less fallback HF fetcher can't
+# resolve `--hf-repo` downloads at all ("HTTPS is not supported... rebuild
+# with -DLLAMA_BUILD_BORINGSSL/-DLLAMA_OPENSSL"). LLAMA_OPENSSL needs
+# libssl-dev (OpenSSL dev headers), not libcurl4-openssl-dev — this build
+# no longer links against curl for the HF downloader.
+RUN cmake -B build -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release -DLLAMA_OPENSSL=ON \
     && cmake --build build -j"$(nproc)" --target llama-server
 
 FROM debian:trixie-slim AS runtime

@@ -17,8 +17,10 @@ and — only for chart/table blocks — ``.image["img"]``, a real cropped
 from __future__ import annotations
 
 import io
+import re
 import tempfile
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -82,11 +84,70 @@ _OCR_MODELS = {
 }
 
 
+class _TableHTMLToMarkdown(HTMLParser):
+    """Minimal ``<table>`` → GFM markdown-table converter for PP-StructureV3's
+    table-recognition output (``table_res.html["pred"]``, surfaced on
+    ``block.content`` once ``use_table_recognition=True``). Stdlib-only —
+    no new dependency for what's a simple, well-formed HTML shape (PaddleX's
+    own tables have no nested tables and rarely use colspan/rowspan; spans
+    are not reconstructed, the cell text is just kept in its one cell)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[list[str]] = []
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "tr":
+            self._row = []
+        elif tag in ("td", "th"):
+            self._cell = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in ("td", "th") and self._cell is not None and self._row is not None:
+            self._row.append(" ".join("".join(self._cell).split()))
+            self._cell = None
+        elif tag == "tr" and self._row is not None:
+            self.rows.append(self._row)
+            self._row = None
+
+    def handle_data(self, data: str) -> None:
+        if self._cell is not None:
+            self._cell.append(data)
+
+    def to_markdown(self) -> str:
+        if not self.rows:
+            return ""
+        width = max(len(r) for r in self.rows)
+        rows = [r + [""] * (width - len(r)) for r in self.rows]
+        lines = [
+            "| " + " | ".join(rows[0]) + " |",
+            "| " + " | ".join(["---"] * width) + " |",
+        ]
+        lines += ["| " + " | ".join(r) + " |" for r in rows[1:]]
+        return "\n".join(lines)
+
+
+def _html_table_to_markdown(html: str) -> str:
+    """Best-effort HTML table → markdown. Never raises — a malformed table
+    falls back to the flattened plain text rather than dropping the block."""
+    try:
+        parser = _TableHTMLToMarkdown()
+        parser.feed(html)
+        md = parser.to_markdown()
+        if md:
+            return md
+    except Exception:
+        pass
+    return re.sub(r"<[^>]+>", " ", html).strip()
+
+
 class ExtractionPipeline:
     """One PaddleOCR ``PPStructureV3`` pipeline: layout + chart/table
     detection + OCR, in a single call per document."""
 
-    def __init__(self, *, ocr_size: str = "tiny") -> None:
+    def __init__(self, *, ocr_size: str = "tiny", device: str = "cpu") -> None:
         _disable_mkldnn()
 
         from paddleocr import PPStructureV3
@@ -95,7 +156,13 @@ class ExtractionPipeline:
         self._pipeline = PPStructureV3(
             text_detection_model_name=det_model,
             text_recognition_model_name=rec_model,
-            use_table_recognition=False,
+            device=device,
+            # Table structure recognition (SLANet, bundled in PP-StructureV3)
+            # gives real row/column HTML for table blocks — converted to a
+            # markdown table below — instead of just an OCR'd caption. The
+            # rest stay off: no formula/seal/chart sub-models needed for the
+            # chart/table-image RAG use case this pipeline is built for.
+            use_table_recognition=True,
             use_formula_recognition=False,
             use_seal_recognition=False,
             use_chart_recognition=False,
@@ -131,6 +198,14 @@ class ExtractionPipeline:
             for block in res.get("parsing_res_list") or []:
                 label = getattr(block, "label", "") or ""
                 confidence = _nearest_score(score_by_bbox, getattr(block, "bbox", None))
+                raw_content = (getattr(block, "content", "") or "").strip()
+                # Table blocks now carry real structured HTML in ``content``
+                # (use_table_recognition=True) — convert it to a markdown
+                # table for the text stream, not just an image-crop caption,
+                # so the plain-text output alone has the actual table data.
+                md_table = (
+                    _html_table_to_markdown(raw_content) if label == "table" else ""
+                )
                 if label in _IMAGE_LABELS and confidence >= _MIN_IMAGE_CONFIDENCE:
                     img_dict = getattr(block, "image", None)
                     pil_img = (
@@ -139,7 +214,7 @@ class ExtractionPipeline:
                     if pil_img is not None:
                         buf = io.BytesIO()
                         pil_img.convert("RGB").save(buf, format="PNG")
-                        caption = (getattr(block, "content", "") or "").strip() or None
+                        caption = md_table or raw_content or None
                         images.append(
                             ExtractedImage(
                                 data=buf.getvalue(),
@@ -149,13 +224,15 @@ class ExtractionPipeline:
                                 caption=caption,
                             )
                         )
+                        if md_table:
+                            text_parts.append(md_table)
                         continue
                 # Non-image blocks, and image-labeled blocks below the
                 # confidence bar, fall through here — a marginal chart/table
-                # detection still surfaces whatever OCR'd text it has (may be
-                # empty, since table-region text needs use_table_recognition,
-                # which is off) rather than being silently dropped.
-                content = (getattr(block, "content", "") or "").strip()
+                # detection still surfaces whatever text it has (markdown for
+                # a table block, raw OCR text otherwise) rather than being
+                # silently dropped.
+                content = md_table or raw_content
                 if content:
                     text_parts.append(content)
             pages.append(

@@ -1,6 +1,6 @@
 [project]
 name = "agent-substrate"
-version = "0.1.0"
+version = "0.2.0"
 description = "Production-ready async Python framework for building autonomous AI agents with tool calling, memory, and durable execution."
 readme = "README.md"
 license = { text = "MIT" }

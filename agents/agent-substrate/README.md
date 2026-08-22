@@ -37,8 +37,27 @@
 
 ### Installation
 
+Add it to your own project like any other dependency:
+
 ```bash
-# Clone the repository
+uv add agent-substrate
+# or
+pip install agent-substrate
+```
+
+The examples below (`Runtime`, `ReActAgent`) run entirely in-process — no
+database, Redis, or Docker required. Extras for specific capabilities
+(web browsing, RAG, S3 storage, the sandboxed code interpreter, PDF
+extraction, ...) are documented in `pyproject.toml`'s
+`[project.optional-dependencies]`, e.g. `uv add "agent-substrate[rag,s3]"`.
+
+### Running the reference server (optional)
+
+Only needed if you want the full FastAPI monolith (chat API, HITL,
+durable execution, dashboards) rather than importing the framework as a
+library — clone this repo directly:
+
+```bash
 git clone https://github.com/Ravikumarchavva/agent-substrate
 cd agent-substrate
 

@@ -137,12 +137,38 @@ server = ["agent-substrate[web,code,rag,s3,sandbox]"]
 # needs a runtime mkldnn-disable workaround for CPUs without AVX-512; see
 # `serving/services/extraction/pipeline.py::_disable_mkldnn`). Not needed
 # unless you actually run the extraction service — the base install already
-# covers CSV/JSON/text/pypdf-based PDF loading without it.
+# covers CSV/JSON/text/pypdf-based PDF loading without it. Note for
+# downstream consumers: `[tool.uv.sources]`/`[[tool.uv.index]]` below only
+# apply when THIS repo's pyproject.toml is the active uv project — they
+# don't propagate to a project that merely depends on `agent-substrate`.
+# PyPI also serves a CPU wheel (that's what a downstream resolver will use),
+# just not the exact one verified here; replicate the same `tool.uv.sources`
+# entry in your own project if you need that specific match.
 extraction = [
     "doc-firewall>=0.5.1",
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle==3.3.0",
 ]
+# Same as `extraction`, but the CUDA 13.0 GPU wheel instead of the CPU one —
+# for local dev on an NVIDIA GPU (set EXTRACTION_DEVICE=gpu:0). Mutually
+# exclusive with `extraction`: pick one, not both, since paddlepaddle and
+# paddlepaddle-gpu both provide the `paddle` import and will conflict.
+# Pick the CUDA index (cu118/cu126/cu130/...) matching your driver — cu130
+# is what this project's own dev GPU (CUDA 13.1 driver) uses.
+extraction-gpu = [
+    "doc-firewall>=0.5.1",
+    "paddleocr[doc-parser]>=3.7.0",
+    "paddlepaddle-gpu==3.3.0",
+]
+# `create_embedding_client("sentence-transformers/<model>")`
+# (integrations/llm/factory.py) — local, CPU-or-CUDA, no API key, no
+# external server. This is the one place torch comes back after being
+# deliberately removed everywhere else (see the `extraction` extra's own
+# comment) — genuinely needed here, not an oversight, since
+# sentence-transformers has no lighter runtime. Opt-in only: without this
+# extra, selecting this provider raises a clean ModuleNotFoundError instead
+# of silently working.
+sentence-transformers = ["sentence-transformers>=3.0.0"]
 
 [project.urls]
 Homepage = "https://docs.agent-substrate.com"
@@ -170,6 +196,13 @@ name = "paddle-cpu"
 url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
 explicit = true
 
+# paddlepaddle-gpu's CUDA 13.0 wheel (extraction-gpu extra above) — same
+# PaddlePaddle package server as paddle-cpu, different channel.
+[[tool.uv.index]]
+name = "paddle-cu130"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cu130/"
+explicit = true
+
 # torch's default PyPI wheel bundles the full NVIDIA CUDA/cuDNN/NCCL runtime
 # even for CPU-only use (confirmed: nvidia-cufile, nvidia-curand, etc. all
 # pulled in by a plain `torch` install here) — sentence-transformers (the
@@ -182,6 +215,7 @@ explicit = true
 
 [tool.uv.sources]
 paddlepaddle = { index = "paddle-cpu" }
+paddlepaddle-gpu = { index = "paddle-cu130" }
 torch = { index = "pytorch-cpu" }
 
 [dependency-groups]

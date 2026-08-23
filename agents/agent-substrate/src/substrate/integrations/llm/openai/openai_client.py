@@ -72,6 +72,15 @@ def _normalize_strict_json_schema(schema: Any) -> Any:
 
         if normalized.get("type") == "object":
             normalized.setdefault("additionalProperties", False)
+            # OpenAI strict mode requires every key in `properties` to also
+            # appear in `required` — true optionality is expressed via a
+            # nullable type (`anyOf` with "null", which Pydantic's
+            # `X | None = None` already produces), not by omission from
+            # `required`. Pydantic's own model_json_schema() only lists
+            # fields without a default here, which strict mode rejects
+            # outright ("'required' is ... missing '<field>'").
+            if "properties" in normalized and isinstance(normalized["properties"], dict):
+                normalized["required"] = list(normalized["properties"].keys())
 
         for key in ("properties", "$defs", "definitions"):
             if key in normalized and isinstance(normalized[key], dict):
@@ -523,12 +532,22 @@ class OpenAIClient(LLMClient):
 
         max_tok = options.max_tokens or self.max_tokens
         if max_tok:
-            params["max_tokens"] = max_tok
+            params["max_output_tokens"] = max_tok
 
         if transformed_tools:
             params["tools"] = transformed_tools
             if normalized_tool_choice:
                 params["tool_choice"] = normalized_tool_choice
+
+        # response_format without tools fell through to here with no JSON-
+        # schema constraint sent at all (real, found-not-assumed: the only
+        # branch that set `text_format` required transformed_tools too,
+        # matching generate_stream's identical gap below params["text"] is
+        # not wired there either — out of scope here, nothing in this
+        # session's path calls it). Same _build_openai_text_format the
+        # tools+response_format branch above already uses.
+        if response_format is not None:
+            params["text"] = _build_openai_text_format(response_format)
 
         response = await self.client.responses.create(**params)
 

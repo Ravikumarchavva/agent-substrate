@@ -17,6 +17,11 @@ from substrate.capabilities.knowledge.chunking import (
     get_chunker,
 )
 from substrate.capabilities.knowledge.reranker import LLMReranker
+from substrate.capabilities.knowledge.document_ingest_pipeline import (
+    DocumentIngestPipeline,
+    ExtractionFailedError,
+)
+from substrate.capabilities.knowledge.ask import ask, AskResult, Citation, list_catalog
 
 __all__ = [
     "GraphStore",
@@ -36,4 +41,10 @@ __all__ = [
     "PageChunker",
     "get_chunker",
     "LLMReranker",
+    "DocumentIngestPipeline",
+    "ExtractionFailedError",
+    "ask",
+    "AskResult",
+    "Citation",
+    "list_catalog",
 ]

@@ -85,6 +85,15 @@ class PgVectorStore:
         self._dimensions = dimensions
         self._table = table_name
         self._table_ensured = False
+        # pgvector's `vector` type can only be HNSW/IVFFlat-indexed up to
+        # 2000 dimensions (real, hit directly: Qwen3-VL-Embedding-2B's
+        # 2048-dim output failed CREATE INDEX with "column cannot have more
+        # than 2000 dimensions for hnsw index"). `halfvec` (pgvector
+        # >=0.7.0, half-precision storage) raises that ceiling to 4000 —
+        # used only above 2000 dims so the existing `vector` path (e.g.
+        # 1536-dim OpenAI embeddings) is completely unchanged.
+        self._vector_type = "halfvec" if dimensions > 2000 else "vector"
+        self._vector_ops = "halfvec_cosine_ops" if dimensions > 2000 else "vector_cosine_ops"
 
     # ── Schema ────────────────────────────────────────────────────────────────
 
@@ -102,7 +111,7 @@ class PgVectorStore:
                     collection  VARCHAR(255) NOT NULL,
                     text        TEXT NOT NULL,
                     content_json JSONB,
-                    embedding   vector({self._dimensions}) NOT NULL,
+                    embedding   {self._vector_type}({self._dimensions}) NOT NULL,
                     metadata    JSONB NOT NULL DEFAULT '{{}}',
                     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
                 )
@@ -117,7 +126,7 @@ class PgVectorStore:
             await conn.execute(
                 text(f"""
                 CREATE INDEX IF NOT EXISTS ix_{self._table}_embedding_cosine
-                ON {self._table} USING hnsw (embedding vector_cosine_ops)
+                ON {self._table} USING hnsw (embedding {self._vector_ops})
                 WITH (m = 16, ef_construction = 64)
             """)
             )
@@ -176,7 +185,7 @@ class PgVectorStore:
                             (id, collection, text, content_json, embedding, metadata, created_at)
                         VALUES
                             (:id, :collection, :text, CAST(:content_json AS jsonb),
-                             CAST(:embedding AS vector), CAST(:metadata AS jsonb), :created_at)
+                             CAST(:embedding AS {self._vector_type}), CAST(:metadata AS jsonb), :created_at)
                         ON CONFLICT (id) DO NOTHING
                     """),
                     {
@@ -262,7 +271,7 @@ class PgVectorStore:
                             (id, collection, text, content_json, embedding, metadata, created_at)
                         VALUES
                             (:id, :collection, :text, CAST(:content_json AS jsonb),
-                             CAST(:embedding AS vector), CAST(:metadata AS jsonb), :created_at)
+                             CAST(:embedding AS {self._vector_type}), CAST(:metadata AS jsonb), :created_at)
                         ON CONFLICT (id) DO UPDATE SET
                             text = EXCLUDED.text,
                             content_json = EXCLUDED.content_json,
@@ -371,10 +380,10 @@ class PgVectorStore:
 
         sql = text(f"""
             SELECT id, text, content_json, metadata,
-                   1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
+                   1 - (embedding <=> CAST(:embedding AS {self._vector_type})) AS similarity
             FROM {self._table}
             WHERE {where_sql}
-            ORDER BY embedding <=> CAST(:embedding AS vector)
+            ORDER BY embedding <=> CAST(:embedding AS {self._vector_type})
             LIMIT :limit
         """)
 
@@ -484,10 +493,10 @@ class PgVectorStore:
 
         sql = text(f"""
             WITH dense AS (
-                SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> CAST(:embedding AS vector)) AS rank
+                SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> CAST(:embedding AS {self._vector_type})) AS rank
                 FROM {self._table}
                 WHERE collection = :collection {filter_sql}
-                ORDER BY embedding <=> CAST(:embedding AS vector)
+                ORDER BY embedding <=> CAST(:embedding AS {self._vector_type})
                 LIMIT :dense_k
             ),
             lexical AS (

@@ -260,8 +260,16 @@ class DocumentIngestPipeline:
 
             if self._blob_store is not None:
                 ext = self._EXT_BY_MEDIA_TYPE.get(img.media_type, ".bin")
+                # "images/{source_name}/..." (source_name is a sibling
+                # segment), NOT "{source_name}/images/..." -- the latter
+                # makes the PDF's own key (see pdf_key below) a literal
+                # path *prefix* of its images' keys. SeaweedFS's filer is
+                # filesystem-backed, so a key can't be both a leaf file and
+                # a directory at once -- real, found-not-assumed: the S3
+                # admin UI showed the PDF as a "Directory" with no download
+                # action, meaning the object itself was gone/inaccessible.
                 key = (
-                    f"{self._key_prefix}{collection}/{source_name}/images/{img.id}{ext}"
+                    f"{self._key_prefix}{collection}/images/{source_name}/{img.id}{ext}"
                 )
                 if await self._upload_blob(key, img_bytes, img.media_type):
                     caption = img.caption or f"[{img.label or 'image'}]"
@@ -385,7 +393,12 @@ class DocumentIngestPipeline:
         pdf_key: str | None = None
         if self._blob_store is not None:
             data = await asyncio.to_thread(path.read_bytes)
-            pdf_key = f"{self._key_prefix}{collection}/{path.name}"
+            # "pdfs/{name}", a sibling of "images/{name}/..." above -- keeps
+            # every key under a given source file's name a leaf, never a
+            # prefix of another key, so no path can ever collide between a
+            # file and a directory (see _embed_images's comment for why
+            # that matters on a filesystem-backed store like SeaweedFS).
+            pdf_key = f"{self._key_prefix}{collection}/pdfs/{path.name}"
             if not await self._upload_blob(pdf_key, data, "application/pdf"):
                 pdf_key = None
 

@@ -164,7 +164,7 @@ async def test_ingest_file_with_images_and_blob_store_stores_key_not_bytes(tmp_p
     assert isinstance(doc.content[0], TextBlock)
     assert doc.content[0].text == "a chart"
     key = doc.metadata["image_key"]
-    assert key == "kb/a.pdf/images/img-p1-0.png"
+    assert key == "kb/images/a.pdf/img-p1-0.png"
     assert blob_store.uploaded[key] == b"fake-png-bytes"
 
 
@@ -180,7 +180,7 @@ async def test_image_upload_failure_degrades_to_inline_not_dropped(tmp_path):
             images=[_image(id="img-p1-0")],
         ),
     }
-    blob_store = _FakeBlobStore(fail_keys={"kb/a.pdf/images/img-p1-0.png"})
+    blob_store = _FakeBlobStore(fail_keys={"kb/images/a.pdf/img-p1-0.png"})
     pipeline, extraction, store = _pipeline(responses, blob_store=blob_store)
 
     n_text, n_image = await pipeline.ingest_file(a, collection="kb")
@@ -209,8 +209,39 @@ async def test_key_prefix_is_applied_to_both_pdf_and_image_keys(tmp_path):
 
     await pipeline.ingest_file(a, collection="kb")
 
-    assert "datasets/eval/kb/a.pdf" in blob_store.uploaded
-    assert "datasets/eval/kb/a.pdf/images/img-p1-0.png" in blob_store.uploaded
+    assert "datasets/eval/kb/pdfs/a.pdf" in blob_store.uploaded
+    assert "datasets/eval/kb/images/a.pdf/img-p1-0.png" in blob_store.uploaded
+
+
+async def test_pdf_key_is_never_a_path_prefix_of_an_image_key(tmp_path):
+    """Real bug, found via the SeaweedFS admin UI: image keys used to be
+    "{collection}/{source_name}/images/{id}.png", making the PDF's own key
+    ("{collection}/{source_name}") a literal path prefix of its images'
+    keys. SeaweedFS's filer is filesystem-backed, so a key can't be both a
+    leaf file and a directory at once -- the PDF object silently became
+    inaccessible (showed as a "Directory" with no download action) the
+    moment its first image was uploaded underneath it. No key here may
+    ever be a path-prefix of another."""
+    a = _write_pdf(tmp_path, "a.pdf")
+    responses = {
+        "a.pdf": ExtractResponse(
+            success=True,
+            markdown="# A\n\nBody text.",
+            page_count=1,
+            images=[_image(id="img-p1-0"), _image(id="img-p1-1")],
+        ),
+    }
+    blob_store = _FakeBlobStore()
+    pipeline, extraction, store = _pipeline(responses, blob_store=blob_store)
+
+    await pipeline.ingest_file(a, collection="kb")
+
+    keys = list(blob_store.uploaded.keys())
+    assert len(keys) == 3  # 1 pdf + 2 images
+    for k1 in keys:
+        for k2 in keys:
+            if k1 != k2:
+                assert not k2.startswith(k1 + "/"), f"{k1!r} is a prefix of {k2!r}"
 
 
 async def test_one_store_add_call_per_file_not_two(tmp_path):
@@ -338,7 +369,7 @@ async def test_process_extracted_then_store(tmp_path):
 
     assert (n_text, n_image) == (1, 0)
     assert store.added[0][1] == "kb"
-    assert blob_store.uploaded["kb/a.pdf"] == a.read_bytes()
+    assert blob_store.uploaded["kb/pdfs/a.pdf"] == a.read_bytes()
 
 
 # ── ingest_file / ingest_dataset (both stages, back-to-back) ────────────────
@@ -358,7 +389,7 @@ async def test_ingest_file_single_still_works(tmp_path):
 
     assert (n_text, n_image) == (1, 0)
     assert store.added[0][1] == "kb"
-    assert blob_store.uploaded["kb/a.pdf"] == a.read_bytes()
+    assert blob_store.uploaded["kb/pdfs/a.pdf"] == a.read_bytes()
 
 
 async def test_ingest_file_without_blob_store_does_not_upload_the_pdf(tmp_path):

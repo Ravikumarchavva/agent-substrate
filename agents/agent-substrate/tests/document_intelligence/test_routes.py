@@ -39,6 +39,11 @@ class _FakePipeline:
             raise self._error
         return ExtractionResult(pages=self._pages)
 
+    def extract_batch(self, items: list[tuple[bytes, str]]) -> list[ExtractionResult]:
+        if self._error is not None:
+            raise self._error
+        return [ExtractionResult(pages=self._pages) for _ in items]
+
 
 def _client(*, pipeline: _FakePipeline | None = None, config=None) -> TestClient:
     app = FastAPI()
@@ -154,6 +159,119 @@ def test_extract_empty_result_returns_structured_failure():
     )
     body = resp.json()
     assert body["success"] is False
+
+
+# ── /v1/extract-batch ───────────────────────────────────────────────────────
+
+
+def _item(filename: str = "test.pdf", data: bytes = b"data") -> dict:
+    return {
+        "content_base64": _b64(data),
+        "filename": filename,
+        "content_type": "application/pdf",
+    }
+
+
+def test_extract_batch_success_returns_one_response_per_item():
+    pages = [ExtractedPage(page_number=1, text="hello world")]
+    client = _client(pipeline=_FakePipeline(pages=pages))
+
+    resp = client.post(
+        "/v1/extract-batch",
+        json={"items": [_item("a.pdf"), _item("b.pdf")]},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 2
+    assert all(item["success"] is True for item in body)
+    assert all(item["text"] == "hello world" for item in body)
+
+
+def test_extract_batch_empty_items_returns_empty_list():
+    client = _client()
+    resp = client.post("/v1/extract-batch", json={"items": []})
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_extract_batch_partial_failure_does_not_fail_whole_batch():
+    """One item with a bad content_type must not 400 (or otherwise fail)
+    the other, valid items in the same batch -- the whole point of the
+    per-item soft-failure design over /extract's stricter single-file
+    behavior."""
+    pages = [ExtractedPage(page_number=1, text="hello world")]
+    client = _client(pipeline=_FakePipeline(pages=pages))
+
+    bad_item = _item("bad.docx")
+    bad_item["content_type"] = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+    resp = client.post(
+        "/v1/extract-batch",
+        json={"items": [_item("good.pdf"), bad_item]},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 2
+    assert body[0]["success"] is True
+    assert body[1]["success"] is False
+    assert "Unsupported content_type" in body[1]["error"]
+
+
+def test_extract_batch_preserves_input_order_with_mixed_results():
+    pages = [ExtractedPage(page_number=1, text="hello world")]
+    client = _client(pipeline=_FakePipeline(pages=pages))
+
+    bad_item = _item("bad.docx")
+    bad_item["content_type"] = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+    resp = client.post(
+        "/v1/extract-batch",
+        json={"items": [bad_item, _item("good.pdf"), bad_item]},
+    )
+
+    body = resp.json()
+    assert [item["success"] for item in body] == [False, True, False]
+
+
+def test_extract_batch_pipeline_exception_fails_only_validated_items():
+    client = _client(pipeline=_FakePipeline(error=RuntimeError("mkldnn boom")))
+
+    bad_item = _item("bad.docx")
+    bad_item["content_type"] = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+    resp = client.post(
+        "/v1/extract-batch",
+        json={"items": [_item("good.pdf"), bad_item]},
+    )
+
+    body = resp.json()
+    assert resp.status_code == 200
+    # The validation-failed item keeps its own specific error, not the
+    # pipeline exception -- it never reached the pipeline at all.
+    assert body[0]["success"] is False
+    assert "mkldnn boom" in body[0]["error"]
+    assert body[1]["success"] is False
+    assert "Unsupported content_type" in body[1]["error"]
+
+
+def test_extract_batch_oversized_item_returns_413_equivalent_soft_failure():
+    client = _client(config=_FakeConfig(max_upload_bytes=4))
+    resp = client.post(
+        "/v1/extract-batch",
+        json={"items": [_item(data=b"way too big")]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body[0]["success"] is False
+    assert "maximum size" in body[0]["error"]
 
 
 # ── /v1/health ───────────────────────────────────────────────────────────────

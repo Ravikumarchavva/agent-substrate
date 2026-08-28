@@ -252,3 +252,34 @@ def test_extraction_pipeline_detects_chart_in_real_pdf():
     assert chart.id
     # The chart's cid: reference actually made it into the assembled markdown.
     assert f"cid:{chart.id}" in result.markdown
+
+
+@pytest.mark.skipif(
+    not _CHART_FIXTURE.exists(),
+    reason=f"chart_page.pdf fixture missing at {_CHART_FIXTURE}",
+)
+def test_extraction_pipeline_extract_batch_demuxes_per_file():
+    """Real, non-mocked: two documents through ONE predict() call still come
+    back correctly split by source file (input_path demuxing), each with
+    its own page numbering reset and its own chart detected -- not a
+    cross-contaminated merge of both files' pages."""
+    from substrate.runtimes.document_intelligence.service.pipeline import (
+        ExtractionPipeline,
+    )
+
+    pipeline = ExtractionPipeline(ocr_size="tiny")
+    data = _CHART_FIXTURE.read_bytes()
+    results = pipeline.extract_batch(
+        [(data, "chart_page_a.pdf"), (data, "chart_page_b.pdf")]
+    )
+
+    assert len(results) == 2
+    for result in results:
+        pages = result.pages
+        assert len(pages) >= 1
+        assert pages[0].page_number == 1  # not accumulated across files
+        all_images = [img for page in pages for img in page.images]
+        chart = next((img for img in all_images if img.label == "chart"), None)
+        assert chart is not None
+        assert chart.confidence > 0.5
+        assert f"cid:{chart.id}" in result.markdown

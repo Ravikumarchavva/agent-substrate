@@ -18,6 +18,7 @@ from substrate.runtimes.document_intelligence.client import (
 
 __all__ = [
     "ExtractRequest",
+    "ExtractBatchRequest",
     "ExtractedImage",
     "ExtractedPageText",
     "ExtractResponse",
@@ -29,6 +30,16 @@ class ExtractRequest(BaseModel):
     content_base64: str
     filename: str
     content_type: str
+
+
+class ExtractBatchRequest(BaseModel):
+    """Same shape as ``ExtractRequest``, batched — see ``/v1/extract-batch``.
+    Real reason this exists as a separate endpoint rather than accepting a
+    ``list[ExtractRequest]`` there: single-file callers (e.g. chat
+    attachments) shouldn't have to build a one-element list for the common
+    case."""
+
+    items: list[ExtractRequest]
 
 
 class HealthResponse(BaseModel):

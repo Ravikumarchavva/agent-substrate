@@ -145,6 +145,63 @@ class ExtractionClient:
             logger.error("Extract connection error: %s", exc)
             return ExtractResponse(success=False, error=f"Connection error: {exc}")
 
+    async def extract_batch(
+        self, items: list[tuple[bytes, str, str]]
+    ) -> list[ExtractResponse]:
+        """Extract multiple documents in ONE request — see
+        document_intelligence/service/pipeline.py::ExtractionPipeline.
+        extract_batch's docstring for why this beats N sequential
+        ``extract()`` calls (real GPU-batching headroom a single document's
+        pages often can't fill on their own). ``items`` is
+        ``(data, filename, content_type)`` tuples, same fields as
+        ``extract()`` batched. Results come back in the same order as
+        ``items``.
+
+        Never raises — a transport-level failure (bad status, connection
+        error, timeout) affects the whole batch the same way ``extract()``
+        fails a single file: every item comes back ``success=False`` with
+        the same error, so the caller can retry those files individually
+        rather than losing the whole batch's worth of work silently.
+        """
+        import base64
+
+        if not items:
+            return []
+        try:
+            resp = await self._request(
+                "POST",
+                "/v1/extract-batch",
+                json={
+                    "items": [
+                        {
+                            "content_base64": base64.b64encode(data).decode("ascii"),
+                            "filename": filename,
+                            "content_type": content_type,
+                        }
+                        for data, filename, content_type in items
+                    ]
+                },
+            )
+            return [ExtractResponse(**item) for item in resp.json()]
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "Extract-batch HTTP %d: %s",
+                exc.response.status_code,
+                exc.response.text[:500],
+            )
+            error = (
+                f"Service error {exc.response.status_code}: {exc.response.text[:200]}"
+            )
+        except httpx.TimeoutException as exc:
+            logger.warning(
+                "Extract-batch timed out for %d file(s): %s", len(items), exc
+            )
+            error = f"Timeout: {exc}"
+        except httpx.RequestError as exc:
+            logger.error("Extract-batch connection error: %s", exc)
+            error = f"Connection error: {exc}"
+        return [ExtractResponse(success=False, error=error) for _ in items]
+
     async def health(self) -> bool:
         try:
             resp = await self._request("GET", "/v1/health")

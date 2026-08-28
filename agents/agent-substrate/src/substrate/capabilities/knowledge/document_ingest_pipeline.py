@@ -56,7 +56,9 @@ if TYPE_CHECKING:
     from substrate.capabilities.storage.s3 import S3FileStore
     from substrate.kernel.storage.vector import VectorStore
     from substrate.runtimes.document_intelligence.client import ExtractionClient
-    from substrate.runtimes.embedding_reranker.service.embedding import EmbeddingReranker
+    from substrate.runtimes.embedding_reranker.service.embedding import (
+        EmbeddingReranker,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +102,9 @@ class DocumentIngestPipeline:
 
         self._extraction = extraction_client
         self._embedder = embedder
-        self._chunker = StructureAwareChunker(chunk_size=chunk_size, overlap=chunk_overlap)
+        self._chunker = StructureAwareChunker(
+            chunk_size=chunk_size, overlap=chunk_overlap
+        )
         self._store = store
         self._blob_store = blob_store
 
@@ -124,9 +128,7 @@ class DocumentIngestPipeline:
             return []
 
         try:
-            vecs = await self._embedder.embed_texts(
-                [c.content[0].text for c in chunks]
-            )
+            vecs = await self._embedder.embed_texts([c.content[0].text for c in chunks])
             return [replace(c, embedding=v) for c, v in zip(chunks, vecs)]
         except EmbeddingServiceError as exc:
             logger.warning(
@@ -225,20 +227,15 @@ class DocumentIngestPipeline:
 
     # ── Single file ───────────────────────────────────────────────────────
 
-    async def ingest_file(self, path: Path, *, collection: str) -> tuple[int, int]:
-        """Extract, chunk, embed, and store one PDF.
-
-        Returns ``(n_text_docs, n_image_docs)`` — may be fewer than the
-        chunker/extractor produced if individual chunks/images fail to embed
-        (e.g. an HTML-table chunk too large for the sidecar's context; see
-        the loop below), which are skipped and logged, not fatal. Raises
-        ``OSError`` if the file can't be read, or ``ExtractionFailedError``
-        if document-intelligence reports failure (e.g. blocked by its
-        security scan) — callers doing dataset-level ingestion should catch
-        both per-file so one bad PDF doesn't kill the whole batch.
-        """
-        data = path.read_bytes()
-        result = await self._extraction.extract(data, path.name, "application/pdf")
+    async def _process_extraction(
+        self, path: Path, data: bytes, result, *, collection: str
+    ) -> tuple[int, int]:
+        """Chunk, embed, and store one already-extracted document — the
+        shared tail of ``ingest_file()`` (single-request extraction) and
+        ``ingest_files()`` (batched extraction, extract_batch's demuxed
+        per-file result). Raises ``ExtractionFailedError`` if *result*
+        itself reports failure (e.g. blocked by document-intelligence's
+        security scan)."""
         if not result.success:
             raise ExtractionFailedError(result.error or "unknown extraction failure")
 
@@ -277,6 +274,84 @@ class DocumentIngestPipeline:
         if image_docs:
             await self._store.add(image_docs, collection=collection)
         return len(text_docs), len(image_docs)
+
+    async def ingest_file(self, path: Path, *, collection: str) -> tuple[int, int]:
+        """Extract, chunk, embed, and store one PDF.
+
+        Returns ``(n_text_docs, n_image_docs)`` — may be fewer than the
+        chunker/extractor produced if individual chunks/images fail to embed
+        (e.g. an HTML-table chunk too large for the sidecar's context; see
+        the loop below), which are skipped and logged, not fatal. Raises
+        ``OSError`` if the file can't be read, or ``ExtractionFailedError``
+        if document-intelligence reports failure (e.g. blocked by its
+        security scan) — callers doing dataset-level ingestion should catch
+        both per-file so one bad PDF doesn't kill the whole batch.
+        """
+        data = path.read_bytes()
+        result = await self._extraction.extract(data, path.name, "application/pdf")
+        return await self._process_extraction(path, data, result, collection=collection)
+
+    # ── Multiple files, batched extraction ─────────────────────────────────
+
+    async def ingest_files(
+        self, paths: list[Path], *, collection: str
+    ) -> list[tuple[int, int] | Exception]:
+        """Extract every file in ONE document-intelligence batch call, then
+        chunk/embed/store each individually (that part isn't batchable
+        across files the way extraction now is — embeddings and
+        vector-store writes are already batched *within* one file's own
+        chunks/images, see ``_embed_chunks``/``_embed_images``).
+
+        Real motivation: a single document's pages often don't carry enough
+        text regions to fill a large OCR batch on their own (see
+        ``ExtractionPipeline.extract_batch``'s docstring) — grouping several
+        files' pages into one ``predict()`` call gives document-intelligence
+        real cross-document batching headroom that ``ingest_file()``'s
+        one-request-per-file design leaves unused.
+
+        Returns one entry per path, in ``paths`` order: ``(n_text, n_image)``
+        on success, or the ``OSError``/``ExtractionFailedError``/
+        ``EmbeddingServiceError`` that failed that specific file — collected
+        rather than raised, since one bad file in a batch of N must not
+        lose the other N-1 files' results.
+        """
+        from substrate.runtimes.embedding_reranker.service.embedding import (
+            EmbeddingServiceError,
+        )
+
+        if not paths:
+            return []
+
+        read: list[bytes | OSError] = []
+        for p in paths:
+            try:
+                read.append(p.read_bytes())
+            except OSError as exc:
+                read.append(exc)
+
+        readable = [(p, d) for p, d in zip(paths, read) if isinstance(d, bytes)]
+        if readable:
+            extraction_results = await self._extraction.extract_batch(
+                [(data, p.name, "application/pdf") for p, data in readable]
+            )
+            result_by_path = {p: r for (p, _), r in zip(readable, extraction_results)}
+        else:
+            result_by_path = {}
+
+        out: list[tuple[int, int] | Exception] = []
+        for p, data in zip(paths, read):
+            if isinstance(data, OSError):
+                out.append(data)
+                continue
+            try:
+                out.append(
+                    await self._process_extraction(
+                        p, data, result_by_path[p], collection=collection
+                    )
+                )
+            except (ExtractionFailedError, EmbeddingServiceError) as exc:
+                out.append(exc)
+        return out
 
     # ── Dataset directory ────────────────────────────────────────────────
 
@@ -327,7 +402,9 @@ class DocumentIngestPipeline:
                 stats["files"] += 1
                 stats["text_docs"] += n_text
                 stats["image_docs"] += n_img
-                logger.info("Ingested %s: %d text, %d image docs", p.name, n_text, n_img)
+                logger.info(
+                    "Ingested %s: %d text, %d image docs", p.name, n_text, n_img
+                )
 
         await asyncio.gather(*(_one(p) for p in pdfs))
         return stats

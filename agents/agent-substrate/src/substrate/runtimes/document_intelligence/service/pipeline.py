@@ -16,13 +16,14 @@ and — only for chart/table blocks — ``.image["img"]``, a real cropped
 
 from __future__ import annotations
 
+import contextlib
 import io
 import re
 import tempfile
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 # Labels PaddleOCR's layout model can produce that we treat as extractable
 # images rather than OCR'd text — a chart/table crop is more useful to a
@@ -259,7 +260,56 @@ class ExtractionPipeline:
             tmp.write(data)
             tmp.flush()
             results = list(self._pipeline.predict(tmp.name))
+        pages, document_markdown = self._pages_from_results(results)
+        return ExtractionResult(pages=pages, markdown=document_markdown)
 
+    def extract_batch(self, items: list[tuple[bytes, str]]) -> list[ExtractionResult]:
+        """Extract multiple documents in ONE ``predict()`` call.
+
+        Real, found-not-assumed reason this matters: ``predict()`` accepts
+        ``list[str]`` (paddlex's own signature — it renders each path's
+        pages internally, PDFs included, via pypdfium2) and each yielded
+        page result carries its own ``input_path``
+        (paddlex/inference/pipelines/layout_parsing/pipeline_v2.py — set
+        alongside ``page_index``), so results are demuxable back to their
+        source file with no extra bookkeeping. A single document's pages
+        often don't have enough text regions to fill a large
+        ``ocr_batch_size`` on their own (a sparse page might have 3-4); a
+        multi-file predict() call lets paddlex's batch sampler group OCR/
+        layout inference across ALL these files' pages together instead,
+        which is real, additional GPU-batching headroom this pipeline was
+        leaving on the table before.
+        """
+        if not items:
+            return []
+        with contextlib.ExitStack() as stack:
+            tmp_paths: list[str] = []
+            for data, filename in items:
+                suffix = Path(filename).suffix or ".pdf"
+                tmp = stack.enter_context(tempfile.NamedTemporaryFile(suffix=suffix))
+                tmp.write(data)
+                tmp.flush()
+                tmp_paths.append(tmp.name)
+
+            results = list(self._pipeline.predict(tmp_paths))
+
+        by_path: dict[str, list[Any]] = {p: [] for p in tmp_paths}
+        for res in results:
+            by_path[res.get("input_path")].append(res)
+
+        out: list[ExtractionResult] = []
+        for p in tmp_paths:
+            pages, document_markdown = self._pages_from_results(by_path[p])
+            out.append(ExtractionResult(pages=pages, markdown=document_markdown))
+        return out
+
+    def _pages_from_results(
+        self, results: Iterable[Any]
+    ) -> tuple[list[ExtractedPage], str]:
+        """Turn a ``predict()`` results iterable for ONE document's pages
+        into ``(pages, document_markdown)`` — shared by ``extract()`` and
+        ``extract_batch()`` (which demuxes a multi-document batch back into
+        per-document result groups before calling this)."""
         pages: list[ExtractedPage] = []
         markdown_pages: list[dict[str, Any]] = []
         for res in results:
@@ -373,7 +423,7 @@ class ExtractionPipeline:
                 ).get("markdown_texts", "")
             except Exception:
                 document_markdown = "\n\n".join(p.markdown for p in pages)
-        return ExtractionResult(pages=pages, markdown=document_markdown)
+        return pages, document_markdown
 
 
 def _score_lookup(

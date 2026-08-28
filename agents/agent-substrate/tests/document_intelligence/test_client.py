@@ -89,6 +89,83 @@ async def test_extract_bad_content_type_from_service():
     assert result.success is False
 
 
+async def test_extract_batch_success_returns_results_in_order():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/extract-batch"
+        body = request.read()
+        import json
+
+        payload = json.loads(body)
+        assert len(payload["items"]) == 2
+        assert payload["items"][0]["filename"] == "a.pdf"
+        assert payload["items"][1]["filename"] == "b.pdf"
+        return httpx.Response(
+            200,
+            json=[
+                {"success": True, "text": "text a", "page_count": 1},
+                {"success": True, "text": "text b", "page_count": 2},
+            ],
+        )
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    results = await client.extract_batch(
+        [
+            (b"data a", "a.pdf", "application/pdf"),
+            (b"data b", "b.pdf", "application/pdf"),
+        ]
+    )
+
+    assert len(results) == 2
+    assert results[0].text == "text a"
+    assert results[1].text == "text b"
+
+
+async def test_extract_batch_empty_items_returns_empty_list_without_request():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("should not send a request for an empty batch")
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    assert await client.extract_batch([]) == []
+
+
+async def test_extract_batch_http_error_fails_every_item_not_raise():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="internal error")
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    results = await client.extract_batch(
+        [(b"a", "a.pdf", "application/pdf"), (b"b", "b.pdf", "application/pdf")]
+    )
+
+    assert len(results) == 2
+    assert all(r.success is False for r in results)
+    assert all("500" in (r.error or "") for r in results)
+
+
+async def test_extract_batch_connection_error_returns_failure_not_raise():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    results = await client.extract_batch([(b"a", "a.pdf", "application/pdf")])
+
+    assert len(results) == 1
+    assert results[0].success is False
+    assert "Connection error" in (results[0].error or "")
+
+
+async def test_extract_batch_timeout_returns_failure_not_raise():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out")
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    results = await client.extract_batch([(b"a", "a.pdf", "application/pdf")])
+
+    assert len(results) == 1
+    assert results[0].success is False
+    assert "Timeout" in (results[0].error or "")
+
+
 async def test_health_true_on_200():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

@@ -8,16 +8,28 @@ Composes existing agent-substrate pieces without reimplementing any of them:
   - llama-embed/llama-rerank sidecars via ``EmbeddingReranker`` (HTTP) — text
     and image embedding into the same vector space, see
     runtimes/embedding_reranker/service/embedding.py
+  - ``S3FileStore`` (SeaweedFS/MinIO/S3) — durable object storage for the
+    original PDF and each extracted image, see capabilities/storage/s3.py
 
 Distinct from ``RAGPipeline`` (pipeline.py): that one is text-only, driven
 by the generic ``EmbeddingClient`` Protocol. This starts from raw PDF files
 and produces multimodal (text + real image) ``Document`` objects via the
 multimodal-specific ``EmbeddingReranker``.
 
+Images and the source PDF are stored in ``blob_store``, not inlined —
+``ImageBlock.data`` (raw bytes) would otherwise serialize to base64 straight
+into ``PgVectorStore``'s ``content_json`` JSONB column (real, measured: at
+benchmark scale that's tens of thousands of multi-KB base64 blobs bloating
+every row). Documents instead carry ``ImageBlock.storage_key`` (a durable
+ref, resolved to a real URL only at display time via
+``S3FileStore.presign_url``) plus a ``pdf_storage_key`` in metadata so a
+UI can link a citation back to its exact source PDF.
+
 Usage::
 
     from substrate.runtimes.document_intelligence.client import ExtractionClient
     from substrate.runtimes.embedding_reranker.service.embedding import EmbeddingReranker
+    from substrate.capabilities.storage.s3 import S3FileStore
     from substrate.capabilities.knowledge.document_ingest_pipeline import DocumentIngestPipeline
 
     pipeline = DocumentIngestPipeline(
@@ -25,6 +37,7 @@ Usage::
         EmbeddingReranker(embed_server_url="http://localhost:8031",
                           rerank_server_url="http://localhost:8032"),
         store,
+        blob_store,
     )
     stats = await pipeline.ingest_dataset(Path("data/pdfs"), collection="kb", limit=5)
     await pipeline.aclose()
@@ -40,6 +53,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from substrate.capabilities.storage.s3 import S3FileStore
     from substrate.kernel.storage.vector import VectorStore
     from substrate.runtimes.document_intelligence.client import ExtractionClient
     from substrate.runtimes.embedding_reranker.service.embedding import EmbeddingReranker
@@ -65,6 +79,9 @@ class DocumentIngestPipeline:
             llama-embed/llama-rerank sidecars.
         store: Any ``VectorStore`` implementation (``InMemoryVectorStore``/
             ``LanceDBVectorStore`` for dev, ``PgVectorStore`` for production).
+        blob_store: Pre-built ``S3FileStore`` (SeaweedFS/MinIO/S3) that the
+            source PDF and every extracted image are uploaded to — their
+            ``storage_key`` is what gets persisted, not raw bytes.
         chunk_size: Characters per text chunk (``StructureAwareChunker``).
         chunk_overlap: Overlap characters between consecutive chunks.
     """
@@ -74,6 +91,7 @@ class DocumentIngestPipeline:
         extraction_client: ExtractionClient,
         embedder: EmbeddingReranker,
         store: VectorStore,
+        blob_store: S3FileStore,
         *,
         chunk_size: int = 1800,
         chunk_overlap: int = 250,
@@ -84,6 +102,7 @@ class DocumentIngestPipeline:
         self._embedder = embedder
         self._chunker = StructureAwareChunker(chunk_size=chunk_size, overlap=chunk_overlap)
         self._store = store
+        self._blob_store = blob_store
 
     async def aclose(self) -> None:
         await self._embedder.aclose()
@@ -131,13 +150,31 @@ class DocumentIngestPipeline:
             text_docs.append(replace(c, embedding=vec))
         return text_docs
 
-    async def _embed_images(self, images: list, source_name: str, *, total_pages: int) -> list:
+    _EXT_BY_MEDIA_TYPE = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/webp": ".webp",
+    }
+
+    async def _embed_images(
+        self,
+        images: list,
+        source_name: str,
+        *,
+        total_pages: int,
+        collection: str,
+        pdf_storage_key: str,
+    ) -> list:
         """Embed a file's images in ONE batched request — same win and same
         batch-then-fallback shape as ``_embed_chunks`` (real, verified: 3
         images in one request vs 3 sequential round trips; see
         EmbeddingReranker.embed_images's own docstring). Falls back to
         per-image (skipping just the offending one) only if the batch
         itself fails.
+
+        Each image is also uploaded to ``blob_store`` and referenced by
+        ``storage_key`` — the Document itself never carries the raw bytes
+        (see this module's docstring for why).
         """
         from substrate.kernel.core.content import ImageBlock
         from substrate.kernel.storage.vector import Document
@@ -148,9 +185,12 @@ class DocumentIngestPipeline:
         if not images:
             return []
 
-        def _doc(img, embedding: list[float], img_bytes: bytes) -> Document:
+        async def _doc(img, embedding: list[float], img_bytes: bytes) -> Document:
+            ext = self._EXT_BY_MEDIA_TYPE.get(img.media_type, ".bin")
+            key = f"{collection}/{source_name}/images/{img.id}{ext}"
+            await self._blob_store.upload(key, img_bytes, content_type=img.media_type)
             return Document(
-                content=[ImageBlock(data=img_bytes, media_type=img.media_type)],
+                content=[ImageBlock(storage_key=key, media_type=img.media_type)],
                 embedding=embedding,
                 metadata={
                     "source": source_name,
@@ -158,13 +198,14 @@ class DocumentIngestPipeline:
                     "image_id": img.id,
                     "confidence": img.confidence,
                     "total_pages": total_pages,
+                    "pdf_storage_key": pdf_storage_key,
                 },
             )
 
         raw = [base64.b64decode(img.data_base64) for img in images]
         try:
             vecs = await self._embedder.embed_images(raw)
-            return [_doc(img, v, b) for img, v, b in zip(images, vecs, raw)]
+            return [await _doc(img, v, b) for img, v, b in zip(images, vecs, raw)]
         except EmbeddingServiceError as exc:
             logger.warning(
                 "Batch image embed failed for %s (%s) — falling back to per-image",
@@ -179,7 +220,7 @@ class DocumentIngestPipeline:
             except EmbeddingServiceError as exc:
                 logger.warning("Skipping image %s in %s: %s", img.id, source_name, exc)
                 continue
-            image_docs.append(_doc(img, vec, img_bytes))
+            image_docs.append(await _doc(img, vec, img_bytes))
         return image_docs
 
     # ── Single file ───────────────────────────────────────────────────────
@@ -201,6 +242,12 @@ class DocumentIngestPipeline:
         if not result.success:
             raise ExtractionFailedError(result.error or "unknown extraction failure")
 
+        # Durable ref to the exact source PDF, so a citation can link back to
+        # "view page N of this file" — the local dataset path isn't a durable
+        # store, it's gone the moment this eval run's machine is torn down.
+        pdf_key = f"{collection}/{path.name}"
+        await self._blob_store.upload(pdf_key, data, content_type="application/pdf")
+
         # StructureAwareChunker never splits mid-sentence, but the extracted
         # markdown embeds tables as raw HTML (document-intelligence's own
         # convention) — an HTML table has ~no ". "/"! "/"? " boundaries, so it
@@ -210,11 +257,19 @@ class DocumentIngestPipeline:
         # table hit exactly this — see _embed_chunks for how it's handled.
         chunks = self._chunker.chunk(
             result.markdown,
-            metadata={"source": path.name, "total_pages": result.page_count},
+            metadata={
+                "source": path.name,
+                "total_pages": result.page_count,
+                "pdf_storage_key": pdf_key,
+            },
         )
         text_docs = await self._embed_chunks(chunks, path.name)
         image_docs = await self._embed_images(
-            result.images, path.name, total_pages=result.page_count
+            result.images,
+            path.name,
+            total_pages=result.page_count,
+            collection=collection,
+            pdf_storage_key=pdf_key,
         )
 
         if text_docs:

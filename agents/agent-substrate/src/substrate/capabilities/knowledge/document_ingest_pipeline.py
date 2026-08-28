@@ -437,6 +437,27 @@ class DocumentIngestPipeline:
         all_docs = text_docs + image_docs
         if all_docs:
             await self._store.add(all_docs, collection=collection)
+
+        # Say out loud when rows were lost. _embed_chunks/_embed_images
+        # degrade by skipping whatever the embed sidecar rejects, which is
+        # the right behaviour -- but the caller only ever sees the surviving
+        # counts, so a lossy run and a clean one report identically. Real,
+        # measured: one 81-page report extracted 60 images and stored 47,
+        # every rejection being "exceeds the available context size (1024
+        # tokens)" on a large chart. Nothing in the summary said so.
+        dropped_chunks = len(chunks) - len(text_docs)
+        dropped_images = len(result.images) - len(image_docs)
+        if dropped_chunks or dropped_images:
+            logger.warning(
+                "%s: DROPPED %d/%d chunks and %d/%d images — the embed "
+                "sidecar rejected them (usually its per-slot token ceiling: "
+                "--ctx-size / --parallel)",
+                path.name,
+                dropped_chunks,
+                len(chunks),
+                dropped_images,
+                len(result.images),
+            )
         return len(text_docs), len(image_docs)
 
     # ── Single file (both stages) ────────────────────────────────────────

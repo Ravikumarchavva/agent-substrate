@@ -5,6 +5,7 @@ and embedding_reranker's own test suites)."""
 from __future__ import annotations
 
 import base64
+import contextlib
 from pathlib import Path
 
 import pytest
@@ -218,6 +219,95 @@ async def test_missing_caption_still_yields_a_labelled_row(tmp_path):
     docs, _ = store.added[0]
     image_docs = [d for d in docs if d.metadata.get("kind") == "image"]
     assert image_docs[0].content[0].text == "[chart]"
+
+
+@contextlib.contextmanager
+def _capture_pipeline_warnings():
+    """Capture the pipeline module's own warnings.
+
+    pytest's caplog attaches to the ROOT logger, but substrate's
+    ``setup_logging`` sets ``propagate = False`` on the substrate namespace,
+    so nothing logged there ever reaches root -- which is precisely why a
+    real 22%-image-loss run looked clean in the driver's output. Attach to
+    the module's logger directly instead of relying on propagation.
+    """
+    import logging
+
+    from substrate.capabilities.knowledge import document_ingest_pipeline as dip
+
+    records: list[logging.LogRecord] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    handler = _Collect(level=logging.WARNING)
+    dip.logger.addHandler(handler)
+    try:
+        yield records
+    finally:
+        dip.logger.removeHandler(handler)
+
+
+async def test_dropped_images_are_reported_not_just_silently_missing(tmp_path):
+    """Real, measured: an 81-page report extracted 60 images and stored 47 --
+    every rejection was the embed sidecar's "exceeds the available context
+    size (1024 tokens)" on a large chart. Because _embed_images degrades by
+    skipping, the run summary showed only the 47 survivors and a 22% loss
+    was indistinguishable from a clean run. The drop must be stated."""
+    from substrate.runtimes.embedding_reranker.service.embedding import (
+        EmbeddingServiceError,
+    )
+
+    class _RejectsEveryImage(_FakeEmbedder):
+        async def embed_images(self, images):
+            raise EmbeddingServiceError("batch too large")
+
+        async def embed_image(self, data):
+            raise EmbeddingServiceError("exceeds the available context size")
+
+    a = _write_pdf(tmp_path, "a.pdf")
+    responses = {
+        "a.pdf": ExtractResponse(
+            success=True,
+            markdown="# A\n\nBody text for document A.",
+            page_count=1,
+            images=[_image(id="img-p1-0"), _image(id="img-p1-1")],
+        ),
+    }
+    store = _FakeStore()
+    pipeline = DocumentIngestPipeline(
+        _FakeExtractionClient(responses), _RejectsEveryImage(), store
+    )
+
+    with _capture_pipeline_warnings() as records:
+        n_text, n_image = await pipeline.ingest_file(a, collection="kb")
+
+    messages = [r.getMessage() for r in records]
+    assert n_image == 0
+    assert any("DROPPED" in m and "2/2 images" in m for m in messages), (
+        f"no drop warning found in {messages}"
+    )
+
+
+async def test_no_drop_warning_when_nothing_was_lost(tmp_path):
+    """The warning must be specific to real loss -- a clean run that emits
+    it would train everyone to ignore it."""
+    a = _write_pdf(tmp_path, "a.pdf")
+    responses = {
+        "a.pdf": ExtractResponse(
+            success=True,
+            markdown="# A\n\nBody text for document A.",
+            page_count=1,
+            images=[_image(id="img-p1-0")],
+        ),
+    }
+    pipeline, extraction, store = _pipeline(responses)
+
+    with _capture_pipeline_warnings() as records:
+        await pipeline.ingest_file(a, collection="kb")
+
+    assert not any("DROPPED" in r.getMessage() for r in records)
 
 
 async def test_image_upload_failure_degrades_to_inline_not_dropped(tmp_path):

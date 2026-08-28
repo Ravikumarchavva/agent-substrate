@@ -162,10 +162,62 @@ async def test_ingest_file_with_images_and_blob_store_stores_key_not_bytes(tmp_p
     doc = image_docs[0]
     # Never a storage_key-only ImageBlock (the exact shape that used to crash).
     assert isinstance(doc.content[0], TextBlock)
-    assert doc.content[0].text == "a chart"
+    # The generic label always leads, with the real caption appended — see
+    # _caption_for. A row is never left with only a caption as its content.
+    assert doc.content[0].text == "[chart] a chart"
     key = doc.metadata["image_key"]
     assert key == "kb/images/a.pdf/img-p1-0.png"
     assert blob_store.uploaded[key] == b"fake-png-bytes"
+
+
+async def test_garbled_single_char_caption_falls_back_to_the_label(tmp_path):
+    """Real bug, found by reading stored rows directly in pgAdmin: an image
+    row from "Boeing 2023 Sustainability Report.pdf" had its entire text
+    content — and therefore its entire tsvector — set to '亿', a single CJK
+    digit-grouping unit almost certainly misread off a chart axis. A row
+    whose only searchable content is one stray glyph is unretrievable noise;
+    the generic label at least says what kind of thing it is."""
+    a = _write_pdf(tmp_path, "a.pdf")
+    responses = {
+        "a.pdf": ExtractResponse(
+            success=True,
+            markdown="# A\n\nBody text for document A.",
+            page_count=1,
+            images=[_image(id="img-p1-0", caption="亿")],
+        ),
+    }
+    blob_store = _FakeBlobStore()
+    pipeline, extraction, store = _pipeline(responses, blob_store=blob_store)
+
+    await pipeline.ingest_file(a, collection="kb")
+
+    docs, _ = store.added[0]
+    image_docs = [d for d in docs if d.metadata.get("kind") == "image"]
+    text = image_docs[0].content[0].text
+    assert text == "[chart]"
+    assert "亿" not in text
+
+
+async def test_missing_caption_still_yields_a_labelled_row(tmp_path):
+    """No caption at all is the same failure mode as a garbled one — the row
+    must still carry its label rather than becoming empty text."""
+    a = _write_pdf(tmp_path, "a.pdf")
+    responses = {
+        "a.pdf": ExtractResponse(
+            success=True,
+            markdown="# A\n\nBody text for document A.",
+            page_count=1,
+            images=[_image(id="img-p1-0", caption=None)],
+        ),
+    }
+    blob_store = _FakeBlobStore()
+    pipeline, extraction, store = _pipeline(responses, blob_store=blob_store)
+
+    await pipeline.ingest_file(a, collection="kb")
+
+    docs, _ = store.added[0]
+    image_docs = [d for d in docs if d.metadata.get("kind") == "image"]
+    assert image_docs[0].content[0].text == "[chart]"
 
 
 async def test_image_upload_failure_degrades_to_inline_not_dropped(tmp_path):

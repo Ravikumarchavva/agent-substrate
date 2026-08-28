@@ -272,7 +272,7 @@ class DocumentIngestPipeline:
                     f"{self._key_prefix}{collection}/images/{source_name}/{img.id}{ext}"
                 )
                 if await self._upload_blob(key, img_bytes, img.media_type):
-                    caption = img.caption or f"[{img.label or 'image'}]"
+                    caption = _caption_for(img)
                     return Document(
                         content=[TextBlock(text=caption)],
                         embedding=embedding,
@@ -510,6 +510,28 @@ class DocumentIngestPipeline:
 
         await asyncio.gather(*(_one(p) for p in pdfs))
         return stats
+
+
+# Below this length, an OCR'd caption fragment is treated as noise rather
+# than a real description — real, found-not-assumed: a stored image row's
+# entire searchable/embeddable text was a single stray character ("亿", a
+# CJK digit-grouping unit, likely a garbled read of a chart axis label) with
+# no other context. A caption this short adds no real retrieval signal and
+# actively hides the fact that there's no useful description at all.
+_MIN_CAPTION_CHARS = 4
+
+
+def _caption_for(img: Any) -> str:
+    """The text used for a stored (non-inlined) image row — always at
+    least the generic label (``"[chart]"``/``"[table]"``/...), so a row
+    is never left with only a short garbled OCR fragment as its sole
+    content. The real caption, when long enough to be meaningful, is
+    appended rather than replacing the label outright."""
+    label = f"[{img.label or 'image'}]"
+    caption = (img.caption or "").strip()
+    if len(caption) >= _MIN_CAPTION_CHARS:
+        return f"{label} {caption}"
+    return label
 
 
 def _decode_images(images: list) -> list[bytes]:

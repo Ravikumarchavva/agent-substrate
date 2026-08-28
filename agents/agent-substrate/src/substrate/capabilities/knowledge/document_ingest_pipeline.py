@@ -8,22 +8,26 @@ Composes existing agent-substrate pieces without reimplementing any of them:
   - llama-embed/llama-rerank sidecars via ``EmbeddingReranker`` (HTTP) — text
     and image embedding into the same vector space, see
     runtimes/embedding_reranker/service/embedding.py
-  - ``S3FileStore`` (SeaweedFS/MinIO/S3) — durable object storage for the
-    original PDF and each extracted image, see capabilities/storage/s3.py
+  - an optional ``blob_store`` (duck-typed ``upload``/``download``, e.g.
+    ``S3FileStore`` — SeaweedFS/AWS S3, or any S3-compatible object store a deployment
+    points it at, including a hosted one) for the source PDF and each
+    extracted image, following the same pattern as
+    ``backends/local.py``'s ``_store_image_bytes``/``_rehydrate_image``.
 
 Distinct from ``RAGPipeline`` (pipeline.py): that one is text-only, driven
 by the generic ``EmbeddingClient`` Protocol. This starts from raw PDF files
 and produces multimodal (text + real image) ``Document`` objects via the
 multimodal-specific ``EmbeddingReranker``.
 
-Images and the source PDF are stored in ``blob_store``, not inlined —
-``ImageBlock.data`` (raw bytes) would otherwise serialize to base64 straight
-into ``PgVectorStore``'s ``content_json`` JSONB column (real, measured: at
-benchmark scale that's tens of thousands of multi-KB base64 blobs bloating
-every row). Documents instead carry ``ImageBlock.storage_key`` (a durable
-ref, resolved to a real URL only at display time via
-``S3FileStore.presign_url``) plus a ``pdf_storage_key`` in metadata so a
-UI can link a citation back to its exact source PDF.
+Object storage is optional, not assumed: pass ``blob_store=None`` (the
+default) to inline extracted images as ``ImageBlock(data=...)``, exactly as
+a store-free deployment always has. Pass a blob store to instead write each
+image's bytes there and keep only a small ``image_key`` reference in the
+row's metadata — real, measured motivation: inlining serializes straight to
+base64 in ``PgVectorStore``'s ``content_json`` JSONB column, and at
+benchmark scale that's tens of thousands of multi-KB blobs bloating every
+row. An upload failure degrades to inlining that one image rather than
+losing it, matching ``backends/local.py``'s existing behavior.
 
 Usage::
 
@@ -37,7 +41,7 @@ Usage::
         EmbeddingReranker(embed_server_url="http://localhost:8031",
                           rerank_server_url="http://localhost:8032"),
         store,
-        blob_store,
+        blob_store=blob_store,  # or None to inline images
     )
     stats = await pipeline.ingest_dataset(Path("data/pdfs"), collection="kb", limit=5)
     await pipeline.aclose()
@@ -48,14 +52,16 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from substrate.capabilities.storage.s3 import S3FileStore
     from substrate.kernel.storage.vector import VectorStore
-    from substrate.runtimes.document_intelligence.client import ExtractionClient
+    from substrate.runtimes.document_intelligence.client import (
+        ExtractionClient,
+        ExtractResponse,
+    )
     from substrate.runtimes.embedding_reranker.service.embedding import (
         EmbeddingReranker,
     )
@@ -71,6 +77,24 @@ class ExtractionFailedError(RuntimeError):
     as failed, not as "succeeded with 0 chunks"."""
 
 
+@dataclass(slots=True)
+class ExtractedFile:
+    """One file's extraction result, ready for the chunk/embed/store tail —
+    the hand-off unit between ``extract_files`` and ``process_extracted``.
+
+    Deliberately does NOT carry the source PDF's raw bytes: a 450-page
+    report can be tens of MB, and holding that (times however many files are
+    in flight) is the single largest contributor to memory if this is queued
+    between two independently-paced stages. ``process_extracted`` re-reads
+    the file from disk instead — one extra threaded read is far cheaper than
+    holding the bytes for the file's entire time in a hand-off queue.
+    """
+
+    path: Path
+    result: ExtractResponse
+    pages: int
+
+
 class DocumentIngestPipeline:
     """Ingest raw PDFs into a ``VectorStore`` as multimodal ``Document``s.
 
@@ -81,9 +105,21 @@ class DocumentIngestPipeline:
             llama-embed/llama-rerank sidecars.
         store: Any ``VectorStore`` implementation (``InMemoryVectorStore``/
             ``LanceDBVectorStore`` for dev, ``PgVectorStore`` for production).
-        blob_store: Pre-built ``S3FileStore`` (SeaweedFS/MinIO/S3) that the
-            source PDF and every extracted image are uploaded to — their
-            ``storage_key`` is what gets persisted, not raw bytes.
+        blob_store: Optional duck-typed object store (``async upload(key,
+            data, *, content_type)`` / ``async download(key)`` — e.g.
+            ``S3FileStore``). ``None`` (the default) inlines images instead;
+            see the module docstring.
+        key_prefix: Prepended to every blob key this pipeline writes
+            (``f"{key_prefix}{collection}/..."``). Key *layout* is
+            deployment policy, not something this pipeline should hardcode —
+            e.g. a serving layer that authorizes objects by key prefix needs
+            this to be predictable and distinct from other namespaces
+            (unrelated to storage *location*, which is entirely a property
+            of the injected ``store``/``blob_store`` instances). Defaults to
+            ``""`` (unchanged, top-level keys).
+        upload_concurrency: Max concurrent blob uploads, held on the
+            instance so the cap is global across every file this pipeline
+            processes, not per-file — see ``_embed_images``.
         chunk_size: Characters per text chunk (``StructureAwareChunker``).
         chunk_overlap: Overlap characters between consecutive chunks.
     """
@@ -93,8 +129,10 @@ class DocumentIngestPipeline:
         extraction_client: ExtractionClient,
         embedder: EmbeddingReranker,
         store: VectorStore,
-        blob_store: S3FileStore,
         *,
+        blob_store: Any | None = None,
+        key_prefix: str = "",
+        upload_concurrency: int = 32,
         chunk_size: int = 1800,
         chunk_overlap: int = 250,
     ) -> None:
@@ -107,6 +145,8 @@ class DocumentIngestPipeline:
         )
         self._store = store
         self._blob_store = blob_store
+        self._key_prefix = key_prefix
+        self._upload_sem = asyncio.Semaphore(upload_concurrency)
 
     async def aclose(self) -> None:
         await self._embedder.aclose()
@@ -158,6 +198,20 @@ class DocumentIngestPipeline:
         "image/webp": ".webp",
     }
 
+    async def _upload_blob(self, key: str, data: bytes, media_type: str) -> bool:
+        """Upload one blob (image or source PDF) under the instance-wide
+        upload semaphore. Returns whether it succeeded — the caller degrades
+        to inlining on failure rather than losing the image (matches
+        ``backends/local.py::_store_image_bytes``'s degrade-not-drop
+        behavior)."""
+        async with self._upload_sem:
+            try:
+                await self._blob_store.upload(key, data, content_type=media_type)
+                return True
+            except Exception as exc:
+                logger.warning("Storing image %s failed: %s", key, exc)
+                return False
+
     async def _embed_images(
         self,
         images: list,
@@ -165,7 +219,7 @@ class DocumentIngestPipeline:
         *,
         total_pages: int,
         collection: str,
-        pdf_storage_key: str,
+        pdf_key: str | None,
     ) -> list:
         """Embed a file's images in ONE batched request — same win and same
         batch-then-fallback shape as ``_embed_chunks`` (real, verified: 3
@@ -174,11 +228,16 @@ class DocumentIngestPipeline:
         per-image (skipping just the offending one) only if the batch
         itself fails.
 
-        Each image is also uploaded to ``blob_store`` and referenced by
-        ``storage_key`` — the Document itself never carries the raw bytes
-        (see this module's docstring for why).
+        When ``self._blob_store`` is set, each image is uploaded there
+        (concurrently, bounded by ``self._upload_sem``) and the row carries
+        a small ``TextBlock`` caption + an ``image_key`` metadata reference
+        — never a raw-bytes ``ImageBlock``, which the caption approach also
+        makes lexically searchable via hybrid/lexical search for free. On
+        upload failure, or when no blob store is configured, the row falls
+        back to inlining the bytes as ``ImageBlock(data=...)`` — degrade,
+        never drop.
         """
-        from substrate.kernel.core.content import ImageBlock
+        from substrate.kernel.core.content import ImageBlock, TextBlock
         from substrate.kernel.storage.vector import Document
         from substrate.runtimes.embedding_reranker.service.embedding import (
             EmbeddingServiceError,
@@ -188,26 +247,49 @@ class DocumentIngestPipeline:
             return []
 
         async def _doc(img, embedding: list[float], img_bytes: bytes) -> Document:
-            ext = self._EXT_BY_MEDIA_TYPE.get(img.media_type, ".bin")
-            key = f"{collection}/{source_name}/images/{img.id}{ext}"
-            await self._blob_store.upload(key, img_bytes, content_type=img.media_type)
+            base_meta = {
+                "source": source_name,
+                "page_number": img.page_number,
+                "image_id": img.id,
+                "confidence": img.confidence,
+                "total_pages": total_pages,
+                "kind": "image",
+            }
+            if pdf_key is not None:
+                base_meta["pdf_key"] = pdf_key
+
+            if self._blob_store is not None:
+                ext = self._EXT_BY_MEDIA_TYPE.get(img.media_type, ".bin")
+                key = (
+                    f"{self._key_prefix}{collection}/{source_name}/images/{img.id}{ext}"
+                )
+                if await self._upload_blob(key, img_bytes, img.media_type):
+                    caption = img.caption or f"[{img.label or 'image'}]"
+                    return Document(
+                        content=[TextBlock(text=caption)],
+                        embedding=embedding,
+                        metadata={
+                            **base_meta,
+                            "image_key": key,
+                            "media_type": img.media_type,
+                        },
+                    )
+            # No blob store, or the upload failed: keep the old inline
+            # behavior rather than dropping the image entirely.
             return Document(
-                content=[ImageBlock(storage_key=key, media_type=img.media_type)],
+                content=[ImageBlock(data=img_bytes, media_type=img.media_type)],
                 embedding=embedding,
-                metadata={
-                    "source": source_name,
-                    "page_number": img.page_number,
-                    "image_id": img.id,
-                    "confidence": img.confidence,
-                    "total_pages": total_pages,
-                    "pdf_storage_key": pdf_storage_key,
-                },
+                metadata=base_meta,
             )
 
-        raw = [base64.b64decode(img.data_base64) for img in images]
+        raw = await asyncio.to_thread(_decode_images, images)
         try:
             vecs = await self._embedder.embed_images(raw)
-            return [await _doc(img, v, b) for img, v, b in zip(images, vecs, raw)]
+            return list(
+                await asyncio.gather(
+                    *(_doc(img, v, b) for img, v, b in zip(images, vecs, raw))
+                )
+            )
         except EmbeddingServiceError as exc:
             logger.warning(
                 "Batch image embed failed for %s (%s) — falling back to per-image",
@@ -225,135 +307,143 @@ class DocumentIngestPipeline:
             image_docs.append(await _doc(img, vec, img_bytes))
         return image_docs
 
-    # ── Single file ───────────────────────────────────────────────────────
+    # ── Stage 1: extraction ──────────────────────────────────────────────
 
-    async def _process_extraction(
-        self, path: Path, data: bytes, result, *, collection: str
+    async def extract_files(
+        self, paths: list[Path], *, timeout_s: float | None = None
+    ) -> list[ExtractedFile | Exception]:
+        """Extract every file in ONE document-intelligence batch call.
+
+        Real motivation: a single document's pages often don't carry enough
+        text regions to fill a large OCR batch on their own (see
+        ``ExtractionPipeline.extract_batch``'s docstring) — grouping several
+        files' pages into one ``predict()`` call gives document-intelligence
+        real cross-document batching headroom that one-request-per-file
+        leaves unused.
+
+        Returns one entry per path, in ``paths`` order: an ``ExtractedFile``
+        on success, or the ``OSError``/``ExtractionFailedError`` that failed
+        that specific file — collected rather than raised, since one bad
+        file in a batch of N must not lose the other N-1 files' results.
+        This is the stage boundary for a staged producer/consumer driver
+        (e.g. ``pdfqa_rag.pipeline.dataset_ingest_gpu``); ``ingest_file``/
+        ``ingest_dataset`` below run both stages back-to-back for simpler
+        callers that don't need the split.
+
+        ``timeout_s`` overrides the extraction client's own default for
+        this call only — a caller that knows the batch's total page count
+        can size the timeout to it (a fixed timeout shared across
+        wildly-different-sized batches was a real, measured cause of
+        avoidable failures on large documents).
+        """
+        if not paths:
+            return []
+
+        read: list[bytes | OSError] = await asyncio.gather(
+            *(_read_bytes(p) for p in paths)
+        )
+
+        readable = [(p, d) for p, d in zip(paths, read) if isinstance(d, bytes)]
+        if readable:
+            extraction_results = await self._extraction.extract_batch(
+                [(data, p.name, "application/pdf") for p, data in readable],
+                timeout_s=timeout_s,
+            )
+            result_by_path = {p: r for (p, _), r in zip(readable, extraction_results)}
+        else:
+            result_by_path = {}
+
+        out: list[ExtractedFile | Exception] = []
+        for p, data in zip(paths, read):
+            if isinstance(data, OSError):
+                out.append(data)
+                continue
+            result = result_by_path[p]
+            if not result.success:
+                out.append(
+                    ExtractionFailedError(result.error or "unknown extraction failure")
+                )
+                continue
+            out.append(ExtractedFile(path=p, result=result, pages=result.page_count))
+        return out
+
+    # ── Stage 2: chunk, embed, store ─────────────────────────────────────
+
+    async def process_extracted(
+        self, item: ExtractedFile, *, collection: str
     ) -> tuple[int, int]:
-        """Chunk, embed, and store one already-extracted document — the
-        shared tail of ``ingest_file()`` (single-request extraction) and
-        ``ingest_files()`` (batched extraction, extract_batch's demuxed
-        per-file result). Raises ``ExtractionFailedError`` if *result*
-        itself reports failure (e.g. blocked by document-intelligence's
-        security scan)."""
-        if not result.success:
-            raise ExtractionFailedError(result.error or "unknown extraction failure")
+        """Chunk, embed, and store one already-extracted document.
 
-        # Durable ref to the exact source PDF, so a citation can link back to
-        # "view page N of this file" — the local dataset path isn't a durable
-        # store, it's gone the moment this eval run's machine is torn down.
-        pdf_key = f"{collection}/{path.name}"
-        await self._blob_store.upload(pdf_key, data, content_type="application/pdf")
+        Returns ``(n_text_docs, n_image_docs)`` — may be fewer than the
+        chunker/extractor produced if individual chunks/images fail to embed
+        (e.g. an HTML-table chunk too large for the sidecar's context; see
+        ``_embed_chunks``), which are skipped and logged, not fatal.
+        """
+        result = item.result
+        path = item.path
+
+        pdf_key: str | None = None
+        if self._blob_store is not None:
+            data = await asyncio.to_thread(path.read_bytes)
+            pdf_key = f"{self._key_prefix}{collection}/{path.name}"
+            if not await self._upload_blob(pdf_key, data, "application/pdf"):
+                pdf_key = None
 
         # StructureAwareChunker never splits mid-sentence, but the extracted
         # markdown embeds tables as raw HTML (document-intelligence's own
         # convention) — an HTML table has ~no ". "/"! "/"? " boundaries, so it
         # can collapse into one oversized "sentence" that exceeds the embed
-        # sidecar's token ceiling (--ctx-size/--parallel -> 1024 tokens/slot).
+        # sidecar's token ceiling (--ctx-size/--parallel -> tokens/slot).
         # Real, found-not-assumed: a 4158-char/1983-token chunk from an HTML
         # table hit exactly this — see _embed_chunks for how it's handled.
-        chunks = self._chunker.chunk(
-            result.markdown,
-            metadata={
-                "source": path.name,
-                "total_pages": result.page_count,
-                "pdf_storage_key": pdf_key,
-            },
+        chunk_meta = {
+            "source": path.name,
+            "total_pages": result.page_count,
+            "kind": "text",
+        }
+        if pdf_key is not None:
+            chunk_meta["pdf_key"] = pdf_key
+        chunks = await asyncio.to_thread(
+            self._chunker.chunk, result.markdown, chunk_meta
         )
+
         text_docs = await self._embed_chunks(chunks, path.name)
         image_docs = await self._embed_images(
             result.images,
             path.name,
             total_pages=result.page_count,
             collection=collection,
-            pdf_storage_key=pdf_key,
+            pdf_key=pdf_key,
         )
 
-        if text_docs:
-            await self._store.add(text_docs, collection=collection)
-        if image_docs:
-            await self._store.add(image_docs, collection=collection)
+        # One write, not two: makes per-file persistence atomic (a crash
+        # between two separate add() calls previously could strand text
+        # rows with no checkpoint entry, which a resume would then
+        # re-insert under fresh UUIDs).
+        all_docs = text_docs + image_docs
+        if all_docs:
+            await self._store.add(all_docs, collection=collection)
         return len(text_docs), len(image_docs)
 
+    # ── Single file (both stages) ────────────────────────────────────────
+
     async def ingest_file(self, path: Path, *, collection: str) -> tuple[int, int]:
-        """Extract, chunk, embed, and store one PDF.
+        """Extract, chunk, embed, and store one PDF — ``extract_files`` +
+        ``process_extracted`` run back-to-back.
 
-        Returns ``(n_text_docs, n_image_docs)`` — may be fewer than the
-        chunker/extractor produced if individual chunks/images fail to embed
-        (e.g. an HTML-table chunk too large for the sidecar's context; see
-        the loop below), which are skipped and logged, not fatal. Raises
-        ``OSError`` if the file can't be read, or ``ExtractionFailedError``
-        if document-intelligence reports failure (e.g. blocked by its
-        security scan) — callers doing dataset-level ingestion should catch
-        both per-file so one bad PDF doesn't kill the whole batch.
+        Raises ``OSError`` if the file can't be read, or
+        ``ExtractionFailedError`` if document-intelligence reports failure
+        (e.g. blocked by its security scan) — callers doing dataset-level
+        ingestion should catch both per-file so one bad PDF doesn't kill the
+        whole batch.
         """
-        data = path.read_bytes()
-        result = await self._extraction.extract(data, path.name, "application/pdf")
-        return await self._process_extraction(path, data, result, collection=collection)
+        extracted = await self.extract_files([path])
+        item = extracted[0]
+        if isinstance(item, Exception):
+            raise item
+        return await self.process_extracted(item, collection=collection)
 
-    # ── Multiple files, batched extraction ─────────────────────────────────
-
-    async def ingest_files(
-        self, paths: list[Path], *, collection: str
-    ) -> list[tuple[int, int] | Exception]:
-        """Extract every file in ONE document-intelligence batch call, then
-        chunk/embed/store each individually (that part isn't batchable
-        across files the way extraction now is — embeddings and
-        vector-store writes are already batched *within* one file's own
-        chunks/images, see ``_embed_chunks``/``_embed_images``).
-
-        Real motivation: a single document's pages often don't carry enough
-        text regions to fill a large OCR batch on their own (see
-        ``ExtractionPipeline.extract_batch``'s docstring) — grouping several
-        files' pages into one ``predict()`` call gives document-intelligence
-        real cross-document batching headroom that ``ingest_file()``'s
-        one-request-per-file design leaves unused.
-
-        Returns one entry per path, in ``paths`` order: ``(n_text, n_image)``
-        on success, or the ``OSError``/``ExtractionFailedError``/
-        ``EmbeddingServiceError`` that failed that specific file — collected
-        rather than raised, since one bad file in a batch of N must not
-        lose the other N-1 files' results.
-        """
-        from substrate.runtimes.embedding_reranker.service.embedding import (
-            EmbeddingServiceError,
-        )
-
-        if not paths:
-            return []
-
-        read: list[bytes | OSError] = []
-        for p in paths:
-            try:
-                read.append(p.read_bytes())
-            except OSError as exc:
-                read.append(exc)
-
-        readable = [(p, d) for p, d in zip(paths, read) if isinstance(d, bytes)]
-        if readable:
-            extraction_results = await self._extraction.extract_batch(
-                [(data, p.name, "application/pdf") for p, data in readable]
-            )
-            result_by_path = {p: r for (p, _), r in zip(readable, extraction_results)}
-        else:
-            result_by_path = {}
-
-        out: list[tuple[int, int] | Exception] = []
-        for p, data in zip(paths, read):
-            if isinstance(data, OSError):
-                out.append(data)
-                continue
-            try:
-                out.append(
-                    await self._process_extraction(
-                        p, data, result_by_path[p], collection=collection
-                    )
-                )
-            except (ExtractionFailedError, EmbeddingServiceError) as exc:
-                out.append(exc)
-        return out
-
-    # ── Dataset directory ────────────────────────────────────────────────
+    # ── Dataset directory (both stages, many files) ──────────────────────
 
     async def ingest_dataset(
         self,
@@ -372,13 +462,12 @@ class DocumentIngestPipeline:
         PPStructureV3 pipeline instance) rather than being safe for
         concurrent requests. Only raise this if you've verified your
         document-intelligence deployment actually handles concurrent
-        ``/v1/extract`` calls (e.g. multiple replicas behind a load balancer).
+        ``/v1/extract`` calls (e.g. multiple replicas behind a load balancer
+        — see ``pdfqa_rag.pipeline.dataset_ingest_gpu`` for a driver built
+        around exactly that).
 
-        Runs ``concurrency`` files in parallel (each file's own chunks are
-        still embedded sequentially — the sidecars only take one connection
-        of real work at a time per request anyway). One failing file is
-        logged and counted, not raised — a 5000-file batch shouldn't die on
-        file #3.
+        One failing file is logged and counted, not raised — a 5000-file
+        batch shouldn't die on file #3.
         """
         from substrate.runtimes.embedding_reranker.service.embedding import (
             EmbeddingServiceError,
@@ -410,4 +499,18 @@ class DocumentIngestPipeline:
         return stats
 
 
-__all__ = ["DocumentIngestPipeline", "ExtractionFailedError"]
+def _decode_images(images: list) -> list[bytes]:
+    """Sync, CPU-bound — callers run this via ``asyncio.to_thread``. A
+    240-image response is tens of MB of base64 decode, otherwise done
+    directly on the event loop shared by every other concurrent worker."""
+    return [base64.b64decode(img.data_base64) for img in images]
+
+
+async def _read_bytes(path: Path) -> bytes | OSError:
+    try:
+        return await asyncio.to_thread(path.read_bytes)
+    except OSError as exc:
+        return exc
+
+
+__all__ = ["DocumentIngestPipeline", "ExtractedFile", "ExtractionFailedError"]

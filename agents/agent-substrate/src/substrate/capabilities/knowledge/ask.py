@@ -34,6 +34,7 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -44,7 +45,9 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from substrate.kernel.llm.llm import LLMClient
     from substrate.kernel.storage.vector import SearchResult, VectorStore
-    from substrate.runtimes.embedding_reranker.service.embedding import EmbeddingReranker
+    from substrate.runtimes.embedding_reranker.service.embedding import (
+        EmbeddingReranker,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,19 @@ class Citation:
     score: float
     kind: str  # "text" | "image"
     snippet: str
+    # Durable refs into the blob store a citation's source document was
+    # ingested with (``DocumentIngestPipeline``'s ``image_key``/``pdf_key``
+    # metadata) — present whenever the ingesting deployment used one,
+    # regardless of whether *this* ask() call was given a blob_store to
+    # resolve them. Lets a caller build its own link/fetch even when
+    # rehydration below wasn't requested.
+    image_key: str | None = None
+    pdf_key: str | None = None
+    # Populated only when ask() is given a blob_store and resolving
+    # image_key succeeds — see _rehydrate_citation. None otherwise (no
+    # blob_store, a text citation, or a failed/missing lookup); the
+    # snippet/image_key above still carry provenance either way.
+    image_data: bytes | None = None
 
 
 @dataclass
@@ -73,6 +89,20 @@ class _KBFilterDecision(BaseModel):
 
 
 def _is_text(result: SearchResult) -> bool:
+    """Text vs. image classification for split-then-rerank below.
+
+    Reads ``metadata["kind"]`` (set by ``DocumentIngestPipeline`` at ingest
+    time) when present, rather than the content block's own type. Real,
+    found-not-assumed reason this matters: when a blob store is configured,
+    an image row's content is a *caption* ``TextBlock`` (see
+    ``DocumentIngestPipeline._embed_images``), not an ``ImageBlock`` — the
+    block-type check alone would misclassify every stored-not-inlined image
+    as a text result. Falls back to the old block-type check for rows
+    without ``kind`` (pre-existing collections, or a different producer).
+    """
+    kind = result.metadata.get("kind")
+    if kind is not None:
+        return kind == "text"
     return any(block.type == "text" for block in result.content)
 
 
@@ -119,7 +149,9 @@ async def _decide_kb_filter(
     from substrate.kernel.core.content import ChatMessage, TextBlock
     from substrate.kernel.llm.llm import GenerationOptions
 
-    catalog_text = "\n".join(f"- {c['source']} ({c['total_pages']} pages)" for c in catalog)
+    catalog_text = "\n".join(
+        f"- {c['source']} ({c['total_pages']} pages)" for c in catalog
+    )
     prompt = (
         "You are deciding whether to narrow a document search to one specific "
         "document and/or page, based on the user's question and this catalog "
@@ -177,6 +209,26 @@ async def _decide_kb_filter(
     return filter_dict or None
 
 
+async def _rehydrate_citation(citation: Citation, blob_store: Any) -> Citation:
+    """Resolve ``image_key`` to real bytes on the way out, mirroring
+    ``backends/local.py::_rehydrate_image`` — resolution happens here, per
+    read, rather than being baked into the stored row, so a durable ref
+    never goes stale and nothing holds an expiring URL. Degrades to the
+    citation unchanged (caption/snippet still present) on any failure or a
+    missing key: a citation whose image can't be fetched should read like a
+    text-only citation, not fail the whole answer."""
+    if citation.image_key is None:
+        return citation
+    from dataclasses import replace
+
+    try:
+        data = await blob_store.download(citation.image_key)
+    except Exception as exc:
+        logger.warning("Loading citation image %s failed: %s", citation.image_key, exc)
+        return citation
+    return replace(citation, image_data=data)
+
+
 async def ask(
     question: str,
     *,
@@ -188,6 +240,7 @@ async def ask(
     use_kb_filter: bool = True,
     top_k: int = 5,
     rerank: bool = True,
+    blob_store: Any | None = None,
 ) -> AskResult:
     """Answer *question* against *collection*.
 
@@ -200,16 +253,31 @@ async def ask(
     Reranking only applies to text results — ``EmbeddingReranker.rerank``
     is not confirmed to support image-aware scoring (see its own
     docstring); image results keep their cosine order.
+
+    ``blob_store``: optional, matching ``DocumentIngestPipeline``'s own
+    duck-typed object store (``async download(key) -> bytes``). When given,
+    each image citation's ``image_key`` is resolved to real bytes
+    (``Citation.image_data``) before returning — omit it to get citations
+    with just the durable refs (``image_key``/``pdf_key``) and resolve them
+    yourself, e.g. from a serving layer closer to the actual response.
     """
-    from substrate.kernel.core.content import ChatMessage, TextBlock, content_blocks_to_str
+    from substrate.kernel.core.content import (
+        ChatMessage,
+        TextBlock,
+        content_blocks_to_str,
+    )
     from substrate.kernel.llm.llm import GenerationOptions
-    from substrate.runtimes.embedding_reranker.service.embedding import EmbeddingServiceError
+    from substrate.runtimes.embedding_reranker.service.embedding import (
+        EmbeddingServiceError,
+    )
 
     query_vec = await embedder.embed_text(question)
 
     kb_filter: dict[str, Any] | None = None
     if use_kb_filter:
-        catalog = await list_catalog(store, collection=collection, probe_embedding=query_vec)
+        catalog = await list_catalog(
+            store, collection=collection, probe_embedding=query_vec
+        )
         kb_filter = await _decide_kb_filter(llm_client, question, catalog)
 
     # user_filter is an access-control boundary — it always wins over
@@ -250,9 +318,17 @@ async def ask(
             score=r.score,
             kind="text" if _is_text(r) else "image",
             snippet=r.to_text()[:200],
+            image_key=r.metadata.get("image_key"),
+            pdf_key=r.metadata.get("pdf_key"),
         )
         for r in final
     ]
+    if blob_store is not None:
+        citations = list(
+            await asyncio.gather(
+                *(_rehydrate_citation(c, blob_store) for c in citations)
+            )
+        )
 
     context = "\n\n".join(
         f"[{i + 1}] (source={c.source}, page={c.page_number})\n{c.snippet}"

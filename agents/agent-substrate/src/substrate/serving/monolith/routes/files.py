@@ -475,28 +475,53 @@ async def get_doc_quota_status(
     }
 
 
+# Namespaces this route will serve, beyond a caller's own `users/{sub}/`
+# objects. `kb/` is what DocumentIngestPipeline writes (source PDFs +
+# extracted images from batch dataset ingestion — see
+# capabilities/knowledge/document_ingest_pipeline.py's `key_prefix`) — those
+# objects have no per-user owner at ingest time, so ownership isn't the
+# right check for them the way it is for `users/{sub}/`. Explicitly coarse:
+# any authenticated caller can read any `kb/`-namespaced object. Real,
+# product-level per-collection ACLs (who may see which ingested dataset) are
+# a separate decision this route does not attempt to make — add a rule here
+# only once that policy exists, rather than approximating it.
+_OPEN_NAMESPACES = ("kb/",)
+
+
 @router.get("/object")
 async def serve_object(
-    key: str = Query(..., description="Object key under the caller's users/{sub}/"),
+    key: str = Query(
+        ...,
+        description="Object key under the caller's users/{sub}/, or a namespace in _OPEN_NAMESPACES",
+    ),
     claims: AuthClaims = Depends(get_current_user),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> StreamingResponse:
     """Serve a stored object by key — the target of the ``/files/object?key=``
-    links in tool-result attachments (see ``agents/runtime/context/tool.py``).
+    links in tool-result attachments (see ``agents/runtime/context/tool.py``)
+    and of ``ask()``'s ``Citation.image_key``/``pdf_key`` (see
+    ``capabilities/knowledge/ask.py``).
 
     Deliberately a stable, authenticated app URL rather than a presigned one:
     the wire-event log is replayed months later, and a presigned link would
     have expired, leaving old conversations full of dead images.
 
-    Ownership is the key's own ``users/{sub}/`` prefix, so a caller can only
-    ever read their own objects. A mismatch 404s rather than 403s — same
-    rationale as ``_get_meta`` above: this must not become an existence oracle
-    for keys that leak into logs or URLs.
+    Two authorization rules, by namespace:
+      - ``users/{sub}/...`` — ownership is the key's own prefix, so a caller
+        can only ever read their own objects.
+      - anything under ``_OPEN_NAMESPACES`` (e.g. ``kb/``) — any
+        authenticated caller may read it; see that constant's own comment
+        for why ownership doesn't apply there.
+    Anything else 404s rather than 403s — same rationale as ``_get_meta``
+    above: this must not become an existence oracle for keys that leak into
+    logs or URLs.
 
     Registered before ``/{file_id}/status`` so "object" is never matched as a
     file_id path param (Starlette matches in registration order).
     """
-    if not key.startswith(f"users/{claims.sub}/"):
+    is_own = key.startswith(f"users/{claims.sub}/")
+    is_open = key.startswith(_OPEN_NAMESPACES)
+    if not (is_own or is_open):
         raise HTTPException(status_code=404, detail="Not found")
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File storage is not configured")

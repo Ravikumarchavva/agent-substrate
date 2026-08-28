@@ -154,6 +154,40 @@ async def test_object_route_denies_a_key_under_another_users_prefix(object_route
     assert resp.status_code == 404
 
 
+async def test_object_route_serves_a_kb_key_to_any_authenticated_caller(
+    object_route_app,
+):
+    """kb/ objects (DocumentIngestPipeline's batch-ingested PDFs/images) have
+    no per-user owner at ingest time -- any authenticated caller may read
+    them, unlike users/{sub}/ objects."""
+    app, file_store = object_route_app
+    await file_store.upload("kb/eval-set/a.pdf/images/img-p1-0.png", b"CHARTBYTES")
+    app.dependency_overrides[get_current_user] = lambda: STRANGER
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        resp = await http.get(
+            "/files/object",
+            params={"key": "kb/eval-set/a.pdf/images/img-p1-0.png"},
+        )
+    assert resp.status_code == 200
+    assert resp.content == b"CHARTBYTES"
+
+
+async def test_object_route_denies_a_key_outside_any_open_namespace(object_route_app):
+    """A key that's neither the caller's own users/{sub}/ prefix nor an
+    _OPEN_NAMESPACES entry must still 404 -- the open-namespace rule is an
+    explicit allowlist, not a general relaxation."""
+    app, file_store = object_route_app
+    await file_store.upload("shared/reference.bin", b"SECRETBYTES")
+    app.dependency_overrides[get_current_user] = lambda: STRANGER
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        resp = await http.get("/files/object", params={"key": "shared/reference.bin"})
+    assert resp.status_code == 404
+
+
 async def test_object_route_404s_on_a_missing_key_not_a_500(object_route_app):
     app, _file_store = object_route_app
     app.dependency_overrides[get_current_user] = lambda: OWNER

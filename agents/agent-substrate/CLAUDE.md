@@ -32,7 +32,7 @@ Package manager: **`uv`** (never `pip`).
 # Install dependencies (always first)
 uv sync
 
-# Start infrastructure (Postgres, Redis, MinIO, observability, MCP server)
+# Start infrastructure (Postgres, Redis, SeaweedFS, observability, MCP server)
 make infra-up
 
 # Start monolith backend (port 8000)
@@ -129,7 +129,7 @@ src/substrate/
 │   ├── history/          RedisHistoryProvider, DurableHistoryProvider
 │   ├── vector/           PgVectorStore  (implements VectorStore Protocol)
 │   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
-│   ├── storage/          S3FileStore (wraps infrastructure MinIOConnector)
+│   ├── storage/          S3FileStore (wraps infrastructure S3Connector)
 │   ├── pipeline/         PipelineEngine, DataRef/DataRefArtifactStore, PipelineStore
 │   └── triggers/         TriggerScheduler, WebhookRegistry, ConditionMonitor
 │
@@ -146,7 +146,7 @@ src/substrate/
 ├── infrastructure/ built-in standard backends for the engine itself (orthogonal to layers)
 │   ├── database/         PostgresConnector (asyncpg pool — engine's own DB)
 │   ├── cache/            RedisConnector
-│   ├── storage/          MinIOConnector (S3-compatible object storage)
+│   ├── storage/          S3Connector (S3-compatible object storage)
 │   └── runtime/          EventLog/Inbox/Scheduler, RedisJournal,
 │                         build_postgres_runtime() — durable runtime backends
 │
@@ -217,7 +217,7 @@ fabric (L3)       How agents are orchestrated: flows, evals, durable execution.
 `integrations/`, `infrastructure/`, and `serving/` are **orthogonal** — they
 implement kernel Protocols and wire all layers together in lifespan. They are not
 part of the stack hierarchy. Distinction: `infrastructure/` holds built-in
-standard backends the engine runs on (Postgres, Redis, MinIO + durable runtime);
+standard backends the engine runs on (Postgres, Redis, SeaweedFS + durable runtime);
 `integrations/` holds external third-party adapters (LLM providers, MCP,
 email/calendar connectors).
 

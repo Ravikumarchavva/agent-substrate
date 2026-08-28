@@ -49,7 +49,7 @@ These three are **not part of the vertical stack** — they're wiring, not
 behavior:
 
 - `infrastructure/` — built-in backends the engine itself runs on (Postgres,
-  Redis, MinIO, the durable runtime backends). If you're building a Postgres-
+  Redis, SeaweedFS, the durable runtime backends). If you're building a Postgres-
   or Redis-backed implementation of a kernel Protocol, it goes here.
 - `integrations/` — external third-party adapters (LLM providers, MCP, Spotify,
   email/calendar). If you're wrapping someone else's API, it goes here.

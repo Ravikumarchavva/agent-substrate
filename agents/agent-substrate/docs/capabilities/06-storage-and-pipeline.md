@@ -30,9 +30,9 @@ flowchart TB
     subgraph BL["Blob storage"]
         direction TB
         BS["BlobStore — kernel Protocol (blob.py)<br/>put · get · delete · list"]:::proto
-        S3["S3FileStore · storage/s3.py<br/>wraps MinIOConnector (aiobotocore)<br/>connect() creates bucket if missing"]:::impl
-        MINIO["MinIO (dev) / AWS S3 (prod)"]:::infra
-        BS --> S3 --> MINIO
+        S3["S3FileStore · storage/s3.py<br/>wraps S3Connector (aiobotocore)<br/>connect() creates bucket if missing"]:::impl
+        SEAWEEDFS["SeaweedFS (dev) / AWS S3 (prod)"]:::infra
+        BS --> S3 --> SEAWEEDFS
     end
 
     PG1 ~~~ GS
@@ -103,15 +103,15 @@ results = await store.query_cypher("MATCH (n:Person) RETURN n")
 
 ### `S3FileStore`
 
-Delegates to `MinIOConnector` (from `infrastructure/storage/minio.py`). Compatible with MinIO in docker-compose and AWS S3 in production.
+Delegates to `S3Connector` (from `infrastructure/storage/s3.py`). Compatible with SeaweedFS in docker-compose and AWS S3 in production.
 
 ```python
 from substrate.capabilities.storage import S3FileStore
 
 store = S3FileStore(
     endpoint_url="http://localhost:9000",
-    access_key="minioadmin",
-    secret_key="minioadmin",
+    access_key="substrate",
+    secret_key="substrate",
     bucket="agent-files",
 )
 await store.connect()   # also creates the bucket if missing
@@ -211,7 +211,7 @@ flowchart TD
     THRESH{"size_bytes<br/>< 1 MB?"}:::dec
 
     RD["Redis<br/>──────────────────────<br/>key: dataref:{ref_id}<br/>value: raw bytes<br/>TTL: default 3600s<br/>SETEX with TTL enforced"]:::store
-    S3["S3 / MinIO<br/>──────────────────────<br/>key: datarefs/{ref_id}<br/>bucket: agent-artifacts<br/>no automatic TTL<br/>(cleanup_expired() sweeps stale)"]:::store
+    S3["S3 / SeaweedFS<br/>──────────────────────<br/>key: datarefs/{ref_id}<br/>bucket: agent-artifacts<br/>no automatic TTL<br/>(cleanup_expired() sweeps stale)"]:::store
 
     REF["DataRef<br/>──────────────────────<br/>ref_id: str  (UUID)<br/>storage: 'redis' | 's3'<br/>key: str  (Redis key or S3 object key)<br/>size_bytes: int<br/>ttl: int  (seconds)<br/>pinned: bool  (prevent expiry for long jobs)"]:::obj
 

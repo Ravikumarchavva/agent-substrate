@@ -1,5 +1,5 @@
-"""Object storage connector (MinIO / S3-compatible)."""
+"""Object storage connector (S3-compatible — SeaweedFS by default)."""
 
-from substrate.infrastructure.storage.minio import MinIOConnector
+from substrate.infrastructure.storage.s3 import S3Connector
 
-__all__ = ["MinIOConnector"]
+__all__ = ["S3Connector"]

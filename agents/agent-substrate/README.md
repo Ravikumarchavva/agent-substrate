@@ -64,7 +64,7 @@ cd agent-substrate
 # Sync dependencies
 uv sync
 
-# Start infrastructure (Postgres, Redis, MinIO, observability)
+# Start infrastructure (Postgres, Redis, SeaweedFS, observability)
 make infra-up
 ```
 
@@ -145,7 +145,7 @@ fabric (L3)        ← Flows (Sequential/Parallel/Conditional), Evals, durable e
 | Layer | Responsibility |
 |---|---|
 | `integrations/` | Third-party adapters: LLM providers, MCP, event bus, connectors |
-| `infrastructure/` | Engine backends: Postgres, Redis, MinIO, durable runtime |
+| `infrastructure/` | Engine backends: Postgres, Redis, SeaweedFS, durable runtime |
 | `serving/` | Deployment shells: monolith FastAPI app + 12 microservices |
 
 Import-linter enforces the layer contract on every CI run (`uv run lint-imports`).

@@ -99,7 +99,7 @@ class SubstrateConfig(BaseSettings):
     # ── File storage ─────────────────────────────────────────────────────────
     # "local" (default) = WorkspaceFileStore, a per-user directory tree on
     # server-side storage (local dir in dev, docker volume in compose, RWX PVC
-    # in k8s — see capabilities/storage/workspace.py). "s3" = MinIO/S3,
+    # in k8s — see capabilities/storage/workspace.py). "s3" = SeaweedFS/S3,
     # opt-in. "memory" = InMemoryFileStore, tests only.
     FILE_STORE_BACKEND: str = "local"
     FILE_STORE_ROOT: str = "./data/workspaces"

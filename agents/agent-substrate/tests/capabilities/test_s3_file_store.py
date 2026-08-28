@@ -1,4 +1,4 @@
-"""S3FileStore's workspace surface + MinIOConnector listing pagination.
+"""S3FileStore's workspace surface + S3Connector listing pagination.
 
 Both are exercised against fakes rather than a live bucket: the logic under
 test is the prefix accounting and the continuation-token loop, not aiobotocore.
@@ -13,11 +13,11 @@ import pytest
 
 from substrate.capabilities.storage.s3 import S3FileStore
 from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
-from substrate.infrastructure.storage.minio import MinIOConnector
+from substrate.infrastructure.storage.s3 import S3Connector
 
 
 class FakeConnector:
-    """In-memory stand-in for MinIOConnector, keyed like a real bucket."""
+    """In-memory stand-in for S3Connector, keyed like a real bucket."""
 
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
@@ -113,7 +113,7 @@ async def test_delete_invalidates_usage_cache(store):
     assert await store.usage_bytes("u1") == 0
 
 
-# ── MinIOConnector.list_objects pagination ────────────────────────────────────
+# ── S3Connector.list_objects pagination ────────────────────────────────────
 
 
 class FakePagedClient:
@@ -144,8 +144,8 @@ class FakePagedClient:
         }
 
 
-def _connector_with(client: FakePagedClient) -> MinIOConnector:
-    connector = MinIOConnector(
+def _connector_with(client: FakePagedClient) -> S3Connector:
+    connector = S3Connector(
         endpoint_url="http://localhost:9000",
         access_key="k",
         secret_key="s",

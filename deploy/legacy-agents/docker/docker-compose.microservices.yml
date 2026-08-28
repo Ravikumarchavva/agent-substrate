@@ -77,17 +77,31 @@ services:
       - agent-net
     restart: unless-stopped
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  # S3-compatible object store for file-store's backend. SeaweedFS, not
+  # MinIO — MinIO's Community Edition was archived in Feb 2026 (no further
+  # development, security patches, or prebuilt binaries). SeaweedFS is
+  # Apache 2.0 and speaks the same S3 API this stack only ever uses (see
+  # capabilities/storage/s3.py), so swapping it for any other S3-compatible
+  # service — Garage, R2, AWS S3 — is a compose/env change with no code
+  # change. Mirrors the monolith compose's own seaweedfs service.
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: >
+      server -dir=/data -s3 -s3.port=8333
+      -s3.config=/etc/seaweedfs/s3.json
+      -master.volumeSizeLimitMB=1024
     ports:
-      - "9100:9000"
-      - "9101:9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      - "9100:8333"
     volumes:
-      - miniodata:/data
+      - seaweedfsdata:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      # SeaweedFS binds to the container's own IP, not 127.0.0.1, so
+      # localhost is refused — hence CMD-SHELL and `hostname -i`.
+      test: ["CMD-SHELL", "wget -qO- http://$$(hostname -i):8333/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - agent-net
     restart: unless-stopped
@@ -254,17 +268,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_started
+      seaweedfs:
+        condition: service_healthy
     environment:
       <<: *common-env
       SERVICE_NAME: file-store
       FILE_STORE_BACKEND: s3
       FILE_STORE_BUCKET: agent-files
-      FILE_STORE_ENDPOINT: http://minio:9000
+      FILE_STORE_ENDPOINT: http://seaweedfs:8333
       FILE_STORE_REGION: us-east-1
-      FILE_STORE_ACCESS_KEY: minioadmin
-      FILE_STORE_SECRET_KEY: minioadmin
+      FILE_STORE_ACCESS_KEY: ${FILE_STORE_ACCESS_KEY:-substrate}
+      FILE_STORE_SECRET_KEY: ${FILE_STORE_SECRET_KEY:-substrate-dev-secret}
 
   # ══════════════════════════════════════════════════════════════════════════
   # Wave 5: Admin
@@ -377,7 +391,7 @@ volumes:
   lokidata:
   promtaildata:
   file-store-data:
-  miniodata:
+  seaweedfsdata:
 
 networks:
   agent-net:

@@ -33,7 +33,7 @@ flowchart TB
 
     VM["CodeInterpreter — K8s agent-sandbox / local sandbox container<br/>POST /ci/run {code, session_id}<br/>returns stdout, exit_code, media_blocks"]:::infra
     INV["ToolInvoker (L1) · agents/tools/invoker.py<br/>invoke(call, session, ctx)<br/>risk check → approval gate (HIGH/CRITICAL)"]:::l1
-    DRS["DataRefStore · pipeline/data_ref.py<br/>< 1MB → Redis · ≥ 1MB → S3/MinIO<br/>returns DataRef.ref_id"]:::data
+    DRS["DataRefStore · pipeline/data_ref.py<br/>< 1MB → Redis · ≥ 1MB → S3/SeaweedFS<br/>returns DataRef.ref_id"]:::data
 
     LLM -->|"tool_chain(code=script)"| CHAIN
     TCT -->|"execute(prelude + user code)"| VM

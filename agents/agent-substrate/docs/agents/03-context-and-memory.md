@@ -353,7 +353,7 @@ flowchart TB
     end
 
     subgraph L2["capabilities — production backends"]
-        P1["S3FileStore (MinIO)"]:::external
+        P1["S3FileStore (SeaweedFS)"]:::external
         P2["PgVectorStore (pgvector)"]:::external
         P3["AGEGraphStore (Apache AGE)"]:::external
         P4["PgTaskStore (Postgres, planned)"]:::external
@@ -370,7 +370,7 @@ flowchart TB
 
 | In-memory store (L1) | Kernel Protocol shape | Production backend (L2) |
 |---|---|---|
-| `InMemoryFileStore` | `BlobStore` (large binary artifacts) | `S3FileStore` → MinIO / S3 |
+| `InMemoryFileStore` | `BlobStore` (large binary artifacts) | `S3FileStore` → SeaweedFS / S3 |
 | `InMemoryVectorStore` | `VectorStore` (semantic search) | `PgVectorStore` → pgvector |
 | `InMemoryGraphStore` | `GraphStore` (knowledge graph) | `AGEGraphStore` → Apache AGE |
 | `TaskStore` / `GlobalTaskStore` | `TaskStore` (Kanban boards) | `PgTaskStore` → Postgres (planned) |

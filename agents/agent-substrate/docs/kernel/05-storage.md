@@ -13,7 +13,7 @@ The kernel (layer L0) defines that "asking shape" — and nothing more. Every
 store on this page is a **Protocol**: a list of `async def` method signatures
 with no body. The kernel never opens a socket, never touches a disk. It only
 says *"a vector store must have an `add` and a `search`"*. The real work —
-talking to Postgres, Redis, pgvector, Apache AGE, MinIO — happens in concrete
+talking to Postgres, Redis, pgvector, Apache AGE, SeaweedFS — happens in concrete
 backends up in `capabilities/` and `infrastructure/`.
 
 !!! note "Why Protocols instead of classes?"
@@ -55,7 +55,7 @@ flowchart LR
 
     subgraph Backends["Concrete backends (capabilities / infrastructure)"]
         direction TB
-        B1["MinIO / S3"]:::external
+        B1["SeaweedFS / S3"]:::external
         B2["Redis — Postgres"]:::external
         B3["pgvector"]:::external
         B4["Apache AGE"]:::external
@@ -107,7 +107,7 @@ class BlobStore(Protocol):
     intermediate and reads it back minutes later must `pin` it first — otherwise
     the locker may clear it mid-execution and `resolve` will fail.
 
-**Example backends:** an in-memory `dict` for dev, a MinIO / S3 adapter for
+**Example backends:** an in-memory `dict` for dev, a SeaweedFS / S3 adapter for
 production.
 
 ---
@@ -510,7 +510,7 @@ with a Postgres-backed implementation tracked as planned tech debt.
 
 | Protocol | What it stores | Keyed by | Example backend |
 |---|---|---|---|
-| `BlobStore` | Large binary artifacts (files, media, intermediates) | opaque `ref` | in-memory → MinIO / S3 |
+| `BlobStore` | Large binary artifacts (files, media, intermediates) | opaque `ref` | in-memory → SeaweedFS / S3 |
 | `HistoryProvider` | Ordered `ChatMessage` transcript | `session_id` (+ `run_id`) | in-memory → Redis / Postgres |
 | `VectorStore` | `Document` chunks for semantic search | `id` within a `collection` | in-memory → pgvector |
 | `GraphStore` | `Entity` nodes + `Relationship` edges | `entity_id` / `relationship_id` | in-memory → Apache AGE |
@@ -521,7 +521,7 @@ with a Postgres-backed implementation tracked as planned tech debt.
 !!! tip "The one rule to remember"
     Agent code imports the **Protocol** from the kernel. The lifespan wires in
     whichever **backend** is appropriate. That separation is why the same agent
-    runs unchanged in a unit test and in a Postgres + Redis + MinIO production
+    runs unchanged in a unit test and in a Postgres + Redis + SeaweedFS production
     cluster.
 
 ---

@@ -453,7 +453,7 @@ def start_main() -> None:
 def start_all_main() -> None:
     """Dedicated entry point for ``uv run start-all``.
 
-    Runs ``make infra-up-all`` (Postgres, Redis, MinIO, observability, the
+    Runs ``make infra-up-all`` (Postgres, Redis, SeaweedFS, observability, the
     MCP server, the code-interpreter sandbox, and ONLYOFFICE — everything
     except the GPU-only Docling service) and then starts the server in the
     foreground, same as ``uv run start``. One command instead of the usual

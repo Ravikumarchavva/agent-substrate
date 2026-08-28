@@ -146,7 +146,7 @@ graph TB
     L0["kernel (L0) — frozen contracts: Protocols, dataclasses, enums"]:::l0
 ```
 
-`integrations` (LLM providers, MCP, connectors), `infrastructure` (Postgres, Redis, MinIO, durable runtime), and `serving` (the monolith + 12 microservices) sit orthogonal to the stack — they implement kernel Protocols and wire everything together at startup.
+`integrations` (LLM providers, MCP, connectors), `infrastructure` (Postgres, Redis, SeaweedFS, durable runtime), and `serving` (the monolith + 12 microservices) sit orthogonal to the stack — they implement kernel Protocols and wire everything together at startup.
 
 **The Capability Map** — the platform organized by *concern* rather than by code layer: context (the RAM tier), memory (short-term + long-term with pluggable backends), storage (the disk tier), guardrails, governance, evals, observability, and tools. Every item names a real, shipped class.
 

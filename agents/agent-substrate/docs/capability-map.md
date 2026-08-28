@@ -28,7 +28,7 @@ hide:
 
     ---
 
-    The persistence mechanisms underneath — Postgres, Redis, pgvector, Apache AGE, and optional MinIO / S3 object storage. Memory and RAG plug in on top; agents never touch these directly.
+    The persistence mechanisms underneath — Postgres, Redis, pgvector, Apache AGE, and optional SeaweedFS / S3 object storage. Memory and RAG plug in on top; agents never touch these directly.
 
 </div>
 
@@ -97,7 +97,7 @@ ltm = await build_long_term_memory(database_url)
 
     The disk tier. Mechanisms only — higher concerns plug in through kernel protocols, never directly.
 
-    `Postgres` · `Redis` · `PgVectorStore` · `AGEGraphStore` · `PgTaskStore` · `MinIOConnector` *(optional S3)*
+    `Postgres` · `Redis` · `PgVectorStore` · `AGEGraphStore` · `PgTaskStore` · `S3Connector` *(optional S3)*
 
 -   :material-shield-alert-outline: **Guardrails** — `AGENTS`
 

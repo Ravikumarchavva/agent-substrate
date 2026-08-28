@@ -2,7 +2,7 @@
 
 Concrete implementations:
   Stage 0 — in-memory dict (agents/runtime/local/)
-  Stage 1 — MinIO / S3 adapter (adapters/storage/)
+  Stage 1 — S3-compatible adapter (adapters/storage/)
 
 ``store`` writes bytes or text and returns an opaque ref string.
 ``resolve`` fetches the original bytes by ref.
@@ -17,7 +17,7 @@ from typing import Protocol
 
 
 class BlobStore(Protocol):
-    """Object/binary store — the MinIO / S3 abstraction."""
+    """Object/binary store — the S3-compatible abstraction."""
 
     async def store(
         self,

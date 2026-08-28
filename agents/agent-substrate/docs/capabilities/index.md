@@ -46,7 +46,7 @@ flowchart TB
 
     L1["agents (L1)<br/>ReActAgent · OrchestratorAgent · Runtime · ToolInvoker"]:::layer
     L0["kernel (L0) — Protocols<br/>Tool · VectorStore · GraphStore<br/>BlobStore · HistoryProvider · SessionStore"]:::proto
-    EXT["External systems<br/>PostgreSQL · Redis · MinIO / S3<br/>OpenAI · Anthropic · Gemini · Ollama"]:::ext
+    EXT["External systems<br/>PostgreSQL · Redis · SeaweedFS / S3<br/>OpenAI · Anthropic · Gemini · Ollama"]:::ext
 
     L3 -->|"imports"| L2
     L2 -->|"imports"| L1

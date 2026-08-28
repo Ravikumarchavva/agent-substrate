@@ -1,10 +1,11 @@
-"""S3-compatible file store backed by MinIOConnector (L2).
+"""S3-compatible file store backed by S3Connector (L2).
 
 Keys use the same ``users/{user_id}/...`` layout as ``WorkspaceFileStore`` (see
 its module docstring), so the two are interchangeable behind ``ctx.file_store``
 and the workspace management API works against either. The store is addressed
-purely through the S3 API, which is what makes the backend swappable — MinIO
-locally, or any S3-compatible service in production — with no code change.
+purely through the S3 API, which is what makes the backend swappable —
+SeaweedFS locally (this stack's default), or any other S3-compatible service
+in production — with no code change.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import time
 from pathlib import PurePosixPath
 
 from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
-from substrate.infrastructure.storage.minio import MinIOConnector
+from substrate.infrastructure.storage.s3 import S3Connector
 
 _USAGE_CACHE_TTL = 30.0  # seconds
 
@@ -28,9 +29,9 @@ def _user_id_from_key(key: str) -> str | None:
 
 
 class S3FileStore:
-    """Async file store that delegates to MinIOConnector (aiobotocore-based).
+    """Async file store that delegates to S3Connector (aiobotocore-based).
 
-    Compatible with MinIO (docker-compose) and AWS S3.
+    Compatible with SeaweedFS (docker-compose default) and real AWS S3.
     """
 
     def __init__(
@@ -43,7 +44,7 @@ class S3FileStore:
         region: str = "us-east-1",
         user_quota_bytes: int = 0,
     ) -> None:
-        self._connector = MinIOConnector(
+        self._connector = S3Connector(
             endpoint_url=endpoint_url,
             access_key=access_key,
             secret_key=secret_key,

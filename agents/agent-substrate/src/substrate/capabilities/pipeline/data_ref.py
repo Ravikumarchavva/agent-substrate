@@ -1,7 +1,7 @@
 """DataRef — zero-context-bloat pointer for large data exchange between adapters.
 
 Small data (< ``size_threshold``) is stored in Redis for speed.
-Large data goes to S3/MinIO for persistence.  Both backends support TTL-based
+Large data goes to S3-compatible storage (SeaweedFS) for persistence.  Both backends support TTL-based
 expiry with optional pinning for long-running workflows.
 
 Usage::

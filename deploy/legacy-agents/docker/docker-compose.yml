@@ -4,7 +4,14 @@ services:
   postgres:
     image: pgvector/pgvector:pg18
     ports:
-      - "5432:5432"
+      # Host-side port only — override when 5432 is already taken by
+      # something else on the host (real, found-not-assumed: hit exactly
+      # this on a shared multi-project server). Internal service-to-service
+      # traffic always uses the container's own port 5432 via the
+      # `postgres` DNS name regardless of this mapping (see e.g. `backend`'s
+      # DATABASE_URL below) — safe to change without touching anything else
+      # in this compose file.
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

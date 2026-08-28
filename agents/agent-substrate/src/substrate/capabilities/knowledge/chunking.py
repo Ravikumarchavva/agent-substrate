@@ -280,8 +280,11 @@ class StructureAwareChunker:
         chunk_section_ids: list[int] = []
         section_id = 0
 
-        for start, end, _title in self._detect_sections(text):
-            section_chunks = self._pack_section(text, start, end, protected_spans)
+        sections = self._merge_tiny_sections(text, self._detect_sections(text))
+        for start, end, title in sections:
+            section_chunks = self._pack_section(
+                text, start, end, protected_spans, title=title
+            )
             if not section_chunks:
                 continue
             section_texts.extend(section_chunks)
@@ -344,6 +347,50 @@ class StructureAwareChunker:
 
         return [s for s in sections if text[s[0] : s[1]].strip()]
 
+    _MIN_SECTION_BODY_CHARS = 20
+
+    def _merge_tiny_sections(
+        self, text: str, sections: list[tuple[int, int, str]]
+    ) -> list[tuple[int, int, str]]:
+        """Fold a section whose own body is too short to carry useful
+        meaning on its own (e.g. a stray OCR fragment, or two headings
+        with almost nothing detected between them) into its neighbor,
+        rather than emitting it as a standalone near-empty chunk. Real,
+        found-not-assumed: seen directly in production output — a whole
+        chunk containing only ``"NEW K"`` (5 characters), from real
+        extracted markdown. Merges forward into the following section so
+        the fragment stays adjacent to what follows it in the document;
+        the last section merges backward since there's no "next". The
+        threshold (20 chars) is well below any legitimate short paragraph
+        (a one-sentence section already runs 40+ chars) so it only ever
+        catches genuine fragments, not real short sections.
+        """
+        if len(sections) <= 1:
+            return sections
+
+        sections = list(sections)
+        result: list[tuple[int, int, str]] = []
+        i = 0
+        n = len(sections)
+        while i < n:
+            start, end, title = sections[i]
+            body_len = len(text[start:end].strip())
+            if body_len < self._MIN_SECTION_BODY_CHARS and i + 1 < n:
+                next_start, next_end, next_title = sections[i + 1]
+                combined_title = " — ".join(t for t in (title, next_title) if t)
+                sections[i + 1] = (start, next_end, combined_title)
+                i += 1
+                continue
+            if body_len < self._MIN_SECTION_BODY_CHARS and result:
+                prev_start, prev_end, prev_title = result[-1]
+                combined_title = " — ".join(t for t in (prev_title, title) if t)
+                result[-1] = (prev_start, end, combined_title)
+                i += 1
+                continue
+            result.append((start, end, title))
+            i += 1
+        return result
+
     # ── Protected spans ──────────────────────────────────────────────────
 
     @staticmethod
@@ -364,6 +411,8 @@ class StructureAwareChunker:
         start: int,
         end: int,
         protected_spans: list[tuple[int, int]],
+        *,
+        title: str = "",
     ) -> list[str]:
         section_text = text[start:end]
         rel_spans = [
@@ -392,6 +441,21 @@ class StructureAwareChunker:
                 chunks.append(piece_text.strip())
             else:
                 chunks.extend(self._pack_sentences(piece_text))
+
+        # Carry the section's own heading into its first chunk rather than
+        # dropping it — real, found-not-assumed: a body's first sentence
+        # is often the predicate of a subject named only in its heading
+        # ("## The Higg Index" / "is a suite of tools used widely..."),
+        # and without the heading that chunk reads as an orphaned sentence
+        # with no antecedent, which hurts both embedding quality and a
+        # human skimming citations. Small, bounded overflow past
+        # chunk_size is an accepted tradeoff here, same as protected spans
+        # above (see this class's own docstring).
+        if title:
+            if chunks:
+                chunks[0] = f"{title}\n\n{chunks[0]}"
+            else:
+                chunks = [title]
         return chunks
 
     def _pack_sentences(self, text: str) -> list[str]:
@@ -451,7 +515,11 @@ class StructureAwareChunker:
             if not match:
                 expanded.append(s)
                 continue
-            before, table_html, after = s[: match.start()], match.group(0), s[match.end() :]
+            before, table_html, after = (
+                s[: match.start()],
+                match.group(0),
+                s[match.end() :],
+            )
             if before.strip():
                 expanded.append(before.strip())
             expanded.extend(_split_oversized_table(table_html, self.chunk_size))

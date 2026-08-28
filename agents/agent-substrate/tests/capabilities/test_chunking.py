@@ -139,6 +139,73 @@ def test_oversized_html_table_is_split_not_dropped() -> None:
     assert "Event 79" in combined
 
 
+def test_tiny_fragment_section_is_merged_not_a_standalone_chunk() -> None:
+    """Real bug, found in production output: a whole chunk containing only
+    "NEW K" (5 characters) -- two headings close together left almost
+    nothing detected as the first one's body. That fragment must not
+    become its own low-information chunk."""
+    text = (
+        "# Real Section\n"
+        "This is a real paragraph with actual content worth retrieving on its own.\n\n"
+        "## NEW K\n"
+        "Content that legitimately belongs to the next real section starts here "
+        "and continues for a while to make sure it reads naturally.\n"
+    )
+    chunker = StructureAwareChunker(chunk_size=512, overlap=64)
+    docs = chunker.chunk(text)
+
+    assert not any(doc.to_text().strip() == "NEW K" for doc in docs)
+    # The fragment's heading text should still be findable, folded into
+    # whichever neighboring chunk absorbed it -- not silently dropped.
+    assert any("NEW K" in doc.to_text() for doc in docs)
+
+
+def test_last_tiny_section_merges_backward() -> None:
+    """A trailing fragment has no "next" section to merge into, so it must
+    fold into the previous one instead of being dropped or left standalone."""
+    text = (
+        "# Main Section\n"
+        "This is the real content of the document with a full paragraph here.\n\n"
+        "## X\n"
+    )
+    chunker = StructureAwareChunker(chunk_size=512, overlap=64)
+    docs = chunker.chunk(text)
+
+    assert not any(doc.to_text().strip() == "X" for doc in docs)
+
+
+def test_section_heading_is_prepended_to_its_first_chunk() -> None:
+    """Real bug, found in production output: a chunk reading "is a suite of
+    tools used widely by..." -- the predicate's subject was the section's
+    own heading, dropped during extraction. The heading must travel with
+    its body's first chunk so the sentence isn't orphaned."""
+    text = (
+        "# The Higg Index\n"
+        "is a suite of tools used widely by the apparel and footwear sector "
+        "to standardise the measurement of value chain sustainability.\n"
+    )
+    chunker = StructureAwareChunker(chunk_size=512, overlap=64)
+    docs = chunker.chunk(text)
+
+    assert len(docs) == 1
+    assert docs[0].to_text().startswith("The Higg Index")
+    assert "is a suite of tools" in docs[0].to_text()
+
+
+def test_heading_prepend_only_touches_first_chunk_of_its_section() -> None:
+    """A section long enough to split into multiple chunks must only carry
+    its heading in the first one -- not repeat it in every chunk."""
+    text = "# Repeated Heading Guard\n" + (
+        "Sentence padding to force a split into multiple chunks here. " * 20
+    )
+    chunker = StructureAwareChunker(chunk_size=200, overlap=20)
+    docs = chunker.chunk(text)
+
+    assert len(docs) > 1
+    assert docs[0].to_text().startswith("Repeated Heading Guard")
+    assert all("Repeated Heading Guard" not in doc.to_text() for doc in docs[1:])
+
+
 def test_small_html_table_is_kept_whole() -> None:
     # A table that already fits within chunk_size is left completely
     # untouched (still raw HTML) — only oversized tables get split and

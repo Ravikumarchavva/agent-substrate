@@ -37,6 +37,16 @@ class ServiceConfig(BaseSettings):
     # through to PPStructureV3(device=...) in pipeline.py.
     device: str = "cpu"
 
+    # text_recognition_batch_size/textline_orientation_batch_size passed to
+    # PPStructureV3 (pipeline.py) — how many OCR'd text regions get batched
+    # into one GPU inference call instead of dozens of tiny sequential
+    # ones. 16 was tuned for this project's original 4GB-class dev GPU
+    # (PP-StructureV3 holds layout+table+OCR models resident at once, so
+    # headroom is tighter than a single-model server); a 24GB+ card has
+    # real room to go much higher. None on CPU regardless of this value —
+    # pipeline.py only applies it when device starts with "gpu".
+    ocr_batch_size: int = 16
+
     # ── Document security scan (doc-firewall, security_scan.py) ──────────
     # Runs on raw bytes before PaddleOCR/PaddleX parses them — see
     # routes.py::extract(). True by default; disable only for local

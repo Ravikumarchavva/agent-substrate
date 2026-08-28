@@ -53,7 +53,9 @@ async def lifespan(app: FastAPI):
     )
 
     pipeline = ExtractionPipeline(
-        ocr_size=svc_config.ocr_size, device=svc_config.device
+        ocr_size=svc_config.ocr_size,
+        device=svc_config.device,
+        ocr_batch_size=svc_config.ocr_batch_size,
     )
 
     app.state.pipeline = pipeline

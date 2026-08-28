@@ -205,7 +205,9 @@ class ExtractionPipeline:
     """One PaddleOCR ``PPStructureV3`` pipeline: layout + chart/table
     detection + OCR, in a single call per document."""
 
-    def __init__(self, *, ocr_size: str = "tiny", device: str = "cpu") -> None:
+    def __init__(
+        self, *, ocr_size: str = "tiny", device: str = "cpu", ocr_batch_size: int = 16
+    ) -> None:
         _disable_mkldnn()
 
         from paddleocr import PPStructureV3
@@ -221,11 +223,10 @@ class ExtractionPipeline:
         # sequential launches instead of one batched one — real, measured
         # as a sawtooth GPU-utilization pattern (repeated short spikes, not
         # sustained load) rather than a bug in this pipeline's own code.
-        # 16 is a conservative batch for a 4GB-class laptop GPU (this
-        # project's own dev GPU) — PP-StructureV3 already holds layout +
-        # table + OCR models resident at once, so headroom is tighter than
-        # a single-model server.
-        batch_size = 16 if device.startswith("gpu") else None
+        # ocr_batch_size (config.py's DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE,
+        # default 16) was originally tuned for a 4GB-class laptop GPU — a
+        # 24GB+ card has real room to raise it; only ever applied on GPU.
+        batch_size = ocr_batch_size if device.startswith("gpu") else None
         self._pipeline = PPStructureV3(
             text_detection_model_name=det_model,
             text_recognition_model_name=rec_model,

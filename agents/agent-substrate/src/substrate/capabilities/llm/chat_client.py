@@ -399,6 +399,14 @@ class OpenAIChatCompletionClient:
         if response_format is not None and not serialized_tools:
             params["response_format"] = {"type": "json_object"}
 
+        if options.extra:
+            # The openai SDK validates top-level kwargs strictly — a
+            # provider-specific field like llama-server's
+            # `chat_template_kwargs` isn't a known param and raises
+            # TypeError if merged directly into params. `extra_body` is
+            # the SDK's own supported passthrough for exactly this case.
+            params["extra_body"] = options.extra
+
         try:
             response = await self.client.chat.completions.create(**params)
         except Exception as exc:
@@ -511,6 +519,14 @@ class OpenAIChatCompletionClient:
         response_format = options.response_format
         if response_format is not None and not serialized_tools:
             params["response_format"] = {"type": "json_object"}
+
+        if options.extra:
+            # The openai SDK validates top-level kwargs strictly — a
+            # provider-specific field like llama-server's
+            # `chat_template_kwargs` isn't a known param and raises
+            # TypeError if merged directly into params. `extra_body` is
+            # the SDK's own supported passthrough for exactly this case.
+            params["extra_body"] = options.extra
 
         collected_content = ""
         collected_tool_calls: dict[int, dict[str, Any]] = {}

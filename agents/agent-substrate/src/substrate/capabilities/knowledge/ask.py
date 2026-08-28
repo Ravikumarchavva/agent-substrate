@@ -34,6 +34,7 @@ Usage::
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -136,13 +137,34 @@ async def _decide_kb_filter(
     )
     response = await llm_client.generate(
         [ChatMessage(role="user", content=[TextBlock(text=prompt)])],
-        options=GenerationOptions(response_format=_KBFilterDecision),
+        options=GenerationOptions(
+            response_format=_KBFilterDecision,
+            # Real, found-not-assumed: reasoning-capable local models (e.g.
+            # Qwen3.5) burn their entire token budget on chain-of-thought
+            # before ever emitting the JSON decision, leaving nothing for
+            # the actual answer even at 512 tokens — this decision doesn't
+            # benefit from reasoning anyway, it's a mechanical lookup
+            # against the catalog. `chat_template_kwargs` is llama-server's
+            # accepted extra_body field for this; harmless no-op on
+            # providers that don't read it (verified: the OpenAI
+            # Responses-API client ignores `options.extra` entirely).
+            extra={"chat_template_kwargs": {"enable_thinking": False}},
+        ),
     )
     from substrate.kernel.core.content import content_blocks_to_str
 
-    text = content_blocks_to_str(response.content)
+    text = content_blocks_to_str(response.content).strip()
     try:
-        decision = _KBFilterDecision.model_validate_json(text)
+        # Parse only the first complete JSON object and ignore anything
+        # after it, rather than the whole string. Real, found-not-assumed:
+        # llama-server's generic json_object mode (no exact schema, just
+        # "valid JSON") doesn't reliably stop after one object — observed
+        # it duplicate the same decision twice in a row
+        # (`{...}\n{...}`), which `model_validate_json` on the raw string
+        # rejects outright as invalid JSON even though the first object is
+        # perfectly fine on its own.
+        obj, _ = json.JSONDecoder().raw_decode(text)
+        decision = _KBFilterDecision.model_validate(obj)
     except Exception as exc:
         logger.warning("kb_filter decision did not parse (%s): %r", exc, text[:200])
         return None

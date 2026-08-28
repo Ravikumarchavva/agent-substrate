@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import asyncio
+import uuid
 from typing import TYPE_CHECKING
 
 import pytest
@@ -649,5 +650,88 @@ async def test_pg_vector_store_hybrid_search_applies_filter() -> None:
     )
 
     assert [r.id for r in results] == [keep.id]
+
+    await store.delete_collection(collection)
+
+
+# ---------------------------------------------------------------------------
+# PgVectorStore — multi-row INSERT (add/upsert chunking, dedup)
+# ---------------------------------------------------------------------------
+
+
+async def test_pg_vector_store_add_spans_multiple_insert_batches() -> None:
+    """add() chunks its INSERT statements at insert_batch_size -- this
+    exercises more rows than fit in one statement to prove the multi-row
+    VALUES rewrite doesn't drop or corrupt rows across a chunk boundary."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.kernel.storage.vector import Document
+
+    engine = await _pg_async_engine()
+    if engine is None:
+        pytest.skip("Postgres not reachable")
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    store = PgVectorStore(
+        session_factory=session_factory,
+        engine=engine,
+        dimensions=384,
+        insert_batch_size=10,  # small on purpose -- forces multiple chunks
+    )
+    await store.ensure_table()
+
+    collection = f"chunked-insert-test-{id(object())}"
+    docs = [
+        Document.from_text(f"doc {i}", embedding=_vec384((i % 384, 1.0)))
+        for i in range(25)  # 3 chunks at batch size 10: 10, 10, 5
+    ]
+    ids = await store.add(docs, collection=collection)
+
+    assert len(ids) == 25
+    fetched = await store.get(ids, collection=collection)
+    assert {d.to_text() for d in fetched} == {f"doc {i}" for i in range(25)}
+
+    await store.delete_collection(collection)
+
+
+async def test_pg_vector_store_upsert_dedupes_repeated_id_within_a_chunk() -> None:
+    """ON CONFLICT DO UPDATE aborts a whole statement if one VALUES list
+    repeats an id ("cannot affect row a second time") -- upsert() must
+    dedupe (last write wins) before building the VALUES list, not just
+    trust callers never pass duplicate ids in one call."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.kernel.storage.vector import Document
+
+    engine = await _pg_async_engine()
+    if engine is None:
+        pytest.skip("Postgres not reachable")
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    store = PgVectorStore(
+        session_factory=session_factory, engine=engine, dimensions=384
+    )
+    await store.ensure_table()
+
+    collection = f"upsert-dedup-test-{id(object())}"
+    shared_id = str(uuid.uuid4())
+    docs = [
+        Document.from_text("first", id=shared_id, embedding=_vec384((0, 1.0))),
+        Document.from_text(
+            "second (should win)", id=shared_id, embedding=_vec384((0, 1.0))
+        ),
+    ]
+
+    # Must not raise, despite both documents sharing shared_id.
+    ids = await store.upsert(docs, collection=collection)
+
+    assert ids == [shared_id, shared_id]
+    fetched = await store.get([shared_id], collection=collection)
+    assert len(fetched) == 1
+    assert fetched[0].to_text() == "second (should win)"
 
     await store.delete_collection(collection)

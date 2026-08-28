@@ -23,8 +23,10 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -52,6 +54,16 @@ def _blocks_from_json(raw: str | list) -> list:
 
 _TABLE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
+# Rows per multi-row INSERT statement, for both add() and upsert(). Chunked
+# for statement size, not the 65535-bind-parameter ceiling (7 params/row
+# allows ~9362 rows per statement before hitting that): a 2048-dim halfvec
+# renders to a ~30KB text literal, so 100 rows is already a ~3MB SQL
+# statement. That captures ~99% of the round-trip reduction (1 -> 100) for
+# a fraction of the further gain 250+ would add, at real cost in statement-
+# compilation and asyncpg buffer churn.
+_INSERT_BATCH_SIZE = 100
+_PARAMS_PER_ROW = 7
+
 
 class PgVectorStore:
     """PostgreSQL + pgvector vector store (raw SQL, no ORM).
@@ -74,6 +86,7 @@ class PgVectorStore:
         engine: Any,
         dimensions: int = 1536,
         table_name: str = "vector_documents",
+        insert_batch_size: int = _INSERT_BATCH_SIZE,
     ) -> None:
         if not _TABLE_NAME_RE.match(table_name):
             raise ValueError(
@@ -85,6 +98,7 @@ class PgVectorStore:
         self._dimensions = dimensions
         self._table = table_name
         self._table_ensured = False
+        self._insert_batch_size = insert_batch_size
         # pgvector's `vector` type can only be HNSW/IVFFlat-indexed up to
         # 2000 dimensions (real, hit directly: Qwen3-VL-Embedding-2B's
         # 2048-dim output failed CREATE INDEX with "column cannot have more
@@ -93,7 +107,9 @@ class PgVectorStore:
         # used only above 2000 dims so the existing `vector` path (e.g.
         # 1536-dim OpenAI embeddings) is completely unchanged.
         self._vector_type = "halfvec" if dimensions > 2000 else "vector"
-        self._vector_ops = "halfvec_cosine_ops" if dimensions > 2000 else "vector_cosine_ops"
+        self._vector_ops = (
+            "halfvec_cosine_ops" if dimensions > 2000 else "vector_cosine_ops"
+        )
 
     # ── Schema ────────────────────────────────────────────────────────────────
 
@@ -156,6 +172,78 @@ class PgVectorStore:
 
     # ── Write ─────────────────────────────────────────────────────────────────
 
+    def _row_params(
+        self, doc: Document, collection: str, now: datetime
+    ) -> dict[str, Any]:
+        doc_id = doc.id or str(uuid.uuid4())
+        if doc.embedding is None:
+            raise ValueError(
+                f"Document {doc_id} is missing embedding required by PgVectorStore"
+            )
+        return {
+            "id": doc_id,
+            "collection": collection,
+            "text": doc.to_text(),
+            "content_json": _blocks_to_json(doc),
+            "embedding": "[" + ",".join(str(x) for x in doc.embedding) + "]",
+            "metadata": json.dumps(doc.metadata),
+            "created_at": now,
+        }
+
+    async def _insert_rows(
+        self, conn: Any, rows: list[dict[str, Any]], *, on_conflict_sql: str
+    ) -> None:
+        """Multi-row ``INSERT ... VALUES (...), (...), ...``, chunked at
+        ``self._insert_batch_size`` rows per statement — shared by ``add``
+        and ``upsert``, which differ only in their ``ON CONFLICT`` clause.
+
+        Replaces a previous per-row ``await conn.execute`` loop that a
+        comment here used to justify as "asyncpg pipelines them on the
+        wire" — it doesn't; SQLAlchemy's asyncpg dialect awaits each
+        ``execute`` as its own round trip, so that loop was one round trip
+        per row. The ``CAST(:embedding AS {vector_type})`` trick (kept
+        verbatim per row below) is exactly what makes a multi-row
+        ``VALUES`` list work with a typed vector column — the reason this
+        wasn't done originally (asyncpg can't infer the type in
+        ``executemany``) never actually applied, since this uses an
+        explicit ``VALUES`` list, not ``executemany``.
+        """
+        if not rows:
+            return
+        assert self._insert_batch_size * _PARAMS_PER_ROW < 65535, (
+            f"insert_batch_size={self._insert_batch_size} would exceed "
+            "Postgres's 65535 bind-parameter limit per statement"
+        )
+        start = time.monotonic()
+        for chunk_start in range(0, len(rows), self._insert_batch_size):
+            chunk = rows[chunk_start : chunk_start + self._insert_batch_size]
+            values_sql = ", ".join(
+                f"(:id_{i}, :collection_{i}, :text_{i}, CAST(:content_json_{i} AS jsonb), "
+                f"CAST(:embedding_{i} AS {self._vector_type}), CAST(:metadata_{i} AS jsonb), :created_at_{i})"
+                for i in range(len(chunk))
+            )
+            params: dict[str, Any] = {}
+            for i, row in enumerate(chunk):
+                for key, value in row.items():
+                    params[f"{key}_{i}"] = value
+            await conn.execute(
+                text(f"""
+                    INSERT INTO {self._table}
+                        (id, collection, text, content_json, embedding, metadata, created_at)
+                    VALUES {values_sql}
+                    {on_conflict_sql}
+                """),
+                params,
+            )
+        elapsed = time.monotonic() - start
+        logger.info(
+            "%s: inserted %d rows in %.2fs (%.0f rows/s)",
+            self._table,
+            len(rows),
+            elapsed,
+            len(rows) / elapsed if elapsed > 0 else float("inf"),
+        )
+
     async def add(
         self,
         documents: list[Document],
@@ -165,42 +253,16 @@ class PgVectorStore:
         await self.ensure_table()
 
         now = datetime.now(timezone.utc)
-        ids: list[str] = []
+        rows = await asyncio.to_thread(
+            lambda: [self._row_params(doc, collection, now) for doc in documents]
+        )
 
-        # asyncpg cannot infer the vector type in executemany, so we use a single
-        # transaction with per-row execute calls. asyncpg pipelines them on the wire
-        # so latency is amortised across the batch despite the loop.
         async with self._engine.begin() as conn:
-            for doc in documents:
-                doc_id = doc.id or str(uuid.uuid4())
-                if doc.embedding is None:
-                    raise ValueError(
-                        f"Document {doc_id} is missing embedding required by PgVectorStore"
-                    )
+            await self._insert_rows(
+                conn, rows, on_conflict_sql="ON CONFLICT (id) DO NOTHING"
+            )
 
-                emb_str = "[" + ",".join(str(x) for x in doc.embedding) + "]"
-                await conn.execute(
-                    text(f"""
-                        INSERT INTO {self._table}
-                            (id, collection, text, content_json, embedding, metadata, created_at)
-                        VALUES
-                            (:id, :collection, :text, CAST(:content_json AS jsonb),
-                             CAST(:embedding AS {self._vector_type}), CAST(:metadata AS jsonb), :created_at)
-                        ON CONFLICT (id) DO NOTHING
-                    """),
-                    {
-                        "id": doc_id,
-                        "collection": collection,
-                        "text": doc.to_text(),
-                        "content_json": _blocks_to_json(doc),
-                        "embedding": emb_str,
-                        "metadata": json.dumps(doc.metadata),
-                        "created_at": now,
-                    },
-                )
-                ids.append(doc_id)
-
-        return ids
+        return [row["id"] for row in rows]
 
     async def get(
         self,
@@ -254,44 +316,34 @@ class PgVectorStore:
     ) -> list[str]:
         await self.ensure_table()
         now = datetime.now(timezone.utc)
-        ids: list[str] = []
+        rows = await asyncio.to_thread(
+            lambda: [self._row_params(doc, collection, now) for doc in documents]
+        )
+
+        # Dedupe by id (last write wins) only for what actually gets sent to
+        # Postgres -- ON CONFLICT DO UPDATE aborts the whole statement with
+        # "cannot affect row a second time" if one VALUES list repeats an
+        # id. Duplicate ids across documents passed in one call are rare
+        # (ids default to fresh UUIDs) but real enough to guard rather than
+        # assume away. The returned `ids` list still has one entry per
+        # input document, in order, unaffected by the dedup.
+        deduped: dict[str, dict[str, Any]] = {row["id"]: row for row in rows}
 
         async with self._engine.begin() as conn:
-            for doc in documents:
-                doc_id = doc.id or str(uuid.uuid4())
-                if doc.embedding is None:
-                    raise ValueError(
-                        f"Document {doc_id} is missing embedding required by PgVectorStore"
-                    )
+            await self._insert_rows(
+                conn,
+                list(deduped.values()),
+                on_conflict_sql="""
+                    ON CONFLICT (id) DO UPDATE SET
+                        text = EXCLUDED.text,
+                        content_json = EXCLUDED.content_json,
+                        embedding = EXCLUDED.embedding,
+                        metadata = EXCLUDED.metadata,
+                        created_at = EXCLUDED.created_at
+                """,
+            )
 
-                emb_str = "[" + ",".join(str(x) for x in doc.embedding) + "]"
-                await conn.execute(
-                    text(f"""
-                        INSERT INTO {self._table}
-                            (id, collection, text, content_json, embedding, metadata, created_at)
-                        VALUES
-                            (:id, :collection, :text, CAST(:content_json AS jsonb),
-                             CAST(:embedding AS {self._vector_type}), CAST(:metadata AS jsonb), :created_at)
-                        ON CONFLICT (id) DO UPDATE SET
-                            text = EXCLUDED.text,
-                            content_json = EXCLUDED.content_json,
-                            embedding = EXCLUDED.embedding,
-                            metadata = EXCLUDED.metadata,
-                            created_at = EXCLUDED.created_at
-                    """),
-                    {
-                        "id": doc_id,
-                        "collection": collection,
-                        "text": doc.to_text(),
-                        "content_json": _blocks_to_json(doc),
-                        "embedding": emb_str,
-                        "metadata": json.dumps(doc.metadata),
-                        "created_at": now,
-                    },
-                )
-                ids.append(doc_id)
-
-        return ids
+        return [row["id"] for row in rows]
 
     async def delete(
         self,

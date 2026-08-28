@@ -135,13 +135,14 @@ class DocumentIngestPipeline:
         upload_concurrency: int = 32,
         chunk_size: int = 1800,
         chunk_overlap: int = 250,
+        segmenter: Any | None = None,
     ) -> None:
         from substrate.capabilities.knowledge.chunking import StructureAwareChunker
 
         self._extraction = extraction_client
         self._embedder = embedder
         self._chunker = StructureAwareChunker(
-            chunk_size=chunk_size, overlap=chunk_overlap
+            chunk_size=chunk_size, overlap=chunk_overlap, segmenter=segmenter
         )
         self._store = store
         self._blob_store = blob_store

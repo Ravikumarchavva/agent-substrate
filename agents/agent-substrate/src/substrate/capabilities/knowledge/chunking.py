@@ -17,6 +17,10 @@ import uuid
 from html.parser import HTMLParser
 from typing import Any
 
+from substrate.capabilities.knowledge.segmentation import (
+    RegexSegmenter,
+    SentenceSegmenter,
+)
 from substrate.kernel.core.content import TextBlock
 from substrate.kernel.storage.vector import Document
 
@@ -242,9 +246,14 @@ class StructureAwareChunker:
     from ``PageIndexRAGPipeline._build_markdown_tree``'s header-detection
     approach). Text with no detected headings falls back to a single section
     covering the whole input. Within each section, sentences are packed
-    greedily (reusing ``SentenceChunker._SENTENCE_RE``) up to ``chunk_size``
-    characters with ``overlap`` characters carried over between consecutive
-    chunks.
+    greedily up to ``chunk_size`` characters with ``overlap`` characters
+    carried over between consecutive chunks.
+
+    Sentence boundaries come from an injected ``segmenter``
+    (:class:`~substrate.capabilities.knowledge.segmentation.SentenceSegmenter`),
+    defaulting to the punctuation regex this class has always used. Pass
+    ``SaTSegmenter()`` for text where terminal punctuation is unreliable —
+    OCR'd PDFs, headings, and list items in particular.
 
     Protected spans: callers may pass ``protected_spans`` to :meth:`chunk` —
     a list of ``(start_offset, end_offset)`` character offsets into the
@@ -259,13 +268,18 @@ class StructureAwareChunker:
     section).
     """
 
-    _SENTENCE_RE = SentenceChunker._SENTENCE_RE
-
-    def __init__(self, chunk_size: int = 512, overlap: int = 128) -> None:
+    def __init__(
+        self,
+        chunk_size: int = 512,
+        overlap: int = 128,
+        *,
+        segmenter: SentenceSegmenter | None = None,
+    ) -> None:
         if overlap >= chunk_size:
             raise ValueError("overlap must be less than chunk_size")
         self.chunk_size = chunk_size
         self.overlap = overlap
+        self.segmenter = segmenter or RegexSegmenter()
 
     def chunk(
         self,
@@ -459,7 +473,7 @@ class StructureAwareChunker:
         return chunks
 
     def _pack_sentences(self, text: str) -> list[str]:
-        sentences = [s.strip() for s in self._SENTENCE_RE.split(text) if s.strip()]
+        sentences = self.segmenter.segment(text)
         sentences = self._expand_oversized_tables(sentences)
         chunks: list[str] = []
         current: list[str] = []

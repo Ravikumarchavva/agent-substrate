@@ -125,6 +125,20 @@ sandbox = [
 # file-based vector store — capabilities/vector/lancedb_store.py), ~110MB
 # combined (lancedb + pyarrow) — not needed unless you actually use either.
 rag = ["pypdf>=6.13.0", "lancedb>=0.37.1"]
+# Model-based sentence segmentation for the chunkers (SaTSegmenter, in
+# capabilities/knowledge/segmentation.py). wtpsplit pulls transformers +
+# huggingface-hub + scikit-learn + pandas, and needs a backend to actually
+# run a model — torch if present, otherwise add `wtpsplit[onnx-cpu]`. The
+# default RegexSegmenter needs none of it, so this stays opt-in: install it
+# only if punctuation is an unreliable boundary signal for your documents
+# (OCR'd PDFs, headings, list items), which is where SaT earns its weight.
+# The onnx-cpu extra is not optional in practice: wtpsplit declares NO deep
+# learning backend of its own and fails at model construction with "Please
+# install `torch` to use WtP with a PyTorch model" unless torch or
+# onnxruntime is present. onnxruntime is ~50MB against torch's ~2GB, so
+# SaTSegmenter defaults to the ONNX path — see its docstring to opt back
+# into torch.
+chunking = ["wtpsplit[onnx-cpu]>=2.1.0"]
 # Managed RAG via Pinecone Assistant (RAG_BACKEND=pinecone) — parsing,
 # chunking, embedding, storage, and retrieval all run on Pinecone's side, so
 # none of the local `rag`/`extraction` extras above are needed with this backend.

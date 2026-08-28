@@ -1,8 +1,26 @@
 from __future__ import annotations
 
+import pytest
+
 from substrate.capabilities.knowledge.chunking import (
     StructureAwareChunker,
     get_chunker,
+)
+from substrate.capabilities.knowledge.segmentation import (
+    RegexSegmenter,
+    SentenceSegmenter,
+)
+
+# Real shape of document-intelligence output for an OCR'd corporate PDF:
+# a heading with no terminal punctuation, bullet items, and a column-broken
+# line. None of it contains ". ", so the punctuation regex sees the whole
+# block as a single unsplittable "sentence".
+OCR_SHAPED_TEXT = (
+    "Scope 1 and Scope 2 Emissions Summary\n"
+    "- Total direct emissions fell year over year\n"
+    "- Renewable electricity share increased\n"
+    "- Third party assurance was obtained\n"
+    "Reported figures exclude joint ventures\n"
 )
 
 
@@ -204,6 +222,60 @@ def test_heading_prepend_only_touches_first_chunk_of_its_section() -> None:
     assert len(docs) > 1
     assert docs[0].to_text().startswith("Repeated Heading Guard")
     assert all("Repeated Heading Guard" not in doc.to_text() for doc in docs[1:])
+
+
+def test_default_segmenter_is_the_regex_one() -> None:
+    """The seam must not change behaviour for callers that never asked for
+    a segmenter — the regex is still what runs by default."""
+    assert isinstance(StructureAwareChunker().segmenter, RegexSegmenter)
+
+
+def test_injected_segmenter_is_actually_used() -> None:
+    """Proves the chunker packs whatever the segmenter returns, rather than
+    re-splitting the text itself somewhere downstream."""
+
+    class _FixedSegmenter:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def segment(self, text: str) -> list[str]:
+            self.calls.append(text)
+            return ["ALPHA", "BETA", "GAMMA"]
+
+    segmenter = _FixedSegmenter()
+    assert isinstance(segmenter, SentenceSegmenter)
+
+    chunker = StructureAwareChunker(chunk_size=512, overlap=64, segmenter=segmenter)
+    docs = chunker.chunk("some text that the fake segmenter ignores entirely")
+
+    assert segmenter.calls, "the chunker never called the injected segmenter"
+    assert docs[0].to_text() == "ALPHA BETA GAMMA"
+
+
+def test_regex_segmenter_fuses_unpunctuated_ocr_text() -> None:
+    """Documents the limitation SaTSegmenter exists to fix. This is not a
+    wish -- it is what the default does today on real OCR output, and the
+    reason a whole heading + bullet list can land in one chunk with no
+    internal boundary available to pack on."""
+    assert len(RegexSegmenter().segment(OCR_SHAPED_TEXT)) == 1
+
+
+def test_sat_segmenter_finds_boundaries_the_regex_cannot() -> None:
+    """The payoff test: on the same unpunctuated OCR text the regex fuses
+    into one unit, SaT must find real boundaries. Skipped unless the
+    optional 'chunking' extra is installed."""
+    pytest.importorskip("wtpsplit", reason="requires the 'chunking' extra")
+    from substrate.capabilities.knowledge.segmentation import SaTSegmenter
+
+    pieces = SaTSegmenter().segment(OCR_SHAPED_TEXT)
+
+    assert len(pieces) > 1
+    assert len(pieces) > len(RegexSegmenter().segment(OCR_SHAPED_TEXT))
+    # Nothing may be silently dropped: every non-whitespace character of the
+    # input must survive segmentation.
+    assert "".join(pieces).replace(" ", "") == OCR_SHAPED_TEXT.replace(" ", "").replace(
+        "\n", ""
+    )
 
 
 def test_small_html_table_is_kept_whole() -> None:

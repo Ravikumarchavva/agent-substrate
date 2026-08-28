@@ -373,6 +373,89 @@ services:
       - paddlex-model-cache:/root/.paddlex
     restart: unless-stopped
 
+  # Second replica per physical GPU (-3/-4/-5 pinned to the same GPUs as
+  # -0/-1/-2) — real measurement on epyc showed each single replica only
+  # using ~4-8GB of a 24GB card and 0-20% compute, because PPStructureV3 is
+  # a multi-stage pipeline (layout/orientation/table/OCR, each a small GPU
+  # call with CPU-side pre/post-processing between them) rather than one
+  # sustained batched forward pass — a lone replica can't keep the GPU busy
+  # by itself. A second independent replica's GPU calls fill the first
+  # one's CPU-bound idle gaps. This does NOT reintroduce the concurrent-
+  # requests-to-one-instance timeout finding above — these are separate
+  # containers/processes, each still only ever receiving one request at a
+  # time from the ingestion driver's per-endpoint worker.
+  document-intelligence-gpu-3:
+    profiles:
+      - document-intelligence-gpu
+    build:
+      context: ../..
+      dockerfile: deployment/docker/document-intelligence.gpu.Dockerfile
+    ports:
+      - "8024:8080"
+    environment:
+      DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-false}
+      DOCUMENT_INTELLIGENCE_DEVICE: gpu:0
+      DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE: ${DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE:-64}
+      HF_TOKEN: ${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    volumes:
+      - paddlex-model-cache:/root/.paddlex
+    restart: unless-stopped
+
+  document-intelligence-gpu-4:
+    profiles:
+      - document-intelligence-gpu
+    build:
+      context: ../..
+      dockerfile: deployment/docker/document-intelligence.gpu.Dockerfile
+    ports:
+      - "8025:8080"
+    environment:
+      DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-false}
+      DOCUMENT_INTELLIGENCE_DEVICE: gpu:0
+      DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE: ${DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE:-64}
+      HF_TOKEN: ${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
+    volumes:
+      - paddlex-model-cache:/root/.paddlex
+    restart: unless-stopped
+
+  document-intelligence-gpu-5:
+    profiles:
+      - document-intelligence-gpu
+    build:
+      context: ../..
+      dockerfile: deployment/docker/document-intelligence.gpu.Dockerfile
+    ports:
+      - "8026:8080"
+    environment:
+      DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-false}
+      DOCUMENT_INTELLIGENCE_DEVICE: gpu:0
+      DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE: ${DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE:-64}
+      HF_TOKEN: ${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["2"]
+              capabilities: [gpu]
+    volumes:
+      - paddlex-model-cache:/root/.paddlex
+    restart: unless-stopped
+
   # Thin httpx proxy to the llama-embed/llama-rerank sidecars — a separate
   # service from document-intelligence since it shares no code or state
   # with the OCR/layout pipeline (see docs/claude_docs/decisions.md).

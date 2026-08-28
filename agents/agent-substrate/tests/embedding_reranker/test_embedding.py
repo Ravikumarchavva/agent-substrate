@@ -91,6 +91,86 @@ async def test_embed_image_sends_prompt_string_and_multimodal_data():
     assert vector == [0.4, 0.5]
 
 
+def _png(width: int, height: int) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), (120, 30, 200)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_downscale_leaves_an_image_that_already_fits_untouched() -> None:
+    from substrate.runtimes.embedding_reranker.service.embedding import (
+        _downscale_to_pixel_budget,
+    )
+
+    data = _png(400, 300)
+    assert _downscale_to_pixel_budget(data, 1_000_000) is data
+
+
+def test_downscale_shrinks_to_budget_and_keeps_aspect_ratio() -> None:
+    """Real, measured: the sidecar spends one token per ~32x32 px block, so
+    an image's token cost is its area / 1024. A 2025x837 chart came to 1641
+    tokens against a 1024-token slot and was rejected outright."""
+    import io
+
+    from PIL import Image
+
+    from substrate.runtimes.embedding_reranker.service.embedding import (
+        _PIXELS_PER_IMAGE_TOKEN,
+        _downscale_to_pixel_budget,
+    )
+
+    budget = 1_000_000
+    out = _downscale_to_pixel_budget(_png(2025, 837), budget)
+    width, height = Image.open(io.BytesIO(out)).size
+
+    assert width * height <= budget
+    # Comfortably under the 1024-token slot ceiling that rejected it before.
+    assert (width * height) / _PIXELS_PER_IMAGE_TOKEN < 1024
+    assert abs((width / height) - (2025 / 837)) < 0.01
+
+
+def test_downscale_returns_input_unchanged_when_it_cannot_be_decoded() -> None:
+    """Not this function's job to police unreadable bytes -- the existing
+    embed error path already handles them, and swallowing them here would
+    turn a clear failure into a confusing one."""
+    from substrate.runtimes.embedding_reranker.service.embedding import (
+        _downscale_to_pixel_budget,
+    )
+
+    assert _downscale_to_pixel_budget(b"not an image", 1000) == b"not an image"
+
+
+async def test_embed_image_downscales_an_oversized_image_before_sending():
+    """The 13-of-60 image loss was silent: oversized charts 400'd and the
+    caller's degrade path skipped them. They must now be sent at a size the
+    sidecar accepts instead of being dropped."""
+    import io
+
+    from PIL import Image
+
+    sent: dict[str, bytes] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/props":
+            return httpx.Response(200, json={"media_marker": "<m>"})
+        payload = json.loads(request.content)
+        sent["data"] = base64.b64decode(payload["input"]["multimodal_data"][0])
+        return httpx.Response(200, json=[{"embedding": [[0.1, 0.2]]}])
+
+    original = _png(2025, 837)
+    reranker = _reranker(handler)
+    reranker._max_image_pixels = 1_000_000
+    await reranker.embed_image(original)
+
+    assert sent["data"] != original, "oversized image was sent unchanged"
+    width, height = Image.open(io.BytesIO(sent["data"])).size
+    assert width * height <= 1_000_000
+
+
 async def test_embed_image_caches_the_media_marker_across_calls():
     props_calls = 0
 

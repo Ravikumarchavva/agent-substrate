@@ -31,6 +31,72 @@ class EmbeddingServiceError(RuntimeError):
     returns a response in an unexpected shape."""
 
 
+# The sidecar turns an image into one token per ~32x32 pixel block, so its
+# token cost is a pure function of area. Measured against the running
+# server across images from a real report, the ratio is strikingly tight:
+#
+#   1098x1044 -> 1125 tok (1019 px/tok)    2025x837  -> 1641 tok (1033)
+#   1595x670  -> 1053 tok (1015 px/tok)    1470x1069 -> 1521 tok (1033)
+#
+# so tokens ~= width * height / 1024, plus a handful for the prompt marker.
+_PIXELS_PER_IMAGE_TOKEN = 1024
+
+# Default budget in pixels, sized for a slot ceiling of 1024 tokens
+# (llama-embed-gpu runs --ctx-size 8192 --parallel 8). 1_000_000 px works
+# out to ~977 image tokens, leaving room for the marker without sitting
+# right on the limit.
+_DEFAULT_MAX_IMAGE_PIXELS = 1_000_000
+
+
+def _downscale_to_pixel_budget(data: bytes, max_pixels: int) -> bytes:
+    """Shrink an image to fit ``max_pixels``, preserving aspect ratio.
+
+    Real, measured problem this solves: an 81-page sustainability report
+    extracted 60 images, of which 13 were rejected outright with "request
+    (1053-1641 tokens) exceeds the available context size (1024 tokens)"
+    and silently dropped by the caller's degrade path. Every one was a
+    large chart -- the most information-dense images in the document, and
+    the ones most worth retrieving.
+
+    Only the EMBEDDING input is reduced. Callers that also store the image
+    keep their own original bytes, so nothing is downscaled on disk.
+    Returns the input unchanged if it already fits or cannot be decoded --
+    an unreadable image is the existing error path's problem, not this
+    function's.
+    """
+    import io
+
+    from PIL import Image
+
+    try:
+        img = Image.open(io.BytesIO(data))
+        width, height = img.size
+    except Exception:
+        return data
+
+    if width * height <= max_pixels or width < 1 or height < 1:
+        return data
+
+    scale = (max_pixels / (width * height)) ** 0.5
+    new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+    try:
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        buffer = io.BytesIO()
+        img.resize(new_size, Image.LANCZOS).save(buffer, format="PNG")
+    except Exception:
+        return data
+    logger.debug(
+        "Downscaled image %dx%d -> %dx%d for embedding (budget %d px)",
+        width,
+        height,
+        new_size[0],
+        new_size[1],
+        max_pixels,
+    )
+    return buffer.getvalue()
+
+
 class EmbeddingReranker:
     def __init__(
         self,
@@ -38,11 +104,13 @@ class EmbeddingReranker:
         embed_server_url: str,
         rerank_server_url: str,
         timeout: float = 30.0,
+        max_image_pixels: int = _DEFAULT_MAX_IMAGE_PIXELS,
     ) -> None:
         self._embed_url = embed_server_url.rstrip("/")
         self._rerank_url = rerank_server_url.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout)
         self._cached_media_marker: str | None = None
+        self._max_image_pixels = max_image_pixels
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -67,7 +135,8 @@ class EmbeddingReranker:
         # server instance unless `LLAMA_MEDIA_MARKER` is pinned, so it's
         # fetched from `/props` rather than hardcoded.
         marker = await self._media_marker()
-        b64 = base64.b64encode(data).decode("ascii")
+        fitted = _downscale_to_pixel_budget(data, self._max_image_pixels)
+        b64 = base64.b64encode(fitted).decode("ascii")
         payload = {"input": {"prompt_string": marker, "multimodal_data": [b64]}}
         return await self._embed(payload)
 
@@ -87,7 +156,11 @@ class EmbeddingReranker:
             "input": [
                 {
                     "prompt_string": marker,
-                    "multimodal_data": [base64.b64encode(data).decode("ascii")],
+                    "multimodal_data": [
+                        base64.b64encode(
+                            _downscale_to_pixel_budget(data, self._max_image_pixels)
+                        ).decode("ascii")
+                    ],
                 }
                 for data in images
             ]

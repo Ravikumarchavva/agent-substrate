@@ -263,7 +263,20 @@ services:
   # (`docker compose --profile document-intelligence-gpu up`); they'd
   # otherwise collide on host port 8021. Requires the NVIDIA Container
   # Toolkit configured for Docker on the host.
-  document-intelligence-gpu:
+  #
+  # Three pinned replicas (document-intelligence-gpu-0/1/2), one per
+  # physical GPU on a multi-card host — document-intelligence-gpu appears
+  # to serialize extraction requests internally (real, found-not-assumed:
+  # concurrent requests to ONE instance made even small files time out,
+  # while sequential succeeded every time), so real indexing throughput
+  # comes from independent instances, not from one instance handling more
+  # concurrent requests. `device_ids` (not `count`) pins each replica to a
+  # specific card — `count: 1` alone is non-deterministic about which GPU
+  # a container lands on. DOCUMENT_INTELLIGENCE_DEVICE stays "gpu:0" for
+  # every replica: device_ids restricts each container's CUDA visibility
+  # to just its one pinned card, which is always index 0 from inside that
+  # container regardless of the host's physical GPU index.
+  document-intelligence-gpu-0:
     profiles:
       - document-intelligence-gpu
     build:
@@ -273,14 +286,60 @@ services:
       - "8021:8080"
     environment:
       DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-true}
-      DOCUMENT_INTELLIGENCE_DEVICE: ${DOCUMENT_INTELLIGENCE_DEVICE:-gpu:0}
+      DOCUMENT_INTELLIGENCE_DEVICE: gpu:0
       HF_TOKEN: ${HF_TOKEN:-}
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              device_ids: ["0"]
+              capabilities: [gpu]
+    volumes:
+      - paddlex-model-cache:/root/.paddlex
+    restart: unless-stopped
+
+  document-intelligence-gpu-1:
+    profiles:
+      - document-intelligence-gpu
+    build:
+      context: ../..
+      dockerfile: deployment/docker/document-intelligence.gpu.Dockerfile
+    ports:
+      - "8022:8080"
+    environment:
+      DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-true}
+      DOCUMENT_INTELLIGENCE_DEVICE: gpu:0
+      HF_TOKEN: ${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
+    volumes:
+      - paddlex-model-cache:/root/.paddlex
+    restart: unless-stopped
+
+  document-intelligence-gpu-2:
+    profiles:
+      - document-intelligence-gpu
+    build:
+      context: ../..
+      dockerfile: deployment/docker/document-intelligence.gpu.Dockerfile
+    ports:
+      - "8023:8080"
+    environment:
+      DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-true}
+      DOCUMENT_INTELLIGENCE_DEVICE: gpu:0
+      HF_TOKEN: ${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["2"]
               capabilities: [gpu]
     volumes:
       - paddlex-model-cache:/root/.paddlex
@@ -442,7 +501,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              device_ids: ["0"]
               capabilities: [gpu]
     volumes:
       - llama-model-cache:/cache
@@ -480,7 +539,51 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              device_ids: ["1"]
+              capabilities: [gpu]
+    volumes:
+      - llama-model-cache:/cache
+    restart: unless-stopped
+
+  # Local chat/instruct LLM — used only by the query/eval-time pipeline
+  # (kb_filter decisions, RAG answer generation, LLM-judge correctness
+  # scoring), never during ingestion. Same Dockerfile family as the
+  # embed/rerank sidecars, plain chat-completions mode (no --embedding/
+  # --reranking). Model pinned per real-world guidance (past this repo's
+  # own knowledge cutoff for model recency) — verify the exact -hf-file
+  # quant filename still resolves on HF before trusting this in a real run.
+  llama-chat-gpu:
+    profiles:
+      - llama-gpu
+    build:
+      context: ../..
+      dockerfile: deployment/docker/llama-server.gpu.Dockerfile
+    command:
+      - --hf-repo
+      - unsloth/Qwen3.5-9B-GGUF
+      - --hf-file
+      - Qwen3.5-9B-Q4_K_M.gguf
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8033"
+      - --ctx-size
+      - "4096"
+      - --parallel
+      - "2"
+      - -ngl
+      - "99"
+    environment:
+      PORT: "8033"
+      HF_TOKEN: ${HF_TOKEN:-}
+    ports:
+      - "8033:8033"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["2"]
               capabilities: [gpu]
     volumes:
       - llama-model-cache:/cache

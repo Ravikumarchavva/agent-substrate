@@ -108,13 +108,36 @@ class ExtractionClient:
         resp.raise_for_status()
         return resp
 
+    def _timeout_for(self, timeout_s: float | None) -> httpx.Timeout:
+        """The constructor timeout, with just the read leg overridden when
+        the caller passes one — e.g. a batch driver that knows a batch's
+        total page count and wants a bigger read budget for this one call
+        without touching connect/write/pool."""
+        if timeout_s is None:
+            return self._timeout
+        return httpx.Timeout(
+            connect=self._timeout.connect,
+            read=timeout_s,
+            write=self._timeout.write,
+            pool=self._timeout.pool,
+        )
+
     async def extract(
-        self, data: bytes, filename: str, content_type: str
+        self,
+        data: bytes,
+        filename: str,
+        content_type: str,
+        *,
+        timeout_s: float | None = None,
     ) -> ExtractResponse:
         """Extract text + chart/table images from a document. Never raises —
         a failure of any kind (bad status, connection error, timeout) comes
         back as ``success=False`` so the caller can fall back to a lighter
-        local extractor instead of failing the whole chat turn."""
+        local extractor instead of failing the whole chat turn.
+
+        ``timeout_s`` overrides the client's own constructor timeout for
+        this call only (httpx supports a per-request ``timeout=`` override).
+        """
         import base64
 
         try:
@@ -126,6 +149,7 @@ class ExtractionClient:
                     "filename": filename,
                     "content_type": content_type,
                 },
+                timeout=self._timeout_for(timeout_s),
             )
             return ExtractResponse(**resp.json())
         except httpx.HTTPStatusError as exc:
@@ -146,7 +170,10 @@ class ExtractionClient:
             return ExtractResponse(success=False, error=f"Connection error: {exc}")
 
     async def extract_batch(
-        self, items: list[tuple[bytes, str, str]]
+        self,
+        items: list[tuple[bytes, str, str]],
+        *,
+        timeout_s: float | None = None,
     ) -> list[ExtractResponse]:
         """Extract multiple documents in ONE request — see
         document_intelligence/service/pipeline.py::ExtractionPipeline.
@@ -156,6 +183,13 @@ class ExtractionClient:
         ``(data, filename, content_type)`` tuples, same fields as
         ``extract()`` batched. Results come back in the same order as
         ``items``.
+
+        ``timeout_s`` overrides the client's own constructor timeout for
+        this call only — a caller that batches by page-count budget (see
+        ``pdfqa_rag.pipeline.dataset_ingest_gpu``) can size this to the
+        batch's actual total page count instead of one fixed timeout shared
+        across every batch regardless of size, which was a real, measured
+        cause of avoidable failures on large documents.
 
         Never raises — a transport-level failure (bad status, connection
         error, timeout) affects the whole batch the same way ``extract()``
@@ -181,6 +215,7 @@ class ExtractionClient:
                         for data, filename, content_type in items
                     ]
                 },
+                timeout=self._timeout_for(timeout_s),
             )
             return [ExtractResponse(**item) for item in resp.json()]
         except httpx.HTTPStatusError as exc:

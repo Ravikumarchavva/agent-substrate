@@ -66,7 +66,8 @@ class RAGPipeline:
         Args:
             content: Text (or list of texts) to ingest.
             collection: Namespace in the vector store.
-            chunker: Chunking strategy name (``"text"`` or ``"sentence"``).
+            chunker: Chunking strategy name (``"text"``, ``"sentence"`` or
+                ``"structure"``).
             metadata: Base metadata applied to every chunk.
             chunk_size: Override default chunk size.
             chunk_overlap: Override default chunk overlap.
@@ -79,7 +80,11 @@ class RAGPipeline:
 
         # Build chunker
         chunker_kwargs: dict[str, Any] = {}
-        if chunker == "text":
+        if chunker in ("text", "structure"):
+            # StructureAwareChunker takes the same chunk_size/overlap pair as
+            # TextChunker. It was previously absent from this dispatch, so
+            # both overrides were silently discarded and it always got its
+            # own 512/128 defaults no matter what the caller asked for.
             chunker_kwargs["chunk_size"] = chunk_size or self._default_chunk_size
             chunker_kwargs["overlap"] = chunk_overlap or self._default_chunk_overlap
         elif chunker == "sentence":

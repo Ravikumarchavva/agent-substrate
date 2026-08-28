@@ -195,6 +195,39 @@ This is the end.
 
 
 @pytest.mark.asyncio
+async def test_structure_chunker_honours_chunk_size_override():
+    """RAGPipeline.ingest built chunker kwargs for the "text" and "sentence"
+    strategies only, so "structure" fell through with an empty kwargs dict
+    and always got StructureAwareChunker's own 512/128 defaults — both
+    overrides silently discarded with no error. A caller asking for small
+    chunks got large ones and had no way to notice."""
+    embed_client = OpenAIEmbeddingClient(api_key="mock")
+    embed_client.embed = AsyncMock(
+        side_effect=lambda texts, **kw: EmbeddingResult(
+            embeddings=[[0.1] * 1536 for _ in texts], model="test"
+        )
+    )
+    vector_store = StubVectorStore()
+    pipeline = RAGPipeline(embedding_client=embed_client, vector_store=vector_store)
+
+    text = "".join(
+        f"This is sentence number {i} in a long document. " for i in range(60)
+    )
+
+    await pipeline.ingest(
+        text,
+        collection="kb",
+        chunker="structure",
+        chunk_size=120,
+        chunk_overlap=20,
+    )
+
+    assert len(vector_store.documents) > 1
+    # Slack allows one whole sentence to overshoot: packing works on whole
+    # sentences and cannot split one that alone exceeds chunk_size.
+    assert all(len(doc.to_text()) <= 180 for doc in vector_store.documents)
+
+
 async def test_graph_rag_enrichment():
     # Setup mock LLM for Graph extraction
     # Returns entity/rel JSON

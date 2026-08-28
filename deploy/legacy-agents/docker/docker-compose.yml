@@ -596,10 +596,18 @@ services:
       - 0.0.0.0
       - --port
       - "8031"
+      # 8 parallel slots (up from 2) -- real, found-not-assumed: the batch
+      # ingestion driver runs 6 document-intelligence-gpu workers that all
+      # embed through this ONE shared server; with only 2 slots, 4 of every
+      # 6 workers' embed calls queued behind the other 2 on every file.
+      # ctx-size scaled proportionally (1024/slot, same per-slot budget as
+      # before -- see document_ingest_pipeline.py's chunk-size comment for
+      # why that budget matters) so this isn't a silent regression on the
+      # oversized-chunk case that was already found and handled there.
       - --ctx-size
-      - "2048"
+      - "8192"
       - --parallel
-      - "2"
+      - "8"
       - -ngl
       - "99"
     environment:
@@ -634,10 +642,15 @@ services:
       - 0.0.0.0
       - --port
       - "8032"
+      # 6 parallel slots (up from 1) -- the retrieval/eval phase runs many
+      # ask() calls concurrently (LLM-judge over a ~200-pair sample); a
+      # single slot would fully serialize every one of those rerank calls.
+      # This card is dedicated to rerank alone during that phase (extraction
+      # is stopped by then), so there's headroom to scale ctx-size with it.
       - --ctx-size
-      - "2048"
+      - "12288"
       - --parallel
-      - "1"
+      - "6"
       - -ngl
       - "99"
     environment:
@@ -678,10 +691,16 @@ services:
       - 0.0.0.0
       - --port
       - "8033"
+      # 6 parallel slots (up from 2) -- highest call volume of the eval
+      # phase (kb_filter decision + answer generation per ask() call, plus
+      # LLM-judge scoring over the sample); dedicated to this alone on its
+      # own GPU during that phase. ctx-size scaled to keep a comfortable
+      # per-slot budget for retrieved-context + citations, not just the
+      # kb_filter's own short catalog prompt.
       - --ctx-size
-      - "4096"
+      - "24576"
       - --parallel
-      - "2"
+      - "6"
       - -ngl
       - "99"
     environment:

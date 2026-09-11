@@ -33,13 +33,18 @@ Package manager: **`uv`** (never `pip`).
 uv sync
 
 # Start infrastructure (Postgres, Redis, SeaweedFS, observability, MCP server)
-make infra-up
+make infra-up                        # repo contributors — full stack via Makefile
+uv run substrate up                  # anyone depending on agent-substrate as a
+                                      # package — no clone, no `make`, required
 
 # Start monolith backend (port 8000)
-uv run start
+uv run substrate start --host 0.0.0.0 --foreground
 
 # With hot-reload
-uv run start --reload
+uv run substrate start --host 0.0.0.0 --reload
+
+# Bring up infra + start the server in one command
+uv run substrate start --all --host 0.0.0.0 --foreground
 
 # Run tests
 uv run pytest
@@ -446,7 +451,7 @@ RUNTIME_PG_POOL_MAX_SIZE=10
 | PostgreSQL | 5432 | `DATABASE_URL` uses `localhost:5432` |
 | Redis | 6379 | `REDIS_URL` uses `localhost:6379` |
 | MCP demo server | 9000 | SSE at `localhost:9000/sse` |
-| Monolith backend | 8000 | `uv run start` |
+| Monolith backend | 8000 | `uv run substrate start` |
 | Tempo | 4318 | OTLP HTTP |
 | Grafana | 3001 | Dashboard |
 

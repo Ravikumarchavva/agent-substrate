@@ -86,7 +86,9 @@ src/substrate/
 │   │                     ToolRegistry, ToolRisk, ToolExecutionResult), chain.py (chain
 │   │                     contracts: ChainPolicy, InvocationResult, ChainRunResult),
 │   │                     skills.py, approval.py (ApprovalHandler, ApprovalResult)
-│   ├── agent/            context.py (CompactionStrategy), middleware.py (Interceptor),
+│   ├── agent/            context.py (CompactionStrategy), middleware.py (MiddlewareStage —
+│   │                     the real Interceptor/MiddlewarePipeline machinery is L1, not kernel;
+│   │                     see agents/middleware/ below),
 │   │                     supervision.py (Supervision, SpawnBudget, Priority),
 │   │                     runtime_context.py (RunMeta), safety.py (SafetyVerdict,
 │   │                     TextSafetyClassifier/ImageSafetyClassifier Protocols)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-import httpx
+import httpx2 as httpx
 
 from substrate.logger import setup_logging
 

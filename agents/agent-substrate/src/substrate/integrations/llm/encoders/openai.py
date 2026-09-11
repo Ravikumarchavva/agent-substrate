@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from PIL import Image
+if TYPE_CHECKING:
+    from PIL import Image
 
 from substrate.integrations.llm.encoders._media import (
     bytes_to_base64,
@@ -184,6 +185,8 @@ def _encode_media_item(
     role: str,
 ) -> dict[str, Any]:
     """Encode a single media block to OpenAI Responses API format."""
+    from PIL import Image
+
     if isinstance(item, Image.Image):
         return _encode_image(item)
     if isinstance(item, ImageBlock):

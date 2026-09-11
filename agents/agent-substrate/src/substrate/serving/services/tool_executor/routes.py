@@ -19,7 +19,7 @@ from substrate.logger import setup_logging
 import base64
 from typing import Any, Dict, List, Optional
 
-import httpx
+import httpx2 as httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 

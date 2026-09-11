@@ -16,7 +16,7 @@ from substrate.logger import setup_logging
 
 from typing import Any
 
-import httpx
+import httpx2 as httpx
 from pydantic import BaseModel
 
 logger = setup_logging()

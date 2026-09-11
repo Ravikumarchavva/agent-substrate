@@ -1,7 +1,10 @@
 """substrate CLI
 
 Usage:
-    substrate start          # start server on default port 8000
+    substrate up              # start local dev infra (Postgres, Redis, SeaweedFS,
+                               # observability, MCP server) — no `make`, no clone needed
+    substrate down             # stop it
+    substrate start           # start server on default port 8000
     substrate start --port 9000 --reload
     substrate stop           # stop a running server (via PID file)
     substrate status         # check if server is running
@@ -9,7 +12,7 @@ Usage:
     substrate chat --model gpt-4o-mini --no-tools
 
     uv run start             # `start_main` — server only, infra assumed running
-    uv run start-all         # `start_all_main` — `make infra-up-all` then the server
+    uv run start-all         # `start_all_main` — `substrate up` then the server
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import ctypes
+import importlib.resources
 import os
 import signal
 import subprocess
@@ -68,6 +72,75 @@ def _is_running(pid: int) -> bool:
             return True
         except (ProcessLookupError, PermissionError):
             return False
+
+
+# ── infra (up / down) ────────────────────────────────────────────────────────
+
+# Matches `make infra-up`'s service list (agent-substrate's own repo-root
+# Makefile) minus the services that need the full repo as build context
+# (backend, document-intelligence, GPU inference, ONLYOFFICE) — those build
+# agent-substrate's own images and aren't needed to just run against it as
+# a dependency.
+_INFRA_SERVICES = [
+    "postgres",
+    "redis",
+    "seaweedfs",
+    "seaweedfs-admin",
+    "loki",
+    "promtail",
+    "tempo",
+    "grafana",
+    "mcp-server",
+]
+
+
+def _infra_compose_path() -> Path:
+    """Real filesystem path to the docker-compose.yml shipped inside this
+    package (``deployment/docker/`` under ``src/substrate/`` — verified to
+    land in the built wheel, not just the source tree). Resolves correctly
+    regardless of where ``substrate`` was installed, so ``substrate up``
+    works for any project that depends on agent-substrate as a package,
+    with no clone of this repo and no ``make`` required.
+
+    Assumes a normal (non-zipped) install, which ``uv``/``pip`` always
+    produce — the compose file bind-mounts several sibling config files by
+    relative path (``./seaweedfs/s3.json``, etc.), which only resolves
+    against a real directory on disk, not a zip member.
+    """
+    return (
+        Path(str(importlib.resources.files("substrate")))
+        / "deployment"
+        / "docker"
+        / "docker-compose.yml"
+    )
+
+
+def cmd_up(args: argparse.Namespace) -> None:
+    """Start local dev infra: Postgres, Redis, SeaweedFS, observability
+    (Loki/Promtail/Tempo/Grafana), and the demo MCP server."""
+    compose_file = _infra_compose_path()
+    if not compose_file.exists():
+        print(f"Packaged compose file not found: {compose_file}")
+        print("This install may be missing package data — reinstall agent-substrate.")
+        sys.exit(1)
+
+    cmd = ["docker", "compose", "-f", str(compose_file)]
+    env_file = Path(args.env_file) if args.env_file else Path.cwd() / ".env"
+    if env_file.exists():
+        cmd += ["--env-file", str(env_file)]
+    cmd += ["up", "-d", "--remove-orphans", *_INFRA_SERVICES]
+
+    print(f"Starting local dev infra ({', '.join(_INFRA_SERVICES)})…")
+    subprocess.run(cmd, check=True)
+
+
+def cmd_down(args: argparse.Namespace) -> None:  # noqa: ARG001
+    """Stop local dev infra started by ``substrate up`` — data volumes are
+    kept (same as ``make infra-down``'s ``stop``, not a destructive ``down -v``)."""
+    compose_file = _infra_compose_path()
+    cmd = ["docker", "compose", "-f", str(compose_file), "stop", *_INFRA_SERVICES]
+    print("Stopping local dev infra…")
+    subprocess.run(cmd, check=True)
 
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -337,6 +410,21 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
     sub.required = True
 
+    # ── up / down ──────────────────────────────────────────────────────────
+    p_up = sub.add_parser(
+        "up",
+        help="Start local dev infra (Postgres, Redis, SeaweedFS, observability, MCP server)",
+    )
+    p_up.add_argument(
+        "--env-file", default=None, help="Path to .env (default: ./.env if present)"
+    )
+    p_up.set_defaults(func=cmd_up)
+
+    p_down = sub.add_parser(
+        "down", help="Stop local dev infra started by `substrate up`"
+    )
+    p_down.set_defaults(func=cmd_down)
+
     # ── start ──────────────────────────────────────────────────────────────
     p_start = sub.add_parser("start", help="Start the server")
     p_start.add_argument(
@@ -453,15 +541,22 @@ def start_main() -> None:
 def start_all_main() -> None:
     """Dedicated entry point for ``uv run start-all``.
 
-    Runs ``make infra-up-all`` (Postgres, Redis, SeaweedFS, observability, the
-    MCP server, the code-interpreter sandbox, and ONLYOFFICE — everything
-    except the GPU-only Docling service) and then starts the server in the
-    foreground, same as ``uv run start``. One command instead of the usual
-    two-step ``make infra-up && uv run start``.
+    Runs ``substrate up`` (Postgres, Redis, SeaweedFS, observability, the
+    demo MCP server) and then starts the server in the foreground, same as
+    ``uv run start``. One command instead of the usual two-step
+    ``substrate up && uv run start``.
+
+    Previously shelled out to ``make infra-up-all`` — real, found-not-
+    assumed bug: ``make``/the Makefile are repo-only, never part of the
+    built package, so this shipped entry point (``start-all`` in
+    ``pyproject.toml``'s ``[project.scripts]``) crashed for anyone who had
+    only ``pip install``/``uv add``-ed agent-substrate rather than cloned
+    its repo. ``cmd_up`` uses the packaged compose file instead, which
+    ships with the wheel.
     """
     parser = argparse.ArgumentParser(
         prog="start-all",
-        description="Bring up infra (make infra-up-all) then start the Agent Substrate server",
+        description="Bring up infra (substrate up) then start the Agent Substrate server",
     )
     parser.add_argument(
         "--host", default="0.0.0.0", help="Bind host  (default: 0.0.0.0)"
@@ -490,9 +585,7 @@ def start_all_main() -> None:
     args = parser.parse_args()
 
     if not args.no_infra:
-        repo_root = Path(__file__).resolve().parents[2]
-        print("Bringing up infra (make infra-up-all)…")
-        subprocess.run(["make", "infra-up-all"], cwd=repo_root, check=True)
+        cmd_up(argparse.Namespace(env_file=None))
 
     args.foreground = not args.background
     cmd_start(args)

@@ -1,0 +1,161 @@
+name: substrate-infra
+
+# Local dev infra for a project that depends on agent-substrate as a package
+# (``uv add agent-substrate`` / ``pip install agent-substrate``). This file
+# ships INSIDE the package (src/substrate/deployment/docker/) so `substrate
+# up`/`substrate down` work for any downstream consumer with Docker
+# installed — no clone of the agent-substrate repo, no `make`, required.
+#
+# This is deliberately a smaller, self-contained subset of
+# agent-substrate's own deployment/docker/docker-compose.yml (repo root) --
+# it covers exactly what `substrate up` starts: Postgres, Redis, SeaweedFS,
+# the observability stack, and the demo MCP server. It does not include
+# building agent-substrate's own server image, GPU inference services, or
+# ONLYOFFICE -- those are agent-substrate's own dev/CI concerns and stay in
+# the (unshipped) repo-root compose file.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agentdb
+    volumes:
+      - substrate-pgdata:/var/lib/postgresql
+      - ./init-extensions.sql:/docker-entrypoint-initdb.d/10-extensions.sql
+      - ./init-chatbotdb.sh:/docker-entrypoint-initdb.d/20-chatbotdb.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - substrate-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: >
+      server -dir=/data -s3 -s3.port=8333
+      -s3.config=/etc/seaweedfs/s3.json
+      -master.volumeSizeLimitMB=1024
+    ports:
+      - "8333:8333"   # S3 API
+      - "8888:8888"   # Filer UI
+      - "9333:9333"   # Master UI
+    volumes:
+      - substrate-seaweedfsdata:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://$$(hostname -i):8333/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  seaweedfs-admin:
+    image: chrislusf/seaweedfs:latest
+    command: >
+      admin -port=23646 -master=seaweedfs:9333
+      -dataDir=/data
+      -adminUser=${SEAWEEDFS_ADMIN_USER:-admin}
+      -adminPassword=${SEAWEEDFS_ADMIN_PASSWORD:-admin}
+    ports:
+      - "23646:23646"
+    volumes:
+      - substrate-seaweedfsadmin:/data
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.10.0
+    user: root
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo.yaml
+      - substrate-tempodata:/tmp/tempo
+    ports:
+      - "3200:3200"
+      - "9095:9095"
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:2.9.4
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - ./loki/local-config.yaml:/etc/loki/local-config.yaml:ro
+      - substrate-lokidata:/loki
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.4
+    command: ["-config.file=/etc/promtail/promtail.yaml"]
+    volumes:
+      - ./promtail/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - substrate-promtaildata:/tmp
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3099:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - tempo
+      - loki
+    restart: unless-stopped
+
+  mcp-server:
+    build:
+      context: ./mcp_server
+      dockerfile: Dockerfile
+    ports:
+      - "9000:9000"
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=9000
+    init: true
+    restart: unless-stopped
+
+volumes:
+  substrate-pgdata:
+  substrate-redisdata:
+  substrate-seaweedfsdata:
+  substrate-seaweedfsadmin:
+  substrate-tempodata:
+  substrate-lokidata:
+  substrate-promtaildata:

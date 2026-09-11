@@ -1,7 +1,7 @@
 [project]
 name = "agent-substrate"
 version = "0.3.0"
-description = "Production-ready async Python framework for building autonomous AI agents with tool calling, memory, and durable execution."
+description = "Durable Agents for Agent Swarms, LLMs, and Autonomous Systems"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -21,12 +21,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 requires-python = ">=3.11"
-# Base install: the agent loop, LLM provider clients, and the FastAPI/Postgres/
-# Redis serving stack. Everything a tool lazily imports only when that specific
-# capability is used (web browsing/search, the K8s code interpreter, PDF/RAG
-# loaders, S3 storage) lives in `[project.optional-dependencies]` below instead
-# — install the matching extra, or accept that tool's clean "not installed"
-# error at call time rather than a hard dependency on every install.
 dependencies = [
     "httpx>=0.27.0",
     "mcp>=1.0.0",
@@ -41,19 +35,7 @@ dependencies = [
     "redis[hiredis]>=5.0.0",
     "sqlalchemy>=2.0.46",
     "greenlet>=3.0.0",
-    # sqlalchemy.ext.asyncio (used unconditionally by capabilities/vector/
-    # pgvector_store.py) imports greenlet at module load time, not just at
-    # actual async-engine use — without it pinned explicitly here, a
-    # consumer project resolving agent-substrate as an editable dependency
-    # can end up with a venv missing it (only pulled in transitively by
-    # some other package in THIS repo's own lock, not guaranteed in
-    # another project's), breaking on `from substrate.capabilities.vector
-    # import ...` even when that project never touches Postgres.
     "asyncpg>=0.30.0",
-    # Never imported directly in src/ — SQLAlchemy loads it dynamically for
-    # the monolith's `postgresql+psycopg://` DATABASE_URL (the ORM engine
-    # behind Thread/ScheduledTask/Feedback). `asyncpg` above is the separate,
-    # directly-used driver for the durable runtime's raw asyncpg pool.
     "psycopg[binary]>=3.2.0",
     "uvicorn[standard]>=0.34.0",
     "pyyaml>=6.0",
@@ -70,25 +52,16 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi<0.60b1",
     "httpx2>=2.7.0",
     "confusable-homoglyphs>=3.3.1",
-    # capabilities/safety/ — input-safety classifiers (prompt-attack, image
-    # NSFW), run in-process in the monolith on the live chat-turn hot path.
-    # Deliberately onnxruntime + tokenizers, NOT torch/transformers — this
-    # is the one place a real ML dependency was added to the base install;
-    # everything else in this codebase already avoided torch (see the
-    # `extraction` extra's own comment below), and keeping this pairing
-    # narrow instead of pulling in the full transformers stack preserves
-    # that. Model weights are downloaded from the Hub lazily and cached, not
-    # vendored — see capabilities/safety/text_classifier.py.
     "onnxruntime>=1.20.0",
     "tokenizers>=0.20.0",
     "huggingface-hub>=0.25.0",
 ]
 
+# Full rationale for every extra below — size costs, version-pin reasoning,
+# mutual-exclusivity rules — lives in
+# docs/claude_docs/architecture/optional-dependencies.md, not here.
 [project.optional-dependencies]
-# Web browsing/search tools (WebSearchTool DuckDuckGo fallback, ReadUrlTool
-# crawl4ai fallback, WebSurferTool). Playwright alone is ~140MB; crawl4ai pulls
-# a further ~250MB of transitive deps (scipy/pandas/onnxruntime via its own
-# extras) for what is only ever the free-tier fallback behind Tavily/Exa.
+# web search/browsing tools
 web = [
     "ddgs>=9.14.4",
     "crawl4ai>=0.8.7",
@@ -96,17 +69,9 @@ web = [
     "exa-py>=2.14.0",
     "tavily-python>=0.7.26",
 ]
-# K8s agent-sandbox code execution (SANDBOX_RUNTIME=k8s). Pulls the full
-# kubernetes + kubernetes_asyncio client libraries (~85MB) — only needed if
-# you're actually running sandbox pods against a real cluster. The default
-# bubblewrap runtime needs none of it.
+# K8s code-interpreter sandbox (SANDBOX_RUNTIME=k8s)
 code = ["k8s-agent-sandbox>=0.4.6"]
-# Data-science packages the code_interpreter tool advertises to the model.
-# With SANDBOX_RUNTIME=bubblewrap the sandbox executes using an interpreter on
-# THIS host (see SANDBOX_PYTHON), so these must be importable from that
-# interpreter's environment — previously they only existed inside the sandbox
-# container image. Install into the engine's own env (simplest), or into a
-# dedicated venv and point SANDBOX_PYTHON at it to keep them out of the engine.
+# code_interpreter's data-science packages
 sandbox = [
     "pandas>=2.2.0",
     "matplotlib>=3.9.0",
@@ -120,80 +85,29 @@ sandbox = [
     "scikit-learn>=1.5.0",
     "pdfplumber>=0.11.0",
 ]
-# PDF loading for the knowledge/RAG pipeline (PDFLoader — the local,
-# no-extraction-service fallback path) plus LanceDBVectorStore (embedded,
-# file-based vector store — capabilities/vector/lancedb_store.py), ~110MB
-# combined (lancedb + pyarrow) — not needed unless you actually use either.
+# local PDF loading + embedded vector store
 rag = ["pypdf>=6.13.0", "lancedb>=0.37.1"]
-# Model-based sentence segmentation for the chunkers (SaTSegmenter, in
-# capabilities/knowledge/segmentation.py). wtpsplit pulls transformers +
-# huggingface-hub + scikit-learn + pandas, and needs a backend to actually
-# run a model — torch if present, otherwise add `wtpsplit[onnx-cpu]`. The
-# default RegexSegmenter needs none of it, so this stays opt-in: install it
-# only if punctuation is an unreliable boundary signal for your documents
-# (OCR'd PDFs, headings, list items), which is where SaT earns its weight.
-# The onnx-cpu extra is not optional in practice: wtpsplit declares NO deep
-# learning backend of its own and fails at model construction with "Please
-# install `torch` to use WtP with a PyTorch model" unless torch or
-# onnxruntime is present. onnxruntime is ~50MB against torch's ~2GB, so
-# SaTSegmenter defaults to the ONNX path — see its docstring to opt back
-# into torch.
+# model-based sentence segmentation (SaTSegmenter)
 chunking = ["wtpsplit[onnx-cpu]>=2.1.0"]
-# Managed RAG via Pinecone Assistant (RAG_BACKEND=pinecone) — parsing,
-# chunking, embedding, storage, and retrieval all run on Pinecone's side, so
-# none of the local `rag`/`extraction` extras above are needed with this backend.
+# managed RAG via Pinecone Assistant
 rag-pinecone = ["pinecone>=9.0.0"]
-# S3-compatible object storage backend for FILE_STORE_BACKEND=s3 (the default,
-# "local", needs neither of these).
+# S3-compatible object storage backend
 s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
-# Everything the reference monolith server (`make infra-up && uv run start`)
-# constructs by default — install this if you're running agent-substrate
-# itself, not just importing it as a library. `make sync` uses this.
+# everything the reference monolith server needs
 server = ["agent-substrate[web,code,rag,s3,sandbox]"]
-# Layout-aware document parsing (PDF layout, chart/table detection, OCR) via
-# PaddleOCR — used only by `runtimes/document_intelligence/service/`, never
-# imported from the main API process. Multimodal embedding and reranking are
-# a separate service now (`runtimes/embedding_reranker/`) — thin HTTP calls
-# to the llama-embed/llama-rerank `llama-server` sidecars (docker-compose.yml),
-# so sentence-transformers/torch are not needed here either.
-# `paddlepaddle` is pinned to the exact CPU-wheel version verified working
-# on this project's target hardware (see `[tool.uv.sources]` below — it
-# comes from PaddlePaddle's own CPU package index, not plain PyPI, and needs
-# a runtime mkldnn-disable workaround for CPUs without AVX-512; see
-# `runtimes/document_intelligence/service/pipeline.py::_disable_mkldnn`).
-# Not needed unless you actually run the document-intelligence service — the
-# base install already covers CSV/JSON/text/pypdf-based PDF loading without
-# it. Note for downstream consumers: `[tool.uv.sources]`/`[[tool.uv.index]]`
-# below only apply when THIS repo's pyproject.toml is the active uv project —
-# they don't propagate to a project that merely depends on `agent-substrate`.
-# PyPI also serves a CPU wheel (that's what a downstream resolver will use),
-# just not the exact one verified here; replicate the same `tool.uv.sources`
-# entry in your own project if you need that specific match.
+# PaddleOCR layout/chart/table extraction, CPU wheel
 document-intelligence = [
     "doc-firewall>=0.5.1",
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle==3.3.0",
 ]
-# Same as `document-intelligence`, but the CUDA 13.0 GPU wheel instead of the
-# CPU one — for local dev on an NVIDIA GPU (set
-# DOCUMENT_INTELLIGENCE_DEVICE=gpu:0). Mutually exclusive with
-# `document-intelligence`: pick one, not both, since paddlepaddle and
-# paddlepaddle-gpu both provide the `paddle` import and will conflict.
-# Pick the CUDA index (cu118/cu126/cu130/...) matching your driver — cu130
-# is what this project's own dev GPU (CUDA 13.1 driver) uses.
+# same, CUDA wheel — pick one, not both
 document-intelligence-gpu = [
     "doc-firewall>=0.5.1",
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle-gpu==3.3.0",
 ]
-# `create_embedding_client("sentence-transformers/<model>")`
-# (integrations/llm/factory.py) — local, CPU-or-CUDA, no API key, no
-# external server. This is the one place torch comes back after being
-# deliberately removed everywhere else (see the `document-intelligence`
-# extra's own comment) — genuinely needed here, not an oversight, since
-# sentence-transformers has no lighter runtime. Opt-in only: without this
-# extra, selecting this provider raises a clean ModuleNotFoundError instead
-# of silently working.
+# local embedding provider (brings torch back)
 sentence-transformers = ["sentence-transformers>=3.0.0"]
 
 [project.urls]
@@ -214,26 +128,21 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "substrate"
 
-# paddlepaddle's CPU wheel — plain PyPI also serves a CPU build, but the
-# `extraction` extra's pinned version was verified (via this project's own
-# benchmarking) against PaddlePaddle's official CPU package index, not PyPI's.
+# Verified/pinned wheel indexes for the document-intelligence and
+# sentence-transformers extras — see
+# docs/claude_docs/architecture/optional-dependencies.md for why each one
+# is routed off plain PyPI (only applies when THIS repo is the active uv
+# project; a downstream consumer must replicate the entry it needs).
 [[tool.uv.index]]
 name = "paddle-cpu"
 url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
 explicit = true
 
-# paddlepaddle-gpu's CUDA 13.0 wheel (document-intelligence-gpu extra above) —
-# same PaddlePaddle package server as paddle-cpu, different channel.
 [[tool.uv.index]]
 name = "paddle-cu130"
 url = "https://www.paddlepaddle.org.cn/packages/stable/cu130/"
 explicit = true
 
-# torch's default PyPI wheel bundles the full NVIDIA CUDA/cuDNN/NCCL runtime
-# even for CPU-only use (confirmed: nvidia-cufile, nvidia-curand, etc. all
-# pulled in by a plain `torch` install here) — sentence-transformers (the
-# `extraction` extra) depends on torch transitively, so route it to
-# PyTorch's own CPU-only wheel index instead.
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"

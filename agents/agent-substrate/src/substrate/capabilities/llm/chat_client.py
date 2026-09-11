@@ -157,6 +157,7 @@ class OpenAIChatCompletionClient:
         organization: Optional[str] = None,
         extra_headers: Optional[dict[str, str]] = None,
         timeout: Optional[float] = None,
+        http_client: Optional[Any] = None,
     ) -> None:
         self.model = model
         self.temperature = temperature
@@ -177,6 +178,11 @@ class OpenAIChatCompletionClient:
             client_kwargs["default_headers"] = extra_headers
         if timeout is not None:
             client_kwargs["timeout"] = timeout
+        if http_client is not None:
+            # AsyncOpenAI's own supported seam for injecting a transport —
+            # used by tests to point this client at a mocked server instead
+            # of a real one, without touching any request-building code.
+            client_kwargs["http_client"] = http_client
 
         self.client = AsyncOpenAI(**client_kwargs)
 

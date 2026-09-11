@@ -27,12 +27,12 @@ import hashlib
 import struct
 from typing import TYPE_CHECKING
 
-import redis.asyncio as aioredis
-
 from substrate.agents.storage.vector import cosine_similarity
 from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+
     from substrate.kernel.llm import EmbeddingClient
 
 logger = setup_logging()
@@ -70,6 +70,8 @@ class SemanticCache:
         self._redis: aioredis.Redis | None = None
 
     async def connect(self) -> None:
+        import redis.asyncio as aioredis
+
         self._redis = aioredis.from_url(self._redis_url, decode_responses=False)
 
     async def disconnect(self) -> None:

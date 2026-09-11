@@ -158,7 +158,7 @@ async def test_read_url_tool_exa_path():
 
 
 @pytest.mark.asyncio
-@patch("httpx.AsyncClient")
+@patch("substrate.capabilities.tools.web.wikipedia.httpx.AsyncClient")
 async def test_wikipedia_tool_capping(mock_client_class):
     mock_client = AsyncMock()
     mock_client_class.return_value.__aenter__.return_value = mock_client

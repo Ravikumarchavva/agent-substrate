@@ -14,9 +14,10 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from PIL import Image
+if TYPE_CHECKING:
+    from PIL import Image
 
 from google.genai import types as genai_types
 
@@ -108,6 +109,8 @@ def _encode_media_item(
     | TextBlock,
 ) -> genai_types.Part:
     """Encode a single block item to a Gemini Part."""
+    from PIL import Image
+
     if isinstance(item, TextBlock):
         return _encode_text(item.text)
     if isinstance(item, Image.Image):

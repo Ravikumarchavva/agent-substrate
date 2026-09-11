@@ -21,7 +21,7 @@ from __future__ import annotations
 import base64
 import logging
 
-import httpx
+import httpx2 as httpx
 
 logger = logging.getLogger(__name__)
 

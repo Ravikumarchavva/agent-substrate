@@ -4,7 +4,7 @@ unreranked order or skip indexing one bad image."""
 
 from __future__ import annotations
 
-import httpx
+import httpx2 as httpx
 
 from substrate.runtimes.embedding_reranker.client import EmbeddingRerankerClient
 

@@ -4,7 +4,7 @@ raise, so callers can always fall back to a lighter local extractor."""
 
 from __future__ import annotations
 
-import httpx
+import httpx2 as httpx
 
 from substrate.runtimes.document_intelligence.client import ExtractionClient
 

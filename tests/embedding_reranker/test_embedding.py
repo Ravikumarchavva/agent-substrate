@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import json
 
-import httpx
+import httpx2 as httpx
 import pytest
 
 from substrate.runtimes.embedding_reranker.service.embedding import (

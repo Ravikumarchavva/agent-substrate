@@ -25,7 +25,7 @@ import time
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
-import httpx
+import httpx2 as httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse

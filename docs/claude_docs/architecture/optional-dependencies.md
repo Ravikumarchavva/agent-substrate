@@ -67,12 +67,32 @@ backend.
 S3-compatible object storage backend for `FILE_STORE_BACKEND=s3` (the
 default, `"local"`, needs neither of these).
 
+## `safety`
+
+`MultimodalSafetyMiddleware`'s jailbreak-text (`PromptGuardClassifier`) and
+NSFW-image (`ImageSafetyClassifier`) classifiers — `onnxruntime` +
+`tokenizers` + `huggingface-hub` to load and run the ONNX models, plus
+`confusable-homoglyphs` for the text normalizer both share. All four are
+lazy-imported only inside those two classes' `__init__`, never at module
+top level, so nothing else in the codebase needs them.
+
+Deliberately opt-in despite the reference monolith enabling this guardrail
+by default (`ENABLE_TEXT_SAFETY_GUARD=true`): `build_safety_middleware()`
+(`infrastructure/serving_factory.py`) already wraps classifier construction
+in a fail-open `try/except` — a missing package is handled exactly like a
+model-download failure on first run, logged loudly, guardrail disabled,
+monolith still boots. Installing `[safety]` (or `[server]`, which includes
+it) is what keeps the guardrail actually active.
+
 ## `server`
 
 Everything the reference monolith server (`substrate up && uv run start`)
-constructs by default — install this if you're running agent-substrate
-itself, not just importing it as a library. Shorthand for
-`agent-substrate[web,code,rag,s3,sandbox]`.
+needs beyond the base install — the base `dependencies` already cover
+Postgres, Redis, FastAPI, and Pillow (this is a *deployable app* package,
+not a headless library), so `server` only adds the optional features layered
+on top: web search/browsing, the K8s sandbox runtime, local RAG, S3 storage,
+the safety guardrail, and the code-interpreter's data-science packages.
+Shorthand for `agent-substrate[web,code,rag,s3,safety,sandbox]`.
 
 ## `document-intelligence` / `document-intelligence-gpu`
 

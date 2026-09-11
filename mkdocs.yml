@@ -7,6 +7,7 @@ edit_uri: edit/main/docs/
 exclude_docs: |
   includes/
   archive/
+  claude_docs/
 
 copyright: Copyright &copy; 2025–2026 Ravikumar Chavva
 

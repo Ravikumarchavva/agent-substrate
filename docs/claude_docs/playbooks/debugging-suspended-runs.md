@@ -14,7 +14,7 @@ same second).
 **Check the server terminal first**, filtered:
 
 ```bash
-uv run start 2>&1 | grep -iE "suspended|resumed|HITL|signal|pending request"
+uv run substrate start --foreground 2>&1 | grep -iE "suspended|resumed|HITL|signal|pending request"
 ```
 
 or, if already running, check what already printed. You're looking for:

@@ -1,4 +1,4 @@
-"""substrate CLI
+"""substrate CLI — the one entry point; every command is a `substrate` subcommand.
 
 Usage:
     substrate up              # start local dev infra (Postgres, Redis, SeaweedFS,
@@ -6,13 +6,12 @@ Usage:
     substrate down             # stop it
     substrate start           # start server on default port 8000
     substrate start --port 9000 --reload
+    substrate start --all --host 0.0.0.0 --foreground   # infra + server, one command
+                                                          # (container-entrypoint shape)
     substrate stop           # stop a running server (via PID file)
     substrate status         # check if server is running
     substrate chat           # interactive CLI chat with default agent
     substrate chat --model gpt-4o-mini --no-tools
-
-    uv run start             # `start_main` — server only, infra assumed running
-    uv run start-all         # `start_all_main` — `substrate up` then the server
 """
 
 from __future__ import annotations
@@ -147,7 +146,15 @@ def cmd_down(args: argparse.Namespace) -> None:  # noqa: ARG001
 
 
 def cmd_start(args: argparse.Namespace) -> None:
-    """Start the uvicorn server and write its PID to the PID file."""
+    """Start the uvicorn server and write its PID to the PID file.
+
+    ``--all`` brings up local dev infra first (same as ``substrate up``) —
+    the one-command replacement for what used to be the separate
+    ``start-all`` console script.
+    """
+    if getattr(args, "all", False):
+        cmd_up(argparse.Namespace(env_file=None))
+
     pid = _read_pid()
     if pid and _is_running(pid):
         print(f"Agent Framework is already running (PID {pid}).")
@@ -446,6 +453,11 @@ def main() -> None:
         action="store_true",
         help="Run in foreground instead of background",
     )
+    p_start.add_argument(
+        "--all",
+        action="store_true",
+        help="Bring up local dev infra first (same as `substrate up`), then start",
+    )
     p_start.set_defaults(func=cmd_start)
 
     # ── stop ───────────────────────────────────────────────────────────────
@@ -501,94 +513,6 @@ def main() -> None:
 
     args = parser.parse_args()
     args.func(args)
-
-
-def start_main() -> None:
-    """Dedicated entry point for ``uv run start``.
-
-    Unlike ``substrate start``, this wrapper defaults to foreground mode so it is
-    suitable as a simple local dev command and as a container entrypoint.
-    """
-
-    parser = argparse.ArgumentParser(
-        prog="start",
-        description="Start the Agent Substrate server",
-    )
-    parser.add_argument(
-        "--host", default="0.0.0.0", help="Bind host  (default: 0.0.0.0)"
-    )
-    parser.add_argument(
-        "--port", "-p", default=8000, type=int, help="Bind port  (default: 8000)"
-    )
-    parser.add_argument(
-        "--reload",
-        action="store_true",
-        help="Enable auto-reload (dev mode)",
-    )
-    parser.add_argument(
-        "--workers", default=1, type=int, help="Number of uvicorn workers (default: 1)"
-    )
-    parser.add_argument(
-        "--background",
-        action="store_true",
-        help="Detach and run in the background instead of foreground",
-    )
-    args = parser.parse_args()
-    args.foreground = not args.background
-    cmd_start(args)
-
-
-def start_all_main() -> None:
-    """Dedicated entry point for ``uv run start-all``.
-
-    Runs ``substrate up`` (Postgres, Redis, SeaweedFS, observability, the
-    demo MCP server) and then starts the server in the foreground, same as
-    ``uv run start``. One command instead of the usual two-step
-    ``substrate up && uv run start``.
-
-    Previously shelled out to ``make infra-up-all`` — real, found-not-
-    assumed bug: ``make``/the Makefile are repo-only, never part of the
-    built package, so this shipped entry point (``start-all`` in
-    ``pyproject.toml``'s ``[project.scripts]``) crashed for anyone who had
-    only ``pip install``/``uv add``-ed agent-substrate rather than cloned
-    its repo. ``cmd_up`` uses the packaged compose file instead, which
-    ships with the wheel.
-    """
-    parser = argparse.ArgumentParser(
-        prog="start-all",
-        description="Bring up infra (substrate up) then start the Agent Substrate server",
-    )
-    parser.add_argument(
-        "--host", default="0.0.0.0", help="Bind host  (default: 0.0.0.0)"
-    )
-    parser.add_argument(
-        "--port", "-p", default=8000, type=int, help="Bind port  (default: 8000)"
-    )
-    parser.add_argument(
-        "--reload",
-        action="store_true",
-        help="Enable auto-reload (dev mode)",
-    )
-    parser.add_argument(
-        "--workers", default=1, type=int, help="Number of uvicorn workers (default: 1)"
-    )
-    parser.add_argument(
-        "--background",
-        action="store_true",
-        help="Detach and run the server in the background instead of foreground",
-    )
-    parser.add_argument(
-        "--no-infra",
-        action="store_true",
-        help="Skip `make infra-up-all` and just start the server (same as `uv run start`)",
-    )
-    args = parser.parse_args()
-
-    if not args.no_infra:
-        cmd_up(argparse.Namespace(env_file=None))
-
-    args.foreground = not args.background
-    cmd_start(args)
 
 
 if __name__ == "__main__":

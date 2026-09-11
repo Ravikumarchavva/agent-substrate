@@ -111,15 +111,13 @@ document-intelligence-gpu = [
 sentence-transformers = ["sentence-transformers>=3.0.0"]
 
 [project.urls]
-Homepage = "https://docs.agent-substrate.com"
-Documentation = "https://docs.agent-substrate.com"
+Homepage = "https://agent-substrate.com"
+Documentation = "https://agent-substrate.com/docs"
 Repository = "https://github.com/Ravikumarchavva/agent-substrate"
 Issues = "https://github.com/Ravikumarchavva/agent-substrate/issues"
 
 [project.scripts]
 substrate = "substrate.cli:main"
-start = "substrate.cli:start_main"
-start-all = "substrate.cli:start_all_main"
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12"]

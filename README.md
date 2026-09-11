@@ -311,8 +311,7 @@ JWT_SECRET=<32+ char random string>
 OTLP_ENDPOINT=http://localhost:4318
 ```
 
-The monolith server (`uv run start` / `substrate start`) listens on port
-**8000** by default.
+The monolith server (`substrate start`) listens on port **8000** by default.
 
 ---
 

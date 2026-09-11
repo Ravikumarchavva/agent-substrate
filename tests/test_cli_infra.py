@@ -70,15 +70,29 @@ def test_every_relative_bind_mount_and_build_context_resolves_on_disk() -> None:
             assert dockerfile.exists(), f"{name}: {dockerfile} does not exist"
 
 
-def test_start_all_main_no_longer_shells_out_to_make() -> None:
-    """Regression guard for the actual bug: start_all_main used to run
-    subprocess.run(["make", "infra-up-all"], ...) -- never available in an
-    installed (non-cloned) package. Checks the source directly since
-    exercising start_all_main() itself would require a live Docker daemon."""
+def test_cmd_start_all_flag_no_longer_shells_out_to_make() -> None:
+    """Regression guard for the actual bug: the old separate `start-all`
+    console script (start_all_main, since consolidated into `substrate
+    start --all`) used to run subprocess.run(["make", "infra-up-all"], ...)
+    -- never available in an installed (non-cloned) package. Checks the
+    source directly since actually exercising --all would require a live
+    Docker daemon."""
     import inspect
 
-    from substrate.cli import start_all_main
+    from substrate.cli import cmd_start
 
-    src = inspect.getsource(start_all_main)
+    src = inspect.getsource(cmd_start)
     assert '"make"' not in src
     assert "cmd_up" in src
+
+
+def test_start_and_start_all_scripts_are_gone_only_substrate_remains() -> None:
+    """The `start`/`start-all` console-script entry points were removed --
+    everything now goes through `substrate <command>` (`substrate start`,
+    `substrate start --all`), so pyproject.toml should declare exactly one
+    script."""
+    import tomllib
+
+    with open("pyproject.toml", "rb") as f:
+        scripts = tomllib.load(f)["project"]["scripts"]
+    assert scripts == {"substrate": "substrate.cli:main"}

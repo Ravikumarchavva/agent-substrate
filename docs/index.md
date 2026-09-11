@@ -123,7 +123,7 @@ Then start the infrastructure and run your agent:
 
 ```bash
 make infra-up        # Postgres, Redis, MCP server, observability
-uv run start         # Monolith on port 8001
+uv run substrate start --host 0.0.0.0 --foreground   # Monolith on port 8001
 ```
 
 ---

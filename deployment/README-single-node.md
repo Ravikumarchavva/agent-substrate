@@ -84,7 +84,7 @@ After=network.target docker.service
 User=substrate
 WorkingDirectory=/opt/agent-substrate
 EnvironmentFile=/opt/agent-substrate/.env
-ExecStart=/usr/local/bin/uv run start
+ExecStart=/usr/local/bin/uv run substrate start --host 0.0.0.0 --foreground
 Restart=always
 # Defence in depth for the engine itself (the sandbox has its own boundary):
 NoNewPrivileges=false     # bwrap needs to create user namespaces

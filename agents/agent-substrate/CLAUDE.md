@@ -61,13 +61,12 @@ uv run python -m ruff format .
 ```
 agent-substrate/                         ← repo root
 ├── src/substrate/                 ← Python package (all application code)
-├── deployment/                  ← All deployment artefacts
-│   ├── docker/                  ← Dockerfiles + Compose files
+├── deployment/                  ← All deployment artefacts — one Compose file, three ways to use it
+│   ├── docker/                  ← Dockerfiles + the one docker-compose.yml
 │   │   ├── backend.Dockerfile
-│   │   ├── docker-compose.yml   ← Local dev (monolith + infra)
-│   │   ├── docker-compose.microservices.yml
+│   │   ├── docker-compose.yml   ← develop / one-shot run / deploy — see deployment/README.md
 │   │   └── mcp_server/          ← FastMCP 2.x demo SSE server
-│   └── k8s/                     ← Kubernetes / Kustomize manifests
+│   └── README.md                ← How to run it (dev, one-shot, or a real public deploy)
 ├── docs/                        ← Architecture docs, design patterns, archive
 ├── examples/                    ← Jupyter notebooks
 ├── tests/                       ← pytest suite
@@ -454,8 +453,6 @@ RUNTIME_PG_POOL_MAX_SIZE=10
 | Monolith backend | 8000 | `uv run substrate start` |
 | Tempo | 4318 | OTLP HTTP |
 | Grafana | 3001 | Dashboard |
-
-Microservice ports: see `deployment/docker/docker-compose.microservices.yml`.
 
 ---
 

@@ -30,9 +30,8 @@ ravi/
 │   ├── configs/         ← Pydantic Settings
 │   └── evals/           ← LLM-as-judge evaluation framework
 ├── deployment/
-│   ├── docker/          ← Dockerfiles, docker-compose.yml, docker-compose.microservices.yml
-│   └── k8s/             ← Kustomize base + Kind overlay, smoke-test.ps1
-├── deploy.py            ← Cross-platform Kind cluster deploy script
+│   ├── docker/          ← Dockerfiles + the one docker-compose.yml (dev, one-shot run, and deploy — see deployment/README.md)
+│   └── README.md        ← How to run it: develop / one-shot run / deploy publicly
 ├── docs/                ← Architecture, operations, design patterns
 └── examples/            ← Jupyter notebooks (01–14)
 ```

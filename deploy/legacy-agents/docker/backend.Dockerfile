@@ -34,9 +34,9 @@ FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS base
 # namespaces + cgroups scoped to one session directory (no daemon, no root).
 # Runtime shared libs (libprotobuf32/libnl-route-3-200) match nsjail's own
 # upstream Dockerfile. Running it *inside* this container additionally needs
-# cgroupns_mode: host (for its cgroup limits to initialize) and, for the
+# cgroup: host (for its cgroup limits to initialize) and, for the
 # unprivileged user namespaces it also relies on, cap_add=SYS_ADMIN and
-# seccomp=unconfined on the container itself — see docker-compose.deploy.yml.
+# seccomp=unconfined on the container itself — see docker-compose.yml.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gcc \

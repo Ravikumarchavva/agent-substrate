@@ -1,9 +1,9 @@
 """Standalone FastAPI application for the embedding-reranker service.
 
-Deploy this as its own low-replica Deployment — no local model, just a thin
+Deploy this as its own low-replica service — no local model, just a thin
 httpx proxy to the llama-embed/llama-rerank sidecars, so resource needs are
-much lighter than document_intelligence (see
-deployment/k8s/base/runtime/embedding-reranker.yaml). The main backend calls
+much lighter than document_intelligence (see docker-compose.yml's
+`embedding-reranker` profile). The main backend calls
 it via HTTP through EmbeddingRerankerClient
 (runtimes/embedding_reranker/client.py), only when
 EMBEDDING_RERANKER_SERVICE_URL is configured; otherwise image ingestion and

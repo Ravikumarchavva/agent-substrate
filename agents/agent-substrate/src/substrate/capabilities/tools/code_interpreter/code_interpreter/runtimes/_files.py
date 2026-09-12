@@ -2,7 +2,7 @@
 
 After an execution we report only the files it actually created or modified —
 the same ``output_files`` entry shape ``sandbox_response`` already consumes, so
-one converter serves every runtime. Used by ``bubblewrap`` and ``inprocess``;
+one converter serves every runtime. Used by ``nsjail`` and ``inprocess``;
 the k8s runtime gets equivalent entries from the in-pod server instead.
 """
 

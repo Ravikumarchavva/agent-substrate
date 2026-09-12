@@ -249,7 +249,7 @@ async def chat(
 
         # workspace_path (see _build_file_context) is only meaningful when the
         # running code interpreter actually mounts the same workspace
-        # directory as chat uploads. Two cases: the default bubblewrap
+        # directory as chat uploads. Two cases: the default nsjail
         # runtime always mounts the caller's own session dir (see
         # CodeInterpreterTool._session_dir), or the K8s agent-sandbox path
         # (CI_WORKSPACE_PVC_CLAIM configured — see
@@ -259,7 +259,7 @@ async def chat(
         # plausible-looking prefix (observed: "/mnt/data/..." from ChatGPT-
         # convention training bias). Only surface the hint when it's true.
         ci_has_workspace_access = bool(
-            settings.SANDBOX_RUNTIME == "bubblewrap" or settings.CI_WORKSPACE_PVC_CLAIM
+            settings.SANDBOX_RUNTIME == "nsjail" or settings.CI_WORKSPACE_PVC_CLAIM
         )
         # Ordered, declarative instruction blocks — this IS the assembly
         # order the model sees (primacy matters; see

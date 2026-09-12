@@ -1,5 +1,5 @@
 """readonly_kb_block() — the system-prompt note pointing the model at the
-read-only /workspace/.kb mount (see BubblewrapRuntime._bwrap_argv() and
+read-only /workspace/.kb mount (see NsjailRuntime._nsjail_argv() and
 sandbox_service.py's per-user SandboxTemplate for what actually mounts it)."""
 
 from __future__ import annotations

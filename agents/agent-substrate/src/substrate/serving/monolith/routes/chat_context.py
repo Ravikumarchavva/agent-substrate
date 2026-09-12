@@ -73,7 +73,7 @@ def _session_relative_path(object_key: str) -> str | None:
     """``users/{uid}/sessions/{tid}/{rest}`` → ``rest``, or ``None`` if
     *object_key* isn't a thread-scoped upload (e.g. ``users/{uid}/uploads/...``).
 
-    Shared by the bubblewrap workspace-path branch of ``_attachment_dict``
+    Shared by the nsjail workspace-path branch of ``_attachment_dict``
     below and by the RAG-ingest metadata: both need the path a citation's
     "open this file" click uses (``routes/workspace.py::serve_file``),
     relative to the thread's session dir — never ``original_name``, which can
@@ -266,8 +266,8 @@ async def _build_file_context(
         # code_interpreter genuinely is the only way to read the file.
         if meta.content_type in EXTRACTABLE_CONTENT_TYPES:
             return attachment
-        if settings.SANDBOX_RUNTIME == "bubblewrap":
-            # Bubblewrap mounts ONLY the caller's own session dir — see
+        if settings.SANDBOX_RUNTIME == "nsjail":
+            # nsjail mounts ONLY the caller's own session dir — see
             # CodeInterpreterTool._session_dir — at /workspace, so the
             # "users/{uid}/sessions/{tid}/" prefix must be stripped entirely,
             # not just the "users/{uid}/" part.

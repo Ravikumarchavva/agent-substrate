@@ -130,7 +130,7 @@ src/substrate/
 │   │   ├── ai/           ImageGeneratorTool, KnowledgeSearchTool
 │   │   ├── utils/        CurrentTimeTool, ToolSearchTool
 │   │   ├── task_manager/ TaskManagerTool (Kanban board)
-│   │   └── code_interpreter/ CodeInterpreterTool + pluggable SandboxRuntime (bubblewrap/k8s/inprocess)
+│   │   └── code_interpreter/ CodeInterpreterTool + pluggable SandboxRuntime (nsjail/k8s/inprocess)
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore, DurableMemoryStore
 │   ├── history/          RedisHistoryProvider, DurableHistoryProvider
@@ -426,9 +426,9 @@ OTLP_ENDPOINT=http://localhost:4318
 # Auth
 JWT_SECRET=<32+ char random string — required>
 
-# Code interpreter sandbox: "bubblewrap" (default, Linux namespaces on this
-# host, no container) | "k8s" (one agent-sandbox pod per session) | "inprocess"
-SANDBOX_RUNTIME=bubblewrap
+# Code interpreter sandbox: "nsjail" (default, Linux namespaces + cgroups on
+# this host, no container) | "k8s" (one agent-sandbox pod per session) | "inprocess"
+SANDBOX_RUNTIME=nsjail
 
 # Agent runtime backend: "postgres" (default, durable) or "memory" (in-process, no infra)
 RUNTIME_BACKEND=postgres

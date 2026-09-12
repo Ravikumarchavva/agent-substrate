@@ -371,8 +371,8 @@ class CodeInterpreterService:
             }
         ]
         # Same PVC, a second mount: the user's standing knowledge-base
-        # content, read-only — the k8s equivalent of BubblewrapRuntime's
-        # conditional --ro-bind for users/{uid}/kb (runtimes/bubblewrap.py).
+        # content, read-only — the k8s equivalent of NsjailRuntime's
+        # conditional -R for users/{uid}/kb (runtimes/nsjail.py).
         # A pod spec can't be conditioned per-execution the way a bwrap argv
         # is built fresh each call, so this mount is unconditional (not
         # gated on the directory already existing, unlike bwrap's is_dir()

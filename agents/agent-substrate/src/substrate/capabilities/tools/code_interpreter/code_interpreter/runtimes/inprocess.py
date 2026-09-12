@@ -1,6 +1,6 @@
 """InProcessRuntime — NO isolation. Tests and CI only.
 
-Exists so the tool can be exercised without bubblewrap or a cluster (e.g. on
+Exists so the tool can be exercised without nsjail or a cluster (e.g. on
 macOS dev machines, or in unit tests that only care about tool plumbing).
 
 **Never select this in a deployment that serves more than one user.** It runs
@@ -43,7 +43,7 @@ class InProcessRuntime:
         if spec.argv:
             return await self._run_argv(spec, session_path, before)
         if not spec.code:
-            # Same contract as BubblewrapRuntime: runtimes never silently
+            # Same contract as NsjailRuntime: runtimes never silently
             # succeed on an empty request.
             return ExecResult(stderr="No code or command supplied.", exit_code=2)
 

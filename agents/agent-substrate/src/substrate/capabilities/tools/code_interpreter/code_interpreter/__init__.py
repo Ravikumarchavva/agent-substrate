@@ -13,9 +13,9 @@ from .agent_sandbox_tools import (
     set_code_interpreter_thread_id,
 )
 from .runtimes import (
-    BubblewrapRuntime,
     InProcessRuntime,
     NetworkPolicy,
+    NsjailRuntime,
     SandboxRuntime,
     SandboxSpec,
     SandboxUnavailableError,
@@ -32,10 +32,10 @@ def main() -> None:
 __all__ = [
     "main",
     "AgentSandboxTools",
-    "BubblewrapRuntime",
     "CodeInterpreterTool",
     "InProcessRuntime",
     "NetworkPolicy",
+    "NsjailRuntime",
     "SandboxRuntime",
     "SandboxSpec",
     "SandboxUnavailableError",

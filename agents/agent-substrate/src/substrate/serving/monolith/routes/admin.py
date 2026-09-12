@@ -225,7 +225,7 @@ async def list_storage_conversations(
     """``(conversation_id, size_bytes, file_count)`` for one tenant — the
     admin storage page's drill-down. Conversation workspaces are what the
     code interpreter's sandbox mounts (``sandbox_service.py`` /
-    ``bubblewrap.py`` mount ``.../conversations/{cid}/workspace``), so this
+    ``nsjail.py`` mount ``.../conversations/{cid}/workspace``), so this
     is what an agent's sandbox run actually wrote."""
     store = _require_workspace_file_store(ctx)
     conversations = await store.list_conversations(tenant_id)

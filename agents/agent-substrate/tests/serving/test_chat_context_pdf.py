@@ -250,13 +250,13 @@ async def _run_build_file_context_for_workspace_path(object_key: str):
     return attachments[0]
 
 
-async def test_workspace_path_strips_session_prefix_for_bubblewrap_mode(monkeypatch):
-    """Bubblewrap mounts ONLY the caller's own session dir (see
+async def test_workspace_path_strips_session_prefix_for_nsjail_mode(monkeypatch):
+    """nsjail mounts ONLY the caller's own session dir (see
     CodeInterpreterTool._session_dir) at /workspace — the full
     users/{uid}/sessions/{tid}/ prefix must be stripped, not just users/{uid}/."""
     from substrate.serving.monolith.routes import chat_context
 
-    monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "bubblewrap")
+    monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "nsjail")
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
 
     attachment = await _run_build_file_context_for_workspace_path(
@@ -296,12 +296,12 @@ async def test_workspace_path_absent_when_no_sandbox_configured(monkeypatch):
     assert "workspace_path" not in attachment
 
 
-async def test_workspace_path_absent_for_a_pdf_even_with_bubblewrap_configured(
+async def test_workspace_path_absent_for_a_pdf_even_with_nsjail_configured(
     monkeypatch,
 ):
     """A PDF is already ingested into the RagBackend and readable via
     knowledge_search — it must never ALSO get a code_interpreter workspace_path,
-    even when bubblewrap genuinely does mount the file there.
+    even when nsjail genuinely does mount the file there.
 
     Real incident this pins: with the hint present, the model was handed a
     working `pypdf.PdfReader(workspace_path)`-able path in the very same
@@ -315,7 +315,7 @@ async def test_workspace_path_absent_for_a_pdf_even_with_bubblewrap_configured(
     """
     from substrate.serving.monolith.routes import chat_context
 
-    monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "bubblewrap")
+    monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "nsjail")
 
     file_id = "55555555-5555-5555-5555-555555555555"
     meta = _pdf_meta(file_id, "report.pdf", f"users/u1/sessions/t1/{file_id}.pdf", 999)

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.capabilities.gdpr.eraser import erase_tenant, erase_user
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_service_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.shared.auth.middleware import require_service_identity
 
@@ -42,7 +42,7 @@ async def erase_user_data(
     body: EraseUserRequest,
     request: Request,
     _: object = Depends(require_service_identity),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_service_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> dict:
     summary = await erase_user(
@@ -60,7 +60,7 @@ async def erase_tenant_data(
     body: EraseTenantRequest,
     request: Request,
     _: object = Depends(require_service_identity),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_service_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> dict:
     summary = await erase_tenant(

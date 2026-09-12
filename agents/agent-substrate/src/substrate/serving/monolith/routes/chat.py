@@ -48,7 +48,7 @@ from substrate.kernel.messaging.message import (
     Message as _Message,
 )
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.hooks import ChatContext, hooks
 from substrate.serving.monolith.schemas import ChatRequest
 from substrate.serving.monolith.services import get_owned_thread
@@ -103,7 +103,7 @@ async def chat(
     body: ChatRequest,
     request: Request,
     ctx: ServerDependencies = Depends(get_ctx),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Stream agent response as Server-Sent Events with HITL support.
@@ -467,7 +467,7 @@ async def chat(
 async def stream_thread(
     thread_id: uuid.UUID,
     ctx: ServerDependencies = Depends(get_ctx),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Reconnect to a thread's active run and relay its remaining wire events.

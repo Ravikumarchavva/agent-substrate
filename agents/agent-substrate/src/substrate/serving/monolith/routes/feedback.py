@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.schemas import FeedbackCreate, FeedbackOut
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.monolith.services import create_feedback
@@ -19,7 +19,7 @@ router = APIRouter(tags=["feedback"], dependencies=[Depends(get_current_user)])
 @router.post("/feedbacks", response_model=FeedbackOut, status_code=201)
 async def submit_feedback(
     body: FeedbackCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
 ):
     """Submit feedback (thumbs up / down) on an assistant step."""
     fb = await create_feedback(

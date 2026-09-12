@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.schemas import McpContextUpdate
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
@@ -307,7 +307,7 @@ async def get_manifest(request: Request) -> List[Dict[str, Any]]:
 async def update_mcp_context(
     thread_id: uuid.UUID,
     body: McpContextUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
     ctx: ServerDependencies = Depends(get_ctx),
 ):

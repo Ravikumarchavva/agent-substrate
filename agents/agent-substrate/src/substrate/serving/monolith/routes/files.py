@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
 from substrate.capabilities.storage.layout import conversation_shared_key, user_prefix
 from substrate.logger import setup_logging
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import FileMetadata, Thread, User
 from substrate.serving.monolith.routes.chat_context import EXTRACTABLE_CONTENT_TYPES
@@ -354,7 +354,7 @@ async def upload_file(
     file: UploadFile = File(...),
     thread_id: Optional[uuid.UUID] = Form(None),
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> FileUploadResponse:
     """Upload a file and store its metadata.
@@ -529,7 +529,7 @@ async def serve_object(
         description="Tenant-scoped object key owned by the caller",
     ),
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> StreamingResponse:
     """Serve a stored object by key — the target of the ``/files/object?key=``
@@ -589,7 +589,7 @@ async def serve_object(
 async def get_file_status(
     file_id: uuid.UUID,
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
 ) -> dict:
     """Lightweight polling target for the composer's per-attachment progress
     ring — never touches file_store, just the metadata row. See
@@ -612,7 +612,7 @@ async def get_file_status(
 async def download_file(
     file_id: uuid.UUID,
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> StreamingResponse:
     """Download file bytes."""
@@ -640,7 +640,7 @@ async def get_file_url(
     file_id: uuid.UUID,
     expires_in: int = 3600,
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> FileUrlResponse:
     """Return a presigned URL (or download URL for InMemoryFileStore)."""
@@ -660,7 +660,7 @@ async def get_file_url(
 async def delete_file(
     file_id: uuid.UUID,
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> None:
     """Soft-delete metadata and remove object from store."""

@@ -25,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.logger import setup_logging
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
 from substrate.serving.monolith.security.deps import get_current_user
@@ -70,7 +70,7 @@ def validate_schedule(cron_expression: str, kind: str) -> None:
 @router.post("", response_model=ScheduledTaskOut, status_code=status.HTTP_201_CREATED)
 async def create_scheduled_task_endpoint(
     body: ScheduledTaskCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Create a new persistent scheduled task."""
@@ -138,7 +138,7 @@ async def create_scheduled_task_endpoint(
 @router.get("", response_model=List[ScheduledTaskOut])
 async def list_scheduled_tasks(
     status_filter: Optional[str] = Query(None, alias="status"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """List all scheduled tasks with execution status preview."""
@@ -196,7 +196,7 @@ async def list_scheduled_tasks(
 @router.get("/{task_id}", response_model=ScheduledTaskOut)
 async def get_scheduled_task(
     task_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Get details of a single scheduled task with last 5 runs."""
@@ -243,7 +243,7 @@ async def list_scheduled_task_runs(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     include_silent: bool = Query(True),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
 ):
     """Retrieve run history log for a task (paginated)."""
     stmt = select(ScheduledTaskRun).where(ScheduledTaskRun.task_id == task_id)
@@ -262,7 +262,7 @@ async def list_scheduled_task_runs(
 async def update_scheduled_task_endpoint(
     task_id: uuid.UUID,
     body: ScheduledTaskUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Update a scheduled task's configuration, prompt, or status."""
@@ -349,7 +349,7 @@ async def update_scheduled_task_endpoint(
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_scheduled_task_endpoint(
     task_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Delete a scheduled task and its associated thread/history."""
@@ -379,7 +379,7 @@ async def delete_scheduled_task_endpoint(
 @router.post("/{task_id}/run", status_code=status.HTTP_202_ACCEPTED)
 async def trigger_scheduled_task_now(
     task_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Manually trigger execution of a scheduled task immediately (async)."""
@@ -512,7 +512,7 @@ async def parse_schedule_endpoint(
 async def add_scheduled_task_feedback(
     task_id: uuid.UUID,
     body: ScheduledTaskFeedbackRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Add user feedback/message directly to a scheduled task's thread for lookback context."""

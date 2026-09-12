@@ -296,6 +296,11 @@ class FileVersion(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     thread_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    # Plain string, not a FK, same reasoning as user_id/thread_id above —
+    # added for Row-Level Security (see rls.py): a snapshot's own key embeds
+    # the tenant, but RLS policies need a real column to filter on rather
+    # than parsing object_key.
+    tenant_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

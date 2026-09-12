@@ -70,7 +70,12 @@ async def lifespan(app: FastAPI):
     )
 
     # Database — returns (engine, session_factory), no module globals
-    engine, session_factory = await init_db(settings.DATABASE_URL, echo=False)
+    engine, session_factory = await init_db(
+        settings.DATABASE_URL,
+        echo=False,
+        rls_app_role_password=settings.RLS_APP_ROLE_PASSWORD,
+        app_database_url=settings.APP_DATABASE_URL or None,
+    )
     app.state.engine = engine
     app.state.session_factory = session_factory
 

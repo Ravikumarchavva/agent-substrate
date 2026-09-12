@@ -101,6 +101,7 @@ async def record_version(
     author: str,
     user_id: str | None = None,
     thread_id: str | None = None,
+    tenant_id: str | None = None,
     restored_from_seq: int | None = None,
 ) -> FileVersion:
     """Snapshot ``data`` as the next version of ``object_key`` and commit."""
@@ -118,6 +119,7 @@ async def record_version(
         size_bytes=len(data),
         user_id=user_id,
         thread_id=thread_id,
+        tenant_id=tenant_id,
     )
     db.add(fv)
     await db.commit()
@@ -132,6 +134,7 @@ async def capture_bytes(
     data: bytes,
     user_id: str | None = None,
     thread_id: str | None = None,
+    tenant_id: str | None = None,
     change_author: str = "agent",
 ) -> FileVersion | None:
     """Ensure the current canonical bytes are versioned. Records ``"initial"``
@@ -150,6 +153,7 @@ async def capture_bytes(
             author="initial",
             user_id=user_id,
             thread_id=thread_id,
+            tenant_id=tenant_id,
         )
     if latest.checksum_sha256 != checksum:
         return await record_version(
@@ -160,5 +164,6 @@ async def capture_bytes(
             author=change_author,
             user_id=user_id,
             thread_id=thread_id,
+            tenant_id=tenant_id,
         )
     return None

@@ -2,7 +2,7 @@
 
 Replaces the previous pair of near-duplicate tools (one per deployment target)
 with one tool plus an injected :class:`SandboxRuntime`. The agent never learns
-which backend it is talking to, so swapping bubblewrap → k8s/gVisor →
+which backend it is talking to, so swapping nsjail → k8s/gVisor →
 Firecracker is a wiring change, not a tool change.
 
 Two execution modes, both isolated identically by the runtime:

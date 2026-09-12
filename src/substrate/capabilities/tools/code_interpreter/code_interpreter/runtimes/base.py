@@ -1,7 +1,7 @@
 """SandboxRuntime — the contract every code-execution backend implements.
 
 The seam that decouples *what* the agent asks for (run this code, in this
-session's directory) from *how* it is isolated (bubblewrap namespaces on a
+session's directory) from *how* it is isolated (nsjail namespaces on a
 single host, a gVisor pod in Kubernetes, or nothing at all in tests). Adding a
 Firecracker/Kata/Docker backend later means adding one module here — no agent,
 tool, or serving code changes.

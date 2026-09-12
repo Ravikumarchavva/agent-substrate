@@ -93,7 +93,7 @@ def test_ensure_user_template_creates_volume_and_mount(service) -> None:
     assert not mount.get("readOnly")
 
     # Second mount: the same PVC, read-only, for standing KB content — the
-    # k8s equivalent of BubblewrapRuntime's conditional --ro-bind.
+    # k8s equivalent of NsjailRuntime's conditional -R mount.
     assert kb_mount["mountPath"] == "/app/workspace/.kb"
     assert kb_mount["subPath"] == "users/user-42/kb"
     assert kb_mount["readOnly"] is True

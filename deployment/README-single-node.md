@@ -2,8 +2,10 @@
 
 Runs the whole stack on one box: engine + chat UI + Postgres + Redis behind Caddy
 (automatic HTTPS). Agent-generated code is isolated per session with
-**bubblewrap** — Linux namespaces, no daemon, no Docker socket, no root, and no
-nested virtualization (`/dev/kvm` not required), so it works on any Linux VPS.
+**nsjail** — Linux namespaces + cgroups, no daemon, no Docker socket, no root,
+and no nested virtualization (`/dev/kvm` not required), so it works on any
+Linux VPS. Unlike a plain namespace sandbox, nsjail also enforces a real
+per-sandbox process-count/memory cap via cgroups.
 
 ```bash
 cd deployment/docker
@@ -13,11 +15,12 @@ docker compose --env-file deploy.env -f docker-compose.deploy.yml up -d --build
 
 ## How code execution is isolated
 
-`SANDBOX_RUNTIME=bubblewrap` (the default) mounts **only the caller's own session
+`SANDBOX_RUNTIME=nsjail` (the default) mounts **only the caller's own session
 directory** at `/workspace` inside the sandbox. Other users' directories are
 absent from the mount namespace — a traversal like `../../other_user` resolves to
 nothing, rather than being permission-denied. Each execution is a fresh process,
-so no Python state carries between turns or between users. Network egress is
+so no Python state carries between turns or between users. A cgroup process-count
+cap (`--cgroup_pids_max`, 64 by default) contains fork bombs; network egress is
 denied (`SANDBOX_NETWORK_POLICY=deny`), and the sandbox gets a minimal
 environment, so host secrets (`OPENAI_API_KEY`, `JWT_SECRET`, `DATABASE_URL`)
 are never visible to the model's code.
@@ -28,7 +31,7 @@ so the session directory doubles as persistent storage — no sync step, and
 
 ## Python packages available to the sandbox
 
-With `SANDBOX_RUNTIME=bubblewrap` the sandbox executes an interpreter **on this
+With `SANDBOX_RUNTIME=nsjail` the sandbox executes an interpreter **on this
 host** (its prefix is bind-mounted read-only), rather than a container image with
 packages baked in. So the packages the tool advertises to the model — pandas,
 matplotlib, openpyxl, python-docx, python-pptx, reportlab, scikit-learn, seaborn,
@@ -57,22 +60,35 @@ path fails immediately with a clear error rather than at first tool call.
 ## Two ways to run the backend
 
 ### A. Containerized (what the compose file does)
-Simplest. Because Docker's default seccomp profile blocks
-`clone(CLONE_NEWUSER)`, the backend container carries:
+Simplest. nsjail needs two separate things inside the container: unprivileged
+user+mount namespaces (Docker's default seccomp profile blocks
+`clone(CLONE_NEWUSER)`) and ownership of a cgroup v2 subtree to enforce its
+process/memory caps. The compose file grants both:
 
 ```yaml
+user: root
+cgroupns_mode: host
 cap_add: [SYS_ADMIN]
 security_opt: [seccomp=unconfined]
 ```
 
-**Trade-off, stated plainly:** this weakens the *outer* container boundary. The
-boundary that keeps users away from each other's data is the *inner* bubblewrap
-namespace, which still fully applies — but a compromise of the backend process
-itself is less contained than it would otherwise be.
+**Trade-off, stated plainly:** `cgroupns_mode: host` gives the container the
+host's real cgroup tree, and only `root` owns that tree outright without
+further per-user delegation plumbing — a non-root container user has no
+cgroup v2 subtree delegated to it here (there's no systemd running inside
+the container to delegate one), so nsjail's own preflight would otherwise
+fail closed at startup. Running the backend container as root weakens the
+*outer* container boundary more than the previous non-root setup did. The
+boundary that keeps users away from each other's data is still the *inner*
+nsjail namespace, which fully applies regardless of the outer container's
+uid — but a compromise of the backend process itself is less contained than
+it would be non-root. Option B avoids this trade-off entirely.
 
 ### B. Backend on the host via systemd (strongest posture)
-Neither relaxation is needed, because there is no outer container to weaken.
-Keep Postgres/Redis/Caddy in compose and run the engine directly:
+No outer container to weaken, and systemd delegates your own unprivileged
+user a real cgroup v2 subtree automatically — so neither the container
+relaxations above nor running as root are needed. Keep Postgres/Redis/Caddy
+in compose and run the engine directly:
 
 ```ini
 # /etc/systemd/system/substrate.service
@@ -87,31 +103,45 @@ EnvironmentFile=/opt/agent-substrate/.env
 ExecStart=/usr/local/bin/uv run substrate start --host 0.0.0.0 --foreground
 Restart=always
 # Defence in depth for the engine itself (the sandbox has its own boundary):
-NoNewPrivileges=false     # bwrap needs to create user namespaces
+NoNewPrivileges=false     # nsjail needs to create user namespaces
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
+# Delegates a cgroup v2 subtree to this service's own slice (cpu/memory/pids)
+# — required for nsjail's process-count/memory caps to initialize. Present
+# by default on any systemd >= 245 host; explicit here for clarity.
+Delegate=cpu memory pids
 
 [Install]
 WantedBy=multi-user.target
 ```
 
+Build nsjail (no apt/Debian package exists — see github.com/google/nsjail):
+
 ```bash
-apt install bubblewrap
+sudo apt-get install -y autoconf bison flex gcc g++ git \
+    libprotobuf-dev libnl-route-3-dev libtool make pkg-config protobuf-compiler
+git clone --branch 3.6 --depth 1 https://github.com/google/nsjail.git
+cd nsjail && git submodule update --init --recursive && make
+sudo install -m 755 nsjail /usr/local/bin/nsjail
+```
+
+```bash
 systemctl enable --now substrate
 ```
 
 ## Preflight
 
-The engine checks bubblewrap at startup and **fails closed** with actionable
+The engine checks nsjail at startup and **fails closed** with actionable
 remediation rather than silently running code unisolated. If you see
-`bubblewrap cannot create a namespace on this host`:
+`nsjail cannot create a sandbox on this host` or `No usable cgroup v2 subtree`:
 
 | Cause | Fix |
 |---|---|
-| `bwrap` missing | `apt install bubblewrap` |
-| Ubuntu 24.04+ AppArmor restriction | `sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` (persist in `/etc/sysctl.d/`) |
-| Running in Docker without caps | add `cap_add: [SYS_ADMIN]` + `security_opt: [seccomp=unconfined]`, or use option B |
+| `nsjail` missing | build it — see the systemd section above (no apt package exists) |
+| Running unprivileged with no cgroup delegation | run under a systemd unit with `Delegate=cpu memory pids` (see above), or `systemctl edit user@$(id -u).service` and add the same under `[Service]`, then re-login |
+| Running in Docker without cgroup delegation | add `cgroupns_mode: host` + `user: root` (see option A above), or use option B |
+| Running in Docker without namespace caps | add `cap_add: [SYS_ADMIN]` + `security_opt: [seccomp=unconfined]`, or use option B |
 
 ## What this deployment does not include
 
@@ -122,10 +152,10 @@ remediation rather than silently running code unisolated. If you see
 
 ## Residual risk
 
-bubblewrap shares the host kernel, so a **kernel-level exploit** would escape it.
+nsjail shares the host kernel, so a **kernel-level exploit** would escape it.
 gVisor (see the Kubernetes deployment, `SANDBOX_RUNTIME=k8s` with
 `SANDBOX_RUNTIME_CLASS=gvisor`) and Firecracker defend against that class;
-bubblewrap does not. This is the same boundary online judges and Codex CLI
-accept, and it is a large improvement over a shared sandbox with no per-user
-boundary at all. Prefer the Kubernetes + gVisor path once you serve untrusted
-multi-tenant traffic at scale.
+nsjail does not. This is the same class of boundary online judges and Codex
+CLI accept, and it is a large improvement over a shared sandbox with no
+per-user boundary at all. Prefer the Kubernetes + gVisor path once you serve
+untrusted multi-tenant traffic at scale.

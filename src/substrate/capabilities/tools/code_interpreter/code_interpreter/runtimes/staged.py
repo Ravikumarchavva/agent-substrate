@@ -1,6 +1,6 @@
 """StagedSandboxRuntime — run a sandbox against a store that has no filesystem.
 
-Every local runtime (bubblewrap, inprocess) executes with ``cwd`` inside a real
+Every local runtime (nsjail, inprocess) executes with ``cwd`` inside a real
 directory tree, and the k8s runtime mounts one. Object storage offers ``GET``/
 ``PUT`` on keys, not ``open()``/``write()``/``seek()``, so when
 ``FILE_STORE_BACKEND=s3`` there is no tree for them to run in.

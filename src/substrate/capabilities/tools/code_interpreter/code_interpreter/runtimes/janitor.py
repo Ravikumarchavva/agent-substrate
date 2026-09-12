@@ -1,7 +1,7 @@
 """SandboxJanitor — reap sandboxes whose session has gone idle.
 
 Only matters for runtimes that keep something alive between turns (today:
-``K8sRuntime``, one pod per session). ``BubblewrapRuntime`` needs no janitor —
+``K8sRuntime``, one pod per session). ``NsjailRuntime`` needs no janitor —
 each execution is a fresh process and ``--die-with-parent`` guarantees nothing
 outlives us — so ``start()`` is a no-op for runtimes without
 ``terminate_session``.

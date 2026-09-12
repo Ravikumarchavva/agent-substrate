@@ -323,7 +323,7 @@ def readonly_kb_block(ci_has_workspace_access: bool) -> str:
     """Not attachment-specific (unlike attachments_block above) — this is
     about code_interpreter's filesystem generally, so it's unconditional on
     ci_has_workspace_access alone, not on any particular upload existing.
-    See BubblewrapRuntime._bwrap_argv()/sandbox_service.py's per-user
+    See NsjailRuntime._nsjail_argv()/sandbox_service.py's per-user
     SandboxTemplate for what actually gets mounted at /workspace/.kb."""
     if not ci_has_workspace_access:
         return ""

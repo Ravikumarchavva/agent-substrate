@@ -143,17 +143,25 @@ class SubstrateConfig(BaseSettings):
     # sandbox_service.py::_ensure_user_template). Empty with SANDBOX_RUNTIME=
     # "k8s" means the running code interpreter has no view of uploaded files
     # at all, so chat.py must not tell the model a workspace path is openable
-    # (the default "bubblewrap" runtime always has a view — see chat.py's
+    # (the default "nsjail" runtime always has a view — see chat.py's
     # ci_has_workspace_access).
     CI_WORKSPACE_PVC_CLAIM: str = ""
     # ── Sandbox isolation (how agent-generated code is contained) ─────────────
-    # "bubblewrap" = Linux namespaces on this host (no daemon, no root, no
-    #   nested virtualization). The default: only the caller's own session
-    #   directory is mounted, so one user's code cannot see another's files.
+    # "nsjail"     = Linux namespaces + real cgroup limits on this host (no
+    #   daemon, no root, no nested virtualization). The default: only the
+    #   caller's own session directory is mounted, so one user's code cannot
+    #   see another's files, and a genuine per-sandbox process-count/memory
+    #   cap is enforced via cgroups (not RLIMIT_NPROC, which is per-UID
+    #   system-wide, not per-sandbox). Needs the `nsjail` binary on PATH
+    #   (build from github.com/google/nsjail — not commonly packaged) and
+    #   either root inside a container started with --cgroupns=host, or an
+    #   unprivileged user with a systemd-delegated cgroup v2 subtree. See
+    #   runtimes/nsjail.py's module docstring for what was verified before
+    #   this was added.
     # "k8s"        = one agent-sandbox pod per session (per-user PVC subPath,
     #   optional gVisor RuntimeClass). For cluster deployments.
     # "inprocess"  = NO isolation. Tests/CI only — never multi-user.
-    SANDBOX_RUNTIME: str = "bubblewrap"
+    SANDBOX_RUNTIME: str = "nsjail"
     # Network reachable from sandboxed code: "deny" | "pip_only" | "full".
     # Deny is the default because the code is LLM-generated and untrusted: with
     # no egress it cannot exfiltrate files even if it reads them.
@@ -161,12 +169,12 @@ class SubstrateConfig(BaseSettings):
     SANDBOX_TIMEOUT_SECONDS: int = 60
     SANDBOX_MEMORY_BYTES: int = 2 * 1024 * 1024 * 1024
     # Idle sessions whose sandbox is reaped by the janitor (k8s pods; the
-    # bubblewrap runtime has no long-lived process to reap).
+    # nsjail runtime has no long-lived process to reap).
     SANDBOX_SESSION_TTL_SECONDS: int = 3600
     # Kubernetes RuntimeClass for sandbox pods, e.g. "gvisor". Empty = cluster
     # default (shared host kernel).
     SANDBOX_RUNTIME_CLASS: str = ""
-    # Interpreter the bubblewrap runtime executes. Its environment supplies the
+    # Interpreter the nsjail runtime executes. Its environment supplies the
     # packages the tool advertises (pandas, matplotlib, …) — install the
     # `sandbox` extra. Empty = the interpreter the engine itself runs under.
     # Point this at a dedicated venv to keep those packages out of the engine's

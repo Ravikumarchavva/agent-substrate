@@ -75,20 +75,35 @@ services:
       ENABLE_BUILDER: "true"
       FRONTEND_URL: https://${DOMAIN}
       CORS_ALLOWED_ORIGINS: https://${DOMAIN}
-      # Agent-generated code runs in a bubblewrap namespace scoped to the
+      # Agent-generated code runs in an nsjail namespace+cgroup scoped to the
       # caller's own session directory — no separate sandbox service, no Docker
-      # socket. See capabilities/tools/code_interpreter/.../runtimes/bubblewrap.py
-      SANDBOX_RUNTIME: bubblewrap
+      # socket. See capabilities/tools/code_interpreter/.../runtimes/nsjail.py
+      SANDBOX_RUNTIME: nsjail
       SANDBOX_NETWORK_POLICY: deny
     volumes:
       - workspaces:/data/workspaces
-    # bwrap needs to create user+mount namespaces. Docker's default seccomp
-    # profile blocks clone(CLONE_NEWUSER), so the backend container needs these
-    # two relaxations. NOTE this weakens the *outer* container boundary; the
-    # boundary that protects users from each other is the inner bubblewrap
-    # namespace, which still applies. For the strongest posture, run the backend
-    # as a systemd unit on the host instead of in a container (then neither
-    # relaxation is needed) — see deployment/README-single-node.md.
+    # nsjail needs to both create user+mount namespaces (same as bubblewrap
+    # before it: Docker's default seccomp profile blocks
+    # clone(CLONE_NEWUSER), hence cap_add/seccomp=unconfined below) AND own a
+    # cgroup v2 subtree to enforce its process-count/memory limits
+    # (cgroupns_mode: host). Root owns the whole delegated cgroup tree
+    # outright once cgroupns_mode: host is set — see runtimes/nsjail.py's
+    # module docstring for how this was verified — which is why `user: root`
+    # is set below rather than the appuser the Dockerfile otherwise creates:
+    # a non-root container user has no cgroup v2 subtree delegated to it
+    # here (no systemd running inside the container to delegate one), so
+    # nsjail's own preflight() would fail closed at startup. This trades
+    # some outer-container defense-in-depth (previously: even a namespace
+    # escape would land as non-root) for nsjail's per-sandbox process/memory
+    # caps, which bubblewrap could not provide at all. The boundary that
+    # protects users from each other either way is the *inner* nsjail
+    # namespace, which still applies regardless of the outer container's
+    # uid. For the strongest posture, run the backend as a systemd unit on
+    # the host instead of in a container (systemd delegates a cgroup subtree
+    # to your own unprivileged user, so neither this nor the capability
+    # relaxations below are needed) — see deployment/README-single-node.md.
+    user: root
+    cgroupns_mode: host
     cap_add:
       - SYS_ADMIN
     security_opt:

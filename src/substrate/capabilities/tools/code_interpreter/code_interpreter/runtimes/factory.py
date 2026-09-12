@@ -17,8 +17,8 @@ from substrate.logger import setup_logging
 
 from ..sandbox_service import CodeInterpreterConfig
 from .base import NetworkPolicy, SandboxRuntime, SandboxUnavailableError
-from .bubblewrap import BubblewrapRuntime
 from .inprocess import InProcessRuntime
+from .nsjail import NsjailRuntime
 
 logger = setup_logging()
 
@@ -49,11 +49,12 @@ def build_runtime(
     """
     name = kind.strip().lower()
 
-    if name == "bubblewrap":
-        runtime = BubblewrapRuntime(workspace_root, python_bin=python_bin)
+    if name == "nsjail":
+        runtime = NsjailRuntime(workspace_root, python_bin=python_bin)
         runtime.preflight()  # raises with actionable remediation if unusable
         logger.info(
-            "Sandbox runtime: bubblewrap (namespace isolation, %s)", workspace_root
+            "Sandbox runtime: nsjail (namespace + cgroup isolation, %s)",
+            workspace_root,
         )
         return runtime
 
@@ -82,7 +83,7 @@ def build_runtime(
         return InProcessRuntime(workspace_root)
 
     raise SandboxUnavailableError(
-        f"Unknown SANDBOX_RUNTIME {kind!r}. Valid: bubblewrap, k8s, inprocess."
+        f"Unknown SANDBOX_RUNTIME {kind!r}. Valid: nsjail, k8s, inprocess."
     )
 
 

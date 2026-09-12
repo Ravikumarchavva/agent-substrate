@@ -18,12 +18,12 @@ is only ever the free-tier fallback behind Tavily/Exa.
 K8s agent-sandbox code execution (`SANDBOX_RUNTIME=k8s`). Pulls the full
 `kubernetes`/`kubernetes_asyncio` client libraries (~85MB) — only needed if
 you're actually running sandbox pods against a real cluster. The default
-`bubblewrap` runtime needs none of it.
+`nsjail` runtime needs none of it.
 
 ## `sandbox`
 
 Data-science packages the `code_interpreter` tool advertises to the model.
-With `SANDBOX_RUNTIME=bubblewrap` the sandbox executes using an interpreter
+With `SANDBOX_RUNTIME=nsjail` the sandbox executes using an interpreter
 on the host running agent-substrate (see `SANDBOX_PYTHON`), so these must be
 importable from *that* interpreter's environment — previously they only
 existed inside the sandbox container image. Install into the engine's own

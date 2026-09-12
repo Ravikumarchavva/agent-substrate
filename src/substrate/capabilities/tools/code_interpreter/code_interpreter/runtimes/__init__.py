@@ -2,7 +2,7 @@
 
 | Runtime              | Isolation                                  | Needs |
 |----------------------|--------------------------------------------|-------|
-| ``BubblewrapRuntime``| Linux namespaces (mount/pid/net/user)      | `bwrap`, unprivileged userns |
+| ``NsjailRuntime``    | Namespaces + cgroups (real per-sandbox process-count/memory caps, optional seccomp) | `nsjail` binary (build from source), cgroup v2 delegation |
 | ``K8sRuntime``       | Pod per session + per-user PVC subPath, optional gVisor | a cluster |
 | ``InProcessRuntime`` | **none** — tests/CI only                   | nothing |
 
@@ -21,8 +21,8 @@ from .base import (
     SandboxSpec,
     SandboxUnavailableError,
 )
-from .bubblewrap import BubblewrapRuntime
 from .inprocess import InProcessRuntime
+from .nsjail import NsjailRuntime
 
 if TYPE_CHECKING:
     from .k8s import K8sRuntime
@@ -37,11 +37,11 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "BubblewrapRuntime",
     "ExecResult",
     "InProcessRuntime",
     "K8sRuntime",
     "NetworkPolicy",
+    "NsjailRuntime",
     "SandboxRuntime",
     "SandboxSpec",
     "SandboxUnavailableError",

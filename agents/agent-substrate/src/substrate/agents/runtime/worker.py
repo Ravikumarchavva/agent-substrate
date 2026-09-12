@@ -250,6 +250,7 @@ class Worker:
         # execution_budget via Supervision.spawn_child() instead of handing
         # every grandchild a fresh, unlimited budget unrelated to whatever
         # constraints its own parent was given.
+        # Populate tenant and supervision hierarchy (inheriting parent budgets)
         supervision = await self._supervisor.supervision_of(run_id)
         meta = RunMeta(
             run_id=run_id,
@@ -268,6 +269,7 @@ class Worker:
         # already recorded becomes a free in-memory lookup for the rest of
         # this invocation. last_seq also seeds RunContext's local seq
         # cursor, so no separate last_seq() query is needed below.
+        # Fold recorded effect.result entries into the effect cache for replay
         effect_cache = await EffectCache.fold(self._event_log, run_id)
 
         ctx = RunContext(
@@ -289,6 +291,7 @@ class Worker:
         # Log run start (last_seq -1 → first append at seq 0). Routed through
         # ctx._log so its local seq cursor stays the single source of truth
         # instead of drifting from an out-of-band append.
+        # Log initial run start via ctx._log to preserve seq cursor
         if effect_cache.last_seq < 0:
             await ctx._log("run.started", {})
 
@@ -300,6 +303,7 @@ class Worker:
         # Recording which message ids were drained on the live attempt and
         # reusing that exact set on replay closes it; a message that arrives
         # mid-suspension simply waits for the run's NEXT drain instead.
+        # Journaled inbox drain: preserve exact drained message IDs across replays
         from substrate.kernel.runtime.effects import Effect
 
         drain_path = ctx._alloc_path()
@@ -329,6 +333,7 @@ class Worker:
         # Keep the Postgres lease alive for long-running agents (LLM calls can
         # easily exceed the 30-second default lease).  The heartbeat runs every
         # _HEARTBEAT_INTERVAL seconds; InMemoryScheduler.heartbeat is a no-op.
+        # Periodic heartbeat maintains the lease during long-running operations
         _HEARTBEAT_INTERVAL = 15
 
         async def _heartbeat() -> None:
@@ -343,6 +348,7 @@ class Worker:
                         # process's live Task), so the heartbeat round-trip
                         # is how it reaches this token. ctx.check() picks it
                         # up cooperatively at the next yield point.
+                        # Cancellation requested out-of-band by supervisor/admin
                         token.cancel("cancel_requested")
                 except Exception:
                     pass  # never let a missed heartbeat kill the run
@@ -377,6 +383,7 @@ class Worker:
             # no finish_run. release(SUSPENDED) is the only state
             # change; the Task ends here and the run costs nothing until
             # something wakes it.
+            # Genuine dormancy: messages remain unacked for replay; release with wake condition
             await self._scheduler.release(
                 lease, status=RunStatus.SUSPENDED, wake_on=exc.wakeup
             )
@@ -411,6 +418,7 @@ class Worker:
             # failure. Anything else defaults to retryable: an unclassified
             # exception might be transient, and the framework can't safely
             # assume otherwise.
+            # Deterministic errors (guardrails, budgets, permanent errors) skip retries
             retryable = not (is_guardrail or is_budget or is_permanent)
 
             if is_crash:
@@ -436,6 +444,7 @@ class Worker:
             # about to retry it. Same reasoning for finish_run(): a parent
             # watching via ctx.ask/ctx.join must not be told the child failed
             # until it's genuinely done retrying.
+            # Atomically decide retry-vs-terminal before emitting run.failed
             terminal = await self._scheduler.release(
                 lease, status=RunStatus.FAILED, retryable=retryable
             )

@@ -29,6 +29,7 @@ class CodeInterpreterConfig:
     # on first use, mounting only users/{user_id} of the shared RWX PVC —
     # this subPath is the isolation boundary between users' sandboxes.
     # Unset (default) preserves the old shared-template, ephemeral behavior.
+    # Per-user persistent workspace PVC (subPath isolation)
     workspace_pvc_claim: str | None = None
     workspace_mount_path: str = "/app/workspace"
     # Kubernetes RuntimeClass for sandbox pods. "gvisor" routes them through
@@ -36,6 +37,7 @@ class CodeInterpreterConfig:
     # host kernel — the isolation Google itself uses for GKE Sandbox / Cloud Run
     # untrusted code, and it needs no nested virtualization (unlike Kata /
     # Firecracker). Empty = cluster default runtime (weaker: shared kernel).
+    # RuntimeClass for sandbox pods (e.g. "gvisor" / runsc)
     runtime_class_name: str = ""
 
 
@@ -280,6 +282,7 @@ class CodeInterpreterService:
 
         # No user identity, or no workspace PVC configured: fall back to the
         # shared template — old ephemeral, non-persistent behavior.
+        # Fall back to shared template if no user ID or workspace PVC configured
         template = self.config.template
         per_user_template = (
             user_id is not None and self.config.workspace_pvc_claim is not None
@@ -291,6 +294,7 @@ class CodeInterpreterService:
         # is pre-created and generic, so it cannot carry this user's
         # `subPath: users/{uid}` mount, and a pod's spec is immutable after
         # creation. Isolation wins — take the cold-start cost instead.
+        # Warm pools cannot carry user-specific subPath mounts; cold start required for isolation
         warmpool = None if per_user_template else self.config.warmpool
 
         sandbox = self.client.create_sandbox(
@@ -383,6 +387,7 @@ class CodeInterpreterService:
         # in this dev setup (no k8s environment available) — review this
         # pod-spec diff carefully, and confirm this behavior for real,
         # before relying on it in a k8s deployment.
+        # Mount user's standing knowledge-base read-only
         kb_mount_path = self.config.workspace_mount_path.rstrip("/") + "/.kb"
         for container in containers:
             container["volumeMounts"] = [

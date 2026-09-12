@@ -80,6 +80,7 @@ class Thread(Base):
     # Tenant namespace (see AuthClaims.tenant_id) — "default" for
     # single-tenant deployments. NULL-tenant legacy rows claim-on-first-access
     # the same way NULL-owner rows do (see get_owned_thread).
+    # Tenant namespace (defaults to "default" for single-tenant)
     tenant_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), default=list)
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column(
@@ -203,6 +204,7 @@ class FileMetadata(Base):
     # file (see routes/chat_context.py::_build_file_context). Files are
     # immutable once uploaded, so no invalidation is needed: a cache hit
     # skips extraction entirely for every later reference to the same file.
+    # Extraction cache (immutable once uploaded)
     extracted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     extracted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -216,6 +218,7 @@ class FileMetadata(Base):
     # immutable once uploaded, so a non-null value means "already indexed,
     # don't re-ingest" for every later reference, same pattern as
     # extracted_at above.
+    # RAG ingestion cache timestamp
     rag_ingested_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -232,6 +235,7 @@ class FileMetadata(Base):
     # enforces RAG_MAX_DOC_PAGES), reused by the frontend to estimate
     # progress since true per-page extraction progress isn't available (see
     # plan notes — PPStructureV3 batches internally despite looking lazy).
+    # Eager staged ingestion (staging:{file_id} vector collection)
     page_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     staged_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -300,6 +304,7 @@ class FileVersion(Base):
     # added for Row-Level Security (see rls.py): a snapshot's own key embeds
     # the tenant, but RLS policies need a real column to filter on rather
     # than parsing object_key.
+    # Tenant ID for Row-Level Security filtering
     tenant_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -34,6 +34,7 @@ from typing import Any, Iterable
 # a logo, a branded graphic) were silently falling through to the text
 # branch, leaking their garbled OCR'd fragments into the plain-text output
 # as if they were real prose, instead of becoming cropped images.
+# Layout regions extracted as discrete image crops (see docs/capabilities/08-document-intelligence.md)
 _IMAGE_LABELS = {"chart", "table", "figure", "image"}
 
 # Below this detection confidence, a chart/table/figure region is treated as
@@ -45,6 +46,7 @@ _IMAGE_LABELS = {"chart", "table", "figure", "image"}
 # (nothing else in the image store to compete with it). 0.7 sits with a
 # comfortable margin below the genuine range and above the observed spurious
 # case.
+# Minimum confidence required to extract region as an image crop
 _MIN_IMAGE_CONFIDENCE = 0.7
 
 
@@ -282,6 +284,7 @@ class ExtractionPipeline:
         # ocr_batch_size (config.py's DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE,
         # default 16) was originally tuned for a 4GB-class laptop GPU — a
         # 24GB+ card has real room to raise it; only ever applied on GPU.
+        # Configure batch size on GPU to avoid sawtooth single-region CUDA launches
         batch_size = ocr_batch_size if device.startswith("gpu") else None
         self._pipeline = PPStructureV3(
             text_detection_model_name=det_model,
@@ -294,6 +297,7 @@ class ExtractionPipeline:
             # markdown table below — instead of just an OCR'd caption. The
             # rest stay off: no formula/seal/chart sub-models needed for the
             # chart/table-image RAG use case this pipeline is built for.
+            # Enable SLANet table structure recognition for HTML table output
             use_table_recognition=True,
             use_formula_recognition=False,
             use_seal_recognition=False,
@@ -373,6 +377,7 @@ class ExtractionPipeline:
             # and ``layout_det_res.boxes`` (raw detections, has .score) come
             # from the same detection pass but are NOT index-aligned — match
             # by nearest bbox to recover a confidence score for each block.
+            # Match blocks to nearest bounding box to recover detector confidence scores
             score_by_bbox = _score_lookup(res.get("layout_det_res"))
 
             text_parts: list[str] = []
@@ -387,6 +392,7 @@ class ExtractionPipeline:
                 # (use_table_recognition=True) — convert it to a markdown
                 # table for the text stream, not just an image-crop caption,
                 # so the plain-text output alone has the actual table data.
+                # Convert structured table HTML to Markdown for plain-text search stream
                 md_table = (
                     _html_table_to_markdown(raw_content) if label == "table" else ""
                 )
@@ -402,6 +408,7 @@ class ExtractionPipeline:
                 # _IMAGE_LABELS PaddleX still populated block.image for)
                 # gets recorded as dropped so its <img> tag never leaks an
                 # unresolvable filesystem path into the markdown field.
+                # Crop as image if label matches, confidence clears threshold, and PIL image exists
                 keep_as_image = (
                     label in _IMAGE_LABELS
                     and confidence >= _MIN_IMAGE_CONFIDENCE
@@ -434,6 +441,7 @@ class ExtractionPipeline:
                 # detection still surfaces whatever text it has (markdown for
                 # a table block, raw OCR text otherwise) rather than being
                 # silently dropped.
+                # Non-image blocks or marginal detections fall through to plain text
                 content = md_table or raw_content
                 if content:
                     text_parts.append(content)
@@ -443,6 +451,7 @@ class ExtractionPipeline:
             # string formatting, no re-inference) and safe to call after the
             # loop above (parsing_res_list is a stored list, not a
             # generator, so consuming it once doesn't exhaust it).
+            # Assemble page markdown using PaddleX reading order
             page_md = res.markdown
             page_markdown_text = _rewrite_markdown_images(
                 page_md.get("markdown_texts", ""), kept_image_paths, dropped_image_paths
@@ -452,6 +461,7 @@ class ExtractionPipeline:
             # retaining a second full-res PIL copy per embedded image for
             # every page of a 60+ page document is unnecessary memory
             # pressure for a value we don't otherwise use.
+            # Retain only compressed ExtractedImage.data (drop PIL copies to save memory)
             markdown_pages.append(
                 {
                     "markdown_texts": page_markdown_text,

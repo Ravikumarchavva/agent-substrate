@@ -41,31 +41,10 @@ async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
     }
 
 
-# Both the K8s agent-sandbox pod and the local sandbox container mount the
-# workspace at this exact path (see sandbox_service.py's
-# workspace_mount_path default and deployment/docker/docker-compose.yml's
-# code-interpreter-sandbox volume). sandbox_runtime.py's /ci/run changes cwd
-# to WORKSPACE_DIR/sessions/{session_id} for every run — nothing currently
-# threads the real chat thread_id into that session_id for direct tool
-# calls (it defaults to "default"), so a workspace-relative path would
-# resolve against the wrong directory. An absolute path sidesteps that
-# entirely regardless of cwd.
+# Absolute workspace mount path inside sandboxes
 _SANDBOX_WORKSPACE_MOUNT_PATH = "/app/workspace"
 
-# The extraction service (PaddleOCR-based) reads PDF and raster images
-# natively — no DOCX/PPTX parser (verified: paddlex has no docx/pptx reader
-# at all). Those formats stay metadata-only, same as when no extraction
-# service is configured. Public (not `_`-prefixed): also imported by
-# routes/files.py to scope upload-time page/size caps and eager staging to
-# the same set of types this module actually ingests.
-#
-# text/markdown: NOT routed through the extraction service at all —
-# LocalRagBackend._load() already dispatches .txt/.md straight to the local
-# TextLoader (no OCR, no PaddleOCR call — see backends/local.py's
-# _LOCAL_FALLBACK_EXTENSIONS). Added here purely to make files.py's existing
-# will_stage/_stage_uploaded_doc eligibility check include it, so a large
-# paste-to-document upload gets chunked+embedded+staged the same way a PDF
-# does — same mechanism, not a new one.
+# Types eligible for upload-time size caps and eager RAG staging
 EXTRACTABLE_CONTENT_TYPES = {"application/pdf", "text/markdown"}
 
 
@@ -243,40 +222,19 @@ async def _build_file_context(
             "mime": meta.content_type,
             "size": meta.size_bytes,
         }
-        # object_key is "users/{uid}/sessions/{tid}/name" under the
-        # WorkspaceFileStore default. What that maps to *inside* the sandbox
-        # depends on how the active code interpreter mounts the workspace —
-        # these backends use different mount topologies (mirrors the
-        # ci_has_workspace_access gate below) — and the result is always
-        # made absolute since the sandbox's execution cwd isn't guaranteed to
-        # be the workspace root.
+        # Resolve absolute path inside the sandbox based on active mount topology
         relative_path: str | None = None
         mount_path = _SANDBOX_WORKSPACE_MOUNT_PATH
-        # Extractable types (PDF today) are already ingested into the RagBackend
-        # and readable via knowledge_search — never also hand the model a real,
-        # working code_interpreter path to the same file. Offering both isn't
-        # harmless redundancy: a prose instruction to "prefer knowledge_search"
-        # loses every time to a concrete, correct absolute path sitting right
-        # next to it, because reading the raw file *feels* more certain than a
-        # semantic-search result even when it isn't. Observed directly — the
-        # model reached for `pypdf.PdfReader(workspace_path)` on an already-
-        # successfully-searched document, repeatedly, specifically because this
-        # hint told it that path existed and was readable. Non-extractable types
-        # (csv, images, etc.) still get the hint below — for those,
-        # code_interpreter genuinely is the only way to read the file.
+
+        # Extractable types (e.g. PDF) are indexed into RAG; omit raw workspace path
+        # so the model prioritizes knowledge_search over direct file inspection.
         if meta.content_type in EXTRACTABLE_CONTENT_TYPES:
             return attachment
+
         if settings.SANDBOX_RUNTIME == "nsjail":
-            # nsjail mounts ONLY the caller's own session dir — see
-            # CodeInterpreterTool._session_dir — at /workspace, so the
-            # "users/{uid}/sessions/{tid}/" prefix must be stripped entirely,
-            # not just the "users/{uid}/" part.
             mount_path = "/workspace"
             relative_path = _session_relative_path(meta.object_key)
         elif settings.CI_WORKSPACE_PVC_CLAIM:
-            # K8s agent-sandbox subPath-mounts "users/{uid}" at
-            # /app/workspace (per-user pod — that subPath IS the isolation
-            # boundary), so the prefix must be stripped.
             parts = meta.object_key.split("/", 2)
             if len(parts) == 3 and parts[0] == "users":
                 relative_path = parts[2]

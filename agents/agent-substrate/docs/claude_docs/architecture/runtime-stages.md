@@ -93,6 +93,27 @@ any claim there against the code before trusting it.
   EventLogProtocol entries have no retention sweep yet (PR8).
 - **`FollowGraph`** is still in-memory only; no durable backend exists.
 
+## Fair-Share Tenant Scheduling & Lease Lifecycle
+
+The production PostgreSQL `Scheduler` (`infrastructure/runtime/scheduler.py`) provides durable multi-tenant execution guarantees:
+
+### 1. Fair-Share Tenant Partitioning
+- **Anti-Starvation CTE**: Instead of a naive strict FIFO queue where one tenant submitting 10,000 runs starves everyone else, runs are ranked using a `ROW_NUMBER() OVER (PARTITION BY tenant ORDER BY priority DESC, enqueued_at ASC)` window function.
+- **Round-Robin Scheduling**: Each tenant's $N$-th oldest run competes fairly against other tenants' $N$-th oldest runs.
+- **Two-Stage Lock Acquisition**: Because PostgreSQL disallows combining `FOR UPDATE SKIP LOCKED` directly with window functions in the same query, ranking is computed in a lock-free Common Table Expression (CTE), and the final `UPDATE` re-targets the candidate row IDs using `FOR UPDATE SKIP LOCKED`.
+
+### 2. Suspension, Timers, and Lost-Wakeup Races
+- **Cadence-Riding Timers**: Timed suspensions (`wake_at`) and deadlines ride the normal worker poll cadence — eliminating the need for a separate timer service.
+- **Lost-Wakeup Race Protection**: Between the moment an agent misses a signal and the database `UPDATE` suspends the run, an external worker might deliver that signal. The scheduler query verifies signal arrival atomically, un-suspending immediately if a matching signal landed in the interim.
+- **Exponential Retry Backoff**: Retries are modeled as legitimate dormancy via `status = 'suspended'` and a computed `wake_at`, surviving process restarts without being misidentified as orphaned runs.
+
+### 3. Worker Execution & Replay Invariants
+The runtime `Worker` (`agents/runtime/worker.py`) implements durable execution and replay determinism:
+- **Effect Cache Folding**: At the start of each lease, the worker queries the `EventLogProtocol` and folds recorded `effect.result` entries into an in-memory `EffectCache`. Replaying code executes previously recorded side-effects as instant local cache hits.
+- **Journaled Inbox Drain**: `inbox.drain()` is non-destructive (messages remain until acknowledged). To prevent nondeterminism during replays (where newly arrived messages mid-suspension would alter the message list), the set of drained message IDs is journaled on the first attempt and reused on subsequent replays.
+- **Atomic Retry vs. Terminal Transitions**: The worker invokes `release()` first to atomically bump retry counts and decide whether retries remain. It emits terminal events (`run.failed`) and notifies `finish_run()` only if the run has genuinely exhausted all retries, preventing downstream stream projectors from reporting premature failure.
+- **Deterministic Failure Classification**: Guardrail violations, budget exhaustion, and `PermanentError` are classified as deterministic errors that bypass retries, avoiding futile lease cycles.
+
 ## Why this matters for new work
 
 Today, `EventLogProtocol`/`InboxProtocol`/`SchedulerProtocol`/`SignalBusProtocol`/`SupervisorProtocol` state all

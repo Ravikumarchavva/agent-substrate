@@ -44,6 +44,8 @@ logger = setup_logging("substrate.runtimes.document_intelligence.security_scan")
 # stable signal: T6_DOS/T3_OBFUSCATION-only reports get downgraded; any
 # other category (active content, malware, prompt injection, embedded
 # payload, ...) keeps full severity.
+# Structural-only parsing risks (downgraded to warnings rather than blocking execution;
+# see docs/capabilities/08-document-intelligence.md)
 _STRUCTURAL_ONLY_THREATS = {"T6_DOS", "T3_OBFUSCATION"}
 
 _VERDICT_SEVERITY = {

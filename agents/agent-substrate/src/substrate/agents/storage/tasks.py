@@ -178,7 +178,7 @@ class TaskStore:
                 if t.strip()
             ]
             self._lists[task_list_id] = dataclasses.replace(
-                task_list, tasks=task_list.tasks + new_tasks
+                task_list, tasks=[*task_list.tasks, *new_tasks]
             )
             return new_tasks
 

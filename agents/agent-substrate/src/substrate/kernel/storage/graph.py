@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Mapping, Protocol, runtime_checkable
 
 
 @dataclass(frozen=True)
@@ -12,7 +12,7 @@ class Entity:
     """A node in the knowledge graph."""
 
     label: str
-    properties: dict[str, Any] = field(default_factory=dict)
+    properties: Mapping[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
@@ -23,7 +23,7 @@ class Relationship:
     source_id: str
     target_id: str
     type: str
-    properties: dict[str, Any] = field(default_factory=dict)
+    properties: Mapping[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 

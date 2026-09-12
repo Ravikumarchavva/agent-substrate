@@ -286,7 +286,9 @@ class PgTaskStore:
             for i, t in enumerate(titles)
             if t.strip()
         ]
-        updated_list = dataclasses.replace(task_list, tasks=task_list.tasks + new_tasks)
+        updated_list = dataclasses.replace(
+            task_list, tasks=[*task_list.tasks, *new_tasks]
+        )
         await self._save_tasks(updated_list)
         return new_tasks
 

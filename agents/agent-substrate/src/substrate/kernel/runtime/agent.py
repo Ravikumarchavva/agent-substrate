@@ -98,6 +98,16 @@ class Agent(Protocol[CtxT]):
     EventLogProtocol as the ``run.completed`` entry and surfaced as ``RunResult.output``
     to the parent or the caller of ``SupervisorProtocol.join``.
 
+    A journaled call (``ctx.tool()``, ``ctx.sleep_until_signal()``, etc.) can
+    raise ``kernel.core.errors.SuspendInterrupt`` to unwind this run to the
+    Worker. It's a ``BaseException``, not an ``Exception``, specifically so a
+    broad ``except Exception`` around a journaled call — a normal pattern for
+    recording a tool/journal error and re-raising — doesn't accidentally
+    catch it too. But a broader ``except BaseException`` (or a cancellation-
+    scope/task-group handler) still can; any such handler in agent or
+    middleware code must re-raise it (``except SuspendInterrupt: raise``) or
+    the run never actually suspends — it just looks completed or hangs.
+
     ``isinstance(x, Agent)`` (bare, unparametrized) still works —
     ``runtime_checkable`` Protocol checks are structural on member names and
     ignore the type parameter, same as before this became generic.

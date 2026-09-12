@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, Sequence
 
 
 class TaskStatus(StrEnum):
@@ -44,7 +44,7 @@ class TaskList:
 
     id: str
     conversation_id: str
-    tasks: list[Task] = field(default_factory=list)
+    tasks: Sequence[Task] = field(default_factory=list)
     max_retries: int = 3
     agent_id: str = ""
     agent_label: str = ""

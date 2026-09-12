@@ -40,7 +40,7 @@ settings = SubstrateConfig()
 # | [`05_safety/`](05_safety/) | Guardrails, LLM-as-judge evals | `01_guardrails`, `02_evals` |
 # | [`06_runtime/`](06_runtime/) | Actor runtime, internals, gRPC | `01_local_runtime`, `02_runtime_internals`, `03_grpc_runtime` |
 # | [`07_observability/`](07_observability/) | OpenTelemetry tracing, EventBus spans | `01_observability` |
-# | [`08_deployment/`](08_deployment/) | Docker Compose, Kind K8s, invoice extractor, K8s code interpreter | `01_docker_services`, `02_kind_k8s`, `03_invoice_extractor`, `04_k8s_code_interpreter` |
+# | [`08_deployment/`](08_deployment/) | Docker Compose, invoice extractor | `01_docker_services`, `03_invoice_extractor` |
 #
 # ---
 #

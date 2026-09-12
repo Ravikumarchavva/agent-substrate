@@ -1,8 +1,8 @@
 """Standalone FastAPI application for the document-intelligence service.
 
-Deploy this as its own low-replica Deployment (heavy paddlepaddle OCR
-runtime, model-loaded pods — see
-deployment/k8s/base/runtime/document-intelligence.yaml). The main backend
+Deploy this as its own low-replica service (heavy paddlepaddle OCR
+runtime, model-loaded — see docker-compose.yml's `document-intelligence`
+profile, or the `document-intelligence-gpu` variant). The main backend
 calls it via HTTP through ExtractionClient
 (runtimes/document_intelligence/client.py), only when
 DOCUMENT_INTELLIGENCE_SERVICE_URL is configured; otherwise chat attachments

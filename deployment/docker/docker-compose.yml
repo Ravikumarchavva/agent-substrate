@@ -65,8 +65,11 @@ services:
       FILE_STORE_ACCESS_KEY: ${FILE_STORE_ACCESS_KEY:-substrate}
       FILE_STORE_SECRET_KEY: ${FILE_STORE_SECRET_KEY:-substrate-dev-secret}
       ENABLE_BUILDER: "true"
+      # For a real deployment (DOMAIN set), override both to the public
+      # origin, e.g. FRONTEND_URL=https://yourdomain.com
+      # CORS_ALLOWED_ORIGINS=https://yourdomain.com
       FRONTEND_URL: ${FRONTEND_URL:-http://host.docker.internal:3000}
-      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROK_API_KEY: ${GROK_API_KEY:-}
@@ -98,24 +101,86 @@ services:
         condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # nsjail (the default SANDBOX_RUNTIME) needs to both create user+mount
+    # namespaces (Docker's default seccomp profile blocks
+    # clone(CLONE_NEWUSER), hence cap_add/seccomp=unconfined) AND own a
+    # cgroup v2 subtree to enforce its process-count/memory limits
+    # (cgroup: host). Root owns the whole delegated cgroup tree
+    # outright once cgroup: host is set — see runtimes/nsjail.py's
+    # module docstring for how this was verified — which is why `user: root`
+    # is set below rather than the appuser the Dockerfile otherwise creates:
+    # a non-root container user has no cgroup v2 subtree delegated to it
+    # here (no systemd running inside the container to delegate one), so
+    # nsjail's own preflight() would fail closed at startup. Trade-off,
+    # stated plainly: this weakens the *outer* container boundary; the
+    # boundary that protects users from each other is the *inner* nsjail
+    # namespace, which still fully applies regardless. For the strongest
+    # posture, run the backend as a systemd unit on the host instead of in a
+    # container — see deployment/README.md.
+    user: root
+    cgroup: host
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
     restart: unless-stopped
 
+  # Deploy publicly with DOMAIN set: also bring up `caddy` below (same
+  # profile group as this service — see its own comment) for automatic
+  # HTTPS. Locally, this is reachable directly at localhost:3000.
   substrate-ui:
     profiles:
       - ui
     build:
       context: ../../../substrate-ui
       dockerfile: Dockerfile
+      args:
+        # Empty (the default) -> the browser uses same-origin relative paths,
+        # correct when Caddy fronts this service (DOMAIN set). Baked in at
+        # build time, so a real public deployment behind Caddy needs no
+        # override; only set this to point the built UI at a *different*
+        # host's backend than the one it's deployed alongside.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
     ports:
       - "3000:3000"
     environment:
       BACKEND_API_URL: http://backend:8000
-      NEXTAUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+      # MUST equal the backend's JWT_SECRET so the proxy's tokens verify.
+      ENGINE_JWT_SECRET: ${JWT_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-me}
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/substrate_ui
+      # chatbotdb: created by init-chatbotdb.sh on the same Postgres.
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/chatbotdb
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-dev-encryption-key-change-me}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
     depends_on:
       - backend
       - postgres
+
+  # Public HTTPS front door — opt-in (profile "deploy"), for a real internet-
+  # facing deployment. Set DOMAIN (your A-record'd domain) and bring this up
+  # alongside `substrate-ui` (`--profile ui --profile deploy`); Caddy fetches
+  # a Let's Encrypt cert for it automatically on first boot. Local dev never
+  # needs this — hit localhost:3000/8000 directly.
+  caddy:
+    profiles:
+      - deploy
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - substrate-ui
 
   tempo:
     image: grafana/tempo:2.10.0
@@ -796,3 +861,5 @@ volumes:
   workspaces:
   llama-model-cache:
   paddlex-model-cache:
+  caddy_data:
+  caddy_config:

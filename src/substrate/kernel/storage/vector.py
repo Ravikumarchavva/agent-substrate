@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol, Sequence
 
 from substrate.kernel.core.content import ContentBlock, TextBlock, content_blocks_to_str
 
@@ -23,7 +23,7 @@ from substrate.kernel.core.content import ContentBlock, TextBlock, content_block
 class Document:
     """A content chunk with optional metadata ready for vector storage.
 
-    ``content`` is a list of ``ContentBlock`` — text, images, audio,
+    ``content`` is a sequence of ``ContentBlock`` — text, images, audio,
     structured data, or any mix.  Use ``Document.from_text(s)`` for the
     common case of plain-text chunks.
 
@@ -32,10 +32,10 @@ class Document:
     supports server-side embedding and the field is ignored).
     """
 
-    content: list[ContentBlock] = field(default_factory=list)
+    content: Sequence[ContentBlock] = field(default_factory=list)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    embedding: list[float] | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    embedding: Sequence[float] | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     # ── Convenience constructors ───────────────────────────────────────────
 
@@ -45,8 +45,8 @@ class Document:
         text: str,
         *,
         id: str | None = None,
-        embedding: list[float] | None = None,
-        metadata: dict[str, Any] | None = None,
+        embedding: Sequence[float] | None = None,
+        metadata: Mapping[str, Any] | None = None,
     ) -> "Document":
         """Create a text-only document — the common case for plain-text RAG."""
         return cls(
@@ -77,9 +77,9 @@ class SearchResult:
     """
 
     id: str
-    content: list[ContentBlock]
+    content: Sequence[ContentBlock]
     score: float
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def to_text(self) -> str:
         """Return a human-readable text representation of the content."""

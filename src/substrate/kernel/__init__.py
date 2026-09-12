@@ -73,11 +73,21 @@ from substrate.kernel.agent.context import CompactionStrategy, AgentContextProto
 from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.core.errors import (
     KernelError,
+    PermanentError,
+    SuspendInterrupt,
+    ThreadBusyError,
     AgentCrashError,
     BudgetExhaustedError,
     MiddlewareTermination,
     CancellationError,
     ConcurrentAppendError,
+)
+from substrate.kernel.agent.safety import (
+    Severity,
+    max_severity,
+    SafetyVerdict,
+    TextSafetyClassifier,
+    ImageSafetyClassifier,
 )
 from substrate.kernel.messaging.stream import (
     TextDelta,
@@ -97,6 +107,13 @@ from substrate.kernel.storage.graph import (
     CypherCapable,
 )
 from substrate.kernel.storage.memory import Memory, ShortTermMemory, LongTermMemory
+from substrate.kernel.storage.tasks import Task, TaskList, TaskStatus, TaskStore
+from substrate.kernel.storage.document import (
+    DocumentExtractor,
+    ExtractedImage,
+    ExtractedPage,
+    ExtractionResult,
+)
 from substrate.kernel.agent.runtime_context import CancellationToken, RunMeta
 from substrate.kernel.tools.approval import (
     ApprovalDecision,
@@ -206,11 +223,20 @@ __all__ = [
     "MiddlewareStage",
     # Errors
     "KernelError",
+    "PermanentError",
+    "SuspendInterrupt",
+    "ThreadBusyError",
     "AgentCrashError",
     "BudgetExhaustedError",
     "MiddlewareTermination",
     "CancellationError",
     "ConcurrentAppendError",
+    # Safety
+    "Severity",
+    "max_severity",
+    "SafetyVerdict",
+    "TextSafetyClassifier",
+    "ImageSafetyClassifier",
     # Token stream
     "TextDelta",
     "ReasoningDelta",
@@ -234,6 +260,16 @@ __all__ = [
     "Memory",
     "ShortTermMemory",
     "LongTermMemory",
+    # Tasks
+    "Task",
+    "TaskList",
+    "TaskStatus",
+    "TaskStore",
+    # Document extraction
+    "DocumentExtractor",
+    "ExtractedImage",
+    "ExtractedPage",
+    "ExtractionResult",
     # Execution context
     "CancellationToken",
     "RunMeta",

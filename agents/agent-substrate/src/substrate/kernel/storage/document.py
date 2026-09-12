@@ -13,7 +13,7 @@ extractor (lightweight, digital-PDF-only, in-process, no ML model).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Protocol, Sequence
 
 
 @dataclass(frozen=True)
@@ -28,13 +28,13 @@ class ExtractedImage:
 class ExtractedPage:
     page_number: int
     text: str
-    images: list[ExtractedImage] = field(default_factory=list)
+    images: Sequence[ExtractedImage] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class ExtractionResult:
     success: bool
-    pages: list[ExtractedPage] = field(default_factory=list)
+    pages: Sequence[ExtractedPage] = field(default_factory=list)
     error: str | None = None
 
 

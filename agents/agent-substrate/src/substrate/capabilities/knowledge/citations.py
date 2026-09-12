@@ -17,7 +17,7 @@ same number for the life of a collection.
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from difflib import SequenceMatcher
 from typing import Any
@@ -105,7 +105,7 @@ def _pages_label(pages: tuple[int, ...]) -> str:
     return "pp." + ",".join(str(p) for p in ordered)
 
 
-def _pages_of(metadata: dict[str, Any]) -> tuple[int, ...]:
+def _pages_of(metadata: Mapping[str, Any]) -> tuple[int, ...]:
     """Normalise the two shapes backends produce into one tuple.
 
     Pinecone reports a whole chunk's span as ``pages``; the local pypdf/
@@ -197,7 +197,7 @@ def _looks_open_at_end(text: str) -> bool:
     return bool(stripped) and stripped[-1] not in _TERMINAL_END_CHARS
 
 
-def _same_section(a: dict[str, Any], b: dict[str, Any]) -> bool:
+def _same_section(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
     section_a = a.get("section_id")
     section_b = b.get("section_id")
     return section_a is not None and section_a == section_b

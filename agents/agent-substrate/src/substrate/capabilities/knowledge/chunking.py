@@ -305,6 +305,10 @@ class StructureAwareChunker:
             chunk_section_ids.extend([section_id] * len(section_chunks))
             section_id += 1
 
+        # Ids computed upfront so neighbour links can be set at construction
+        # time — Document.metadata is a Mapping (read-only view), so it can't
+        # be patched in place after the fact the way a plain dict could.
+        doc_ids = [str(uuid.uuid4()) for _ in section_texts]
         docs: list[Document] = []
         for i, chunk_text in enumerate(section_texts):
             docs.append(
@@ -314,15 +318,11 @@ class StructureAwareChunker:
                         **metadata,
                         "chunk_index": i,
                         "section_id": chunk_section_ids[i],
+                        "prev_chunk_id": doc_ids[i - 1] if i > 0 else None,
+                        "next_chunk_id": doc_ids[i + 1] if i < len(doc_ids) - 1 else None,
                     },
-                    id=str(uuid.uuid4()),
+                    id=doc_ids[i],
                 )
-            )
-
-        for i, doc in enumerate(docs):
-            doc.metadata["prev_chunk_id"] = docs[i - 1].id if i > 0 else None
-            doc.metadata["next_chunk_id"] = (
-                docs[i + 1].id if i < len(docs) - 1 else None
             )
 
         return docs

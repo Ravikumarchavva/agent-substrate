@@ -20,6 +20,8 @@ import {
   X,
   Download,
   FileText,
+  FileSpreadsheet,
+  Presentation,
 } from "lucide-react";
 import { CitationSource, ToolCall, UploadedFile } from "@/types";
 import { AudioPlayer } from "@/components/AudioPlayer";
@@ -136,6 +138,31 @@ function MarkdownImage({
       />
     </button>
   );
+}
+
+// Per-type icon/color/label for a generated-file card (the `sandbox:` link
+// card below) — matches office-suite convention (PowerPoint orange, Excel
+// green, Word blue) so the file type reads at a glance, the same way
+// Claude's own artifact cards do.
+function officeFileBadge(name: string): {
+  Icon: typeof FileText;
+  label: string;
+  badgeClass: string;
+} {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "pptx" || ext === "ppt") {
+    return { Icon: Presentation, label: "Presentation", badgeClass: "bg-orange-500/15 text-orange-500" };
+  }
+  if (ext === "xlsx" || ext === "xls" || ext === "csv") {
+    return { Icon: FileSpreadsheet, label: "Spreadsheet", badgeClass: "bg-emerald-500/15 text-emerald-500" };
+  }
+  if (ext === "docx" || ext === "doc") {
+    return { Icon: FileText, label: "Document", badgeClass: "bg-blue-500/15 text-blue-500" };
+  }
+  if (ext === "md" || ext === "markdown") {
+    return { Icon: FileText, label: "Document", badgeClass: "bg-teal-500/15 text-teal-500" };
+  }
+  return { Icon: FileText, label: "File", badgeClass: "bg-(--muted)/15 text-(--muted)" };
 }
 
 function serializeTableToClipboard(table: HTMLTableElement): string {
@@ -1044,36 +1071,47 @@ export function MessageBubble({
                         const path = raw.replace(/^sandbox:/, "").replace(/^\.?\//, "");
                         const name = path.split("/").pop() || path;
                         const url = buildWorkspaceFileUrl(threadId, raw);
+                        const { Icon, label, badgeClass } = officeFileBadge(name);
+                        const ext = name.split(".").pop()?.toUpperCase() || "FILE";
                         return (
-                          <span className="my-1 inline-flex items-center gap-2.5 rounded-xl border border-(--border) bg-(--card) px-3 py-1.5 align-middle shadow-xs hover:shadow-sm hover:bg-(--card-hover) hover:border-(--border-hover) transition-all duration-200">
-                            <FileText className="h-4 w-4 shrink-0 text-(--muted)" />
-                            <span className="truncate text-sm font-medium text-foreground">{name}</span>
-                            {onOpenArtifact && (
-                              <button
-                                onClick={() => onOpenArtifact(path, name)}
-                                className="btn-icon ml-1 shrink-0 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold hover:scale-[1.03] active:scale-[0.97] transition-all"
-                                style={{
-                                  background: "var(--accent)",
-                                  color: "var(--accent-foreground)",
-                                  minWidth: "unset",
-                                  minHeight: "unset"
-                                }}
-                              >
-                                Open
-                              </button>
-                            )}
+                          <span
+                            role={onOpenArtifact ? "button" : undefined}
+                            tabIndex={onOpenArtifact ? 0 : undefined}
+                            onClick={() => onOpenArtifact?.(path, name)}
+                            onKeyDown={(e) => {
+                              if (onOpenArtifact && (e.key === "Enter" || e.key === " ")) {
+                                e.preventDefault();
+                                onOpenArtifact(path, name);
+                              }
+                            }}
+                            className={`my-1 flex w-full max-w-md items-center gap-3 rounded-2xl border border-(--border) bg-(--card) p-3 shadow-xs hover:shadow-sm hover:bg-(--card-hover) hover:border-(--border-hover) transition-all duration-200 ${onOpenArtifact ? "cursor-pointer" : ""}`}
+                          >
+                            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${badgeClass}`}>
+                              <Icon className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold text-foreground">
+                                {name}
+                              </span>
+                              <span className="block text-xs text-(--muted)">
+                                {label} · {ext}
+                              </span>
+                            </span>
                             <a
                               href={url}
                               download={name}
-                              className="btn-icon shrink-0 rounded-lg p-1.5 text-(--muted) hover:text-foreground hover:bg-(--card-hover) hover:scale-[1.05] active:scale-[0.95] transition-all flex items-center justify-center"
-                              title="Download"
+                              onClick={(e) => e.stopPropagation()}
+                              className="btn-icon shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold hover:scale-[1.03] active:scale-[0.97] transition-all flex items-center gap-1.5"
                               style={{
+                                background: "var(--accent)",
+                                color: "var(--accent-foreground)",
                                 minWidth: "unset",
                                 minHeight: "unset",
-                                textDecoration: "none"
+                                textDecoration: "none",
                               }}
                             >
                               <Download className="h-3.5 w-3.5" />
+                              Download
                             </a>
                           </span>
                         );

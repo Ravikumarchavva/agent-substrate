@@ -17,6 +17,11 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@betteroffice/docx-react": "^0.1.0",
+    "@betteroffice/fonts": "^0.1.0",
+    "@betteroffice/pptx": "^0.0.4",
+    "@betteroffice/pptx-react": "^0.0.4",
+    "@betteroffice/xlsx-react": "^0.1.0",
     "@monaco-editor/react": "^4.7.0",
     "@prisma/client": "^6.3.0",
     "@sentry/nextjs": "^10.70.0",

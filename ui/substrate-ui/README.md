@@ -36,9 +36,9 @@ then lets you take the wheel on anything the agent produces.
   Office / code) opens on the right, Claude/ChatGPT-style. The main artifact
   auto-opens when a run finishes.
 - ✍️ **Edit in place, with versioning** — Office files open in
-  [ONLYOFFICE](#onlyoffice-optional) and code/text in **Monaco**, saving back
-  through a version lineage so **human edits and the agent's rewrites reconcile
-  instead of overwriting each other**.
+  **BetterOffice** (client-side, no server needed) and code/text in
+  **Monaco**, saving back through a version lineage so **human edits and the
+  agent's rewrites reconcile instead of overwriting each other**.
 - ✅ **Human-in-the-loop** — the agent can pause and ask; approval cards render
   inline.
 - 🗂️ **Live task board** — a Kanban board mirrors the agent's task manager.
@@ -51,8 +51,8 @@ then lets you take the wheel on anything the agent produces.
 </div>
 
 > More screenshots can be dropped into [`docs/screenshots/`](docs/screenshots/)
-> and referenced here — the ONLYOFFICE editor, the version-history dropdown, and
-> the Monaco code editor each make a good shot.
+> and referenced here — the BetterOffice editor, the version-history dropdown,
+> and the Monaco code editor each make a good shot.
 
 ## How it fits together
 
@@ -65,8 +65,8 @@ ravi (SaaS control plane)
 ```
 
 The engine ([`agent-substrate`](../agent-substrate)) does the real work; this app
-is the interface. Office editing additionally uses an ONLYOFFICE Document Server
-run on the engine side.
+is the interface. Office editing runs entirely client-side via BetterOffice —
+no separate document server.
 
 ## Quick start
 
@@ -115,20 +115,6 @@ Copy `.env.local.example` → `.env.local`:
 > one identity. Logged out, everything runs under the `substrate-ui` service
 > account — files created then aren't visible once you log in as a real user.
 
-## ONLYOFFICE (optional)
-
-Editing Office files (docx/xlsx/pptx) uses the ONLYOFFICE Document Server, run on
-the **engine** side (opt-in, ~2 GB image). Without it, Office files fall back to
-a read-only preview (SheetJS for spreadsheets, Mammoth for Word).
-
-```bash
-cd ../agent-substrate
-make infra-up-onlyoffice          # start the doc server
-```
-
-Then set `ONLYOFFICE_URL`, `ONLYOFFICE_INTERNAL_CALLBACK_BASE`, and
-`ONLYOFFICE_JWT_SECRET` in the engine's `.env`.
-
 ## Architecture notes
 
 - All backend calls go through the `api` object in `src/lib/api/` — never
@@ -139,7 +125,7 @@ Then set `ONLYOFFICE_URL`, `ONLYOFFICE_INTERNAL_CALLBACK_BASE`, and
 - The chat page, SSE loop, and panel wiring live in
   [`src/app/page.tsx`](src/app/page.tsx); the artifact surfaces are
   [`FileArtifactViewer`](src/components/FileArtifactViewer.tsx),
-  [`OnlyOfficeEditor`](src/components/OnlyOfficeEditor.tsx), and
+  [`BetterOfficeEditor`](src/components/BetterOfficeEditor.tsx), and
   [`CodeEditorView`](src/components/CodeEditorView.tsx).
 
 See [`.github/copilot-instructions.md`](.github/copilot-instructions.md) for

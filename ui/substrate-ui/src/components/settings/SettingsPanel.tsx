@@ -15,6 +15,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import type {
   AdminStats,
   AdminStep,
+  AdminStorageSession,
+  AdminStorageUser,
   AdminThread,
   AdminUser,
   InstructionValidationResult,
@@ -187,10 +189,18 @@ export function SettingsPanel({
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminLoadNotice, setAdminLoadNotice] = useState<string | null>(null);
   const [adminUsersError, setAdminUsersError] = useState<string | null>(null);
-  const [adminTab, setAdminTab] = useState<"users" | "threads">("users");
+  const [adminTab, setAdminTab] = useState<"users" | "threads" | "storage">("users");
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
   const [threadSteps, setThreadSteps] = useState<Record<string, AdminStep[]>>({});
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
+
+  const [adminStorageUsers, setAdminStorageUsers] = useState<AdminStorageUser[]>([]);
+  const [adminStorageLoading, setAdminStorageLoading] = useState(false);
+  const [adminStorageSessions, setAdminStorageSessions] = useState<
+    Record<string, AdminStorageSession[]>
+  >({});
+  const [expandedStorageUserId, setExpandedStorageUserId] = useState<string | null>(null);
+  const [savingQuotaUserId, setSavingQuotaUserId] = useState<string | null>(null);
 
   const syncLocalSettings = useCallback(() => {
     setCustomInstructions(localStorage.getItem(CUSTOM_INSTRUCTIONS_STORAGE_KEY) ?? "");
@@ -280,6 +290,63 @@ export function SettingsPanel({
       void loadAdminData();
     }
   }, [activeTab, adminLoading, adminThreads.length, isAdmin, loadAdminData]);
+
+  const loadAdminStorage = useCallback(async () => {
+    setAdminStorageLoading(true);
+    try {
+      setAdminStorageUsers(await api.getAdminStorageUsers());
+    } catch (error) {
+      console.warn("Failed to load admin storage.", error);
+    } finally {
+      setAdminStorageLoading(false);
+    }
+  }, []);
+
+  // Separate from loadAdminData's batch — a distinct backend surface
+  // (agent-substrate's WorkspaceFileStore-only /admin/storage routes, 501
+  // for non-local FILE_STORE_BACKEND) that shouldn't block or be blocked by
+  // threads/users/stats.
+  useEffect(() => {
+    if (
+      activeTab === "admin" &&
+      adminTab === "storage" &&
+      isAdmin &&
+      !adminStorageLoading &&
+      adminStorageUsers.length === 0
+    ) {
+      void loadAdminStorage();
+    }
+  }, [activeTab, adminTab, adminStorageLoading, adminStorageUsers.length, isAdmin, loadAdminStorage]);
+
+  const handleExpandStorageUser = useCallback(
+    (userId: string) => {
+      setExpandedStorageUserId((prev) => (prev === userId ? null : userId));
+      if (!adminStorageSessions[userId]) {
+        void api
+          .getAdminStorageSessions(userId)
+          .then((sessions) =>
+            setAdminStorageSessions((prev) => ({ ...prev, [userId]: sessions })),
+          )
+          .catch((error) => console.warn("Failed to load storage sessions.", error));
+      }
+    },
+    [adminStorageSessions],
+  );
+
+  const handleSaveQuota = useCallback((userId: string, quotaBytes: number | null) => {
+    setSavingQuotaUserId(userId);
+    void api
+      .setAdminStorageQuota(userId, quotaBytes)
+      .then((updated) =>
+        setAdminStorageUsers((prev) =>
+          prev.map((u) =>
+            u.user_id === userId ? { ...u, quota_bytes: updated.quota_bytes } : u,
+          ),
+        ),
+      )
+      .catch((error) => console.warn("Failed to set storage quota.", error))
+      .finally(() => setSavingQuotaUserId(null));
+  }, []);
 
   const handleSaveInstructions = async () => {
     setSaveError(null);
@@ -587,6 +654,13 @@ export function SettingsPanel({
             handleExpandThread={handleExpandThread}
             handleDeleteThread={handleDeleteThread}
             loadAdminData={loadAdminData}
+            adminStorageUsers={adminStorageUsers}
+            adminStorageLoading={adminStorageLoading}
+            adminStorageSessions={adminStorageSessions}
+            expandedStorageUserId={expandedStorageUserId}
+            handleExpandStorageUser={handleExpandStorageUser}
+            savingQuotaUserId={savingQuotaUserId}
+            handleSaveQuota={handleSaveQuota}
           />
         )}
       </div>

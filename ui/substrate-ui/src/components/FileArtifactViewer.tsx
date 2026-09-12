@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, Download, FileWarning } from "lucide-react";
-import { OnlyOfficeEditor } from "@/components/OnlyOfficeEditor";
+import { BetterOfficeEditor } from "@/components/BetterOfficeEditor";
+import { PptxSlideViewer } from "@/components/PptxSlideViewer";
 import { CodeEditorView } from "@/components/CodeEditorView";
 
 /**
  * Renders a code-interpreter-generated file in the side panel, ChatGPT/Claude
- * "artifact" style. Office files (docx/xlsx/pptx) open in the ONLYOFFICE editor
- * (full fidelity + editing) when it's configured, falling back to a read-only
- * SheetJS/Mammoth preview otherwise. HTML/PDF/images/text render natively.
+ * "artifact" style. Office files (docx/xlsx/pptx) open in the BetterOffice
+ * editor (client-side WASM, full fidelity + editing, always interactive for
+ * xlsx/pptx since the library has no read-only mode for those two).
+ * HTML/PDF/images/text render natively.
  */
 export function FileArtifactViewer({
   fileUrl,
@@ -62,8 +64,11 @@ export function FileArtifactViewer({
     );
   }
 
-  // Office docs → ONLYOFFICE editor, with a read-only fallback when it's not
-  // configured (xlsx→SheetJS grid, docx→Mammoth; pptx has no client fallback).
+  // Office docs → BetterOffice editor. All three now show a real read-only
+  // preview until Edit is clicked (glance-first, like Claude's own artifact
+  // viewer): xlsx via SheetJS, docx via its editor's native readOnly, pptx
+  // via a chrome-free canvas viewer built on BetterOffice's own low-level
+  // rendering primitives (PptxEditor itself has no read-only mode).
   if (kind === "xlsx" || kind === "docx" || kind === "pptx") {
     const ref = parseFileUrl(fileUrl);
     const fallback =
@@ -72,11 +77,13 @@ export function FileArtifactViewer({
       ) : kind === "docx" ? (
         <DocxView fileUrl={fileUrl} />
       ) : (
-        <UnsupportedView fileUrl={fileUrl} fileName={fileName} />
+        <PptxSlideViewer fileUrl={fileUrl} />
       );
     if (!ref) return fallback;
     return (
-      <OnlyOfficeEditor
+      <BetterOfficeEditor
+        kind={kind}
+        fileUrl={fileUrl}
         threadId={ref.threadId}
         path={ref.path}
         editMode={editMode}

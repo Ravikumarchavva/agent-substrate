@@ -1363,8 +1363,8 @@ function ChatPageContent() {
           });
           // Reconcile already-open file panels: the agent may have rewritten a
           // file that's open in the editor. Bump the cache-bust so the viewer
-          // remounts (AppPanel keys on `id:fileUrl`) and re-fetches config —
-          // ONLYOFFICE then reloads on the new checksum-derived document.key.
+          // remounts (AppPanel keys on `id:fileUrl`) and re-fetches — the
+          // BetterOffice editor then reloads the new bytes/checksum.
           setPanelItems((items) =>
             items.map((it) =>
               it.kind === "file" && it.fileUrl?.includes(`thread_id=${runThreadId}`)

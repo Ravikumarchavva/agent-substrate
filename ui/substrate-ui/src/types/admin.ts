@@ -34,3 +34,19 @@ export interface AdminStep {
   is_error: boolean | null;
   created_at: string | null;
 }
+
+/** One user's workspace storage summary — admin storage tab. */
+export interface AdminStorageUser {
+  user_id: string;
+  used_bytes: number;
+  quota_bytes: number;
+  session_count: number;
+}
+
+/** One session under a user's workspace (attaches to the code interpreter
+ * when live — see agent-substrate's sandbox_runtime.py). */
+export interface AdminStorageSession {
+  session_id: string;
+  size_bytes: number;
+  file_count: number;
+}

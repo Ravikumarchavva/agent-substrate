@@ -1,8 +1,15 @@
 "use client";
 
-import React from "react";
-import { ChevronRight, Loader2, RefreshCw, Trash2 } from "lucide-react";
-import type { AdminStats, AdminStep, AdminThread, AdminUser } from "@/types";
+import React, { useState } from "react";
+import { ChevronRight, Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import type {
+  AdminStats,
+  AdminStep,
+  AdminStorageSession,
+  AdminStorageUser,
+  AdminThread,
+  AdminUser,
+} from "@/types";
 
 interface AdminTabProps {
   adminStats: AdminStats | null;
@@ -11,17 +18,100 @@ interface AdminTabProps {
   adminLoading: boolean;
   adminLoadNotice: string | null;
   adminUsersError: string | null;
-  adminTab: "users" | "threads";
-  setAdminTab: (tab: "users" | "threads") => void;
+  adminTab: "users" | "threads" | "storage";
+  setAdminTab: (tab: "users" | "threads" | "storage") => void;
   expandedThreadId: string | null;
   threadSteps: Record<string, AdminStep[]>;
   deletingThreadId: string | null;
   handleExpandThread: (threadId: string) => void;
   handleDeleteThread: (threadId: string, event: React.MouseEvent) => void;
   loadAdminData: () => void;
+  // Storage tab — lazy-loaded on first switch, not part of loadAdminData's
+  // Promise.allSettled batch (see SettingsPanel.tsx).
+  adminStorageUsers: AdminStorageUser[];
+  adminStorageLoading: boolean;
+  adminStorageSessions: Record<string, AdminStorageSession[]>;
+  expandedStorageUserId: string | null;
+  handleExpandStorageUser: (userId: string) => void;
+  savingQuotaUserId: string | null;
+  handleSaveQuota: (userId: string, quotaBytes: number | null) => void;
 }
 
-const tabOptions = ["users", "threads"] as const;
+const tabOptions = ["users", "threads", "storage"] as const;
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(
+    units.length - 1,
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+  );
+  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function QuotaEditor({
+  userId,
+  quotaBytes,
+  saving,
+  onSave,
+}: {
+  userId: string;
+  quotaBytes: number;
+  saving: boolean;
+  onSave: (userId: string, quotaBytes: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(() => (quotaBytes / (1024 * 1024)).toString());
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setValue((quotaBytes / (1024 * 1024)).toString());
+          setEditing(true);
+        }}
+        className="inline-flex cursor-pointer items-center gap-1 text-(--muted) transition-colors hover:text-foreground"
+        aria-label="Edit quota"
+      >
+        <Pencil className="h-3 w-3" />
+      </button>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <input
+        type="number"
+        min={0}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="w-20 rounded-lg border border-(--border) bg-background px-2 py-1 text-xs"
+        autoFocus
+      />
+      <span className="text-xs text-(--muted)">MB</span>
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => {
+          const mb = Number(value);
+          onSave(userId, Number.isFinite(mb) && mb >= 0 ? mb * 1024 * 1024 : null);
+          setEditing(false);
+        }}
+        className="cursor-pointer rounded-lg bg-foreground px-2 py-1 text-xs font-medium text-background disabled:opacity-50"
+      >
+        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+      </button>
+      <button
+        type="button"
+        onClick={() => setEditing(false)}
+        className="cursor-pointer text-xs text-(--muted) hover:text-foreground"
+      >
+        Cancel
+      </button>
+    </span>
+  );
+}
 
 function StepTypeBadge({ type }: { type: string }) {
   const color =
@@ -50,6 +140,13 @@ export function AdminTab({
   handleExpandThread,
   handleDeleteThread,
   loadAdminData,
+  adminStorageUsers,
+  adminStorageLoading,
+  adminStorageSessions,
+  expandedStorageUserId,
+  handleExpandStorageUser,
+  savingQuotaUserId,
+  handleSaveQuota,
 }: AdminTabProps) {
   return (
     <div className="space-y-6">
@@ -98,7 +195,13 @@ export function AdminTab({
               }`}
               style={adminTab === tab ? { boxShadow: "var(--shadow-sm)" } : undefined}
             >
-              {tab} ({tab === "users" ? adminUsers.length : adminThreads.length})
+              {tab} (
+              {tab === "users"
+                ? adminUsers.length
+                : tab === "threads"
+                  ? adminThreads.length
+                  : adminStorageUsers.length}
+              )
             </button>
           ))}
         </div>
@@ -116,7 +219,7 @@ export function AdminTab({
       </div>
 
       {/* Content */}
-      {adminLoading ? (
+      {(adminTab === "storage" ? adminStorageLoading : adminLoading) ? (
         <div className="flex items-center justify-center py-10">
           <Loader2 className="h-5 w-5 animate-spin text-(--muted)" />
         </div>
@@ -166,7 +269,7 @@ export function AdminTab({
             ))
           )}
         </div>
-      ) : (
+      ) : adminTab === "threads" ? (
         <div className="space-y-2">
           {adminThreads.length === 0 ? (
             <p className="py-8 text-center text-sm text-(--muted)">No threads found</p>
@@ -233,6 +336,91 @@ export function AdminTab({
                 )}
               </div>
             ))
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {adminStorageUsers.length === 0 ? (
+            <p className="py-8 text-center text-sm text-(--muted)">No user workspaces yet</p>
+          ) : (
+            adminStorageUsers.map((user) => {
+              const pct = user.quota_bytes > 0 ? user.used_bytes / user.quota_bytes : 0;
+              return (
+                <div
+                  key={user.user_id}
+                  className="overflow-hidden rounded-[24px]"
+                  style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
+                >
+                  <div className="flex items-center gap-3 px-4 py-4">
+                    <button
+                      onClick={() => handleExpandStorageUser(user.user_id)}
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+                    >
+                      <ChevronRight
+                        className={`h-4 w-4 shrink-0 text-(--muted) transition-transform duration-150 ${
+                          expandedStorageUserId === user.user_id ? "rotate-90" : ""
+                        }`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{user.user_id}</p>
+                        <p className="text-xs text-(--muted)">
+                          {user.session_count} session{user.session_count === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                    </button>
+
+                    <div className="w-40 shrink-0">
+                      <div className="h-1.5 overflow-hidden rounded-full bg-(--panel-muted)">
+                        <div
+                          className={`h-full rounded-full ${pct > 0.9 ? "bg-rose-400" : "bg-foreground"}`}
+                          style={{ width: `${Math.min(100, pct * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2 text-xs text-(--muted)">
+                      <span>
+                        {formatBytes(user.used_bytes)} / {formatBytes(user.quota_bytes)}
+                      </span>
+                      <QuotaEditor
+                        userId={user.user_id}
+                        quotaBytes={user.quota_bytes}
+                        saving={savingQuotaUserId === user.user_id}
+                        onSave={handleSaveQuota}
+                      />
+                    </div>
+                  </div>
+
+                  {expandedStorageUserId === user.user_id && (
+                    <div className="max-h-80 overflow-y-auto border-t border-(--border) bg-background px-4 py-3">
+                      {!adminStorageSessions[user.user_id] ? (
+                        <div className="flex items-center gap-2 py-3 text-sm text-(--muted)">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading sessions…
+                        </div>
+                      ) : adminStorageSessions[user.user_id].length === 0 ? (
+                        <p className="py-3 text-center text-sm text-(--muted)">No sessions</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {adminStorageSessions[user.user_id].map((session) => (
+                            <div
+                              key={session.session_id}
+                              className="flex items-center justify-between rounded-2xl border border-(--border) bg-(--card) px-3 py-3 text-sm"
+                            >
+                              <span className="truncate text-foreground">{session.session_id}</span>
+                              <span className="shrink-0 text-xs text-(--muted)">
+                                {formatBytes(session.size_bytes)} · {session.file_count} file
+                                {session.file_count === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       )}

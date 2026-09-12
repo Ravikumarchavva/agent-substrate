@@ -90,8 +90,8 @@ export function AppPanel({
   // Full-screen the panel (for reading/editing file artifacts).
   const [maximized, setMaximized] = useState(false);
   // Office files open read-only; the header Edit toggle flips the active file
-  // into ONLYOFFICE edit mode. Reset whenever the active file (or its version)
-  // changes so a reload always lands back in read-only.
+  // into BetterOffice edit mode. Reset whenever the active file (or its
+  // version) changes so a reload always lands back in read-only.
   const [editingFile, setEditingFile] = useState(false);
 
   // ── Per-item ready / error / flash state ────────────────────────
@@ -112,8 +112,8 @@ export function AppPanel({
 
   const activeItem = items.find((i) => i.id === activeItemId) ?? items[items.length - 1];
 
-  // Only Office docs are editable in-panel (ONLYOFFICE). Reset edit mode when
-  // the active file or its version changes.
+  // Only Office docs are editable in-panel (BetterOffice). Reset edit mode
+  // when the active file or its version changes.
   const activeIsOffice = /\.(docx?|xlsx?|pptx?)$/i.test(activeItem?.fileName ?? "");
   useEffect(() => {
     setEditingFile(false);

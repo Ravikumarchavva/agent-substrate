@@ -1,13 +1,14 @@
 """Workspace storage management — usage, listing, and deletion for the
-per-user filesystem backing uploads and code-interpreter artifacts.
+tenant-scoped filesystem backing uploads and code-interpreter artifacts.
 
-Works against any file store that can enumerate a user's files — both
+Works against any file store that can enumerate a prefix — both
 ``WorkspaceFileStore`` (``FILE_STORE_BACKEND=local``, a filesystem tree) and
-``S3FileStore`` (``=s3``, object storage keyed on the same ``users/{id}/...``
-layout) qualify. Stores that can't, like ``InMemoryFileStore``, 501 here.
+``S3FileStore`` (``=s3``, object storage keyed on the same
+``tenants/{tenant_id}/...`` layout, see ``capabilities/storage/layout.py``)
+qualify. Stores that can't, like ``InMemoryFileStore``, 501 here.
 
 Routes:
-  GET    /workspace/usage   – bytes used vs. quota for the caller
+  GET    /workspace/usage   – bytes used vs. quota for the caller's tenant
   GET    /workspace/files   – files grouped by session (thread)
   DELETE /workspace/files   – delete one file by its workspace-relative path
 """
@@ -25,6 +26,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.capabilities.storage.workspace import WorkspacePathError
+from substrate.capabilities.storage.layout import (
+    conversation_shared_key,
+    conversation_workspace_prefix,
+    user_prefix,
+)
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.file_versioning import (
@@ -71,14 +77,15 @@ class _WorkspaceCapableStore(Protocol):
 
     A capability check rather than ``isinstance(WorkspaceFileStore)``: both
     ``WorkspaceFileStore`` (filesystem tree) and ``S3FileStore`` (object
-    storage, keyed on the same ``users/{id}/...`` layout) implement it, and the
-    backend is meant to be swappable without touching this API. Stores that
-    can't enumerate a user's files — ``InMemoryFileStore`` — still get a 501.
+    storage, keyed on the same ``tenants/{tenant_id}/...`` layout) implement
+    it, and the backend is meant to be swappable without touching this API.
+    Stores that can't enumerate a prefix — ``InMemoryFileStore`` — still get
+    a 501.
     """
 
     async def exists(self, key: str) -> bool: ...
-    async def usage_bytes(self, user_id: str, *, force: bool = False) -> int: ...
-    async def list_user_files(self, user_id: str) -> list[tuple[str, int, float]]: ...
+    async def usage_bytes(self, tenant_id: str, *, force: bool = False) -> int: ...
+    async def list_prefix(self, prefix: str) -> list[tuple[str, int, float]]: ...
     async def download(self, key: str) -> bytes: ...
     async def upload(
         self, key: str, data: bytes, *, content_type: str = ...
@@ -93,27 +100,34 @@ def _require_workspace_store(ctx: ServerDependencies) -> _WorkspaceCapableStore:
             status_code=501,
             detail=(
                 "Workspace management requires a file store that can enumerate "
-                "a user's files (FILE_STORE_BACKEND=local or s3)."
+                "a prefix (FILE_STORE_BACKEND=local or s3)."
             ),
         )
     return store
 
 
 def _is_version_key(key: str) -> bool:
-    """True for a snapshot under ``users/{uid}/versions/...``.
+    """True for a snapshot under
+    ``tenants/{tid}/conversations/{cid}/workspace/versions/...``.
 
-    Anchored at the owner prefix rather than matching ``/versions/`` anywhere:
-    a user is perfectly entitled to a folder of their own called ``versions``,
-    and it must not vanish from their file list.
+    Anchored at that fixed position rather than matching ``/versions/``
+    anywhere: a conversation could otherwise have its own real ``versions``
+    folder, and it must not vanish from the file list.
     """
     parts = key.split("/")
-    return len(parts) >= 3 and parts[0] == "users" and parts[2] == VERSIONS_DIR
+    return (
+        len(parts) >= 6
+        and parts[0] == "tenants"
+        and parts[2] == "conversations"
+        and parts[4] == "workspace"
+        and parts[5] == VERSIONS_DIR
+    )
 
 
 def _session_id_from_key(key: str) -> str | None:
     parts = key.split("/")
-    # users/{uid}/sessions/{thread_id}/...
-    if len(parts) >= 4 and parts[0] == "users" and parts[2] == "sessions":
+    # tenants/{tid}/conversations/{thread_id}/workspace/...
+    if len(parts) >= 4 and parts[0] == "tenants" and parts[2] == "conversations":
         return parts[3]
     return None
 
@@ -138,10 +152,20 @@ async def get_usage(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceUsageResponse:
     store = _require_workspace_store(ctx)
-    used = await store.usage_bytes(claims.sub, force=True)
-    return WorkspaceUsageResponse(
-        used_bytes=used, quota_bytes=ctx.workspace_user_quota_bytes
+    # Quota is metered per tenant, not per user: a conversation-scoped key
+    # carries no user segment by design (ownership lives in Postgres, not
+    # the key), so tenant is the only identity every key reliably carries.
+    used = await store.usage_bytes(claims.tenant_id, force=True)
+    # WorkspaceFileStore supports a per-tenant quota override (admin storage
+    # API); other backends (e.g. S3FileStore) don't, so fall back to the
+    # single global default for those.
+    effective_quota = getattr(store, "effective_quota", None)
+    quota = (
+        effective_quota(claims.tenant_id)
+        if effective_quota is not None
+        else ctx.workspace_user_quota_bytes
     )
+    return WorkspaceUsageResponse(used_bytes=used, quota_bytes=quota)
 
 
 @router.get("/files", response_model=WorkspaceFilesResponse)
@@ -151,11 +175,32 @@ async def list_files(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceFilesResponse:
     store = _require_workspace_store(ctx)
+    # A conversation's files aren't nested under the caller — enumerate the
+    # threads they own within this tenant first (same ownership rule as
+    # ``thread_service.get_owned_thread``), then list each one's shared
+    # workspace, plus the caller's own direct-upload prefix.
+    owned_thread_ids = (
+        (
+            await db.execute(
+                select(Thread.id).where(
+                    Thread.user_identifier == claims.sub,
+                    Thread.tenant_id == claims.tenant_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    entries: list[tuple[str, int, float]] = []
+    for thread_id in owned_thread_ids:
+        prefix = f"{conversation_workspace_prefix(claims.tenant_id, str(thread_id))}/"
+        entries.extend(await store.list_prefix(prefix))
+    entries.extend(
+        await store.list_prefix(f"{user_prefix(claims.tenant_id, claims.sub)}/")
+    )
     # Hide the per-file version snapshots — they're internal history, not
     # user-facing files (see file_versioning.py).
-    entries = [
-        e for e in await store.list_user_files(claims.sub) if not _is_version_key(e[0])
-    ]
+    entries = [e for e in entries if not _is_version_key(e[0])]
     session_ids_by_key = {key: _session_id_from_key(key) for key, _, _ in entries}
 
     valid_uuids: list[uuid.UUID] = []
@@ -207,17 +252,17 @@ async def list_files(
     return WorkspaceFilesResponse(files=files)
 
 
-def _session_key(sub: str, thread_id: str, path: str) -> str:
+def _session_key(tenant_id: str, thread_id: str, path: str) -> str:
     """Build (and validate) the ownership-scoped canonical key for a
     session-relative path."""
-    rel = path.lstrip("/")
-    if ".." in rel.split("/"):
+    try:
+        return conversation_shared_key(tenant_id, thread_id, path)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
-    return f"users/{sub}/sessions/{thread_id}/{rel}"
 
 
 async def _resolve_session_key(
-    store: _WorkspaceCapableStore, sub: str, thread_id: str, path: str
+    store: _WorkspaceCapableStore, tenant_id: str, thread_id: str, path: str
 ) -> str:
     """Resolve a session-relative ref to the real object key of an existing file.
 
@@ -228,17 +273,15 @@ async def _resolve_session_key(
     under the session dir (excluding version snapshots). When nothing matches,
     return the exact key so writes to a brand-new file still land where asked.
     """
-    exact = _session_key(sub, thread_id, path)
+    exact = _session_key(tenant_id, thread_id, path)
     if await store.exists(exact):
         return exact
     base = path.rsplit("/", 1)[-1]
-    prefix = f"users/{sub}/sessions/{thread_id}/"
+    shared_prefix = f"{conversation_workspace_prefix(tenant_id, thread_id)}/shared/"
     matches = [
         (key, mtime)
-        for (key, _size, mtime) in await store.list_user_files(sub)
-        if key.startswith(prefix)
-        and not _is_version_key(key)
-        and key.rsplit("/", 1)[-1] == base
+        for (key, _size, mtime) in await store.list_prefix(shared_prefix)
+        if not _is_version_key(key) and key.rsplit("/", 1)[-1] == base
     ]
     if matches:
         matches.sort(key=lambda item: item[1], reverse=True)
@@ -246,9 +289,9 @@ async def _resolve_session_key(
     return exact
 
 
-def _session_rel(key: str, sub: str, thread_id: str) -> str:
+def _session_rel(key: str, tenant_id: str, thread_id: str) -> str:
     """Inverse of `_session_key`: the session-relative path for a resolved key."""
-    prefix = f"users/{sub}/sessions/{thread_id}/"
+    prefix = f"{conversation_workspace_prefix(tenant_id, thread_id)}/shared/"
     return key[len(prefix) :] if key.startswith(prefix) else key
 
 
@@ -309,7 +352,7 @@ async def serve_file(
 ) -> StreamingResponse | Response:
     """Serve a code-interpreter / workspace file by its session-relative path.
 
-    Resolves to ``users/{caller}/sessions/{thread_id}/{path}`` — the same
+    Resolves to the conversation's ``.../conversations/{thread_id}/workspace/shared/{path}`` key — the same
     per-thread directory the sandbox runs in (see the code-interpreter tools'
     ``workspace_dir``). This is what the frontend ``sandbox:<path>`` markdown
     refs resolve to: images render inline, everything else downloads.
@@ -320,7 +363,7 @@ async def serve_file(
     history stays honest without a per-turn scan.
     """
     store = _require_workspace_store(ctx)
-    key = await _resolve_session_key(store, claims.sub, thread_id, path)
+    key = await _resolve_session_key(store, claims.tenant_id, thread_id, path)
 
     if seq is not None:
         version = (
@@ -404,8 +447,8 @@ async def save_file(
     db: AsyncSession = Depends(get_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> dict:
-    """Save edited bytes back to a workspace file (used by text/Monaco editors;
-    ONLYOFFICE Office edits arrive via its own callback in M3).
+    """Save edited bytes back to a workspace file — used by text/Monaco editors
+    and, client-side, the BetterOffice Office editors.
 
     Optimistic concurrency: the client sends the checksum it loaded in
     ``X-Base-Checksum``; if the canonical file changed since (the agent wrote
@@ -413,7 +456,7 @@ async def save_file(
     is already versioned (via serve_file's lazy capture), so nothing is lost.
     """
     store = _require_workspace_store(ctx)
-    key = await _resolve_session_key(store, claims.sub, thread_id, path)
+    key = await _resolve_session_key(store, claims.tenant_id, thread_id, path)
     body = await request.body()
     base = request.headers.get("X-Base-Checksum", "")
 
@@ -468,7 +511,7 @@ async def get_versions(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceVersionsResponse:
     store = _require_workspace_store(ctx)
-    key = await _resolve_session_key(store, claims.sub, thread_id, path)
+    key = await _resolve_session_key(store, claims.tenant_id, thread_id, path)
     versions = await list_versions(db, key)
     return WorkspaceVersionsResponse(
         versions=[
@@ -498,7 +541,7 @@ async def restore_version(
     (non-destructive — the current state was already captured, so it stays in
     history too)."""
     store = _require_workspace_store(ctx)
-    key = await _resolve_session_key(store, claims.sub, body.thread_id, body.path)
+    key = await _resolve_session_key(store, claims.tenant_id, body.thread_id, body.path)
     version = (
         await db.execute(
             select(FileVersion).where(
@@ -554,11 +597,32 @@ async def delete_file(
         )
     store = _require_workspace_store(ctx)
 
-    # Ownership check: the path must live under this caller's own tree —
-    # WorkspaceFileStore's own traversal guard stops `../` escapes, but
-    # doesn't know about ownership, so enforce that here.
-    if not path.startswith(f"users/{claims.sub}/"):
-        raise HTTPException(status_code=404, detail="File not found")
+    # Ownership check: the path must live under this caller's own direct
+    # upload prefix, or under a conversation they own — WorkspaceFileStore's
+    # own traversal guard stops `../` escapes, but doesn't know about
+    # ownership (a conversation key carries no user segment at all), so
+    # enforce that here.
+    own_prefix = f"{user_prefix(claims.tenant_id, claims.sub)}/"
+    if not path.startswith(own_prefix):
+        thread_id = _session_id_from_key(path)
+        owned = None
+        if thread_id is not None:
+            try:
+                thread_uuid = uuid.UUID(thread_id)
+            except ValueError:
+                thread_uuid = None
+            if thread_uuid is not None:
+                owned = (
+                    await db.execute(
+                        select(Thread.id).where(
+                            Thread.id == thread_uuid,
+                            Thread.user_identifier == claims.sub,
+                            Thread.tenant_id == claims.tenant_id,
+                        )
+                    )
+                ).scalar_one_or_none()
+        if owned is None:
+            raise HTTPException(status_code=404, detail="File not found")
 
     try:
         await store.delete(path)

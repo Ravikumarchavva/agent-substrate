@@ -255,8 +255,15 @@ class BubblewrapRuntime:
         # sandbox has a bare Python and every `import pandas` fails.
         for prefix in self._python_prefixes:
             argv += ["--ro-bind", prefix, prefix]
-        # THE isolation boundary: only this session's directory is present.
+        # Shared conversation workspace. Agent-private scratch is mounted over
+        # /workspace/private below, so siblings cannot inspect one another.
         argv += ["--bind", str(session_path), "/workspace", "--chdir", "/workspace"]
+
+        private_dir = spec.extra.get("private_dir")
+        if private_dir:
+            private_path = self._resolve_session(str(private_dir))
+            private_path.mkdir(parents=True, exist_ok=True)
+            argv += ["--dir", "/workspace/private", "--bind", str(private_path), "/workspace/private"]
 
         # A second, deliberate exception to that boundary: a user's own
         # standing knowledge-base content, read-only. Resolved through the
@@ -267,10 +274,8 @@ class BubblewrapRuntime:
         # content yet gets no extra mount and nothing new can break for the
         # common case. See chat_intents.py for the matching system-prompt
         # note telling the model this path is read-only.
-        if spec.user_id:
-            kb_path = self._resolve_session(f"users/{spec.user_id}/kb")
-            if kb_path.is_dir():
-                argv += ["--ro-bind", str(kb_path), "/workspace/.kb"]
+        # Knowledge bases are mounted only by the dedicated KB access path;
+        # never infer an owner path from a user id here.
 
         # PIP_ONLY mounts a prepared venv read-only; the user's code still gets
         # no network (the install ran earlier, in its own sandbox).

@@ -93,11 +93,11 @@ class StubFileStore:
     async def delete(self, key: str) -> None:
         self.objects.pop(key, None)
 
-    async def list_user_files(self, user_id: str):
+    async def list_prefix(self, prefix: str):
         return [
             (k, len(v), 1000.0)
             for k, v in self.objects.items()
-            if k.startswith(f"users/{user_id}/")
+            if k.startswith(prefix)
         ]
 
 
@@ -124,6 +124,7 @@ def _backend(
 
 
 IMG_META = {
+    "tenant_id": "tenant1",
     "user_id": "u1",
     "file_id": "f9",
     "page_number": 3,
@@ -146,7 +147,7 @@ async def test_ingest_images_stores_bytes_in_the_file_store_not_the_vector_row()
 
     await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
 
-    key = "users/u1/rag/f9/p3-0.png"
+    key = "tenants/tenant1/users/u1/rag/f9/p3-0.png"
     assert store.objects == {key: b"PNGBYTES"}
     doc = image_store.documents[0]
     assert doc.metadata["image_key"] == key
@@ -244,18 +245,20 @@ async def test_image_key_is_independent_of_collection_so_promote_need_not_move_i
 
 async def test_delete_file_images_removes_only_that_files_objects():
     store = StubFileStore()
-    store.objects["users/u1/rag/f9/p1-0.png"] = b"a"
-    store.objects["users/u1/rag/f9/p2-0.png"] = b"b"
-    store.objects["users/u1/rag/OTHER/p1-0.png"] = b"c"
-    store.objects["users/u1/uploads/doc.pdf"] = b"d"
+    store.objects["tenants/tenant1/users/u1/rag/f9/p1-0.png"] = b"a"
+    store.objects["tenants/tenant1/users/u1/rag/f9/p2-0.png"] = b"b"
+    store.objects["tenants/tenant1/users/u1/rag/OTHER/p1-0.png"] = b"c"
+    store.objects["tenants/tenant1/users/u1/uploads/doc.pdf"] = b"d"
     backend, _ = _backend(file_store=store)
 
-    deleted = await backend.delete_file_images(user_id="u1", file_id="f9")
+    deleted = await backend.delete_file_images(
+        tenant_id="tenant1", user_id="u1", file_id="f9"
+    )
 
     assert deleted == 2
     assert sorted(store.objects) == [
-        "users/u1/rag/OTHER/p1-0.png",
-        "users/u1/uploads/doc.pdf",
+        "tenants/tenant1/users/u1/rag/OTHER/p1-0.png",
+        "tenants/tenant1/users/u1/uploads/doc.pdf",
     ]
 
 

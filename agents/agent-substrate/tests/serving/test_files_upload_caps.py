@@ -70,7 +70,7 @@ def _request_mock(redis=None) -> MagicMock:
 def _claims_mock(sub: str = "test-user") -> MagicMock:
     claims = MagicMock()
     claims.sub = sub
-    claims.tenant_id = None
+    claims.tenant_id = "test-tenant"
     claims.email = "test@example.com"
     return claims
 
@@ -308,7 +308,7 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
     sidecar_calls = [
         call
         for call in ctx.file_store.upload.call_args_list
-        if call.args[0] == "users/test-user/uploads/doc.pdf.extracted.md"
+        if call.args[0] == "tenants/test-tenant/users/test-user/uploads/doc.pdf.extracted.md"
     ]
     assert len(sidecar_calls) == 1
     sidecar_text = sidecar_calls[0].args[1].decode("utf-8")

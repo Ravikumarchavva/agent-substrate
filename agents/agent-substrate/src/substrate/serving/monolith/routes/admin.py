@@ -15,9 +15,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel
+
+from substrate.capabilities.storage.workspace import WorkspaceFileStore
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.models import Thread
+from substrate.serving.monolith.models import Thread, WorkspaceQuota
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.stream import project_thread
 
@@ -161,3 +164,106 @@ async def delete_thread(
     await db.commit()
     logger.info("Admin deleted thread %s", thread_id)
     return {"deleted": thread_id}
+
+
+# ── Storage (WorkspaceFileStore only — FILE_STORE_BACKEND=local) ─────────────
+
+
+def _require_workspace_file_store(ctx: ServerDependencies) -> WorkspaceFileStore:
+    store = ctx.file_store
+    if not isinstance(store, WorkspaceFileStore):
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Admin storage management requires the docker-volume backend "
+                "(FILE_STORE_BACKEND=local, the default) — not S3/memory."
+            ),
+        )
+    return store
+
+
+class SetQuotaRequest(BaseModel):
+    quota_bytes: int | None  # None resets the tenant to the global default
+
+
+@router.get("/storage")
+async def list_storage_tenants(
+    ctx: ServerDependencies = Depends(get_ctx),
+    _: AuthClaims = Depends(require_admin),
+) -> List[Dict[str, Any]]:
+    """Every tenant with a workspace directory, their usage, effective quota
+    (override or global default), and conversation count.
+
+    Metered per tenant, not per user: a conversation's files carry no user
+    segment in their key by design (ownership lives in Postgres' ``threads``
+    table), so tenant is the only identity every key reliably carries — see
+    ``WorkspaceFileStore``'s module docstring.
+    """
+    store = _require_workspace_file_store(ctx)
+    tenants = await store.list_all_tenants()
+    result = []
+    for tenant_id in tenants:
+        used = await store.usage_bytes(tenant_id)
+        conversations = await store.list_conversations(tenant_id)
+        result.append(
+            {
+                "tenant_id": tenant_id,
+                "used_bytes": used,
+                "quota_bytes": store.effective_quota(tenant_id),
+                "conversation_count": len(conversations),
+            }
+        )
+    return result
+
+
+@router.get("/storage/{tenant_id}/conversations")
+async def list_storage_conversations(
+    tenant_id: str,
+    ctx: ServerDependencies = Depends(get_ctx),
+    _: AuthClaims = Depends(require_admin),
+) -> List[Dict[str, Any]]:
+    """``(conversation_id, size_bytes, file_count)`` for one tenant — the
+    admin storage page's drill-down. Conversation workspaces are what the
+    code interpreter's sandbox mounts (``sandbox_service.py`` /
+    ``bubblewrap.py`` mount ``.../conversations/{cid}/workspace``), so this
+    is what an agent's sandbox run actually wrote."""
+    store = _require_workspace_file_store(ctx)
+    conversations = await store.list_conversations(tenant_id)
+    return [
+        {"conversation_id": cid, "size_bytes": size, "file_count": count}
+        for cid, size, count in conversations
+    ]
+
+
+@router.put("/storage/{tenant_id}/quota")
+async def set_storage_quota(
+    tenant_id: str,
+    body: SetQuotaRequest,
+    ctx: ServerDependencies = Depends(get_ctx),
+    db: AsyncSession = Depends(get_db),
+    _: AuthClaims = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Set (or, with ``quota_bytes: null``, reset to the global default)
+    one tenant's storage quota. Takes effect immediately (updates the live
+    store) and persists (upserts/deletes the ``workspace_quotas`` row) so
+    it survives a restart."""
+    store = _require_workspace_file_store(ctx)
+
+    existing = await db.get(WorkspaceQuota, tenant_id)
+    if body.quota_bytes is None:
+        if existing is not None:
+            await db.delete(existing)
+            await db.commit()
+    elif existing is not None:
+        existing.quota_bytes = body.quota_bytes
+        await db.commit()
+    else:
+        db.add(WorkspaceQuota(user_id=tenant_id, quota_bytes=body.quota_bytes))
+        await db.commit()
+
+    store.set_quota_override(tenant_id, body.quota_bytes)
+    logger.info("Admin set storage quota for tenant %s: %r", tenant_id, body.quota_bytes)
+    return {
+        "tenant_id": tenant_id,
+        "quota_bytes": store.effective_quota(tenant_id),
+    }

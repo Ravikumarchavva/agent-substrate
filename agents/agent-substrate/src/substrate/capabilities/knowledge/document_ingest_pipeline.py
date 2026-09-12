@@ -116,7 +116,8 @@ class DocumentIngestPipeline:
             this to be predictable and distinct from other namespaces
             (unrelated to storage *location*, which is entirely a property
             of the injected ``store``/``blob_store`` instances). Defaults to
-            ``""`` (unchanged, top-level keys).
+            supplied by the owning serving route. It must be a tenant-scoped
+            document prefix; unowned top-level keys are rejected.
         upload_concurrency: Max concurrent blob uploads, held on the
             instance so the cap is global across every file this pipeline
             processes, not per-file — see ``_embed_images``.
@@ -131,7 +132,7 @@ class DocumentIngestPipeline:
         store: VectorStore,
         *,
         blob_store: Any | None = None,
-        key_prefix: str = "",
+        key_prefix: str,
         upload_concurrency: int = 32,
         chunk_size: int = 1800,
         chunk_overlap: int = 250,
@@ -146,7 +147,10 @@ class DocumentIngestPipeline:
         )
         self._store = store
         self._blob_store = blob_store
-        self._key_prefix = key_prefix
+        normalized_prefix = key_prefix.strip("/")
+        if not normalized_prefix.startswith("tenants/"):
+            raise ValueError("key_prefix must be a tenant-scoped storage prefix")
+        self._key_prefix = f"{normalized_prefix}/"
         self._upload_sem = asyncio.Semaphore(upload_concurrency)
 
     async def aclose(self) -> None:

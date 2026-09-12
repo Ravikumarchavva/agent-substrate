@@ -115,9 +115,6 @@ remediation rather than silently running code unisolated. If you see
 
 ## What this deployment does not include
 
-- **ONLYOFFICE** (editable Office files in the panel) — opt-in, ~2 GB image, and
-  its container is **amd64-only**. Without it, Office files fall back to a
-  read-only preview. Start with `make infra-up-onlyoffice`.
 - **Docling** (OCR / rich document extraction) — heavy and GPU-oriented; the
   engine falls back to pypdf text extraction when `DOCLING_SERVICE_URL` is
   unset. Consider running it as a scale-to-zero service elsewhere instead of on

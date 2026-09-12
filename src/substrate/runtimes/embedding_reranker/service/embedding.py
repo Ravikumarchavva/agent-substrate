@@ -39,12 +39,14 @@ class EmbeddingServiceError(RuntimeError):
 #   1595x670  -> 1053 tok (1015 px/tok)    1470x1069 -> 1521 tok (1033)
 #
 # so tokens ~= width * height / 1024, plus a handful for the prompt marker.
+# Image-to-token ratio (~1024 px per patch token; see docs/capabilities/08-document-intelligence.md)
 _PIXELS_PER_IMAGE_TOKEN = 1024
 
 # Default budget in pixels, sized for a slot ceiling of 1024 tokens
 # (llama-embed-gpu runs --ctx-size 8192 --parallel 8). 1_000_000 px works
 # out to ~977 image tokens, leaving room for the marker without sitting
 # right on the limit.
+# Default pixel budget sized for 1024 token slot ceiling (~977 image tokens)
 _DEFAULT_MAX_IMAGE_PIXELS = 1_000_000
 
 
@@ -134,6 +136,7 @@ class EmbeddingReranker:
         # image tokens should be inserted — the marker is randomized per
         # server instance unless `LLAMA_MEDIA_MARKER` is pinned, so it's
         # fetched from `/props` rather than hardcoded.
+        # Build llama-server multimodal prompt payload using dynamic media marker
         marker = await self._media_marker()
         fitted = _downscale_to_pixel_budget(data, self._max_image_pixels)
         b64 = base64.b64encode(fitted).decode("ascii")
@@ -258,6 +261,7 @@ class EmbeddingReranker:
             # floats — an earlier version of this method returned that wrapper
             # unflattened, which would have hard-failed Postgres's vector(2048)
             # cast on first real write.
+            # Unwrap pooled vector list [[float, ...]] -> [float, ...]
             return list(data[0]["embedding"][0])
         except (KeyError, IndexError, TypeError) as exc:
             raise EmbeddingServiceError(

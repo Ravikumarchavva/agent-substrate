@@ -155,6 +155,7 @@ async def get_usage(
     # Quota is metered per tenant, not per user: a conversation-scoped key
     # carries no user segment by design (ownership lives in Postgres, not
     # the key), so tenant is the only identity every key reliably carries.
+    # Meter quota per tenant (conversation workspaces omit user segments)
     used = await store.usage_bytes(claims.tenant_id, force=True)
     # WorkspaceFileStore supports a per-tenant quota override (admin storage
     # API); other backends (e.g. S3FileStore) don't, so fall back to the
@@ -179,6 +180,7 @@ async def list_files(
     # threads they own within this tenant first (same ownership rule as
     # ``thread_service.get_owned_thread``), then list each one's shared
     # workspace, plus the caller's own direct-upload prefix.
+    # Enumerate threads owned by caller in this tenant, plus direct uploads
     owned_thread_ids = (
         (
             await db.execute(
@@ -298,6 +300,7 @@ def _session_rel(key: str, tenant_id: str, thread_id: str) -> str:
 # Only editable documents are worth versioning. Images embedded in an HTML
 # report are fetched through serve_file too, but the user never edits them —
 # skip them so we don't snapshot a version per chart.
+# Non-editable formats excluded from version snapshots
 _NON_VERSIONABLE_EXTS = {
     "png",
     "jpg",
@@ -410,6 +413,7 @@ async def serve_file(
     # agent rewrite), so it's revalidate-before-use rather than cached
     # outright — `ETag` + `if-none-match` still turns a repeat load into a
     # cheap 304 (no response body) instead of re-transferring the file.
+    # seq-pinned versions are immutable (public cache); latest versions use ETag revalidation
     etag = f'"{checksum}"'
     if request.headers.get("if-none-match") == etag:
         return Response(
@@ -607,6 +611,7 @@ async def delete_file(
     # own traversal guard stops `../` escapes, but doesn't know about
     # ownership (a conversation key carries no user segment at all), so
     # enforce that here.
+    # Ownership check: must reside under caller's upload prefix or owned thread
     own_prefix = f"{user_prefix(claims.tenant_id, claims.sub)}/"
     if not path.startswith(own_prefix):
         thread_id = _session_id_from_key(path)

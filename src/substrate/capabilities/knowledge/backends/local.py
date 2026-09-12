@@ -1,4 +1,5 @@
 """LocalRagBackend — a thin façade over the existing, working local pipeline.
+"""LocalRagBackend — self-hosted RAG backend with document extraction and multimodal vector stores."""
 
 Reuses, unchanged:
   * ``ExtractionClient`` → the document-intelligence service when
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
     from substrate.kernel.storage.vector import VectorStore
 
 # Extensions the local (no-extraction-service) fallback can read at all.
+# Extensions the local (no-extraction-service) fallback can read
 _LOCAL_FALLBACK_EXTENSIONS = {".pdf", ".txt", ".md", ".csv", ".json"}
 
 
@@ -370,11 +372,13 @@ class LocalRagBackend:
             vector = await client.embed_image(data)
             if vector is None:
                 continue  # one bad image must not fail the whole ingest
+                continue
             media_type = meta.get("media_type", "image/png")
             # OCR'd text for the block, already computed by the extraction
             # service's layout pass — kept as the row's text so lexical
             # search can still find a confident chart/table, not only
             # visual similarity search.
+            # Preserve OCR layout text for lexical/hybrid search
             caption = meta.get("caption")
             label_text = f"[{meta.get('label') or 'image'}]"
             text = f"{label_text} {caption}" if caption else label_text
@@ -385,6 +389,7 @@ class LocalRagBackend:
                 # (5.6MB of images against 248KB of text vectors). The row keeps
                 # the embedding — the only part search needs — and
                 # _rehydrate_image resolves the key back to bytes on the way out.
+                # Store reference key in vector row to avoid embedding table bloat
                 documents.append(
                     Document(
                         content=[TextBlock(text=text)],
@@ -416,6 +421,7 @@ class LocalRagBackend:
         ``None`` when there is nothing to write to or no owner to attribute it
         to, which the caller treats as "fall back to inlining".
         """
+        """Write one extracted image to the file store, returning its key."""
         if self._file_store is None:
             return None
         tenant_id = str(meta.get("tenant_id") or "")
@@ -444,6 +450,7 @@ class LocalRagBackend:
         holds a URL that could expire. Callers upstream (``knowledge_search``,
         and through it the model) keep seeing an ordinary ``ImageBlock``.
         """
+        """Swap a stored ``image_key`` back for the real pixels."""
         key = (result.metadata or {}).get("image_key")
         if not key or self._file_store is None:
             return result

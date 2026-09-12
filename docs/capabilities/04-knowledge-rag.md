@@ -207,3 +207,27 @@ reranked = await reranker.rerank(query, results, top_k=3)
 ## Paged memory pipeline
 
 `knowledge/page_pipeline.py` handles very long documents by splitting them into pages rather than fixed-size chunks. Use it when the document has natural page boundaries (PDFs) and you want to preserve page-level context.
+
+## Citations & Deduplication
+
+`capabilities/knowledge/citations.py` turns raw vector search results into grounded, numbered citations (`Citation`) for tool output and UI source chips:
+
+- **`CitationLedger`**: Numbers passages per `(file_id or filename, page)` across multiple search calls within a turn, preventing conflicting `[1]` numbers.
+- **Score Thresholding (`filter_by_score`)**: Filters candidates below `RAG_MIN_RERANK_SCORE` (default 0.1). Filtered or nameless results receive index 0 (uncitable) while preserving positional list alignment.
+- **Near-Duplicate Suppression (`suppress_near_duplicates`)**: Uses `difflib.SequenceMatcher` (threshold 0.9) to discard adjacent chunk overlap windows, retaining the highest-scoring chunk.
+- **Continuity-Gated Adjacency Context**: Attaches preceding/following chunks only when sentence boundaries appear cut off mid-sentence (lowercase start, unclosed punctuation). Surrounding context is surfaced explicitly rather than concatenated directly into the matched snippet.
+
+## Multimodal Ingestion & Image Store
+
+`capabilities/knowledge/backends/local.py` and `capabilities/knowledge/document_ingest_pipeline.py` coordinate multimodal RAG:
+
+- **Separate Vector Stores**: Text chunks live in `vector_store` (1536d), while chart and table images live in `image_store` (2048d with `Qwen3-VL-Embedding-2B`). Tables cannot share embedding dimensions.
+- **Image Offloading**: Rather than inlining ~500KB page images into vector rows, images are persisted to `file_store` (Workspace or S3), keeping only an `image_key` in metadata. This prevents DB bloat while search retrieves embeddings. At query time, `_rehydrate_image` retrieves the image bytes for candidate blocks.
+- **OCR Dual-Indexation**: Extracted image blocks preserve their OCR layout text in the vector row, enabling both visual similarity search and lexical/hybrid search. Short OCR noise fragments (< 4 chars or stray punctuation) are discarded to avoid corrupting image descriptions.
+- **Candidate Merging**: During retrieval, `_hybrid_candidates` pools candidates across text dense/lexical search and multimodal image search before reranking.
+- **Object Key Layout**: For filesystem-backed object stores (e.g. SeaweedFS filer), keys are stored as siblings (`pdfs/{name}` and `images/{name}/p{page}-{index}.ext`) rather than prefix paths (`{name}/images/...`), avoiding leaf-file vs directory collisions.
+- **HTML Table Token Ceilings**: Tables extracted as raw HTML lack punctuation delimiters, causing single chunks to potentially exceed embedding context windows (e.g. 1024 tokens). Oversized chunks and images are safely filtered with explicit loss reporting in ingest metrics.
+- **Atomic Batch Ingest**: Per-file chunks and images are inserted in a single atomic `store.add()` call, preventing checkpoint desynchronization across crashes.
+- **Eager Staged Ingestion**: On file upload, extraction and embedding execute in the background to a temporary `staging:{file_id}` collection. When a chat turn references the file, staged vectors are promoted into the thread collection without repeating OCR/embedding, leveraging `extracted_text` and `rag_ingested_at` as immutable caches.
+
+

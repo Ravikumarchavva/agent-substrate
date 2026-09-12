@@ -82,6 +82,7 @@ CREATE INDEX IF NOT EXISTS substrate_agent_runs_agent_idx
 # pre-existing table, "CREATE TABLE IF NOT EXISTS" in _CREATE_TABLES is a
 # no-op and never adds them, so an index created in that same statement
 # would reference a column that doesn't exist yet.
+# Additive column migrations for existing deployments (runs before dependent indexes)
 _MIGRATE_COLUMNS: list[tuple[str, str]] = [
     ("wake_signals", "TEXT[]"),
     ("wake_at", "TIMESTAMPTZ"),
@@ -454,6 +455,7 @@ class Scheduler:
                 # passed is due; wake_signals is left as-is (harmless once
                 # pending — the wait will consume() and, if nothing's there
                 # yet, immediately re-suspend on the next iteration).
+                # Wake up suspended runs whose wake_at timer has elapsed
                 await conn.execute(
                     """
                     UPDATE substrate_run_queue
@@ -466,6 +468,7 @@ class Scheduler:
                 # heartbeat) terminates here directly — a coarser circuit
                 # breaker than any single ctx.ask/ctx.join timeout. Running
                 # runs are caught by heartbeat() instead (see there).
+                # Terminate pending/suspended runs that exceeded their deadline
                 await conn.execute(
                     """
                     UPDATE substrate_run_queue
@@ -487,6 +490,7 @@ class Scheduler:
                 # with its own SKIP LOCKED — a candidate claimed by a
                 # concurrent worker in between is silently dropped (fewer
                 # than `capacity` leases this poll), never double-claimed.
+                # Claim pending runs using fair-share tenant partitioning CTE with SKIP LOCKED
                 rows = await conn.fetch(
                     """
                     WITH ranked AS (
@@ -618,6 +622,7 @@ class Scheduler:
                     # deadline at once (whichever comes first should wake it),
                     # so a Wakeup can legitimately carry both regardless of its
                     # nominal "kind".
+                    # wake_signals and wake_at can be used simultaneously (e.g. signal wait with timeout)
                     wake_signals = (
                         wake_on.signals if wake_on and wake_on.signals else None
                     )
@@ -645,6 +650,7 @@ class Scheduler:
                         # is why we're suspending) and this UPDATE landing.
                         # If so, un-suspend immediately instead of parking
                         # on a wakeup that already happened.
+                        # Prevent lost-wakeup race if signal arrived while suspending
                         pending = await conn.fetchval(
                             """
                             SELECT 1 FROM substrate_signals

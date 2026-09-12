@@ -1,16 +1,18 @@
-"""substrate library configuration.
+"""Substrate library configuration.
 
 ``SubstrateConfig`` holds everything the library layer needs — API keys, model
-defaults, storage URLs, and tool settings.  It reads from environment variables
-only (no ``.env`` file loading).  Consumers instantiate it explicitly:
+defaults, storage URLs, and tool settings. It reads from environment variables
+only (no ``.env`` file loading). Consumers instantiate it explicitly:
 
     cfg = SubstrateConfig(openai_api_key="sk-...")
     runtime = Runtime(config=cfg)
 
-If you are running the built-in FastAPI server, use
+For running the built-in FastAPI server, use
 ``substrate.serving.shared.settings.ServerSettings`` instead — it extends this
-class and adds server-only fields (JWT, CORS, rate limits, observability) with
-``.env`` file auto-loading.
+class and adds server-only fields with ``.env`` file auto-loading.
+
+For the complete reference of all settings and architecture, see
+``docs/configuration.md``.
 """
 
 from __future__ import annotations
@@ -36,28 +38,18 @@ class SubstrateConfig(BaseSettings):
     OPENROUTER_SITE_URL: str = "http://localhost:3000"
     OPENROUTER_APP_NAME: str = "Agent Substrate"
 
-    # huggingface_hub/tokenizers read this env var directly (not through this
-    # Settings object) for authenticated model downloads — see
-    # cli.py::cmd_start(), which forwards it into the uvicorn subprocess env.
+    # HuggingFace token for downloading gated models/tokenizers in subprocesses
     HF_TOKEN: str = ""
 
-    # ── Database ─────────────────────────────────────────────────────────────
-    # The admin/bootstrap connection — schema creation, additive migrations,
-    # and RLS policy/role setup (see rls.py) all need table-owner/superuser
-    # privilege, which the restricted runtime role below deliberately lacks.
+    # ── Database & RLS ───────────────────────────────────────────────────────
+    # Primary / admin connection (schema setup, migrations, superuser)
     DATABASE_URL: str = ""
     ASYNC_DATABASE_URL: str = ""
-    # What actually serves requests once RLS is provisioned (substrate_app —
-    # see rls.py). Unset ⇒ falls back to DATABASE_URL/ASYNC_DATABASE_URL,
-    # today's single-connection behavior (RLS policies stay enabled either
-    # way, just inert against a superuser — see rls.py's module docstring).
+    # Restricted application connection used when RLS is provisioned
     APP_DATABASE_URL: str = ""
+    RLS_APP_ROLE_PASSWORD: str | None = None
 
     # ── Durable runtime asyncpg pool ─────────────────────────────────────────
-    # This is a SEPARATE pool from the ORM's own (SQLAlchemy/asyncpg or
-    # psycopg engine) — see build_postgres_runtime(). Total connection budget
-    # against your Postgres max_connections is (this pool) + (ORM engine pool)
-    # per process, times the number of replicas.
     RUNTIME_PG_POOL_MIN_SIZE: int = 2
     RUNTIME_PG_POOL_MAX_SIZE: int = 10
 
@@ -66,8 +58,7 @@ class SubstrateConfig(BaseSettings):
     REDIS_SESSION_TTL: int = 3600
 
     # ── Agent runtime backend ────────────────────────────────────────────────
-    # "postgres" — durable (EventLogProtocol/InboxProtocol/SchedulerProtocol/SignalBusProtocol/SupervisorProtocol in Postgres)
-    # "memory"   — in-process, no durability; lighter for dev / tests
+    # "postgres" (durable) | "memory" (ephemeral/tests)
     RUNTIME_BACKEND: str = "postgres"
 
     # ── Session / context ────────────────────────────────────────────────────
@@ -96,19 +87,13 @@ class SubstrateConfig(BaseSettings):
     WEB_READ_MAX_CHARS: int = 6000
 
     # ── Chat attachments ─────────────────────────────────────────────────────
-    # PDFs are extracted server-side (pypdf/pdfplumber) and inlined into the
-    # prompt like text/* attachments, capped so one large PDF can't blow the
-    # context window. See routes/chat_context.py::_build_file_context.
     ATTACHMENT_PDF_MAX_CHARS: int = 20000
 
     # ── Tool behaviour ───────────────────────────────────────────────────────
     DISABLE_TOOL_APPROVALS: bool = False
 
     # ── File storage ─────────────────────────────────────────────────────────
-    # "local" (default) = WorkspaceFileStore, a per-user directory tree on
-    # server-side storage (local dir in dev, docker volume in compose, RWX PVC
-    # in k8s — see capabilities/storage/workspace.py). "s3" = SeaweedFS/S3,
-    # opt-in. "memory" = InMemoryFileStore, tests only.
+    # "local" (WorkspaceFileStore) | "s3" (SeaweedFS/S3) | "memory" (tests)
     FILE_STORE_BACKEND: str = "local"
     FILE_STORE_ROOT: str = "./data/workspaces"
     FILE_STORE_BUCKET: str = "agent-files"
@@ -121,155 +106,53 @@ class SubstrateConfig(BaseSettings):
     FILE_KEK_HEX: str = ""
     FILE_MAX_UPLOAD_BYTES: int = 200 * 1024 * 1024
 
-    # ── Workspace (per-user filesystem: uploads + code-interpreter workdir) ───
+    # ── Workspace quotas ─────────────────────────────────────────────────────
     WORKSPACE_USER_QUOTA_BYTES: int = 1024 * 1024 * 1024
     WORKSPACE_USER_DELETE_ALLOWED: bool = True
 
-    # ── Row-Level Security (see serving/monolith/rls.py) ─────────────────────
-    # Unset (default): RLS policies are still created/enabled (harmless,
-    # idempotent DDL — see rls.py), but the app keeps connecting as
-    # DATABASE_URL's own role, which is a superuser in the default local
-    # setup and therefore bypasses RLS entirely, same as today. Set this to
-    # provision the dedicated substrate_app role RLS actually needs — after
-    # that, DATABASE_URL/ASYNC_DATABASE_URL must be switched to connect as
-    # that role (rls.APP_DB_ROLE) for enforcement to take effect; that
-    # credentials switch is a separate, deliberate deployment step this
-    # setting does not perform by itself.
-    RLS_APP_ROLE_PASSWORD: str | None = None
-
     # ── Code interpreter sandbox ─────────────────────────────────────────────
-    # Set only when the K8s agent-sandbox backend is wired to the shared
-    # workspace PVC (see capabilities/tools/code_interpreter/code_interpreter/
-    # sandbox_service.py::_ensure_user_template). Empty with SANDBOX_RUNTIME=
-    # "k8s" means the running code interpreter has no view of uploaded files
-    # at all, so chat.py must not tell the model a workspace path is openable
-    # (the default "nsjail" runtime always has a view — see chat.py's
-    # ci_has_workspace_access).
-    CI_WORKSPACE_PVC_CLAIM: str = ""
-    # ── Sandbox isolation (how agent-generated code is contained) ─────────────
-    # "nsjail"     = Linux namespaces + real cgroup limits on this host (no
-    #   daemon, no root, no nested virtualization). The default: only the
-    #   caller's own session directory is mounted, so one user's code cannot
-    #   see another's files, and a genuine per-sandbox process-count/memory
-    #   cap is enforced via cgroups (not RLIMIT_NPROC, which is per-UID
-    #   system-wide, not per-sandbox). Needs the `nsjail` binary on PATH
-    #   (build from github.com/google/nsjail — not commonly packaged) and
-    #   either root inside a container started with --cgroupns=host, or an
-    #   unprivileged user with a systemd-delegated cgroup v2 subtree. See
-    #   runtimes/nsjail.py's module docstring for what was verified before
-    #   this was added.
-    # "k8s"        = one agent-sandbox pod per session (per-user PVC subPath,
-    #   optional gVisor RuntimeClass). For cluster deployments.
-    # "inprocess"  = NO isolation. Tests/CI only — never multi-user.
+    # "nsjail" (Linux namespaces/cgroups) | "k8s" (isolated pods) | "inprocess" (tests only)
     SANDBOX_RUNTIME: str = "nsjail"
-    # Network reachable from sandboxed code: "deny" | "pip_only" | "full".
-    # Deny is the default because the code is LLM-generated and untrusted: with
-    # no egress it cannot exfiltrate files even if it reads them.
-    SANDBOX_NETWORK_POLICY: str = "deny"
+    SANDBOX_NETWORK_POLICY: str = "deny"  # "deny" | "pip_only" | "full"
     SANDBOX_TIMEOUT_SECONDS: int = 60
     SANDBOX_MEMORY_BYTES: int = 2 * 1024 * 1024 * 1024
-    # Idle sessions whose sandbox is reaped by the janitor (k8s pods; the
-    # nsjail runtime has no long-lived process to reap).
     SANDBOX_SESSION_TTL_SECONDS: int = 3600
-    # Kubernetes RuntimeClass for sandbox pods, e.g. "gvisor". Empty = cluster
-    # default (shared host kernel).
     SANDBOX_RUNTIME_CLASS: str = ""
-    # Interpreter the nsjail runtime executes. Its environment supplies the
-    # packages the tool advertises (pandas, matplotlib, …) — install the
-    # `sandbox` extra. Empty = the interpreter the engine itself runs under.
-    # Point this at a dedicated venv to keep those packages out of the engine's
-    # own environment; that venv is mounted read-only into the sandbox.
     SANDBOX_PYTHON: str = ""
+    CI_WORKSPACE_PVC_CLAIM: str = ""
 
     # ── Document-intelligence service ────────────────────────────────────────
-    # Optional, isolated microservice for layout-aware document parsing:
-    # PaddleOCR layout/chart/table detection + OCR (see
-    # runtimes/document_intelligence/service/). Empty (the default) means
-    # chat attachments fall back to the lightweight pypdf/pdfplumber path
-    # for PDFs (no chart images) — see
-    # routes/chat_context.py::_extract_document_text.
     DOCUMENT_INTELLIGENCE_SERVICE_URL: str = ""
     DOCUMENT_INTELLIGENCE_AUTH_TOKEN: str = ""
     DOCUMENT_INTELLIGENCE_TIMEOUT_S: int = 90
 
     # ── Embedding + reranking service ────────────────────────────────────────
-    # Optional, isolated microservice proxying to the llama-embed/llama-rerank
-    # sidecars for multimodal embedding + reranking (see
-    # runtimes/embedding_reranker/service/) — a separate concern from
-    # document-intelligence's OCR/layout extraction, split out since it
-    # shares no code or state with it. Empty (the default) means image
-    # ingestion/multimodal search and reranking are unavailable.
     EMBEDDING_RERANKER_SERVICE_URL: str = ""
     EMBEDDING_RERANKER_AUTH_TOKEN: str = ""
     EMBEDDING_RERANKER_TIMEOUT_S: int = 30
 
-    # ── RAG backend ───────────────────────────────────────────────────────────
-    # "local" (default) = RAGPipeline + PgVectorStore + extraction-service-or-
-    #   pypdf loaders, all self-hosted (see capabilities/knowledge/backends/local.py).
-    # "pinecone" = Pinecone Assistant — managed parse+chunk+embed+store+
-    #   retrieve, no local processing at all. Requires PINECONE_API_KEY and
-    #   PINECONE_ASSISTANT_NAME, and the `rag-pinecone` extra installed.
-    # See capabilities/knowledge/backends/factory.py::build_rag_backend.
-    RAG_BACKEND: str = "local"
+    # ── RAG backend & retrieval ──────────────────────────────────────────────
+    RAG_BACKEND: str = "local"  # "local" | "pinecone"
     PINECONE_API_KEY: str = ""
     PINECONE_ASSISTANT_NAME: str = ""
-    # Vector dimensionality of EMBEDDING_MODEL's output — must match exactly,
-    # since PgVectorStore's `vector({dimensions})` column is fixed per table
-    # (CREATE TABLE IF NOT EXISTS never widens/narrows an existing column).
-    # Defaults to OpenAI text-embedding-3-small's 1536. Local
-    # sentence-transformers models are much smaller: all-MiniLM-L6-v2 (the
-    # SentenceTransformersEmbeddingClient default) is 384, all-mpnet-base-v2
-    # is 768 — set this to match whichever EMBEDDING_MODEL is configured.
     RAG_TEXT_EMBEDDING_DIM: int = 1536
-    # Vector dimensionality of the embedding-reranker service's image
-    # embedding model — needed for the separate image-vector PgVectorStore
-    # table (see backends/local.py's image_store). Qwen3-VL-Embedding-2B
-    # (2048) now embeds both text and images into the SAME space (see
-    # docs/claude_docs/decisions.md) — this must match
-    # EMBEDDING_RERANKER_EMBEDDING_DIM in
-    # runtimes/embedding_reranker/service/config.py, or image ingestion
-    # hard-fails on a vector-column-width mismatch the first time it
-    # actually runs.
     RAG_IMAGE_EMBEDDING_DIM: int = 2048
-    # Caps on RAG-eligible document uploads (currently PDF only — see
-    # EXTRACTABLE_CONTENT_TYPES in routes/chat_context.py), enforced
-    # synchronously at upload time before any storage or extraction cost is
-    # spent — routes/files.py::upload_file.
     RAG_MAX_DOC_PAGES: int = 20
     RAG_MAX_DOC_MB: int = 5
-    # Daily per-user commit quota: how many documents can actually be *sent*
-    # in a chat message (promoted from staging into a real thread
-    # collection) — not merely uploaded. See serving/shared/doc_quota.py.
     RAG_DAILY_DOC_LIMIT: int = 20
-    # Coarser daily cap on raw upload attempts (separate counter) — eager
-    # staging starts unconditionally on upload regardless of the commit
-    # quota above, so this bounds worst-case extraction compute from
-    # repeated upload-then-discard abuse.
     RAG_DAILY_UPLOAD_ATTEMPT_LIMIT: int = 100
-    # Structure-aware chunking (capabilities/knowledge/chunking.py).
     RAG_CHUNK_SIZE: int = 512
     RAG_CHUNK_OVERLAP: int = 128
-    # Hybrid retrieval budgets (capabilities/vector/pgvector_store.py::hybrid_search,
-    # capabilities/knowledge/reranker.py) — explicit and named rather than
-    # inline magic numbers, per the RAG pipeline redesign
-    # (docs/claude_docs/decisions.md). Each stage narrows the candidate set:
-    # dense/lexical retrieval (50 each) → RRF fusion (50) → a deliberately
-    # dumb pre-filter (10) → the expensive multimodal reranker (5 final).
     RAG_DENSE_K: int = 50
     RAG_LEXICAL_K: int = 50
     RAG_FUSED_K: int = 50
     RAG_RERANK_TOP_N: int = 10
     RAG_FINAL_K: int = 5
-    # Minimum reranker relevance score to surface a result at all — below
-    # this for every candidate means "no confident match," not "force the
-    # weakest 5 through anyway."
     RAG_MIN_RERANK_SCORE: float = 0.1
 
     FRONTEND_URL: str = "http://127.0.0.1:3000"
 
     model_config = SettingsConfigDict(
-        # No env_file — reads from environment variables only.
-        # The server layer (ServerSettings) adds env_file loading on top.
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=True,

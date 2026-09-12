@@ -222,6 +222,7 @@ class ToolInvoker:
         # (e.g. code_interpreter parses the code: exploratory → SAFE, no
         # approval; dangerous → CRITICAL + a summary for the human). Static
         # .risk is the fallback for every other tool.
+        # 3. Risk / approval gate (dynamic classification takes precedence over static .risk)
         risk_summary: str | None = None
         classifier = getattr(tool, "classify_risk", None)
         if callable(classifier):
@@ -260,6 +261,7 @@ class ToolInvoker:
                 # suspended), so a fresh id here would mint a new
                 # request_id each attempt and orphan whatever card the
                 # human is looking at.
+                # Durable suspension: request_id is replay-stable via ctx.uuid()
                 request_id = await ctx.uuid()
                 log_payload = {
                     "request_id": request_id,
@@ -333,6 +335,7 @@ class ToolInvoker:
         # and the timeout would cancel the coroutine parked in sleep_until_signal,
         # dropping the eventual answer. Their wait is governed elsewhere (the
         # handler/bridge, or run cancellation on a new message / disconnect).
+        # 7. Execute with per-call timeout (suspending tools are exempt)
         if getattr(tool, "suspends", False):
             exec_result = await tool.execute(ctx=ctx, **args)  # type: ignore[union-attr]
         else:
@@ -400,6 +403,7 @@ class ToolInvoker:
         # has no ArtifactStore wired (agent.blob_store is never set), so
         # gating this on self._store would silently drop every chart/image
         # a tool produces outside of a ToolChainTool-bridged call.
+        # Keep media blocks inline on InvocationResult.media (bytes preserved)
         media_blocks = [b for b in content if isinstance(b, ImageBlock)]
         files: list[ChainFile] = []
         media = [b for b in media_blocks if b.data is not None]
@@ -407,6 +411,7 @@ class ToolInvoker:
         # Additionally offload to the artifact store when one is configured
         # (chain runs) — lets the sandbox reference the file by workspace
         # path without inlining bytes across the bridge.
+        # Offload to artifact store for chain runs when configured
         if media_blocks and self._store is not None:
             for block in media_blocks:
                 if block.data is None:

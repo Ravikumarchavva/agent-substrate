@@ -34,9 +34,7 @@ from substrate.integrations.llm.factory import (
 )
 from substrate.infrastructure.serving_factory import build_agent_for_thread
 
-# current_thread_id: ContextVar that scopes TaskManagerTool to the active thread.
-# Defined in capabilities; both serving and capabilities need it — tracked as an
-# explicit exception in the import-linter "serving boundary" contract.
+# ContextVar that scopes TaskManagerTool to the active thread
 from substrate.capabilities.tools.task_manager.tool import current_thread_id
 from substrate.kernel.core.content import (
     ChatMessage as _ChatMessage,
@@ -126,17 +124,8 @@ async def chat(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    # 2. Single-flight: only one active stream per thread at a time.
-    # Durable and cross-replica: a unique partial index on substrate_run_queue
-    # (see Scheduler) is the actual enforcement, at Runtime.submit()
-    # time — this is a cheap pre-check so the common case still gets a clean
-    # 409 before the (comparatively expensive) agent build below runs, same
-    # as the old per-process asyncio.Lock did. Unlike that lock, this holds
-    # even when the existing run is being served by a different replica.
-    # The rare race (two requests for the same thread both pass this check)
-    # degrades gracefully instead of corrupting anything: submit() still
-    # rejects one of them, surfaced as a run.failed SSE event since headers
-    # are already sent by then — see AgentStreamSession._agent_worker.
+    # 2. Single-flight: only one active stream per thread at a time (enforced
+    # durably across replicas via Scheduler unique partial index on substrate_run_queue)
     if await runtime.scheduler.find_run_for_thread(str(body.thread_id)):
         raise HTTPException(
             status_code=409,
@@ -146,10 +135,7 @@ async def chat(
             ),
         )
 
-    # 2b. Plan-derived daily message quota — only enforced when the caller's
-    # token carries daily_message_limit (ravi embeds it from Project.plan;
-    # absent for direct/dev usage, so this is a no-op unless ravi is in the
-    # request path).
+    # 2b. Plan-derived daily message quota (when present in token claims)
     if user.daily_message_limit is not None:
         quota_key = plan_quota_key(user)
         redis = getattr(request.app.state, "redis", None)
@@ -247,24 +233,11 @@ async def chat(
             _store = request.app.state.task_tool.store
             existing_task_board = await _store.get_by_conversation(str(body.thread_id))
 
-        # workspace_path (see _build_file_context) is only meaningful when the
-        # running code interpreter actually mounts the same workspace
-        # directory as chat uploads. Two cases: the default nsjail
-        # runtime always mounts the caller's own session dir (see
-        # CodeInterpreterTool._session_dir), or the K8s agent-sandbox path
-        # (CI_WORKSPACE_PVC_CLAIM configured — see
-        # sandbox_service.py::_ensure_user_template). Without one of these,
-        # the code interpreter has never seen the uploaded bytes — telling
-        # the model a path exists there just causes it to hallucinate a
-        # plausible-looking prefix (observed: "/mnt/data/..." from ChatGPT-
-        # convention training bias). Only surface the hint when it's true.
+        # Check if code interpreter runtime mounts the uploaded workspace bytes
         ci_has_workspace_access = bool(
             settings.SANDBOX_RUNTIME == "nsjail" or settings.CI_WORKSPACE_PVC_CLAIM
         )
-        # Ordered, declarative instruction blocks — this IS the assembly
-        # order the model sees (primacy matters; see
-        # docs/claude_docs/architecture/prompt-and-skills.md). Each function
-        # returns "" when it doesn't apply, so appending is unconditional.
+        # Assemble declarative instruction blocks in priority order
         for block in (
             existing_task_board_block(bool(existing_task_board)),
             readonly_kb_block(ci_has_workspace_access),
@@ -355,29 +328,13 @@ async def chat(
             agent=agent,
         )
         await hooks.fire_message(hook_ctx, user_content)
-        # The user's turn is durably logged inside the run itself
-        # (ReActAgent's log_user_message -> user.message EventLogProtocol entry,
-        # including display_content/attachments via Message.metadata below)
-        # — no separate steps-table write here anymore.
         await db.commit()
 
     except Exception:
-        # No per-thread lock to release anymore (single-flight is enforced
-        # durably by Runtime.submit()'s unique-index check, not a lock this
-        # handler owns) — this except exists only to preserve the original
-        # exception's traceback/type on the way out.
         raise
-    # Per-thread HITL bridge (acquired in _get_agent_deps).
+
     bridge: WebHITLBridge = deps["bridge"]
 
-    # current_thread_id is set inside sse_generator (with reset) to scope it
-    # to the streaming task and avoid leaking into the request handler scope.
-
-    # image_inputs (see _build_file_context) were previously computed into
-    # a `user_input_content` list that nothing ever read — the model never
-    # actually received uploaded images despite a vision model being
-    # resolved for the request. build_user_blocks is the one place the
-    # message content that actually reaches the agent is built.
     _user_blocks: list = build_user_blocks(user_content, image_inputs)
     _entry_msg = _Message(
         target=agent.id,
@@ -386,13 +343,6 @@ async def chat(
             message=_ChatMessage(role=Role.USER, content=_user_blocks)
         ),
         correlation_id=str(body.thread_id),
-        # display_content is what the user actually typed/saw; user_content
-        # may be augmented with file_block for the LLM. Read back by
-        # log_user_message() (agents/core/_loop.py) when journaling
-        # user.message, so history shows the real turn, not the augmented
-        # prompt. user_id is stamped into current_user_id inside
-        # ReActAgent._handle_message (agents/storage/tasks.py) so the
-        # code-interpreter tool can select the caller's workspace subPath.
         metadata={
             "display_text": display_content,
             "attachments": attachments,

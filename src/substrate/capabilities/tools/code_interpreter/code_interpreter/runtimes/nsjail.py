@@ -110,6 +110,7 @@ from .base import ExecResult, NetworkPolicy, SandboxSpec, SandboxUnavailableErro
 # Read-only host paths the interpreter needs to run at all (libs, binaries).
 # Everything else — notably other users' data and the rest of the host fs — is
 # simply never mounted, so it does not exist inside the sandbox.
+# Read-only host libraries and font configuration needed by runtime interpreters
 _RO_HOST_PATHS = (
     "/usr",
     "/lib",
@@ -208,6 +209,7 @@ logger = setup_logging()
 # scope, unlike RLIMIT_NPROC (per-UID system-wide). Generous enough for real
 # pandas/numpy multiprocess use, tight enough to stop a fork bomb well
 # before it exhausts the host.
+# Max processes per sandbox (cgroup pids.max)
 _DEFAULT_MAX_PIDS = 64
 
 _CGROUPV2_ROOT = Path("/sys/fs/cgroup")
@@ -216,11 +218,13 @@ _CGROUPV2_ROOT = Path("/sys/fs/cgroup")
 # this can't be "/" or anything under /tmp or /run. Shared across
 # executions: nsjail mounts each execution's tree in its own private mount
 # namespace, so this directory is never actually written to on the host.
+# Base directory for nsjail private mount namespace chroot
 _CHROOT_BASE = Path("/var/tmp/substrate-nsjail-chroot")
 
 # nsjail has no bwrap-style synthetic --dev; CPython's own startup needs
 # /dev/urandom to seed hash randomization, so these must be bound
 # explicitly or the interpreter fails before running any user code.
+# Essential character devices required for interpreter startup (e.g. hash randomization)
 _RO_DEV_NODES = (
     "/dev/null",
     "/dev/zero",
@@ -442,6 +446,7 @@ class NsjailRuntime:
             argv += [
                 f"--cgroup_mem_max={spec.memory_bytes}",
                 "--cgroup_mem_swap_max=0",
+                "--cgroup_mem_swap_max=0",  # prevent swapping past memory limit
             ]
         if self._seccomp_policy_path:
             argv += ["--seccomp_policy", self._seccomp_policy_path]
@@ -485,6 +490,7 @@ class NsjailRuntime:
                     argv += ["-R", resolv]
         # NetworkPolicy.DENY: no flag needed — CLONE_NEWNET is nsjail's own
         # default, verified in the spike (`clone_newnet:true` unconditionally).
+        # NetworkPolicy.DENY: CLONE_NEWNET is nsjail's default
 
         argv.append("--")
         return argv

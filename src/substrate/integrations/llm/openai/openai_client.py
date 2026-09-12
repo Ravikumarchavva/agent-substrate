@@ -61,9 +61,10 @@ def _mime_for(filename: str) -> str:
 def _normalize_strict_json_schema(schema: Any) -> Any:
     """Recursively normalize a JSON schema for OpenAI strict mode.
 
-    OpenAI's strict structured-output mode requires every object schema to
-    declare ``additionalProperties: false``. Pydantic's ``model_json_schema()``
-    does not guarantee that on all nested object nodes, so we add it here.
+    OpenAI strict structured output mode requires:
+    - ``additionalProperties: false`` on every object schema.
+    - All keys in ``properties`` to be explicitly present in ``required``
+      (true optionality is expressed via nullable unions with null).
     """
     if isinstance(schema, dict):
         normalized = {
@@ -72,13 +73,6 @@ def _normalize_strict_json_schema(schema: Any) -> Any:
 
         if normalized.get("type") == "object":
             normalized.setdefault("additionalProperties", False)
-            # OpenAI strict mode requires every key in `properties` to also
-            # appear in `required` — true optionality is expressed via a
-            # nullable type (`anyOf` with "null", which Pydantic's
-            # `X | None = None` already produces), not by omission from
-            # `required`. Pydantic's own model_json_schema() only lists
-            # fields without a default here, which strict mode rejects
-            # outright ("'required' is ... missing '<field>'").
             if "properties" in normalized and isinstance(normalized["properties"], dict):
                 normalized["required"] = list(normalized["properties"].keys())
 
@@ -437,85 +431,6 @@ class OpenAIClient(LLMClient):
                 content=final_blocks, usage=self._extract_usage(response)
             )
 
-        # ── Structured-only path (no tools) ──────────────────────────────
-        # if response_format is not None:
-        #     import openai
-        #     # from substrate.kernel.structured.result import (
-        #     #     StructuredOutputError,
-        #     #     StructuredOutputResult,
-        #     # )
-
-        #     structured_params: dict[str, Any] = {
-        #         "model": kwargs.get("model", self.model),
-        #         "input": conversation_input,
-        #     }
-        #     if instructions:
-        #         structured_params["instructions"] = instructions
-        #     if self.max_tokens:
-        #         structured_params["max_output_tokens"] = kwargs.get(
-        #             "max_tokens", self.max_tokens
-        #         )
-
-        #     # Forward provider-specific structured-output kwargs, but avoid
-        #     # duplicating keys we already set above.
-        #     structured_params.update(
-        #         {
-        #             k: v
-        #             for k, v in kwargs.items()
-        #             if k
-        #             not in {
-        #                 "model",
-        #                 "input",
-        #                 "instructions",
-        #                 "max_output_tokens",
-        #                 "max_tokens",
-        #                 "temperature",
-        #             }
-        #         }
-        #     )
-
-        #     try:
-        #         response = await self.client.responses.parse(
-        #             text_format=response_format,
-        #             **structured_params,
-        #         )
-        #     except openai.APIError as exc:
-        #         raise StructuredOutputError(
-        #             f"OpenAI API error during structured parse: {exc}"
-        #         ) from exc
-        #     except Exception as exc:
-        #         raise StructuredOutputError(
-        #             f"Unexpected error during structured parse: {exc}"
-        #         ) from exc
-
-        #     refusal: Optional[str] = None
-        #     parsed = getattr(response, "output_parsed", None)
-        #     raw_text = getattr(response, "output_text", "") or ""
-
-        #     if response.output:
-        #         for item in response.output:
-        #             item_refusal = getattr(item, "refusal", None)
-        #             if item_refusal:
-        #                 refusal = item_refusal
-        #                 parsed = None
-        #                 break
-        #             for block in getattr(item, "content", None) or []:
-        #                 if getattr(block, "type", None) == "refusal":
-        #                     refusal = getattr(block, "refusal", str(block))
-        #                     parsed = None
-        #                     break
-
-        #     final_blocks: list[ContentBlock] = []
-        #     if raw_text:
-        #         final_blocks.append(TextBlock(text=raw_text))
-
-        #     if refusal:
-        #         final_blocks.append(ErrorBlock(error_type="Refusal", message=refusal))
-        #     elif parsed:
-        #         final_blocks.append(DataBlock(data=parsed.model_dump(mode="json") if hasattr(parsed, "model_dump") else parsed))
-
-        #     return final_blocks
-
         params: dict[str, Any] = {
             "model": self.model,
             "input": conversation_input,
@@ -539,13 +454,7 @@ class OpenAIClient(LLMClient):
             if normalized_tool_choice:
                 params["tool_choice"] = normalized_tool_choice
 
-        # response_format without tools fell through to here with no JSON-
-        # schema constraint sent at all (real, found-not-assumed: the only
-        # branch that set `text_format` required transformed_tools too,
-        # matching generate_stream's identical gap below params["text"] is
-        # not wired there either — out of scope here, nothing in this
-        # session's path calls it). Same _build_openai_text_format the
-        # tools+response_format branch above already uses.
+        # Enforce structured output schema when requested without tools
         if response_format is not None:
             params["text"] = _build_openai_text_format(response_format)
 

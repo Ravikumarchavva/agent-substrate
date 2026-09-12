@@ -98,8 +98,9 @@ def _pipeline(responses: dict[str, ExtractResponse], *, blob_store=None, **kwarg
     extraction = _FakeExtractionClient(responses)
     embedder = _FakeEmbedder()
     store = _FakeStore()
+    key_prefix = kwargs.pop("key_prefix", "tenants/test/knowledge/kb/documents/doc")
     pipeline = DocumentIngestPipeline(
-        extraction, embedder, store, blob_store=blob_store, **kwargs
+        extraction, embedder, store, blob_store=blob_store, key_prefix=key_prefix, **kwargs
     )
     return pipeline, extraction, store
 
@@ -167,7 +168,7 @@ async def test_ingest_file_with_images_and_blob_store_stores_key_not_bytes(tmp_p
     # _caption_for. A row is never left with only a caption as its content.
     assert doc.content[0].text == "[chart] a chart"
     key = doc.metadata["image_key"]
-    assert key == "kb/images/a.pdf/img-p1-0.png"
+    assert key == "tenants/test/knowledge/kb/documents/doc/kb/images/a.pdf/img-p1-0.png"
     assert blob_store.uploaded[key] == b"fake-png-bytes"
 
 
@@ -277,7 +278,8 @@ async def test_dropped_images_are_reported_not_just_silently_missing(tmp_path):
     }
     store = _FakeStore()
     pipeline = DocumentIngestPipeline(
-        _FakeExtractionClient(responses), _RejectsEveryImage(), store
+        _FakeExtractionClient(responses), _RejectsEveryImage(), store,
+        key_prefix="tenants/test/knowledge/kb/documents/doc"
     )
 
     with _capture_pipeline_warnings() as records:
@@ -322,7 +324,7 @@ async def test_image_upload_failure_degrades_to_inline_not_dropped(tmp_path):
             images=[_image(id="img-p1-0")],
         ),
     }
-    blob_store = _FakeBlobStore(fail_keys={"kb/images/a.pdf/img-p1-0.png"})
+    blob_store = _FakeBlobStore(fail_keys={"tenants/test/knowledge/kb/documents/doc/kb/images/a.pdf/img-p1-0.png"})
     pipeline, extraction, store = _pipeline(responses, blob_store=blob_store)
 
     n_text, n_image = await pipeline.ingest_file(a, collection="kb")
@@ -346,13 +348,13 @@ async def test_key_prefix_is_applied_to_both_pdf_and_image_keys(tmp_path):
     }
     blob_store = _FakeBlobStore()
     pipeline, extraction, store = _pipeline(
-        responses, blob_store=blob_store, key_prefix="datasets/eval/"
+        responses, blob_store=blob_store, key_prefix="tenants/eval/knowledge/kb/documents/doc/"
     )
 
     await pipeline.ingest_file(a, collection="kb")
 
-    assert "datasets/eval/kb/pdfs/a.pdf" in blob_store.uploaded
-    assert "datasets/eval/kb/images/a.pdf/img-p1-0.png" in blob_store.uploaded
+    assert "tenants/eval/knowledge/kb/documents/doc/kb/pdfs/a.pdf" in blob_store.uploaded
+    assert "tenants/eval/knowledge/kb/documents/doc/kb/images/a.pdf/img-p1-0.png" in blob_store.uploaded
 
 
 async def test_pdf_key_is_never_a_path_prefix_of_an_image_key(tmp_path):
@@ -511,7 +513,7 @@ async def test_process_extracted_then_store(tmp_path):
 
     assert (n_text, n_image) == (1, 0)
     assert store.added[0][1] == "kb"
-    assert blob_store.uploaded["kb/pdfs/a.pdf"] == a.read_bytes()
+    assert blob_store.uploaded["tenants/test/knowledge/kb/documents/doc/kb/pdfs/a.pdf"] == a.read_bytes()
 
 
 # ── ingest_file / ingest_dataset (both stages, back-to-back) ────────────────
@@ -531,7 +533,7 @@ async def test_ingest_file_single_still_works(tmp_path):
 
     assert (n_text, n_image) == (1, 0)
     assert store.added[0][1] == "kb"
-    assert blob_store.uploaded["kb/pdfs/a.pdf"] == a.read_bytes()
+    assert blob_store.uploaded["tenants/test/knowledge/kb/documents/doc/kb/pdfs/a.pdf"] == a.read_bytes()
 
 
 async def test_ingest_file_without_blob_store_does_not_upload_the_pdf(tmp_path):

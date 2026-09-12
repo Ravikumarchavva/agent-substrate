@@ -30,7 +30,7 @@ def create_access_token(
     *,
     email: str = "",
     role: str = "end_user",
-    tenant_id: str = "default",
+    tenant_id: str,
     workspace_id: str = "default",
     algorithm: str = _DEFAULT_ALG,
     expire_minutes: int = 60,
@@ -143,14 +143,24 @@ def verify_token(
         )
         return None
 
+    token_type = payload.get("type", "access")
+    tenant_id = payload.get("tenant_id")
+    # A missing tenant used to silently become "default", which joined
+    # unrelated projects into the same authorization and storage namespace.
+    # Service identities do not access user-owned rows directly and are the
+    # sole exception.
+    if token_type != "service" and (not isinstance(tenant_id, str) or not tenant_id):
+        logger.debug("JWT missing required tenant_id")
+        return None
+
     return AuthClaims(
         sub=payload.get("sub", ""),
         email=payload.get("email", ""),
         role=payload.get("role", "end_user"),
-        tenant_id=payload.get("tenant_id", "default"),
+        tenant_id=tenant_id or "",
         workspace_id=payload.get("workspace_id", "default"),
         jti=payload.get("jti", ""),
-        token_type=payload.get("type", "access"),
+        token_type=token_type,
         thread_id=payload.get("thread_id"),
         permissions=payload.get("permissions"),
         daily_message_limit=payload.get("daily_message_limit"),

@@ -32,13 +32,11 @@ class FakeStore:
         self.fail_upload_for: set[str] = set()
         self.fail_list = False
 
-    async def list_user_files(self, user_id: str):
+    async def list_prefix(self, prefix: str):
         if self.fail_list:
             raise RuntimeError("listing is down")
         return [
-            (k, len(v), 1000.0)
-            for k, v in self.objects.items()
-            if k.startswith(f"users/{user_id}/")
+            (k, len(v), 1000.0) for k, v in self.objects.items() if k.startswith(prefix)
         ]
 
     async def download(self, key: str) -> bytes:
@@ -235,9 +233,10 @@ async def test_stage_out_refuses_a_path_outside_the_workspace_root(tmp_path, spe
     assert store.uploads == []
 
 
-async def test_user_id_falls_back_to_the_session_key(tmp_path):
-    """session_dir already carries the owner, so an unset user_id must not
-    silently skip staging."""
+async def test_stage_in_works_without_a_user_id(tmp_path):
+    """Staging lists directly by ``session_dir`` prefix — it needs no
+    ``user_id`` at all (unlike the old per-user-listing approach), so an
+    unset ``user_id`` must not skip staging."""
     store = FakeStore()
     store.objects[f"{SESSION}/data.csv"] = b"x"
     inner = FakeInner(tmp_path)

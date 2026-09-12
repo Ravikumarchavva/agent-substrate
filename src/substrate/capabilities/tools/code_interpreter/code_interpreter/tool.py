@@ -20,7 +20,14 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
-from substrate.agents.storage.tasks import current_thread_id, current_user_id
+from substrate.agents.storage.tasks import (
+    current_agent_id,
+    current_parent_agent_id,
+    current_tenant_id,
+    current_thread_id,
+    current_user_id,
+)
+from substrate.capabilities.storage.layout import conversation_workspace_prefix
 from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.tools import ToolExecutionResult
 from substrate.kernel.tools.tools import ToolRisk
@@ -137,11 +144,25 @@ class CodeInterpreterTool:
             else self.session_id
         )
         user_id = current_user_id.get()
+        tenant_id = current_tenant_id.get()
+        agent_id = current_agent_id.get() or "primary"
+        parent_agent_id = current_parent_agent_id.get()
+        if not tenant_id:
+            return sandbox_error_result("Sandbox execution requires a tenant-scoped conversation.")
+        workspace = conversation_workspace_prefix(tenant_id, session_id)
+        shared_dir = f"{workspace}/shared"
+        private_dir = (
+            f"{workspace}/agents/{parent_agent_id}/subagents/{agent_id}/private"
+            if parent_agent_id
+            else f"{workspace}/agents/{agent_id}/private"
+        )
 
         spec = SandboxSpec(
             user_id=user_id,
             thread_id=session_id,
-            session_dir=_session_dir(user_id, session_id),
+            session_dir=shared_dir,
+            tenant_id=tenant_id,
+            extra={"private_dir": private_dir},
             code=code or None,
             argv=shlex.split(command) if command else None,
             timeout_s=timeout_s,

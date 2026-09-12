@@ -90,11 +90,12 @@ def plan_quota_key(user: AuthClaims) -> str:
     ``tenant_id`` when set to a real project (a project-scoped deployed
     chatbot — every visitor, anonymous or logged-in, shares one quota so a
     project's BYOK key/plan governs total usage under it, not each visitor
-    individually). Falls back to ``sub`` when ``tenant_id`` is still the
-    "default" placeholder (today's implicit per-caller behavior — e.g. the
-    ravi builder's own test-chat, a single user acting alone).
+    individually). Falls back to ``sub`` when ``tenant_id`` is unset
+    (``AuthClaims``'s own default — a real JWT always carries one now, see
+    ``verify_token``, but ``AuthClaims`` built directly in-process, e.g. a
+    single-user test-chat, may not).
     """
-    return user.tenant_id if user.tenant_id != "default" else user.sub
+    return user.tenant_id if user.tenant_id else user.sub
 
 
 @router.post("/chat")
@@ -396,6 +397,7 @@ async def chat(
             "display_text": display_content,
             "attachments": attachments,
             "user_id": user.sub,
+            "tenant_id": user.tenant_id,
         },
     )
 

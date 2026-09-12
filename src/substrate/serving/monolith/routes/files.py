@@ -32,10 +32,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
+from substrate.capabilities.storage.layout import conversation_shared_key, user_prefix
 from substrate.logger import setup_logging
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.models import FileMetadata, User
+from substrate.serving.monolith.models import FileMetadata, Thread, User
 from substrate.serving.monolith.routes.chat_context import EXTRACTABLE_CONTENT_TYPES
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims
@@ -119,18 +120,56 @@ def _may_access(meta: FileMetadata, claims: AuthClaims) -> bool:
     ``user_id`` NULL whenever ``claims.sub`` isn't a UUID (see
     ``_ensure_user``'s caller above), so that check alone would lock those
     users out of files they uploaded themselves. The reliable signal is
-    structural: ``object_key`` is built from ``claims.sub`` at upload time
-    (``users/{sub}/...``), the same way ``routes/workspace.py::serve_file``
-    already derives its access boundary. ``user_id`` is kept as a fallback
-    for rows where that still resolves.
+    tenant and user/thread columns are the authority; paths are intentionally
+    not used for authorization because paths are storage implementation
+    details, not identity claims.
     """
     if claims.is_admin:
         return True
-    same_tenant = meta.org_id in (None, claims.tenant_id)
-    if meta.object_key.startswith(f"users/{claims.sub}/"):
-        return same_tenant
+    same_tenant = meta.org_id == claims.tenant_id
     if meta.user_id is not None and str(meta.user_id) == claims.sub:
         return same_tenant
+    return False
+
+
+async def _may_access_key(key: str, claims: AuthClaims, db: AsyncSession) -> bool:
+    """Ownership check for an object key with no ``FileMetadata`` row at
+    all — RAG-extracted images and other capability-written artifacts are
+    uploaded straight to the store with no metadata row (see
+    ``capabilities/knowledge/backends/local.py::_store_image_bytes``), so
+    ``serve_object`` cannot rely on ``_may_access`` for them. Structural,
+    not a raw prefix trust: every key starts ``tenants/{tenant_id}/...``,
+    where ``tenant_id`` came from the server's own JWT-minted keys, never
+    from this request — so checking it is checking real ownership, not an
+    attacker-controlled string.
+    """
+    if claims.is_admin:
+        return True
+    parts = key.split("/")
+    if len(parts) < 2 or parts[0] != "tenants" or parts[1] != claims.tenant_id:
+        return False
+    if len(parts) >= 4 and parts[2] == "users" and parts[3] == claims.sub:
+        return True  # the caller's own direct-upload prefix
+    if len(parts) >= 3 and parts[2] == "knowledge":
+        # Knowledge-base documents are project-shared: any same-tenant
+        # caller may read them (replaces the old blanket, cross-tenant
+        # `_OPEN_NAMESPACES = ("kb/",)` rule with a tenant-scoped one).
+        return True
+    if len(parts) >= 4 and parts[2] == "conversations":
+        try:
+            thread_uuid = uuid.UUID(parts[3])
+        except ValueError:
+            return False
+        owned = (
+            await db.execute(
+                select(Thread.id).where(
+                    Thread.id == thread_uuid,
+                    Thread.user_identifier == claims.sub,
+                    Thread.tenant_id == claims.tenant_id,
+                )
+            )
+        ).scalar_one_or_none()
+        return owned is not None
     return False
 
 
@@ -258,6 +297,7 @@ async def _stage_uploaded_doc(
     original_name: str,
     content_type: str,
     owner_sub: str,
+    tenant_id: str,
 ) -> None:
     """Fire-and-forget eager extraction+embedding, staged under a temporary
     collection — not the real thread collection (see
@@ -278,9 +318,11 @@ async def _stage_uploaded_doc(
                 "content_type": content_type,
                 "file_id": str(file_id),
                 # Lets the backend park extracted chart/table images under
-                # users/{sub}/rag/... instead of inlining their bytes into
-                # Postgres — see LocalRagBackend._ingest_images.
+                # tenants/{tid}/users/{sub}/rag/... instead of inlining
+                # their bytes into Postgres — see
+                # LocalRagBackend._ingest_images/_store_image_bytes.
                 "user_id": owner_sub,
+                "tenant_id": tenant_id,
             },
         )
     except Exception as exc:
@@ -397,9 +439,13 @@ async def upload_file(
                 )
 
     if thread_id is not None:
-        base_key = f"users/{claims.sub}/sessions/{thread_id}/{original_name}"
+        base_key = conversation_shared_key(
+            claims.tenant_id, str(thread_id), f"uploads/{original_name}"
+        )
     else:
-        base_key = f"users/{claims.sub}/uploads/{original_name}"
+        base_key = (
+            f"{user_prefix(claims.tenant_id, claims.sub)}/uploads/{original_name}"
+        )
     object_key = await _unique_object_key(db, base_key)
 
     try:
@@ -440,6 +486,7 @@ async def upload_file(
                 original_name=original_name,
                 content_type=content_type,
                 owner_sub=claims.sub,
+                tenant_id=claims.tenant_id,
             )
         )
 
@@ -475,26 +522,14 @@ async def get_doc_quota_status(
     }
 
 
-# Namespaces this route will serve, beyond a caller's own `users/{sub}/`
-# objects. `kb/` is what DocumentIngestPipeline writes (source PDFs +
-# extracted images from batch dataset ingestion — see
-# capabilities/knowledge/document_ingest_pipeline.py's `key_prefix`) — those
-# objects have no per-user owner at ingest time, so ownership isn't the
-# right check for them the way it is for `users/{sub}/`. Explicitly coarse:
-# any authenticated caller can read any `kb/`-namespaced object. Real,
-# product-level per-collection ACLs (who may see which ingested dataset) are
-# a separate decision this route does not attempt to make — add a rule here
-# only once that policy exists, rather than approximating it.
-_OPEN_NAMESPACES = ("kb/",)
-
-
 @router.get("/object")
 async def serve_object(
     key: str = Query(
         ...,
-        description="Object key under the caller's users/{sub}/, or a namespace in _OPEN_NAMESPACES",
+        description="Tenant-scoped object key owned by the caller",
     ),
     claims: AuthClaims = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> StreamingResponse:
     """Serve a stored object by key — the target of the ``/files/object?key=``
@@ -506,22 +541,30 @@ async def serve_object(
     the wire-event log is replayed months later, and a presigned link would
     have expired, leaving old conversations full of dead images.
 
-    Two authorization rules, by namespace:
-      - ``users/{sub}/...`` — ownership is the key's own prefix, so a caller
-        can only ever read their own objects.
-      - anything under ``_OPEN_NAMESPACES`` (e.g. ``kb/``) — any
-        authenticated caller may read it; see that constant's own comment
-        for why ownership doesn't apply there.
-    Anything else 404s rather than 403s — same rationale as ``_get_meta``
-    above: this must not become an existence oracle for keys that leak into
-    logs or URLs.
+    Authorization is resolved through a ``FileMetadata`` row when one exists
+    (uploads go through ``upload_file``, which records one); many objects
+    this route serves never get one — RAG-extracted images, other
+    capability-written artifacts — so those fall back to ``_may_access_key``,
+    a structural check on the key's own tenant/user/conversation segments.
+    In particular, knowledge-base keys are project-shared within a tenant,
+    never a global open namespace across tenants.
 
     Registered before ``/{file_id}/status`` so "object" is never matched as a
     file_id path param (Starlette matches in registration order).
     """
-    is_own = key.startswith(f"users/{claims.sub}/")
-    is_open = key.startswith(_OPEN_NAMESPACES)
-    if not (is_own or is_open):
+    meta = (
+        await db.execute(
+            select(FileMetadata).where(
+                FileMetadata.object_key == key,
+                FileMetadata.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if meta is not None:
+        allowed = _may_access(meta, claims)
+    else:
+        allowed = await _may_access_key(key, claims, db)
+    if not allowed:
         raise HTTPException(status_code=404, detail="Not found")
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File storage is not configured")
@@ -651,7 +694,7 @@ async def delete_file(
         # in storage against the owner's quota with nothing pointing at them.
         try:
             await ctx.rag_backend.delete_file_images(
-                user_id=claims.sub, file_id=str(file_id)
+                tenant_id=claims.tenant_id, user_id=claims.sub, file_id=str(file_id)
             )
         except Exception as exc:
             logger.warning(

@@ -276,6 +276,19 @@ async def init_infrastructure(
     # images are written here rather than inlined into the image vector rows.
     file_store = _init_file_store(cfg)
     await file_store.connect()
+    if hasattr(file_store, "set_quota_override"):
+        # Per-tenant quota overrides (admin storage API) are held in-memory
+        # on the store (see WorkspaceFileStore.set_quota_override) — seed
+        # them from their durable copy on every startup. WorkspaceQuota.user_id
+        # actually holds a tenant_id (see that model's docstring).
+        from sqlalchemy import select
+
+        from substrate.serving.monolith.models import WorkspaceQuota
+
+        async with session_factory() as session:
+            rows = (await session.execute(select(WorkspaceQuota))).scalars().all()
+        for row in rows:
+            file_store.set_quota_override(row.user_id, row.quota_bytes)
     # Fail-closed at construction, degrade gracefully at startup: an
     # unreachable/misconfigured RAG backend (e.g. RAG_BACKEND=pinecone with no
     # API key) disables RAG rather than crashing the whole server, matching

@@ -34,6 +34,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from substrate.capabilities.storage.layout import user_prefix
 from substrate.kernel.core.content import ImageBlock, TextBlock
 from substrate.kernel.storage.vector import Document, SearchResult
 from substrate.logger import setup_logging
@@ -303,25 +304,25 @@ class LocalRagBackend:
             deleted += await self._image_store.delete_collection(collection)
         return deleted
 
-    async def delete_file_images(self, *, user_id: str, file_id: str) -> int:
+    async def delete_file_images(
+        self, *, tenant_id: str, user_id: str, file_id: str
+    ) -> int:
         """Delete the stored image objects for one file.
 
         ``delete_collection`` only removes vector rows; without this the image
         objects behind them would be orphaned in storage forever, still counting
         against the owner's quota. Called when an upload is discarded.
         """
-        if self._file_store is None or not user_id or not file_id:
+        if self._file_store is None or not tenant_id or not user_id or not file_id:
             return 0
-        prefix = f"users/{user_id}/rag/{file_id}/"
+        prefix = f"{user_prefix(tenant_id, user_id)}/rag/{file_id}/"
         try:
-            entries = await self._file_store.list_user_files(user_id)
+            entries = await self._file_store.list_prefix(prefix)
         except Exception as exc:
             logger.warning("Listing RAG images for cleanup failed: %s", exc)
             return 0
         deleted = 0
         for key, _size, _mtime in entries:
-            if not key.startswith(prefix):
-                continue
             try:
                 await self._file_store.delete(key)
                 deleted += 1
@@ -409,22 +410,24 @@ class LocalRagBackend:
     ) -> str | None:
         """Write one extracted image to the file store, returning its key.
 
-        Keyed under the owning user so it is covered by the same per-user
-        quota, listing and deletion as everything else they own. Returns
+        Keyed under the owning tenant+user so it is covered by the same
+        per-tenant quota, listing and deletion as everything else they own
+        (see ``capabilities/storage/layout.py::user_prefix``). Returns
         ``None`` when there is nothing to write to or no owner to attribute it
         to, which the caller treats as "fall back to inlining".
         """
         if self._file_store is None:
             return None
+        tenant_id = str(meta.get("tenant_id") or "")
         user_id = str(meta.get("user_id") or "")
         file_id = str(meta.get("file_id") or "")
-        if not user_id or not file_id:
+        if not tenant_id or not user_id or not file_id:
             return None
         media_type = str(meta.get("media_type") or "image/png")
         ext = media_type.rsplit("/", 1)[-1] or "png"
         page = meta.get("page_number")
         name = f"p{page}-{index}.{ext}" if page is not None else f"{index}.{ext}"
-        key = f"users/{user_id}/rag/{file_id}/{name}"
+        key = f"{user_prefix(tenant_id, user_id)}/rag/{file_id}/{name}"
         try:
             await self._file_store.upload(key, data, content_type=media_type)
         except Exception as exc:

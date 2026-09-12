@@ -211,3 +211,19 @@ class S3Connector:
         b = bucket or self._default_bucket
         async with self._client_ctx() as client:
             await client.delete_object(Bucket=b, Key=key)
+
+    async def delete_prefix(
+        self, prefix: str, *, bucket: str | None = None
+    ) -> int:
+        """Delete every object below *prefix*, including paginated listings."""
+        b = bucket or self._default_bucket
+        objects = await self.list_objects(prefix=prefix, bucket=b)
+        if not objects:
+            return 0
+        async with self._client_ctx() as client:
+            for offset in range(0, len(objects), 1000):
+                chunk = objects[offset : offset + 1000]
+                await client.delete_objects(
+                    Bucket=b, Delete={"Objects": [{"Key": item["key"]} for item in chunk]}
+                )
+        return len(objects)

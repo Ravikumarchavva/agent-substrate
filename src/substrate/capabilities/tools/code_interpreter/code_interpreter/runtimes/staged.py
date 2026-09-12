@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 from substrate.logger import setup_logging
@@ -30,20 +30,6 @@ from substrate.logger import setup_logging
 from .base import ExecResult, SandboxSpec
 
 logger = setup_logging("substrate.code_interpreter.staged")
-
-
-def _user_id_of(spec: SandboxSpec) -> str | None:
-    """The owning user, preferring the spec and falling back to the session key.
-
-    ``session_dir`` is ``users/{uid}/sessions/{tid}``, so it already carries the
-    owner even when the caller left ``user_id`` unset.
-    """
-    if spec.user_id:
-        return spec.user_id
-    parts = PurePosixPath(spec.session_dir.strip("/")).parts
-    if len(parts) >= 2 and parts[0] == "users":
-        return parts[1]
-    return None
 
 
 class StagedSandboxRuntime:
@@ -101,19 +87,14 @@ class StagedSandboxRuntime:
         a previous run's output whose upload failed, and keeping them means the
         next stage-out retries rather than silently dropping the user's data.
         """
-        user_id = _user_id_of(spec)
-        if user_id is None:
-            return
         prefix = spec.session_dir.strip("/") + "/"
         try:
-            entries = await self._store.list_user_files(user_id)
+            entries = await self._store.list_prefix(prefix)
         except Exception as exc:
             logger.warning("Stage-in listing failed for %s: %s", prefix, exc)
             return
 
         for key, size, _mtime in entries:
-            if not key.startswith(prefix):
-                continue
             local = self._root / key
             if local.is_file() and local.stat().st_size == size:
                 continue

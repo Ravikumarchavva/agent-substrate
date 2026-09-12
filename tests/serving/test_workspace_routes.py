@@ -1,5 +1,5 @@
 """Integration tests for /files upload and /workspace management routes —
-user-scoped keys, quota enforcement, and cross-user isolation."""
+tenant-scoped keys, quota enforcement, and cross-user isolation."""
 
 from __future__ import annotations
 
@@ -15,9 +15,11 @@ from substrate.serving.monolith.models import Thread, User
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims
 
+TENANT = "test-tenant"
+
 
 def _claims_for(user_id: str) -> AuthClaims:
-    return AuthClaims(sub=user_id, tenant_id="test-tenant")
+    return AuthClaims(sub=user_id, tenant_id=TENANT)
 
 
 @asynccontextmanager
@@ -40,12 +42,22 @@ async def _registered_user():
 
 
 @asynccontextmanager
-async def _registered_thread(thread_id: str):
-    """Create a real Thread row (file_metadata.thread_id is a real FK)."""
+async def _registered_thread(thread_id: str, *, owner: str, tenant_id: str = TENANT):
+    """Create a real Thread row (file_metadata.thread_id is a real FK),
+    owned by *owner* within *tenant_id* — ownership (``list_files``,
+    ``delete_file``, ``_may_access_key``) is resolved through these columns,
+    not the storage key."""
     session_factory = app.state.session_factory
     tid = uuid.UUID(thread_id)
     async with session_factory() as db:
-        db.add(Thread(id=tid, name="test thread"))
+        db.add(
+            Thread(
+                id=tid,
+                name="test thread",
+                user_identifier=owner,
+                tenant_id=tenant_id,
+            )
+        )
         await db.commit()
     try:
         yield thread_id
@@ -62,7 +74,7 @@ async def test_upload_scoped_key_and_workspace_management(tmp_path) -> None:
     async with app.router.lifespan_context(app):
         # Swap in a workspace store rooted at a throwaway tmp dir so the
         # test never touches real disk under FILE_STORE_ROOT, and give
-        # the user a small quota to exercise the 413 path.
+        # the tenant a small quota to exercise the 413 path.
         app.state.ctx.file_store = WorkspaceFileStore(
             root=tmp_path, user_quota_bytes=1000
         )
@@ -75,21 +87,22 @@ async def test_upload_scoped_key_and_workspace_management(tmp_path) -> None:
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as client:
-                    # Upload without a thread_id -> users/{uid}/uploads/...
+                    # Upload without a thread_id -> tenants/{tid}/users/{uid}/uploads/...
                     resp = await client.post(
                         "/files/upload",
                         files={"file": ("hello.txt", b"hello world", "text/plain")},
                     )
                     assert resp.status_code == 201
                     file_id = resp.json()["id"]
+                    expected_key = f"tenants/{TENANT}/users/{user_id}/uploads/hello.txt"
 
-                    # File lands under this user's namespace.
+                    # File lands under this tenant+user's namespace.
                     files = (await client.get("/workspace/files")).json()["files"]
-                    assert any(
-                        f["path"] == f"users/{user_id}/uploads/hello.txt" for f in files
-                    )
+                    assert any(f["path"] == expected_key for f in files)
 
-                    # Usage reflects the upload.
+                    # Usage reflects the upload (metered per tenant, not per
+                    # user — a conversation-scoped upload carries no user
+                    # segment in its key at all).
                     usage = (await client.get("/workspace/usage")).json()
                     assert usage["used_bytes"] == len(b"hello world")
                     assert usage["quota_bytes"] == 1000
@@ -110,8 +123,7 @@ async def test_upload_scoped_key_and_workspace_management(tmp_path) -> None:
 
                     # Delete via the workspace route.
                     del_resp = await client.delete(
-                        "/workspace/files",
-                        params={"path": f"users/{user_id}/uploads/hello.txt"},
+                        "/workspace/files", params={"path": expected_key}
                     )
                     assert del_resp.status_code == 204
                     usage_after = (await client.get("/workspace/usage")).json()
@@ -137,7 +149,7 @@ async def test_upload_auto_creates_missing_user_row(tmp_path) -> None:
 
         user_id = str(uuid.uuid4())
         app.dependency_overrides[get_current_user] = lambda: AuthClaims(
-            sub=user_id, email=f"{user_id}@example.com", tenant_id="test-tenant"
+            sub=user_id, email=f"{user_id}@example.com", tenant_id=TENANT
         )
         try:
             async with AsyncClient(
@@ -176,41 +188,49 @@ async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
         async with (
             _registered_user() as user_1,
             _registered_user() as user_2,
-            _registered_thread("33333333-3333-3333-3333-333333333333") as thread_id,
         ):
-            app.dependency_overrides[get_current_user] = lambda: _claims_for(user_1)
-            try:
-                async with AsyncClient(
-                    transport=ASGITransport(app=app), base_url="http://test"
-                ) as client:
-                    resp = await client.post(
-                        "/files/upload",
-                        data={"thread_id": thread_id},
-                        files={"file": ("notes.txt", b"secret notes", "text/plain")},
-                    )
-                    assert resp.status_code == 201
-                    key = f"users/{user_1}/sessions/{thread_id}/notes.txt"
-            finally:
-                app.dependency_overrides.pop(get_current_user, None)
+            thread_id = str(uuid.uuid4())
+            async with _registered_thread(thread_id, owner=user_1):
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(
+                    user_1
+                )
+                try:
+                    async with AsyncClient(
+                        transport=ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        resp = await client.post(
+                            "/files/upload",
+                            data={"thread_id": thread_id},
+                            files={
+                                "file": ("notes.txt", b"secret notes", "text/plain")
+                            },
+                        )
+                        assert resp.status_code == 201
+                        key = (
+                            f"tenants/{TENANT}/conversations/{thread_id}/workspace/"
+                            "shared/uploads/notes.txt"
+                        )
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)
 
-            # A second user cannot see or delete the first user's file.
-            app.dependency_overrides[get_current_user] = lambda: _claims_for(user_2)
-            try:
-                async with AsyncClient(
-                    transport=ASGITransport(app=app), base_url="http://test"
-                ) as client:
-                    files = (await client.get("/workspace/files")).json()["files"]
-                    assert all(f["path"] != key for f in files)
+                # A second user, who doesn't own this thread, cannot see or
+                # delete the first user's file.
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(
+                    user_2
+                )
+                try:
+                    async with AsyncClient(
+                        transport=ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        files = (await client.get("/workspace/files")).json()["files"]
+                        assert all(f["path"] != key for f in files)
 
-                    usage = (await client.get("/workspace/usage")).json()
-                    assert usage["used_bytes"] == 0
-
-                    del_resp = await client.delete(
-                        "/workspace/files", params={"path": key}
-                    )
-                    assert del_resp.status_code == 404
-            finally:
-                app.dependency_overrides.pop(get_current_user, None)
+                        del_resp = await client.delete(
+                            "/workspace/files", params={"path": key}
+                        )
+                        assert del_resp.status_code == 404
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.requires_postgres
@@ -225,50 +245,53 @@ async def test_serve_file_sets_etag_and_honors_if_none_match(tmp_path) -> None:
         )
         app.state.ctx.workspace_user_quota_bytes = 10_000
 
-        async with (
-            _registered_user() as user_id,
-            _registered_thread("44444444-4444-4444-4444-444444444444") as thread_id,
-        ):
-            app.dependency_overrides[get_current_user] = lambda: _claims_for(user_id)
-            try:
-                async with AsyncClient(
-                    transport=ASGITransport(app=app), base_url="http://test"
-                ) as client:
-                    await client.post(
-                        "/files/upload",
-                        data={"thread_id": thread_id},
-                        files={"file": ("chart.png", b"fake-png-bytes", "image/png")},
-                    )
+        async with _registered_user() as user_id:
+            thread_id = str(uuid.uuid4())
+            async with _registered_thread(thread_id, owner=user_id):
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(
+                    user_id
+                )
+                try:
+                    async with AsyncClient(
+                        transport=ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        await client.post(
+                            "/files/upload",
+                            data={"thread_id": thread_id},
+                            files={
+                                "file": ("chart.png", b"fake-png-bytes", "image/png")
+                            },
+                        )
 
-                    first = await client.get(
-                        "/workspace/file",
-                        params={"thread_id": thread_id, "path": "chart.png"},
-                    )
-                    assert first.status_code == 200
-                    etag = first.headers["etag"]
-                    assert etag
-                    assert first.headers["cache-control"] == "private, no-cache"
+                        first = await client.get(
+                            "/workspace/file",
+                            params={"thread_id": thread_id, "path": "chart.png"},
+                        )
+                        assert first.status_code == 200
+                        etag = first.headers["etag"]
+                        assert etag
+                        assert first.headers["cache-control"] == "private, no-cache"
 
-                    # Unmodified: If-None-Match round-trips as a bodyless 304.
-                    cached = await client.get(
-                        "/workspace/file",
-                        params={"thread_id": thread_id, "path": "chart.png"},
-                        headers={"if-none-match": etag},
-                    )
-                    assert cached.status_code == 304
-                    assert cached.content == b""
-                    assert cached.headers["etag"] == etag
+                        # Unmodified: If-None-Match round-trips as a bodyless 304.
+                        cached = await client.get(
+                            "/workspace/file",
+                            params={"thread_id": thread_id, "path": "chart.png"},
+                            headers={"if-none-match": etag},
+                        )
+                        assert cached.status_code == 304
+                        assert cached.content == b""
+                        assert cached.headers["etag"] == etag
 
-                    # A stale/foreign ETag must still get the real file back.
-                    stale = await client.get(
-                        "/workspace/file",
-                        params={"thread_id": thread_id, "path": "chart.png"},
-                        headers={"if-none-match": '"not-the-real-etag"'},
-                    )
-                    assert stale.status_code == 200
-                    assert stale.content == b"fake-png-bytes"
-            finally:
-                app.dependency_overrides.pop(get_current_user, None)
+                        # A stale/foreign ETag must still get the real file back.
+                        stale = await client.get(
+                            "/workspace/file",
+                            params={"thread_id": thread_id, "path": "chart.png"},
+                            headers={"if-none-match": '"not-the-real-etag"'},
+                        )
+                        assert stale.status_code == 200
+                        assert stale.content == b"fake-png-bytes"
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.requires_postgres
@@ -281,40 +304,41 @@ async def test_serve_file_pinned_version_is_cached_immutable(tmp_path) -> None:
         )
         app.state.ctx.workspace_user_quota_bytes = 10_000
 
-        async with (
-            _registered_user() as user_id,
-            _registered_thread("55555555-5555-5555-5555-555555555555") as thread_id,
-        ):
-            app.dependency_overrides[get_current_user] = lambda: _claims_for(user_id)
-            try:
-                async with AsyncClient(
-                    transport=ASGITransport(app=app), base_url="http://test"
-                ) as client:
-                    await client.post(
-                        "/files/upload",
-                        data={"thread_id": thread_id},
-                        files={"file": ("notes.txt", b"v1", "text/plain")},
-                    )
-                    # serve_file lazily captures a FileVersion on its first
-                    # (unpinned) read (see its docstring) — a version row
-                    # doesn't exist purely from the upload itself.
-                    await client.get(
-                        "/workspace/file",
-                        params={"thread_id": thread_id, "path": "notes.txt"},
-                    )
+        async with _registered_user() as user_id:
+            thread_id = str(uuid.uuid4())
+            async with _registered_thread(thread_id, owner=user_id):
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(
+                    user_id
+                )
+                try:
+                    async with AsyncClient(
+                        transport=ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        await client.post(
+                            "/files/upload",
+                            data={"thread_id": thread_id},
+                            files={"file": ("notes.txt", b"v1", "text/plain")},
+                        )
+                        # serve_file lazily captures a FileVersion on its first
+                        # (unpinned) read (see its docstring) — a version row
+                        # doesn't exist purely from the upload itself.
+                        await client.get(
+                            "/workspace/file",
+                            params={"thread_id": thread_id, "path": "notes.txt"},
+                        )
 
-                    resp = await client.get(
-                        "/workspace/file",
-                        params={
-                            "thread_id": thread_id,
-                            "path": "notes.txt",
-                            "seq": 1,
-                        },
-                    )
-                    assert resp.status_code == 200
-                    assert (
-                        resp.headers["cache-control"]
-                        == "public, max-age=31536000, immutable"
-                    )
-            finally:
-                app.dependency_overrides.pop(get_current_user, None)
+                        resp = await client.get(
+                            "/workspace/file",
+                            params={
+                                "thread_id": thread_id,
+                                "path": "notes.txt",
+                                "seq": 1,
+                            },
+                        )
+                        assert resp.status_code == 200
+                        assert (
+                            resp.headers["cache-control"]
+                            == "public, max-age=31536000, immutable"
+                        )
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)

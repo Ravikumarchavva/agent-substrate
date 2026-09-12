@@ -52,65 +52,67 @@ def store() -> S3FileStore:
     return fs
 
 
-async def test_usage_bytes_sums_only_that_users_prefix(store):
-    await store.upload("users/u1/uploads/a.bin", b"x" * 300)
-    await store.upload("users/u1/sessions/t1/b.bin", b"x" * 200)
-    await store.upload("users/u2/uploads/c.bin", b"x" * 500)
+async def test_usage_bytes_sums_only_that_tenants_prefix(store):
+    await store.upload("tenants/t1/users/u1/uploads/a.bin", b"x" * 300)
+    await store.upload("tenants/t1/conversations/c1/workspace/shared/b.bin", b"x" * 200)
+    await store.upload("tenants/t2/users/u1/uploads/c.bin", b"x" * 500)
 
-    assert await store.usage_bytes("u1", force=True) == 500
-    assert await store.usage_bytes("u2", force=True) == 500
+    assert await store.usage_bytes("t1", force=True) == 500
+    assert await store.usage_bytes("t2", force=True) == 500
 
 
-async def test_list_user_files_scopes_to_the_user(store):
-    await store.upload("users/u1/sessions/t1/a.txt", b"aaa")
-    await store.upload("users/u2/uploads/c.txt", b"c")
+async def test_list_prefix_scopes_to_the_prefix(store):
+    await store.upload("tenants/t1/conversations/c1/workspace/shared/a.txt", b"aaa")
+    await store.upload("tenants/t2/users/u1/uploads/c.txt", b"c")
 
-    files = await store.list_user_files("u1")
+    files = await store.list_prefix("tenants/t1/")
 
-    assert [key for key, _size, _mtime in files] == ["users/u1/sessions/t1/a.txt"]
+    assert [key for key, _size, _mtime in files] == [
+        "tenants/t1/conversations/c1/workspace/shared/a.txt"
+    ]
     assert files[0][1] == 3
 
 
 async def test_quota_rejects_a_write_past_the_limit(store):
-    await store.upload("users/u1/uploads/a.bin", b"x" * 900)
+    await store.upload("tenants/t1/users/u1/uploads/a.bin", b"x" * 900)
     with pytest.raises(WorkspaceQuotaExceededError):
-        await store.upload("users/u1/uploads/b.bin", b"x" * 200)
+        await store.upload("tenants/t1/users/u1/uploads/b.bin", b"x" * 200)
 
 
 async def test_overwrite_is_charged_its_delta_not_its_full_size(store):
     """Re-uploading a key replaces it, so it must not be counted as
     existing + new — the same rule WorkspaceFileStore.upload follows."""
-    key = "users/u1/uploads/a.bin"
+    key = "tenants/t1/users/u1/uploads/a.bin"
     await store.upload(key, b"x" * 900)
     await store.upload(key, b"y" * 900)  # would be 1800 if double-counted
-    assert await store.usage_bytes("u1", force=True) == 900
+    assert await store.usage_bytes("t1", force=True) == 900
 
 
-async def test_quota_is_per_user(store):
-    await store.upload("users/u1/uploads/a.bin", b"x" * 900)
-    await store.upload("users/u2/uploads/a.bin", b"y" * 900)
+async def test_quota_is_per_tenant(store):
+    await store.upload("tenants/t1/users/u1/uploads/a.bin", b"x" * 900)
+    await store.upload("tenants/t2/users/u1/uploads/a.bin", b"y" * 900)
 
 
-async def test_keys_outside_users_are_not_charged_to_a_quota(store):
-    """An unowned key has no user to bill, so quota can't apply — it must not
-    be silently attributed to someone."""
+async def test_keys_outside_tenants_are_not_charged_to_a_quota(store):
+    """An unowned key has no tenant to bill, so quota can't apply — it must
+    not be silently attributed to someone."""
     await store.upload("shared/reference.bin", b"x" * 5000)
-    assert await store.usage_bytes("u1", force=True) == 0
+    assert await store.usage_bytes("t1", force=True) == 0
 
 
 async def test_usage_bytes_cache_is_invalidated_by_a_write(store):
-    await store.upload("users/u1/uploads/a.bin", b"x" * 100)
-    assert await store.usage_bytes("u1") == 100
+    await store.upload("tenants/t1/users/u1/uploads/a.bin", b"x" * 100)
+    assert await store.usage_bytes("t1") == 100
     # Without invalidation this would still report 100 from the TTL cache.
-    await store.upload("users/u1/uploads/b.bin", b"x" * 50)
-    assert await store.usage_bytes("u1") == 150
+    await store.upload("tenants/t1/users/u1/uploads/b.bin", b"x" * 50)
+    assert await store.usage_bytes("t1") == 150
 
 
 async def test_delete_invalidates_usage_cache(store):
-    await store.upload("users/u1/uploads/a.bin", b"x" * 100)
-    assert await store.usage_bytes("u1") == 100
-    await store.delete("users/u1/uploads/a.bin")
-    assert await store.usage_bytes("u1") == 0
+    await store.upload("tenants/t1/users/u1/uploads/a.bin", b"x" * 100)
+    assert await store.usage_bytes("t1") == 100
+    await store.delete("tenants/t1/users/u1/uploads/a.bin")
+    assert await store.usage_bytes("t1") == 0
 
 
 # ── S3Connector.list_objects pagination ────────────────────────────────────

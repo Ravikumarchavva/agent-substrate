@@ -58,6 +58,7 @@ class SandboxSpec:
     user_id: str | None
     thread_id: str
     session_dir: str
+    tenant_id: str | None = None
     code: str | None = None
     argv: list[str] | None = None
     timeout_s: int = 60

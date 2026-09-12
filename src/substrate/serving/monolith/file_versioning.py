@@ -2,9 +2,8 @@
 
 A workspace file (e.g. a code-interpreter-generated report) can change two
 ways: the human edits it in the side panel (author="user", via the PUT
-save-back or the ONLYOFFICE callback) or the agent rewrites it via
-code_interpreter (author="agent", captured lazily the next time the file is
-served). Every state becomes a recoverable ``FileVersion`` snapshot, so the two
+save-back) or the agent rewrites it via code_interpreter (author="agent",
+captured lazily the next time the file is served). Every state becomes a recoverable ``FileVersion`` snapshot, so the two
 never silently clobber each other and any version can be restored.
 
 The canonical working file (``object_key``) always mirrors the latest version;
@@ -56,6 +55,9 @@ def _version_key(object_key: str, seq: int) -> str:
     """
     p = PurePosixPath(object_key)
     parts = p.parts
+    # tenants/<tenant>/conversations/<thread>/workspace/shared/<path>
+    if len(parts) >= 7 and parts[:1] == ("tenants",) and parts[2:4] == ("conversations", parts[3]) and parts[4:6] == ("workspace", "shared"):
+        return str(PurePosixPath(*parts[:5]) / VERSIONS_DIR / PurePosixPath(*parts[6:]) / f"{seq}{p.suffix}")
     if len(parts) >= 3 and parts[0] == "users":
         owner = parts[1]
         rest = PurePosixPath(*parts[2:])

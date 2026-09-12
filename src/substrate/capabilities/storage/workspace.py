@@ -1,17 +1,25 @@
-"""Workspace-backed file store — a per-user directory tree on shared storage (L2).
+"""Workspace-backed file store — a tenant-scoped directory tree on shared storage (L2).
 
 Server-side only: the tree lives at ``root`` (a local dir in monolith dev, a
 docker-compose volume, or a k8s RWX PVC mount in production — never on the
-end user's machine). Keys are POSIX-relative paths of the form
-``users/{user_id}/sessions/{thread_id}/{name}`` or ``users/{user_id}/uploads/{name}``;
-callers (routes) build them from authenticated identity, never from raw
-client input.
+end user's machine). Keys are POSIX-relative paths under
+``tenants/{tenant_id}/`` — see ``capabilities/storage/layout.py`` for the
+canonical builders (``tenants/{tid}/users/{uid}/...`` for a user's own
+uploads not tied to a conversation, ``tenants/{tid}/conversations/{cid}/workspace/...``
+for a conversation's shared/version files, ``tenants/{tid}/knowledge/{kb}/...``
+for knowledge-base documents). Callers (routes) build keys from authenticated
+identity via ``layout.py``, never from raw client input.
 
 This is Phase 1 (single-tier): the filesystem tree IS the record, not a
-cache in front of object storage. Quota enforcement here is soft/app-layer —
-it protects against accidental runaway usage, not a hostile actor with
-another path onto the same volume. The hard isolation boundary against other
-users is the k8s ``subPath`` mount into each user's sandbox pod (see
+cache in front of object storage. Quota enforcement here is soft/app-layer,
+scoped per tenant (not per user): a conversation's files carry no user
+segment in their key by design (ownership lives in Postgres' ``threads``
+table, not the storage key), so a tenant is the only identity every key
+reliably carries — matching the same tenant-first quota key ``chat.py``'s
+daily-message-limit check already prefers over a raw user id. This check
+protects against accidental runaway usage, not a hostile actor with another
+path onto the same volume. The hard isolation boundary against other tenants
+is the k8s ``subPath`` mount into each sandbox pod (see
 ``capabilities/tools/code_interpreter/code_interpreter/sandbox_service.py``),
 not this quota check.
 """
@@ -24,14 +32,14 @@ from pathlib import Path
 
 
 class WorkspaceQuotaExceededError(Exception):
-    """Raised when a write would push a user's usage past their quota."""
+    """Raised when a write would push a tenant's usage past their quota."""
 
-    def __init__(self, user_id: str, used_bytes: int, quota_bytes: int) -> None:
-        self.user_id = user_id
+    def __init__(self, tenant_id: str, used_bytes: int, quota_bytes: int) -> None:
+        self.tenant_id = tenant_id
         self.used_bytes = used_bytes
         self.quota_bytes = quota_bytes
         super().__init__(
-            f"Storage quota exceeded for user {user_id!r}: "
+            f"Storage quota exceeded for tenant {tenant_id!r}: "
             f"{used_bytes} bytes used, {quota_bytes} byte quota"
         )
 
@@ -48,7 +56,7 @@ class WorkspaceFileStore:
 
     Duck-types the same shape as ``S3FileStore``/``InMemoryFileStore``:
     ``upload``/``download``/``delete``/``presign_url``/``connect``/``disconnect``,
-    plus workspace-specific helpers (``usage_bytes``, ``list_user_files``)
+    plus workspace-specific helpers (``usage_bytes``, ``list_prefix``)
     used by the workspace management API.
     """
 
@@ -56,6 +64,13 @@ class WorkspaceFileStore:
         self._root = Path(root).resolve()
         self._quota_bytes = user_quota_bytes
         self._usage_cache: dict[str, tuple[float, int]] = {}
+        # Per-tenant quota overrides (admin storage API) — in-memory, seeded
+        # from the ``workspace_quotas`` table at startup and kept live by
+        # the admin route on every write. A plain dict, not the DB itself:
+        # this store has no DB dependency by design (see module docstring),
+        # and a single-process/single-replica deployment (this stack's
+        # actual target) has no cross-process consistency to worry about.
+        self._quota_overrides: dict[str, int] = {}
 
     async def connect(self) -> None:
         self._root.mkdir(parents=True, exist_ok=True)
@@ -91,14 +106,18 @@ class WorkspaceFileStore:
             return False
 
     @staticmethod
-    def _user_id_from_key(key: str) -> str | None:
+    def _tenant_id_from_key(key: str) -> str | None:
+        """The tenant a key belongs to — every key under the current layout
+        starts ``tenants/{tenant_id}/...`` (see ``layout.py``); nothing else
+        is a reliable identity to meter storage against (a conversation key
+        carries no user segment at all)."""
         parts = Path(key).parts
-        if len(parts) >= 2 and parts[0] == "users":
+        if len(parts) >= 2 and parts[0] == "tenants":
             return parts[1]
         return None
 
-    async def usage_bytes(self, user_id: str, *, force: bool = False) -> int:
-        """Sum of file sizes under ``users/{user_id}``, cached briefly.
+    async def usage_bytes(self, tenant_id: str, *, force: bool = False) -> int:
+        """Sum of file sizes under ``tenants/{tenant_id}``, cached briefly.
 
         Walking the filesystem is the source of truth — it counts files the
         sandbox created directly, not just ones written through ``upload()``.
@@ -108,25 +127,70 @@ class WorkspaceFileStore:
         backs it.
         """
         now = time.monotonic()
-        cached = self._usage_cache.get(user_id)
+        cached = self._usage_cache.get(tenant_id)
         if not force and cached is not None and now - cached[0] < _USAGE_CACHE_TTL:
             return cached[1]
 
-        user_root = self._root / "users" / user_id
+        tenant_root = self._root / "tenants" / tenant_id
         total = 0
-        if user_root.is_dir():
-            for dirpath, _dirnames, filenames in os.walk(user_root):
+        if tenant_root.is_dir():
+            for dirpath, _dirnames, filenames in os.walk(tenant_root):
                 for name in filenames:
                     try:
                         total += (Path(dirpath) / name).stat().st_size
                     except OSError:
                         continue
-        self._usage_cache[user_id] = (now, total)
+        self._usage_cache[tenant_id] = (now, total)
         return total
 
-    def _invalidate_usage(self, user_id: str | None) -> None:
-        if user_id is not None:
-            self._usage_cache.pop(user_id, None)
+    def _invalidate_usage(self, tenant_id: str | None) -> None:
+        if tenant_id is not None:
+            self._usage_cache.pop(tenant_id, None)
+
+    def effective_quota(self, tenant_id: str) -> int:
+        """The quota that actually applies to *tenant_id* — their override if
+        one is set, otherwise the global default."""
+        return self._quota_overrides.get(tenant_id, self._quota_bytes)
+
+    def set_quota_override(self, tenant_id: str, quota_bytes: int | None) -> None:
+        """Set (or, with ``None``, clear) *tenant_id*'s quota override.
+
+        Callers own persistence (the admin route writes/deletes the
+        ``workspace_quotas`` row) — this only updates what ``upload()``
+        actually enforces on the next call, live, no restart needed."""
+        if quota_bytes is None:
+            self._quota_overrides.pop(tenant_id, None)
+        else:
+            self._quota_overrides[tenant_id] = quota_bytes
+
+    async def list_all_tenants(self) -> list[str]:
+        """Tenant ids with a workspace directory, i.e. every tenant that has
+        ever uploaded a file, run a session, or ingested a KB document."""
+        tenants_root = self._root / "tenants"
+        if not tenants_root.is_dir():
+            return []
+        return sorted(p.name for p in tenants_root.iterdir() if p.is_dir())
+
+    async def list_conversations(self, tenant_id: str) -> list[tuple[str, int, int]]:
+        """``(conversation_id, size_bytes, file_count)`` for every
+        conversation workspace under ``tenants/{tenant_id}/conversations/``
+        — the admin storage drill-down."""
+        conversations_root = self._root / "tenants" / tenant_id / "conversations"
+        if not conversations_root.is_dir():
+            return []
+        results: list[tuple[str, int, int]] = []
+        for conv_dir in sorted(p for p in conversations_root.iterdir() if p.is_dir()):
+            size = 0
+            count = 0
+            for dirpath, _dirnames, filenames in os.walk(conv_dir):
+                for name in filenames:
+                    try:
+                        size += (Path(dirpath) / name).stat().st_size
+                    except OSError:
+                        continue
+                    count += 1
+            results.append((conv_dir.name, size, count))
+        return results
 
     async def upload(
         self,
@@ -138,18 +202,19 @@ class WorkspaceFileStore:
         del content_type  # plain files on disk; no per-object content-type store
         path = self._resolve(key)
 
-        user_id = self._user_id_from_key(key)
-        if user_id is not None:
+        tenant_id = self._tenant_id_from_key(key)
+        if tenant_id is not None:
             existing_size = path.stat().st_size if path.exists() else 0
-            used = await self.usage_bytes(user_id)
-            if used - existing_size + len(data) > self._quota_bytes:
-                raise WorkspaceQuotaExceededError(user_id, used, self._quota_bytes)
+            used = await self.usage_bytes(tenant_id)
+            quota = self.effective_quota(tenant_id)
+            if used - existing_size + len(data) > quota:
+                raise WorkspaceQuotaExceededError(tenant_id, used, quota)
 
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = path.with_suffix(f"{path.suffix}.tmp-{os.getpid()}")
         tmp_path.write_bytes(data)
         tmp_path.replace(path)
-        self._invalidate_usage(user_id)
+        self._invalidate_usage(tenant_id)
 
     async def download(self, key: str) -> bytes:
         path = self._resolve(key)
@@ -160,13 +225,13 @@ class WorkspaceFileStore:
 
     async def delete(self, key: str) -> None:
         path = self._resolve(key)
-        user_id = self._user_id_from_key(key)
+        tenant_id = self._tenant_id_from_key(key)
         try:
             path.unlink()
         except FileNotFoundError:
             pass
         else:
-            self._invalidate_usage(user_id)
+            self._invalidate_usage(tenant_id)
             # Prune now-empty parent directories up to (not including) the root.
             parent = path.parent
             while parent != self._root and parent.exists():
@@ -176,6 +241,25 @@ class WorkspaceFileStore:
                     break
                 parent = parent.parent
 
+    async def delete_prefix(self, prefix: str) -> int:
+        """Delete a complete, validated storage subtree for GDPR erasure."""
+        root = self._resolve(prefix.rstrip("/") or prefix)
+        if not root.exists():
+            return 0
+        if root.is_file():
+            root.unlink()
+            return 1
+        deleted = 0
+        for path in sorted(root.rglob("*"), reverse=True):
+            if path.is_file() or path.is_symlink():
+                path.unlink(missing_ok=True)
+                deleted += 1
+            elif path.is_dir():
+                path.rmdir()
+        root.rmdir()
+        self._usage_cache.clear()
+        return deleted
+
     async def presign_url(self, key: str, *, expires_in: int = 3600) -> str:
         del expires_in
         # No real URL — caller detects "workspace://" and falls back to
@@ -183,16 +267,22 @@ class WorkspaceFileStore:
         # "memory://" sentinel.
         return f"workspace://{key}"
 
-    async def list_user_files(self, user_id: str) -> list[tuple[str, int, float]]:
-        """Yield ``(relative_key, size_bytes, mtime)`` for every file under
-        ``users/{user_id}``, for the workspace management API.
-
-        ``async`` to match ``S3FileStore``, as with ``usage_bytes``."""
-        user_root = self._root / "users" / user_id
+    async def list_prefix(self, prefix: str) -> list[tuple[str, int, float]]:
+        """``(relative_key, size_bytes, mtime)`` for every file under
+        *prefix* — the generic listing primitive every caller that used to
+        list "a user's files" and filter should use instead now that a key
+        no longer necessarily carries a user segment (see
+        ``_tenant_id_from_key``'s docstring). ``async`` to match
+        ``S3FileStore``.
+        """
+        try:
+            root = self._resolve(prefix.rstrip("/") or prefix)
+        except WorkspacePathError:
+            return []
         results: list[tuple[str, int, float]] = []
-        if not user_root.is_dir():
+        if not root.is_dir():
             return results
-        for dirpath, _dirnames, filenames in os.walk(user_root):
+        for dirpath, _dirnames, filenames in os.walk(root):
             for name in filenames:
                 full = Path(dirpath) / name
                 try:

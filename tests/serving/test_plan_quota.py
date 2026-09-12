@@ -31,13 +31,10 @@ def test_quota_key_uses_tenant_id_when_project_scoped():
     assert plan_quota_key(user) == "proj-abc123"
 
 
-def test_quota_key_falls_back_to_sub_when_tenant_is_default():
-    user = AuthClaims(sub="user-42", tenant_id="default")
-    assert plan_quota_key(user) == "user-42"
-
-
 def test_quota_key_falls_back_to_sub_when_tenant_omitted():
-    # tenant_id defaults to "default" per the AuthClaims model itself.
+    # tenant_id defaults to "" per the AuthClaims model itself — a real JWT
+    # always carries a real one now (see verify_token), but AuthClaims built
+    # directly in-process (e.g. a single-user test-chat) may not.
     user = AuthClaims(sub="user-42")
     assert plan_quota_key(user) == "user-42"
 

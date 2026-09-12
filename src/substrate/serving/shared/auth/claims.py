@@ -21,7 +21,9 @@ class AuthClaims(BaseModel):
     sub: str  # stable user/service identity
     email: str = ""
     role: str = "end_user"  # platform role
-    tenant_id: str = "default"
+    # A tenant is mandatory for every user access token.  Service tokens are
+    # deliberately handled separately by ``verify_token``.
+    tenant_id: str = ""
     workspace_id: str = "default"
     jti: str = ""
     token_type: str = "access"  # access | refresh | agent | service

@@ -264,9 +264,9 @@ class FileVersion(Base):
     """A point-in-time snapshot of a workspace file.
 
     Both writers of a workspace file get a row here: the human editing it in
-    the side panel (author="user", via PUT / the ONLYOFFICE callback) and the
-    agent rewriting it via code_interpreter (author="agent", captured lazily
-    when the file is next served). The very first captured state is
+    the side panel (author="user", via PUT) and the agent rewriting it via
+    code_interpreter (author="agent", captured lazily when the file is next
+    served). The very first captured state is
     author="initial". Snapshot bytes live at ``version_key`` (a copy under
     ``.versions/{name}/{seq}{ext}`` in the same session dir); the canonical
     working file (``object_key``) always mirrors the latest version. This is
@@ -507,3 +507,32 @@ class ScheduledTaskRun(Base):
 
     def __repr__(self) -> str:
         return f"<ScheduledTaskRun(id={self.id}, status={self.status!r}, executed_at={self.executed_at!r})>"
+
+
+# ── Workspace storage quotas ─────────────────────────────────────────────────
+
+
+class WorkspaceQuota(Base):
+    """Per-tenant override of ``WORKSPACE_USER_QUOTA_BYTES`` (the global
+    default), set via the admin storage API. ``user_id`` holds a JWT
+    ``tenant_id`` claim (``AuthClaims.tenant_id``) despite the column's
+    name — kept as-is to avoid a rename migration; a plain string, not a
+    FK: the same opaque identity already used to key every
+    ``WorkspaceFileStore`` path (``tenants/{tenant_id}/...``). Quota is
+    metered per tenant, not per user, because a conversation's files carry
+    no user segment in their key at all (ownership lives in Postgres'
+    ``threads`` table, not the key) — see
+    ``WorkspaceFileStore``'s module docstring. Absence of a row means "use
+    the default" — see ``WorkspaceFileStore.effective_quota``.
+    """
+
+    __tablename__ = "workspace_quotas"
+
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    quota_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return f"<WorkspaceQuota(user_id={self.user_id!r}, quota_bytes={self.quota_bytes})>"

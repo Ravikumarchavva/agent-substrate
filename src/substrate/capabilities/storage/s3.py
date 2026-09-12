@@ -1,11 +1,12 @@
 """S3-compatible file store backed by S3Connector (L2).
 
-Keys use the same ``users/{user_id}/...`` layout as ``WorkspaceFileStore`` (see
-its module docstring), so the two are interchangeable behind ``ctx.file_store``
-and the workspace management API works against either. The store is addressed
-purely through the S3 API, which is what makes the backend swappable —
-SeaweedFS locally (this stack's default), or any other S3-compatible service
-in production — with no code change.
+Keys use the same ``tenants/{tenant_id}/...`` layout as ``WorkspaceFileStore``
+(see its module docstring and ``capabilities/storage/layout.py``), so the two
+are interchangeable behind ``ctx.file_store`` and the workspace management
+API works against either. The store is addressed purely through the S3 API,
+which is what makes the backend swappable — SeaweedFS locally (this stack's
+default), or any other S3-compatible service in production — with no code
+change.
 """
 
 from __future__ import annotations
@@ -19,11 +20,14 @@ from substrate.infrastructure.storage.s3 import S3Connector
 _USAGE_CACHE_TTL = 30.0  # seconds
 
 
-def _user_id_from_key(key: str) -> str | None:
-    """``users/{id}/rest`` -> ``id``; anything else -> ``None`` (unowned, so
-    not charged to a quota). Same rule as ``WorkspaceFileStore``."""
+def _tenant_id_from_key(key: str) -> str | None:
+    """``tenants/{id}/rest`` -> ``id``; anything else -> ``None`` (unowned, so
+    not charged to a quota). Every key under the current layout starts
+    ``tenants/{tenant_id}/...`` — a conversation-scoped key carries no user
+    segment at all, so tenant is the only identity reliably present. Same
+    rule as ``WorkspaceFileStore._tenant_id_from_key``."""
     parts = PurePosixPath(key).parts
-    if len(parts) >= 2 and parts[0] == "users":
+    if len(parts) >= 2 and parts[0] == "tenants":
         return parts[1]
     return None
 
@@ -89,28 +93,33 @@ class S3FileStore:
         *,
         content_type: str = "application/octet-stream",
     ) -> None:
-        user_id = _user_id_from_key(key)
-        if user_id is not None and self._quota_bytes > 0:
+        tenant_id = _tenant_id_from_key(key)
+        if tenant_id is not None and self._quota_bytes > 0:
             # One listing yields both the prefix total and this key's current
             # size, so an overwrite is charged for its *delta* rather than
             # double-counted (mirrors WorkspaceFileStore.upload). Deliberately
             # uncached: a stale total here would let a write past the quota.
-            entries = await self._list_prefix(user_id)
+            entries = await self.list_prefix(f"tenants/{tenant_id}/")
             used = sum(size for _key, size, _mtime in entries)
             existing = next((s for k, s, _m in entries if k == key), 0)
             if used - existing + len(data) > self._quota_bytes:
-                raise WorkspaceQuotaExceededError(user_id, used, self._quota_bytes)
+                raise WorkspaceQuotaExceededError(tenant_id, used, self._quota_bytes)
         await self._connector.upload(
             key, data, content_type=content_type, bucket=self._bucket
         )
-        self._invalidate_usage(user_id)
+        self._invalidate_usage(tenant_id)
 
     async def download(self, key: str) -> bytes:
         return await self._connector.download(key, bucket=self._bucket)
 
     async def delete(self, key: str) -> None:
         await self._connector.delete(key, bucket=self._bucket)
-        self._invalidate_usage(_user_id_from_key(key))
+        self._invalidate_usage(_tenant_id_from_key(key))
+
+    async def delete_prefix(self, prefix: str) -> int:
+        deleted = await self._connector.delete_prefix(prefix, bucket=self._bucket)
+        self._usage_cache.clear()
+        return deleted
 
     async def presign_url(self, key: str, *, expires_in: int = 3600) -> str:
         return await self._connector.presign_url(
@@ -121,15 +130,15 @@ class S3FileStore:
     # management API in serving/monolith/routes/workspace.py works against
     # either store) ──────────────────────────────────────────────────────────
 
-    async def _list_prefix(self, user_id: str) -> list[tuple[str, int, float]]:
-        objects = await self._connector.list_objects(
-            prefix=f"users/{user_id}/", bucket=self._bucket
-        )
+    async def list_prefix(self, prefix: str) -> list[tuple[str, int, float]]:
+        """``(key, size_bytes, mtime)`` for every object under *prefix* —
+        the generic listing primitive (mirrors ``WorkspaceFileStore.list_prefix``)."""
+        objects = await self._connector.list_objects(prefix=prefix, bucket=self._bucket)
         return [(o["key"], int(o["size"]), float(o["mtime"])) for o in objects]
 
-    def _invalidate_usage(self, user_id: str | None) -> None:
-        if user_id is not None:
-            self._usage_cache.pop(user_id, None)
+    def _invalidate_usage(self, tenant_id: str | None) -> None:
+        if tenant_id is not None:
+            self._usage_cache.pop(tenant_id, None)
 
     async def exists(self, key: str) -> bool:
         """True if *key* is present. A HEAD, not a LIST — cheap point check,
@@ -143,21 +152,19 @@ class S3FileStore:
                 return False
             return True
 
-    async def usage_bytes(self, user_id: str, *, force: bool = False) -> int:
-        """Sum of object sizes under ``users/{user_id}/``, cached briefly.
+    async def usage_bytes(self, tenant_id: str, *, force: bool = False) -> int:
+        """Sum of object sizes under ``tenants/{tenant_id}/``, cached briefly.
 
         Unlike the filesystem store this costs a paginated LIST, so the cache
         matters more here — but it is only ever read for *display*; quota
         enforcement in ``upload`` lists fresh.
         """
         now = time.monotonic()
-        cached = self._usage_cache.get(user_id)
+        cached = self._usage_cache.get(tenant_id)
         if not force and cached is not None and now - cached[0] < _USAGE_CACHE_TTL:
             return cached[1]
-        total = sum(size for _key, size, _mtime in await self._list_prefix(user_id))
-        self._usage_cache[user_id] = (now, total)
+        total = sum(
+            size for _key, size, _mtime in await self.list_prefix(f"tenants/{tenant_id}/")
+        )
+        self._usage_cache[tenant_id] = (now, total)
         return total
-
-    async def list_user_files(self, user_id: str) -> list[tuple[str, int, float]]:
-        """``(key, size_bytes, mtime)`` for every object under ``users/{user_id}/``."""
-        return await self._list_prefix(user_id)

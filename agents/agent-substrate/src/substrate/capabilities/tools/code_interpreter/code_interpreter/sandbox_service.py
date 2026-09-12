@@ -24,19 +24,9 @@ class CodeInterpreterConfig:
     server_port: int = 8888
     shutdown_after_seconds: int | None = None
     warmpool: str | None = None
-    # Per-user persistent workspace (see capabilities/storage/workspace.py).
-    # When workspace_pvc_claim is set, a per-user SandboxTemplate is generated
-    # on first use, mounting only users/{user_id} of the shared RWX PVC —
-    # this subPath is the isolation boundary between users' sandboxes.
-    # Unset (default) preserves the old shared-template, ephemeral behavior.
     # Per-user persistent workspace PVC (subPath isolation)
     workspace_pvc_claim: str | None = None
     workspace_mount_path: str = "/app/workspace"
-    # Kubernetes RuntimeClass for sandbox pods. "gvisor" routes them through
-    # runsc, a user-space kernel that intercepts syscalls before they reach the
-    # host kernel — the isolation Google itself uses for GKE Sandbox / Cloud Run
-    # untrusted code, and it needs no nested virtualization (unlike Kata /
-    # Firecracker). Empty = cluster default runtime (weaker: shared kernel).
     # RuntimeClass for sandbox pods (e.g. "gvisor" / runsc)
     runtime_class_name: str = ""
 
@@ -71,10 +61,6 @@ class CodeInterpreterService:
     ) -> dict[str, Any]:
         with self._lock_for_thread(thread_id):
             sandbox, session = self._get_or_create_sandbox(thread_id, user_id=user_id)
-            # session_id tells the pod's own execution cwd to become
-            # sessions/{thread_id}/ within the mounted per-user workspace
-            # (see sandbox_runtime.py::_session_run_dir) — a no-op when the
-            # pod isn't on a workspace-mounted template (runs at its root).
             payload = {"code": code, "session_id": thread_id}
             data = self._runtime_json(
                 sandbox,
@@ -280,8 +266,6 @@ class CodeInterpreterService:
                 self.store.delete(thread_id)
                 self._handles.pop(thread_id, None)
 
-        # No user identity, or no workspace PVC configured: fall back to the
-        # shared template — old ephemeral, non-persistent behavior.
         # Fall back to shared template if no user ID or workspace PVC configured
         template = self.config.template
         per_user_template = (
@@ -290,10 +274,6 @@ class CodeInterpreterService:
         if per_user_template:
             template = self._ensure_user_template(str(user_id))
 
-        # Warm pools and per-user isolation are mutually exclusive: a pooled pod
-        # is pre-created and generic, so it cannot carry this user's
-        # `subPath: users/{uid}` mount, and a pod's spec is immutable after
-        # creation. Isolation wins — take the cold-start cost instead.
         # Warm pools cannot carry user-specific subPath mounts; cold start required for isolation
         warmpool = None if per_user_template else self.config.warmpool
 
@@ -374,19 +354,6 @@ class CodeInterpreterService:
                 "persistentVolumeClaim": {"claimName": self.config.workspace_pvc_claim},
             }
         ]
-        # Same PVC, a second mount: the user's standing knowledge-base
-        # content, read-only — the k8s equivalent of NsjailRuntime's
-        # conditional -R for users/{uid}/kb (runtimes/nsjail.py).
-        # A pod spec can't be conditioned per-execution the way a bwrap argv
-        # is built fresh each call, so this mount is unconditional (not
-        # gated on the directory already existing, unlike bwrap's is_dir()
-        # check) — per k8s's documented subPath behavior, a subPath that
-        # doesn't yet exist on the volume is created automatically, so a
-        # user with no KB content yet gets an empty read-only directory
-        # rather than a mount failure. NOT verified against a live cluster
-        # in this dev setup (no k8s environment available) — review this
-        # pod-spec diff carefully, and confirm this behavior for real,
-        # before relying on it in a k8s deployment.
         # Mount user's standing knowledge-base read-only
         kb_mount_path = self.config.workspace_mount_path.rstrip("/") + "/.kb"
         for container in containers:
@@ -418,8 +385,6 @@ class CodeInterpreterService:
                 }
             ]
         pod_spec.setdefault("securityContext", {"runAsNonRoot": True})
-        # Route the pod through gVisor (runsc) when configured, so the sandbox's
-        # syscalls hit a user-space kernel instead of the host's.
         if self.config.runtime_class_name:
             pod_spec["runtimeClassName"] = self.config.runtime_class_name
 

@@ -265,14 +265,6 @@ class DocumentIngestPipeline:
 
             if self._blob_store is not None:
                 ext = self._EXT_BY_MEDIA_TYPE.get(img.media_type, ".bin")
-                # "images/{source_name}/..." (source_name is a sibling
-                # segment), NOT "{source_name}/images/..." -- the latter
-                # makes the PDF's own key (see pdf_key below) a literal
-                # path *prefix* of its images' keys. SeaweedFS's filer is
-                # filesystem-backed, so a key can't be both a leaf file and
-                # a directory at once -- real, found-not-assumed: the S3
-                # admin UI showed the PDF as a "Directory" with no download
-                # action, meaning the object itself was gone/inaccessible.
                 # Sibling prefix prevents filesystem-backed object store collisions
                 key = (
                     f"{self._key_prefix}{collection}/images/{source_name}/{img.id}{ext}"
@@ -288,8 +280,6 @@ class DocumentIngestPipeline:
                             "media_type": img.media_type,
                         },
                     )
-            # No blob store, or the upload failed: keep the old inline
-            # behavior rather than dropping the image entirely.
             # Fall back to inlining image data on upload failure or without blob store
             return Document(
                 content=[ImageBlock(data=img_bytes, media_type=img.media_type)],
@@ -400,23 +390,11 @@ class DocumentIngestPipeline:
         pdf_key: str | None = None
         if self._blob_store is not None:
             data = await asyncio.to_thread(path.read_bytes)
-            # "pdfs/{name}", a sibling of "images/{name}/..." above -- keeps
-            # every key under a given source file's name a leaf, never a
-            # prefix of another key, so no path can ever collide between a
-            # file and a directory (see _embed_images's comment for why
-            # that matters on a filesystem-backed store like SeaweedFS).
             # Store PDF under sibling key prefix "pdfs/{name}"
             pdf_key = f"{self._key_prefix}{collection}/pdfs/{path.name}"
             if not await self._upload_blob(pdf_key, data, "application/pdf"):
                 pdf_key = None
 
-        # StructureAwareChunker never splits mid-sentence, but the extracted
-        # markdown embeds tables as raw HTML (document-intelligence's own
-        # convention) — an HTML table has ~no ". "/"! "/"? " boundaries, so it
-        # can collapse into one oversized "sentence" that exceeds the embed
-        # sidecar's token ceiling (--ctx-size/--parallel -> tokens/slot).
-        # Real, found-not-assumed: a 4158-char/1983-token chunk from an HTML
-        # table hit exactly this — see _embed_chunks for how it's handled.
         chunk_meta = {
             "source": path.name,
             "total_pages": result.page_count,
@@ -437,22 +415,11 @@ class DocumentIngestPipeline:
             pdf_key=pdf_key,
         )
 
-        # One write, not two: makes per-file persistence atomic (a crash
-        # between two separate add() calls previously could strand text
-        # rows with no checkpoint entry, which a resume would then
-        # re-insert under fresh UUIDs).
         # Single atomic write for text and image documents
         all_docs = text_docs + image_docs
         if all_docs:
             await self._store.add(all_docs, collection=collection)
 
-        # Say out loud when rows were lost. _embed_chunks/_embed_images
-        # degrade by skipping whatever the embed sidecar rejects, which is
-        # the right behaviour -- but the caller only ever sees the surviving
-        # counts, so a lossy run and a clean one report identically. Real,
-        # measured: one 81-page report extracted 60 images and stored 47,
-        # every rejection being "exceeds the available context size (1024
-        # tokens)" on a large chart. Nothing in the summary said so.
         # Log dropped rows from context ceiling rejections
         dropped_chunks = len(chunks) - len(text_docs)
         dropped_images = len(result.images) - len(image_docs)
@@ -543,12 +510,6 @@ class DocumentIngestPipeline:
         return stats
 
 
-# Below this length, an OCR'd caption fragment is treated as noise rather
-# than a real description — real, found-not-assumed: a stored image row's
-# entire searchable/embeddable text was a single stray character ("亿", a
-# CJK digit-grouping unit, likely a garbled read of a chart axis label) with
-# no other context. A caption this short adds no real retrieval signal and
-# actively hides the fact that there's no useful description at all.
 # Discard OCR caption fragments shorter than 4 chars as noise
 _MIN_CAPTION_CHARS = 4
 

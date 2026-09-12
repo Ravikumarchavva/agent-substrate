@@ -31,21 +31,9 @@ class EmbeddingServiceError(RuntimeError):
     returns a response in an unexpected shape."""
 
 
-# The sidecar turns an image into one token per ~32x32 pixel block, so its
-# token cost is a pure function of area. Measured against the running
-# server across images from a real report, the ratio is strikingly tight:
-#
-#   1098x1044 -> 1125 tok (1019 px/tok)    2025x837  -> 1641 tok (1033)
-#   1595x670  -> 1053 tok (1015 px/tok)    1470x1069 -> 1521 tok (1033)
-#
-# so tokens ~= width * height / 1024, plus a handful for the prompt marker.
 # Image-to-token ratio (~1024 px per patch token; see docs/capabilities/08-document-intelligence.md)
 _PIXELS_PER_IMAGE_TOKEN = 1024
 
-# Default budget in pixels, sized for a slot ceiling of 1024 tokens
-# (llama-embed-gpu runs --ctx-size 8192 --parallel 8). 1_000_000 px works
-# out to ~977 image tokens, leaving room for the marker without sitting
-# right on the limit.
 # Default pixel budget sized for 1024 token slot ceiling (~977 image tokens)
 _DEFAULT_MAX_IMAGE_PIXELS = 1_000_000
 
@@ -125,17 +113,6 @@ class EmbeddingReranker:
             logger.info("Embedding/rerank sidecar warmup skipped (%s)", exc)
 
     async def embed_image(self, data: bytes) -> list[float]:
-        # Verified against the real running llama-embed sidecar (not the
-        # OpenAI-compatible chat-completions image_url shape, which this
-        # server's /embeddings rejects outright with a 500). The real
-        # accepted shape, confirmed by reading llama.cpp's own
-        # tokenize_input_subprompt() source: `input` (== "prompt") as
-        # `{"prompt_string": ..., "multimodal_data": [base64, ...]}`, where
-        # prompt_string must contain the server's media-placeholder marker
-        # (`get_media_marker()` in server-common.cpp) at the position the
-        # image tokens should be inserted — the marker is randomized per
-        # server instance unless `LLAMA_MEDIA_MARKER` is pinned, so it's
-        # fetched from `/props` rather than hardcoded.
         # Build llama-server multimodal prompt payload using dynamic media marker
         marker = await self._media_marker()
         fitted = _downscale_to_pixel_budget(data, self._max_image_pixels)
@@ -252,15 +229,6 @@ class EmbeddingReranker:
             ) from exc
         data = resp.json()
         try:
-            # `embedding` is itself a list of per-sequence vectors (llama-server's
-            # OAI-compatible /embeddings shape) — one row per pooled sequence, not
-            # a flat vector directly. With --pooling last there is exactly one row
-            # per input, so [0] is the real vector. Confirmed against the real
-            # running sidecar (not assumed from docs): `data[0]["embedding"]` is
-            # `[[float, ...]]`, a single-element wrapper around the actual 2048
-            # floats — an earlier version of this method returned that wrapper
-            # unflattened, which would have hard-failed Postgres's vector(2048)
-            # cast on first real write.
             # Unwrap pooled vector list [[float, ...]] -> [float, ...]
             return list(data[0]["embedding"][0])
         except (KeyError, IndexError, TypeError) as exc:

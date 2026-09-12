@@ -152,14 +152,8 @@ async def get_usage(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceUsageResponse:
     store = _require_workspace_store(ctx)
-    # Quota is metered per tenant, not per user: a conversation-scoped key
-    # carries no user segment by design (ownership lives in Postgres, not
-    # the key), so tenant is the only identity every key reliably carries.
     # Meter quota per tenant (conversation workspaces omit user segments)
     used = await store.usage_bytes(claims.tenant_id, force=True)
-    # WorkspaceFileStore supports a per-tenant quota override (admin storage
-    # API); other backends (e.g. S3FileStore) don't, so fall back to the
-    # single global default for those.
     effective_quota = getattr(store, "effective_quota", None)
     quota = (
         effective_quota(claims.tenant_id)
@@ -176,10 +170,6 @@ async def list_files(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceFilesResponse:
     store = _require_workspace_store(ctx)
-    # A conversation's files aren't nested under the caller — enumerate the
-    # threads they own within this tenant first (same ownership rule as
-    # ``thread_service.get_owned_thread``), then list each one's shared
-    # workspace, plus the caller's own direct-upload prefix.
     # Enumerate threads owned by caller in this tenant, plus direct uploads
     owned_thread_ids = (
         (
@@ -297,9 +287,6 @@ def _session_rel(key: str, tenant_id: str, thread_id: str) -> str:
     return key[len(prefix) :] if key.startswith(prefix) else key
 
 
-# Only editable documents are worth versioning. Images embedded in an HTML
-# report are fetched through serve_file too, but the user never edits them —
-# skip them so we don't snapshot a version per chart.
 # Non-editable formats excluded from version snapshots
 _NON_VERSIONABLE_EXTS = {
     "png",
@@ -404,15 +391,6 @@ async def serve_file(
     content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
     disposition = "inline" if _is_inline_type(content_type) else "attachment"
 
-    # No cache headers at all here previously — every inline chart/image in
-    # a message re-triggered a full backend round trip (auth + DB lookup +
-    # object-storage download) on every page load, noticeably slow for a
-    # message with several charts. A `seq`-pinned version is genuinely
-    # immutable (a specific historical version's bytes never change) and can
-    # be cached aggressively; the unpinned "latest" file can change (an
-    # agent rewrite), so it's revalidate-before-use rather than cached
-    # outright — `ETag` + `if-none-match` still turns a repeat load into a
-    # cheap 304 (no response body) instead of re-transferring the file.
     # seq-pinned versions are immutable (public cache); latest versions use ETag revalidation
     etag = f'"{checksum}"'
     if request.headers.get("if-none-match") == etag:
@@ -606,11 +584,6 @@ async def delete_file(
         )
     store = _require_workspace_store(ctx)
 
-    # Ownership check: the path must live under this caller's own direct
-    # upload prefix, or under a conversation they own — WorkspaceFileStore's
-    # own traversal guard stops `../` escapes, but doesn't know about
-    # ownership (a conversation key carries no user segment at all), so
-    # enforce that here.
     # Ownership check: must reside under caller's upload prefix or owned thread
     own_prefix = f"{user_prefix(claims.tenant_id, claims.sub)}/"
     if not path.startswith(own_prefix):

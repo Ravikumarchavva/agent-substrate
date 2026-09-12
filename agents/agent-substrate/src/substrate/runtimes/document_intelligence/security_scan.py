@@ -22,28 +22,6 @@ from substrate.logger import setup_logging
 
 logger = setup_logging("substrate.runtimes.document_intelligence.security_scan")
 
-# doc-firewall's own top-level verdict alone is NOT a safe severity signal
-# for FLAG: verdict_class (REVIEW vs BLOCK) doesn't discriminate either — a
-# confirmed-malicious PDF (real /JavaScript OpenAction) and a benign one
-# (unconfirmed byte-level object/filter density counts) both land on
-# verdict=FLAG with EVERY finding at verdict_class=REVIEW, because this
-# install's BLOCK-tier detectors (YARA/EICAR) aren't active (see
-# "reduced-coverage mode" in scan_document's own scan result). An
-# evidence-shape check doesn't work either — a T6_DOS "Circular XObject"
-# finding on a *benign* PDF still carries a descriptive evidence string,
-# same shape as a real detection.
-#
-# Real, found-not-assumed: ran scan_bytes directly against (a) 5 benign
-# Wikipedia-derived benchmark PDFs that were all getting hard-rejected —
-# every one of their findings was threat_id T6_DOS or T3_OBFUSCATION, from
-# `fast_scan.pdf.dos`/`fast_scan.pdf.obfuscation` — heuristic byte-level
-# object/filter-density counts about whether the file is risky to *parse*,
-# not about it containing something designed to *execute* — and (b) the
-# test suite's synthetic OpenAction-JavaScript PDF, whose findings are all
-# threat_id T2_ACTIVE_CONTENT. That threat-category split is the real,
-# stable signal: T6_DOS/T3_OBFUSCATION-only reports get downgraded; any
-# other category (active content, malware, prompt injection, embedded
-# payload, ...) keeps full severity.
 # Structural-only parsing risks (downgraded to warnings rather than blocking execution;
 # see docs/capabilities/08-document-intelligence.md)
 _STRUCTURAL_ONLY_THREATS = {"T6_DOS", "T3_OBFUSCATION"}

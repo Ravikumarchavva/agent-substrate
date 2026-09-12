@@ -107,9 +107,6 @@ from substrate.logger import setup_logging
 from ._files import collect_changed, snapshot
 from .base import ExecResult, NetworkPolicy, SandboxSpec, SandboxUnavailableError
 
-# Read-only host paths the interpreter needs to run at all (libs, binaries).
-# Everything else — notably other users' data and the rest of the host fs — is
-# simply never mounted, so it does not exist inside the sandbox.
 # Read-only host libraries and font configuration needed by runtime interpreters
 _RO_HOST_PATHS = (
     "/usr",
@@ -119,9 +116,6 @@ _RO_HOST_PATHS = (
     "/sbin",
     "/etc/ssl",
     "/etc/alternatives",
-    # matplotlib/PIL shell out to fontconfig; without these every plot emits
-    # "Fontconfig error: Cannot load default config file" onto stderr, which
-    # would surface as noise in the agent's tool output.
     "/etc/fonts",
 )
 
@@ -205,25 +199,14 @@ def _sandbox_env() -> dict[str, str]:
 
 logger = setup_logging()
 
-# Per-sandbox process-count ceiling — cgroups give this a real per-sandbox
-# scope, unlike RLIMIT_NPROC (per-UID system-wide). Generous enough for real
-# pandas/numpy multiprocess use, tight enough to stop a fork bomb well
-# before it exhausts the host.
 # Max processes per sandbox (cgroup pids.max)
 _DEFAULT_MAX_PIDS = 64
 
 _CGROUPV2_ROOT = Path("/sys/fs/cgroup")
 
-# A stable, writable, non-tmpfs chroot base — see module docstring for why
-# this can't be "/" or anything under /tmp or /run. Shared across
-# executions: nsjail mounts each execution's tree in its own private mount
-# namespace, so this directory is never actually written to on the host.
 # Base directory for nsjail private mount namespace chroot
 _CHROOT_BASE = Path("/var/tmp/substrate-nsjail-chroot")
 
-# nsjail has no bwrap-style synthetic --dev; CPython's own startup needs
-# /dev/urandom to seed hash randomization, so these must be bound
-# explicitly or the interpreter fails before running any user code.
 # Essential character devices required for interpreter startup (e.g. hash randomization)
 _RO_DEV_NODES = (
     "/dev/null",
@@ -440,12 +423,8 @@ class NsjailRuntime:
             "/workspace",
         ]
         if spec.memory_bytes:
-            # swap must be capped too, or the kernel pushes the process into
-            # swap instead of OOM-killing it once memory.max is hit — see
-            # module docstring.
             argv += [
                 f"--cgroup_mem_max={spec.memory_bytes}",
-                "--cgroup_mem_swap_max=0",
                 "--cgroup_mem_swap_max=0",  # prevent swapping past memory limit
             ]
         if self._seccomp_policy_path:
@@ -454,14 +433,9 @@ class NsjailRuntime:
         for host_path in _RO_HOST_PATHS:
             if Path(host_path).exists():
                 argv += ["-R", host_path]
-        # nsjail has no bwrap-style synthetic --dev; without these device
-        # nodes CPython's own startup fails
-        # (_Py_HashRandomization_Init: failed to get random numbers).
         for dev_node in _RO_DEV_NODES:
             if Path(dev_node).exists():
                 argv += ["-R", dev_node]
-        # The interpreter and its site-packages (read-only) — without these
-        # the sandbox has a bare Python and every `import pandas` fails.
         for prefix in self._python_prefixes:
             argv += ["-R", prefix]
 
@@ -488,8 +462,6 @@ class NsjailRuntime:
             for resolv in ("/etc/resolv.conf", "/etc/hosts"):
                 if Path(resolv).exists():
                     argv += ["-R", resolv]
-        # NetworkPolicy.DENY: no flag needed — CLONE_NEWNET is nsjail's own
-        # default, verified in the spike (`clone_newnet:true` unconditionally).
         # NetworkPolicy.DENY: CLONE_NEWNET is nsjail's default
 
         argv.append("--")

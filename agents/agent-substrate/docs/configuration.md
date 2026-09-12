@@ -80,7 +80,6 @@ Agent Substrate provides secure, isolated execution environments for executing u
 
 ### Sandbox Runtimes
 - **`nsjail` (Default)**:
-  Uses Linux namespaces and cgroup v2 subtree limits on the host. No daemon or nested virtualization required. Mounts only the session's workspace directory read-only/read-write as needed.
   Uses Linux namespaces (`CLONE_NEWPID`, `CLONE_NEWNS`, `CLONE_NEWNET`, `CLONE_NEWIPC`, `CLONE_NEWUTS`) and cgroup v2 subtree limits on the host. No daemon or nested virtualization required.
   - **Mount Isolation**: Minimal host paths (`/lib`, `/usr`, `/etc/fonts`) are mounted read-only. Only the caller's specific session directory is mounted read-write at `/workspace`.
   - **Memory & Process Caps**: Caps memory via `memory.max` and `memory.swap.max` (stopping kernel swap fallback), and sets max processes (`pids.max = 64`) to prevent fork-bombs.

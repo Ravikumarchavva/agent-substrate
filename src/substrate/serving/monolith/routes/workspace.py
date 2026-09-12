@@ -31,7 +31,7 @@ from substrate.capabilities.storage.layout import (
     conversation_workspace_prefix,
     user_prefix,
 )
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.file_versioning import (
     VERSIONS_DIR,
@@ -171,7 +171,7 @@ async def get_usage(
 @router.get("/files", response_model=WorkspaceFilesResponse)
 async def list_files(
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceFilesResponse:
     store = _require_workspace_store(ctx)
@@ -347,7 +347,7 @@ async def serve_file(
         None, description="Serve a specific version (default: latest)"
     ),
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> StreamingResponse | Response:
     """Serve a code-interpreter / workspace file by its session-relative path.
@@ -395,6 +395,7 @@ async def serve_file(
             data=data,
             user_id=claims.sub,
             thread_id=thread_id,
+            tenant_id=claims.tenant_id,
         )
 
     content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
@@ -444,7 +445,7 @@ async def save_file(
     thread_id: str = Query(...),
     path: str = Query(...),
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> dict:
     """Save edited bytes back to a workspace file — used by text/Monaco editors
@@ -488,6 +489,7 @@ async def save_file(
             data=current,
             user_id=claims.sub,
             thread_id=thread_id,
+            tenant_id=claims.tenant_id,
         )
     await store.upload(key, body)
     version = await record_version(
@@ -498,6 +500,7 @@ async def save_file(
         author="user",
         user_id=claims.sub,
         thread_id=thread_id,
+        tenant_id=claims.tenant_id,
     )
     return {"checksum": version.checksum_sha256, "seq": version.seq}
 
@@ -507,7 +510,7 @@ async def get_versions(
     thread_id: str = Query(...),
     path: str = Query(...),
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceVersionsResponse:
     store = _require_workspace_store(ctx)
@@ -533,7 +536,7 @@ async def get_versions(
 async def restore_version(
     body: RestoreVersionRequest,
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> dict:
     """Restore a prior version: copy that snapshot's bytes to the canonical
@@ -567,6 +570,7 @@ async def restore_version(
             data=current,
             user_id=claims.sub,
             thread_id=body.thread_id,
+            tenant_id=claims.tenant_id,
         )
     except (WorkspacePathError, KeyError, FileNotFoundError):
         pass
@@ -579,6 +583,7 @@ async def restore_version(
         author="restore",
         user_id=claims.sub,
         thread_id=body.thread_id,
+        tenant_id=claims.tenant_id,
         restored_from_seq=body.seq,
     )
     return {"checksum": new_version.checksum_sha256, "seq": new_version.seq}
@@ -588,7 +593,7 @@ async def restore_version(
 async def delete_file(
     path: str = Query(..., description="Workspace-relative file path"),
     claims: AuthClaims = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> None:
     if not ctx.workspace_user_delete_allowed:

@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
 from substrate.capabilities.storage.workspace import WorkspaceFileStore
 from substrate.serving.monolith.app import app
@@ -25,14 +26,27 @@ def _user_claims(user_id: str) -> AuthClaims:
 
 
 @asynccontextmanager
+async def _bypass_session():
+    """A session_factory() session with RLS's admin bypass GUC set — for
+    direct test setup/teardown against RLS-covered tables
+    (workspace_quotas), trusted fixture code rather than a real request
+    going through get_tenant_scoped_db/get_service_scoped_db. No-op
+    against the superuser connection tests normally run under; only
+    matters once APP_DATABASE_URL points at the restricted role (rls.py)."""
+    session_factory = app.state.session_factory
+    async with session_factory() as db:
+        await db.execute(text("SELECT set_config('app.bypass_rls', 'on', false)"))
+        yield db
+
+
+@asynccontextmanager
 async def _no_quota_row(tenant_id: str):
     """Ensure no stray workspace_quotas row for *tenant_id* survives the
     test, regardless of outcome — set_storage_quota writes real DB rows."""
-    session_factory = app.state.session_factory
     try:
         yield
     finally:
-        async with session_factory() as db:
+        async with _bypass_session() as db:
             row = await db.get(WorkspaceQuota, tenant_id)
             if row is not None:
                 await db.delete(row)
@@ -128,8 +142,7 @@ async def test_set_quota_persists_and_takes_effect_immediately(tmp_path) -> None
 
                     # Persisted — a fresh store loaded the same way admin
                     # startup does would see it too.
-                    session_factory = app.state.session_factory
-                    async with session_factory() as db:
+                    async with _bypass_session() as db:
                         row = await db.get(WorkspaceQuota, "tenant1")
                         assert row is not None
                         assert row.quota_bytes == 42
@@ -142,7 +155,7 @@ async def test_set_quota_persists_and_takes_effect_immediately(tmp_path) -> None
                     assert reset_resp.json()["quota_bytes"] == 1000
                     assert store.effective_quota("tenant1") == 1000
 
-                    async with session_factory() as db:
+                    async with _bypass_session() as db:
                         assert await db.get(WorkspaceQuota, "tenant1") is None
             finally:
                 app.dependency_overrides.pop(get_current_user, None)

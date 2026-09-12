@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.kernel.core.identity import AgentId
 from substrate.kernel.runtime.supervisor import RunHandle
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.services import get_owned_thread
@@ -38,7 +38,7 @@ router = APIRouter(
 async def cancel_chat(
     thread_id: uuid.UUID,
     ctx: ServerDependencies = Depends(get_ctx),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Cancel the active run for *thread_id*, wherever it's actually running.

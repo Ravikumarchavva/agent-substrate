@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from substrate.capabilities.storage.workspace import WorkspaceFileStore
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_service_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import Thread, WorkspaceQuota
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
@@ -46,7 +46,7 @@ def require_admin(
 
 @router.get("/stats")
 async def admin_stats(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_service_scoped_db),
     _: AuthClaims = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Return top-level aggregate stats.
@@ -70,7 +70,7 @@ async def admin_stats(
 async def list_all_threads(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_service_scoped_db),
     _: AuthClaims = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     """Return all threads with EventLogProtocol event counts, newest first.
@@ -143,7 +143,7 @@ async def get_thread_steps(
 async def delete_thread(
     thread_id: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_service_scoped_db),
     _: AuthClaims = Depends(require_admin),
 ) -> Dict[str, str]:
     """Hard-delete a thread and all its steps (admin only)."""
@@ -240,7 +240,7 @@ async def set_storage_quota(
     tenant_id: str,
     body: SetQuotaRequest,
     ctx: ServerDependencies = Depends(get_ctx),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_service_scoped_db),
     _: AuthClaims = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Set (or, with ``quota_bytes: null``, reset to the global default)

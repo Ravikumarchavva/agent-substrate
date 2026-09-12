@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from substrate.serving.monolith.models import Base
+from substrate.serving.monolith.rls import enable_row_level_security, ensure_app_role
 
 # Columns added to existing tables after they first shipped —
 # `Base.metadata.create_all` below is a no-op on a pre-existing table (it
@@ -31,6 +32,7 @@ _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("file_metadata", "staged_at", "TIMESTAMPTZ"),
     ("file_metadata", "staging_error", "TEXT"),
     ("file_versions", "restored_from_seq", "INTEGER"),
+    ("file_versions", "tenant_id", "VARCHAR"),
 ]
 
 
@@ -38,31 +40,58 @@ async def init_db(
     database_url: str,
     *,
     echo: bool = False,
+    rls_app_role_password: str | None = None,
+    app_database_url: str | None = None,
 ) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
-    """Initialize the database engine and create tables.
+    """Run schema setup on the admin connection, then return an engine/
+    session_factory bound to the app's actual runtime connection.
+
+    ``database_url`` is the admin/bootstrap connection — table creation,
+    additive-column migrations, and RLS policy/role setup (see ``rls.py``)
+    all need table-owner/superuser privilege, which the restricted runtime
+    role deliberately doesn't have. ``app_database_url``, when given, is a
+    *different* connection (the least-privilege ``substrate_app`` role —
+    see ``rls.py``) that the returned ``session_factory`` actually uses to
+    serve requests; omitted, it falls back to ``database_url`` — today's
+    single-connection behavior (RLS stays enabled either way, just inert
+    against a superuser connection).
 
     Returns ``(engine, session_factory)`` for the caller to store on
     ``app.state.*``.  No module-level globals are used.
     """
-    engine = create_async_engine(
-        database_url,
-        echo=echo,
-        pool_size=10,
-        max_overflow=20,
-        pool_pre_ping=True,
-    )
-    session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
-        bind=engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
-    async with engine.begin() as conn:
+    admin_engine = create_async_engine(database_url, echo=echo)
+    async with admin_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         for table, col, defn in _MIGRATE_COLUMNS:
             await conn.execute(
                 text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {defn}")
             )
+        # Enabling the policies is always safe (idempotent DDL, and inert
+        # against a superuser connection — see rls.py's module docstring).
+        # Only actually provision the dedicated low-privilege role when a
+        # password is configured, since that's a persistent DB role, not
+        # just column/policy metadata.
+        await enable_row_level_security(conn)
+        if rls_app_role_password:
+            await ensure_app_role(conn, password=rls_app_role_password)
 
+    if app_database_url and app_database_url != database_url:
+        await admin_engine.dispose()
+        engine = create_async_engine(
+            app_database_url,
+            echo=echo,
+            pool_size=10,
+            max_overflow=20,
+            pool_pre_ping=True,
+        )
+    else:
+        engine = admin_engine
+
+    session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
     return engine, session_factory
 
 

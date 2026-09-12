@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.services import get_owned_thread
 
@@ -61,7 +61,7 @@ async def _authorize_board(
 async def get_tasks(
     conversation_id: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Return all agent boards for a conversation."""
@@ -77,7 +77,7 @@ async def update_task(
     task_id: str,
     req: TaskUpdateRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Update a task's status, title, or note."""
@@ -111,7 +111,7 @@ async def force_retry_task(
     task_list_id: str,
     task_id: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """User override: reset retry_count to 0 and reopen failed/abandoned task."""
@@ -136,7 +136,7 @@ async def add_tasks(
     task_list_id: str,
     req: AddTasksRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Append new tasks to an existing board."""
@@ -151,7 +151,7 @@ async def delete_task(
     task_list_id: str,
     task_id: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Delete a task."""

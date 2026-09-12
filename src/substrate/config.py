@@ -42,8 +42,16 @@ class SubstrateConfig(BaseSettings):
     HF_TOKEN: str = ""
 
     # ── Database ─────────────────────────────────────────────────────────────
+    # The admin/bootstrap connection — schema creation, additive migrations,
+    # and RLS policy/role setup (see rls.py) all need table-owner/superuser
+    # privilege, which the restricted runtime role below deliberately lacks.
     DATABASE_URL: str = ""
     ASYNC_DATABASE_URL: str = ""
+    # What actually serves requests once RLS is provisioned (substrate_app —
+    # see rls.py). Unset ⇒ falls back to DATABASE_URL/ASYNC_DATABASE_URL,
+    # today's single-connection behavior (RLS policies stay enabled either
+    # way, just inert against a superuser — see rls.py's module docstring).
+    APP_DATABASE_URL: str = ""
 
     # ── Durable runtime asyncpg pool ─────────────────────────────────────────
     # This is a SEPARATE pool from the ORM's own (SQLAlchemy/asyncpg or
@@ -116,6 +124,18 @@ class SubstrateConfig(BaseSettings):
     # ── Workspace (per-user filesystem: uploads + code-interpreter workdir) ───
     WORKSPACE_USER_QUOTA_BYTES: int = 1024 * 1024 * 1024
     WORKSPACE_USER_DELETE_ALLOWED: bool = True
+
+    # ── Row-Level Security (see serving/monolith/rls.py) ─────────────────────
+    # Unset (default): RLS policies are still created/enabled (harmless,
+    # idempotent DDL — see rls.py), but the app keeps connecting as
+    # DATABASE_URL's own role, which is a superuser in the default local
+    # setup and therefore bypasses RLS entirely, same as today. Set this to
+    # provision the dedicated substrate_app role RLS actually needs — after
+    # that, DATABASE_URL/ASYNC_DATABASE_URL must be switched to connect as
+    # that role (rls.APP_DB_ROLE) for enforcement to take effect; that
+    # credentials switch is a separate, deliberate deployment step this
+    # setting does not perform by itself.
+    RLS_APP_ROLE_PASSWORD: str | None = None
 
     # ── Code interpreter sandbox ─────────────────────────────────────────────
     # Set only when the K8s agent-sandbox backend is wired to the shared

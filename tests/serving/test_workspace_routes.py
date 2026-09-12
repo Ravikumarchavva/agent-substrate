@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
 from substrate.capabilities.storage.workspace import WorkspaceFileStore
 from substrate.serving.monolith.app import app
@@ -23,18 +24,31 @@ def _claims_for(user_id: str) -> AuthClaims:
 
 
 @asynccontextmanager
+async def _bypass_session():
+    """A session_factory() session with RLS's admin bypass GUC set — for
+    direct test setup/teardown against RLS-covered tables (threads), which
+    is trusted fixture code, not a real request going through
+    get_tenant_scoped_db. No-op against the superuser connection tests
+    normally run under; only matters once APP_DATABASE_URL points at the
+    restricted role (see rls.py)."""
+    session_factory = app.state.session_factory
+    async with session_factory() as db:
+        await db.execute(text("SELECT set_config('app.bypass_rls', 'on', false)"))
+        yield db
+
+
+@asynccontextmanager
 async def _registered_user():
     """Create a real User row (file_metadata.user_id is a real FK) and
     clean it up afterwards, regardless of test outcome."""
-    session_factory = app.state.session_factory
     user_id = uuid.uuid4()
-    async with session_factory() as db:
+    async with _bypass_session() as db:
         db.add(User(id=user_id, identifier=f"test-{user_id}"))
         await db.commit()
     try:
         yield str(user_id)
     finally:
-        async with session_factory() as db:
+        async with _bypass_session() as db:
             row = await db.get(User, user_id)
             if row is not None:
                 await db.delete(row)
@@ -47,9 +61,8 @@ async def _registered_thread(thread_id: str, *, owner: str, tenant_id: str = TEN
     owned by *owner* within *tenant_id* — ownership (``list_files``,
     ``delete_file``, ``_may_access_key``) is resolved through these columns,
     not the storage key."""
-    session_factory = app.state.session_factory
     tid = uuid.UUID(thread_id)
-    async with session_factory() as db:
+    async with _bypass_session() as db:
         db.add(
             Thread(
                 id=tid,
@@ -62,7 +75,7 @@ async def _registered_thread(thread_id: str, *, owner: str, tenant_id: str = TEN
     try:
         yield thread_id
     finally:
-        async with session_factory() as db:
+        async with _bypass_session() as db:
             row = await db.get(Thread, tid)
             if row is not None:
                 await db.delete(row)

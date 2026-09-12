@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.schemas import (
     ThreadCreate,
     ThreadOut,
@@ -43,7 +43,7 @@ router = APIRouter(
 @router.post("", response_model=ThreadOut, status_code=201)
 async def create_thread_endpoint(
     body: ThreadCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Create a new chat thread owned by the caller."""
@@ -69,7 +69,7 @@ async def create_thread_endpoint(
 async def list_threads_endpoint(
     limit: int = 50,
     offset: int = 0,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """List the caller's threads, newest first."""
@@ -85,7 +85,7 @@ async def list_threads_endpoint(
 @router.get("/{thread_id}", response_model=ThreadOut)
 async def get_thread_endpoint(
     thread_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Get a single thread by ID."""
@@ -108,7 +108,7 @@ async def get_thread_endpoint(
 async def update_thread_endpoint(
     thread_id: uuid.UUID,
     body: ThreadUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Update thread name, tags, or metadata."""
@@ -139,7 +139,7 @@ async def update_thread_endpoint(
 async def delete_thread_endpoint(
     thread_id: uuid.UUID,
     ctx: ServerDependencies = Depends(get_ctx),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
     """Delete a thread and all its data."""
@@ -156,7 +156,7 @@ async def delete_thread_endpoint(
 async def get_thread_messages(
     thread_id: uuid.UUID,
     ctx: ServerDependencies = Depends(get_ctx),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ) -> List[dict]:
     """Return a thread's full conversation, projected from the EventLogProtocol.

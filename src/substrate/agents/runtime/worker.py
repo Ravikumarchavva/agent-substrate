@@ -236,20 +236,6 @@ class Worker:
 
         run_id = lease.run_id
         token = CancellationToken()
-        # lease.tenant is whatever Runtime.submit(..., tenant=...) passed to
-        # enqueue() — "default" if the caller never set one. Previously
-        # always None here regardless of what was enqueued: RunMeta.tenant_id
-        # existed end-to-end (kernel type, request path) but nothing ever
-        # actually populated it on the resume/execute side.
-        #
-        # supervision_of() is None for a top-level submit() (never spawned)
-        # or an in-memory run before any spawn happened to persist one — in
-        # both cases ctx.spawn() falls back to Supervision.root() exactly as
-        # it always has. For a run that WAS itself ctx.spawn()'d, this is
-        # what lets its own ctx.spawn() calls inherit the caller's
-        # execution_budget via Supervision.spawn_child() instead of handing
-        # every grandchild a fresh, unlimited budget unrelated to whatever
-        # constraints its own parent was given.
         # Populate tenant and supervision hierarchy (inheriting parent budgets)
         supervision = await self._supervisor.supervision_of(run_id)
         meta = RunMeta(
@@ -264,11 +250,6 @@ class Worker:
         tool_invoker = self._build_tool_invoker(agent)
         blob_store = getattr(agent, "blob_store", None)
 
-        # Fold the EventLogProtocol into the effect cache once per lease — this is
-        # the "replay" half of fold-is-truth: every effect.result this run
-        # already recorded becomes a free in-memory lookup for the rest of
-        # this invocation. last_seq also seeds RunContext's local seq
-        # cursor, so no separate last_seq() query is needed below.
         # Fold recorded effect.result entries into the effect cache for replay
         effect_cache = await EffectCache.fold(self._event_log, run_id)
 
@@ -288,21 +269,10 @@ class Worker:
             agent=agent,
         )
 
-        # Log run start (last_seq -1 → first append at seq 0). Routed through
-        # ctx._log so its local seq cursor stays the single source of truth
-        # instead of drifting from an out-of-band append.
         # Log initial run start via ctx._log to preserve seq cursor
         if effect_cache.last_seq < 0:
             await ctx._log("run.started", {})
 
-        # Journaled drain: inbox.drain() is a non-destructive peek (messages
-        # stay until acked), so on a genuine replay a message that arrived
-        # DURING the prior attempt's suspension would otherwise be silently
-        # folded into inbox_msgs this time, changing what the agent sees
-        # from one replay attempt to the next — a real nondeterminism source.
-        # Recording which message ids were drained on the live attempt and
-        # reusing that exact set on replay closes it; a message that arrives
-        # mid-suspension simply waits for the run's NEXT drain instead.
         # Journaled inbox drain: preserve exact drained message IDs across replays
         from substrate.kernel.runtime.effects import Effect
 
@@ -332,7 +302,6 @@ class Worker:
 
         # Keep the Postgres lease alive for long-running agents (LLM calls can
         # easily exceed the 30-second default lease).  The heartbeat runs every
-        # _HEARTBEAT_INTERVAL seconds; InMemoryScheduler.heartbeat is a no-op.
         # Periodic heartbeat maintains the lease during long-running operations
         _HEARTBEAT_INTERVAL = 15
 
@@ -342,12 +311,6 @@ class Worker:
                 try:
                     cancel_requested = await self._scheduler.heartbeat(lease)
                     if cancel_requested:
-                        # Durable cancel or deadline observed for this run —
-                        # possibly requested by a DIFFERENT worker process
-                        # (SupervisorProtocol.cancel() has no reference to this
-                        # process's live Task), so the heartbeat round-trip
-                        # is how it reaches this token. ctx.check() picks it
-                        # up cooperatively at the next yield point.
                         # Cancellation requested out-of-band by supervisor/admin
                         token.cancel("cancel_requested")
                 except Exception:
@@ -377,12 +340,6 @@ class Worker:
             await self._supervisor.finish_run(run_id, RunStatus.COMPLETED)
 
         except SuspendInterrupt as exc:
-            # Genuine dormancy: no ack/nack (the drained messages are still
-            # unacked in the inbox — see the journaled drain above — and will
-            # be there, exactly as-is, on the next lease), no terminal event,
-            # no finish_run. release(SUSPENDED) is the only state
-            # change; the Task ends here and the run costs nothing until
-            # something wakes it.
             # Genuine dormancy: messages remain unacked for replay; release with wake condition
             await self._scheduler.release(
                 lease, status=RunStatus.SUSPENDED, wake_on=exc.wakeup
@@ -411,13 +368,6 @@ class Worker:
             is_budget = isinstance(exc, BudgetExhaustedError)
             is_permanent = isinstance(exc, PermanentError)
             is_crash = not is_guardrail and not is_budget and not is_permanent
-            # Guardrail trips and budget exhaustion are deterministic policy
-            # decisions — a retry replays the same effects and hits the same
-            # decision again, wasting a lease cycle. PermanentError is agent/
-            # tool code explicitly saying the same thing about its own
-            # failure. Anything else defaults to retryable: an unclassified
-            # exception might be transient, and the framework can't safely
-            # assume otherwise.
             # Deterministic errors (guardrails, budgets, permanent errors) skip retries
             retryable = not (is_guardrail or is_budget or is_permanent)
 
@@ -433,17 +383,6 @@ class Worker:
                 for msg in inbox_msgs:
                     await self._inbox.nack(agent.id, msg.id, error=str(exc))
 
-            # Decide retry-vs-terminal FIRST: release() is the authoritative
-            # call (it atomically bumps retry_count and picks pending/
-            # suspended-backoff vs terminal in one transaction). Only once we
-            # know the outcome is actually terminal do we append run.failed
-            # to the EventLogProtocol or tell the SupervisorProtocol — appending run.failed
-            # unconditionally would make any tailer (AgentStreamSession's
-            # loop checks `kind == "run.failed"` directly) think the run is
-            # over on the FIRST transient failure, even though the Worker is
-            # about to retry it. Same reasoning for finish_run(): a parent
-            # watching via ctx.ask/ctx.join must not be told the child failed
-            # until it's genuinely done retrying.
             # Atomically decide retry-vs-terminal before emitting run.failed
             terminal = await self._scheduler.release(
                 lease, status=RunStatus.FAILED, retryable=retryable

@@ -76,25 +76,13 @@ CREATE INDEX IF NOT EXISTS substrate_agent_runs_agent_idx
     ON substrate_agent_runs (agent_id);
 """
 
-# Columns added after the original table shape shipped — additive migration
-# for pre-existing deployments; CREATE TABLE above already includes them for
-# fresh ones. Must run BEFORE any index referencing these columns: on a
-# pre-existing table, "CREATE TABLE IF NOT EXISTS" in _CREATE_TABLES is a
-# no-op and never adds them, so an index created in that same statement
-# would reference a column that doesn't exist yet.
 # Additive column migrations for existing deployments (runs before dependent indexes)
 _MIGRATE_COLUMNS: list[tuple[str, str]] = [
     ("wake_signals", "TEXT[]"),
     ("wake_at", "TIMESTAMPTZ"),
     ("cancel_requested", "BOOLEAN NOT NULL DEFAULT false"),
     ("deadline", "TIMESTAMPTZ"),
-    # Set once, when a run first reaches a terminal status — the retention
-    # sweep's cutoff (see infrastructure/runtime/retention.py). NULL for any
-    # non-terminal run.
     ("terminated_at", "TIMESTAMPTZ"),
-    # Conversation thread this run belongs to, if any (submitted from the
-    # serving layer, not an internal ctx.spawn() child). NULL for runs with
-    # no thread association (spawned subagents, background jobs).
     ("thread_id", "TEXT"),
 ]
 
@@ -450,11 +438,6 @@ class Scheduler:
                     WHERE status = 'running' AND expires_at < now()
                     """
                 )
-                # Timer/deadline wakeups ride this same poll cadence — no
-                # separate timer service. A suspended run whose wake_at has
-                # passed is due; wake_signals is left as-is (harmless once
-                # pending — the wait will consume() and, if nothing's there
-                # yet, immediately re-suspend on the next iteration).
                 # Wake up suspended runs whose wake_at timer has elapsed
                 await conn.execute(
                     """
@@ -463,11 +446,6 @@ class Scheduler:
                     WHERE status = 'suspended' AND wake_at IS NOT NULL AND wake_at <= now()
                     """
                 )
-                # Deadline enforcement: a run stuck pending or suspended past
-                # its deadline (no worker ever running it to observe a
-                # heartbeat) terminates here directly — a coarser circuit
-                # breaker than any single ctx.ask/ctx.join timeout. Running
-                # runs are caught by heartbeat() instead (see there).
                 # Terminate pending/suspended runs that exceeded their deadline
                 await conn.execute(
                     """
@@ -478,18 +456,6 @@ class Scheduler:
                       AND deadline IS NOT NULL AND deadline <= now()
                     """
                 )
-                # Claim up to capacity pending runs — fairly, not strict FIFO.
-                # substrate_run_queue.tenant partitions the ranking: each tenant's
-                # Nth-oldest-by-priority run competes for a slot against every
-                # other tenant's Nth-oldest, so one tenant flooding the queue
-                # can never starve another's first run indefinitely (weighted
-                # round-robin, not "whoever enqueued first wins forever").
-                # FOR UPDATE SKIP LOCKED can't combine with a window function
-                # in one SELECT, so ranking happens in a lock-free CTE first;
-                # the final UPDATE re-targets exactly those candidate rows
-                # with its own SKIP LOCKED — a candidate claimed by a
-                # concurrent worker in between is silently dropped (fewer
-                # than `capacity` leases this poll), never double-claimed.
                 # Claim pending runs using fair-share tenant partitioning CTE with SKIP LOCKED
                 rows = await conn.fetch(
                     """
@@ -617,11 +583,6 @@ class Scheduler:
                             return False
 
                 if status == RunStatus.SUSPENDED:
-                    # wake_signals and wake_at are orthogonal, not kind-exclusive:
-                    # ctx.ask() suspends on BOTH a set of signal names AND a
-                    # deadline at once (whichever comes first should wake it),
-                    # so a Wakeup can legitimately carry both regardless of its
-                    # nominal "kind".
                     # wake_signals and wake_at can be used simultaneously (e.g. signal wait with timeout)
                     wake_signals = (
                         wake_on.signals if wake_on and wake_on.signals else None
@@ -645,11 +606,6 @@ class Scheduler:
                     )
                     suspension_counter.add(1, {"backend": "postgres"})
                     if wake_signals:
-                        # Close the lost-wakeup race: a signal may have
-                        # arrived between the miss inside RunContext (which
-                        # is why we're suspending) and this UPDATE landing.
-                        # If so, un-suspend immediately instead of parking
-                        # on a wakeup that already happened.
                         # Prevent lost-wakeup race if signal arrived while suspending
                         pending = await conn.fetchval(
                             """

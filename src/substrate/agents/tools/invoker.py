@@ -217,11 +217,6 @@ class ToolInvoker:
                 text="Recursive tool_chain calls are not allowed.",
             )
 
-        # 3. Risk / approval gate
-        # A tool may classify its risk per-call from the actual arguments
-        # (e.g. code_interpreter parses the code: exploratory → SAFE, no
-        # approval; dangerous → CRITICAL + a summary for the human). Static
-        # .risk is the fallback for every other tool.
         # 3. Risk / approval gate (dynamic classification takes precedence over static .risk)
         risk_summary: str | None = None
         classifier = getattr(tool, "classify_risk", None)
@@ -246,21 +241,6 @@ class ToolInvoker:
             if ctx is not None and getattr(
                 self._approval, "suspends_via_signal", False
             ):
-                # Durable path: suspend via ctx.sleep_until_signal() instead
-                # of blocking on an in-process Future — a pending approval
-                # then survives a process restart the same way ask_human's
-                # HITL already does (see AskHumanTool.execute()'s signal
-                # branch, capabilities/tools/human_input.py — this mirrors
-                # it exactly). getattr(..., "suspends_via_signal", False) is
-                # the marker WebHITLBridge.human_handler already uses for
-                # the same purpose; SSEApprovalHandler sets it identically.
-                #
-                # ctx.uuid() (not uuid4()) is replay-stable: this tool body
-                # re-executes from the top on every resume attempt (a
-                # suspending call is never itself a cache hit while
-                # suspended), so a fresh id here would mint a new
-                # request_id each attempt and orphan whatever card the
-                # human is looking at.
                 # Durable suspension: request_id is replay-stable via ctx.uuid()
                 request_id = await ctx.uuid()
                 log_payload = {
@@ -271,9 +251,6 @@ class ToolInvoker:
                     "summary": risk_summary or "",
                 }
                 try:
-                    # log_once, not _log: see the docstring reasoning above —
-                    # a plain _log would duplicate this entry (and the UI
-                    # card built from it) on every resume.
                     await ctx.log_once("approval.requested", log_payload)
                 except Exception:
                     pass
@@ -330,11 +307,6 @@ class ToolInvoker:
             )
 
         # 7. Execute with per-call timeout.
-        # Tools that suspend the run for human input (e.g. ask_human) declare
-        # ``suspends = True`` and are exempt: a human may take minutes to answer,
-        # and the timeout would cancel the coroutine parked in sleep_until_signal,
-        # dropping the eventual answer. Their wait is governed elsewhere (the
-        # handler/bridge, or run cancellation on a new message / disconnect).
         # 7. Execute with per-call timeout (suspending tools are exempt)
         if getattr(tool, "suspends", False):
             exec_result = await tool.execute(ctx=ctx, **args)  # type: ignore[union-attr]
@@ -397,20 +369,11 @@ class ToolInvoker:
         content = getattr(exec_result, "content", [])
         policy = self._policy
 
-        # Separate media blocks from text blocks. These are always kept
-        # inline on InvocationResult.media (bytes preserved) — the normal
-        # direct-tool-call path (ctx.tool(), used for every LLM tool call)
-        # has no ArtifactStore wired (agent.blob_store is never set), so
-        # gating this on self._store would silently drop every chart/image
-        # a tool produces outside of a ToolChainTool-bridged call.
         # Keep media blocks inline on InvocationResult.media (bytes preserved)
         media_blocks = [b for b in content if isinstance(b, ImageBlock)]
         files: list[ChainFile] = []
         media = [b for b in media_blocks if b.data is not None]
 
-        # Additionally offload to the artifact store when one is configured
-        # (chain runs) — lets the sandbox reference the file by workspace
-        # path without inlining bytes across the bridge.
         # Offload to artifact store for chain runs when configured
         if media_blocks and self._store is not None:
             for block in media_blocks:

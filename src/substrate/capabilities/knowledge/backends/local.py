@@ -1,33 +1,4 @@
-"""LocalRagBackend — a thin façade over the existing, working local pipeline.
 """LocalRagBackend — self-hosted RAG backend with document extraction and multimodal vector stores."""
-
-Reuses, unchanged:
-  * ``ExtractionClient`` → the document-intelligence service when
-    ``extraction_service_url`` is configured (layout-aware: chart/table
-    detection, OCR) — the same call
-    ``routes/chat_context.py::_extract_document_text`` makes for chat
-    attachments, so parsing behavior is identical between the two paths.
-  * ``EmbeddingRerankerClient`` → the embedding-reranker service when
-    ``embedding_reranker_service_url`` is configured (multimodal embedding,
-    reranking) — a separate service from extraction, see
-    runtimes/embedding_reranker/.
-  * ``PDFLoader``/``TextLoader``/``CSVLoader``/``JSONLoader`` — the local,
-    no-service fallback (PDF/text/csv/json only; DOCX/PPTX have no
-    extraction path at all — the extraction service doesn't parse them
-    either, same limitation chat attachments already have).
-  * ``RAGPipeline`` — chunk → embed → store (text only).
-  * ``LLMReranker``/``CrossEncoderReranker`` — optional post-query reordering.
-
-Chart/table images extracted by the service bypass ``RAGPipeline`` entirely
-(it always re-embeds via the text embedding client, ignoring any pre-set
-``Document.embedding`` — see ``pipeline.py::ingest_documents``) and go
-through a separate multimodal ingest path into ``image_store``, a second
-``VectorStore`` with its own embedding dimensionality (Qwen3-VL-Embedding-2B:
-2048, see docs/claude_docs/decisions.md) that can't share a table with the
-text store's dimensionality. At query time, though, its candidates are
-merged with the text store's into one pool before reranking — see
-``query()``/``_hybrid_candidates()`` below — not kept in a separate path.
-"""
 
 from __future__ import annotations
 
@@ -51,7 +22,6 @@ if TYPE_CHECKING:
     from substrate.kernel.llm import LLMClient
     from substrate.kernel.storage.vector import VectorStore
 
-# Extensions the local (no-extraction-service) fallback can read at all.
 # Extensions the local (no-extraction-service) fallback can read
 _LOCAL_FALLBACK_EXTENSIONS = {".pdf", ".txt", ".md", ".csv", ".json"}
 
@@ -73,23 +43,11 @@ class LocalRagBackend:
         embedding_reranker_service_url: str = "",
         embedding_reranker_auth_token: str = "",
         embedding_reranker_timeout_s: int = 30,
-        # LLMReranker or CrossEncoderReranker — no formal Protocol exists,
-        # both duck-type `async rerank(query, results, *, top_k) -> list[SearchResult]`.
         reranker: Any | None = None,
         model_client: "LLMClient | None" = None,
-        # Pre-built clients, e.g. shared with a CrossEncoderReranker so it
-        # doesn't open a separate HTTP connection to the same service — see
-        # backends/factory.py. Lazily constructed from their *_service_url
-        # when not given.
         extraction_client: "ExtractionClient | None" = None,
         embedding_reranker_client: "EmbeddingRerankerClient | None" = None,
-        # Duck-typed file store (WorkspaceFileStore/S3FileStore). When given,
-        # extracted chart/table images are written here and only a storage key
-        # is kept in the vector row — see _ingest_images.
         file_store: Any | None = None,
-        # Hybrid-retrieval budgets — see config.py's RAG_DENSE_K/RAG_LEXICAL_K/
-        # RAG_FUSED_K/RAG_RERANK_TOP_N for the defaults these mirror and
-        # docs/claude_docs/decisions.md for why each stage is sized this way.
         dense_k: int = 50,
         lexical_k: int = 50,
         fused_k: int = 50,
@@ -371,24 +329,14 @@ class LocalRagBackend:
         for i, (data, meta) in enumerate(items):
             vector = await client.embed_image(data)
             if vector is None:
-                continue  # one bad image must not fail the whole ingest
                 continue
             media_type = meta.get("media_type", "image/png")
-            # OCR'd text for the block, already computed by the extraction
-            # service's layout pass — kept as the row's text so lexical
-            # search can still find a confident chart/table, not only
-            # visual similarity search.
             # Preserve OCR layout text for lexical/hybrid search
             caption = meta.get("caption")
             label_text = f"[{meta.get('label') or 'image'}]"
             text = f"{label_text} {caption}" if caption else label_text
             key = await self._store_image_bytes(data, meta, index=i)
             if key is not None:
-                # Reference, not bytes: a page image is ~500KB, and inlining
-                # them made the images dwarf the vectors they exist to serve
-                # (5.6MB of images against 248KB of text vectors). The row keeps
-                # the embedding — the only part search needs — and
-                # _rehydrate_image resolves the key back to bytes on the way out.
                 # Store reference key in vector row to avoid embedding table bloat
                 documents.append(
                     Document(
@@ -398,8 +346,6 @@ class LocalRagBackend:
                     )
                 )
             else:
-                # No file store (or the write failed): keep the old inline
-                # behaviour rather than dropping the image entirely.
                 documents.append(
                     Document(
                         content=[ImageBlock(data=data, media_type=media_type)],
@@ -413,14 +359,6 @@ class LocalRagBackend:
     async def _store_image_bytes(
         self, data: bytes, meta: dict[str, Any], *, index: int
     ) -> str | None:
-        """Write one extracted image to the file store, returning its key.
-
-        Keyed under the owning tenant+user so it is covered by the same
-        per-tenant quota, listing and deletion as everything else they own
-        (see ``capabilities/storage/layout.py::user_prefix``). Returns
-        ``None`` when there is nothing to write to or no owner to attribute it
-        to, which the caller treats as "fall back to inlining".
-        """
         """Write one extracted image to the file store, returning its key."""
         if self._file_store is None:
             return None
@@ -442,14 +380,6 @@ class LocalRagBackend:
         return key
 
     async def _rehydrate_image(self, result: SearchResult) -> SearchResult:
-        """Swap a stored ``image_key`` back for the real pixels.
-
-        Resolution happens here, on every read, rather than being baked into the
-        stored row — so a conversation that resumes a week later (a paused HITL
-        turn, a reopened thread) still gets the image, and nothing durable ever
-        holds a URL that could expire. Callers upstream (``knowledge_search``,
-        and through it the model) keep seeing an ordinary ``ImageBlock``.
-        """
         """Swap a stored ``image_key`` back for the real pixels."""
         key = (result.metadata or {}).get("image_key")
         if not key or self._file_store is None:
@@ -457,8 +387,6 @@ class LocalRagBackend:
         try:
             data = await self._file_store.download(str(key))
         except Exception as exc:
-            # Leave the placeholder text in place: a missing image should
-            # degrade the answer, not fail the search.
             logger.warning("Loading RAG image %s failed: %s", key, exc)
             return result
         media_type = str((result.metadata or {}).get("media_type") or "image/png")
@@ -468,9 +396,6 @@ class LocalRagBackend:
                 ImageBlock(
                     data=data,
                     media_type=media_type,
-                    # Carried alongside the bytes so downstream consumers that
-                    # only need a reference (the wire-event log) can link rather
-                    # than inline a base64 copy. Model encoders ignore it.
                     storage_key=str(key),
                 )
             ],
@@ -566,10 +491,6 @@ class LocalRagBackend:
         )
 
         registry = DocumentLoaderRegistry()
-        # Passing the extraction client too (not just relying on _load's own
-        # earlier extraction-service attempt) so PDFLoader itself benefits
-        # when reached directly — e.g. a future caller that instantiates the
-        # registry without going through _load's two-tier fallback first.
         registry.register(
             ".pdf", PDFLoader(extraction_client=self._get_extraction_client())
         )
@@ -579,9 +500,6 @@ class LocalRagBackend:
         registry.register(".json", JSONLoader())
 
         try:
-            # get_loader(name) — not source — since source may be bytes with
-            # no extension of its own; `name` (a path or metadata["filename"])
-            # is what carries it.
             loader = registry.get_loader(name)
         except ValueError as exc:
             raise RagLoadError(

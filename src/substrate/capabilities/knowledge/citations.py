@@ -24,27 +24,15 @@ from typing import Any
 
 from substrate.kernel.storage.vector import SearchResult
 
-# How much of a passage travels to the UI as hover/preview text. Long enough to
-# recognise the quote, short enough that a dozen citations don't bloat the SSE
-# payload (the full passage already went to the model in the tool's text output).
 # Characters to include in UI snippet preview
 _SNIPPET_CHARS = 240
 
-# Matches config.RAG_MIN_RERANK_SCORE's value. Kept as a plain default here
-# rather than importing substrate.config — this module has no config
-# dependency today and shouldn't be the first to add one; callers that care
-# about the real configured value pass it explicitly.
 # Default minimum rerank score threshold (mirrors config.RAG_MIN_RERANK_SCORE)
 _DEFAULT_MIN_SCORE = 0.1
 
-# "Near-duplicate" for overlap-window chunks: literal text overlap, not
-# semantic similarity. difflib's ratio is good enough for that and needs no
-# new dependency.
 # Near-duplicate threshold using SequenceMatcher ratio
 _DEFAULT_DEDUP_SIMILARITY = 0.9
 
-# Characters a chunk boundary can end/start with and still count as "ends a
-# sentence cleanly" — used by the mid-sentence-boundary heuristic below.
 _TERMINAL_END_CHARS = (".", "!", "?", '"', "'", ")", "]", "”", "’")
 
 
@@ -69,11 +57,6 @@ class Citation:
     score: float = 0.0
     snippet: str = ""
     backend: str = ""
-    # Adjacent-chunk text attached only when a continuity signal holds (see
-    # attach_adjacency_context()). Kept separate from `snippet`/the passage
-    # text sent to the model — never silently concatenated — so a caller can
-    # render "...continues from previous page: ..." as clearly-labelled
-    # surrounding context rather than passing it off as the matched passage.
     # Adjacent-chunk context (attached when continuity signal holds)
     preceding_context: str = ""
     following_context: str = ""
@@ -152,16 +135,6 @@ def _snippet_of(result: SearchResult) -> str:
 
 
 # ── Score threshold + near-duplicate suppression ────────────────────────────
-#
-# Both run as a pre-pass inside build_citations(), in this order: score
-# threshold first (cheap, and there's no reason to run dedup comparisons over
-# results that are getting dropped anyway), then near-duplicate suppression
-# over the survivors. Filtered-out results are *not* removed from the
-# result list — build_citations() still walks every result positionally
-# (index_for/first_seen must stay aligned with the caller's `results` list,
-# since callers like knowledge_search.py zip them together) — they're just
-# routed down the same "uncitable" path already used for results with no
-# filename: index 0, first_seen False.
 # Runs score filtering first, then deduplication. Filtered results remain in the
 # list as uncitable (index 0) to maintain positional alignment with caller lists.
 
@@ -429,10 +402,6 @@ def build_citations(
         metadata = result.metadata or {}
         file_name = str(metadata.get("filename") or "").strip()
         if not file_name or id(result) not in citable_ids:
-            # Nothing servable to link to (no filename), or filtered out by
-            # score/dedup above. No index means the passage is labelled as
-            # uncitable and the model has no number to cite — preferable to
-            # a chip that opens nothing.
             # Uncitable or filtered: index 0 keeps passage unnumbered
             index_for.append(0)
             first_seen.append(False)
@@ -443,16 +412,11 @@ def build_citations(
         page = pages[0] if pages else None
         key = (file_id or file_name, page)
 
-        # Safe to close over the loop variables: assign() calls this
-        # synchronously, before the next iteration rebinds them.
         def build(index: int) -> Citation:
             return Citation(
                 index=index,
                 file_name=file_name,
                 file_id=file_id,
-                # session_path is what the UI turns into a file URL. Falls back
-                # to the filename, which is right unless the upload's object key
-                # was uniquified (see routes/files.py::_unique_object_key).
                 session_path=str(metadata.get("session_path") or file_name),
                 thread_id=collection,
                 page=page,

@@ -25,27 +25,9 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Iterable
 
-# Labels PaddleOCR's layout model can produce that we treat as extractable
-# images rather than OCR'd text — a chart/table crop is more useful to a
-# vision-capable agent than reflowed OCR text of its contents. "image" was
-# a real, found-not-assumed gap: a plain photo/logo/decorative graphic (no
-# chart/table structure) gets labeled "image", not "figure" — verified
-# against a real 2-page marketing brochure where 3 such blocks (a photo,
-# a logo, a branded graphic) were silently falling through to the text
-# branch, leaking their garbled OCR'd fragments into the plain-text output
-# as if they were real prose, instead of becoming cropped images.
 # Layout regions extracted as discrete image crops (see docs/capabilities/08-document-intelligence.md)
 _IMAGE_LABELS = {"chart", "table", "figure", "image"}
 
-# Below this detection confidence, a chart/table/figure region is treated as
-# a marginal/spurious call, not extracted as an image. Real numbers from this
-# project's own testing: genuine charts/tables on financial filings score
-# 0.94-0.97; a single-row invoice line-items table (not a real chart-worthy
-# region) scored 0.52 and, extracted anyway, showed up in the product as a
-# spuriously-attached "chart" for every unrelated query about that document
-# (nothing else in the image store to compete with it). 0.7 sits with a
-# comfortable margin below the genuine range and above the observed spurious
-# case.
 # Minimum confidence required to extract region as an image crop
 _MIN_IMAGE_CONFIDENCE = 0.7
 
@@ -271,19 +253,6 @@ class ExtractionPipeline:
         from paddleocr import PPStructureV3
 
         det_model, rec_model = _OCR_MODELS[ocr_size]
-        # PPStructureV3 leaves text_recognition_batch_size/
-        # textline_orientation_batch_size at None, which paddlex's
-        # BatchSampler defaults to 1 (verified: base_batch_sampler.py's
-        # __init__(self, batch_size: int = 1)) — every OCR'd text region on
-        # a page (there can be dozens: paragraphs, table cells, ...) gets
-        # its own separate inference call. On CPU that's already how the
-        # work has to be split up, but on GPU it means dozens of tiny
-        # sequential launches instead of one batched one — real, measured
-        # as a sawtooth GPU-utilization pattern (repeated short spikes, not
-        # sustained load) rather than a bug in this pipeline's own code.
-        # ocr_batch_size (config.py's DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE,
-        # default 16) was originally tuned for a 4GB-class laptop GPU — a
-        # 24GB+ card has real room to raise it; only ever applied on GPU.
         # Configure batch size on GPU to avoid sawtooth single-region CUDA launches
         batch_size = ocr_batch_size if device.startswith("gpu") else None
         self._pipeline = PPStructureV3(
@@ -292,11 +261,6 @@ class ExtractionPipeline:
             device=device,
             text_recognition_batch_size=batch_size,
             textline_orientation_batch_size=batch_size,
-            # Table structure recognition (SLANet, bundled in PP-StructureV3)
-            # gives real row/column HTML for table blocks — converted to a
-            # markdown table below — instead of just an OCR'd caption. The
-            # rest stay off: no formula/seal/chart sub-models needed for the
-            # chart/table-image RAG use case this pipeline is built for.
             # Enable SLANet table structure recognition for HTML table output
             use_table_recognition=True,
             use_formula_recognition=False,
@@ -373,10 +337,6 @@ class ExtractionPipeline:
         markdown_pages: list[dict[str, Any]] = []
         for res in results:
             page_no = int(res.get("page_index") or 0) + 1
-            # ``parsing_res_list`` (reading-order blocks, has .image crops)
-            # and ``layout_det_res.boxes`` (raw detections, has .score) come
-            # from the same detection pass but are NOT index-aligned — match
-            # by nearest bbox to recover a confidence score for each block.
             # Match blocks to nearest bounding box to recover detector confidence scores
             score_by_bbox = _score_lookup(res.get("layout_det_res"))
 
@@ -388,10 +348,6 @@ class ExtractionPipeline:
                 label = getattr(block, "label", "") or ""
                 confidence = _nearest_score(score_by_bbox, getattr(block, "bbox", None))
                 raw_content = (getattr(block, "content", "") or "").strip()
-                # Table blocks now carry real structured HTML in ``content``
-                # (use_table_recognition=True) — convert it to a markdown
-                # table for the text stream, not just an image-crop caption,
-                # so the plain-text output alone has the actual table data.
                 # Convert structured table HTML to Markdown for plain-text search stream
                 md_table = (
                     _html_table_to_markdown(raw_content) if label == "table" else ""
@@ -400,14 +356,6 @@ class ExtractionPipeline:
                 img_path = img_dict.get("path") if isinstance(img_dict, dict) else None
                 pil_img = img_dict.get("img") if isinstance(img_dict, dict) else None
 
-                # One gate drives both the images[] list and the markdown
-                # kept/dropped decision — a block only becomes a cropped
-                # image AND a cid: markdown reference if it clears all three
-                # checks; anything else that carried an image blob (a
-                # low-confidence chart/table, or a label outside
-                # _IMAGE_LABELS PaddleX still populated block.image for)
-                # gets recorded as dropped so its <img> tag never leaks an
-                # unresolvable filesystem path into the markdown field.
                 # Crop as image if label matches, confidence clears threshold, and PIL image exists
                 keep_as_image = (
                     label in _IMAGE_LABELS
@@ -436,31 +384,16 @@ class ExtractionPipeline:
                     continue
                 if img_path:
                     dropped_image_paths.add(img_path)
-                # Non-image blocks, and image-labeled blocks below the
-                # confidence bar, fall through here — a marginal chart/table
-                # detection still surfaces whatever text it has (markdown for
-                # a table block, raw OCR text otherwise) rather than being
-                # silently dropped.
                 # Non-image blocks or marginal detections fall through to plain text
                 content = md_table or raw_content
                 if content:
                     text_parts.append(content)
 
-            # Second pass over the same (already-computed) parsing_res_list,
-            # via PaddleX's own markdown assembly — confirmed cheap (pure
-            # string formatting, no re-inference) and safe to call after the
-            # loop above (parsing_res_list is a stored list, not a
-            # generator, so consuming it once doesn't exhaust it).
             # Assemble page markdown using PaddleX reading order
             page_md = res.markdown
             page_markdown_text = _rewrite_markdown_images(
                 page_md.get("markdown_texts", ""), kept_image_paths, dropped_image_paths
             )
-            # Deliberately drop markdown_images (PIL refs) here — the real
-            # bytes are already captured in images[]/ExtractedImage.data;
-            # retaining a second full-res PIL copy per embedded image for
-            # every page of a 60+ page document is unnecessary memory
-            # pressure for a value we don't otherwise use.
             # Retain only compressed ExtractedImage.data (drop PIL copies to save memory)
             markdown_pages.append(
                 {

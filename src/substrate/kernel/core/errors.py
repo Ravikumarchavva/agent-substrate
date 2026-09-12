@@ -110,6 +110,19 @@ class SuspendInterrupt(BaseException):
     is what the Worker passes to ``SchedulerProtocol.release(status=SUSPENDED,
     wake_on=wakeup)`` — it's how the raiser (``RunContext``) tells the
     catcher (``Worker``) what should wake this run back up.
+
+    **Contract for any code that might catch this** (middleware, tool
+    wrappers, task-group/cancellation-scope handling): a broad
+    ``except BaseException`` — or an async framework's own cancellation
+    trap — can still catch this even though ``except Exception`` cannot.
+    Any such handler must re-raise::
+
+        except SuspendInterrupt:
+            raise  # never swallow — the run must actually reach the Worker
+
+    Swallowing it here means the Worker never sees the suspend signal: the
+    run looks completed or simply hangs, instead of going dormant and
+    resuming on ``wakeup`` as intended.
     """
 
     def __init__(self, run_id: str, wakeup: "Wakeup", *, reason: str = "") -> None:

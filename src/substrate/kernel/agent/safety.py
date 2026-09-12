@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Protocol
+from typing import Mapping, Protocol
 
 
 class Severity(str, Enum):
@@ -56,7 +56,7 @@ class SafetyVerdict:
     """
 
     severity: Severity
-    scores: dict[str, float] = field(default_factory=dict)
+    scores: Mapping[str, float] = field(default_factory=dict)
     detector: str = ""
     modality: str = "text"  # "text" | "image" | "document"
     detail: str = ""

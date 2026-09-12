@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 
 from substrate.kernel.core.identity import AgentId
 
@@ -45,7 +45,7 @@ class Memory:
     content: str
     score: float = 0.0
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

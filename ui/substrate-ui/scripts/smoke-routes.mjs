@@ -10,16 +10,17 @@
 
 const START_PORT = Number(process.env.SMOKE_PORT || 3099);
 
-/** Routes that must resolve (not 404). Add new client routes here. */
+/** Routes that must resolve (not 404). Add new client routes here.
+ *  All app routes are served under the `/chat` basePath (next.config.ts) —
+ *  a bare "/" or "/settings" 404s regardless of the page existing. */
 const ROUTES = [
-  "/",
   "/chat",
   "/chat/test-thread-id",
-  "/settings",
-  "/settings/apps",
-  "/settings/llm",
-  "/settings/search",
-  "/settings/admin",
+  "/chat/settings",
+  "/chat/settings/apps",
+  "/chat/settings/llm",
+  "/chat/settings/search",
+  "/chat/settings/admin",
 ];
 
 async function main() {

@@ -37,7 +37,10 @@ from substrate.logger import setup_logging
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import FileMetadata, Thread, User
-from substrate.serving.monolith.routes.chat_context import EXTRACTABLE_CONTENT_TYPES
+from substrate.serving.monolith.routes.chat_context import (
+    EXTRACTABLE_CONTENT_TYPES,
+    _session_relative_path,
+)
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims
 from substrate.serving.shared.contracts.file_store import (
@@ -636,6 +639,16 @@ async def upload_file(
         name=meta.original_name,
         mime=meta.content_type,
         size=meta.size_bytes,
+        # object_key is fixed at upload time regardless of promotion state
+        # (see conversation_shared_key(...) above), so this can be computed
+        # immediately rather than waiting for the first chat turn. Lets the
+        # composer's optimistic just-sent render open the file in the
+        # read-only viewer right away, instead of only after a reload
+        # picks up chat_context.py's own (identically-derived) session_path
+        # on the persisted message.
+        session_path=(
+            _session_relative_path(object_key) if thread_id is not None else None
+        ),
     )
 
 

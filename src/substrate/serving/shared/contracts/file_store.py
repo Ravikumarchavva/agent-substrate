@@ -16,6 +16,11 @@ class FileUploadResponse(BaseModel):
     size: Optional[int] = None
     document_type: Optional[str] = None
     document_class: Optional[str] = None
+    # Workspace-relative path — see routes/files.py::upload_file and
+    # routes/chat_context.py::_session_relative_path, which derive it the
+    # same way. Lets the UI open this file in the read-only artifact
+    # viewer right after upload, not just after a reload.
+    session_path: Optional[str] = None
     model_config = {"from_attributes": True}
 
 

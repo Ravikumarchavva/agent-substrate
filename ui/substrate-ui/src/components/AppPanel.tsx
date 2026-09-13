@@ -676,7 +676,7 @@ export function AppPanel({
                       onClose(item.id);
                     }
                   }}
-                  className="ml-1 p-0.5 rounded hover:bg-background text-(--muted) hover:text-foreground cursor-pointer"
+                  className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-background text-(--muted) hover:text-foreground cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </span>

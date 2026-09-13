@@ -1,4 +1,5 @@
 import { authHeaderFromCookieHeader } from "@/lib/engine-auth";
+import { streamingDispatcher } from "@/lib/streaming-dispatcher";
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
       ...(body.file_ids?.length ? { file_ids: body.file_ids } : {}),
       ...(body.model ? { model: body.model } : {}),
     }),
+    // @ts-expect-error — dispatcher is a Node/undici fetch extension, not in the standard fetch() types
+    dispatcher: streamingDispatcher,
   });
 
   if (!res.ok || !res.body) {

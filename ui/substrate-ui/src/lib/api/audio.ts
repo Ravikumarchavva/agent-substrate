@@ -57,7 +57,7 @@ export const audioApi = {
       model: getPreferredRealtimeModel(),
       voice: getPreferredRealtimeVoice(),
     });
-    const res = await fetch(`/api/audio/realtime-token?${params.toString()}`);
+    const res = await fetch(`/chat/api/audio/realtime-token?${params.toString()}`);
     if (!res.ok) throw new Error(`Failed to get realtime token: ${res.statusText}`);
     return res.json();
   },

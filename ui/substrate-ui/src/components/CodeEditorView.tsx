@@ -87,7 +87,7 @@ export function CodeEditorView({
     setSave("saving");
     try {
       const r = await fetch(
-        `/api/backend/workspace/file?thread_id=${encodeURIComponent(
+        `/chat/api/backend/workspace/file?thread_id=${encodeURIComponent(
           threadId,
         )}&path=${encodeURIComponent(path)}`,
         {

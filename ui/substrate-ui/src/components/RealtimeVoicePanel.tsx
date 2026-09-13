@@ -27,7 +27,7 @@ const IDLE_CLOSE_MS = 90_000;
 // Falls back to using the env var WS URL directly (e.g. in Docker with SSE proxy disabled).
 const WS_PROXY_URL =
   typeof window !== "undefined"
-    ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/api/audio/realtime-ws`
+    ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/chat/api/audio/realtime-ws`
     : (process.env.NEXT_PUBLIC_WS_URL
         ? `${process.env.NEXT_PUBLIC_WS_URL}/audio/realtime`
         : "ws://localhost:8000/audio/realtime");

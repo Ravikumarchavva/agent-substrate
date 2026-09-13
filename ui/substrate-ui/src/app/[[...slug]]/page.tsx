@@ -132,6 +132,12 @@ function ChatPageContent() {
   }, []);
 
   const currentThreadId = routeState.threadId ?? lastActiveThreadId;
+  // Mirrors currentThreadId so an in-flight loadMessages() fetch can tell,
+  // once it resolves, whether the user has already navigated to a different
+  // thread — without this, a slow fetch for thread A resolving after the
+  // user switched to thread B would overwrite B's view with A's messages.
+  const currentThreadIdRef = useRef<string | null>(currentThreadId);
+  currentThreadIdRef.current = currentThreadId;
 
   // Poll for active scheduled tasks count
   useEffect(() => {
@@ -507,11 +513,31 @@ function ChatPageContent() {
   // Wrap hook handlers to also manage local page state
   const handleNewChat = useCallback(async () => {
     setScheduledPanelOpen(false);
+    // Starting a new chat while the previous thread is still streaming used
+    // to blow away `messages` unconditionally (see loadMessages/the
+    // thread-change effect above, which both guard `wsRef.current` before
+    // clearing) — the old stream's events kept landing via `processEvent`
+    // (still the same `abortController`, so its owner-check never tripped)
+    // and got rendered under the new, blank thread. Stop it the same way
+    // the Stop button does first, so its `finally` block finishes cleanly
+    // before we clear anything.
+    if (wsRef.current) {
+      handleStop();
+    }
     await _handleNewChat({ onCreated: () => { setMessages([]); setMobileSidebarOpen(false); } });
   }, [_handleNewChat]);
 
   const handleSelectThread = useCallback((threadId: string) => {
     setScheduledPanelOpen(false);
+    // Same race as handleNewChat above, but for switching to a *different
+    // existing* thread mid-stream: loadMessages' `if (wsRef.current) return
+    // current` guard would keep showing the streaming thread's live
+    // messages under the newly-selected thread's identity until the stream
+    // finished. Only stop when navigating away from the thread that's
+    // actually streaming — reselecting it should leave it alone.
+    if (wsRef.current && activeStreamThreadIdRef.current !== threadId) {
+      handleStop();
+    }
     _handleSelectThread(threadId, { onSelected: () => { setMobileSidebarOpen(false); } });
   }, [_handleSelectThread]);
 
@@ -605,6 +631,10 @@ function ChatPageContent() {
     try {
       const fetchedMessages = await api.getMessages(threadId);
       setMessages((current) => {
+        // The user already navigated away from this thread while the fetch
+        // was in flight — a newer loadMessages call (or handleNewChat) owns
+        // the display now, so don't clobber it with this stale result.
+        if (currentThreadIdRef.current !== threadId) return current;
         // Active stream owns the message state — don't touch it.
         if (wsRef.current) return current;
         // This thread just finished streaming; in-memory messages are more

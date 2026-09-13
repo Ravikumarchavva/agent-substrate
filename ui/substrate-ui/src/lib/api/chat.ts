@@ -35,7 +35,7 @@ export const chatApi = {
   },
 
   async respondToHitl(requestId: string, data: Record<string, unknown>): Promise<void> {
-    const res = await fetch(`/api/chat/respond/${requestId}`, {
+    const res = await fetch(`/chat/api/chat/respond/${requestId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),

@@ -1,29 +1,59 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowDownAZ,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   ArrowUpZA,
   Bot,
   Check,
   ChevronDown,
+  ChevronRight,
   Clock,
-  FolderOpen,
+  Copy,
+  Download,
+  ExternalLink,
+  Eye,
+  File,
+  FileCode,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  Folder,
   HardDrive,
+  LayoutGrid,
+  List,
   Loader2,
   RefreshCw,
   Search,
   Trash2,
+  Upload,
   User,
   Weight,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { formatFileSize, getAttachmentIcon, getAttachmentKind } from "@/lib/file-utils";
+import { buildObjectUrl, buildWorkspaceFileUrl } from "@/lib/api/_client";
+import { formatFileSize, getFileExtension } from "@/lib/file-utils";
+import { FileArtifactViewer } from "@/components/FileArtifactViewer";
 import type { Thread, WorkspaceFile, WorkspaceUsage } from "@/types";
 
+// ─── Constants & Types ───────────────────────────────────────────────────────
+
 const UPLOADS_KEY = "__uploads__";
+
+type ViewMode = "grid" | "list";
+type NavigationLocation =
+  | { type: "drive" }
+  | { type: "folder"; id: string; name: string }
+  | { type: "recent" }
+  | { type: "uploads" }
+  | { type: "assistant" }
+  | { type: "category"; category: "pdf" | "doc" | "sheet" | "image" | "code" };
 
 type SortKey = "recent" | "oldest" | "largest" | "smallest" | "name-asc" | "name-desc";
 
@@ -36,464 +66,6 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "name-desc", label: "Name Z–A" },
 ];
 
-interface SessionGroup {
-  key: string;
-  label: string;
-  items: WorkspaceFile[];
-  totalBytes: number;
-  latest: number;
-}
-
-function formatDate(epochSeconds: number): string {
-  return new Date(epochSeconds * 1000).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-// Same date buckets and order the chat sidebar uses, so Storage reads like the
-// list of conversations the user already knows.
-const DATE_BUCKETS = ["Today", "Yesterday", "Last 7 days", "Last 30 days", "Older"] as const;
-type DateBucket = (typeof DATE_BUCKETS)[number];
-
-function dateBucket(epochSeconds: number): DateBucket {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const day = 86_400_000;
-  const ts = epochSeconds * 1000;
-  if (ts >= today) return "Today";
-  if (ts >= today - day) return "Yesterday";
-  if (ts >= today - 7 * day) return "Last 7 days";
-  if (ts >= today - 30 * day) return "Last 30 days";
-  return "Older";
-}
-
-function sortFiles(files: WorkspaceFile[], sort: SortKey): WorkspaceFile[] {
-  const copy = [...files];
-  copy.sort((a, b) => {
-    switch (sort) {
-      case "recent":
-        return b.modified_at - a.modified_at;
-      case "oldest":
-        return a.modified_at - b.modified_at;
-      case "largest":
-        return b.size_bytes - a.size_bytes;
-      case "smallest":
-        return a.size_bytes - b.size_bytes;
-      case "name-asc":
-        return a.name.localeCompare(b.name);
-      case "name-desc":
-        return b.name.localeCompare(a.name);
-    }
-  });
-  return copy;
-}
-
-function sortSessions(sessions: SessionGroup[], sort: SortKey): SessionGroup[] {
-  const copy = [...sessions];
-  copy.sort((a, b) => {
-    switch (sort) {
-      case "recent":
-        return b.latest - a.latest;
-      case "oldest":
-        return a.latest - b.latest;
-      case "largest":
-        return b.totalBytes - a.totalBytes;
-      case "smallest":
-        return a.totalBytes - b.totalBytes;
-      case "name-asc":
-        return a.label.localeCompare(b.label);
-      case "name-desc":
-        return b.label.localeCompare(a.label);
-    }
-  });
-  return copy;
-}
-
-export function StorageTab() {
-  const [usage, setUsage] = useState<WorkspaceUsage | null>(null);
-  const [files, setFiles] = useState<WorkspaceFile[]>([]);
-  const [threads, setThreads] = useState<Thread[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [deletingPath, setDeletingPath] = useState<string | null>(null);
-
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortKey>("recent");
-  const [sessionSearch, setSessionSearch] = useState("");
-  const [sessionSort, setSessionSort] = useState<SortKey>("recent");
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [usageResult, filesResult, threadsResult] = await Promise.all([
-        api.getWorkspaceUsage(),
-        api.listWorkspaceFiles(),
-        api.getThreads().catch(() => [] as Thread[]),
-      ]);
-      setUsage(usageResult);
-      setFiles(filesResult);
-      setThreads(threadsResult);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Storage isn't available for this deployment.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Group files by session, then order those groups to mirror the sidebar:
-  // threads by their position in /threads (recency), with an "Uploads" bucket
-  // for files that don't belong to any conversation.
-  const sessions = useMemo<SessionGroup[]>(() => {
-    const byKey = new Map<string, SessionGroup>();
-    for (const file of files) {
-      const key = file.session_id ?? UPLOADS_KEY;
-      const label = file.session_id
-        ? file.session_name ?? "Untitled conversation"
-        : "Uploads";
-      const group =
-        byKey.get(key) ?? { key, label, items: [], totalBytes: 0, latest: 0 };
-      group.items.push(file);
-      group.totalBytes += file.size_bytes;
-      group.latest = Math.max(group.latest, file.modified_at);
-      byKey.set(key, group);
-    }
-
-    const order = new Map(threads.map((t, i) => [t.id, i]));
-    return Array.from(byKey.values()).sort((a, b) => {
-      if (a.key === UPLOADS_KEY) return 1;
-      if (b.key === UPLOADS_KEY) return -1;
-      const ai = order.get(a.key);
-      const bi = order.get(b.key);
-      if (ai !== undefined && bi !== undefined) return ai - bi;
-      if (ai !== undefined) return -1;
-      if (bi !== undefined) return 1;
-      return b.latest - a.latest;
-    });
-  }, [files, threads]);
-
-  // Keep a valid selection as data loads / files are deleted.
-  useEffect(() => {
-    if (sessions.length === 0) {
-      setSelectedKey(null);
-    } else if (!sessions.some((s) => s.key === selectedKey)) {
-      setSelectedKey(sessions[0].key);
-    }
-  }, [sessions, selectedKey]);
-
-  const selected = sessions.find((s) => s.key === selectedKey) ?? null;
-
-  const visibleFiles = useMemo(() => {
-    if (!selected) return [];
-    const term = search.trim().toLowerCase();
-    const filtered = term
-      ? selected.items.filter((f) => f.name.toLowerCase().includes(term))
-      : selected.items;
-    return sortFiles(filtered, sort);
-  }, [selected, search, sort]);
-
-  const handleDelete = async (file: WorkspaceFile) => {
-    if (!confirm(`Delete "${file.name}" permanently? This cannot be undone.`)) return;
-    setDeletingPath(file.path);
-    try {
-      await api.deleteWorkspaceFile(file.path);
-      setFiles((prev) => prev.filter((f) => f.path !== file.path));
-      setUsage((prev) =>
-        prev ? { ...prev, used_bytes: Math.max(0, prev.used_bytes - file.size_bytes) } : prev,
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete file.");
-    } finally {
-      setDeletingPath(null);
-    }
-  };
-
-  const pct = usage && usage.quota_bytes > 0
-    ? Math.min(100, (usage.used_bytes / usage.quota_bytes) * 100)
-    : 0;
-  const barColour = pct >= 100 ? "bg-red-500" : pct >= 75 ? "bg-amber-400" : "bg-emerald-500";
-
-  // Filter the session list by name, then lay it out. On the default "Newest"
-  // sort we keep the sidebar's recency order and date buckets; any other sort
-  // flattens into a single sorted list (date buckets don't apply to size/name).
-  const sessionSections = useMemo<{ label: string | null; items: SessionGroup[] }[]>(() => {
-    const term = sessionSearch.trim().toLowerCase();
-    const filtered = term
-      ? sessions.filter((s) => s.label.toLowerCase().includes(term))
-      : sessions;
-
-    if (sessionSort === "recent") {
-      const buckets = new Map<DateBucket, SessionGroup[]>();
-      for (const session of filtered) {
-        const bucket = session.key === UPLOADS_KEY ? "Older" : dateBucket(session.latest);
-        const list = buckets.get(bucket) ?? [];
-        list.push(session);
-        buckets.set(bucket, list);
-      }
-      return DATE_BUCKETS.map((b) => ({ label: b as string, items: buckets.get(b) ?? [] })).filter(
-        (section) => section.items.length > 0,
-      );
-    }
-
-    return [{ label: null, items: sortSessions(filtered, sessionSort) }];
-  }, [sessions, sessionSearch, sessionSort]);
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <h2 className="text-3xl font-semibold tracking-tight text-foreground">Storage</h2>
-          <p className="max-w-3xl text-sm leading-6 text-(--muted)">
-            Files you&apos;ve uploaded and files the assistant created while working
-            (e.g. via the code interpreter), organised by conversation.
-          </p>
-        </div>
-        <button
-          onClick={() => void load()}
-          disabled={loading}
-          className="inline-flex cursor-pointer items-center gap-2 self-start rounded-xl bg-(--card) px-4 py-2 text-sm text-(--muted) transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ boxShadow: "var(--shadow-sm)" }}
-          aria-label="Refresh storage data"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
-      </div>
-
-      {error && (
-        <p className="rounded-[18px] bg-(--badge-bg) px-4 py-3 text-sm text-(--muted)">
-          {error}
-        </p>
-      )}
-
-      {usage && (
-        <div className="rounded-[24px] p-5" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-(--muted)">
-              <HardDrive className="h-3.5 w-3.5" />
-              Storage used
-            </span>
-            <span className="text-xs text-(--muted)">
-              {formatFileSize(usage.used_bytes)} of {formatFileSize(usage.quota_bytes)}
-            </span>
-          </div>
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-(--border)">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColour}`}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex items-center justify-center py-10">
-          <Loader2 className="h-5 w-5 animate-spin text-(--muted)" />
-        </div>
-      ) : sessions.length === 0 ? (
-        <p className="py-8 text-center text-sm text-(--muted)">
-          No files yet. Uploads and assistant-created files will show up here.
-        </p>
-      ) : (
-        <div className="grid h-[calc(100vh-19rem)] min-h-[26rem] gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-          {/* Sessions — ordered like the chat sidebar */}
-          <div
-            className="flex min-h-0 flex-col rounded-[24px] p-3"
-            style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
-          >
-            <div className="flex items-center gap-2 px-1 pb-3">
-              <SearchInput
-                value={sessionSearch}
-                onChange={setSessionSearch}
-                placeholder="Search conversations"
-              />
-              <SortControl sort={sessionSort} onChange={setSessionSort} />
-            </div>
-
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-0.5">
-              {sessionSections.length === 0 ? (
-                <p className="py-8 text-center text-sm text-(--muted)">
-                  No conversations match “{sessionSearch}”.
-                </p>
-              ) : (
-                sessionSections.map((section, i) => (
-                  <div key={section.label ?? `flat-${i}`} className="space-y-1">
-                    {section.label && (
-                      <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-(--muted)">
-                        {section.label}
-                      </p>
-                    )}
-                    {section.items.map((session) => {
-                      const active = session.key === selectedKey;
-                      return (
-                        <button
-                          key={session.key}
-                          type="button"
-                          onClick={() => {
-                            setSelectedKey(session.key);
-                            setSearch("");
-                          }}
-                          className={`flex w-full items-center gap-3 rounded-[18px] px-3 py-2.5 text-left transition-colors ${
-                            active ? "bg-background" : "hover:bg-background"
-                          }`}
-                          style={active ? { boxShadow: "var(--shadow-sm)" } : undefined}
-                        >
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-(--badge-bg) text-(--muted)">
-                            <FolderOpen className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-foreground">{session.label}</p>
-                            <p className="truncate text-xs text-(--muted)">
-                              {session.items.length} {session.items.length === 1 ? "file" : "files"} ·{" "}
-                              {formatFileSize(session.totalBytes)}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Files for the selected session */}
-          <div
-            className="flex min-h-0 flex-col rounded-[24px] p-4"
-            style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
-          >
-            {selected && (
-              <>
-                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className="truncate text-sm font-semibold text-foreground" title={selected.label}>
-                    {selected.label}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <SearchInput
-                      value={search}
-                      onChange={setSearch}
-                      placeholder="Search files"
-                      className="sm:w-48"
-                    />
-                    <SortControl sort={sort} onChange={setSort} />
-                  </div>
-                </div>
-
-                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
-                  {visibleFiles.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-(--muted)">
-                      {search ? `No files match “${search}”.` : "No files in this conversation."}
-                    </p>
-                  ) : (
-                    visibleFiles.map((file) => {
-                      const Icon = getAttachmentIcon(getAttachmentKind(undefined, file.name));
-                      return (
-                        <div
-                          key={file.path}
-                          className="flex items-center gap-3 rounded-[18px] bg-background px-3 py-2.5"
-                        >
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-(--badge-bg) text-(--muted)">
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="truncate text-sm font-semibold text-foreground">{file.name}</p>
-                              <OwnerBadge owner={file.owner} />
-                            </div>
-                            <p className="truncate text-xs text-(--muted)">
-                              {formatFileSize(file.size_bytes)} · {formatDate(file.modified_at)}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => void handleDelete(file)}
-                            disabled={deletingPath === file.path}
-                            className="shrink-0 cursor-pointer rounded-lg p-2 text-(--muted) transition-colors hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-40"
-                            aria-label={`Delete ${file.name}`}
-                          >
-                            {deletingPath === file.path ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </button>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function OwnerBadge({ owner }: { owner: WorkspaceFile["owner"] }) {
-  const isUser = owner === "user";
-  const Icon = isUser ? User : Bot;
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-        isUser
-          ? "bg-sky-500/12 text-sky-500"
-          : "bg-violet-500/12 text-violet-500"
-      }`}
-    >
-      <Icon className="h-2.5 w-2.5" />
-      {isUser ? "You" : "Assistant"}
-    </span>
-  );
-}
-
-function SearchInput({
-  value,
-  onChange,
-  placeholder,
-  className = "",
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-(--border) bg-background px-3 py-2 text-sm transition focus-within:ring-2 focus-within:ring-(--accent) ${className}`}
-    >
-      <Search className="h-4 w-4 shrink-0 text-(--muted)" />
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-(--muted)"
-      />
-      {value && (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className="cursor-pointer rounded-lg p-0.5 text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground"
-          aria-label="Clear search"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      )}
-    </div>
-  );
-}
-
 const SORT_ICONS: Record<SortKey, LucideIcon> = {
   recent: Clock,
   oldest: Clock,
@@ -503,9 +75,180 @@ const SORT_ICONS: Record<SortKey, LucideIcon> = {
   "name-desc": ArrowUpZA,
 };
 
-// Custom dropdown mirroring the model-selection selects (ModelsTab): a bordered
-// trigger + a floating `substrate-scale-in` panel with a check on the active row.
-function SortControl({ sort, onChange }: { sort: SortKey; onChange: (s: SortKey) => void }) {
+interface SessionFolder {
+  id: string;
+  name: string;
+  files: WorkspaceFile[];
+  totalBytes: number;
+  latestModified: number;
+}
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
+
+function formatDate(epochSeconds: number): string {
+  return new Date(epochSeconds * 1000).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatFullDate(epochSeconds: number): string {
+  return new Date(epochSeconds * 1000).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+type FileCategory = "pdf" | "doc" | "sheet" | "image" | "code" | "media" | "other";
+
+function getFileCategory(name: string): FileCategory {
+  const ext = getFileExtension(name).toLowerCase();
+  if (ext === "pdf") return "pdf";
+  if (["md", "markdown", "txt", "doc", "docx", "rtf", "odt"].includes(ext)) return "doc";
+  if (["csv", "tsv", "xlsx", "xls", "ods", "parquet"].includes(ext)) return "sheet";
+  if (["png", "jpg", "jpeg", "webp", "svg", "gif", "bmp", "avif"].includes(ext)) return "image";
+  if (["py", "js", "ts", "tsx", "jsx", "json", "yaml", "yml", "sh", "sql", "html", "css", "toml"].includes(ext))
+    return "code";
+  if (["mp3", "wav", "mp4", "mov", "webm", "ogg", "m4a"].includes(ext)) return "media";
+  return "other";
+}
+
+/** Break long, space-less filenames (e.g. "FY24_Q1_Consolidated.pdf") at
+ * underscores/hyphens/dots instead of letting the browser pick an
+ * arbitrary mid-syllable point — real file managers' text layout engines
+ * do the equivalent. `<wbr>` is a zero-width, invisible opportunity to
+ * wrap; it does nothing unless the browser actually needs to break there. */
+function renderBreakableName(name: string) {
+  const parts = name.split(/(?<=[_\-.])/g);
+  return parts.map((part, i) => (
+    <span key={i}>
+      {part}
+      {i < parts.length - 1 && <wbr />}
+    </span>
+  ));
+}
+
+function sortFiles(files: WorkspaceFile[], sort: SortKey): WorkspaceFile[] {
+  const copy = [...files];
+  copy.sort((a, b) => {
+    switch (sort) {
+      case "recent": return b.modified_at - a.modified_at;
+      case "oldest": return a.modified_at - b.modified_at;
+      case "largest": return b.size_bytes - a.size_bytes;
+      case "smallest": return a.size_bytes - b.size_bytes;
+      case "name-asc": return a.name.localeCompare(b.name);
+      case "name-desc": return b.name.localeCompare(a.name);
+    }
+  });
+  return copy;
+}
+
+function sortFolders(folders: SessionFolder[], sort: SortKey): SessionFolder[] {
+  const copy = [...folders];
+  copy.sort((a, b) => {
+    switch (sort) {
+      case "recent": return b.latestModified - a.latestModified;
+      case "oldest": return a.latestModified - b.latestModified;
+      case "largest": return b.totalBytes - a.totalBytes;
+      case "smallest": return a.totalBytes - b.totalBytes;
+      case "name-asc": return a.name.localeCompare(b.name);
+      case "name-desc": return b.name.localeCompare(a.name);
+    }
+  });
+  return copy;
+}
+
+// ─── File Type Config ────────────────────────────────────────────────────────
+
+interface FileTypeConfig {
+  icon: LucideIcon;
+  color: string;
+  bg: string;
+}
+
+function getFileTypeConfig(name: string): FileTypeConfig {
+  const cat = getFileCategory(name);
+  switch (cat) {
+    case "pdf":   return { icon: FileText,        color: "text-rose-400",    bg: "bg-rose-500/10"    };
+    case "doc":   return { icon: FileText,        color: "text-blue-400",    bg: "bg-blue-500/10"    };
+    case "sheet": return { icon: FileSpreadsheet, color: "text-emerald-400", bg: "bg-emerald-500/10" };
+    case "image": return { icon: FileImage,       color: "text-violet-400",  bg: "bg-violet-500/10"  };
+    case "code":  return { icon: FileCode,        color: "text-amber-400",   bg: "bg-amber-500/10"   };
+    default:      return { icon: File,            color: "text-slate-400",   bg: "bg-slate-500/10"   };
+  }
+}
+
+// ─── Subcomponents ───────────────────────────────────────────────────────────
+
+function SidebarItem({
+  icon: Icon,
+  iconColor,
+  label,
+  badge,
+  active,
+  onClick,
+}: {
+  icon: LucideIcon;
+  iconColor?: string;
+  label: string;
+  badge?: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition-colors cursor-pointer ${
+        active
+          ? "bg-background font-semibold text-foreground shadow-xs"
+          : "font-medium text-(--muted) hover:bg-background/50 hover:text-foreground"
+      }`}
+    >
+      <Icon
+        className={`h-[15px] w-[15px] shrink-0 ${
+          active ? "text-(--accent)" : iconColor ?? "text-(--muted)"
+        }`}
+      />
+      <span className="flex-1 truncate text-left">{label}</span>
+      {badge !== undefined && (
+        <span
+          className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums leading-none shrink-0 ${
+            active ? "bg-(--badge-bg) text-foreground" : "bg-background/60 text-(--muted)"
+          }`}
+        >
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function SourcePill({ owner }: { owner: WorkspaceFile["owner"] }) {
+  const isUser = owner === "user";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-[2px] text-[10px] font-medium leading-none shrink-0 ${
+        isUser
+          ? "bg-sky-500/12 text-sky-400 ring-1 ring-sky-500/20"
+          : "bg-purple-500/12 text-purple-400 ring-1 ring-purple-500/20"
+      }`}
+    >
+      {isUser ? (
+        <User className="h-[10px] w-[10px] shrink-0" />
+      ) : (
+        <Bot className="h-[10px] w-[10px] shrink-0" />
+      )}
+      {isUser ? "You" : "Assistant"}
+    </span>
+  );
+}
+
+function SortDropdown({ sort, onChange }: { sort: SortKey; onChange: (s: SortKey) => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -524,46 +267,1005 @@ function SortControl({ sort, onChange }: { sort: SortKey; onChange: (s: SortKey)
     <div className="relative shrink-0" ref={ref}>
       <button
         type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        className="flex cursor-pointer items-center gap-2 rounded-xl border border-(--border) bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
-        aria-label="Sort"
+        onClick={() => setIsOpen((o) => !o)}
+        className="flex h-8 items-center gap-1.5 rounded-lg border border-(--border) bg-background/60 px-2.5 text-xs font-medium text-foreground transition hover:bg-(--card) cursor-pointer"
+        aria-label="Sort options"
       >
-        <TriggerIcon className="h-4 w-4 shrink-0 text-(--muted)" />
-        <span className="hidden truncate sm:inline">{selectedLabel}</span>
-        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+        <TriggerIcon className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
+        <span className="hidden sm:inline">{selectedLabel}</span>
+        <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
       </button>
 
       {isOpen && (
         <div
-          className="substrate-scale-in absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-(--border) p-1 shadow-xl"
-          style={{ background: "var(--card)", transformOrigin: "top right" }}
+          className="absolute right-0 z-50 mt-1.5 w-40 overflow-hidden rounded-xl border border-(--border) p-1 shadow-xl"
+          style={{ background: "var(--card)" }}
         >
-          <div className="flex flex-col gap-0.5">
-            {SORT_OPTIONS.map((opt) => {
-              const OptIcon = SORT_ICONS[opt.key];
-              return (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => {
-                    onChange(opt.key);
-                    setIsOpen(false);
-                  }}
-                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                    sort === opt.key
-                      ? "bg-foreground/10 font-medium text-foreground"
-                      : "text-foreground hover:bg-(--card-hover)"
-                  }`}
-                >
-                  <OptIcon className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
-                  <span className="flex-1 truncate">{opt.label}</span>
-                  {sort === opt.key && <Check className="h-4 w-4 shrink-0" />}
+          {SORT_OPTIONS.map((opt) => {
+            const OptIcon = SORT_ICONS[opt.key];
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => { onChange(opt.key); setIsOpen(false); }}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition cursor-pointer ${
+                  sort === opt.key
+                    ? "bg-foreground/8 font-semibold text-foreground"
+                    : "text-(--muted) hover:bg-background hover:text-foreground"
+                }`}
+              >
+                <OptIcon className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
+                <span className="flex-1">{opt.label}</span>
+                {sort === opt.key && <Check className="h-3.5 w-3.5 shrink-0 text-foreground" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Shared menu body — used by both the per-card 3-dot dropdown and the
+ * right-click context menu below, so the two triggers can't drift apart. */
+function FileMenuContent({
+  file,
+  onInspect,
+  onDelete,
+  downloadUrl,
+  onClose,
+}: {
+  file: WorkspaceFile;
+  onInspect: () => void;
+  onDelete: () => void;
+  downloadUrl: string;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div className="px-3 py-2 border-b border-(--border)/40">
+        <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-(--muted)/60 mb-1">Details</p>
+        <p className="text-[11px] text-(--muted)">{formatFileSize(file.size_bytes)} · {formatDate(file.modified_at)}</p>
+        <p className="text-[11px] text-(--muted) mt-0.5">
+          {file.owner === "user" ? "Uploaded by you" : "Generated by assistant"}
+        </p>
+      </div>
+      <div className="mt-1 space-y-0.5">
+        <button
+          type="button"
+          onClick={() => { onInspect(); onClose(); }}
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-(--muted) hover:bg-background hover:text-foreground transition cursor-pointer"
+        >
+          <Eye className="h-3.5 w-3.5 shrink-0" />
+          Inspect
+        </button>
+        <a
+          href={downloadUrl}
+          download={file.name}
+          onClick={onClose}
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-(--muted) hover:bg-background hover:text-foreground transition cursor-pointer"
+        >
+          <Download className="h-3.5 w-3.5 shrink-0" />
+          Download
+        </a>
+        <button
+          type="button"
+          onClick={() => { onDelete(); onClose(); }}
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-rose-400/80 hover:bg-rose-500/10 hover:text-rose-400 transition cursor-pointer"
+        >
+          <Trash2 className="h-3.5 w-3.5 shrink-0" />
+          Delete
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** Right-click context menu — opens at the cursor. The only way to reach
+ * per-file actions (Inspect/Download/Delete); there's no persistent 3-dot
+ * button cluttering every card — same as a real desktop file manager,
+ * where right-click is the primary discovery path. Portal-rendered at
+ * document.body so it always floats above the panel regardless of any
+ * ancestor's overflow/z-index. One instance, shared by the whole explorer
+ * (mounted once in StorageTab, driven by a single `contextMenu` state)
+ * rather than one per row/card — real file managers only ever show one
+ * context menu at a time regardless of how many items exist. */
+function FileContextMenu({
+  file,
+  x,
+  y,
+  onInspect,
+  onDelete,
+  downloadUrl,
+  onClose,
+}: {
+  file: WorkspaceFile;
+  x: number;
+  y: number;
+  onInspect: () => void;
+  onDelete: () => void;
+  downloadUrl: string;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose();
+    }
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("scroll", onClose, true);
+    window.addEventListener("resize", onClose);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("scroll", onClose, true);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [onClose]);
+
+  // Clamp so the menu never opens off the right/bottom edge of the viewport.
+  const menuWidth = 192;
+  const menuHeight = 180;
+  const left = Math.min(x, window.innerWidth - menuWidth - 8);
+  const top = Math.min(y, window.innerHeight - menuHeight - 8);
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className="fixed z-50 w-48 overflow-hidden rounded-xl border border-(--border) p-1 shadow-xl"
+      style={{ background: "var(--card)", top, left }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <FileMenuContent
+        file={file}
+        onInspect={onInspect}
+        onDelete={onDelete}
+        downloadUrl={downloadUrl}
+        onClose={onClose}
+      />
+    </div>,
+    document.body
+  );
+}
+
+/** A page silhouette with a folded top-right corner and an extension
+ * label at the foot — the classic desktop file-icon shape (Explorer,
+ * Finder, Drive) — instead of a flat colored square badge, which read as
+ * a generic app icon rather than a *file*. */
+function FileIconDisplay({ file, size = "md" }: { file: WorkspaceFile; size?: "sm" | "md" | "lg" }) {
+  const config = getFileTypeConfig(file.name);
+  const Icon = config.icon;
+  const ext = getFileExtension(file.name).toUpperCase().slice(0, 4);
+  const dims = {
+    sm: { w: 26, h: 32, fold: 8, icon: "h-3 w-3", label: "text-[5px]" },
+    md: { w: 34, h: 42, fold: 10, icon: "h-3.5 w-3.5", label: "text-[6px]" },
+    lg: { w: 46, h: 56, fold: 13, icon: "h-[18px] w-[18px]", label: "text-[7px]" },
+  }[size];
+  return (
+    <div className="relative shrink-0" style={{ width: dims.w, height: dims.h }}>
+      <div
+        className={`absolute inset-0 border border-(--border) ${config.bg}`}
+        style={{
+          borderRadius: 3,
+          clipPath: `polygon(0 0, calc(100% - ${dims.fold}px) 0, 100% ${dims.fold}px, 100% 100%, 0 100%)`,
+        }}
+      />
+      {/* Folded corner */}
+      <div
+        className="absolute right-0 top-0"
+        style={{
+          width: 0,
+          height: 0,
+          borderStyle: "solid",
+          borderWidth: `0 ${dims.fold}px ${dims.fold}px 0`,
+          borderColor: `transparent var(--background) transparent transparent`,
+          opacity: 0.55,
+        }}
+      />
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 pb-1">
+        <Icon className={`${dims.icon} ${config.color} shrink-0`} />
+        {ext && (
+          <span className={`${dims.label} font-bold uppercase leading-none tracking-wide ${config.color} opacity-80`}>
+            {ext}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+
+export function StorageTab() {
+  const [usage, setUsage] = useState<WorkspaceUsage | null>(null);
+  const [files, setFiles] = useState<WorkspaceFile[]>([]);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [location, setLocation] = useState<NavigationLocation>({ type: "drive" });
+  const [history, setHistory] = useState<NavigationLocation[]>([{ type: "drive" }]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>("recent");
+
+  const [inspectedFile, setInspectedFile] = useState<WorkspaceFile | null>(null);
+  const [copiedPath, setCopiedPath] = useState(false);
+  const [deletingFile, setDeletingFile] = useState<WorkspaceFile | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Click-to-select / double-click-to-open, like a real file manager —
+  // single click was previously wired straight to openInspector, so there
+  // was no way to just highlight a file without opening it.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: WorkspaceFile } | null>(null);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const explorerRef = useRef<HTMLDivElement>(null);
+
+  // ─── Data Loading ──────────────────────────────────────────────────────────
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
+      Promise.race([p, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
+
+    try {
+      const [usageResult, filesResult, threadsResult] = await Promise.allSettled([
+        withTimeout(api.getWorkspaceUsage(), 4000, null),
+        withTimeout(api.listWorkspaceFiles(), 6000, [] as WorkspaceFile[]),
+        withTimeout(api.getThreads().catch(() => [] as Thread[]), 3000, [] as Thread[]),
+      ]);
+      if (usageResult.status === "fulfilled" && usageResult.value) setUsage(usageResult.value);
+      if (filesResult.status === "fulfilled") {
+        // .extracted.md sidecars (agent-substrate writes one next to every
+        // staged PDF/doc, for code_interpreter's benefit — see
+        // routes/files.py::_write_extracted_sidecar) are an implementation
+        // detail, not a document the user uploaded or generated; listing
+        // them here just doubles the visible file count for one logical
+        // document.
+        setFiles(filesResult.value.filter((f) => !f.name.endsWith(".extracted.md")));
+      } else {
+        setError("Could not load workspace files. Please click Refresh.");
+      }
+      if (threadsResult.status === "fulfilled") setThreads(threadsResult.value);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Storage isn't available for this deployment.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  // ─── Navigation ────────────────────────────────────────────────────────────
+
+  const navigateTo = useCallback((next: NavigationLocation) => {
+    setSearch("");
+    setHistory((prev) => [...prev.slice(0, historyIndex + 1), next]);
+    setHistoryIndex((prev) => prev + 1);
+    setLocation(next);
+  }, [historyIndex]);
+
+  const goBack = useCallback(() => {
+    if (historyIndex > 0) {
+      const i = historyIndex - 1;
+      setHistoryIndex(i);
+      setLocation(history[i]);
+      setSearch("");
+    }
+  }, [historyIndex, history]);
+
+  const goForward = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const i = historyIndex + 1;
+      setHistoryIndex(i);
+      setLocation(history[i]);
+      setSearch("");
+    }
+  }, [historyIndex, history]);
+
+  const goUp = useCallback(() => {
+    if (location.type !== "drive") navigateTo({ type: "drive" });
+  }, [location, navigateTo]);
+
+  // Selection resets on navigation — a selected file's index is only
+  // meaningful within the folder it was selected in.
+  useEffect(() => {
+    setSelected(new Set());
+    setLastSelectedIndex(null);
+  }, [location]);
+
+  // ─── Data ──────────────────────────────────────────────────────────────────
+
+  const sessionFolders = useMemo<SessionFolder[]>(() => {
+    const byKey = new Map<string, SessionFolder>();
+    for (const file of files) {
+      const id = file.session_id ?? UPLOADS_KEY;
+      const name = file.session_id ? file.session_name ?? "Untitled conversation" : "Uploads";
+      const folder = byKey.get(id) ?? { id, name, files: [], totalBytes: 0, latestModified: 0 };
+      folder.files.push(file);
+      folder.totalBytes += file.size_bytes;
+      folder.latestModified = Math.max(folder.latestModified, file.modified_at);
+      byKey.set(id, folder);
+    }
+    const threadOrder = new Map(threads.map((t, i) => [t.id, i]));
+    const list = Array.from(byKey.values()).sort((a, b) => {
+      if (a.id === UPLOADS_KEY) return 1;
+      if (b.id === UPLOADS_KEY) return -1;
+      const ai = threadOrder.get(a.id);
+      const bi = threadOrder.get(b.id);
+      if (ai !== undefined && bi !== undefined) return ai - bi;
+      if (ai !== undefined) return -1;
+      if (bi !== undefined) return 1;
+      return b.latestModified - a.latestModified;
+    });
+    return sortFolders(list, sort);
+  }, [files, threads, sort]);
+
+  const currentViewData = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    if (location.type === "drive") {
+      const folders = term ? sessionFolders.filter((f) => f.name.toLowerCase().includes(term)) : sessionFolders;
+      return { title: "Home Drive", folders, files: [] as WorkspaceFile[] };
+    }
+    if (location.type === "folder") {
+      const folder = sessionFolders.find((f) => f.id === location.id);
+      const all = folder ? folder.files : [];
+      const filtered = term ? all.filter((f) => f.name.toLowerCase().includes(term)) : all;
+      return { title: location.name, folders: [] as SessionFolder[], files: sortFiles(filtered, sort) };
+    }
+    if (location.type === "recent") {
+      const recent = [...files].sort((a, b) => b.modified_at - a.modified_at);
+      const filtered = term ? recent.filter((f) => f.name.toLowerCase().includes(term)) : recent;
+      return { title: "Recent Files", folders: [] as SessionFolder[], files: sortFiles(filtered, sort) };
+    }
+    if (location.type === "uploads") {
+      const userFiles = files.filter((f) => f.owner === "user");
+      const filtered = term ? userFiles.filter((f) => f.name.toLowerCase().includes(term)) : userFiles;
+      return { title: "User Uploads", folders: [] as SessionFolder[], files: sortFiles(filtered, sort) };
+    }
+    if (location.type === "assistant") {
+      const agentFiles = files.filter((f) => f.owner === "agent");
+      const filtered = term ? agentFiles.filter((f) => f.name.toLowerCase().includes(term)) : agentFiles;
+      return { title: "Assistant Artifacts", folders: [] as SessionFolder[], files: sortFiles(filtered, sort) };
+    }
+    if (location.type === "category") {
+      const cat = location.category;
+      const catFiles = files.filter((f) => getFileCategory(f.name) === cat);
+      const filtered = term ? catFiles.filter((f) => f.name.toLowerCase().includes(term)) : catFiles;
+      const titles: Record<string, string> = {
+        pdf: "PDF Documents", doc: "Text & Markdown", sheet: "Spreadsheets & CSV", image: "Images", code: "Code & Scripts",
+      };
+      return { title: titles[cat], folders: [] as SessionFolder[], files: sortFiles(filtered, sort) };
+    }
+    return { title: "Files", folders: [] as SessionFolder[], files: [] as WorkspaceFile[] };
+  }, [location, sessionFolders, files, search, sort]);
+
+  const getDownloadUrl = (file: WorkspaceFile) =>
+    file.session_id ? buildWorkspaceFileUrl(file.session_id, file.name) : buildObjectUrl(file.path);
+
+  // Single click: select (Ctrl/Cmd toggles one, Shift range-selects from
+  // the last click). Double click: open. Same model as Nautilus/Dolphin/
+  // Explorer — a click no longer jumps straight into the inspector.
+  const handleFileClick = useCallback((file: WorkspaceFile, index: number, e: React.MouseEvent) => {
+    if (e.shiftKey && lastSelectedIndex !== null) {
+      const [start, end] = [Math.min(lastSelectedIndex, index), Math.max(lastSelectedIndex, index)];
+      const range = currentViewData.files.slice(start, end + 1).map((f) => f.path);
+      setSelected(new Set(range));
+    } else if (e.metaKey || e.ctrlKey) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(file.path)) next.delete(file.path);
+        else next.add(file.path);
+        return next;
+      });
+      setLastSelectedIndex(index);
+    } else {
+      setSelected(new Set([file.path]));
+      setLastSelectedIndex(index);
+    }
+  }, [lastSelectedIndex, currentViewData.files]);
+
+  const handleFileContextMenu = useCallback((file: WorkspaceFile, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Right-clicking an unselected file selects just that one first — same
+    // as every desktop file manager (right-click never acts on a stale
+    // selection from a different file).
+    if (!selected.has(file.path)) setSelected(new Set([file.path]));
+    setContextMenu({ x: e.clientX, y: e.clientY, file });
+  }, [selected]);
+
+  const selectedFiles = useMemo(
+    () => currentViewData.files.filter((f) => selected.has(f.path)),
+    [currentViewData.files, selected],
+  );
+
+  const executeBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    try {
+      const toDelete = selectedFiles;
+      await Promise.all(toDelete.map((f) => api.deleteWorkspaceFile(f.path)));
+      const deletedPaths = new Set(toDelete.map((f) => f.path));
+      setFiles((prev) => prev.filter((f) => !deletedPaths.has(f.path)));
+      const freedBytes = toDelete.reduce((a, f) => a + f.size_bytes, 0);
+      setUsage((prev) => (prev ? { ...prev, used_bytes: Math.max(0, prev.used_bytes - freedBytes) } : prev));
+      setSelected(new Set());
+      setBulkDeleteConfirm(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete files.");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  // Keyboard shortcuts — Escape clears selection (or closes an open
+  // modal/menu first), Delete removes the selection, Ctrl/Cmd+A selects
+  // everything in the current view. Disabled while a modal/menu already
+  // owns keyboard focus, or while typing in the search box.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      if (inspectedFile || deletingFile || bulkDeleteConfirm || contextMenu) return;
+
+      if (e.key === "Escape") {
+        setSelected(new Set());
+      } else if ((e.key === "Delete" || e.key === "Backspace") && selected.size > 0) {
+        e.preventDefault();
+        if (selected.size === 1) confirmDelete(selectedFiles[0]);
+        else setBulkDeleteConfirm(true);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+        e.preventDefault();
+        setSelected(new Set(currentViewData.files.map((f) => f.path)));
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [inspectedFile, deletingFile, bulkDeleteConfirm, contextMenu, selected, selectedFiles, currentViewData.files]);
+
+  const openInspector = (file: WorkspaceFile) => {
+    setInspectedFile(file);
+    setCopiedPath(false);
+  };
+
+  const copyPath = () => {
+    if (inspectedFile) {
+      void navigator.clipboard.writeText(inspectedFile.path);
+      setCopiedPath(true);
+      setTimeout(() => setCopiedPath(false), 2000);
+    }
+  };
+
+  const confirmDelete = (file: WorkspaceFile) => setDeletingFile(file);
+
+  const executeDelete = async () => {
+    if (!deletingFile) return;
+    setIsDeleting(true);
+    try {
+      await api.deleteWorkspaceFile(deletingFile.path);
+      setFiles((prev) => prev.filter((f) => f.path !== deletingFile.path));
+      setUsage((prev) =>
+        prev ? { ...prev, used_bytes: Math.max(0, prev.used_bytes - deletingFile.size_bytes) } : prev,
+      );
+      if (inspectedFile?.path === deletingFile.path) setInspectedFile(null);
+      setDeletingFile(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete file.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const pct = usage && usage.quota_bytes > 0 ? Math.min(100, (usage.used_bytes / usage.quota_bytes) * 100) : 0;
+  const barColor = pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-400" : "bg-emerald-500";
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Storage Drive</h2>
+          <p className="mt-0.5 text-sm text-(--muted)">Browse, inspect, and organize files across your conversations.</p>
+        </div>
+        <button
+          onClick={() => void load()}
+          disabled={loading}
+          className="inline-flex h-8 items-center gap-2 rounded-lg border border-(--border) bg-(--card) px-3 text-xs font-medium text-(--muted) transition hover:text-foreground disabled:opacity-50 cursor-pointer"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${loading ? "animate-spin text-(--accent)" : ""}`} />
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/8 px-4 py-2.5 text-sm text-red-400">
+          {error}
+        </div>
+      )}
+
+      {/* Main Explorer Window */}
+      <div
+        className="grid min-h-[600px] overflow-hidden rounded-2xl border border-(--border) lg:grid-cols-[220px_1fr]"
+        style={{ background: "var(--card)" }}
+      >
+        {/* Sidebar */}
+        <aside className="flex flex-col border-b border-(--border) lg:border-b-0 lg:border-r">
+          <div className="flex-1 space-y-5 p-3">
+            <div className="space-y-0.5">
+              <p className="mb-1.5 px-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-(--muted)/60">Places</p>
+              <SidebarItem icon={HardDrive} label="Home Drive" badge={sessionFolders.length} active={location.type === "drive"} onClick={() => navigateTo({ type: "drive" })} />
+              <SidebarItem icon={Clock} label="Recent" badge={files.length > 0 ? files.length : undefined} active={location.type === "recent"} onClick={() => navigateTo({ type: "recent" })} />
+              <SidebarItem icon={Upload} label="User Uploads" badge={files.filter((f) => f.owner === "user").length || undefined} active={location.type === "uploads"} onClick={() => navigateTo({ type: "uploads" })} />
+              <SidebarItem icon={Bot} label="Assistant Outputs" badge={files.filter((f) => f.owner === "agent").length || undefined} active={location.type === "assistant"} onClick={() => navigateTo({ type: "assistant" })} />
+            </div>
+            <div className="space-y-0.5">
+              <p className="mb-1.5 px-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-(--muted)/60">File Types</p>
+              <SidebarItem icon={FileText}        iconColor="text-rose-400"    label="PDFs"          active={location.type === "category" && location.category === "pdf"}   onClick={() => navigateTo({ type: "category", category: "pdf" })} />
+              <SidebarItem icon={FileText}        iconColor="text-blue-400"    label="Documents"     active={location.type === "category" && location.category === "doc"}   onClick={() => navigateTo({ type: "category", category: "doc" })} />
+              <SidebarItem icon={FileSpreadsheet} iconColor="text-emerald-400" label="Data & Sheets" active={location.type === "category" && location.category === "sheet"} onClick={() => navigateTo({ type: "category", category: "sheet" })} />
+              <SidebarItem icon={FileImage}       iconColor="text-violet-400"  label="Images"        active={location.type === "category" && location.category === "image"} onClick={() => navigateTo({ type: "category", category: "image" })} />
+              <SidebarItem icon={FileCode}        iconColor="text-amber-400"   label="Code & Scripts" active={location.type === "category" && location.category === "code"}  onClick={() => navigateTo({ type: "category", category: "code" })} />
+            </div>
+          </div>
+
+          {usage && (
+            <div className="border-t border-(--border) p-3">
+              <div className="rounded-xl bg-background/40 p-3">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1.5 font-medium text-foreground">
+                    <HardDrive className="h-3 w-3 shrink-0 text-(--muted)" />
+                    Storage
+                  </span>
+                  <span className="font-semibold tabular-nums text-foreground">{pct.toFixed(0)}%</span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-(--border)/60">
+                  <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${pct}%` }} />
+                </div>
+                <p className="mt-1.5 text-[10px] text-(--muted)">{formatFileSize(usage.used_bytes)} of {formatFileSize(usage.quota_bytes)}</p>
+              </div>
+            </div>
+          )}
+        </aside>
+
+        {/* Main Pane */}
+        <div className="flex min-h-0 flex-col">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-2.5 border-b border-(--border) px-4 py-2.5">
+            {/* Nav */}
+            <div className="flex h-8 items-center rounded-lg border border-(--border) bg-background/50 shrink-0">
+              <button type="button" onClick={goBack} disabled={historyIndex <= 0} className="flex h-8 w-8 items-center justify-center rounded-l-lg text-(--muted) transition hover:bg-(--card) hover:text-foreground disabled:opacity-30 disabled:pointer-events-none cursor-pointer" title="Back">
+                <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+              </button>
+              <button type="button" onClick={goForward} disabled={historyIndex >= history.length - 1} className="flex h-8 w-8 items-center justify-center border-l border-(--border)/60 text-(--muted) transition hover:bg-(--card) hover:text-foreground disabled:opacity-30 disabled:pointer-events-none cursor-pointer" title="Forward">
+                <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+              </button>
+              {location.type !== "drive" && (
+                <button type="button" onClick={goUp} className="flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-(--border)/60 text-(--muted) transition hover:bg-(--card) hover:text-foreground cursor-pointer" title="Up">
+                  <ArrowUp className="h-3.5 w-3.5 shrink-0" />
                 </button>
-              );
-            })}
+              )}
+            </div>
+
+            {/* Breadcrumb */}
+            <div className="flex h-8 items-center rounded-lg border border-(--border) bg-background/50 px-3 text-xs shrink-0 min-w-0">
+              <button type="button" onClick={() => navigateTo({ type: "drive" })} className={`flex items-center gap-1.5 shrink-0 transition cursor-pointer ${location.type === "drive" ? "font-semibold text-foreground" : "text-(--muted) hover:text-foreground"}`}>
+                <HardDrive className="h-3.5 w-3.5 shrink-0" />
+                <span>Home</span>
+              </button>
+              {location.type === "folder" && (
+                <>
+                  <ChevronRight className="mx-2 h-3 w-3 shrink-0 text-(--muted)/40" />
+                  <span className="truncate max-w-[200px] font-semibold text-foreground">{location.name}</span>
+                </>
+              )}
+              {location.type !== "drive" && location.type !== "folder" && (
+                <>
+                  <ChevronRight className="mx-2 h-3 w-3 shrink-0 text-(--muted)/40" />
+                  <span className="truncate max-w-[200px] font-semibold text-foreground">{currentViewData.title}</span>
+                </>
+              )}
+            </div>
+
+            <div className="flex-1" />
+
+            {/* Search */}
+            <div className="relative h-8 w-40 sm:w-48 shrink-0">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--muted)" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search files…"
+                className="h-8 w-full rounded-lg border border-(--border) bg-background/50 pl-8 pr-7 text-xs text-foreground placeholder:text-(--muted) focus:border-(--accent) focus:outline-none focus:ring-1 focus:ring-(--accent) transition"
+              />
+              {search && (
+                <button type="button" onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-(--muted) hover:text-foreground cursor-pointer">
+                  <X className="h-3 w-3 shrink-0" />
+                </button>
+              )}
+            </div>
+
+            {/* View toggle */}
+            <div className="flex h-8 items-center rounded-lg border border-(--border) bg-background/50 shrink-0">
+              <button type="button" onClick={() => setViewMode("grid")} className={`flex h-8 w-8 items-center justify-center rounded-l-lg transition cursor-pointer ${viewMode === "grid" ? "bg-(--card) text-foreground" : "text-(--muted) hover:text-foreground"}`} title="Grid View">
+                <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
+              </button>
+              <button type="button" onClick={() => setViewMode("list")} className={`flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-(--border)/60 transition cursor-pointer ${viewMode === "list" ? "bg-(--card) text-foreground" : "text-(--muted) hover:text-foreground"}`} title="List View">
+                <List className="h-3.5 w-3.5 shrink-0" />
+              </button>
+            </div>
+
+            <SortDropdown sort={sort} onChange={setSort} />
+          </div>
+
+          {/* Canvas */}
+          <div
+            ref={explorerRef}
+            className="flex-1 overflow-y-auto p-5"
+            onClick={(e) => { if (e.target === e.currentTarget) setSelected(new Set()); }}
+          >
+            {loading ? (
+              <div className="flex h-72 flex-col items-center justify-center gap-2.5">
+                <Loader2 className="h-7 w-7 animate-spin text-(--accent) shrink-0" />
+                <p className="text-xs text-(--muted)">Loading storage drive…</p>
+              </div>
+            ) : currentViewData.folders.length === 0 && currentViewData.files.length === 0 ? (
+              <div className="flex h-72 flex-col items-center justify-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-background border border-(--border) shrink-0">
+                  <Folder className="h-7 w-7 text-(--muted) opacity-40 shrink-0" />
+                </div>
+                <div className="text-center max-w-xs">
+                  <p className="text-sm font-medium text-foreground">{search ? `No matches for "${search}"` : "This folder is empty"}</p>
+                  <p className="mt-1 text-xs text-(--muted)">Files uploaded or generated will appear here.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Folders */}
+                {currentViewData.folders.length > 0 && (
+                  <section>
+                    <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-(--muted)">
+                      Folders ({currentViewData.folders.length})
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {currentViewData.folders.map((folder) => (
+                        <button
+                          key={folder.id}
+                          type="button"
+                          onClick={() => navigateTo({ type: "folder", id: folder.id, name: folder.name })}
+                          className="group flex items-center gap-3 rounded-xl border border-(--border) bg-background/40 p-3 text-left transition hover:border-amber-500/30 hover:bg-background hover:shadow-sm cursor-pointer"
+                        >
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 shrink-0">
+                            <Folder className="h-5 w-5 shrink-0 fill-amber-500/20 text-amber-500" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-semibold text-foreground group-hover:text-amber-400 transition-colors">{folder.name}</p>
+                            <p className="mt-0.5 text-[11px] text-(--muted)">{folder.files.length} {folder.files.length === 1 ? "file" : "files"} · {formatFileSize(folder.totalBytes)}</p>
+                          </div>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-(--muted)/30 group-hover:text-foreground transition" />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Files */}
+                {currentViewData.files.length > 0 && (
+                  <section>
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-(--muted)">Files ({currentViewData.files.length})</p>
+                      <p className="text-[11px] text-(--muted)">{formatFileSize(currentViewData.files.reduce((a, f) => a + f.size_bytes, 0))}</p>
+                    </div>
+
+                    {viewMode === "grid" ? (
+                      /* Grid — Nautilus/GNOME Files style: icon + name only.
+                       * Click selects (highlight only); double-click opens
+                       * the inspector; right-click (or the 3-dot menu)
+                       * opens actions — matches every desktop file manager,
+                       * instead of a single click jumping straight in. */
+                      <div
+                        className="grid gap-0.5"
+                        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(86px, 96px))" }}
+                      >
+                        {currentViewData.files.map((file, index) => {
+                          const isSelected = selected.has(file.path);
+                          return (
+                            <div
+                              key={file.path}
+                              onClick={(e) => handleFileClick(file, index, e)}
+                              onDoubleClick={() => void openInspector(file)}
+                              onContextMenu={(e) => handleFileContextMenu(file, e)}
+                              className={`group relative flex flex-col items-center rounded-lg px-2 py-2.5 transition cursor-pointer ${
+                                isSelected
+                                  ? "bg-(--accent)/12 ring-1 ring-(--accent)/40"
+                                  : "hover:bg-background"
+                              }`}
+                            >
+                              {/* Owner icon top-left, always visible */}
+                              <div className="absolute left-1.5 top-1.5">
+                                {file.owner === "user" ? (
+                                  <User className="h-2.5 w-2.5 text-sky-400/70" />
+                                ) : (
+                                  <Bot className="h-2.5 w-2.5 text-purple-400/70" />
+                                )}
+                              </div>
+
+                              {/* File icon */}
+                              <div className="flex h-14 items-center justify-center">
+                                {getFileCategory(file.name) === "image" ? (
+                                  /* eslint-disable-next-line @next/next/no-img-element */
+                                  <img src={getDownloadUrl(file)} alt={file.name} className="h-12 w-12 rounded-md object-cover" loading="lazy" />
+                                ) : (
+                                  <FileIconDisplay file={file} size="lg" />
+                                )}
+                              </div>
+
+                              {/* Name + size */}
+                              <p
+                                className={`mt-1 w-full text-center text-[10.5px] font-medium leading-tight line-clamp-2 break-words transition-colors ${
+                                  isSelected ? "text-(--accent)" : "text-foreground group-hover:text-(--accent)"
+                                }`}
+                                title={file.name}
+                              >
+                                {renderBreakableName(file.name)}
+                              </p>
+                              <p className="text-[9px] text-(--muted)/70 tabular-nums">
+                                {formatFileSize(file.size_bytes)}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      /* List view */
+                      <div className="overflow-hidden rounded-xl border border-(--border)">
+                        <table className="w-full text-left text-xs">
+                          <thead className="border-b border-(--border) bg-background/50">
+                            <tr className="text-(--muted)">
+                              <th className="px-3 py-2.5 font-semibold">Name</th>
+                              <th className="px-3 py-2.5 font-semibold">Source</th>
+                              <th className="px-3 py-2.5 font-semibold">Size</th>
+                              <th className="px-3 py-2.5 font-semibold">Modified</th>
+                              <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-(--border)/40">
+                            {currentViewData.files.map((file, index) => {
+                              const isSelected = selected.has(file.path);
+                              return (
+                                <tr
+                                  key={file.path}
+                                  onClick={(e) => handleFileClick(file, index, e)}
+                                  onDoubleClick={() => void openInspector(file)}
+                                  onContextMenu={(e) => handleFileContextMenu(file, e)}
+                                  className={`cursor-pointer transition ${
+                                    isSelected ? "bg-(--accent)/12" : "hover:bg-(--card)/40"
+                                  }`}
+                                >
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex items-center gap-2.5">
+                                      <FileIconDisplay file={file} size="sm" />
+                                      <span className={`truncate font-medium max-w-xs sm:max-w-md ${isSelected ? "text-(--accent)" : "text-foreground"}`}>{file.name}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5"><SourcePill owner={file.owner} /></td>
+                                  <td className="px-3 py-2.5 text-(--muted) tabular-nums">{formatFileSize(file.size_bytes)}</td>
+                                  <td className="px-3 py-2.5 text-(--muted)">{formatDate(file.modified_at)}</td>
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+                                      <button type="button" onClick={() => void openInspector(file)} className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) hover:bg-background hover:text-foreground cursor-pointer" title="Inspect">
+                                        <Eye className="h-3.5 w-3.5 shrink-0" />
+                                      </button>
+                                      <a href={getDownloadUrl(file)} download={file.name} className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) hover:bg-background hover:text-foreground cursor-pointer" title="Download">
+                                        <Download className="h-3.5 w-3.5 shrink-0" />
+                                      </a>
+                                      <button type="button" onClick={() => confirmDelete(file)} className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) hover:bg-rose-500/10 hover:text-rose-400 cursor-pointer" title="Delete">
+                                        <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Status bar — Nautilus/Dolphin style: item count normally,
+              selection count + size + a quick delete action once
+              something's selected. */}
+          <div className="flex h-8 shrink-0 items-center justify-between border-t border-(--border) px-4 text-[11px] text-(--muted)">
+            {selected.size > 0 ? (
+              <>
+                <span className="font-medium text-foreground">
+                  {selected.size} of {currentViewData.files.length} selected · {formatFileSize(selectedFiles.reduce((a, f) => a + f.size_bytes, 0))}
+                </span>
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => setSelected(new Set())} className="hover:text-foreground transition cursor-pointer">
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => (selected.size === 1 ? confirmDelete(selectedFiles[0]) : setBulkDeleteConfirm(true))}
+                    className="flex items-center gap-1 text-rose-400/80 hover:text-rose-400 transition cursor-pointer"
+                  >
+                    <Trash2 className="h-3 w-3 shrink-0" />
+                    Delete
+                  </button>
+                </div>
+              </>
+            ) : (
+              <span>
+                {currentViewData.folders.length > 0 && `${currentViewData.folders.length} ${currentViewData.folders.length === 1 ? "folder" : "folders"}`}
+                {currentViewData.folders.length > 0 && currentViewData.files.length > 0 && " · "}
+                {currentViewData.files.length > 0 && `${currentViewData.files.length} ${currentViewData.files.length === 1 ? "file" : "files"}`}
+                {currentViewData.folders.length === 0 && currentViewData.files.length === 0 && "Empty"}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <FileContextMenu
+          file={contextMenu.file}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onInspect={() => void openInspector(contextMenu.file)}
+          onDelete={() => confirmDelete(contextMenu.file)}
+          downloadUrl={getDownloadUrl(contextMenu.file)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Inspector Modal */}
+      {inspectedFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-(--border) shadow-2xl" style={{ background: "var(--card)" }}>
+            <div className="flex items-center justify-between border-b border-(--border) px-5 py-3.5">
+              <div className="flex items-center gap-3 min-w-0">
+                <FileIconDisplay file={inspectedFile} size="lg" />
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-semibold text-foreground">{inspectedFile.name}</h3>
+                  <div className="flex items-center gap-2 text-[11px] text-(--muted)">
+                    <span>{formatFileSize(inspectedFile.size_bytes)}</span>
+                    <span>•</span>
+                    <span>{formatFullDate(inspectedFile.modified_at)}</span>
+                    <span>•</span>
+                    <SourcePill owner={inspectedFile.owner} />
+                  </div>
+                </div>
+              </div>
+              <button type="button" onClick={() => setInspectedFile(null)} className="flex h-8 w-8 items-center justify-center rounded-lg text-(--muted) hover:bg-background hover:text-foreground transition cursor-pointer">
+                <X className="h-4 w-4 shrink-0" />
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex items-center justify-between px-5 py-2 text-[11px] text-(--muted)">
+                <span className="truncate font-mono">{inspectedFile.path}</span>
+                <button type="button" onClick={copyPath} className="ml-2 flex items-center gap-1 text-[11px] text-(--muted) hover:text-foreground shrink-0 cursor-pointer">
+                  {copiedPath ? <Check className="h-3 w-3 shrink-0 text-emerald-400" /> : <Copy className="h-3 w-3 shrink-0" />}
+                  {copiedPath ? "Copied" : "Copy"}
+                </button>
+              </div>
+
+              {/* Real preview, not a "binary file, download it" dead end —
+                  reuses the same viewer the chat/code-interpreter artifact
+                  panel already uses: native PDF/image/HTML, Monaco for
+                  code/text, and the BetterOffice WASM editor (read-only
+                  here) for docx/xlsx/pptx. Always editMode={false}: this is
+                  a browse-and-inspect surface, editing happens from the
+                  actual conversation. */}
+              <div className="mx-5 mb-5 min-h-0 flex-1 overflow-hidden rounded-xl border border-(--border) bg-background/40">
+                <FileArtifactViewer
+                  fileUrl={getDownloadUrl(inspectedFile)}
+                  fileName={inspectedFile.name}
+                  editMode={false}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-(--border) bg-background/40 px-5 py-3">
+              <button type="button" onClick={() => confirmDelete(inspectedFile)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-rose-400 transition hover:bg-rose-500/10 cursor-pointer">
+                <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                Delete
+              </button>
+              <div className="flex items-center gap-2">
+                <a href={getDownloadUrl(inspectedFile)} target="_blank" rel="noreferrer" className="flex h-8 items-center gap-1.5 rounded-lg border border-(--border) bg-background px-3 text-xs font-medium text-foreground transition hover:bg-(--card) cursor-pointer">
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                  Open
+                </a>
+                <a href={getDownloadUrl(inspectedFile)} download={inspectedFile.name} className="flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-4 text-xs font-semibold text-background transition hover:opacity-90 cursor-pointer">
+                  <Download className="h-3.5 w-3.5 shrink-0" />
+                  Download
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-(--border) p-5 shadow-2xl" style={{ background: "var(--card)" }}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
+                <Trash2 className="h-5 w-5 shrink-0" />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground">Delete File?</h3>
+            </div>
+            <p className="mt-3 text-sm text-(--muted) leading-relaxed">
+              Are you sure you want to permanently delete{" "}
+              <strong className="text-foreground">{deletingFile.name}</strong>? This cannot be undone.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button type="button" disabled={isDeleting} onClick={() => setDeletingFile(null)} className="h-8 rounded-lg border border-(--border) bg-background px-4 text-xs font-medium text-foreground transition hover:bg-(--card) disabled:opacity-50 cursor-pointer">
+                Cancel
+              </button>
+              <button type="button" disabled={isDeleting} onClick={() => void executeDelete()} className="flex h-8 items-center gap-1.5 rounded-lg bg-rose-600 px-4 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:opacity-50 cursor-pointer">
+                {isDeleting && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {bulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-(--border) p-5 shadow-2xl" style={{ background: "var(--card)" }}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
+                <Trash2 className="h-5 w-5 shrink-0" />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground">Delete {selectedFiles.length} Files?</h3>
+            </div>
+            <p className="mt-3 text-sm text-(--muted) leading-relaxed">
+              Are you sure you want to permanently delete these {selectedFiles.length} files
+              ({formatFileSize(selectedFiles.reduce((a, f) => a + f.size_bytes, 0))})? This cannot be undone.
+            </p>
+            <div className="mt-3 max-h-32 overflow-y-auto rounded-lg bg-background/60 p-2">
+              {selectedFiles.map((f) => (
+                <p key={f.path} className="truncate px-1 py-0.5 text-xs text-(--muted)">{f.name}</p>
+              ))}
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button type="button" disabled={isBulkDeleting} onClick={() => setBulkDeleteConfirm(false)} className="h-8 rounded-lg border border-(--border) bg-background px-4 text-xs font-medium text-foreground transition hover:bg-(--card) disabled:opacity-50 cursor-pointer">
+                Cancel
+              </button>
+              <button type="button" disabled={isBulkDeleting} onClick={() => void executeBulkDelete()} className="flex h-8 items-center gap-1.5 rounded-lg bg-rose-600 px-4 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:opacity-50 cursor-pointer">
+                {isBulkDeleting && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+                Delete {selectedFiles.length}
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
+

@@ -39,7 +39,7 @@ async function saveBytes(
   baseChecksum: string,
 ): Promise<{ checksum: string } | { conflict: true }> {
   const res = await fetch(
-    `/api/backend/workspace/file?thread_id=${encodeURIComponent(
+    `/chat/api/backend/workspace/file?thread_id=${encodeURIComponent(
       threadId,
     )}&path=${encodeURIComponent(path)}`,
     {

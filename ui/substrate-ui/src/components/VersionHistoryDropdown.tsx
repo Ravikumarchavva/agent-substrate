@@ -53,7 +53,7 @@ export function VersionHistoryDropdown({
     setVersions(null);
     try {
       const r = await fetch(
-        `/api/backend/workspace/versions?thread_id=${encodeURIComponent(
+        `/chat/api/backend/workspace/versions?thread_id=${encodeURIComponent(
           threadId,
         )}&path=${encodeURIComponent(path)}`,
       );
@@ -82,7 +82,7 @@ export function VersionHistoryDropdown({
   const restore = async (seq: number) => {
     setBusy(seq);
     try {
-      const r = await fetch(`/api/backend/workspace/versions/restore`, {
+      const r = await fetch(`/chat/api/backend/workspace/versions/restore`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ thread_id: threadId, path, seq }),

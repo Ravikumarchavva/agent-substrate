@@ -20,6 +20,7 @@ import {
   userAuthHeader,
   type UserSession,
 } from "@/lib/engine-auth";
+import { streamingDispatcher } from "@/lib/streaming-dispatcher";
 
 function authHeaderFor(req: NextRequest): HeadersInit {
   const raw = req.cookies.get("user_session")?.value;
@@ -54,7 +55,11 @@ async function proxyRequest(req: NextRequest, path: string[]): Promise<Response>
   // Forward safe request headers
   for (const [k, v] of req.headers.entries()) {
     const lower = k.toLowerCase();
-    if (["content-type", "accept", "cookie", "x-request-id"].includes(lower)) {
+    if (
+      ["content-type", "accept", "cookie", "x-request-id", "x-base-checksum", "if-none-match"].includes(
+        lower,
+      )
+    ) {
       headers.set(k, v);
     }
   }
@@ -70,9 +75,16 @@ async function proxyRequest(req: NextRequest, path: string[]): Promise<Response>
     method: req.method,
     headers,
     body,
-    // @ts-expect-error — Node 18 fetch supports duplex for streaming
     duplex: "half",
-  });
+    dispatcher: streamingDispatcher,
+    // duplex is required by Node's fetch for a streaming request body;
+    // dispatcher is a Node/undici extension — neither is in the standard
+    // fetch() types, so the whole options object is cast rather than
+    // suppressing errors property-by-property (TS anchors the "no overload
+    // matches" diagnostic at whichever unknown property comes first, which
+    // makes per-line @ts-expect-error comments break silently if the
+    // property order ever changes).
+  } as RequestInit & { duplex: "half"; dispatcher: unknown });
 
   // Stream response back as-is (handles SSE, JSON, binary)
   return new Response(upstream.body, {

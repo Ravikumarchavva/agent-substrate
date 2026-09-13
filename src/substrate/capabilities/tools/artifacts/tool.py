@@ -101,15 +101,15 @@ class ArtifactsTool:
         tenant_id = current_tenant_id.get()
         if not tenant_id:
             return None, "Artifacts need a tenant-scoped conversation."
+        user_id = current_user_id.get()
+        if not user_id:
+            return None, "Artifacts need a signed-in user."
         if scope == "global":
-            user_id = current_user_id.get()
-            if not user_id:
-                return None, "Global artifacts need a signed-in user."
-            return self._store.scope_prefix(tenant_id, user_id=user_id), None
+            return self._store.scope_prefix(tenant_id, user_id), None
         thread_id = current_thread_id.get()
         if not thread_id or thread_id == _DEFAULT_SESSION:
             return None, "Session artifacts need an active conversation."
-        return self._store.scope_prefix(tenant_id, conversation_id=thread_id), None
+        return self._store.scope_prefix(tenant_id, user_id, conversation_id=thread_id), None
 
     async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:
         action = str(kwargs.get("action") or "").strip()

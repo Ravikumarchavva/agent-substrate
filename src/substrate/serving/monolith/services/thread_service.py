@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, text, update, delete
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.serving.monolith.models import Thread, Feedback
@@ -84,6 +84,12 @@ async def get_owned_thread(
     owned = thread.user_identifier == claims.sub
     same_tenant = thread.tenant_id == claims.tenant_id
     if owned and same_tenant:
+        # Soft-deleted (see delete_thread below) — gone for its owner, but
+        # never hard-erased, so a safety/abuse review still has it via the
+        # admin path above. 404, not a distinct "deleted" error: the owner
+        # deleted it, so from their side it simply no longer exists.
+        if (thread.metadata_ or {}).get("deleted"):
+            return None
         return thread
     if owned and thread.tenant_id is None:
         thread.tenant_id = claims.tenant_id
@@ -122,6 +128,14 @@ async def list_threads(
     # Exclude scheduled tasks threads from regular recent threads list
     query = query.where(
         (Thread.tags == None) | (~Thread.tags.contains(["scheduled_task"]))  # noqa: E711
+    )
+
+    # Soft-deleted threads (see delete_thread) are gone for their owner but
+    # deliberately not hard-erased — excluded here, still visible to a
+    # separate admin/audit path.
+    query = query.where(
+        (Thread.metadata_ == None)  # noqa: E711
+        | (~Thread.metadata_.contains({"deleted": True}))
     )
 
     if user_id:
@@ -198,9 +212,28 @@ async def update_thread(
 
 
 async def delete_thread(db: AsyncSession, thread_id: uuid.UUID) -> bool:
-    """Delete a thread and its feedbacks (cascade)."""
-    result = await db.execute(delete(Thread).where(Thread.id == thread_id))
-    return bool(getattr(result, "rowcount", 0))
+    """Soft-delete a thread — hidden from its owner (excluded by
+    ``list_threads``, 404s via ``get_owned_thread``) but the row and its
+    storage are retained, not erased.
+
+    A user's own "delete this chat" and GDPR erasure are deliberately
+    different operations with different retention obligations: if this were
+    a hard delete, a policy-violating request could be permanently wiped
+    from existence by the same person who made it, taking any trust &
+    safety review trail with it. Permanent erasure stays exclusively
+    ``capabilities/gdpr/eraser.py``'s job — a distinct, deliberate action,
+    not a side effect of tidying up the sidebar.
+    """
+    thread = await get_thread(db, thread_id)
+    if thread is None:
+        return False
+    meta = dict(thread.metadata_ or {})
+    meta["deleted"] = True
+    meta["deleted_at"] = datetime.now(timezone.utc).isoformat()
+    thread.metadata_ = meta
+    thread.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    return True
 
 
 # ── Feedback CRUD ────────────────────────────────────────────────────────────

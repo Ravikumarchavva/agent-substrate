@@ -22,7 +22,7 @@ from typing import Protocol, runtime_checkable
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.capabilities.storage.workspace import WorkspacePathError
@@ -108,7 +108,7 @@ def _require_workspace_store(ctx: ServerDependencies) -> _WorkspaceCapableStore:
 
 def _is_version_key(key: str) -> bool:
     """True for a snapshot under
-    ``tenants/{tid}/conversations/{cid}/workspace/versions/...``.
+    ``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/versions/...``.
 
     Anchored at that fixed position rather than matching ``/versions/``
     anywhere: a conversation could otherwise have its own real ``versions``
@@ -116,19 +116,20 @@ def _is_version_key(key: str) -> bool:
     """
     parts = key.split("/")
     return (
-        len(parts) >= 6
+        len(parts) >= 8
         and parts[0] == "tenants"
-        and parts[2] == "conversations"
-        and parts[4] == "workspace"
-        and parts[5] == VERSIONS_DIR
+        and parts[2] == "users"
+        and parts[4] == "conversations"
+        and parts[6] == "workspace"
+        and parts[7] == VERSIONS_DIR
     )
 
 
 def _session_id_from_key(key: str) -> str | None:
     parts = key.split("/")
-    # tenants/{tid}/conversations/{thread_id}/workspace/...
-    if len(parts) >= 4 and parts[0] == "tenants" and parts[2] == "conversations":
-        return parts[3]
+    # tenants/{tid}/users/{uid}/conversations/{thread_id}/workspace/...
+    if len(parts) >= 6 and parts[0] == "tenants" and parts[2] == "users" and parts[4] == "conversations":
+        return parts[5]
     return None
 
 
@@ -185,7 +186,7 @@ async def list_files(
     )
     entries: list[tuple[str, int, float]] = []
     for thread_id in owned_thread_ids:
-        prefix = f"{conversation_workspace_prefix(claims.tenant_id, str(thread_id))}/"
+        prefix = f"{conversation_workspace_prefix(claims.tenant_id, claims.sub, str(thread_id))}/"
         entries.extend(await store.list_prefix(prefix))
     entries.extend(
         await store.list_prefix(f"{user_prefix(claims.tenant_id, claims.sub)}/")
@@ -244,17 +245,45 @@ async def list_files(
     return WorkspaceFilesResponse(files=files)
 
 
-def _session_key(tenant_id: str, thread_id: str, path: str) -> str:
+async def _thread_owner(
+    db: AsyncSession, tenant_id: str, thread_id: str
+) -> str:
+    """The thread's actual owner (`Thread.user_identifier`) — conversation
+    storage now nests under that user's prefix, so building the right key
+    needs the real owner, not necessarily the caller (tenant-scoped access
+    to another owner's thread, where allowed, must still resolve the same
+    path that owner's own requests do)."""
+    try:
+        thread_uuid = uuid.UUID(thread_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    owner = (
+        await db.execute(
+            select(Thread.user_identifier).where(
+                Thread.id == thread_uuid, Thread.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one_or_none()
+    if owner is None:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    return owner
+
+
+def _session_key(tenant_id: str, user_id: str, thread_id: str, path: str) -> str:
     """Build (and validate) the ownership-scoped canonical key for a
     session-relative path."""
     try:
-        return conversation_shared_key(tenant_id, thread_id, path)
+        return conversation_shared_key(tenant_id, user_id, thread_id, path)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
 
 
 async def _resolve_session_key(
-    store: _WorkspaceCapableStore, tenant_id: str, thread_id: str, path: str
+    store: _WorkspaceCapableStore,
+    tenant_id: str,
+    user_id: str,
+    thread_id: str,
+    path: str,
 ) -> str:
     """Resolve a session-relative ref to the real object key of an existing file.
 
@@ -265,11 +294,11 @@ async def _resolve_session_key(
     under the session dir (excluding version snapshots). When nothing matches,
     return the exact key so writes to a brand-new file still land where asked.
     """
-    exact = _session_key(tenant_id, thread_id, path)
+    exact = _session_key(tenant_id, user_id, thread_id, path)
     if await store.exists(exact):
         return exact
     base = path.rsplit("/", 1)[-1]
-    shared_prefix = f"{conversation_workspace_prefix(tenant_id, thread_id)}/shared/"
+    shared_prefix = f"{conversation_workspace_prefix(tenant_id, user_id, thread_id)}/shared/"
     matches = [
         (key, mtime)
         for (key, _size, mtime) in await store.list_prefix(shared_prefix)
@@ -281,9 +310,9 @@ async def _resolve_session_key(
     return exact
 
 
-def _session_rel(key: str, tenant_id: str, thread_id: str) -> str:
+def _session_rel(key: str, tenant_id: str, user_id: str, thread_id: str) -> str:
     """Inverse of `_session_key`: the session-relative path for a resolved key."""
-    prefix = f"{conversation_workspace_prefix(tenant_id, thread_id)}/shared/"
+    prefix = f"{conversation_workspace_prefix(tenant_id, user_id, thread_id)}/shared/"
     return key[len(prefix) :] if key.startswith(prefix) else key
 
 
@@ -353,7 +382,8 @@ async def serve_file(
     history stays honest without a per-turn scan.
     """
     store = _require_workspace_store(ctx)
-    key = await _resolve_session_key(store, claims.tenant_id, thread_id, path)
+    owner_id = await _thread_owner(db, claims.tenant_id, thread_id)
+    key = await _resolve_session_key(store, claims.tenant_id, owner_id, thread_id, path)
 
     if seq is not None:
         version = (
@@ -439,7 +469,8 @@ async def save_file(
     is already versioned (via serve_file's lazy capture), so nothing is lost.
     """
     store = _require_workspace_store(ctx)
-    key = await _resolve_session_key(store, claims.tenant_id, thread_id, path)
+    owner_id = await _thread_owner(db, claims.tenant_id, thread_id)
+    key = await _resolve_session_key(store, claims.tenant_id, owner_id, thread_id, path)
     body = await request.body()
     base = request.headers.get("X-Base-Checksum", "")
 
@@ -496,7 +527,8 @@ async def get_versions(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceVersionsResponse:
     store = _require_workspace_store(ctx)
-    key = await _resolve_session_key(store, claims.tenant_id, thread_id, path)
+    owner_id = await _thread_owner(db, claims.tenant_id, thread_id)
+    key = await _resolve_session_key(store, claims.tenant_id, owner_id, thread_id, path)
     versions = await list_versions(db, key)
     return WorkspaceVersionsResponse(
         versions=[
@@ -526,7 +558,8 @@ async def restore_version(
     (non-destructive — the current state was already captured, so it stays in
     history too)."""
     store = _require_workspace_store(ctx)
-    key = await _resolve_session_key(store, claims.tenant_id, body.thread_id, body.path)
+    owner_id = await _thread_owner(db, claims.tenant_id, body.thread_id)
+    key = await _resolve_session_key(store, claims.tenant_id, owner_id, body.thread_id, body.path)
     version = (
         await db.execute(
             select(FileVersion).where(
@@ -584,14 +617,34 @@ async def delete_file(
         )
     store = _require_workspace_store(ctx)
 
+    # A single-user (personal/dev) tenant has nobody else's data to protect,
+    # so any owner may delete their own files there. Once a second user is
+    # present, deletion becomes admin-only — one person's cleanup shouldn't
+    # be able to remove files another user's conversation still depends on.
+    other_users = (
+        await db.execute(
+            select(func.count(func.distinct(Thread.user_identifier))).where(
+                Thread.tenant_id == claims.tenant_id,
+                Thread.user_identifier.is_not(None),
+                Thread.user_identifier != claims.sub,
+            )
+        )
+    ).scalar_one()
+    if other_users > 0 and not claims.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only an admin may delete files once more than one user is present.",
+        )
+
     # Ownership check: must reside under caller's upload prefix or owned thread
     own_prefix = f"{user_prefix(claims.tenant_id, claims.sub)}/"
+    thread_uuid: uuid.UUID | None = None
     if not path.startswith(own_prefix):
-        thread_id = _session_id_from_key(path)
+        session_id = _session_id_from_key(path)
         owned = None
-        if thread_id is not None:
+        if session_id is not None:
             try:
-                thread_uuid = uuid.UUID(thread_id)
+                thread_uuid = uuid.UUID(session_id)
             except ValueError:
                 thread_uuid = None
             if thread_uuid is not None:
@@ -622,4 +675,20 @@ async def delete_file(
         from datetime import datetime, timezone
 
         meta.deleted_at = datetime.now(timezone.utc)
-        await db.commit()
+
+    # Deleting a file the conversation may still reference (earlier turns,
+    # agent context) makes further replies in that thread unreliable — lock
+    # it read-only rather than let the agent silently act on a file that no
+    # longer exists.
+    if thread_uuid is not None:
+        thread = await db.get(Thread, thread_uuid)
+        if thread is not None:
+            meta_dict = dict(thread.metadata_ or {})
+            meta_dict["locked"] = True
+            meta_dict["locked_reason"] = (
+                f"A file was deleted from this conversation's storage: "
+                f"{path.rsplit('/', 1)[-1]}"
+            )
+            thread.metadata_ = meta_dict
+
+    await db.commit()

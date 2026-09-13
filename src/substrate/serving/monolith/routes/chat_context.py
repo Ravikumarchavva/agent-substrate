@@ -49,9 +49,10 @@ EXTRACTABLE_CONTENT_TYPES = {"application/pdf", "text/markdown"}
 
 
 def _session_relative_path(object_key: str) -> str | None:
-    """``tenants/{tid}/conversations/{cid}/workspace/shared/{rest}`` → ``rest``,
-    or ``None`` if *object_key* isn't a conversation-scoped upload (e.g. a
-    user-scoped ``tenants/{tid}/users/{uid}/...`` key).
+    """``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/shared/{rest}``
+    → ``rest``, or ``None`` if *object_key* isn't a conversation-scoped
+    upload (e.g. a bare user-scoped ``tenants/{tid}/users/{uid}/artifacts/...``
+    key with no ``conversations/`` segment).
 
     Must stay in step with ``capabilities/storage/layout.py`` —
     ``conversation_shared_key`` builds exactly the keys parsed here, and
@@ -67,15 +68,16 @@ def _session_relative_path(object_key: str) -> str | None:
     ``_unique_object_key`` (``routes/files.py``) appended a uniquifying
     suffix.
     """
-    parts = object_key.split("/", 6)
+    parts = object_key.split("/", 8)
     if (
-        len(parts) == 7
+        len(parts) == 9
         and parts[0] == "tenants"
-        and parts[2] == "conversations"
-        and parts[4] == "workspace"
-        and parts[5] == "shared"
+        and parts[2] == "users"
+        and parts[4] == "conversations"
+        and parts[6] == "workspace"
+        and parts[7] == "shared"
     ):
-        return parts[6]
+        return parts[8]
     return None
 
 

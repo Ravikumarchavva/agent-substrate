@@ -96,11 +96,12 @@ async def erase_user(
     if user_uuid is not None:
         await db.execute(delete(User).where(User.id == user_uuid))
     await db.commit()
+    # Conversations now nest under the owning user's own prefix (see
+    # capabilities/storage/layout.py::conversation_workspace_prefix), so a
+    # single prefix delete removes every conversation this user ever had
+    # along with it — no separate per-conversation sweep needed, and
+    # nothing to miss if a thread's ownership record were ever wrong.
     objects = await _delete_prefix(store, user_prefix(tenant_id, user_id))
-    for conversation_id in thread_ids:
-        objects += await _delete_prefix(
-            store, f"{tenant_prefix(tenant_id)}/conversations/{conversation_id}"
-        )
     redis_deleted = await _redis_sweep(redis, {user_id, *thread_ids})
     session_index_tables = await erase_session_index(cfg, tenant_id, user_id)
     return ErasureSummary(

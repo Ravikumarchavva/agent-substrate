@@ -124,6 +124,17 @@ async def chat(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
+    # 1b. A file deleted from this thread's storage (routes/workspace.py::
+    # delete_file) locks it read-only — the agent shouldn't reply as if a
+    # now-missing file still exists.
+    if (thread.metadata_ or {}).get("locked"):
+        raise HTTPException(
+            status_code=423,
+            detail=(thread.metadata_ or {}).get(
+                "locked_reason", "This conversation is locked."
+            ),
+        )
+
     # 2. Single-flight: only one active stream per thread at a time (enforced
     # durably across replicas via Scheduler unique partial index on substrate_run_queue)
     if await runtime.scheduler.find_run_for_thread(str(body.thread_id)):

@@ -257,7 +257,11 @@ async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
                         del_resp = await client.delete(
                             "/workspace/files", params={"path": key}
                         )
-                        assert del_resp.status_code == 404
+                        # user_2's deletion is refused either way — but once
+                        # a second user is present, non-admin deletion is
+                        # refused outright (403) before the per-file
+                        # ownership check that would otherwise 404.
+                        assert del_resp.status_code == 403
                 finally:
                     app.dependency_overrides.pop(get_current_user, None)
 

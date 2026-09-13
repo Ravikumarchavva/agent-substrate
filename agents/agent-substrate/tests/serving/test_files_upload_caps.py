@@ -58,6 +58,12 @@ def _ctx_mock(*, rag_backend=None, redis=None) -> MagicMock:
     ctx = MagicMock()
     ctx.file_store = MagicMock()
     ctx.file_store.upload = AsyncMock()
+    # Uploads write here first, not ctx.file_store directly — see
+    # capabilities/storage/pending.py; promotion into ctx.file_store only
+    # happens at send time (routes/chat_context.py).
+    ctx.pending_file_store = MagicMock()
+    ctx.pending_file_store.upload = AsyncMock()
+    ctx.pending_file_store.exists = AsyncMock(return_value=False)
     ctx.rag_backend = rag_backend
     ctx.session_factory = MagicMock()
     return ctx
@@ -326,7 +332,7 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
 
     sidecar_calls = [
         call
-        for call in ctx.file_store.upload.call_args_list
+        for call in ctx.pending_file_store.upload.call_args_list
         if call.args[0]
         == f"tenants/test-tenant/conversations/{_THREAD_ID}/workspace/shared/uploads/doc.pdf.extracted.md"
     ]
@@ -357,7 +363,7 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
         if key.endswith(".extracted.md"):
             raise RuntimeError("boom")
 
-    ctx.file_store.upload = AsyncMock(side_effect=_upload_side_effect)
+    ctx.pending_file_store.upload = AsyncMock(side_effect=_upload_side_effect)
 
     with patch(
         "substrate.capabilities.knowledge.session_ingest.ingest_session_document",

@@ -14,8 +14,8 @@ import hashlib
 import io
 import mimetypes
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
 from fastapi import (
     APIRouter,
@@ -28,10 +28,9 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
 from substrate.capabilities.storage.layout import conversation_shared_key, user_prefix
 from substrate.logger import setup_logging
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
@@ -113,7 +112,7 @@ async def _ensure_user(db: AsyncSession, user_id: uuid.UUID, email: str) -> None
         await db.rollback()
 
 
-def _may_access(meta: FileMetadata, claims: AuthClaims) -> bool:
+async def _may_access(meta: FileMetadata, claims: AuthClaims, db: AsyncSession) -> bool:
     """Ownership check for file bytes.
 
     Not a simple ``user_id == claims.sub`` — ``upload_file`` leaves
@@ -123,12 +122,38 @@ def _may_access(meta: FileMetadata, claims: AuthClaims) -> bool:
     tenant and user/thread columns are the authority; paths are intentionally
     not used for authorization because paths are storage implementation
     details, not identity claims.
+
+    Was previously ``user_id`` only, with an unconditional ``return False``
+    whenever it was NULL — directly contradicting this docstring's own
+    stated intent, and blocking every non-UUID-sub (e.g. anonymous
+    ``anon-<uuid>``) caller from ever reading back their own upload's
+    status/bytes/delete, found live: a just-uploaded file's own composer
+    polling 404'd in an infinite loop, the file stuck showing "Processing…"
+    forever. Fixed by falling back to thread ownership (same check
+    ``_may_access_key`` already uses for conversation-scoped artifacts)
+    when ``user_id`` is NULL but the file has a ``thread_id`` — real
+    identity evidence (``Thread.user_identifier == claims.sub``), not a
+    tenant-wide bypass that would let any same-tenant anonymous visitor
+    read any other's files.
     """
     if claims.is_admin:
         return True
     same_tenant = meta.org_id == claims.tenant_id
-    if meta.user_id is not None and str(meta.user_id) == claims.sub:
-        return same_tenant
+    if not same_tenant:
+        return False
+    if meta.user_id is not None:
+        return str(meta.user_id) == claims.sub
+    if meta.thread_id is not None:
+        owned = (
+            await db.execute(
+                select(Thread.id).where(
+                    Thread.id == meta.thread_id,
+                    Thread.user_identifier == claims.sub,
+                    Thread.tenant_id == claims.tenant_id,
+                )
+            )
+        ).scalar_one_or_none()
+        return owned is not None
     return False
 
 
@@ -190,7 +215,7 @@ async def _get_meta(
     # distinct 403, so this endpoint isn't an existence oracle for file ids
     # that happen to leak into logs/URLs (same rationale as
     # thread_service.get_owned_thread).
-    if row is None or not _may_access(row, claims):
+    if row is None or not await _may_access(row, claims, db):
         raise HTTPException(status_code=404, detail="File not found")
     return row
 
@@ -253,15 +278,15 @@ async def _build_extracted_sidecar_text(
         return None
 
     sections: list[str] = []
-    for page_number, text in pages:
-        sections.append(f"## Page {page_number}\n\n{text.strip()}")
+    for page_number, page_text in pages:
+        sections.append(f"## Page {page_number}\n\n{page_text.strip()}")
         for caption in captions_by_page.get(page_number, []):
             sections.append(f"> Image/table caption: {caption}")
     return "\n\n".join(sections).strip() or None
 
 
 async def _write_extracted_sidecar(
-    ctx: ServerDependencies,
+    store: Any,
     file_id: uuid.UUID,
     data: bytes,
     *,
@@ -270,22 +295,46 @@ async def _write_extracted_sidecar(
     content_type: str,
 ) -> None:
     """Write a ``{original_name}.extracted.md`` sidecar next to the uploaded
-    file, in the same session workspace directory — so ``code_interpreter``
-    (which mounts that same directory) can read pipeline-quality extracted
-    text instead of pypdf-ing the raw PDF bytes itself. Best-effort: never
-    raises, never affects staging success/failure."""
+    file, in the same *store* the raw file itself currently lives in — the
+    pending store pre-promotion, ``ctx.file_store`` after (see
+    ``capabilities/storage/pending.py``) — so ``code_interpreter`` (which
+    mounts that same directory once promoted) can read pipeline-quality
+    extracted text instead of pypdf-ing the raw PDF bytes itself.
+    Best-effort: never raises, never affects staging success/failure."""
     try:
-        if ctx.file_store is None:
+        if store is None:
             return
         text = await _build_extracted_sidecar_text(data, original_name, content_type)
         if not text:
             return
         sidecar_key = f"{object_key}.extracted.md"
-        await ctx.file_store.upload(
+        await store.upload(
             sidecar_key, text.encode("utf-8"), content_type="text/markdown"
         )
     except Exception as exc:
         logger.warning("Writing extracted sidecar failed for file %s: %s", file_id, exc)
+
+
+async def _set_tenant_guc(session: AsyncSession, tenant_id: str) -> None:
+    """Set the RLS session GUC on a session created directly from
+    ``session_factory()`` — i.e. one that never went through
+    ``get_tenant_scoped_db`` (no FastAPI request/DI context exists for a
+    fire-and-forget background task like ``_stage_uploaded_doc``).
+
+    Without this, ``file_metadata``'s ``FORCE ROW LEVEL SECURITY`` policy
+    (``org_id = current_setting('app.current_tenant_id', true)``) hides
+    every row from this session — found live: ``ingest_session_document``
+    ran to real completion (confirmed via Lance table data actually
+    written to disk), but the follow-up ``session.get(FileMetadata,
+    file_id)`` below silently returned ``None`` and the caller's `if row
+    is not None` guard swallowed it with no error — so `staged_at` /
+    `staging_error` never got written, and the composer polled "still
+    processing" forever for a file that had, in fact, finished.
+    """
+    await session.execute(
+        text("SELECT set_config('app.current_tenant_id', :tid, false)"),
+        {"tid": tenant_id},
+    )
 
 
 async def _stage_uploaded_doc(
@@ -332,13 +381,14 @@ async def _stage_uploaded_doc(
     except Exception as exc:
         logger.warning("Eager staging failed for file %s: %s", file_id, exc)
         async with session_factory() as session:
+            await _set_tenant_guc(session, tenant_id)
             row = await session.get(FileMetadata, file_id)
             if row is not None:
                 row.staging_error = str(exc)[:500]
                 await session.commit()
         return
     await _write_extracted_sidecar(
-        ctx,
+        ctx.pending_file_store,
         file_id,
         data,
         object_key=object_key,
@@ -346,10 +396,66 @@ async def _stage_uploaded_doc(
         content_type=content_type,
     )
     async with session_factory() as session:
+        await _set_tenant_guc(session, tenant_id)
         row = await session.get(FileMetadata, file_id)
         if row is not None:
             row.staged_at = datetime.now(timezone.utc)
             await session.commit()
+
+
+async def promote_pending_file(ctx: ServerDependencies, meta: FileMetadata) -> None:
+    """Copy an attachment from the local pending store into the real
+    ``ctx.file_store`` (SeaweedFS/S3) and mark it promoted — called once,
+    at the moment a message that actually references this file is sent
+    (see ``routes/chat_context.py::_build_file_context``). Idempotent
+    no-op if already promoted, since a send can reference the same file
+    more than once (e.g. across retries)."""
+    if meta.promoted_at is not None:
+        return
+    if ctx.pending_file_store is None or ctx.file_store is None:
+        return
+    data = await ctx.pending_file_store.download(meta.object_key)
+    await ctx.file_store.upload(meta.object_key, data, content_type=meta.content_type)
+    await ctx.pending_file_store.delete(meta.object_key)
+    sidecar_key = f"{meta.object_key}.extracted.md"
+    if await ctx.pending_file_store.exists(sidecar_key):
+        sidecar_data = await ctx.pending_file_store.download(sidecar_key)
+        await ctx.file_store.upload(
+            sidecar_key, sidecar_data, content_type="text/markdown"
+        )
+        await ctx.pending_file_store.delete(sidecar_key)
+    meta.promoted_at = datetime.now(timezone.utc)
+
+
+async def sweep_stale_pending_uploads(
+    session_factory: Any, ttl_hours: float
+) -> int:
+    """Delete ``FileMetadata`` rows for attachments abandoned before ever
+    being sent — never promoted, older than *ttl_hours*. Their bytes are
+    already gone (or about to be, via ``PendingFileStore.sweep_stale``,
+    same TTL) — this is the DB-row half of that cleanup, run once at
+    startup from ``app.py``. Cross-tenant by design (an admin/startup-time
+    sweep, not a request), so it sets ``app.bypass_rls`` rather than a
+    single tenant's GUC — same pattern ``get_tenant_scoped_db`` uses for
+    admin/service callers."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=ttl_hours)
+    async with session_factory() as session:
+        await session.execute(text("SELECT set_config('app.bypass_rls', 'on', false)"))
+        result = await session.execute(
+            select(FileMetadata.id).where(
+                FileMetadata.promoted_at.is_(None),
+                FileMetadata.deleted_at.is_(None),
+                FileMetadata.created_at < cutoff,
+            )
+        )
+        stale_ids = [row[0] for row in result.all()]
+        if not stale_ids:
+            return 0
+        await session.execute(
+            FileMetadata.__table__.delete().where(FileMetadata.id.in_(stale_ids))
+        )
+        await session.commit()
+    return len(stale_ids)
 
 
 @router.post("/upload", response_model=FileUploadResponse, status_code=201)
@@ -459,10 +565,13 @@ async def upload_file(
         )
     object_key = await _unique_object_key(db, base_key)
 
-    try:
-        await ctx.file_store.upload(object_key, data, content_type=content_type)
-    except WorkspaceQuotaExceededError as exc:
-        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    if ctx.pending_file_store is None:
+        raise HTTPException(status_code=503, detail="Pending upload storage not configured")
+    # Not the real file_store: stays local-disk-only, never touches
+    # SeaweedFS/S3, until the message carrying this attachment is actually
+    # sent (routes/chat_context.py promotes it then) — see
+    # capabilities/storage/pending.py's module docstring for why.
+    await ctx.pending_file_store.upload(object_key, data, content_type=content_type)
 
     try:
         user_uuid: Optional[uuid.UUID] = uuid.UUID(claims.sub)
@@ -573,15 +682,23 @@ async def serve_object(
         )
     ).scalar_one_or_none()
     if meta is not None:
-        allowed = _may_access(meta, claims)
+        allowed = await _may_access(meta, claims, db)
     else:
         allowed = await _may_access_key(key, claims, db)
     if not allowed:
         raise HTTPException(status_code=404, detail="Not found")
-    if ctx.file_store is None:
+    # Normally unreachable (citations/tool-result links only exist once a
+    # message has already been sent, which is what promotes a file out of
+    # the pending store) — defensive fallback, not a designed path.
+    store = (
+        ctx.pending_file_store
+        if meta is not None and meta.promoted_at is None
+        else ctx.file_store
+    )
+    if store is None:
         raise HTTPException(status_code=503, detail="File storage is not configured")
     try:
-        data = await ctx.file_store.download(key)
+        data = await store.download(key)
     except Exception as exc:
         raise HTTPException(status_code=404, detail="Not found") from exc
     mime = mimetypes.guess_type(key)[0] or "application/octet-stream"
@@ -628,11 +745,11 @@ async def download_file(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> StreamingResponse:
     """Download file bytes."""
-    if ctx.file_store is None:
-        raise HTTPException(status_code=503, detail="File store not configured")
-
     meta = await _get_meta(file_id, db, claims)
-    data = await ctx.file_store.download(meta.object_key)
+    store = ctx.file_store if meta.promoted_at is not None else ctx.pending_file_store
+    if store is None:
+        raise HTTPException(status_code=503, detail="File store not configured")
+    data = await store.download(meta.object_key)
 
     async def _stream():
         yield data
@@ -655,11 +772,15 @@ async def get_file_url(
     db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> FileUrlResponse:
-    """Return a presigned URL (or download URL for InMemoryFileStore)."""
+    """Return a presigned URL (or download URL for InMemoryFileStore/not-yet-
+    promoted pending attachments — the pending store has no presign
+    capability, so it always falls back to the redirect-through-us form)."""
+    meta = await _get_meta(file_id, db, claims)
+    if meta.promoted_at is None:
+        return FileUrlResponse(url=f"/files/{file_id}/download", expires_in=expires_in)
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
-    meta = await _get_meta(file_id, db, claims)
     url = await ctx.file_store.presign_url(meta.object_key, expires_in=expires_in)
 
     if url.startswith("memory://"):
@@ -676,14 +797,17 @@ async def delete_file(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> None:
     """Soft-delete metadata and remove object from store."""
-    if ctx.file_store is None:
+    meta = await _get_meta(file_id, db, claims)
+    store = ctx.file_store if meta.promoted_at is not None else ctx.pending_file_store
+    if store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
-    meta = await _get_meta(file_id, db, claims)
     meta.deleted_at = datetime.now(timezone.utc)
     await db.commit()
 
-    await ctx.file_store.delete(meta.object_key)
+    await store.delete(meta.object_key)
+    if meta.promoted_at is None and ctx.pending_file_store is not None:
+        await ctx.pending_file_store.delete(f"{meta.object_key}.extracted.md")
 
     # Discarded before ever being sent (rag_ingested_at never set) — clean
     # up its orphaned staging collection so it doesn't linger forever.

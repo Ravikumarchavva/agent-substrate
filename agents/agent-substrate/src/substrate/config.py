@@ -104,6 +104,12 @@ class SubstrateConfig(BaseSettings):
     FILE_STORE_PREFIX: str = ""
     FILE_ENCRYPTION_MODE: str = "none"
     FILE_KEK_HEX: str = ""
+    # Attachments live here (local disk, never the real FILE_STORE_BACKEND)
+    # from upload until the message carrying them is actually sent — see
+    # capabilities/storage/pending.py. Swept periodically; PENDING_UPLOAD_TTL_HOURS
+    # is how long an abandoned (never-sent) attachment survives before removal.
+    PENDING_UPLOAD_LOCAL_PATH: str = "./data/pending-uploads"
+    PENDING_UPLOAD_TTL_HOURS: float = 24.0
     FILE_MAX_UPLOAD_BYTES: int = 200 * 1024 * 1024
 
     # ── Workspace quotas ─────────────────────────────────────────────────────

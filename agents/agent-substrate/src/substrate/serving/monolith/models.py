@@ -218,6 +218,17 @@ class FileMetadata(Base):
     )
     staging_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # NULL until the file is actually copied into the real FileStore
+    # (SeaweedFS) — an attachment lives only in the local pending-upload
+    # store (see storage/pending.py::PendingFileStore) from the moment it's
+    # attached in the composer until the message carrying it is actually
+    # sent (routes/chat_context.py promotes it then). Lets an abandoned
+    # attachment (never sent) get swept without ever having touched
+    # permanent storage.
+    promoted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -54,6 +54,11 @@ class ServerDependencies:
     # (capabilities/knowledge/session_ingest.py) so both the tenant-KB flow
     # and the per-user flow embed through the same configured model.
     embedding_client: Optional[Any] = None
+    # Local disk store for not-yet-sent attachments — see
+    # capabilities/storage/pending.py. Never SeaweedFS/S3 directly; routes
+    # promote a file from here into `file_store` only once the message
+    # carrying it is actually sent (routes/chat_context.py).
+    pending_file_store: Optional[Any] = None
 
 
 def get_ctx(request: Request) -> ServerDependencies:

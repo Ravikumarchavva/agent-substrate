@@ -295,7 +295,7 @@ services:
   seaweedfs-admin:
     image: chrislusf/seaweedfs:latest
     command: >
-      admin -port=23646 -master=seaweedfs:9333
+      admin -port=23646 -ip=0.0.0.0 -master=seaweedfs:9333
       -dataDir=/data
       -adminUser=${SEAWEEDFS_ADMIN_USER:-admin}
       -adminPassword=${SEAWEEDFS_ADMIN_PASSWORD:-admin}

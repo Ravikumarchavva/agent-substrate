@@ -109,6 +109,22 @@ async def lifespan(app: FastAPI):
     app.state.skill_manager = infra.skill_manager
     app.state.file_store = infra.file_store
 
+    from substrate.serving.monolith.routes.files import sweep_stale_pending_uploads
+
+    app.state.pending_file_store = infra.pending_file_store
+    removed_bytes = app.state.pending_file_store.sweep_stale(
+        older_than_seconds=settings.PENDING_UPLOAD_TTL_HOURS * 3600
+    )
+    removed_rows = await sweep_stale_pending_uploads(
+        session_factory, settings.PENDING_UPLOAD_TTL_HOURS
+    )
+    if removed_bytes or removed_rows:
+        logger.info(
+            "Swept %d stale pending upload file(s), %d orphaned row(s) on startup",
+            removed_bytes,
+            removed_rows,
+        )
+
     app.state.jwt_secret = settings.JWT_SECRET
 
     # Tool registry
@@ -196,6 +212,7 @@ async def lifespan(app: FastAPI):
         session_factory=app.state.session_factory,
         ci_client=app.state.ci_client,
         file_store=app.state.file_store,
+        pending_file_store=app.state.pending_file_store,
         trigger_scheduler=app.state.trigger_scheduler,
         short_term_memory=app.state.short_term_memory,
         long_term_memory=app.state.long_term_memory,

@@ -57,6 +57,7 @@ class Infrastructure:
     bridge_registry: Any
     skill_manager: Any
     file_store: Any
+    pending_file_store: Any = None
     short_term_memory: Any = None
     long_term_memory: Any = None
     runtime_stack: AsyncExitStack | None = None
@@ -199,6 +200,16 @@ def _init_file_store(cfg: SubstrateConfig) -> Any:
     )
 
 
+def _init_pending_file_store(cfg: SubstrateConfig) -> Any:
+    """Local-disk store for attachments not yet promoted into the real
+    file_store — see capabilities/storage/pending.py. Deliberately never
+    S3/SeaweedFS-backed, regardless of FILE_STORE_BACKEND: an unsent
+    attachment must not touch permanent storage at all."""
+    from substrate.capabilities.storage.pending import PendingFileStore
+
+    return PendingFileStore(cfg.PENDING_UPLOAD_LOCAL_PATH)
+
+
 async def init_infrastructure(
     cfg: SubstrateConfig,
     embedding_client: EmbeddingClient,
@@ -276,6 +287,7 @@ async def init_infrastructure(
     # images are written here rather than inlined into the image vector rows.
     file_store = _init_file_store(cfg)
     await file_store.connect()
+    pending_file_store = _init_pending_file_store(cfg)
     if hasattr(file_store, "set_quota_override"):
         # Per-tenant quota overrides (admin storage API) are held in-memory
         # on the store (see WorkspaceFileStore.set_quota_override) — seed
@@ -348,6 +360,7 @@ async def init_infrastructure(
         bridge_registry=bridge_registry,
         skill_manager=skill_manager,
         file_store=file_store,
+        pending_file_store=pending_file_store,
         short_term_memory=short_term_memory,
         long_term_memory=long_term_memory,
         runtime_stack=runtime_stack,

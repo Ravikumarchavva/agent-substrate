@@ -31,6 +31,7 @@ _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("file_metadata", "page_count", "INTEGER"),
     ("file_metadata", "staged_at", "TIMESTAMPTZ"),
     ("file_metadata", "staging_error", "TEXT"),
+    ("file_metadata", "promoted_at", "TIMESTAMPTZ"),
     ("file_versions", "restored_from_seq", "INTEGER"),
     ("file_versions", "tenant_id", "VARCHAR"),
 ]
@@ -96,12 +97,31 @@ async def init_db(
 
 
 async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency that yields an async session from ``app.state``."""
+    """FastAPI dependency that yields an async session from ``app.state``.
+
+    Explicitly binds the session to ONE checked-out ``Connection`` for the
+    whole request, rather than letting the session pull from the engine's
+    pool per-transaction (the default). This matters specifically for
+    ``get_tenant_scoped_db`` (rls_deps.py): a route that calls
+    ``db.commit()`` more than once mid-request (e.g. upload_file's
+    ``_ensure_user``, then again after the file_metadata insert) was
+    silently losing its RLS session GUCs (``app.current_tenant_id`` etc.)
+    on the second commit — `Session.commit()` returns the connection to
+    the pool by default, so the next statement (e.g. `db.refresh()`) could
+    be handed a *different* physical connection that never had
+    `set_config` run on it, making the row it just inserted invisible to
+    itself under RLS. Verified by a live diagnostic: `current_setting(...)`
+    read back as `''` immediately after a commit that had correctly set it
+    moments earlier. Pinning one connection for the request's lifetime
+    removes the "which physical connection am I on" question entirely.
+    """
+    engine: AsyncEngine = request.app.state.engine
     factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
-    async with factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+    async with engine.connect() as conn:
+        async with factory(bind=conn) as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise

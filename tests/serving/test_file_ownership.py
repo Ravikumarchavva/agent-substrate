@@ -15,6 +15,7 @@ route-level pass proving the ``Depends`` chain is actually wired.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -63,38 +64,81 @@ def _meta(
     )
 
 
-# ── _may_access (pure — no DB, metadata-row objects) ─────────────────────────
+# ── _may_access (metadata-row objects; async since the user_id-NULL
+# fallback below needs a real DB lookup — see the thread-ownership block) ──
 
 
-def test_owner_may_access_via_user_id_column():
+async def test_owner_may_access_via_user_id_column():
     owner_uuid = uuid.uuid4()
     claims = AuthClaims(sub=str(owner_uuid), tenant_id=TENANT_A)
     meta = _meta(object_key="anything/secret.pdf", user_id=owner_uuid)
-    assert _may_access(meta, claims) is True
+    assert await _may_access(meta, claims, db=None) is True  # type: ignore[arg-type]
 
 
-def test_stranger_denied():
+async def test_stranger_denied():
     owner_uuid = uuid.uuid4()
     meta = _meta(object_key="anything/secret.pdf", user_id=owner_uuid)
-    assert _may_access(meta, STRANGER) is False
+    assert await _may_access(meta, STRANGER, db=None) is False  # type: ignore[arg-type]
 
 
-def test_admin_bypasses_ownership():
+async def test_admin_bypasses_ownership():
     meta = _meta(object_key="anything/secret.pdf", user_id=uuid.uuid4())
-    assert _may_access(meta, ADMIN) is True
+    assert await _may_access(meta, ADMIN, db=None) is True  # type: ignore[arg-type]
 
 
-def test_cross_tenant_same_sub_denied():
+async def test_cross_tenant_same_sub_denied():
     """Matching claims.sub isn't enough across a tenant boundary."""
     owner_uuid = uuid.uuid4()
     meta = _meta(object_key="anything/secret.pdf", user_id=owner_uuid, org_id=TENANT_A)
     claims = AuthClaims(sub=str(owner_uuid), tenant_id=TENANT_B)
-    assert _may_access(meta, claims) is False
+    assert await _may_access(meta, claims, db=None) is False  # type: ignore[arg-type]
 
 
-def test_no_owner_signal_at_all_denied():
+async def test_no_owner_signal_at_all_denied():
+    """user_id AND thread_id both NULL — genuinely no identity evidence to
+    check against, so this must stay denied (not a tenant-wide bypass)."""
     meta = _meta(object_key="orphaned/secret.pdf", user_id=None)
-    assert _may_access(meta, STRANGER) is False
+    assert await _may_access(meta, STRANGER, db=None) is False  # type: ignore[arg-type]
+
+
+async def test_anon_uploader_may_access_via_owned_thread_fallback(database_url: str):
+    """The regression this fixes: `upload_file` leaves `user_id` NULL
+    whenever `claims.sub` isn't a UUID (e.g. an anonymous `anon-<uuid>`
+    token) — found live, a just-uploaded file's own status-polling 404'd
+    forever because `_may_access` used to `return False` unconditionally
+    whenever `user_id` was NULL, contradicting its own docstring's stated
+    intent. Fixed by falling back to thread ownership, same signal
+    `_may_access_key` already uses for conversation-scoped artifacts."""
+    engine = create_async_engine(database_url)
+    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    anon_claims = AuthClaims(sub="anon-uploader", tenant_id=TENANT_A)
+    thread_id = uuid.uuid4()
+    async with factory() as session:
+        session.add(
+            Thread(id=thread_id, user_identifier=anon_claims.sub, tenant_id=TENANT_A)
+        )
+        await session.commit()
+    try:
+        meta = FileMetadata(
+            id=uuid.uuid4(),
+            object_key="anything/anon-upload.pdf",
+            original_name="anon-upload.pdf",
+            content_type="application/pdf",
+            size_bytes=10,
+            user_id=None,
+            thread_id=thread_id,
+            org_id=TENANT_A,
+        )
+        async with factory() as session:
+            assert await _may_access(meta, anon_claims, session) is True
+            assert await _may_access(meta, STRANGER, session) is False
+    finally:
+        async with factory() as session:
+            row = await session.get(Thread, thread_id)
+            if row is not None:
+                await session.delete(row)
+                await session.commit()
+        await engine.dispose()
 
 
 # ── _may_access_key (pure except the conversation-ownership branch — objects
@@ -398,6 +442,10 @@ async def _seed_file(db_session_factory, file_store, *, owner: AuthClaims):
         session.add(User(id=owner_uuid, identifier=f"owner-{owner_uuid}"))
         await session.commit()
         meta = _meta(object_key=object_key, user_id=owner_uuid)
+        # Seeded directly into the real file_store above (not the pending
+        # store) — mark it promoted so routes/files.py's promoted_at-based
+        # store selection reads it from the right place.
+        meta.promoted_at = datetime.now(timezone.utc)
         session.add(meta)
         await session.commit()
         await session.refresh(meta)

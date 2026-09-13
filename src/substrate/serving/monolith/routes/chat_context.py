@@ -243,6 +243,17 @@ async def _build_file_context(
         return attachment
 
     for meta in rows:
+        if meta.promoted_at is None:
+            # Attachments live only in the local pending store (see
+            # capabilities/storage/pending.py) until the message
+            # referencing them is actually sent — this is that moment.
+            # Must happen before any of the ctx.file_store.download(...)
+            # calls below, for both extractable and non-extractable
+            # (workspace-mounted) files.
+            from substrate.serving.monolith.routes.files import promote_pending_file
+
+            await promote_pending_file(ctx, meta)
+            needs_commit = True
         if meta.content_type in EXTRACTABLE_CONTENT_TYPES:
             # Extractable docs are ingested into the user's per-user
             # session-document index instead of inlined into the prompt —

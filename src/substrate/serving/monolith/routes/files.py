@@ -32,6 +32,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.capabilities.storage.layout import conversation_shared_key, user_prefix
+from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
 from substrate.logger import setup_logging
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
@@ -565,13 +566,30 @@ async def upload_file(
         )
     object_key = await _unique_object_key(db, base_key)
 
-    if ctx.pending_file_store is None:
-        raise HTTPException(status_code=503, detail="Pending upload storage not configured")
-    # Not the real file_store: stays local-disk-only, never touches
-    # SeaweedFS/S3, until the message carrying this attachment is actually
-    # sent (routes/chat_context.py promotes it then) — see
-    # capabilities/storage/pending.py's module docstring for why.
-    await ctx.pending_file_store.upload(object_key, data, content_type=content_type)
+    if thread_id is not None:
+        # A chat-composer attachment — stays local-disk-only, never
+        # touching SeaweedFS/S3, until the message carrying it is actually
+        # sent (routes/chat_context.py promotes it then; see
+        # capabilities/storage/pending.py's module docstring for why).
+        if ctx.pending_file_store is None:
+            raise HTTPException(
+                status_code=503, detail="Pending upload storage not configured"
+            )
+        await ctx.pending_file_store.upload(object_key, data, content_type=content_type)
+        promoted_at = None
+    else:
+        # No thread_id -> not a composer attachment (e.g. the settings
+        # Storage tab's standalone file manager) -> no chat "Send" event
+        # will ever exist to promote it out of a pending store, so it
+        # would sit there until the abandoned-upload sweep quietly deleted
+        # it. Go straight to permanent storage — already final.
+        if ctx.file_store is None:
+            raise HTTPException(status_code=503, detail="File store not configured")
+        try:
+            await ctx.file_store.upload(object_key, data, content_type=content_type)
+        except WorkspaceQuotaExceededError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        promoted_at = datetime.now(timezone.utc)
 
     try:
         user_uuid: Optional[uuid.UUID] = uuid.UUID(claims.sub)
@@ -591,6 +609,7 @@ async def upload_file(
         thread_id=thread_id,
         scope="uploads",
         page_count=page_count,
+        promoted_at=promoted_at,
     )
     db.add(meta)
     await db.commit()

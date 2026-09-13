@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Download, FileWarning } from "lucide-react";
 import { BetterOfficeEditor } from "@/components/BetterOfficeEditor";
-import { PptxSlideViewer } from "@/components/PptxSlideViewer";
+import { OoxmlViewer } from "@/components/OoxmlViewer";
 import { CodeEditorView } from "@/components/CodeEditorView";
 
 /**
@@ -64,21 +64,14 @@ export function FileArtifactViewer({
     );
   }
 
-  // Office docs → BetterOffice editor. All three now show a real read-only
-  // preview until Edit is clicked (glance-first, like Claude's own artifact
-  // viewer): xlsx via SheetJS, docx via its editor's native readOnly, pptx
-  // via a chrome-free canvas viewer built on BetterOffice's own low-level
-  // rendering primitives (PptxEditor itself has no read-only mode).
+  // Office docs → BetterOffice editor when actually editing; otherwise a
+  // real read-only preview until Edit is clicked (glance-first, like
+  // Claude's own artifact viewer), via @silurus/ooxml for all three kinds —
+  // see OoxmlViewer.tsx for why that replaced the previous per-kind
+  // fallbacks (SheetJS grid / mammoth HTML / BetterOffice's own canvas).
   if (kind === "xlsx" || kind === "docx" || kind === "pptx") {
     const ref = parseFileUrl(fileUrl);
-    const fallback =
-      kind === "xlsx" ? (
-        <SpreadsheetView fileUrl={fileUrl} />
-      ) : kind === "docx" ? (
-        <DocxView fileUrl={fileUrl} />
-      ) : (
-        <PptxSlideViewer fileUrl={fileUrl} />
-      );
+    const fallback = <OoxmlViewer kind={kind} fileUrl={fileUrl} />;
     if (!ref) return fallback;
     return (
       <BetterOfficeEditor
@@ -242,75 +235,6 @@ function TextView({ fileUrl, csv }: { fileUrl: string; csv: boolean }) {
   );
 }
 
-function SpreadsheetView({ fileUrl }: { fileUrl: string }) {
-  const [sheets, setSheets] = useState<{ name: string; rows: string[][] }[] | null>(null);
-  const [active, setActive] = useState(0);
-  const [error, setError] = useState<null | "notfound" | "error">(null);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const [{ read, utils }, buf] = await Promise.all([
-          import("xlsx"),
-          fetch(fileUrl).then((r) =>
-            r.ok
-              ? r.arrayBuffer()
-              : Promise.reject(new Error(r.status === 404 ? "notfound" : "http")),
-          ),
-        ]);
-        const wb = read(buf, { type: "array" });
-        const parsed = wb.SheetNames.map((name) => ({
-          name,
-          rows: utils.sheet_to_json<string[]>(wb.Sheets[name], {
-            header: 1,
-            blankrows: false,
-            defval: "",
-          }),
-        }));
-        if (alive) setSheets(parsed);
-      } catch (e) {
-        if (alive) setError(e instanceof Error && e.message === "notfound" ? "notfound" : "error");
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [fileUrl]);
-
-  if (error === "notfound") return <Centered>This spreadsheet no longer exists.</Centered>;
-  if (error) return <Centered>Couldn&apos;t read this spreadsheet.</Centered>;
-  if (!sheets)
-    return (
-      <Centered>
-        <Loader2 className="h-5 w-5 animate-spin" />
-      </Centered>
-    );
-
-  return (
-    <div className="flex h-full flex-col">
-      {sheets.length > 1 && (
-        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-(--border) bg-(--card) px-2 py-1.5">
-          {sheets.map((s, i) => (
-            <button
-              key={s.name}
-              onClick={() => setActive(i)}
-              className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                i === active ? "bg-(--accent) text-(--accent-foreground)" : "text-(--muted) hover:bg-(--card-hover)"
-              }`}
-            >
-              {s.name}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="min-h-0 flex-1 overflow-auto">
-        <GridTable rows={sheets[active].rows} />
-      </div>
-    </div>
-  );
-}
-
 function GridTable({ rows }: { rows: string[][] }) {
   if (rows.length === 0) return <Centered>Empty.</Centered>;
   const [header, ...body] = rows;
@@ -342,44 +266,6 @@ function GridTable({ rows }: { rows: string[][] }) {
         ))}
       </tbody>
     </table>
-  );
-}
-
-function DocxView({ fileUrl }: { fileUrl: string }) {
-  const [html, setHtml] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const [mammoth, buf] = await Promise.all([
-          import("mammoth"),
-          fetch(fileUrl).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject())),
-        ]);
-        const result = await mammoth.convertToHtml({ arrayBuffer: buf });
-        if (alive) setHtml(result.value);
-      } catch {
-        if (alive) setError(true);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [fileUrl]);
-
-  if (error) return <Centered>Couldn&apos;t read this document.</Centered>;
-  if (html === null)
-    return (
-      <Centered>
-        <Loader2 className="h-5 w-5 animate-spin" />
-      </Centered>
-    );
-  return (
-    <div
-      className="prose-chat h-full overflow-auto bg-white p-8 text-black"
-      // mammoth output is sanitized HTML derived from the user's own docx.
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
   );
 }
 

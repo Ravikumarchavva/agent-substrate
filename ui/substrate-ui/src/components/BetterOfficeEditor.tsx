@@ -70,13 +70,14 @@ async function saveBytes(
  * version history (`FileVersion`, `VersionHistoryDropdown`) keeps working
  * unchanged.
  *
- * Neither xlsx nor pptx has a read-only mode (confirmed absent from their
- * types, unlike DocxEditor's `readOnly` prop), but both have a real
- * lightweight read-only preview to fall back to instead — `SpreadsheetView`
- * (SheetJS) for xlsx, `PptxSlideViewer` (BetterOffice's own low-level
- * rendering primitives, chrome-free) for pptx — so `editMode=false` shows
- * that rather than mounting the full editor. docx always toggles its
- * native `readOnly` instead of using a separate fallback component.
+ * `editMode=false` renders `fallback` (see FileArtifactViewer.tsx —
+ * `OoxmlViewer`, a separate, more faithful read-only renderer) instead of
+ * mounting the editor, for all three kinds. This used to be xlsx/pptx-only
+ * (docx toggled its own native `readOnly` instead, since DocxEditor has
+ * one), but that path had a real crash bug on some real-world docx files
+ * even in read-only mode — routing docx through `fallback` too avoids
+ * mounting BetterOffice's docx engine at all unless the user actually
+ * clicks Edit.
  */
 export function BetterOfficeEditor({
   kind,
@@ -90,10 +91,9 @@ export function BetterOfficeEditor({
   fileUrl: string;
   threadId: string;
   path: string;
-  /** docx: toggles native readOnly. xlsx/pptx: false renders `fallback`
-   *  instead of mounting the editor. */
+  /** false renders `fallback` instead of mounting the editor. */
   editMode?: boolean;
-  /** Required for xlsx/pptx (rendered when `!editMode`); unused for docx. */
+  /** Rendered whenever `!editMode`. */
   fallback?: React.ReactNode;
 }) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -103,10 +103,10 @@ export function BetterOfficeEditor({
   const checksumRef = useRef("");
 
   useEffect(() => {
-    // xlsx/pptx render `fallback` while !editMode (see below) — skip
-    // fetching the editor's own bytes/fonts until Edit is actually clicked,
-    // since PptxSlideViewer/SpreadsheetView already fetch what they need.
-    if ((kind === "xlsx" || kind === "pptx") && !editMode) return;
+    // `fallback` renders while !editMode (see below) — skip fetching the
+    // editor's own bytes/fonts until Edit is actually clicked, since
+    // OoxmlViewer already fetches what it needs.
+    if (!editMode) return;
     let cancelled = false;
     setState("loading");
     (async () => {
@@ -143,10 +143,10 @@ export function BetterOfficeEditor({
     checksumRef.current = result.checksum;
   };
 
-  // xlsx/pptx: a real lightweight read-only preview exists for both now —
-  // use it until Edit is clicked, matching docx's readOnly (and, apparently,
-  // what Claude's own artifact viewer does).
-  if ((kind === "xlsx" || kind === "pptx") && !editMode) {
+  // A real read-only preview exists for all three kinds now (OoxmlViewer) —
+  // use it until Edit is clicked, glance-first like Claude's own artifact
+  // viewer.
+  if (!editMode) {
     return <>{fallback}</>;
   }
 

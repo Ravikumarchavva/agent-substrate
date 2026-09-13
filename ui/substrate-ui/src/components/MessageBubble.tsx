@@ -286,6 +286,13 @@ function AttachmentDocumentCard({ attachment, onOpenArtifact }: AttachmentDocume
       ? getDocumentBadge(attachment.name)
       : { Icon: getAttachmentIcon(kind), badgeClass: "" };
   const extension = attachment.name.split(".").pop()?.toUpperCase() || "FILE";
+  // ArrowUpRight signals "this navigates you away" (opens a download in a
+  // new tab) — wrong affordance for the in-panel viewer button below, which
+  // opens right where you are and was getting the same icon regardless
+  // since `attachment.url` is basically always set (withUploadedFileUrl
+  // synthesizes a download fallback even when session_path is what's
+  // actually driving the click).
+  const opensInPanel = Boolean(attachment.session_path && onOpenArtifact);
   const content = (
     <div className="attachment-card group/file p-3">
       <div className={`attachment-card__icon ${badgeClass || "text-(--accent)"}`}>
@@ -303,7 +310,9 @@ function AttachmentDocumentCard({ attachment, onOpenArtifact }: AttachmentDocume
           )}
         </div>
       </div>
-      {attachment.url && <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-(--muted)" />}
+      {!opensInPanel && attachment.url && (
+        <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
+      )}
     </div>
   );
 

@@ -70,6 +70,15 @@ export function toUploadedFile(value: unknown): UploadedFile | null {
     mime: typeof value.mime === "string" ? value.mime : "application/octet-stream",
     size: typeof value.size === "number" ? value.size : 0,
     url: typeof value.url === "string" ? value.url : undefined,
+    // Lets AttachmentDocumentCard open a user-uploaded office file in the
+    // read-only side-panel viewer — see UploadedFile's own doc comment.
+    // This whitelist constructor is exactly why that stayed broken even
+    // after the field was added everywhere else: the backend (Attachment
+    // model), the wire payload, and the UploadedFile type all carried it
+    // correctly, but this was the one place that actually builds the
+    // object React renders, and it silently dropped any field not listed
+    // here.
+    session_path: typeof value.session_path === "string" ? value.session_path : undefined,
   });
 }
 

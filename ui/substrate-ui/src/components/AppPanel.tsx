@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, PanelRightClose, PanelRightOpen, Maximize2, Minimize2, Download, Pencil, Eye, FileText } from "lucide-react";
+import { X, PanelRightClose, PanelRightOpen, Maximize2, Minimize2, Download, Pencil, Eye } from "lucide-react";
 import { AppIcon } from "@/components/AppIcon";
 import { artifactKind, FileArtifactViewer } from "@/components/FileArtifactViewer";
 import { VersionHistoryDropdown } from "@/components/VersionHistoryDropdown";
+import { getDocumentBadge } from "@/lib/file-utils";
 import { useTheme } from "@/contexts/ThemeContext";
 
 // Strip a `#page=N` viewer fragment for the download link's href. The
@@ -644,13 +645,20 @@ export function AppPanel({
                 } ${flashMap[item.id] ? "bg-blue-500/10" : ""}`}
                 style={item.id === activeItem?.id ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
               >
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-background text-foreground">
-                  {item.kind === "file" ? (
-                    <FileText className="h-3.5 w-3.5 text-foreground" />
-                  ) : (
+                {item.kind === "file" ? (
+                  (() => {
+                    const { Icon, badgeClass } = getDocumentBadge(item.fileName ?? item.toolName);
+                    return (
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${badgeClass}`}>
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                    );
+                  })()
+                ) : (
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-background text-foreground">
                     <AppIcon toolName={item.toolName} className="h-3.5 w-3.5 text-foreground" />
-                  )}
-                </span>
+                  </span>
+                )}
                 <span className="max-w-30 truncate">
                   {item.kind === "file"
                     ? (item.fileName ?? item.toolName)

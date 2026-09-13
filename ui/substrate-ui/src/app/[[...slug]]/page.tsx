@@ -551,7 +551,19 @@ function ChatPageContent() {
   }, [_handleSelectThread]);
 
   useEffect(() => {
-    if (pathname === "/") {
+    // promoteThreadUrl (called right after uploadFiles/doSendMessage create
+    // a thread with no prior URL) updates the address bar via raw
+    // history.replaceState specifically to avoid a real Next.js navigation
+    // remounting this page mid-upload/mid-stream (see its own comment). But
+    // usePathname()'s router-state update from that raw History API call
+    // isn't guaranteed to land before this effect's next run, so pathname
+    // can still read stale "/" for one more render — and this effect would
+    // then fire a REAL router.replace() as if the user were still at bare
+    // root, undoing that protection and wiping the very state
+    // promoteThreadUrl was trying to preserve (the reported "page just
+    // refreshed" after an upload). isNavigatingToNewThread is already set
+    // by promoteThreadUrl for exactly this kind of race — reuse it here.
+    if (pathname === "/" && !isNavigatingToNewThread.current) {
       router.replace(buildChatRoute(isAuthenticated ? currentThreadId : null), { scroll: false });
     }
   }, [currentThreadId, isAuthenticated, pathname, router]);
@@ -833,6 +845,12 @@ function ChatPageContent() {
       mime: file.mime,
       size: file.size,
       url: file.url,
+      // Without this, the just-sent optimistic render (before any reload)
+      // couldn't open the file in the read-only viewer — only a later
+      // reload (which goes through _client.ts's toUploadedFile instead of
+      // this hand-built object) would have it. Same field, same reason,
+      // two different construction sites — see toUploadedFile's comment.
+      session_path: file.session_path,
     }));
 
     // ── Mutable bubble tracking ──────────────────────────────────────────

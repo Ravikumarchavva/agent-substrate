@@ -217,6 +217,16 @@ class GeminiClient(LLMClient):
             config["tools"] = gemini_tools
             if normalized_tool_config is not None:
                 config["tool_config"] = normalized_tool_config
+            # Thinking-enabled Gemini models attach an opaque thought_signature
+            # to function_call parts and require it back verbatim on any
+            # later turn that replays that call as history — this engine's
+            # history round-trips through a persisted step log that doesn't
+            # capture it, so a replayed function_call trips a 400
+            # ("Function call is missing a thought_signature"). Disabling
+            # thinking specifically for tool-calling turns sidesteps the
+            # requirement entirely rather than threading the signature
+            # through persistence. See ai.google.dev/gemini-api/docs/thought-signatures.
+            config["thinking_config"] = genai_types.ThinkingConfig(thinking_budget=0)
 
         if response_format is not None and not tool_dicts:
             config["response_mime_type"] = "application/json"
@@ -315,6 +325,16 @@ class GeminiClient(LLMClient):
             config["tools"] = gemini_tools
             if normalized_tool_config is not None:
                 config["tool_config"] = normalized_tool_config
+            # Thinking-enabled Gemini models attach an opaque thought_signature
+            # to function_call parts and require it back verbatim on any
+            # later turn that replays that call as history — this engine's
+            # history round-trips through a persisted step log that doesn't
+            # capture it, so a replayed function_call trips a 400
+            # ("Function call is missing a thought_signature"). Disabling
+            # thinking specifically for tool-calling turns sidesteps the
+            # requirement entirely rather than threading the signature
+            # through persistence. See ai.google.dev/gemini-api/docs/thought-signatures.
+            config["thinking_config"] = genai_types.ThinkingConfig(thinking_budget=0)
 
         # Accumulate for final message
         text_parts: list[str] = []

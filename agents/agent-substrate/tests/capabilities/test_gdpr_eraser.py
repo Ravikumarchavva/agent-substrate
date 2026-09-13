@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from substrate.capabilities.gdpr.eraser import erase_tenant, erase_user
+from substrate.config import SubstrateConfig
 from substrate.serving.monolith.models import FileMetadata, Thread, User
 
 
@@ -55,9 +56,14 @@ async def db(db_factory):
         await session.rollback()
 
 
+@pytest.fixture
+def cfg(tmp_path):
+    return SubstrateConfig(SESSION_INDEX_LOCAL_PATH=str(tmp_path / "session-index"))
+
+
 @pytest.mark.requires_postgres
 async def test_erase_user_deletes_threads_metadata_and_the_user_row(
-    db: AsyncSession, db_factory
+    db: AsyncSession, db_factory, cfg
 ):
     tenant_id = f"tenant-{uuid.uuid4()}"
     user_uuid = uuid.uuid4()
@@ -113,10 +119,16 @@ async def test_erase_user_deletes_threads_metadata_and_the_user_row(
 
     try:
         summary = await erase_user(
-            db, store=store, redis=redis, tenant_id=tenant_id, user_id=str(user_uuid)
+            db,
+            store=store,
+            redis=redis,
+            tenant_id=tenant_id,
+            user_id=str(user_uuid),
+            cfg=cfg,
         )
         assert summary.conversations_deleted == 1
         assert summary.metadata_rows_deleted == 1
+        assert summary.session_index_tables_deleted == 0
         assert own_key not in store.objects
         assert (
             f"tenants/{tenant_id}/users/{user_uuid}/uploads/c.txt"
@@ -148,7 +160,7 @@ async def test_erase_user_deletes_threads_metadata_and_the_user_row(
 
 @pytest.mark.requires_postgres
 async def test_erase_user_with_non_uuid_sub_skips_the_user_table(
-    db: AsyncSession, db_factory
+    db: AsyncSession, db_factory, cfg
 ):
     """A sub that isn't a UUID (e.g. an external platform's own id format)
     has no substrate `users` row at all — erasure must not crash trying to
@@ -162,7 +174,7 @@ async def test_erase_user_with_non_uuid_sub_skips_the_user_table(
     store = FakeStore()
     try:
         summary = await erase_user(
-            db, store=store, redis=None, tenant_id=tenant_id, user_id=sub
+            db, store=store, redis=None, tenant_id=tenant_id, user_id=sub, cfg=cfg
         )
         assert summary.conversations_deleted == 1
         async with db_factory() as verify:
@@ -177,7 +189,7 @@ async def test_erase_user_with_non_uuid_sub_skips_the_user_table(
 
 @pytest.mark.requires_postgres
 async def test_erase_tenant_deletes_every_thread_in_that_tenant_only(
-    db: AsyncSession, db_factory
+    db: AsyncSession, db_factory, cfg
 ):
     tenant_a = f"tenant-{uuid.uuid4()}"
     tenant_b = f"tenant-{uuid.uuid4()}"
@@ -194,11 +206,14 @@ async def test_erase_tenant_deletes_every_thread_in_that_tenant_only(
     store.objects[key_b] = b"b"
 
     try:
-        summary = await erase_tenant(db, store=store, redis=None, tenant_id=tenant_a)
+        summary = await erase_tenant(
+            db, store=store, redis=None, tenant_id=tenant_a, cfg=cfg
+        )
 
         assert summary.conversations_deleted == 1
         assert key_a not in store.objects
         assert key_b in store.objects  # a different tenant, untouched
+        assert summary.session_index_tables_deleted == 0
         async with db_factory() as verify:
             assert await verify.get(Thread, thread_a.id) is None
             assert await verify.get(Thread, thread_b.id) is not None

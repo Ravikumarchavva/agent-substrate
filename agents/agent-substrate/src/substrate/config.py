@@ -150,6 +150,18 @@ class SubstrateConfig(BaseSettings):
     RAG_FINAL_K: int = 5
     RAG_MIN_RERANK_SCORE: float = 0.1
 
+    # ── Session document index (per-user vector/tree/graph — LanceDB) ─────────
+    # Empty (default): the vector/pageindex/graph store use a local, embedded
+    # LanceDB directory under SESSION_INDEX_LOCAL_PATH — no server needed.
+    # Set SESSION_INDEX_NAMESPACE_URI to point at a Lance Namespace REST
+    # catalog instead (e.g. SeaweedFS's Lance Catalog,
+    # `weed server -s3.port.lance=9101`) — see
+    # capabilities/vector/lancedb_store.py's module docstring for what was
+    # verified about that mode (namespace_path shape, credential handling).
+    SESSION_INDEX_LOCAL_PATH: str = "./data/session-index"
+    SESSION_INDEX_NAMESPACE_URI: str = ""
+    SESSION_INDEX_BUCKET: str = "substrate-index"
+
     FRONTEND_URL: str = "http://127.0.0.1:3000"
 
     model_config = SettingsConfigDict(

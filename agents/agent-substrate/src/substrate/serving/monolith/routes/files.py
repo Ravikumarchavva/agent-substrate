@@ -298,32 +298,36 @@ async def _stage_uploaded_doc(
     content_type: str,
     owner_sub: str,
     tenant_id: str,
+    session_id: str,
 ) -> None:
-    """Fire-and-forget eager extraction+embedding, staged under a temporary
-    collection — not the real thread collection (see
-    ``LocalRagBackend.promote`` / ``routes/chat_context.py``). Same
-    in-process ``asyncio.create_task`` pattern as ``routes/scheduled.py``'s
-    ``_run_bg`` — no durable job queue in this codebase. If the server
-    restarts mid-task, ``staged_at`` simply never gets set; the send-time
-    path already handles that (blocks with a clear "still processing"
-    error) rather than needing a retry queue."""
+    """Fire-and-forget eager extraction+embedding into the caller's own
+    per-user session-document index (vector + PageIndex tree + knowledge
+    graph — see ``capabilities/knowledge/session_ingest.py``), already
+    tagged with the real ``session_id`` — unlike the old Postgres
+    staging-collection flow this replaced, there's no separate "promote"
+    data-movement step needed later: every row is written already scoped
+    to where it belongs. Same in-process ``asyncio.create_task`` pattern as
+    ``routes/scheduled.py``'s ``_run_bg`` — no durable job queue in this
+    codebase. If the server restarts mid-task, ``staged_at`` simply never
+    gets set; the send-time path already handles that (blocks with a clear
+    "still processing" error) rather than needing a retry queue."""
     assert ctx.rag_backend is not None
+    assert ctx.embedding_client is not None
     session_factory = ctx.session_factory
+    from substrate.capabilities.knowledge.session_ingest import ingest_session_document
+
     try:
-        await ctx.rag_backend.ingest(
-            data,
-            collection=f"staging:{file_id}",
-            metadata={
-                "filename": original_name,
-                "content_type": content_type,
-                "file_id": str(file_id),
-                # Lets the backend park extracted chart/table images under
-                # tenants/{tid}/users/{sub}/rag/... instead of inlining
-                # their bytes into Postgres — see
-                # LocalRagBackend._ingest_images/_store_image_bytes.
-                "user_id": owner_sub,
-                "tenant_id": tenant_id,
-            },
+        await ingest_session_document(
+            data=data,
+            filename=original_name,
+            content_type=content_type,
+            tenant_id=tenant_id,
+            user_id=owner_sub,
+            session_id=session_id,
+            cfg=settings,
+            embedding_client=ctx.embedding_client,
+            model_client=ctx.model_client,
+            rag_backend=ctx.rag_backend,
         )
     except Exception as exc:
         logger.warning("Eager staging failed for file %s: %s", file_id, exc)
@@ -367,9 +371,11 @@ async def upload_file(
 
     RAG-eligible types (currently PDF only — see ``EXTRACTABLE_CONTENT_TYPES``)
     get extra, synchronous-before-storing checks (upload-attempt quota, size
-    cap, page cap) plus eager background staging (extraction+embedding into
-    a temporary collection) once stored — see ``_stage_uploaded_doc``. Other
-    file types are unaffected: pure blob+metadata storage, same as today.
+    cap, page cap) plus eager background staging (extraction, chunking,
+    embedding, PageIndex tree, and graph extraction into the caller's
+    per-user session-document index) once stored, when a ``thread_id`` is
+    already known — see ``_stage_uploaded_doc``. Other file types are
+    unaffected: pure blob+metadata storage, same as today.
     """
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
@@ -391,6 +397,11 @@ async def upload_file(
         is_extractable
         and ctx.rag_backend is not None
         and ctx.rag_backend.name == "local"
+        and ctx.embedding_client is not None
+        # No thread_id yet -> no session_id to scope the per-user index
+        # under. Deferred to send time instead, once the real thread_id is
+        # known — see chat_context.py::_build_file_context.
+        and thread_id is not None
     )
     if is_extractable:
         # The upload-attempt quota specifically bounds eager-staging compute
@@ -487,6 +498,7 @@ async def upload_file(
                 content_type=content_type,
                 owner_sub=claims.sub,
                 tenant_id=claims.tenant_id,
+                session_id=str(thread_id),
             )
         )
 

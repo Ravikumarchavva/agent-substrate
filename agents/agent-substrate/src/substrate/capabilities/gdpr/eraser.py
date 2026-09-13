@@ -10,6 +10,10 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.capabilities.storage.layout import tenant_prefix, user_prefix
+from substrate.capabilities.storage.session_index_erasure import (
+    erase_session_index,
+    erase_session_index_for_tenant,
+)
 from substrate.serving.monolith.models import FileMetadata, Thread, User
 
 
@@ -21,6 +25,7 @@ class ErasureSummary:
     metadata_rows_deleted: int
     objects_deleted: int
     redis_keys_deleted: int
+    session_index_tables_deleted: int
 
     def as_dict(self) -> dict[str, int | str | None]:
         return asdict(self)
@@ -47,7 +52,13 @@ async def _redis_sweep(redis: Any, identifiers: set[str]) -> int:
 
 
 async def erase_user(
-    db: AsyncSession, *, store: Any, redis: Any, tenant_id: str, user_id: str
+    db: AsyncSession,
+    *,
+    store: Any,
+    redis: Any,
+    tenant_id: str,
+    user_id: str,
+    cfg: Any,
 ) -> ErasureSummary:
     threads = list(
         (
@@ -91,6 +102,7 @@ async def erase_user(
             store, f"{tenant_prefix(tenant_id)}/conversations/{conversation_id}"
         )
     redis_deleted = await _redis_sweep(redis, {user_id, *thread_ids})
+    session_index_tables = await erase_session_index(cfg, tenant_id, user_id)
     return ErasureSummary(
         tenant_id,
         user_id,
@@ -98,11 +110,12 @@ async def erase_user(
         metadata_result.rowcount or 0,
         objects,
         redis_deleted,
+        session_index_tables,
     )
 
 
 async def erase_tenant(
-    db: AsyncSession, *, store: Any, redis: Any, tenant_id: str
+    db: AsyncSession, *, store: Any, redis: Any, tenant_id: str, cfg: Any
 ) -> ErasureSummary:
     threads = list(
         (
@@ -118,6 +131,7 @@ async def erase_tenant(
     await db.commit()
     objects = await _delete_prefix(store, tenant_prefix(tenant_id))
     redis_deleted = await _redis_sweep(redis, thread_ids | users)
+    session_index_tables = await erase_session_index_for_tenant(cfg, tenant_id, users)
     return ErasureSummary(
         tenant_id,
         None,
@@ -125,4 +139,5 @@ async def erase_tenant(
         metadata_result.rowcount or 0,
         objects,
         redis_deleted,
+        session_index_tables,
     )

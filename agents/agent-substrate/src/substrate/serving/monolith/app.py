@@ -118,6 +118,7 @@ async def lifespan(app: FastAPI):
         bridge_registry=infra.bridge_registry,
         redis_client=infra.redis_client,
         model_client=llm.model_client,
+        embedding_client=llm.embedding_client,
         rag_backend=infra.rag_backend,
         file_store=infra.file_store,
         skill_manager=infra.skill_manager,
@@ -202,6 +203,7 @@ async def lifespan(app: FastAPI):
         workspace_user_quota_bytes=settings.WORKSPACE_USER_QUOTA_BYTES,
         workspace_user_delete_allowed=settings.WORKSPACE_USER_DELETE_ALLOWED,
         rag_backend=app.state.rag_backend,
+        embedding_client=app.state.embedding_client,
     )
 
     for name in ("httpx", "urllib3", "openai"):

@@ -2,12 +2,15 @@
 staged documents (local backend only): a chat send referencing a file whose
 staging failed, is still in progress, or would exceed the daily commit
 quota is blocked entirely (not a silent per-file degrade — see the plan's
-explicit "block the whole send" decision). A file that staged successfully
-gets cheaply promote()'d (re-keyed) instead of re-ingested."""
+explicit "block the whole send" decision). A file already staged *for this
+exact thread* (session_id already correct in the per-user index — see
+capabilities/knowledge/session_ingest.py) needs no further work; one staged
+under a different thread, or never staged at all, gets ingested now,
+tagged with this message's real thread_id."""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import HTTPException
 
@@ -43,6 +46,7 @@ def _staged_meta(
     staged_at="2026-01-01T00:00:00Z",
     staging_error=None,
     rag_ingested_at=None,
+    thread_id="thread-1",
 ) -> MagicMock:
     meta = MagicMock()
     meta.id = file_id
@@ -53,6 +57,11 @@ def _staged_meta(
     meta.staged_at = staged_at
     meta.staging_error = staging_error
     meta.rag_ingested_at = rag_ingested_at
+    # Matches body.thread_id in every test below by default — a file
+    # already staged under *this* thread needs no further ingestion work.
+    # Pass thread_id=None or a different value to exercise the "needs
+    # (re-)ingestion" branch instead.
+    meta.thread_id = thread_id
     return meta
 
 
@@ -164,29 +173,66 @@ def _today() -> str:
     return datetime.now(timezone.utc).date().isoformat()
 
 
-async def test_send_promotes_staged_file_instead_of_reingesting():
-    meta = _staged_meta("f1")
+async def test_send_skips_reingestion_for_file_already_staged_this_thread():
+    """meta.thread_id matches body.thread_id -> already correctly scoped in
+    the per-user index at upload time, nothing left to do but bookkeeping."""
+    meta = _staged_meta("f1", thread_id="thread-1")
     db = _db_with_rows([meta])
 
     rag_backend = MagicMock()
     rag_backend.name = "local"
-    rag_backend.promote = AsyncMock(return_value=3)
-    rag_backend.ingest = AsyncMock()
     ctx = MagicMock()
     ctx.file_store = MagicMock()
     ctx.rag_backend = rag_backend
+    ctx.embedding_client = MagicMock()
 
     body = MagicMock()
     body.file_ids = ["f1"]
     body.thread_id = "thread-1"
 
-    text_block, _images, attachments = await _build_file_context(
-        db, body, _request_with_redis(_FakeRedis()), ctx, MagicMock(sub="user-1")
-    )
+    with patch(
+        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        new=AsyncMock(),
+    ) as mock_ingest:
+        text_block, _images, attachments = await _build_file_context(
+            db, body, _request_with_redis(_FakeRedis()), ctx, MagicMock(sub="user-1")
+        )
 
-    rag_backend.promote.assert_awaited_once_with(file_id="f1", thread_id="thread-1")
-    rag_backend.ingest.assert_not_awaited()
-    ctx.file_store.download.assert_not_called()  # promote never needs the raw bytes
+    mock_ingest.assert_not_awaited()
+    ctx.file_store.download.assert_not_called()
+    assert meta.rag_ingested_at is not None
+    assert len(attachments) == 1
+
+
+async def test_send_ingests_a_file_staged_under_a_different_thread():
+    """meta.thread_id differs from body.thread_id (referenced from a
+    different conversation than it was uploaded under) -> re-ingest, tagged
+    with *this* thread's id, rather than trying to move already-scoped rows."""
+    meta = _staged_meta("f1", thread_id="other-thread")
+    db = _db_with_rows([meta])
+
+    rag_backend = MagicMock()
+    rag_backend.name = "local"
+    ctx = MagicMock()
+    ctx.file_store = MagicMock()
+    ctx.file_store.download = AsyncMock(return_value=b"pdf bytes")
+    ctx.rag_backend = rag_backend
+    ctx.embedding_client = MagicMock()
+
+    body = MagicMock()
+    body.file_ids = ["f1"]
+    body.thread_id = "thread-1"
+
+    with patch(
+        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        new=AsyncMock(),
+    ) as mock_ingest:
+        text_block, _images, attachments = await _build_file_context(
+            db, body, _request_with_redis(_FakeRedis()), ctx, MagicMock(sub="user-1")
+        )
+
+    mock_ingest.assert_awaited_once()
+    assert mock_ingest.await_args.kwargs["session_id"] == "thread-1"
     assert meta.rag_ingested_at is not None
     assert len(attachments) == 1
 
@@ -218,16 +264,17 @@ async def test_send_pinecone_backend_unaffected_by_staging_logic():
     assert meta.rag_ingested_at is not None
 
 
-async def test_send_promote_failure_releases_quota():
-    meta = _staged_meta("f1")
+async def test_send_ingest_failure_releases_quota():
+    meta = _staged_meta("f1", thread_id="other-thread")
     db = _db_with_rows([meta])
 
     rag_backend = MagicMock()
     rag_backend.name = "local"
-    rag_backend.promote = AsyncMock(side_effect=RuntimeError("db exploded"))
     ctx = MagicMock()
     ctx.file_store = MagicMock()
+    ctx.file_store.download = AsyncMock(return_value=b"pdf bytes")
     ctx.rag_backend = rag_backend
+    ctx.embedding_client = MagicMock()
 
     body = MagicMock()
     body.file_ids = ["f1"]
@@ -235,12 +282,16 @@ async def test_send_promote_failure_releases_quota():
 
     redis = _FakeRedis()
     exc = None
-    try:
-        await _build_file_context(
-            db, body, _request_with_redis(redis), ctx, MagicMock(sub="user-1")
-        )
-    except RuntimeError as e:
-        exc = e
+    with patch(
+        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        new=AsyncMock(side_effect=RuntimeError("db exploded")),
+    ):
+        try:
+            await _build_file_context(
+                db, body, _request_with_redis(redis), ctx, MagicMock(sub="user-1")
+            )
+        except RuntimeError as e:
+            exc = e
 
     assert exc is not None
     assert redis.store["docquota:commit:user-1:" + _today()] == 0

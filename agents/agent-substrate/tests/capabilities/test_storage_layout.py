@@ -5,6 +5,7 @@ import pytest
 from substrate.capabilities.storage.layout import (
     conversation_shared_key,
     knowledge_document_prefix,
+    user_index_prefix,
     user_prefix,
 )
 
@@ -16,6 +17,9 @@ def test_canonical_keys_are_tenant_first() -> None:
     )
     assert knowledge_document_prefix("tenant-a", "kb-a", "doc-a") == (
         "tenants/tenant-a/knowledge/kb-a/documents/doc-a"
+    )
+    assert user_index_prefix("tenant-a", "user-a") == (
+        "tenants/tenant-a/users/user-a/index"
     )
 
 

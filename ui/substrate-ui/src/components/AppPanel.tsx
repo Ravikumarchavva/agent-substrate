@@ -319,7 +319,7 @@ export function AppPanel({
             .replace("localhost", "127.0.0.1")
             .split("/")
             .slice(0, 3)
-            .join("/") + "/api/spotify/login";
+            .join("/") + "/chat/api/spotify/login";
         window.open(loginUrl, "spotify-auth", `width=${w},height=${h},left=${left},top=${top}`);
         return;
       }
@@ -345,7 +345,7 @@ export function AppPanel({
         const w = 500, h = 700;
         const left = Math.round(window.screen.width / 2 - w / 2);
         const top = Math.round(window.screen.height / 2 - h / 2);
-        window.open("/api/workspace/login", "workspace-auth", `width=${w},height=${h},left=${left},top=${top}`);
+        window.open("/chat/api/workspace/login", "workspace-auth", `width=${w},height=${h},left=${left},top=${top}`);
         return;
       }
       if (msg.type === "workspace_auth_success") {

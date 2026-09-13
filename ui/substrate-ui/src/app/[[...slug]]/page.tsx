@@ -32,7 +32,7 @@ import {
   writeStoredValue,
   groupModelOptions,
 } from "@/lib/model-preferences";
-import { parseChatPath, buildChatPath, buildSettingsPath } from "@/lib/chat-routes";
+import { parseChatPath, buildChatPath, buildChatRoute, buildSettingsPath } from "@/lib/chat-routes";
 import {
   getAttachmentIcon,
   formatFileSize,
@@ -272,7 +272,7 @@ function ChatPageContent() {
   );
 
   const closeSettingsPanel = useCallback(() => {
-    router.push(buildChatPath(lastActiveThreadId), { scroll: false });
+    router.push(buildChatRoute(lastActiveThreadId), { scroll: false });
   }, [lastActiveThreadId, router]);
 
   const handleOpenScheduled = useCallback(() => {
@@ -429,12 +429,12 @@ function ChatPageContent() {
       setActivePanelId(null);
       clearBoards();
       setAuthNotice("You were signed out. Sign in again to reopen or start chats.");
-      router.replace(buildChatPath(null), { scroll: false });
+      router.replace(buildChatRoute(null), { scroll: false });
     }
 
     // Not authenticated → always show clean /chat (no stale thread IDs in URL)
-    if (!isAuthenticated && !settingsPanelOpen && (routeState.threadId || pathname !== "/chat")) {
-      router.replace(buildChatPath(null), { scroll: false });
+    if (!isAuthenticated && !settingsPanelOpen && (routeState.threadId || pathname !== "/")) {
+      router.replace(buildChatRoute(null), { scroll: false });
     }
 
     if (isAuthenticated) {
@@ -517,7 +517,7 @@ function ChatPageContent() {
 
   useEffect(() => {
     if (pathname === "/") {
-      router.replace(buildChatPath(isAuthenticated ? currentThreadId : null), { scroll: false });
+      router.replace(buildChatRoute(isAuthenticated ? currentThreadId : null), { scroll: false });
     }
   }, [currentThreadId, isAuthenticated, pathname, router]);
 
@@ -1505,8 +1505,8 @@ function ChatPageContent() {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background px-4">
         <div className="text-center space-y-6 max-w-sm w-full">
-          <div className="substrate-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-xl font-bold bg-foreground text-background">
-            R
+          <div className="substrate-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center bg-foreground text-background">
+            <SubstrateMark className="h-8 w-8" />
           </div>
           <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
             <h1 className="text-2xl font-semibold">Welcome</h1>

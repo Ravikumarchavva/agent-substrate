@@ -72,20 +72,20 @@ export const adminApi = {
   },
 
   async disconnectGoogle(): Promise<void> {
-    await requestVoidFromUrl("/api/auth/google/logout", {
+    await requestVoidFromUrl("/chat/api/auth/google/logout", {
       method: "POST",
       credentials: "include",
     });
   },
 
   async disconnectSpotify(): Promise<void> {
-    await requestVoidFromUrl("/api/spotify/logout", {
+    await requestVoidFromUrl("/chat/api/spotify/logout", {
       method: "POST",
       credentials: "include",
     });
   },
 
   async disconnectWorkspace(): Promise<void> {
-    await requestVoidFromUrl("/api/workspace/token", { method: "DELETE" });
+    await requestVoidFromUrl("/chat/api/workspace/token", { method: "DELETE" });
   },
 };

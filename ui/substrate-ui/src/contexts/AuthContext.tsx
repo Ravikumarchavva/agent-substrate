@@ -153,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const top = window.screen.height / 2 - height / 2;
 
     const popup = window.open(
-      "/api/auth/google/login",
+      "/chat/api/auth/google/login",
       "google-auth",
       `width=${width},height=${height},left=${left},top=${top}`
     );
@@ -187,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const top = window.screen.height / 2 - height / 2;
 
     const popup = window.open(
-      "/api/workspace/login",
+      "/chat/api/workspace/login",
       "workspace-auth",
       `width=${width},height=${height},left=${left},top=${top}`
     );
@@ -219,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const top = window.screen.height / 2 - height / 2;
 
     const popup = window.open(
-      "/api/spotify/login",
+      "/chat/api/spotify/login",
       "spotify-auth",
       `width=${width},height=${height},left=${left},top=${top}`
     );

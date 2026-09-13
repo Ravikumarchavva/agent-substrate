@@ -21,7 +21,12 @@
  * All three also carry tenant_id = RAVI_PROJECT_ID when this instance was
  * deployed by ravi for a specific project — every visitor's sub stays
  * distinct (workspace/quota isolation unchanged), but agent-substrate's
- * per-project rate limiting groups them under one shared daily quota.
+ * per-project rate limiting groups them under one shared daily quota. When
+ * unset (local dev / a not-yet-provisioned instance), every token falls back
+ * to a fixed literal tenant_id instead of omitting the claim: agent-substrate's
+ * JWT verification rejects any non-service token with no tenant_id at all
+ * (see serving/shared/auth/jwt.py::verify_token — a deliberate hardening,
+ * not a bug there), so omitting it here would 401 every request.
  */
 import jwt from "jsonwebtoken";
 
@@ -31,11 +36,13 @@ const ENGINE_JWT_SECRET = process.env.ENGINE_JWT_SECRET ?? "";
 // docs/claude_docs/roadmap.md's "Explicitly deferred" entry on real Instance
 // provisioning) — scopes agent-substrate's per-tenant rate limiting so every
 // visitor to THIS deployed chatbot (anonymous or logged-in) shares one
-// project-level quota instead of each getting their own. Empty/unset ⇒
-// tenant_id is omitted from every token below and agent-substrate's
-// AuthClaims falls back to its own "default" (today's behavior, unchanged
-// for local dev / a not-yet-provisioned instance).
+// project-level quota instead of each getting their own.
 const RAVI_PROJECT_ID = process.env.RAVI_PROJECT_ID ?? "";
+
+// Every token needs a non-empty tenant_id (agent-substrate rejects tokens
+// without one) — this is the fallback for local dev / a standalone instance
+// that isn't provisioned through the SaaS platform.
+const TENANT_ID = RAVI_PROJECT_ID || "substrate-ui-local";
 
 export const ANON_COOKIE = "anon_id";
 
@@ -46,7 +53,7 @@ export function makeEngineToken(): string {
       sub: "substrate-ui",
       email: "ui@substrate-ui.local",
       type: "access",
-      ...(RAVI_PROJECT_ID && { tenant_id: RAVI_PROJECT_ID }),
+      tenant_id: TENANT_ID,
     },
     ENGINE_JWT_SECRET,
     { expiresIn: "1h" }
@@ -72,7 +79,7 @@ export function makeUserToken(user: UserSession): string {
       email: user.email,
       role: user.isAdmin ? "platform_admin" : "end_user",
       type: "access",
-      ...(RAVI_PROJECT_ID && { tenant_id: RAVI_PROJECT_ID }),
+      tenant_id: TENANT_ID,
     },
     ENGINE_JWT_SECRET,
     { expiresIn: "1h" }
@@ -97,7 +104,7 @@ export function makeAnonToken(anonId: string): string {
       email: `anon-${anonId}@substrate-ui.local`,
       role: "end_user",
       type: "access",
-      ...(RAVI_PROJECT_ID && { tenant_id: RAVI_PROJECT_ID }),
+      tenant_id: TENANT_ID,
     },
     ENGINE_JWT_SECRET,
     { expiresIn: "1h" }

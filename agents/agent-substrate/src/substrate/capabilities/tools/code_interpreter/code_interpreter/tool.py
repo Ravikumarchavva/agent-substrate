@@ -149,7 +149,9 @@ class CodeInterpreterTool:
         parent_agent_id = current_parent_agent_id.get()
         if not tenant_id:
             return sandbox_error_result("Sandbox execution requires a tenant-scoped conversation.")
-        workspace = conversation_workspace_prefix(tenant_id, session_id)
+        if not user_id:
+            return sandbox_error_result("Sandbox execution requires a signed-in user.")
+        workspace = conversation_workspace_prefix(tenant_id, user_id, session_id)
         shared_dir = f"{workspace}/shared"
         private_dir = (
             f"{workspace}/agents/{parent_agent_id}/subagents/{agent_id}/private"

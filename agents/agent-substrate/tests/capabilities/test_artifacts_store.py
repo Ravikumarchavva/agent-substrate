@@ -65,10 +65,10 @@ def _memory(text: str, **kw) -> Concept:
 
 async def test_session_and_global_scopes_are_separate_prefixes():
     store, blob = _store()
-    session = store.scope_prefix(TENANT, conversation_id=CONVERSATION)
+    session = store.scope_prefix(TENANT, USER, conversation_id=CONVERSATION)
     global_ = store.scope_prefix(TENANT, user_id=USER)
 
-    assert session == f"tenants/{TENANT}/conversations/{CONVERSATION}/artifacts"
+    assert session == f"tenants/{TENANT}/users/{USER}/conversations/{CONVERSATION}/artifacts"
     assert global_ == f"tenants/{TENANT}/users/{USER}/artifacts"
 
     await store.save(session, "a", _memory("session fact"))
@@ -83,18 +83,8 @@ async def test_session_artifacts_live_outside_the_sandbox_mount():
     """The sandbox bind-mounts `.../workspace/shared`; artifacts must not be
     reachable from arbitrary sandboxed code, nor show up as user files."""
     store, _ = _store()
-    session = store.scope_prefix(TENANT, conversation_id=CONVERSATION)
+    session = store.scope_prefix(TENANT, USER, conversation_id=CONVERSATION)
     assert "/workspace/" not in f"{session}/"
-
-
-async def test_scope_prefix_requires_exactly_one_scope():
-    store, _ = _store()
-    for kwargs in ({}, {"user_id": USER, "conversation_id": CONVERSATION}):
-        try:
-            store.scope_prefix(TENANT, **kwargs)
-        except ValueError:
-            continue
-        raise AssertionError(f"expected ValueError for {kwargs}")
 
 
 async def test_reserved_files_are_never_listed_as_concepts():
@@ -151,7 +141,7 @@ async def test_deprecated_concepts_are_hidden_unless_requested():
 
 async def test_promote_copies_to_global_and_retires_the_session_copy():
     store, _ = _store()
-    session = store.scope_prefix(TENANT, conversation_id=CONVERSATION)
+    session = store.scope_prefix(TENANT, USER, conversation_id=CONVERSATION)
     global_ = store.scope_prefix(TENANT, user_id=USER)
     await store.save(session, "fact", _memory("prefers dark mode"))
 
@@ -171,7 +161,7 @@ async def test_promote_copies_to_global_and_retires_the_session_copy():
 
 async def test_promote_does_not_clobber_an_existing_global_slug():
     store, _ = _store()
-    session = store.scope_prefix(TENANT, conversation_id=CONVERSATION)
+    session = store.scope_prefix(TENANT, USER, conversation_id=CONVERSATION)
     global_ = store.scope_prefix(TENANT, user_id=USER)
     await store.save(global_, "fact", _memory("existing global fact"))
     await store.save(session, "fact", _memory("different session fact"))
@@ -184,14 +174,14 @@ async def test_promote_does_not_clobber_an_existing_global_slug():
 
 async def test_promote_missing_concept_returns_none():
     store, _ = _store()
-    session = store.scope_prefix(TENANT, conversation_id=CONVERSATION)
+    session = store.scope_prefix(TENANT, USER, conversation_id=CONVERSATION)
     global_ = store.scope_prefix(TENANT, user_id=USER)
     assert await store.promote(session, global_, "nope") is None
 
 
 async def test_promotion_is_recorded_in_the_log():
     store, blob = _store()
-    session = store.scope_prefix(TENANT, conversation_id=CONVERSATION)
+    session = store.scope_prefix(TENANT, USER, conversation_id=CONVERSATION)
     global_ = store.scope_prefix(TENANT, user_id=USER)
     await store.save(session, "fact", _memory("x"))
     await store.promote(session, global_, "fact")

@@ -103,8 +103,8 @@ def _prefix(
             raise HTTPException(
                 status_code=400, detail="thread_id is required for session scope"
             )
-        return store.scope_prefix(user.tenant_id, conversation_id=thread_id)
-    return store.scope_prefix(user.tenant_id, user_id=user.sub)
+        return store.scope_prefix(user.tenant_id, user.sub, conversation_id=thread_id)
+    return store.scope_prefix(user.tenant_id, user.sub)
 
 
 @router.get("", response_model=list[ArtifactOut])

@@ -184,9 +184,9 @@ async def _may_access_key(key: str, claims: AuthClaims, db: AsyncSession) -> boo
         # caller may read them (replaces the old blanket, cross-tenant
         # `_OPEN_NAMESPACES = ("kb/",)` rule with a tenant-scoped one).
         return True
-    if len(parts) >= 4 and parts[2] == "conversations":
+    if len(parts) >= 6 and parts[2] == "users" and parts[4] == "conversations":
         try:
-            thread_uuid = uuid.UUID(parts[3])
+            thread_uuid = uuid.UUID(parts[5])
         except ValueError:
             return False
         owned = (
@@ -561,7 +561,7 @@ async def upload_file(
 
     if thread_id is not None:
         base_key = conversation_shared_key(
-            claims.tenant_id, str(thread_id), f"uploads/{original_name}"
+            claims.tenant_id, claims.sub, str(thread_id), f"uploads/{original_name}"
         )
     else:
         base_key = (

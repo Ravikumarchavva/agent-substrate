@@ -103,17 +103,13 @@ class ArtifactStore:
     # ---- key helpers ---------------------------------------------------
 
     def scope_prefix(
-        self, tenant_id: str, *, user_id: str | None = None, conversation_id: str | None = None
+        self, tenant_id: str, user_id: str, *, conversation_id: str | None = None
     ) -> str:
-        """Resolve a bundle prefix. Exactly one of *user_id* (global) or
-        *conversation_id* (session) must be given."""
-        if conversation_id and user_id:
-            raise ValueError("pass either user_id or conversation_id, not both")
+        """Resolve a bundle prefix — the user's global bundle, or one
+        conversation's (still scoped by the owning user's prefix)."""
         if conversation_id:
-            return conversation_artifacts_prefix(tenant_id, conversation_id)
-        if user_id:
-            return user_artifacts_prefix(tenant_id, user_id)
-        raise ValueError("one of user_id or conversation_id is required")
+            return conversation_artifacts_prefix(tenant_id, user_id, conversation_id)
+        return user_artifacts_prefix(tenant_id, user_id)
 
     @staticmethod
     def _concept_key(prefix: str, slug: str) -> str:

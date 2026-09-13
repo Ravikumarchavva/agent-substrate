@@ -31,19 +31,29 @@ def user_prefix(tenant_id: str, user_id: str) -> str:
     return f"{tenant_prefix(tenant_id)}/users/{_id(user_id, 'user id')}"
 
 
-def conversation_workspace_prefix(tenant_id: str, conversation_id: str) -> str:
+def conversation_workspace_prefix(
+    tenant_id: str, user_id: str, conversation_id: str
+) -> str:
+    """Nested under the owning user (not a tenant-level sibling of `users/`)
+    so a single-prefix delete of `user_prefix(...)` — GDPR erasure, account
+    deletion — removes every conversation the user ever had along with it,
+    without needing a separate per-conversation sweep."""
     return (
-        f"{tenant_prefix(tenant_id)}/conversations/"
+        f"{user_prefix(tenant_id, user_id)}/conversations/"
         f"{_id(conversation_id, 'conversation id')}/workspace"
     )
 
 
-def conversation_shared_key(tenant_id: str, conversation_id: str, path: str) -> str:
-    return f"{conversation_workspace_prefix(tenant_id, conversation_id)}/shared/{safe_relative_path(path)}"
+def conversation_shared_key(
+    tenant_id: str, user_id: str, conversation_id: str, path: str
+) -> str:
+    return f"{conversation_workspace_prefix(tenant_id, user_id, conversation_id)}/shared/{safe_relative_path(path)}"
 
 
-def conversation_version_key(tenant_id: str, conversation_id: str, path: str) -> str:
-    return f"{conversation_workspace_prefix(tenant_id, conversation_id)}/versions/{safe_relative_path(path)}"
+def conversation_version_key(
+    tenant_id: str, user_id: str, conversation_id: str, path: str
+) -> str:
+    return f"{conversation_workspace_prefix(tenant_id, user_id, conversation_id)}/versions/{safe_relative_path(path)}"
 
 
 def user_artifacts_prefix(tenant_id: str, user_id: str) -> str:
@@ -55,7 +65,9 @@ def user_artifacts_prefix(tenant_id: str, user_id: str) -> str:
     return f"{user_prefix(tenant_id, user_id)}/artifacts"
 
 
-def conversation_artifacts_prefix(tenant_id: str, conversation_id: str) -> str:
+def conversation_artifacts_prefix(
+    tenant_id: str, user_id: str, conversation_id: str
+) -> str:
     """Session-scoped artifact bundle, a *sibling* of the conversation's
     ``workspace`` rather than a child of it.
 
@@ -66,7 +78,7 @@ def conversation_artifacts_prefix(tenant_id: str, conversation_id: str) -> str:
     show up in the file explorer. Sandbox output stays ordinary workspace
     files; something reaches this prefix only when explicitly promoted."""
     return (
-        f"{tenant_prefix(tenant_id)}/conversations/"
+        f"{user_prefix(tenant_id, user_id)}/conversations/"
         f"{_id(conversation_id, 'conversation id')}/artifacts"
     )
 

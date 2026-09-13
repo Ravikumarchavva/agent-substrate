@@ -142,7 +142,9 @@ async def delete_thread_endpoint(
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
-    """Delete a thread and all its data."""
+    """Delete a thread — a soft delete (see thread_service.py::delete_thread):
+    hidden from this user, but the row and its files are retained, not
+    erased. Permanent erasure is a distinct GDPR-erasure action."""
     thread = await get_owned_thread(db, thread_id, user)
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")

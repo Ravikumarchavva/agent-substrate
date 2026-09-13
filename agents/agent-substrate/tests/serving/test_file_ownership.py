@@ -183,7 +183,7 @@ async def test_conversation_key_allowed_for_the_owning_thread(database_url: str)
         await session.commit()
     try:
         async with factory() as session:
-            key = f"tenants/{TENANT_A}/conversations/{thread_id}/workspace/shared/a.png"
+            key = f"tenants/{TENANT_A}/users/{OWNER.sub}/conversations/{thread_id}/workspace/shared/a.png"
             assert await _may_access_key(key, OWNER, session) is True
             assert await _may_access_key(key, STRANGER, session) is False
     finally:

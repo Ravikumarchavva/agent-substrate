@@ -81,9 +81,13 @@ async def test_erase_user_deletes_threads_metadata_and_the_user_row(
     db.add(other_thread)
     await db.commit()
 
-    own_key = f"tenants/{tenant_id}/conversations/{thread.id}/workspace/shared/a.txt"
+    own_key = (
+        f"tenants/{tenant_id}/users/{user_uuid}/conversations/"
+        f"{thread.id}/workspace/shared/a.txt"
+    )
     other_key = (
-        f"tenants/{tenant_id}/conversations/{other_thread.id}/workspace/shared/b.txt"
+        f"tenants/{tenant_id}/users/{other_user_uuid}/conversations/"
+        f"{other_thread.id}/workspace/shared/b.txt"
     )
     db.add(
         FileMetadata(

@@ -82,6 +82,22 @@ async def _registered_thread(thread_id: str, *, owner: str, tenant_id: str = TEN
                 await db.commit()
 
 
+async def _promote_file(file_id: str) -> None:
+    """Simulate "the message carrying this attachment was sent" — a
+    composer upload (real thread_id) only reaches the real file_store at
+    that point (see routes/files.py::promote_pending_file), and these
+    tests exercise /workspace/file's own serving/caching behavior against
+    an already-permanent file, not the pending-upload mechanics."""
+    from substrate.serving.monolith.models import FileMetadata
+    from substrate.serving.monolith.routes.files import promote_pending_file
+
+    async with _bypass_session() as db:
+        meta = await db.get(FileMetadata, uuid.UUID(file_id))
+        assert meta is not None
+        await promote_pending_file(app.state.ctx, meta)
+        await db.commit()
+
+
 @pytest.mark.requires_postgres
 async def test_upload_scoped_key_and_workspace_management(tmp_path) -> None:
     async with app.router.lifespan_context(app):
@@ -268,13 +284,14 @@ async def test_serve_file_sets_etag_and_honors_if_none_match(tmp_path) -> None:
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
                     ) as client:
-                        await client.post(
+                        upload_resp = await client.post(
                             "/files/upload",
                             data={"thread_id": thread_id},
                             files={
                                 "file": ("chart.png", b"fake-png-bytes", "image/png")
                             },
                         )
+                        await _promote_file(upload_resp.json()["id"])
 
                         first = await client.get(
                             "/workspace/file",
@@ -327,11 +344,12 @@ async def test_serve_file_pinned_version_is_cached_immutable(tmp_path) -> None:
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
                     ) as client:
-                        await client.post(
+                        upload_resp = await client.post(
                             "/files/upload",
                             data={"thread_id": thread_id},
                             files={"file": ("notes.txt", b"v1", "text/plain")},
                         )
+                        await _promote_file(upload_resp.json()["id"])
                         # serve_file lazily captures a FileVersion on its first
                         # (unpinned) read (see its docstring) — a version row
                         # doesn't exist purely from the upload itself.

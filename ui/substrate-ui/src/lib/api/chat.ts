@@ -18,6 +18,18 @@ export class ChatConflictError extends Error {
   }
 }
 
+// 423: the thread was locked read-only after a file was deleted from its
+// storage (routes/workspace.py::delete_file) — the agent can't reliably
+// reply as if a now-missing file still existed. `message` is the backend's
+// real reason (routes/workspace.py sets it per-deletion), not a generic
+// fallback.
+export class ChatLockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChatLockedError";
+  }
+}
+
 export const chatApi = {
   async updateMcpContext(
     threadId: string,
@@ -79,6 +91,11 @@ export const chatApi = {
     });
     if (res.status === 409) {
       throw new ChatConflictError();
+    }
+    if (res.status === 423) {
+      throw new ChatLockedError(
+        await getErrorMessage(res, "This conversation is locked."),
+      );
     }
     if (!res.ok || !res.body) {
       throw new Error(await getErrorMessage(res, `HTTP ${res.status}`));

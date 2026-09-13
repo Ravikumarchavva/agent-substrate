@@ -21,7 +21,7 @@ import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
 import { Message, UploadedFile, TaskList, CitationSource } from "@/types";
 import { api } from "@/lib/api";
-import { ChatConflictError } from "@/lib/api/chat";
+import { ChatConflictError, ChatLockedError } from "@/lib/api/chat";
 import { getMessageAttachments, buildWorkspaceFileUrl } from "@/lib/api/_client";
 import { mergeSources, parseCitations } from "@/lib/citations";
 import {
@@ -313,6 +313,13 @@ function ChatPageContent() {
   const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
   const { boards, upsertBoard, clearBoards, settleBoards } = useTaskBoards(currentThreadId);
+  // Set when POST /chat 423s (routes/chat.py — a file was deleted from this
+  // thread's storage, see routes/workspace.py::delete_file). Reset on
+  // thread switch since the lock is per-conversation.
+  const [lockedReason, setLockedReason] = useState<string | null>(null);
+  useEffect(() => {
+    setLockedReason(null);
+  }, [currentThreadId]);
   // Tracks which assistant messages we've already auto-opened an artifact for.
   const autoOpenedArtifactRef = useRef<Set<string>>(new Set());
 
@@ -801,7 +808,7 @@ function ChatPageContent() {
   }
 
   async function doSendMessage(text: string) {
-    if (!text.trim() || isSubmittingRef.current) return;
+    if (!text.trim() || isSubmittingRef.current || lockedReason) return;
     isSubmittingRef.current = true;
 
     // Queued send: any attachment still eagerly processing (staged_at not
@@ -1516,6 +1523,9 @@ function ChatPageContent() {
         setMessages((m) =>
           m.filter((msg) => msg.id !== msgState.activeAssistantId)
         );
+      } else if (err instanceof ChatLockedError) {
+        setLockedReason(err.message);
+        setMessages((m) => m.filter((msg) => msg.id !== msgState.activeAssistantId));
       } else {
         setMessages((m) =>
           m.map((msg) =>
@@ -1888,6 +1898,11 @@ function ChatPageContent() {
 
               <div className="bg-background pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:pb-5">
                 <div className="mx-auto w-full max-w-(--chat-width) px-3 sm:px-6">
+                  {lockedReason && (
+                    <div className="mb-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs text-amber-500">
+                      {lockedReason}
+                    </div>
+                  )}
                   <form
                     onSubmit={sendMessage}
                     className="flex flex-col overflow-hidden rounded-[20px] px-3.5 py-2.5 sm:rounded-[24px]"
@@ -1933,8 +1948,8 @@ function ChatPageContent() {
                       }}
                       rows={1}
                       className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-[15px] outline-none placeholder:text-(--muted)"
-                      placeholder="Ask anything"
-                      disabled={loading}
+                      placeholder={lockedReason ? "This conversation is locked" : "Ask anything"}
+                      disabled={loading || !!lockedReason}
                     />
 
                     {/* ── Bottom bar: [+] left · [model][mic][audio/send] right ── */}

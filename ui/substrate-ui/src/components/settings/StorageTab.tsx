@@ -13,9 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
-  Copy,
   Download,
-  ExternalLink,
   Eye,
   File,
   FileCode,
@@ -47,6 +45,20 @@ import type { Thread, WorkspaceFile, WorkspaceUsage } from "@/types";
 const UPLOADS_KEY = "__uploads__";
 
 type ViewMode = "grid" | "list";
+type GridSize = "sm" | "md" | "lg" | "xl";
+
+// Explorer-style tile density for grid view — column width, the icon slot's
+// height, an inline-image thumbnail's edge length, and which FileIconDisplay
+// size renders the folded-corner icon at that scale.
+const GRID_SIZE_PRESETS: Record<
+  GridSize,
+  { label: string; minmax: string; iconBox: string; thumb: string; iconSize: "sm" | "md" | "lg" | "xl" }
+> = {
+  sm: { label: "Small", minmax: "minmax(64px, 72px)", iconBox: "h-9", thumb: "h-7 w-7", iconSize: "sm" },
+  md: { label: "Medium", minmax: "minmax(86px, 96px)", iconBox: "h-14", thumb: "h-12 w-12", iconSize: "lg" },
+  lg: { label: "Large", minmax: "minmax(110px, 130px)", iconBox: "h-20", thumb: "h-[72px] w-[72px]", iconSize: "lg" },
+  xl: { label: "Extra large", minmax: "minmax(150px, 180px)", iconBox: "h-28", thumb: "h-24 w-24", iconSize: "xl" },
+};
 type NavigationLocation =
   | { type: "drive" }
   | { type: "folder"; id: string; name: string }
@@ -248,6 +260,31 @@ function SourcePill({ owner }: { owner: WorkspaceFile["owner"] }) {
   );
 }
 
+const GRID_SIZE_ORDER: GridSize[] = ["sm", "md", "lg", "xl"];
+const GRID_SIZE_SHORT_LABEL: Record<GridSize, string> = { sm: "S", md: "M", lg: "L", xl: "XL" };
+
+function GridSizeControl({ size, onChange }: { size: GridSize; onChange: (s: GridSize) => void }) {
+  return (
+    <div className="flex h-8 items-center rounded-lg border border-(--border) bg-background/50 shrink-0" role="group" aria-label="Tile size">
+      {GRID_SIZE_ORDER.map((key, i) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          title={GRID_SIZE_PRESETS[key].label}
+          className={`flex h-8 min-w-8 items-center justify-center px-1.5 text-[10px] font-semibold transition cursor-pointer ${
+            i === 0 ? "rounded-l-lg" : "border-l border-(--border)/60"
+          } ${i === GRID_SIZE_ORDER.length - 1 ? "rounded-r-lg" : ""} ${
+            size === key ? "bg-(--card) text-foreground" : "text-(--muted) hover:text-foreground"
+          }`}
+        >
+          {GRID_SIZE_SHORT_LABEL[key]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function SortDropdown({ sort, onChange }: { sort: SortKey; onChange: (s: SortKey) => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -437,7 +474,7 @@ function FileContextMenu({
  * label at the foot — the classic desktop file-icon shape (Explorer,
  * Finder, Drive) — instead of a flat colored square badge, which read as
  * a generic app icon rather than a *file*. */
-function FileIconDisplay({ file, size = "md" }: { file: WorkspaceFile; size?: "sm" | "md" | "lg" }) {
+function FileIconDisplay({ file, size = "md" }: { file: WorkspaceFile; size?: "sm" | "md" | "lg" | "xl" }) {
   const config = getFileTypeConfig(file.name);
   const Icon = config.icon;
   const ext = getFileExtension(file.name).toUpperCase().slice(0, 4);
@@ -445,6 +482,7 @@ function FileIconDisplay({ file, size = "md" }: { file: WorkspaceFile; size?: "s
     sm: { w: 26, h: 32, fold: 8, icon: "h-3 w-3", label: "text-[5px]" },
     md: { w: 34, h: 42, fold: 10, icon: "h-3.5 w-3.5", label: "text-[6px]" },
     lg: { w: 46, h: 56, fold: 13, icon: "h-[18px] w-[18px]", label: "text-[7px]" },
+    xl: { w: 64, h: 78, fold: 17, icon: "h-6 w-6", label: "text-[8px]" },
   }[size];
   return (
     <div className="relative shrink-0" style={{ width: dims.w, height: dims.h }}>
@@ -493,11 +531,11 @@ export function StorageTab() {
   const [historyIndex, setHistoryIndex] = useState(0);
 
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [gridSize, setGridSize] = useState<GridSize>("md");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
 
   const [inspectedFile, setInspectedFile] = useState<WorkspaceFile | null>(null);
-  const [copiedPath, setCopiedPath] = useState(false);
   const [deletingFile, setDeletingFile] = useState<WorkspaceFile | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -692,6 +730,18 @@ export function StorageTab() {
     [currentViewData.files, selected],
   );
 
+  // A refresh (or another tab deleting a file) can drop paths out of
+  // `files` while `selected` still holds them — without this, the count
+  // shown (`selected.size`) drifts from reality (e.g. "1 of 0 selected").
+  // Prune to whatever still actually exists whenever the file list changes.
+  useEffect(() => {
+    setSelected((prev) => {
+      const valid = new Set(currentViewData.files.map((f) => f.path));
+      const next = new Set([...prev].filter((p) => valid.has(p)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [currentViewData.files]);
+
   const executeBulkDelete = async () => {
     setIsBulkDeleting(true);
     try {
@@ -737,15 +787,6 @@ export function StorageTab() {
 
   const openInspector = (file: WorkspaceFile) => {
     setInspectedFile(file);
-    setCopiedPath(false);
-  };
-
-  const copyPath = () => {
-    if (inspectedFile) {
-      void navigator.clipboard.writeText(inspectedFile.path);
-      setCopiedPath(true);
-      setTimeout(() => setCopiedPath(false), 2000);
-    }
   };
 
   const confirmDelete = (file: WorkspaceFile) => setDeletingFile(file);
@@ -909,6 +950,8 @@ export function StorageTab() {
               </button>
             </div>
 
+            {viewMode === "grid" && <GridSizeControl size={gridSize} onChange={setGridSize} />}
+
             <SortDropdown sort={sort} onChange={setSort} />
           </div>
 
@@ -979,10 +1022,11 @@ export function StorageTab() {
                        * instead of a single click jumping straight in. */
                       <div
                         className="grid gap-0.5"
-                        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(86px, 96px))" }}
+                        style={{ gridTemplateColumns: `repeat(auto-fill, ${GRID_SIZE_PRESETS[gridSize].minmax})` }}
                       >
                         {currentViewData.files.map((file, index) => {
                           const isSelected = selected.has(file.path);
+                          const preset = GRID_SIZE_PRESETS[gridSize];
                           return (
                             <div
                               key={file.path}
@@ -1005,12 +1049,12 @@ export function StorageTab() {
                               </div>
 
                               {/* File icon */}
-                              <div className="flex h-14 items-center justify-center">
+                              <div className={`flex items-center justify-center ${preset.iconBox}`}>
                                 {getFileCategory(file.name) === "image" ? (
                                   /* eslint-disable-next-line @next/next/no-img-element */
-                                  <img src={getDownloadUrl(file)} alt={file.name} className="h-12 w-12 rounded-md object-cover" loading="lazy" />
+                                  <img src={getDownloadUrl(file)} alt={file.name} className={`rounded-md object-cover ${preset.thumb}`} loading="lazy" />
                                 ) : (
-                                  <FileIconDisplay file={file} size="lg" />
+                                  <FileIconDisplay file={file} size={preset.iconSize} />
                                 )}
                               </div>
 
@@ -1157,51 +1201,29 @@ export function StorageTab() {
                   </div>
                 </div>
               </div>
-              <button type="button" onClick={() => setInspectedFile(null)} className="flex h-8 w-8 items-center justify-center rounded-lg text-(--muted) hover:bg-background hover:text-foreground transition cursor-pointer">
-                <X className="h-4 w-4 shrink-0" />
-              </button>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex items-center justify-between px-5 py-2 text-[11px] text-(--muted)">
-                <span className="truncate font-mono">{inspectedFile.path}</span>
-                <button type="button" onClick={copyPath} className="ml-2 flex items-center gap-1 text-[11px] text-(--muted) hover:text-foreground shrink-0 cursor-pointer">
-                  {copiedPath ? <Check className="h-3 w-3 shrink-0 text-emerald-400" /> : <Copy className="h-3 w-3 shrink-0" />}
-                  {copiedPath ? "Copied" : "Copy"}
+              <div className="flex items-center gap-1 shrink-0">
+                <a href={getDownloadUrl(inspectedFile)} download={inspectedFile.name} aria-label="Download" title="Download" className="flex h-8 w-8 items-center justify-center rounded-lg text-(--muted) hover:bg-background hover:text-foreground transition cursor-pointer">
+                  <Download className="h-4 w-4 shrink-0" />
+                </a>
+                <button type="button" onClick={() => setInspectedFile(null)} className="flex h-8 w-8 items-center justify-center rounded-lg text-(--muted) hover:bg-background hover:text-foreground transition cursor-pointer">
+                  <X className="h-4 w-4 shrink-0" />
                 </button>
               </div>
-
-              {/* Real preview, not a "binary file, download it" dead end —
-                  reuses the same viewer the chat/code-interpreter artifact
-                  panel already uses: native PDF/image/HTML, Monaco for
-                  code/text, and the BetterOffice WASM editor (read-only
-                  here) for docx/xlsx/pptx. Always editMode={false}: this is
-                  a browse-and-inspect surface, editing happens from the
-                  actual conversation. */}
-              <div className="mx-5 mb-5 min-h-0 flex-1 overflow-hidden rounded-xl border border-(--border) bg-background/40">
-                <FileArtifactViewer
-                  fileUrl={getDownloadUrl(inspectedFile)}
-                  fileName={inspectedFile.name}
-                  editMode={false}
-                />
-              </div>
             </div>
 
-            <div className="flex items-center justify-between border-t border-(--border) bg-background/40 px-5 py-3">
-              <button type="button" onClick={() => confirmDelete(inspectedFile)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-rose-400 transition hover:bg-rose-500/10 cursor-pointer">
-                <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                Delete
-              </button>
-              <div className="flex items-center gap-2">
-                <a href={getDownloadUrl(inspectedFile)} target="_blank" rel="noreferrer" className="flex h-8 items-center gap-1.5 rounded-lg border border-(--border) bg-background px-3 text-xs font-medium text-foreground transition hover:bg-(--card) cursor-pointer">
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                  Open
-                </a>
-                <a href={getDownloadUrl(inspectedFile)} download={inspectedFile.name} className="flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-4 text-xs font-semibold text-background transition hover:opacity-90 cursor-pointer">
-                  <Download className="h-3.5 w-3.5 shrink-0" />
-                  Download
-                </a>
-              </div>
+            {/* Real preview, not a "binary file, download it" dead end —
+                reuses the same viewer the chat/code-interpreter artifact
+                panel already uses: native PDF/image/HTML, Monaco for
+                code/text, and the BetterOffice WASM editor (read-only
+                here) for docx/xlsx/pptx. Always editMode={false}: this is
+                a browse-and-inspect surface, editing happens from the
+                actual conversation. */}
+            <div className="mx-5 mb-5 mt-5 min-h-0 flex-1 overflow-hidden rounded-xl border border-(--border) bg-background/40">
+              <FileArtifactViewer
+                fileUrl={getDownloadUrl(inspectedFile)}
+                fileName={inspectedFile.name}
+                editMode={false}
+              />
             </div>
           </div>
         </div>

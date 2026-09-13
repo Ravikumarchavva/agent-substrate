@@ -194,7 +194,7 @@ async def test_send_skips_reingestion_for_file_already_staged_this_thread():
         "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(),
     ) as mock_ingest:
-        text_block, _images, attachments = await _build_file_context(
+        text_block, _images, attachments, _new_attachments = await _build_file_context(
             db, body, _request_with_redis(_FakeRedis()), ctx, MagicMock(sub="user-1")
         )
 
@@ -227,7 +227,7 @@ async def test_send_ingests_a_file_staged_under_a_different_thread():
         "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(),
     ) as mock_ingest:
-        text_block, _images, attachments = await _build_file_context(
+        text_block, _images, attachments, _new_attachments = await _build_file_context(
             db, body, _request_with_redis(_FakeRedis()), ctx, MagicMock(sub="user-1")
         )
 
@@ -256,7 +256,7 @@ async def test_send_pinecone_backend_unaffected_by_staging_logic():
     body.file_ids = ["f1"]
     body.thread_id = "thread-1"
 
-    text_block, _images, attachments = await _build_file_context(
+    text_block, _images, attachments, _new_attachments = await _build_file_context(
         db, body, _request_with_redis(_FakeRedis()), ctx, MagicMock(sub="user-1")
     )
 
@@ -351,7 +351,7 @@ async def test_send_skips_pre_validation_when_no_new_commits():
     body.file_ids = ["f1"]
     body.thread_id = "thread-1"
 
-    text_block, _images, attachments = await _build_file_context(
+    text_block, _images, attachments, _new_attachments = await _build_file_context(
         db, body, _request_with_redis(_FakeRedis()), ctx, MagicMock(sub="user-1")
     )
 

@@ -156,7 +156,7 @@ async def chat(
     # 3. Build agent with restored memory + per-thread HITL bridge
     try:
         deps = await _get_agent_deps(ctx, str(body.thread_id))
-        file_block, image_inputs, attachments = await _build_file_context(
+        file_block, image_inputs, attachments, new_attachments = await _build_file_context(
             db,
             body,
             request,
@@ -345,7 +345,10 @@ async def chat(
         correlation_id=str(body.thread_id),
         metadata={
             "display_text": display_content,
-            "attachments": attachments,
+            # Only what was newly attached THIS turn — see
+            # _build_file_context's docstring for why this must not be the
+            # broader `attachments` (model context) list.
+            "attachments": new_attachments,
             "user_id": user.sub,
             "tenant_id": user.tenant_id,
         },

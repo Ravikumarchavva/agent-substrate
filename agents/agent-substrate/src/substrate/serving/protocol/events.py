@@ -126,6 +126,12 @@ class Attachment(BaseModel):
     mime: str = "application/octet-stream"
     size: int = 0
     url: str | None = None
+    # Workspace-relative path (e.g. "uploads/data.xlsx"), when the file lives
+    # in the conversation's shared workspace — lets the UI open it in the
+    # same read-only side-panel viewer as an assistant-generated file
+    # (routes/chat_context.py's ``_attachment_dict`` sets this for
+    # non-extractable uploads; ``None`` for RAG-indexed types like PDF).
+    session_path: str | None = None
 
 
 class UserMessageEvent(BaseModel):

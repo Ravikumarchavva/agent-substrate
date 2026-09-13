@@ -59,6 +59,11 @@ class ServerDependencies:
     # promote a file from here into `file_store` only once the message
     # carrying it is actually sent (routes/chat_context.py).
     pending_file_store: Optional[Any] = None
+    # Curated OKF bundles (capabilities/artifacts/) at session and global
+    # scope. Shares `file_store`'s bucket but a different key prefix — the
+    # sandbox never mounts it, so nothing lands here without an explicit
+    # save or promotion.
+    artifact_store: Optional[Any] = None
 
 
 def get_ctx(request: Request) -> ServerDependencies:

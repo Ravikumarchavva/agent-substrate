@@ -58,6 +58,7 @@ class Infrastructure:
     skill_manager: Any
     file_store: Any
     pending_file_store: Any = None
+    artifact_store: Any = None
     short_term_memory: Any = None
     long_term_memory: Any = None
     runtime_stack: AsyncExitStack | None = None
@@ -288,6 +289,12 @@ async def init_infrastructure(
     file_store = _init_file_store(cfg)
     await file_store.connect()
     pending_file_store = _init_pending_file_store(cfg)
+    # Curated OKF bundles ride on the same object store as files (one
+    # bucket, one erasure path, one quota) but under their own key prefix,
+    # which the sandbox never mounts — see capabilities/artifacts/store.py.
+    from substrate.capabilities.artifacts import ArtifactStore
+
+    artifact_store = ArtifactStore(file_store)
     if hasattr(file_store, "set_quota_override"):
         # Per-tenant quota overrides (admin storage API) are held in-memory
         # on the store (see WorkspaceFileStore.set_quota_override) — seed
@@ -361,6 +368,7 @@ async def init_infrastructure(
         skill_manager=skill_manager,
         file_store=file_store,
         pending_file_store=pending_file_store,
+        artifact_store=artifact_store,
         short_term_memory=short_term_memory,
         long_term_memory=long_term_memory,
         runtime_stack=runtime_stack,
@@ -381,6 +389,7 @@ async def init_tool_registry(
     embedding_client: Any = None,
     rag_backend: Any = None,
     file_store: Any = None,
+    artifact_store: Any = None,
     skill_manager: Any = None,
 ) -> ToolboxResult:
     """Create all tools and return a registry.
@@ -394,6 +403,10 @@ async def init_tool_registry(
     """
     from substrate.agents.storage.tasks import GlobalTaskStore
     from substrate.agents.tools.toolbox import Toolbox
+    from substrate.capabilities.tools import (
+        CalculatorTool,
+        CurrentTimeTool,
+    )
     from substrate.capabilities.tools.ai.knowledge_search import KnowledgeSearchTool
     from substrate.capabilities.tools.code_interpreter import CodeInterpreterTool
     from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.factory import (
@@ -405,10 +418,6 @@ async def init_tool_registry(
     )
     from substrate.capabilities.tools.human_input import AskHumanTool
     from substrate.capabilities.tools.task_manager.tool import TaskManagerTool
-    from substrate.capabilities.tools import (
-        CalculatorTool,
-        CurrentTimeTool,
-    )
     from substrate.capabilities.tools.web.read_url import ReadUrlTool
     from substrate.capabilities.tools.web.search import WebSearchTool
 
@@ -509,6 +518,10 @@ async def init_tool_registry(
         registry.add(
             SessionDocumentSearchTool(cfg, embedding_client, model_client)
         )
+    if artifact_store is not None:
+        from substrate.capabilities.tools.artifacts import ArtifactsTool
+
+        registry.add(ArtifactsTool(artifact_store, model_name=cfg.CHAT_MODEL))
     if skill_manager is not None:
         from substrate.capabilities.tools.skills.tool import SkillTool
 

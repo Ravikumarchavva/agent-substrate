@@ -244,23 +244,50 @@ async def _build_file_context(
 
     for meta in rows:
         if meta.content_type in EXTRACTABLE_CONTENT_TYPES:
-            # Extractable docs are ingested into the thread's RagBackend
-            # collection instead of inlined into the prompt — the agent
-            # retrieves relevant passages via the knowledge_search tool.
-            # Cache hit: already ingested (files are immutable once
-            # uploaded), skip re-ingesting on every later reference.
+            # Extractable docs are ingested into the user's per-user
+            # session-document index instead of inlined into the prompt —
+            # the agent retrieves relevant passages via
+            # session_document_search. Cache hit: already ingested (files
+            # are immutable once uploaded), skip re-ingesting on every
+            # later reference.
             if ctx.rag_backend is not None:
                 if meta.rag_ingested_at is None:
-                    if ctx.rag_backend.name == "local" and meta.staged_at is not None:
-                        # Already extracted+embedded eagerly at upload time
-                        # (routes/files.py) — cheap re-key into the real
-                        # thread collection, no re-extraction/re-embedding.
-                        # The pre-validation pass above already confirmed
-                        # staging succeeded and quota was consumed for this
-                        # file before we got here.
+                    already_staged_for_this_thread = (
+                        ctx.rag_backend.name == "local"
+                        and meta.staged_at is not None
+                        and meta.thread_id is not None
+                        and str(meta.thread_id) == str(body.thread_id)
+                    )
+                    if already_staged_for_this_thread:
+                        # Already extracted+embedded+indexed at upload time
+                        # (routes/files.py::_stage_uploaded_doc), already
+                        # tagged with this exact session_id — nothing to
+                        # move. The pre-validation pass above already
+                        # confirmed staging succeeded and quota was
+                        # consumed for this file before we got here.
+                        pass
+                    elif ctx.rag_backend.name == "local" and ctx.embedding_client is not None:
+                        # Not staged (thread_id wasn't known at upload time)
+                        # or referenced from a different thread than it was
+                        # uploaded under — either way, index it now, tagged
+                        # with *this* message's real thread_id.
+                        from substrate.capabilities.knowledge.session_ingest import (
+                            ingest_session_document,
+                        )
+
+                        data = await ctx.file_store.download(meta.object_key)
                         try:
-                            await ctx.rag_backend.promote(
-                                file_id=str(meta.id), thread_id=str(body.thread_id)
+                            await ingest_session_document(
+                                data=data,
+                                filename=meta.original_name,
+                                content_type=meta.content_type,
+                                tenant_id=claims.tenant_id,
+                                user_id=claims.sub,
+                                session_id=str(body.thread_id),
+                                cfg=settings,
+                                embedding_client=ctx.embedding_client,
+                                model_client=ctx.model_client,
+                                rag_backend=ctx.rag_backend,
                             )
                         except Exception:
                             redis = getattr(request.app.state, "redis", None)

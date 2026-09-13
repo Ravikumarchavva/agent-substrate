@@ -365,6 +365,7 @@ async def init_tool_registry(
     bridge_registry: Any,
     redis_client: Any = None,
     model_client: Any = None,
+    embedding_client: Any = None,
     rag_backend: Any = None,
     file_store: Any = None,
     skill_manager: Any = None,
@@ -487,6 +488,14 @@ async def init_tool_registry(
         registry.add(code_interpreter_tool)
     if rag_backend:
         registry.add(KnowledgeSearchTool(rag_backend))
+    if model_client is not None and embedding_client is not None:
+        from substrate.capabilities.tools.ai.session_document_search import (
+            SessionDocumentSearchTool,
+        )
+
+        registry.add(
+            SessionDocumentSearchTool(cfg, embedding_client, model_client)
+        )
     if skill_manager is not None:
         from substrate.capabilities.tools.skills.tool import SkillTool
 
@@ -895,6 +904,113 @@ async def build_long_term_memory(database_url: str) -> Any:
     )
 
     return await _build(database_url)
+
+
+def build_session_index_vector_store(
+    cfg: SubstrateConfig, tenant_id: str, user_id: str
+) -> Any:
+    """Build the per-user session-document vector store (Lance) — the
+    vector half of the per-user index bundle at
+    ``capabilities/storage/layout.py::user_index_prefix``.
+
+    Deliberately a per-(tenant, user) *factory*, not a single shared
+    instance built once in ``init_infrastructure()`` the way
+    ``PgVectorStore`` is: a Lance Namespace table identifier is
+    ``(name, namespace_path)``, and the namespace path here is
+    ``[bucket, tenant_id, user_id]`` — those two ids aren't known until a
+    real request/session exists, so construction happens per-call, called
+    from wherever a request's ``tenant_id``/``user_id`` are already
+    resolved (see the chat/upload routes). Cheap: the constructor does no
+    I/O itself, only the first real table operation connects.
+
+    Local-dev fallback (``cfg.SESSION_INDEX_NAMESPACE_URI`` empty): a
+    per-tenant-per-user subdirectory under ``cfg.SESSION_INDEX_LOCAL_PATH``
+    — mirrors the namespace-mode path's tenant/user split, just as
+    directory nesting instead of a namespace path.
+    """
+    from substrate.capabilities.storage.layout import user_index_prefix
+    from substrate.capabilities.vector.lancedb_store import LanceDBVectorStore
+
+    # user_index_prefix() validates tenant_id/user_id (rejects path
+    # separators/traversal — these ids ultimately come from request-scoped
+    # auth claims, not trusted input); reused here for validation in both
+    # branches even though the namespace-mode branch doesn't need its
+    # returned string, and to keep local-dev mode on the same tree shape as
+    # the rest of the per-user index bundle.
+    key = user_index_prefix(tenant_id, user_id)
+    if cfg.SESSION_INDEX_NAMESPACE_URI:
+        return LanceDBVectorStore(
+            namespace_uri=cfg.SESSION_INDEX_NAMESPACE_URI,
+            namespace_path=[cfg.SESSION_INDEX_BUCKET, tenant_id, user_id],
+        )
+    from pathlib import Path
+
+    return LanceDBVectorStore(path=Path(cfg.SESSION_INDEX_LOCAL_PATH) / key)
+
+
+def build_page_index_memory(cfg: SubstrateConfig, tenant_id: str, user_id: str) -> Any:
+    """Build the per-user ``LongTermMemory`` backing
+    ``PageIndexRAGPipeline``'s outline trees — the tree half of the per-user
+    index bundle, alongside ``build_session_index_vector_store`` above.
+
+    Deliberately its own store, not the shared Postgres ``LongTermMemory``
+    ``build_long_term_memory`` builds elsewhere for cross-session
+    user-preference facts — different data, different lifecycle, shouldn't
+    share a table. Same per-(tenant, user) factory shape as
+    ``build_session_index_vector_store`` and the same reason: the
+    namespace/path needs both ids, which aren't known until a real request
+    does.
+    """
+    from substrate.capabilities.memory.lance_memory_store import LanceLongTermMemory
+    from substrate.capabilities.storage.layout import user_index_prefix
+
+    key = user_index_prefix(tenant_id, user_id)
+    if cfg.SESSION_INDEX_NAMESPACE_URI:
+        return LanceLongTermMemory(
+            namespace_uri=cfg.SESSION_INDEX_NAMESPACE_URI,
+            namespace_path=[cfg.SESSION_INDEX_BUCKET, tenant_id, user_id],
+            table_name="pageindex_trees",
+        )
+    from pathlib import Path
+
+    return LanceLongTermMemory(
+        path=Path(cfg.SESSION_INDEX_LOCAL_PATH) / key, table_name="pageindex_trees"
+    )
+
+
+def build_session_graph_store(
+    cfg: SubstrateConfig, tenant_id: str, user_id: str, *, session_id: str = ""
+) -> Any:
+    """Build the per-user knowledge-graph store backing
+    ``GraphRAGPipeline`` — the graph third of the per-user index bundle,
+    alongside ``build_session_index_vector_store``/``build_page_index_memory``
+    above. Same per-(tenant, user) factory shape and same reason (the
+    namespace/path needs both ids). Deliberately separate from the shared
+    tenant-level ``AGEGraphStore`` (``capabilities/graph/age_store.py``)
+    used for any standing, cross-user knowledge graph — different scale,
+    different lifecycle.
+
+    ``session_id``, when given, tags every row this instance writes (see
+    ``LanceGraphStore.__init__``) — pass it when *ingesting* so entities/
+    relationships can later be filtered per-session; omit it (default) for
+    a user-wide read instance, e.g. ``get_neighbors`` across everything a
+    user has ever uploaded.
+    """
+    from substrate.capabilities.graph.lance_graph_store import LanceGraphStore
+    from substrate.capabilities.storage.layout import user_index_prefix
+
+    key = user_index_prefix(tenant_id, user_id)
+    if cfg.SESSION_INDEX_NAMESPACE_URI:
+        return LanceGraphStore(
+            namespace_uri=cfg.SESSION_INDEX_NAMESPACE_URI,
+            namespace_path=[cfg.SESSION_INDEX_BUCKET, tenant_id, user_id],
+            session_id=session_id,
+        )
+    from pathlib import Path
+
+    return LanceGraphStore(
+        path=Path(cfg.SESSION_INDEX_LOCAL_PATH) / key, session_id=session_id
+    )
 
 
 def build_safety_middleware(cfg: SubstrateConfig) -> Any:

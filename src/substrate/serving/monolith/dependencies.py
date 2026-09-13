@@ -49,6 +49,11 @@ class ServerDependencies:
     workspace_user_delete_allowed: bool = True
     rag_backend: Optional[Any] = None
     safety_middleware: Optional[Any] = None
+    # Shared with rag_backend's own internal RAGPipeline — reused (not
+    # duplicated) by the per-user session-document index
+    # (capabilities/knowledge/session_ingest.py) so both the tenant-KB flow
+    # and the per-user flow embed through the same configured model.
+    embedding_client: Optional[Any] = None
 
 
 def get_ctx(request: Request) -> ServerDependencies:

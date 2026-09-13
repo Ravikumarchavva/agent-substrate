@@ -46,6 +46,16 @@ def conversation_version_key(tenant_id: str, conversation_id: str, path: str) ->
     return f"{conversation_workspace_prefix(tenant_id, conversation_id)}/versions/{safe_relative_path(path)}"
 
 
+def user_index_prefix(tenant_id: str, user_id: str) -> str:
+    """Per-user session-document index bundle (vectors, PageIndex tree
+    nodes, entity/relationship graph) — see docs/claude_docs for the Lance
+    table shapes stored under this prefix. Deliberately per-user, not
+    per-conversation: lets a search span the user's own recent sessions
+    (filtered by a `session_id` column on each table) instead of being
+    blind past one conversation's boundary."""
+    return f"{user_prefix(tenant_id, user_id)}/index"
+
+
 def knowledge_document_prefix(
     tenant_id: str, knowledge_base_id: str, document_id: str
 ) -> str:

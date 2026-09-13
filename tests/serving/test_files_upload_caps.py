@@ -7,13 +7,15 @@ as test_chat_context_pdf.py — no full TestClient/DB needed for this logic.
 from __future__ import annotations
 
 import io
-from unittest.mock import AsyncMock, MagicMock
+import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from PIL import Image
 
 from substrate.serving.monolith.routes.files import get_doc_quota_status, upload_file
 
 _PDF_CONTENT_TYPE = "application/pdf"
+_THREAD_ID = uuid.uuid4()
 
 
 def _pdf_bytes(pages: int) -> bytes:
@@ -170,28 +172,32 @@ async def test_upload_rejects_when_upload_attempt_quota_exhausted(monkeypatch):
     redis = _FakeRedis()
     data = _pdf_bytes(1)
 
-    # First upload consumes the only slot.
-    await upload_file(
-        request=_request_mock(redis),
-        file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
-        thread_id=None,
-        claims=_claims_mock(),
-        db=_db_mock(),
-        ctx=_ctx_mock(rag_backend=rag_backend),
-    )
-
-    exc = None
-    try:
+    with patch(
+        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        new=AsyncMock(),
+    ):
+        # First upload consumes the only slot.
         await upload_file(
             request=_request_mock(redis),
             file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
-            thread_id=None,
+            thread_id=_THREAD_ID,
             claims=_claims_mock(),
             db=_db_mock(),
             ctx=_ctx_mock(rag_backend=rag_backend),
         )
-    except Exception as e:
-        exc = e
+
+        exc = None
+        try:
+            await upload_file(
+                request=_request_mock(redis),
+                file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
+                thread_id=_THREAD_ID,
+                claims=_claims_mock(),
+                db=_db_mock(),
+                ctx=_ctx_mock(rag_backend=rag_backend),
+            )
+        except Exception as e:
+            exc = e
 
     assert exc is not None
     assert getattr(exc, "status_code", None) == 429
@@ -246,6 +252,10 @@ async def test_upload_pinecone_backend_skips_upload_attempt_quota(monkeypatch):
 
 
 async def test_upload_triggers_eager_staging_for_local_backend(monkeypatch):
+    """A thread_id is known at upload time -> eager staging fires,
+    indexing straight into the caller's per-user session-document index,
+    tagged with that real thread_id (no temporary collection — see
+    capabilities/knowledge/session_ingest.py)."""
     from substrate.serving.monolith.routes import files as files_module
 
     captured_coros = []
@@ -255,23 +265,29 @@ async def test_upload_triggers_eager_staging_for_local_backend(monkeypatch):
 
     rag_backend = MagicMock()
     rag_backend.name = "local"
-    rag_backend.ingest = AsyncMock()
     data = _pdf_bytes(1)
 
-    await upload_file(
-        request=_request_mock(_FakeRedis()),
-        file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
-        thread_id=None,
-        claims=_claims_mock(),
-        db=_db_mock(),
-        ctx=_ctx_mock(rag_backend=rag_backend),
-    )
+    with patch(
+        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        new=AsyncMock(),
+    ) as mock_ingest:
+        await upload_file(
+            request=_request_mock(_FakeRedis()),
+            file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
+            thread_id=_THREAD_ID,
+            claims=_claims_mock(),
+            db=_db_mock(),
+            ctx=_ctx_mock(rag_backend=rag_backend),
+        )
 
-    assert len(captured_coros) == 1
-    await captured_coros[0]  # run the staging task synchronously
-    rag_backend.ingest.assert_awaited_once()
-    _args, kwargs = rag_backend.ingest.call_args
-    assert kwargs["collection"].startswith("staging:")
+        assert len(captured_coros) == 1
+        await captured_coros[0]  # run the staging task synchronously
+
+    mock_ingest.assert_awaited_once()
+    kwargs = mock_ingest.await_args.kwargs
+    assert kwargs["session_id"] == str(_THREAD_ID)
+    assert kwargs["tenant_id"] == "test-tenant"
+    assert kwargs["user_id"] == "test-user"
 
 
 async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
@@ -289,26 +305,30 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
 
     rag_backend = MagicMock()
     rag_backend.name = "local"
-    rag_backend.ingest = AsyncMock()
     data = _pdf_bytes(2)
     ctx = _ctx_mock(rag_backend=rag_backend)
 
-    await upload_file(
-        request=_request_mock(_FakeRedis()),
-        file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
-        thread_id=None,
-        claims=_claims_mock(),
-        db=_db_mock(),
-        ctx=ctx,
-    )
+    with patch(
+        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        new=AsyncMock(),
+    ):
+        await upload_file(
+            request=_request_mock(_FakeRedis()),
+            file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
+            thread_id=_THREAD_ID,
+            claims=_claims_mock(),
+            db=_db_mock(),
+            ctx=ctx,
+        )
 
-    assert len(captured_coros) == 1
-    await captured_coros[0]  # run the staging task synchronously
+        assert len(captured_coros) == 1
+        await captured_coros[0]  # run the staging task synchronously
 
     sidecar_calls = [
         call
         for call in ctx.file_store.upload.call_args_list
-        if call.args[0] == "tenants/test-tenant/users/test-user/uploads/doc.pdf.extracted.md"
+        if call.args[0]
+        == f"tenants/test-tenant/conversations/{_THREAD_ID}/workspace/shared/uploads/doc.pdf.extracted.md"
     ]
     assert len(sidecar_calls) == 1
     sidecar_text = sidecar_calls[0].args[1].decode("utf-8")
@@ -330,7 +350,6 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
 
     rag_backend = MagicMock()
     rag_backend.name = "local"
-    rag_backend.ingest = AsyncMock()
     data = _pdf_bytes(1)
     ctx = _ctx_mock(rag_backend=rag_backend)
 
@@ -340,17 +359,21 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
 
     ctx.file_store.upload = AsyncMock(side_effect=_upload_side_effect)
 
-    await upload_file(
-        request=_request_mock(_FakeRedis()),
-        file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
-        thread_id=None,
-        claims=_claims_mock(),
-        db=_db_mock(),
-        ctx=ctx,
-    )
+    with patch(
+        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        new=AsyncMock(),
+    ):
+        await upload_file(
+            request=_request_mock(_FakeRedis()),
+            file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
+            thread_id=_THREAD_ID,
+            claims=_claims_mock(),
+            db=_db_mock(),
+            ctx=ctx,
+        )
 
-    assert len(captured_coros) == 1
-    await captured_coros[0]  # must not raise
+        assert len(captured_coros) == 1
+        await captured_coros[0]  # must not raise
 
 
 async def test_upload_pinecone_backend_skips_eager_staging(monkeypatch):

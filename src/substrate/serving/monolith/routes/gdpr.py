@@ -14,6 +14,7 @@ from substrate.capabilities.gdpr.eraser import erase_tenant, erase_user
 from substrate.serving.monolith.security.rls_deps import get_service_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.shared.auth.middleware import require_service_identity
+from substrate.serving.shared.settings import settings
 
 router = APIRouter(prefix="/internal/gdpr", tags=["gdpr"])
 
@@ -51,6 +52,7 @@ async def erase_user_data(
         redis=request.app.state.redis,
         tenant_id=body.tenant_id,
         user_id=body.user_id,
+        cfg=settings,
     )
     return summary.as_dict()
 
@@ -68,5 +70,6 @@ async def erase_tenant_data(
         store=_require_store(ctx),
         redis=request.app.state.redis,
         tenant_id=body.tenant_id,
+        cfg=settings,
     )
     return summary.as_dict()

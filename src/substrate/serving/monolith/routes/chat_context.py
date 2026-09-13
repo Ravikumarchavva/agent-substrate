@@ -49,19 +49,33 @@ EXTRACTABLE_CONTENT_TYPES = {"application/pdf", "text/markdown"}
 
 
 def _session_relative_path(object_key: str) -> str | None:
-    """``users/{uid}/sessions/{tid}/{rest}`` → ``rest``, or ``None`` if
-    *object_key* isn't a thread-scoped upload (e.g. ``users/{uid}/uploads/...``).
+    """``tenants/{tid}/conversations/{cid}/workspace/shared/{rest}`` → ``rest``,
+    or ``None`` if *object_key* isn't a conversation-scoped upload (e.g. a
+    user-scoped ``tenants/{tid}/users/{uid}/...`` key).
+
+    Must stay in step with ``capabilities/storage/layout.py`` —
+    ``conversation_shared_key`` builds exactly the keys parsed here, and
+    ``code_interpreter/tool.py`` mounts that same ``.../workspace/shared``
+    prefix at the sandbox's ``/workspace``, so ``rest`` is the path the
+    sandbox sees.
 
     Shared by the nsjail workspace-path branch of ``_attachment_dict``
     below and by the RAG-ingest metadata: both need the path a citation's
     "open this file" click uses (``routes/workspace.py::serve_file``),
-    relative to the thread's session dir — never ``original_name``, which can
-    differ from the real object-key basename when ``_unique_object_key``
-    (``routes/files.py``) appended a uniquifying suffix.
+    relative to the conversation's shared dir — never ``original_name``,
+    which can differ from the real object-key basename when
+    ``_unique_object_key`` (``routes/files.py``) appended a uniquifying
+    suffix.
     """
-    parts = object_key.split("/", 4)
-    if len(parts) == 5 and parts[0] == "users" and parts[2] == "sessions":
-        return parts[4]
+    parts = object_key.split("/", 6)
+    if (
+        len(parts) == 7
+        and parts[0] == "tenants"
+        and parts[2] == "conversations"
+        and parts[4] == "workspace"
+        and parts[5] == "shared"
+    ):
+        return parts[6]
     return None
 
 
@@ -140,20 +154,45 @@ async def _build_file_context(
     request: Request,
     ctx: ServerDependencies,
     claims: AuthClaims,
-) -> tuple[str, list[_ImagePayload], list[dict[str, Any]]]:
-    """Resolve file_ids to text/image/attachment context for the chat turn."""
-    if not body.file_ids or ctx.file_store is None:
-        return "", [], []
+) -> tuple[str, list[_ImagePayload], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Resolve file context for the chat turn.
 
-    from sqlalchemy import select
+    Two different things need two different file sets, which is why this
+    returns both:
+
+    * ``attachments`` (3rd) — everything the *model* should know about:
+      newly attached files (``body.file_ids``, sent only on the turn the
+      composer had them staged) plus every previously uploaded file still on
+      this thread. Without the latter, a file was only visible to the model
+      on the single turn it was attached — the frontend composer clears its
+      local attachment list right after send (substrate-ui's
+      ``doSendMessage``), so a follow-up like "summarize that" carried no
+      ``file_ids`` and the model had no way to know the file existed.
+    * ``new_attachments`` (4th) — only ``body.file_ids``, for the *this
+      message's* displayed attachment cards. This one must stay narrow: it
+      gets stamped onto the persisted user-message log entry
+      (``routes/chat.py``'s ``metadata["attachments"]``) and rendered back
+      as that one message's attachment cards on every later page load. Using
+      the broad `attachments` list there instead — an earlier version of
+      this fix did exactly that — made every message in a thread display
+      every file ever uploaded to it, duplicated across every turn.
+    """
+    if ctx.file_store is None:
+        return "", [], [], []
+
+    from sqlalchemy import or_, select
 
     from substrate.serving.monolith.models import FileMetadata
+
+    conditions = [FileMetadata.thread_id == body.thread_id]
+    if body.file_ids:
+        conditions.append(FileMetadata.id.in_(body.file_ids))
 
     rows = (
         (
             await db.execute(
                 select(FileMetadata).where(
-                    FileMetadata.id.in_(body.file_ids),
+                    or_(*conditions),
                     FileMetadata.deleted_at.is_(None),
                 )
             )
@@ -161,6 +200,10 @@ async def _build_file_context(
         .scalars()
         .all()
     )
+    if not rows:
+        return "", [], [], []
+
+    new_file_ids = {str(fid) for fid in (body.file_ids or [])}
 
     # Pre-validation pass, staged/local-backend files only: block the WHOLE
     # send (not a silent per-file degrade — this session's explicit design
@@ -240,6 +283,13 @@ async def _build_file_context(
                 relative_path = parts[2]
         if relative_path is not None:
             attachment["workspace_path"] = f"{mount_path}/{relative_path}"
+
+        # Workspace-relative path (no sandbox mount prefix, no dependency
+        # on which SANDBOX_RUNTIME happens to be configured) — lets the UI
+        # open this exact file in the same read-only artifact viewer a
+        # `sandbox:` link uses (buildWorkspaceFileUrl expects a path
+        # relative to the conversation's shared workspace root).
+        attachment["session_path"] = _session_relative_path(meta.object_key)
         return attachment
 
     for meta in rows:
@@ -379,7 +429,8 @@ async def _build_file_context(
     if needs_commit:
         await db.commit()
 
-    return "\n\n".join(text_parts), image_inputs, attachments
+    new_attachments = [a for a in attachments if a.get("id") in new_file_ids]
+    return "\n\n".join(text_parts), image_inputs, attachments, new_attachments
 
 
 __all__ = ["_get_agent_deps", "_build_file_context"]

@@ -46,6 +46,31 @@ def conversation_version_key(tenant_id: str, conversation_id: str, path: str) ->
     return f"{conversation_workspace_prefix(tenant_id, conversation_id)}/versions/{safe_relative_path(path)}"
 
 
+def user_artifacts_prefix(tenant_id: str, user_id: str) -> str:
+    """Global (cross-conversation) artifact bundle for one user — an OKF
+    bundle (``https://github.com/GoogleCloudPlatform/open-knowledge-format``):
+    markdown concepts with YAML frontmatter, plus the reserved ``index.md``
+    and ``log.md``. Holds whatever survives a single conversation
+    (``type: Memory`` facts today, promoted files and other types later)."""
+    return f"{user_prefix(tenant_id, user_id)}/artifacts"
+
+
+def conversation_artifacts_prefix(tenant_id: str, conversation_id: str) -> str:
+    """Session-scoped artifact bundle, a *sibling* of the conversation's
+    ``workspace`` rather than a child of it.
+
+    Deliberately outside ``workspace/shared``: that prefix is bind-mounted
+    into the code-interpreter sandbox (see ``code_interpreter/tool.py``) and
+    enumerated as the user's files, so nesting curated artifacts under it
+    would both expose them to arbitrary sandboxed code and make every note
+    show up in the file explorer. Sandbox output stays ordinary workspace
+    files; something reaches this prefix only when explicitly promoted."""
+    return (
+        f"{tenant_prefix(tenant_id)}/conversations/"
+        f"{_id(conversation_id, 'conversation id')}/artifacts"
+    )
+
+
 def user_index_prefix(tenant_id: str, user_id: str) -> str:
     """Per-user session-document index bundle (vectors, PageIndex tree
     nodes, entity/relationship graph) — see docs/claude_docs for the Lance

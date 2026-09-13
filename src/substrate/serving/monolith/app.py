@@ -43,6 +43,7 @@ from substrate.serving.monolith.routes.connector_tokens import (
 )
 from substrate.serving.monolith.routes.tasks import router as tasks_router
 from substrate.serving.monolith.routes.threads import router as threads_router
+from substrate.serving.monolith.routes.artifacts import router as artifacts_router
 from substrate.serving.monolith.routes.memory import router as memory_router
 from substrate.serving.monolith.routes.triggers import router as triggers_router
 from substrate.serving.monolith.routes.scheduled import router as scheduled_router
@@ -112,6 +113,7 @@ async def lifespan(app: FastAPI):
     from substrate.serving.monolith.routes.files import sweep_stale_pending_uploads
 
     app.state.pending_file_store = infra.pending_file_store
+    app.state.artifact_store = infra.artifact_store
     removed_bytes = app.state.pending_file_store.sweep_stale(
         older_than_seconds=settings.PENDING_UPLOAD_TTL_HOURS * 3600
     )
@@ -137,6 +139,7 @@ async def lifespan(app: FastAPI):
         embedding_client=llm.embedding_client,
         rag_backend=infra.rag_backend,
         file_store=infra.file_store,
+        artifact_store=infra.artifact_store,
         skill_manager=infra.skill_manager,
     )
     app.state.tools = tools.registry
@@ -213,6 +216,7 @@ async def lifespan(app: FastAPI):
         ci_client=app.state.ci_client,
         file_store=app.state.file_store,
         pending_file_store=app.state.pending_file_store,
+        artifact_store=app.state.artifact_store,
         trigger_scheduler=app.state.trigger_scheduler,
         short_term_memory=app.state.short_term_memory,
         long_term_memory=app.state.long_term_memory,
@@ -301,6 +305,7 @@ def create_app() -> FastAPI:
     app.include_router(workspace_oauth_router)
     app.include_router(threads_router)
     app.include_router(memory_router)
+    app.include_router(artifacts_router)
     app.include_router(chat_router)
     app.include_router(cancel_router)
     app.include_router(hitl_router)

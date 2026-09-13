@@ -22,20 +22,29 @@ from substrate.serving.monolith.routes.chat_context import (
 _FIXTURE = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
 
 
-def test_session_relative_path_extracts_the_rest_of_a_sessions_key():
-    key = "users/u1/sessions/thread-abc/invoice.pdf"
+def test_session_relative_path_extracts_the_rest_of_a_conversation_key():
+    key = "tenants/t1/conversations/thread-abc/workspace/shared/invoice.pdf"
     assert _session_relative_path(key) == "invoice.pdf"
 
 
 def test_session_relative_path_handles_nested_rest():
-    key = "users/u1/sessions/thread-abc/sub/dir/invoice.pdf"
+    key = "tenants/t1/conversations/thread-abc/workspace/shared/sub/dir/invoice.pdf"
     assert _session_relative_path(key) == "sub/dir/invoice.pdf"
 
 
-def test_session_relative_path_none_for_uploads_scoped_key():
-    """Files uploaded with no thread_id land under uploads/, not sessions/ —
-    there's no thread-scoped workspace path to give them."""
-    key = "users/u1/uploads/invoice.pdf"
+def test_session_relative_path_none_for_user_scoped_key():
+    """Files uploaded with no thread_id land under the user prefix, not a
+    conversation workspace — there's no thread-scoped workspace path to give
+    them, and nothing mounts them into a sandbox."""
+    key = "tenants/t1/users/u1/uploads/invoice.pdf"
+    assert _session_relative_path(key) is None
+
+
+def test_session_relative_path_none_outside_the_shared_workspace():
+    """Only `.../workspace/shared/` is bind-mounted into the sandbox (see
+    code_interpreter/tool.py); version snapshots must not be handed out as
+    workspace paths."""
+    key = "tenants/t1/conversations/c1/workspace/versions/invoice.pdf/1.pdf"
     assert _session_relative_path(key) is None
 
 
@@ -149,7 +158,7 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
     body = MagicMock()
     body.file_ids = [file_id]
 
-    text_block, image_inputs, attachments = await _build_file_context(
+    text_block, image_inputs, attachments, _new_attachments = await _build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
 
@@ -195,7 +204,7 @@ async def test_build_file_context_falls_back_to_attachment_on_bad_pdf():
     body = MagicMock()
     body.file_ids = [file_id]
 
-    text_block, image_inputs, attachments = await _build_file_context(
+    text_block, image_inputs, attachments, _new_attachments = await _build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
 
@@ -243,26 +252,222 @@ async def _run_build_file_context_for_workspace_path(object_key: str):
     body = MagicMock()
     body.file_ids = [file_id]
 
-    _text, _images, attachments = await _build_file_context(
+    _text, _images, attachments, _new_attachments = await _build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
     assert len(attachments) == 1
     return attachments[0]
 
 
-async def test_workspace_path_strips_session_prefix_for_nsjail_mode(monkeypatch):
-    """nsjail mounts ONLY the caller's own session dir (see
-    CodeInterpreterTool._session_dir) at /workspace — the full
-    users/{uid}/sessions/{tid}/ prefix must be stripped, not just users/{uid}/."""
+async def test_file_context_includes_thread_files_with_no_file_ids_this_turn(monkeypatch):
+    """Regression: a file attached on turn 1 must still be visible on turn 2,
+    even though the composer only sends `file_ids` on the turn it staged the
+    attachment (substrate-ui's doSendMessage clears its local attachment
+    list right after send). Before this fix, `_build_file_context` early-
+    returned whenever `body.file_ids` was empty, so a follow-up like
+    "summarize that" carried no file context at all and the model asked the
+    user to re-upload a file they'd already sent."""
+    from substrate.serving.monolith.routes import chat_context
+
+    monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "inprocess")
+    monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
+
+    file_id = "55555555-5555-5555-5555-555555555555"
+    thread_id = "thread-xyz"
+    meta = _xlsx_meta(
+        file_id,
+        "data.xlsx",
+        f"tenants/t1/conversations/{thread_id}/workspace/shared/uploads/data.xlsx",
+        1234,
+    )
+
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [meta]
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_result
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=execute_result)
+    db.commit = AsyncMock()
+
+    ctx = MagicMock()
+    ctx.file_store = MagicMock()
+    ctx.rag_backend = None  # not extractable, so ingestion never runs
+
+    body = MagicMock()
+    body.file_ids = None  # exactly what a follow-up turn sends
+    body.thread_id = thread_id
+
+    _text, _images, attachments, _new_attachments = await chat_context._build_file_context(
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
+    )
+    assert len(attachments) == 1
+    assert attachments[0]["name"] == "data.xlsx"
+
+
+async def test_new_attachments_stays_narrow_while_model_context_stays_broad():
+    """Regression: after the fix above (model context includes every thread
+    file, not just this turn's), a first pass at that fix reused the same
+    broad list as *this message's* displayed attachments — stamped onto the
+    persisted user-message log entry (routes/chat.py's
+    metadata["attachments"]) and rendered back as that message's attachment
+    cards on every later page load. That made every message in a thread
+    show every file ever uploaded to it: turn 1 (uploads data.xlsx) and turn
+    2 ("summarize") both displayed the same xlsx card, even though turn 2
+    attached nothing. `new_attachments` (the 4th return value) must stay
+    scoped to only `body.file_ids` — the actually-new-this-turn files —
+    independent of how broad `attachments` (the 3rd, model-facing value)
+    is."""
+    from substrate.serving.monolith.routes import chat_context
+
+    thread_id = "thread-two-turn"
+    old_file_id = "66666666-6666-6666-6666-666666666666"
+    new_file_id = "77777777-7777-7777-7777-777777777777"
+    old_meta = _xlsx_meta(
+        old_file_id,
+        "data.xlsx",
+        f"tenants/t1/conversations/{thread_id}/workspace/shared/uploads/data.xlsx",
+        1234,
+    )
+    new_meta = _xlsx_meta(
+        new_file_id,
+        "second.xlsx",
+        f"tenants/t1/conversations/{thread_id}/workspace/shared/uploads/second.xlsx",
+        1234,
+    )
+
+    scalars_result = MagicMock()
+    # The union query (thread_id match OR file_ids match) returns both rows
+    # regardless of which one body.file_ids actually names this turn.
+    scalars_result.all.return_value = [old_meta, new_meta]
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_result
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=execute_result)
+    db.commit = AsyncMock()
+
+    ctx = MagicMock()
+    ctx.file_store = MagicMock()
+    ctx.rag_backend = None
+
+    body = MagicMock()
+    body.file_ids = [new_file_id]  # only this turn's actual attachment
+    body.thread_id = thread_id
+
+    _text, _images, attachments, new_attachments = await chat_context._build_file_context(
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
+    )
+
+    # Model sees both — old and new.
+    assert {a["name"] for a in attachments} == {"data.xlsx", "second.xlsx"}
+    # This message displays only what it actually attached.
+    assert [a["name"] for a in new_attachments] == ["second.xlsx"]
+
+
+async def test_file_context_still_empty_with_no_file_ids_and_no_thread_files():
+    """Not every request has a thread with prior uploads — the DB query
+    itself does the real filtering; this only pins that an empty result set
+    still short-circuits cleanly."""
+    from substrate.serving.monolith.routes import chat_context
+
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = []
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_result
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=execute_result)
+
+    ctx = MagicMock()
+    ctx.file_store = MagicMock()
+
+    body = MagicMock()
+    body.file_ids = None
+    body.thread_id = "thread-empty"
+
+    text, images, attachments, _new_attachments = await chat_context._build_file_context(
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
+    )
+    assert text == ""
+    assert images == []
+    assert attachments == []
+
+
+async def test_workspace_path_strips_conversation_prefix_for_nsjail_mode(monkeypatch):
+    """nsjail bind-mounts ONLY the conversation's shared dir (see
+    CodeInterpreterTool, which passes `{workspace}/shared` as session_dir) at
+    /workspace — the whole tenants/{tid}/conversations/{cid}/workspace/shared/
+    prefix must be stripped. Regression guard: this assertion previously
+    encoded the pre-tenant-migration `users/{uid}/sessions/{tid}` layout, so
+    _session_relative_path silently returned None for every real object key
+    and non-extractable attachments (xlsx/docx/csv) reached the model with no
+    readable path at all."""
     from substrate.serving.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "nsjail")
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
 
     attachment = await _run_build_file_context_for_workspace_path(
-        "users/u1/sessions/t1/data.xlsx"
+        "tenants/t1/conversations/c1/workspace/shared/uploads/data.xlsx"
     )
-    assert attachment["workspace_path"] == "/workspace/data.xlsx"
+    assert attachment["workspace_path"] == "/workspace/uploads/data.xlsx"
+
+
+async def test_attachment_dict_includes_session_path_for_ui_to_open_the_file(
+    monkeypatch,
+):
+    """session_path (no sandbox mount prefix, independent of SANDBOX_RUNTIME)
+    is what substrate-ui's openArtifact/buildWorkspaceFileUrl needs to open a
+    user-uploaded office file in the read-only side-panel viewer — the same
+    one a `sandbox:` generated-file link uses. Without it, only the
+    sandbox-absolute workspace_path existed, which a browser can't turn into
+    a fetchable URL."""
+    from substrate.serving.monolith.routes import chat_context
+
+    monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "nsjail")
+    monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
+
+    attachment = await _run_build_file_context_for_workspace_path(
+        "tenants/t1/conversations/c1/workspace/shared/uploads/data.xlsx"
+    )
+    assert attachment["session_path"] == "uploads/data.xlsx"
+
+
+async def test_attachment_dict_omits_session_path_for_extractable_types():
+    """PDFs (and other RAG-indexed types) return early, before session_path
+    is ever computed — they're opened via citations, not this path."""
+    file_id = "88888888-8888-8888-8888-888888888888"
+    meta = _pdf_meta(
+        file_id,
+        "corrupt.pdf",
+        "tenants/t1/conversations/c1/workspace/shared/uploads/corrupt.pdf",
+        12,
+    )
+
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [meta]
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_result
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=execute_result)
+    db.commit = AsyncMock()
+
+    file_store = MagicMock()
+    file_store.download = AsyncMock(return_value=b"not a real pdf")
+
+    ctx = MagicMock()
+    ctx.file_store = file_store
+    ctx.rag_backend = None
+
+    body = MagicMock()
+    body.file_ids = [file_id]
+
+    _text, _images, attachments, _new = await _build_file_context(
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
+    )
+    assert "session_path" not in attachments[0]
 
 
 async def test_workspace_path_strips_user_prefix_for_k8s_pvc_mode(monkeypatch):
@@ -337,7 +542,7 @@ async def test_workspace_path_absent_for_a_pdf_even_with_nsjail_configured(
     body = MagicMock()
     body.file_ids = [file_id]
 
-    _text, _images, attachments = await _build_file_context(
+    _text, _images, attachments, _new_attachments = await _build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
 
@@ -377,7 +582,7 @@ async def test_build_file_context_uses_cached_extracted_text_without_download():
     body = MagicMock()
     body.file_ids = [file_id]
 
-    text_block, _images, attachments = await _build_file_context(
+    text_block, _images, attachments, _new_attachments = await _build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
 
@@ -419,7 +624,7 @@ async def test_build_file_context_ingests_pdf_into_rag_backend():
     body.thread_id = "thread-abc"
     body.file_ids = [file_id]
 
-    text_block, image_inputs, attachments = await _build_file_context(
+    text_block, image_inputs, attachments, _new_attachments = await _build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
 
@@ -449,7 +654,8 @@ async def test_build_file_context_ingest_metadata_uses_real_session_path():
     meta = _pdf_meta(
         file_id,
         "invoice.pdf",
-        f"users/u1/sessions/{thread_id}/invoice-1.pdf",  # uniquified basename
+        # uniquified basename
+        f"tenants/t1/conversations/{thread_id}/workspace/shared/uploads/invoice-1.pdf",
         1234,
     )
 
@@ -483,7 +689,7 @@ async def test_build_file_context_ingest_metadata_uses_real_session_path():
     _args, kwargs = rag_backend.ingest.call_args
     # The real object-key basename, not original_name — they differ here
     # because _unique_object_key uniquified it.
-    assert kwargs["metadata"]["session_path"] == "invoice-1.pdf"
+    assert kwargs["metadata"]["session_path"] == "uploads/invoice-1.pdf"
 
 
 async def test_build_file_context_skips_reingest_when_already_indexed():
@@ -520,7 +726,7 @@ async def test_build_file_context_skips_reingest_when_already_indexed():
     body.thread_id = "thread-abc"
     body.file_ids = [file_id]
 
-    text_block, _images, attachments = await _build_file_context(
+    text_block, _images, attachments, _new_attachments = await _build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
 

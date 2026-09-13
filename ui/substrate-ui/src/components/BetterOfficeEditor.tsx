@@ -48,7 +48,11 @@ async function saveBytes(
         "Content-Type": "application/octet-stream",
         "X-Base-Checksum": baseChecksum,
       },
-      body: bytes,
+      // A bare Uint8Array widens to Uint8Array<ArrayBufferLike>, which TS
+      // rejects as BodyInit only because ArrayBufferLike could be a
+      // SharedArrayBuffer; these bytes never are, and both forms are valid
+      // fetch bodies at runtime.
+      body: bytes as BodyInit,
     },
   );
   if (res.status === 409) return { conflict: true };

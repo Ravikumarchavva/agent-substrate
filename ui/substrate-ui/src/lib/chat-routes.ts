@@ -10,7 +10,7 @@ export function isSettingsTab(value: string | null): value is SettingsTab {
     value === "llm" ||
     value === "search" ||
     value === "storage" ||
-    value === "memory" ||
+    value === "artifacts" ||
     value === "admin"
   );
 }

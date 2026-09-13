@@ -51,6 +51,14 @@ export type AppPanelItem = {
   fileUrl?: string;
   fileName?: string;
   mime?: string;
+  /**
+   * True for a user's own uploaded source file — the panel's Edit toggle
+   * (WYSIWYG office editing) is hidden entirely, unlike an assistant-
+   * generated file, which stays editable since code_interpreter itself
+   * reads/writes it. Undefined/false = editable (the default, generated-
+   * file behavior).
+   */
+  readOnly?: boolean;
 };
 
 type JsonRpcRequest = {
@@ -537,7 +545,7 @@ export function AppPanel({
             )}
           </div>
           <div className="flex items-center gap-0.5">
-            {activeItem?.kind === "file" && activeIsOffice && (
+            {activeItem?.kind === "file" && activeIsOffice && !activeItem.readOnly && (
               <button
                 onClick={() => setEditingFile((v) => !v)}
                 className={`flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium transition-colors ${

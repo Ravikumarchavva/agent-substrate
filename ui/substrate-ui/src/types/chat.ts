@@ -53,6 +53,15 @@ export type UploadedFile = {
   size: number;
   url?: string;
   /**
+   * Path relative to the conversation's shared workspace (e.g.
+   * "uploads/data.xlsx") — set by the backend for a non-extractable upload
+   * (xlsx/docx/pptx/…) that actually lives in the workspace. Lets the UI
+   * open it in the same read-only side-panel viewer an assistant-generated
+   * file uses, via openArtifact. Undefined for types with no workspace
+   * copy to view this way (a PDF, indexed into RAG instead).
+   */
+  session_path?: string;
+  /**
    * Where the attachment came from. "tool" = auto-captured by a tool run
    * (e.g. code_interpreter plots) — rendered collapsed so exploratory
    * re-runs don't flood the chat; the model surfaces the ones worth showing

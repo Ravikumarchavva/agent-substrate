@@ -19,9 +19,6 @@ import {
   ArrowUpRight,
   X,
   Download,
-  FileText,
-  FileSpreadsheet,
-  Presentation,
 } from "lucide-react";
 import { CitationSource, ToolCall, UploadedFile } from "@/types";
 import { AudioPlayer } from "@/components/AudioPlayer";
@@ -32,6 +29,7 @@ import { buildWorkspaceFileUrl } from "@/lib/api/_client";
 import {
   getAttachmentKind,
   getAttachmentIcon,
+  getDocumentBadge,
   formatFileSize,
 } from "@/lib/file-utils";
 
@@ -138,31 +136,6 @@ function MarkdownImage({
       />
     </button>
   );
-}
-
-// Per-type icon/color/label for a generated-file card (the `sandbox:` link
-// card below) — matches office-suite convention (PowerPoint orange, Excel
-// green, Word blue) so the file type reads at a glance, the same way
-// Claude's own artifact cards do.
-function officeFileBadge(name: string): {
-  Icon: typeof FileText;
-  label: string;
-  badgeClass: string;
-} {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (ext === "pptx" || ext === "ppt") {
-    return { Icon: Presentation, label: "Presentation", badgeClass: "bg-orange-500/15 text-orange-500" };
-  }
-  if (ext === "xlsx" || ext === "xls" || ext === "csv") {
-    return { Icon: FileSpreadsheet, label: "Spreadsheet", badgeClass: "bg-emerald-500/15 text-emerald-500" };
-  }
-  if (ext === "docx" || ext === "doc") {
-    return { Icon: FileText, label: "Document", badgeClass: "bg-blue-500/15 text-blue-500" };
-  }
-  if (ext === "md" || ext === "markdown") {
-    return { Icon: FileText, label: "Document", badgeClass: "bg-teal-500/15 text-teal-500" };
-  }
-  return { Icon: FileText, label: "File", badgeClass: "bg-(--muted)/15 text-(--muted)" };
 }
 
 function serializeTableToClipboard(table: HTMLTableElement): string {
@@ -291,15 +264,31 @@ function CopyablePre({ children, className, ...props }: ComponentPropsWithoutRef
 
 interface AttachmentDocumentCardProps {
   attachment: UploadedFile;
+  /** Opens the file in the read-only side-panel viewer (same one an
+   *  assistant-generated file uses). Preferred over the raw download link
+   *  whenever the backend resolved a workspace-relative `session_path` for
+   *  this attachment. */
+  onOpenArtifact?: (path: string, fileName: string, readOnly?: boolean) => void;
 }
 
-function AttachmentDocumentCard({ attachment }: AttachmentDocumentCardProps) {
+function AttachmentDocumentCard({ attachment, onOpenArtifact }: AttachmentDocumentCardProps) {
   const kind = getAttachmentKind(attachment.mime, attachment.name);
-  const attachmentIcon = getAttachmentIcon(kind);
+  // Office/text documents (xlsx, docx, pptx, csv, md) get the same
+  // per-type icon+color as the assistant-generated file card below
+  // (getDocumentBadge, which itself now covers PDF too) instead of one
+  // generic FileIcon for every non-image/audio/video kind — the two cards
+  // render right next to each other in a thread and previously looked
+  // inconsistent for no reason (a user-uploaded .xlsx read as a plain
+  // "file", while a generated .pptx got a colored Presentation icon; a PDF
+  // got neither, agent-generated or uploaded).
+  const { Icon: attachmentIcon, badgeClass } =
+    kind === "document" || kind === "pdf"
+      ? getDocumentBadge(attachment.name)
+      : { Icon: getAttachmentIcon(kind), badgeClass: "" };
   const extension = attachment.name.split(".").pop()?.toUpperCase() || "FILE";
   const content = (
     <div className="attachment-card group/file p-3">
-      <div className="attachment-card__icon text-(--accent)">
+      <div className={`attachment-card__icon ${badgeClass || "text-(--accent)"}`}>
         {createElement(attachmentIcon, { className: "h-5 w-5" })}
       </div>
       <div className="min-w-0 flex-1 pr-1">
@@ -317,6 +306,18 @@ function AttachmentDocumentCard({ attachment }: AttachmentDocumentCardProps) {
       {attachment.url && <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-(--muted)" />}
     </div>
   );
+
+  if (attachment.session_path && onOpenArtifact) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenArtifact(attachment.session_path!, attachment.name, true)}
+        className="block w-full cursor-pointer text-left sm:w-72"
+      >
+        {content}
+      </button>
+    );
+  }
 
   if (!attachment.url) {
     return <div className="w-full sm:w-72">{content}</div>;
@@ -349,7 +350,7 @@ type Props = {
   /** Active thread id — resolves `sandbox:<path>` markdown refs to workspace files. */
   threadId?: string | null;
   /** Open a code-interpreter file artifact (sandbox: ref) in the side panel. */
-  onOpenArtifact?: (path: string, fileName: string) => void;
+  onOpenArtifact?: (path: string, fileName: string, readOnly?: boolean) => void;
   /** Grounded source references from knowledge_search — inline [n] chips +
    * a "Sources" strip. See src/types/citations.ts. */
   sources?: CitationSource[];
@@ -756,7 +757,7 @@ export function MessageBubble({
               {documentAttachments.length > 0 && (
                 <div className="flex w-full max-w-xl flex-wrap justify-end gap-2.5">
                   {documentAttachments.map((attachment) => (
-                    <AttachmentDocumentCard key={attachment.id} attachment={attachment} />
+                    <AttachmentDocumentCard key={attachment.id} attachment={attachment} onOpenArtifact={onOpenArtifact} />
                   ))}
                 </div>
               )}
@@ -1071,7 +1072,7 @@ export function MessageBubble({
                         const path = raw.replace(/^sandbox:/, "").replace(/^\.?\//, "");
                         const name = path.split("/").pop() || path;
                         const url = buildWorkspaceFileUrl(threadId, raw);
-                        const { Icon, label, badgeClass } = officeFileBadge(name);
+                        const { Icon, label, badgeClass } = getDocumentBadge(name);
                         const ext = name.split(".").pop()?.toUpperCase() || "FILE";
                         return (
                           <span
@@ -1101,7 +1102,7 @@ export function MessageBubble({
                               href={url}
                               download={name}
                               onClick={(e) => e.stopPropagation()}
-                              className="btn-icon shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold hover:scale-[1.03] active:scale-[0.97] transition-all flex items-center gap-1.5"
+                              className="btn-icon shrink-0 flex h-8 w-8 items-center justify-center rounded-lg hover:scale-[1.03] active:scale-[0.97] transition-all"
                               style={{
                                 background: "var(--accent)",
                                 color: "var(--accent-foreground)",
@@ -1109,9 +1110,10 @@ export function MessageBubble({
                                 minHeight: "unset",
                                 textDecoration: "none",
                               }}
+                              title="Download"
+                              aria-label="Download"
                             >
                               <Download className="h-3.5 w-3.5" />
-                              Download
                             </a>
                           </span>
                         );
@@ -1143,7 +1145,7 @@ export function MessageBubble({
             {documentAttachments.length > 0 && (
               <div className="flex w-full max-w-xl flex-wrap gap-2.5 pt-1">
                 {documentAttachments.map((attachment) => (
-                  <AttachmentDocumentCard key={attachment.id} attachment={attachment} />
+                  <AttachmentDocumentCard key={attachment.id} attachment={attachment} onOpenArtifact={onOpenArtifact} />
                 ))}
               </div>
             )}

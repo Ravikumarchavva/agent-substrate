@@ -35,6 +35,7 @@ import {
 import { parseChatPath, buildChatPath, buildChatRoute, buildSettingsPath } from "@/lib/chat-routes";
 import {
   getAttachmentIcon,
+  getDocumentBadge,
   formatFileSize,
 } from "@/lib/file-utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -324,6 +325,7 @@ function ChatPageContent() {
       fileName?: string,
       threadOverride?: string | null,
       page?: number | null,
+      readOnly?: boolean,
     ) => {
       const tid = threadOverride ?? currentThreadId;
       if (!tid) return;
@@ -348,6 +350,7 @@ function ChatPageContent() {
         fileUrl: page ? `${base}#page=${page}` : base,
         fileName: name,
         mime: name.toLowerCase().endsWith(".pdf") ? "application/pdf" : undefined,
+        readOnly,
       });
       // Collapse the left thread rail so the artifact gets more room.
       setDesktopSidebarOpen(false);
@@ -451,7 +454,13 @@ function ChatPageContent() {
   }, [authLoading, clearBoards, isAuthenticated, pathname, router, routeState.threadId, setActivePanelId, setPanelItems, settingsPanelOpen, updateLastActiveThreadId]);
 
   const renderComposerAttachment = useCallback((file: AttachedFilePreview) => {
-    const AttachmentIcon = getAttachmentIcon(file.previewKind);
+    // Same per-type icon/color as the sent-message attachment card
+    // (MessageBubble's AttachmentDocumentCard) — see getDocumentBadge's
+    // comment for why this exists.
+    const { Icon: AttachmentIcon, badgeClass } =
+      file.previewKind === "document" || file.previewKind === "pdf"
+        ? getDocumentBadge(file.name)
+        : { Icon: getAttachmentIcon(file.previewKind), badgeClass: "" };
     const previewSource = file.previewUrl || file.url || (currentThreadId
       ? `/api/backend/threads/${currentThreadId}/files/${file.id}/content`
       : "");
@@ -481,7 +490,7 @@ function ChatPageContent() {
             />
           </div>
         ) : (
-          <div className="attachment-card__icon text-(--accent)">
+          <div className={`attachment-card__icon ${badgeClass || "text-(--accent)"}`}>
             <AttachmentIcon className="h-5 w-5" />
           </div>
         )}
@@ -1641,6 +1650,7 @@ function ChatPageContent() {
                 isOpen={settingsPanelOpen}
                 initialTab={settingsPanelTab}
                 onTabChange={selectSettingsTab}
+                threadId={currentThreadId}
               />
             </div>
           ) : scheduledPanelOpen ? (
@@ -1808,7 +1818,9 @@ function ChatPageContent() {
                               isContinuation={m.isContinuation}
                               threadId={currentThreadId}
                               sources={m.sources}
-                              onOpenArtifact={openArtifact}
+                              onOpenArtifact={(path, fileName, readOnly) =>
+                                openArtifact(path, fileName, undefined, undefined, readOnly)
+                              }
                               onOpenSource={openSource}
                               onOpenInPanel={(tool) => {
                                 const args = typeof tool.arguments === "string"

@@ -19,4 +19,5 @@ export type { User, AuthUser, Element, InstructionValidationResult } from "./use
 export type { ScheduledTask, ScheduledTaskRun, CreateScheduledTaskBody, UpdateScheduledTaskBody, ScheduledTaskParseResponse } from "./scheduled";
 export type { WorkspaceUsage, WorkspaceFile, WorkspaceFileOwner } from "./workspace";
 export type { Memory } from "./memory";
+export type { Artifact, ArtifactScope, ArtifactTrust } from "./artifacts";
 

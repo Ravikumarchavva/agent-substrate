@@ -61,7 +61,7 @@ import { ModelsTab } from "./ModelsTab";
 import { SearchTab } from "./SearchTab";
 import { AdminTab } from "./AdminTab";
 import { StorageTab } from "./StorageTab";
-import { MemoryTab } from "./MemoryTab";
+import { ArtifactsTab } from "./ArtifactsTab";
 
 export type SettingsTab =
   | "general"
@@ -69,7 +69,7 @@ export type SettingsTab =
   | "llm"
   | "search"
   | "storage"
-  | "memory"
+  | "artifacts"
   | "admin";
 
 interface SettingsNotice {
@@ -95,7 +95,7 @@ export const SETTINGS_TAB_GROUPS: SettingsNavGroup[] = [
     title: "Personal",
     items: [
       { id: "general", label: "General", description: "Timezone and prompt defaults", icon: Settings },
-      { id: "memory", label: "Memory", description: "What the assistant remembers about you", icon: BrainCircuit },
+      { id: "artifacts", label: "Artifacts", description: "What the assistant remembers and keeps", icon: BrainCircuit },
       { id: "storage", label: "Storage", description: "Uploaded and generated files", icon: HardDrive },
     ],
   },
@@ -136,6 +136,8 @@ interface SettingsPanelProps {
   isOpen: boolean;
   initialTab?: SettingsTab;
   onTabChange?: (tab: SettingsTab) => void;
+  /** Current conversation, so the Artifacts tab can show its session scope. */
+  threadId?: string | null;
 }
 
 function getAsyncErrorMessage(error: unknown, fallback: string): string {
@@ -148,6 +150,7 @@ export function SettingsPanel({
   isOpen,
   initialTab = "general",
   onTabChange,
+  threadId,
 }: SettingsPanelProps) {
   const {
     isAdmin,
@@ -636,7 +639,7 @@ export function SettingsPanel({
 
         {activeTab === "storage" && <StorageTab />}
 
-        {activeTab === "memory" && <MemoryTab />}
+        {activeTab === "artifacts" && <ArtifactsTab threadId={threadId} />}
 
         {activeTab === "admin" && isAdmin && (
           <AdminTab

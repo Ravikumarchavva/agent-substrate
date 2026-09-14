@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 from substrate.logger import setup_logging
@@ -81,7 +82,7 @@ class AgentStreamSession:
         runtime: Any,
         agent: Any,
         msg: Any,
-        bridge: WebHITLBridge,
+        bridge: WebHITLBridge | None = None,
         is_disconnected: DisconnectCheck | None = None,
         thread_id: str | None = None,
         tenant_id: str | None = None,
@@ -162,7 +163,14 @@ class AgentStreamSession:
                 # and cache the full card (question/context/options) so a
                 # page refresh mid-suspend (GET /hitl/status/{thread_id})
                 # has something to render, not just a bare request_id.
-                if isinstance(wire, InputRequestedEvent) and wire.run_id and run_id:
+                if self._bridge is None:
+                    # No bridge -- a thin, HITL-free consumer (see events()'s
+                    # own docstring). The wire event still reaches the
+                    # client below; there's just no bridge-side
+                    # registration for a later out-of-band /hitl/respond
+                    # resolution against it.
+                    pass
+                elif isinstance(wire, InputRequestedEvent) and wire.run_id and run_id:
                     self._bridge.register_signal_request(
                         wire.request_id,
                         wire.run_id,
@@ -189,7 +197,12 @@ class AgentStreamSession:
             self._error = str(exc)
             return "error"
         finally:
-            if not self._bridge_signaled:
+            if self._bridge is None:
+                # No bridge_worker exists to put _WORKERS_DONE once this
+                # returns -- events()'s queue-draining loop would otherwise
+                # never see a terminal signal and just poll forever.
+                self._queue.put_nowait(_WORKERS_DONE)
+            elif not self._bridge_signaled:
                 self._bridge_signaled = True
                 await self._bridge.signal_done()
         return "success"
@@ -215,6 +228,7 @@ class AgentStreamSession:
 
     async def _bridge_worker(self) -> None:
         """Forward HITL / task-board events until the bridge signals done."""
+        assert self._bridge is not None
         while True:
             event = await self._bridge.get_event()
             if event is BRIDGE_DONE:
@@ -227,11 +241,20 @@ class AgentStreamSession:
     # -- public stream --------------------------------------------------------
 
     async def events(self) -> AsyncIterator[WireEvent]:
-        """Yield the full wire-event stream for one run."""
+        """Yield the full wire-event stream for one run.
+
+        ``bridge=None`` (a thin, HITL-free consumer -- e.g.
+        ``substrate.serve.add_routes``) skips the bridge worker entirely:
+        the stream is then just the agent's own run -- hello, text/tool
+        events, run.completed|failed|cancelled -- with no out-of-band
+        approval or task-board events merged in. Pass a real
+        ``WebHITLBridge`` (as the monolith's ``chat.py`` does) to get that
+        merge back.
+        """
         yield HelloEvent()
 
         agent_task = asyncio.create_task(self._agent_worker())
-        bridge_task = asyncio.create_task(self._bridge_worker())
+        bridge_task = asyncio.create_task(self._bridge_worker()) if self._bridge is not None else None
         terminal: WireEvent = RunCompletedEvent()
 
         try:
@@ -266,11 +289,13 @@ class AgentStreamSession:
             # bridge_task only relays local HITL/task-board events into
             # self._queue for THIS connection — nothing depends on it once
             # this generator is done. Cancel it and await the cancellation
-            # (bounded, immediate).
-            if not bridge_task.done():
-                bridge_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await bridge_task
+            # (bounded, immediate). None when this session has no bridge
+            # (see events()'s own docstring) — nothing to tear down.
+            if bridge_task is not None:
+                if not bridge_task.done():
+                    bridge_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await bridge_task
 
             # agent_task is NOT safe to cancel here: it does
             # register()+submit() before it ever reaches the tail loop, and
@@ -328,11 +353,35 @@ class AgentStreamSession:
         if not disconnected:
             return False
 
-        self._bridge.cancel_all_pending("session_disconnected")
-        if not self._bridge_signaled:
-            self._bridge_signaled = True
-            await self._bridge.signal_done()
+        if self._bridge is not None:
+            self._bridge.cancel_all_pending("session_disconnected")
+            if not self._bridge_signaled:
+                self._bridge_signaled = True
+                await self._bridge.signal_done()
         return True
+
+
+async def sse_lines(
+    session: AgentStreamSession, *, include_done: bool = True
+) -> AsyncIterator[str]:
+    """Frame *session*'s wire-event stream as SSE ``data:`` lines — the
+    exact byte-for-byte framing both ``serving/monolith/routes/chat.py``
+    and ``substrate.serve.add_routes`` need, extracted here once instead of
+    each maintaining its own copy of ``f"data: {json.dumps(...)}\\n\\n"``.
+
+    ``include_done=True`` (the default) yields a final ``data: [DONE]\\n\\n``
+    once ``session.events()`` completes normally -- but NOT if it raises,
+    same as any other generator. ``chat.py`` wraps this with its own
+    try/except/finally (ContextVar scoping, a custom error line, bridge-
+    registry cleanup) and needs ``data: [DONE]`` to reach the client
+    unconditionally, error or not -- pass ``include_done=False`` there and
+    let that wrapper's own ``finally`` emit it instead, exactly once either
+    way.
+    """
+    async for event in session.events():
+        yield f"data: {json.dumps(event.model_dump(mode='json'), default=str)}\n\n"
+    if include_done:
+        yield "data: [DONE]\n\n"
 
 
 # Sentinel: both workers finished and the queue is drained.

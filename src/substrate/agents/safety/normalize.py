@@ -24,7 +24,16 @@ import unicodedata
 from dataclasses import dataclass, field
 from functools import lru_cache
 
-from confusable_homoglyphs import confusables
+try:
+    from confusable_homoglyphs import confusables
+except ImportError:  # pragma: no cover - optional `safety` extra
+    # Real, found-not-assumed bug this replaced: pyproject.toml's own
+    # `safety` extra comment already promised "MultimodalSafetyMiddleware
+    # fails open... so not core" for a missing confusable_homoglyphs, but
+    # this was an unconditional top-level import with no fallback -- a
+    # bare `agent-substrate` install (no `safety` extra) couldn't even
+    # `import substrate.agents` at all, let alone degrade gracefully.
+    confusables = None  # type: ignore[assignment]
 
 # ── Character classes that are invisible or near-invisible to a human but
 # meaningful to a tokenizer — each is its own smuggling channel. ────────────
@@ -69,6 +78,11 @@ def _latin_skeleton_char(ch: str) -> str:
     it's already Latin/Common or has no Latin confusable. Cached — the same
     handful of confusable characters recur across many messages."""
     if ch.isascii():
+        return ch
+    if confusables is None:
+        # No skeleton substitution without the optional package -- callers
+        # still get NFKC-folded text and the other (stdlib-only) evasion
+        # signals, just not cross-script homoglyph detection.
         return ch
     try:
         matches = confusables.is_confusable(ch, greedy=True)

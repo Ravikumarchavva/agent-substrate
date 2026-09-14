@@ -55,7 +55,7 @@ from substrate.serving.monolith.sse.bridge import WebHITLBridge
 from substrate.serving.shared.rate_limit import rate_limit
 from substrate.serving.shared.doc_quota import check_and_increment, seconds_until_reset
 from substrate.serving.protocol import PROTOCOL_VERSION, HelloEvent
-from substrate.serving.stream import AgentStreamSession, tail_wire_events
+from substrate.serving.stream import AgentStreamSession, sse_lines, tail_wire_events
 
 from substrate.serving.monolith.routes.chat_intents import (
     _tool_name,
@@ -404,8 +404,8 @@ async def chat(
         """
         _thread_id_token = current_thread_id.set(str(body.thread_id))
         try:
-            async for event in session.events():
-                yield f"data: {json.dumps(event.model_dump(mode='json'), default=str)}\n\n"
+            async for line in sse_lines(session, include_done=False):
+                yield line
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("SSE generator error for thread %s", body.thread_id)
             yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"

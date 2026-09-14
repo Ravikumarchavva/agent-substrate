@@ -9,11 +9,13 @@ from substrate.serving.stream.history import (
 )
 from substrate.serving.stream.session import (
     AgentStreamSession,
+    sse_lines,
     tail_wire_events,
 )
 
 __all__ = [
     "AgentStreamSession",
+    "sse_lines",
     "tail_wire_events",
     "project_thread",
     "append_mcp_app_context",

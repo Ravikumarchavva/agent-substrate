@@ -46,12 +46,18 @@ dependencies = [
     "redis[hiredis]>=5.0.0",
     # scheduled/cron triggers — the monolith registers this router unconditionally
     "apscheduler>=4.0.0a5",
-    # the FastAPI monolith/microservices themselves, plus their JWT auth
+    # fastapi itself stays core: substrate.serve.add_routes (the thin,
+    # optional "hand your agent object to a server" adapter) type-hints
+    # against it directly, and capabilities/tools/chain/bridge.py already
+    # lazily imports it for tool-chain execution. uvicorn/python-multipart/
+    # pyjwt/cryptography below are a different story -- confirmed via
+    # repo-wide grep to have ZERO usage anywhere in kernel/agents/
+    # capabilities/fabric/infrastructure/integrations -- they exist purely
+    # for the reference `serving/` monolith+microservices (running a real
+    # uvicorn process, parsing multipart file uploads, issuing/verifying
+    # its own JWTs), so they moved to the `server` extra instead of being
+    # forced onto every `agent-substrate` install.
     "fastapi>=0.128.0",
-    "uvicorn[standard]>=0.34.0",
-    "python-multipart>=0.0.9",
-    "pyjwt>=2.12.0",
-    "cryptography>=46.0.6",
     "opentelemetry-exporter-otlp",
     "opentelemetry-instrumentation-fastapi<0.60b1",
 ]
@@ -102,8 +108,17 @@ safety = [
     "huggingface-hub>=0.25.0",
     "confusable-homoglyphs>=3.3.1",
 ]
-# everything the reference monolith server needs beyond the base install
-server = ["agent-substrate[web,code,rag,s3,safety,sandbox,anthropic,gemini]"]
+# everything the reference monolith server needs beyond the base install --
+# uvicorn to actually run it, python-multipart for file-upload routes,
+# pyjwt+cryptography for its own auth. None of these are needed to build
+# and run an agent object with substrate.agents/capabilities alone.
+server = [
+    "agent-substrate[web,code,rag,s3,safety,sandbox,anthropic,gemini]",
+    "uvicorn[standard]>=0.34.0",
+    "python-multipart>=0.0.9",
+    "pyjwt>=2.12.0",
+    "cryptography>=46.0.6",
+]
 # PaddleOCR layout/chart/table extraction, CPU wheel
 document-intelligence = [
     "doc-firewall>=0.5.1",

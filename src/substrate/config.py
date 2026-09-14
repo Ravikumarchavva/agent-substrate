@@ -102,28 +102,6 @@ class SubstrateConfig(BaseSettings):
     FILE_STORE_ACCESS_KEY: str | None = None
     FILE_STORE_SECRET_KEY: str | None = None
     FILE_STORE_PREFIX: str = ""
-    FILE_ENCRYPTION_MODE: str = "none"
-    FILE_KEK_HEX: str = ""
-    # Attachments live here (local disk, never the real FILE_STORE_BACKEND)
-    # from upload until the message carrying them is actually sent — see
-    # capabilities/storage/pending.py. Swept periodically; PENDING_UPLOAD_TTL_HOURS
-    # is how long an abandoned (never-sent) attachment survives before removal.
-    PENDING_UPLOAD_LOCAL_PATH: str = "./data/pending-uploads"
-    PENDING_UPLOAD_TTL_HOURS: float = 24.0
-    FILE_MAX_UPLOAD_BYTES: int = 200 * 1024 * 1024
-    # routes/files.py::sweep_stuck_staging_uploads -- a startup-time
-    # reconciliation pass for uploads whose eager staging (extraction +
-    # embedding) started but never finished before a server restart (the
-    # in-process asyncio.create_task it runs on has no durability across
-    # one). A real upload is never "in flight" for anywhere near this long
-    # under normal operation, so this only ever fires for genuinely
-    # abandoned, restart-orphaned work -- turns "stuck forever" into
-    # "delayed by up to one restart."
-    STAGING_RECONCILIATION_TTL_MINUTES: float = 10.0
-
-    # ── Workspace quotas ─────────────────────────────────────────────────────
-    WORKSPACE_USER_QUOTA_BYTES: int = 1024 * 1024 * 1024
-    WORKSPACE_USER_DELETE_ALLOWED: bool = True
 
     # ── Code interpreter sandbox ─────────────────────────────────────────────
     # "nsjail" (Linux namespaces/cgroups) | "k8s" (isolated pods) | "inprocess" (tests only)
@@ -157,8 +135,6 @@ class SubstrateConfig(BaseSettings):
     RAG_IMAGE_EMBEDDING_DIM: int = 2048
     RAG_MAX_DOC_PAGES: int = 300
     RAG_MAX_DOC_MB: int = 5
-    RAG_DAILY_DOC_LIMIT: int = 20
-    RAG_DAILY_UPLOAD_ATTEMPT_LIMIT: int = 100
     # None (default) means "let capabilities/knowledge/chunking.py's
     # recommend_chunk_params(EMBEDDING_MODEL) pick a size informed by the
     # configured embedding model's real max input token limit" -- an
@@ -184,8 +160,6 @@ class SubstrateConfig(BaseSettings):
     SESSION_INDEX_LOCAL_PATH: str = "./data/session-index"
     SESSION_INDEX_NAMESPACE_URI: str = ""
     SESSION_INDEX_BUCKET: str = "substrate-index"
-
-    FRONTEND_URL: str = "http://127.0.0.1:3000"
 
     model_config = SettingsConfigDict(
         env_file_encoding="utf-8",

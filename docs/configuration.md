@@ -100,8 +100,8 @@ Agent Substrate provides secure, isolated execution environments for executing u
 | `RAG_IMAGE_EMBEDDING_DIM` | `2048` | Dimension of multimodal image embeddings (must match model output, e.g. 2048 for `Qwen3-VL-Embedding-2B`) |
 | `RAG_MAX_DOC_PAGES` | `20` | Maximum page count allowed for synchronous document upload |
 | `RAG_MAX_DOC_MB` | `5` | Maximum file size in MB for uploaded documents |
-| `RAG_DAILY_DOC_LIMIT` | `20` | Daily document commitment quota per user |
-| `RAG_DAILY_UPLOAD_ATTEMPT_LIMIT` | `100` | Daily upload attempt ceiling to prevent extraction abuse |
+| `RAG_DAILY_DOC_LIMIT` *(ServerSettings)* | `20` | Daily document commitment quota per user |
+| `RAG_DAILY_UPLOAD_ATTEMPT_LIMIT` *(ServerSettings)* | `100` | Daily upload attempt ceiling to prevent extraction abuse |
 | `RAG_CHUNK_SIZE` | (auto) | Character chunk size for document splitting. Unset (default) derives a size from the configured `EMBEDDING_MODEL`'s real max input token limit instead of one flat value; set explicitly to override |
 | `RAG_CHUNK_OVERLAP` | (auto) | Character overlap between adjacent chunks — same auto-derivation as `RAG_CHUNK_SIZE` when unset |
 
@@ -139,7 +139,12 @@ The local RAG pipeline narrows candidates across multi-stage retrieval budgets:
 | `FILE_STORE_REGION` | `us-east-1` | S3 region |
 | `FILE_STORE_ACCESS_KEY` | `None` | S3 access key |
 | `FILE_STORE_SECRET_KEY` | `None` | S3 secret key |
-| `FILE_MAX_UPLOAD_BYTES` | `209715200` (200 MB) | Maximum upload size per file |
-| `WORKSPACE_USER_QUOTA_BYTES`| `1073741824` (1 GB) | Maximum cumulative disk quota per user |
-| `WORKSPACE_USER_DELETE_ALLOWED` | `True` | Whether users are permitted to delete workspace files |
+| `FILE_MAX_UPLOAD_BYTES` *(ServerSettings)* | `209715200` (200 MB) | Maximum upload size per file |
+| `WORKSPACE_USER_QUOTA_BYTES` *(ServerSettings)* | `1073741824` (1 GB) | Maximum cumulative disk quota per user |
+| `WORKSPACE_USER_DELETE_ALLOWED` *(ServerSettings)* | `True` | Whether users are permitted to delete workspace files |
+| `FILE_ENCRYPTION_MODE` *(ServerSettings)* | `none` | At-rest encryption mode for stored files |
+| `FILE_KEK_HEX` *(ServerSettings)* | `""` | Hex-encoded key-encryption-key for `FILE_ENCRYPTION_MODE` |
+| `PENDING_UPLOAD_LOCAL_PATH` *(ServerSettings)* | `./data/pending-uploads` | Local staging path for attachments awaiting send |
+| `PENDING_UPLOAD_TTL_HOURS` *(ServerSettings)* | `24.0` | How long an abandoned pending upload survives before sweep |
+| `STAGING_RECONCILIATION_TTL_MINUTES` *(ServerSettings)* | `10.0` | Startup reconciliation window for orphaned staging uploads |
 

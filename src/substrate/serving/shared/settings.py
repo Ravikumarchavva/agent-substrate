@@ -19,6 +19,34 @@ from substrate.config import SubstrateConfig
 
 
 class ServerSettings(SubstrateConfig):
+    # ── File storage: encryption, quotas, pending-upload staging ───────────────
+    FILE_ENCRYPTION_MODE: str = "none"
+    FILE_KEK_HEX: str = ""
+    # Attachments live here (local disk, never the real FILE_STORE_BACKEND)
+    # from upload until the message carrying them is actually sent — see
+    # capabilities/storage/pending.py. Swept periodically; PENDING_UPLOAD_TTL_HOURS
+    # is how long an abandoned (never-sent) attachment survives before removal.
+    PENDING_UPLOAD_LOCAL_PATH: str = "./data/pending-uploads"
+    PENDING_UPLOAD_TTL_HOURS: float = 24.0
+    FILE_MAX_UPLOAD_BYTES: int = 200 * 1024 * 1024
+    # routes/files.py::sweep_stuck_staging_uploads -- a startup-time
+    # reconciliation pass for uploads whose eager staging (extraction +
+    # embedding) started but never finished before a server restart (the
+    # in-process asyncio.create_task it runs on has no durability across
+    # one). A real upload is never "in flight" for anywhere near this long
+    # under normal operation, so this only ever fires for genuinely
+    # abandoned, restart-orphaned work -- turns "stuck forever" into
+    # "delayed by up to one restart."
+    STAGING_RECONCILIATION_TTL_MINUTES: float = 10.0
+    WORKSPACE_USER_QUOTA_BYTES: int = 1024 * 1024 * 1024
+    WORKSPACE_USER_DELETE_ALLOWED: bool = True
+
+    # ── RAG daily limits (multi-tenant abuse controls) ──────────────────────────
+    RAG_DAILY_DOC_LIMIT: int = 20
+    RAG_DAILY_UPLOAD_ATTEMPT_LIMIT: int = 100
+
+    FRONTEND_URL: str = "http://127.0.0.1:3000"
+
     # ── JWT authentication ───────────────────────────────────────────────────
     JWT_SECRET: str = "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET"
     JWT_ALGORITHM: str = "HS256"

@@ -172,6 +172,9 @@ async def test_upload_rejects_doc_over_size_limit(monkeypatch):
 async def test_upload_rejects_when_upload_attempt_quota_exhausted(monkeypatch):
     from substrate.serving.monolith.routes import files as files_module
 
+    monkeypatch.setattr(
+        files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
+    )
     monkeypatch.setattr(files_module.settings, "RAG_DAILY_UPLOAD_ATTEMPT_LIMIT", 1)
     rag_backend = MagicMock()
     rag_backend.name = "local"
@@ -264,6 +267,9 @@ async def test_upload_triggers_eager_staging_for_local_backend(monkeypatch):
     capabilities/knowledge/session_ingest.py)."""
     from substrate.serving.monolith.routes import files as files_module
 
+    monkeypatch.setattr(
+        files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
+    )
     captured_coros = []
     monkeypatch.setattr(
         files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
@@ -303,6 +309,9 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
     it instead of re-parsing the PDF's raw bytes."""
     from substrate.serving.monolith.routes import files as files_module
 
+    monkeypatch.setattr(
+        files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
+    )
     monkeypatch.setattr(files_module.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "")
     captured_coros = []
     monkeypatch.setattr(
@@ -334,7 +343,7 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
         call
         for call in ctx.pending_file_store.upload.call_args_list
         if call.args[0]
-        == f"tenants/test-tenant/conversations/{_THREAD_ID}/workspace/shared/uploads/doc.pdf.extracted.md"
+        == f"tenants/test-tenant/users/test-user/conversations/{_THREAD_ID}/workspace/shared/uploads/doc.pdf.extracted.md"
     ]
     assert len(sidecar_calls) == 1
     sidecar_text = sidecar_calls[0].args[1].decode("utf-8")
@@ -348,6 +357,9 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
     as a staging_error on the file."""
     from substrate.serving.monolith.routes import files as files_module
 
+    monkeypatch.setattr(
+        files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
+    )
     monkeypatch.setattr(files_module.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "")
     captured_coros = []
     monkeypatch.setattr(

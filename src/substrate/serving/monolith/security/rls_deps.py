@@ -59,10 +59,13 @@ async def get_tenant_scoped_db(
     # be explicitly reset in `finally` before the underlying connection
     # goes back to the pool, or it would leak into whatever unrelated
     # request borrows that connection next.
-    if claims.is_admin or claims.token_type == "service":
-        # Already passed its own app-layer check (require_admin /
-        # require_service_identity) and legitimately needs cross-tenant
-        # visibility — e.g. the admin storage API, GDPR erasure.
+    if claims.role == "platform_admin" or claims.token_type == "service":
+        # Cross-tenant DB bypass is reserved for the platform-wide role (or
+        # a genuine service token) — e.g. the admin storage API, GDPR
+        # erasure. `tenant_admin` is deliberately excluded: it's an
+        # app-layer admin role (require_admin lets it through route-level
+        # checks) but stays row-security-scoped to its own tenant, same as
+        # an ordinary end_user, rather than seeing every tenant's data.
         await db.execute(text("SELECT set_config('app.bypass_rls', 'on', false)"))
     else:
         await db.execute(

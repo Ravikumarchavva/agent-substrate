@@ -9,10 +9,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession, create_async_engine
 
 from substrate.serving.monolith.app import app
-from substrate.serving.monolith.models import ScheduledTaskRun, Thread
+from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims
 from substrate.serving.monolith.services.scheduled_service import (
+    execute_scheduled_task,
     format_lookback_context,
 )
 from substrate.serving.monolith.services.thread_service import list_threads
@@ -94,6 +95,53 @@ async def test_thread_filtering_excludes_scheduled_tasks(database_url: str) -> N
         # Cleanup
         await db.delete(reg_thread)
         await db.delete(sched_thread)
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_execute_scheduled_task_pauses_when_thread_deleted(database_url: str) -> None:
+    """A task whose owning thread was soft-deleted (user deleted the
+    conversation from the sidebar) must not keep running — it's paused on
+    its next firing instead, before any agent/LLM work starts."""
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    async with session_factory() as db:
+        thread = Thread(
+            name="Deleted convo",
+            tags=["scheduled_task"],
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db.add(thread)
+        await db.flush()
+        task = ScheduledTask(
+            name="Stale task",
+            prompt="do the thing",
+            cron_expression="3600",
+            kind="interval",
+            thread_id=thread.id,
+            status="active",
+        )
+        db.add(task)
+        await db.commit()
+        task_id = task.id
+
+    # app_state is never touched: the deleted-thread check returns before
+    # any of it is read.
+    await execute_scheduled_task(task_id, session_factory=session_factory, app_state=None)
+
+    async with session_factory() as db:
+        refreshed = await db.get(ScheduledTask, task_id)
+        assert refreshed is not None
+        assert refreshed.status == "paused"
+
+        # Cleanup
+        thread = await db.get(Thread, thread.id)
+        await db.delete(refreshed)
+        if thread is not None:
+            await db.delete(thread)
         await db.commit()
 
 

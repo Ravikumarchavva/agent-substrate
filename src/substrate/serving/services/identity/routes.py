@@ -118,10 +118,12 @@ async def refresh_tokens(body: RefreshRequest, request: Request):
 
     access_token, _ = jwt_utils.create_access_token(
         user_id=payload.sub,
+        tenant_id=payload.tenant_id,
         secret=jwt_secret,
     )
     refresh_token, new_jti, refresh_exp = jwt_utils.create_refresh_token(
         user_id=payload.sub,
+        tenant_id=payload.tenant_id,
         secret=jwt_secret,
     )
     await _store_refresh_jti(request, new_jti, refresh_exp)

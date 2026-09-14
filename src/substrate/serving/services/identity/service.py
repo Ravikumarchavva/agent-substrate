@@ -78,6 +78,7 @@ async def exchange_frontend_token(
     )
     refresh_token, jti, refresh_exp = jwt_utils.create_refresh_token(
         user_id=str(user.id),
+        tenant_id=user.tenant_id,
         secret=jwt_secret,
     )
 

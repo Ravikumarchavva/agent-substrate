@@ -23,20 +23,35 @@ USING (
 )
 """
 
-# Foreign key join policy: inherits tenant filter from parent thread
+# threads-only variant: no `tenant_id IS NULL` escape hatch. Every thread is
+# now created with a tenant stamped (login is required — see
+# thread_service.py::get_owned_thread), so a NULL-tenant row is never a
+# legitimate current row; the general _TENANT_COLUMN_POLICY's IS NULL clause
+# exists for other tables (file_metadata/file_versions/workspace_quotas)
+# whose NULL-tenant cases haven't been audited the same way, so it stays as
+# a shared default there.
+_THREADS_POLICY = """
+USING (
+    tenant_id = current_setting('app.current_tenant_id', true)
+    OR current_setting('app.bypass_rls', true) = 'on'
+)
+"""
+
+# Foreign key join policy: inherits tenant filter from parent thread. Every
+# current usage below joins to threads.tenant_id specifically, which is
+# never NULL (see _THREADS_POLICY's comment) — no IS NULL escape hatch here.
 _JOIN_POLICY = """
 USING (
     {fk} IN (
         SELECT id FROM {parent}
         WHERE {parent_column} = current_setting('app.current_tenant_id', true)
-           OR {parent_column} IS NULL
     )
     OR current_setting('app.bypass_rls', true) = 'on'
 )
 """
 
 _POLICIES: list[tuple[str, str]] = [
-    ("threads", _TENANT_COLUMN_POLICY.format(column="tenant_id")),
+    ("threads", _THREADS_POLICY),
     (
         "elements",
         _JOIN_POLICY.format(
@@ -65,7 +80,6 @@ _POLICIES: list[tuple[str, str]] = [
                 SELECT st.id FROM scheduled_tasks st
                 JOIN threads t ON t.id = st.thread_id
                 WHERE t.tenant_id = current_setting('app.current_tenant_id', true)
-                   OR t.tenant_id IS NULL
             )
             OR current_setting('app.bypass_rls', true) = 'on'
         )

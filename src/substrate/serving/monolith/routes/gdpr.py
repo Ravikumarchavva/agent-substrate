@@ -53,6 +53,7 @@ async def erase_user_data(
         tenant_id=body.tenant_id,
         user_id=body.user_id,
         cfg=settings,
+        pending_store=ctx.pending_file_store,
     )
     return summary.as_dict()
 
@@ -71,5 +72,6 @@ async def erase_tenant_data(
         redis=request.app.state.redis,
         tenant_id=body.tenant_id,
         cfg=settings,
+        pending_store=ctx.pending_file_store,
     )
     return summary.as_dict()

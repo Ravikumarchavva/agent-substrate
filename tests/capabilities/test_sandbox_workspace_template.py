@@ -76,7 +76,7 @@ def service(monkeypatch) -> tuple[CodeInterpreterService, _FakeCustomObjectsApi]
 
 def test_ensure_user_template_creates_volume_and_mount(service) -> None:
     svc, fake_api = service
-    name = svc._ensure_user_template("user-42")
+    name = svc._ensure_user_template("user-42", "tenant-a")
 
     assert name.startswith("python-sandbox-")
     assert len(fake_api.created) == 1
@@ -89,13 +89,13 @@ def test_ensure_user_template_creates_volume_and_mount(service) -> None:
     [container] = pod_spec["containers"]
     mount, kb_mount = container["volumeMounts"]
     assert mount["mountPath"] == "/app/workspace"
-    assert mount["subPath"] == "users/user-42"
+    assert mount["subPath"] == "tenants/tenant-a/users/user-42"
     assert not mount.get("readOnly")
 
     # Second mount: the same PVC, read-only, for standing KB content — the
     # k8s equivalent of NsjailRuntime's conditional -R mount.
     assert kb_mount["mountPath"] == "/app/workspace/.kb"
-    assert kb_mount["subPath"] == "users/user-42/kb"
+    assert kb_mount["subPath"] == "tenants/tenant-a/users/user-42/kb"
     assert kb_mount["readOnly"] is True
     assert kb_mount["name"] == mount["name"]
 
@@ -109,26 +109,41 @@ def test_ensure_user_template_creates_volume_and_mount(service) -> None:
 
 def test_ensure_user_template_name_is_stable_and_deterministic(service) -> None:
     svc, _fake_api = service
-    name_1 = svc._ensure_user_template("user-42")
-    name_2 = svc._ensure_user_template("user-42")
+    name_1 = svc._ensure_user_template("user-42", "tenant-a")
+    name_2 = svc._ensure_user_template("user-42", "tenant-a")
     assert name_1 == name_2
 
 
 def test_ensure_user_template_different_users_get_different_names(service) -> None:
     svc, _fake_api = service
-    name_a = svc._ensure_user_template("user-a")
-    name_b = svc._ensure_user_template("user-b")
+    name_a = svc._ensure_user_template("user-a", "tenant-a")
+    name_b = svc._ensure_user_template("user-b", "tenant-a")
     assert name_a != name_b
+
+
+def test_ensure_user_template_subpath_matches_the_real_object_key_prefix(
+    service,
+) -> None:
+    """Regression test: the subPath used to omit the tenant segment
+    (`users/{uid}` instead of `tenants/{tid}/users/{uid}`), which doesn't
+    match any real object key — every key built by
+    capabilities/storage/layout.py starts with `tenants/{tid}/`."""
+    svc, fake_api = service
+    svc._ensure_user_template("user-42", "tenant-a")
+    body = fake_api.created[0]
+    [container] = body["spec"]["podTemplate"]["spec"]["containers"]
+    mount = container["volumeMounts"][0]
+    assert mount["subPath"] == "tenants/tenant-a/users/user-42"
 
 
 def test_ensure_user_template_idempotent_against_concurrent_create(service) -> None:
     """A 409 from create (another request won the race) must not raise."""
     svc, fake_api = service
     # Pre-create the target template out-of-band to simulate the race.
-    name = f"python-sandbox-{hashlib.sha256(b'user-42').hexdigest()[:20]}"
+    name = f"python-sandbox-{hashlib.sha256(b'tenant-a/user-42').hexdigest()[:20]}"
     fake_api.existing[name] = {"metadata": {"name": name}, "spec": {}}
 
-    result = svc._ensure_user_template("user-42")
+    result = svc._ensure_user_template("user-42", "tenant-a")
     assert result == name
 
 
@@ -136,4 +151,4 @@ def test_ensure_user_template_missing_base_template_raises(service) -> None:
     svc, fake_api = service
     fake_api.existing.pop("python-sandbox-template")
     with pytest.raises(RuntimeError, match="not found"):
-        svc._ensure_user_template("user-42")
+        svc._ensure_user_template("user-42", "tenant-a")

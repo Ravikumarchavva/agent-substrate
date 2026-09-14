@@ -264,6 +264,10 @@ ignore_imports = [
     "substrate.serving.monolith.routes.workspace -> substrate.capabilities.storage.layout",
     "substrate.serving.monolith.routes.files -> substrate.capabilities.storage.layout",
     "substrate.serving.monolith.routes.knowledge -> substrate.capabilities.storage.layout",
+    # file_versioning builds version-snapshot keys with the same canonical
+    # layout helper routes/workspace.py uses for the working file's key —
+    # otherwise it has to hand-roll (and keep in sync) the same key shape.
+    "substrate.serving.monolith.file_versioning -> substrate.capabilities.storage.layout",
     # gdpr route needs the erasure orchestrator itself, the same way
     # files/workspace routes need WorkspaceFileStore above
     "substrate.serving.monolith.routes.gdpr -> substrate.capabilities.gdpr.eraser",

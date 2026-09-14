@@ -86,6 +86,7 @@ async def list_all_threads(
                 """
                 SELECT
                     t.id, t.name, t.user_identifier, t.created_at, t.updated_at,
+                    t.deleted_at,
                     COALESCE(ec.event_count, 0) AS event_count
                 FROM threads t
                 LEFT JOIN (
@@ -109,6 +110,7 @@ async def list_all_threads(
             "user_identifier": r.user_identifier,
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            "deleted_at": r.deleted_at.isoformat() if r.deleted_at else None,
             "event_count": r.event_count,
         }
         for r in rows
@@ -194,10 +196,10 @@ async def list_storage_tenants(
     """Every tenant with a workspace directory, their usage, effective quota
     (override or global default), and conversation count.
 
-    Metered per tenant, not per user: a conversation's files carry no user
-    segment in their key by design (ownership lives in Postgres' ``threads``
-    table), so tenant is the only identity every key reliably carries — see
-    ``WorkspaceFileStore``'s module docstring.
+    Metered per tenant, not per user: usage/quota stay tenant-scoped even
+    though conversation keys do carry a user segment (see
+    ``WorkspaceFileStore``'s module docstring) — tenant is the coarser
+    identity every key reliably carries.
     """
     store = _require_workspace_file_store(ctx)
     tenants = await store.list_all_tenants()

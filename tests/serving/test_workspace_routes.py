@@ -10,6 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
+from substrate.capabilities.storage.layout import conversation_shared_key
 from substrate.capabilities.storage.workspace import WorkspaceFileStore
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.models import Thread, User
@@ -235,10 +236,10 @@ async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
                             },
                         )
                         assert resp.status_code == 201
-                        key = (
-                            f"tenants/{TENANT}/conversations/{thread_id}/workspace/"
-                            "shared/uploads/notes.txt"
+                        key = conversation_shared_key(
+                            TENANT, user_1, thread_id, "uploads/notes.txt"
                         )
+                        assert resp.json()["session_path"] == "uploads/notes.txt"
                 finally:
                     app.dependency_overrides.pop(get_current_user, None)
 
@@ -262,6 +263,144 @@ async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
                         # refused outright (403) before the per-file
                         # ownership check that would otherwise 404.
                         assert del_resp.status_code == 403
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.requires_postgres
+async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None:
+    """Regression test: _thread_owner used to check only that a thread's
+    tenant matched the caller's — any authenticated user in the same
+    tenant (the common single-tenant deployment) could read *or overwrite*
+    another user's conversation file just by knowing the thread id. It must
+    now go through the same ownership predicate as get_owned_thread."""
+    async with app.router.lifespan_context(app):
+        app.state.ctx.file_store = WorkspaceFileStore(
+            root=tmp_path, user_quota_bytes=10_000
+        )
+        app.state.ctx.workspace_user_quota_bytes = 10_000
+        app.state.ctx.workspace_user_delete_allowed = True
+
+        async with (
+            _registered_user() as user_1,
+            _registered_user() as user_2,
+        ):
+            thread_id = str(uuid.uuid4())
+            async with _registered_thread(thread_id, owner=user_1):
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(
+                    user_1
+                )
+                try:
+                    async with AsyncClient(
+                        transport=ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        upload_resp = await client.post(
+                            "/files/upload",
+                            data={"thread_id": thread_id},
+                            files={
+                                "file": ("secret.txt", b"user-1-secret", "text/plain")
+                            },
+                        )
+                        await _promote_file(upload_resp.json()["id"])
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)
+
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(
+                    user_2
+                )
+                try:
+                    async with AsyncClient(
+                        transport=ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        read = await client.get(
+                            "/workspace/file",
+                            params={"thread_id": thread_id, "path": "secret.txt"},
+                        )
+                        assert read.status_code == 404
+
+                        write = await client.put(
+                            "/workspace/file",
+                            params={"thread_id": thread_id, "path": "secret.txt"},
+                            content=b"overwritten-by-stranger",
+                        )
+                        assert write.status_code == 404
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)
+
+                # The real content is untouched.
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(
+                    user_1
+                )
+                try:
+                    async with AsyncClient(
+                        transport=ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        still = await client.get(
+                            "/workspace/file",
+                            params={"thread_id": thread_id, "path": "secret.txt"},
+                        )
+                        assert still.status_code == 200
+                        assert still.content == b"user-1-secret"
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.requires_postgres
+async def test_list_files_lists_each_conversation_file_once(tmp_path) -> None:
+    """Regression test: conversations now nest under users/{uid}/, so a
+    conversation file used to be listed twice — once by the removed
+    per-thread loop, once by the user-prefix scan (which is now the only
+    scan) — and non-file prefixes under the same user (index/, the curated
+    artifacts bundle) used to leak into the Storage browser too."""
+    async with app.router.lifespan_context(app):
+        store = WorkspaceFileStore(root=tmp_path, user_quota_bytes=10_000)
+        app.state.ctx.file_store = store
+        app.state.ctx.workspace_user_quota_bytes = 10_000
+        app.state.ctx.workspace_user_delete_allowed = True
+
+        async with _registered_user() as user_id:
+            thread_id = str(uuid.uuid4())
+            async with _registered_thread(thread_id, owner=user_id):
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(
+                    user_id
+                )
+                try:
+                    async with AsyncClient(
+                        transport=ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        resp = await client.post(
+                            "/files/upload",
+                            data={"thread_id": thread_id},
+                            files={
+                                "file": ("notes.txt", b"secret notes", "text/plain")
+                            },
+                        )
+                        file_id = resp.json()["id"]
+                        await _promote_file(file_id)
+
+                        # Non-file prefixes under the same user — must never
+                        # show up as "files" in the listing.
+                        await store.upload(
+                            f"tenants/{TENANT}/users/{user_id}/conversations/"
+                            f"{thread_id}/artifacts/note.md",
+                            b"# curated note",
+                        )
+                        await store.upload(
+                            f"tenants/{TENANT}/users/{user_id}/index/table.lance",
+                            b"binary-index-data",
+                        )
+
+                        files = (await client.get("/workspace/files")).json()["files"]
+                        key = conversation_shared_key(
+                            TENANT, user_id, thread_id, "uploads/notes.txt"
+                        )
+                        matches = [f for f in files if f["path"] == key]
+                        assert len(matches) == 1
+
+                        listed_paths = {f["path"] for f in files}
+                        assert not any(
+                            "/artifacts/" in p or "/index/" in p for p in listed_paths
+                        )
                 finally:
                     app.dependency_overrides.pop(get_current_user, None)
 

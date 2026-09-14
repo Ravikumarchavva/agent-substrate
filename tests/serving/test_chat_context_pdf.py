@@ -23,12 +23,12 @@ _FIXTURE = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
 
 
 def test_session_relative_path_extracts_the_rest_of_a_conversation_key():
-    key = "tenants/t1/conversations/thread-abc/workspace/shared/invoice.pdf"
+    key = "tenants/t1/users/u1/conversations/thread-abc/workspace/shared/invoice.pdf"
     assert _session_relative_path(key) == "invoice.pdf"
 
 
 def test_session_relative_path_handles_nested_rest():
-    key = "tenants/t1/conversations/thread-abc/workspace/shared/sub/dir/invoice.pdf"
+    key = "tenants/t1/users/u1/conversations/thread-abc/workspace/shared/sub/dir/invoice.pdf"
     assert _session_relative_path(key) == "sub/dir/invoice.pdf"
 
 
@@ -44,7 +44,7 @@ def test_session_relative_path_none_outside_the_shared_workspace():
     """Only `.../workspace/shared/` is bind-mounted into the sandbox (see
     code_interpreter/tool.py); version snapshots must not be handed out as
     workspace paths."""
-    key = "tenants/t1/conversations/c1/workspace/versions/invoice.pdf/1.pdf"
+    key = "tenants/t1/users/u1/conversations/c1/workspace/versions/invoice.pdf/1.pdf"
     assert _session_relative_path(key) is None
 
 
@@ -277,7 +277,7 @@ async def test_file_context_includes_thread_files_with_no_file_ids_this_turn(mon
     meta = _xlsx_meta(
         file_id,
         "data.xlsx",
-        f"tenants/t1/conversations/{thread_id}/workspace/shared/uploads/data.xlsx",
+        f"tenants/t1/users/u1/conversations/{thread_id}/workspace/shared/uploads/data.xlsx",
         1234,
     )
 
@@ -326,13 +326,13 @@ async def test_new_attachments_stays_narrow_while_model_context_stays_broad():
     old_meta = _xlsx_meta(
         old_file_id,
         "data.xlsx",
-        f"tenants/t1/conversations/{thread_id}/workspace/shared/uploads/data.xlsx",
+        f"tenants/t1/users/u1/conversations/{thread_id}/workspace/shared/uploads/data.xlsx",
         1234,
     )
     new_meta = _xlsx_meta(
         new_file_id,
         "second.xlsx",
-        f"tenants/t1/conversations/{thread_id}/workspace/shared/uploads/second.xlsx",
+        f"tenants/t1/users/u1/conversations/{thread_id}/workspace/shared/uploads/second.xlsx",
         1234,
     )
 
@@ -397,7 +397,7 @@ async def test_file_context_still_empty_with_no_file_ids_and_no_thread_files():
 async def test_workspace_path_strips_conversation_prefix_for_nsjail_mode(monkeypatch):
     """nsjail bind-mounts ONLY the conversation's shared dir (see
     CodeInterpreterTool, which passes `{workspace}/shared` as session_dir) at
-    /workspace — the whole tenants/{tid}/conversations/{cid}/workspace/shared/
+    /workspace — the whole tenants/{tid}/users/{uid}/conversations/{cid}/workspace/shared/
     prefix must be stripped. Regression guard: this assertion previously
     encoded the pre-tenant-migration `users/{uid}/sessions/{tid}` layout, so
     _session_relative_path silently returned None for every real object key
@@ -409,7 +409,7 @@ async def test_workspace_path_strips_conversation_prefix_for_nsjail_mode(monkeyp
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
 
     attachment = await _run_build_file_context_for_workspace_path(
-        "tenants/t1/conversations/c1/workspace/shared/uploads/data.xlsx"
+        "tenants/t1/users/u1/conversations/c1/workspace/shared/uploads/data.xlsx"
     )
     assert attachment["workspace_path"] == "/workspace/uploads/data.xlsx"
 
@@ -429,7 +429,7 @@ async def test_attachment_dict_includes_session_path_for_ui_to_open_the_file(
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
 
     attachment = await _run_build_file_context_for_workspace_path(
-        "tenants/t1/conversations/c1/workspace/shared/uploads/data.xlsx"
+        "tenants/t1/users/u1/conversations/c1/workspace/shared/uploads/data.xlsx"
     )
     assert attachment["session_path"] == "uploads/data.xlsx"
 
@@ -441,7 +441,7 @@ async def test_attachment_dict_omits_session_path_for_extractable_types():
     meta = _pdf_meta(
         file_id,
         "corrupt.pdf",
-        "tenants/t1/conversations/c1/workspace/shared/uploads/corrupt.pdf",
+        "tenants/t1/users/u1/conversations/c1/workspace/shared/uploads/corrupt.pdf",
         12,
     )
 
@@ -470,12 +470,14 @@ async def test_attachment_dict_omits_session_path_for_extractable_types():
     assert "session_path" not in attachments[0]
 
 
-async def test_workspace_path_strips_user_prefix_for_k8s_pvc_mode(monkeypatch):
-    """K8s agent-sandbox subPath-mounts users/{uid} at /app/workspace (the
-    subPath IS the per-user isolation boundary), so the prefix is stripped
-    before being made absolute — the sandbox's execution cwd isn't
-    guaranteed to be the workspace root (sandbox_runtime.py changes cwd to
-    sessions/{session_id} per run), so a relative path would be wrong."""
+async def test_workspace_path_strips_tenant_and_user_prefix_for_k8s_pvc_mode(
+    monkeypatch,
+):
+    """K8s agent-sandbox subPath-mounts tenants/{tid}/users/{uid} at
+    /app/workspace (the subPath IS the per-user, per-tenant isolation
+    boundary — sandbox_service.py::_ensure_user_template), so that prefix
+    is stripped before being made absolute — a path inside the pod is
+    whatever's left after it."""
     from substrate.serving.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "k8s")
@@ -484,9 +486,11 @@ async def test_workspace_path_strips_user_prefix_for_k8s_pvc_mode(monkeypatch):
     )
 
     attachment = await _run_build_file_context_for_workspace_path(
-        "users/u1/sessions/t1/data.xlsx"
+        "tenants/tenant-a/users/u1/conversations/t1/workspace/shared/data.xlsx"
     )
-    assert attachment["workspace_path"] == "/app/workspace/sessions/t1/data.xlsx"
+    assert attachment["workspace_path"] == (
+        "/app/workspace/conversations/t1/workspace/shared/data.xlsx"
+    )
 
 
 async def test_workspace_path_absent_when_no_sandbox_configured(monkeypatch):
@@ -655,7 +659,7 @@ async def test_build_file_context_ingest_metadata_uses_real_session_path():
         file_id,
         "invoice.pdf",
         # uniquified basename
-        f"tenants/t1/conversations/{thread_id}/workspace/shared/uploads/invoice-1.pdf",
+        f"tenants/t1/users/u1/conversations/{thread_id}/workspace/shared/uploads/invoice-1.pdf",
         1234,
     )
 

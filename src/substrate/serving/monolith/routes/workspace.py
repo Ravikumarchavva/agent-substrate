@@ -43,6 +43,7 @@ from substrate.serving.monolith.file_versioning import (
 )
 from substrate.serving.monolith.models import FileMetadata, FileVersion, Thread
 from substrate.serving.monolith.security.deps import get_current_user
+from substrate.serving.monolith.services import get_owned_thread
 from substrate.serving.shared.auth.claims import AuthClaims
 
 router = APIRouter(
@@ -104,6 +105,47 @@ def _require_workspace_store(ctx: ServerDependencies) -> _WorkspaceCapableStore:
             ),
         )
     return store
+
+
+def _is_conversation_shared_key(key: str) -> bool:
+    """True only for an actual conversation file under
+    ``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/shared/...``.
+    """
+    parts = key.split("/")
+    return (
+        len(parts) >= 9
+        and parts[0] == "tenants"
+        and parts[2] == "users"
+        and parts[4] == "conversations"
+        and parts[6] == "workspace"
+        and parts[7] == "shared"
+    )
+
+
+def _is_direct_upload_key(key: str) -> bool:
+    """True for a composer/API upload with no thread — ``tenants/{tid}/
+    users/{uid}/uploads/...`` (see ``routes/files.py``'s ``base_key`` when
+    ``thread_id is None``) — a sibling of ``conversations/``, not nested
+    under it."""
+    parts = key.split("/")
+    return (
+        len(parts) >= 5
+        and parts[0] == "tenants"
+        and parts[2] == "users"
+        and parts[4] == "uploads"
+    )
+
+
+def _is_listable_workspace_key(key: str) -> bool:
+    """The positive counterpart to ``_is_version_key``: ``list_files`` scans
+    the caller's whole ``user_prefix``, which also contains
+    ``conversations/{cid}/artifacts/...`` (curated OKF notes — deliberately
+    not shown as files, see ``layout.py::conversation_artifacts_prefix``),
+    the top-level ``artifacts/...`` bundle, and ``index/...`` (the search
+    index, not a file at all). Only conversation-shared files and direct
+    uploads belong in the Storage browser.
+    """
+    return _is_conversation_shared_key(key) or _is_direct_upload_key(key)
 
 
 def _is_version_key(key: str) -> bool:
@@ -171,29 +213,43 @@ async def list_files(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceFilesResponse:
     store = _require_workspace_store(ctx)
-    # Enumerate threads owned by caller in this tenant, plus direct uploads
-    owned_thread_ids = (
-        (
+    # Non-deleted threads owned by the caller in this tenant — a soft-deleted
+    # thread's files stay in storage (see thread_service.py::delete_thread)
+    # but are hidden from the owner's Storage view, same as the thread
+    # itself is hidden from their sidebar.
+    owned_thread_ids = {
+        str(tid)
+        for tid in (
             await db.execute(
                 select(Thread.id).where(
                     Thread.user_identifier == claims.sub,
                     Thread.tenant_id == claims.tenant_id,
+                    Thread.deleted_at.is_(None),
                 )
             )
         )
         .scalars()
         .all()
-    )
-    entries: list[tuple[str, int, float]] = []
-    for thread_id in owned_thread_ids:
-        prefix = f"{conversation_workspace_prefix(claims.tenant_id, claims.sub, str(thread_id))}/"
-        entries.extend(await store.list_prefix(prefix))
-    entries.extend(
-        await store.list_prefix(f"{user_prefix(claims.tenant_id, claims.sub)}/")
-    )
-    # Hide the per-file version snapshots — they're internal history, not
-    # user-facing files (see file_versioning.py).
-    entries = [e for e in entries if not _is_version_key(e[0])]
+    }
+    # One scan of the caller's whole prefix — not one call per thread plus
+    # this, which used to list every conversation's shared files twice
+    # (conversations now nest under users/{uid}/, so the per-thread loop's
+    # results were already a subset of this single scan).
+    all_entries = await store.list_prefix(f"{user_prefix(claims.tenant_id, claims.sub)}/")
+
+    def _keep(key: str) -> bool:
+        if not _is_listable_workspace_key(key):
+            # Version snapshots, curated artifact bundles, and the search
+            # index are internal, not user-facing files.
+            return False
+        session_id = _session_id_from_key(key)
+        # Direct uploads (no thread_id) have no session; a conversation
+        # file's thread must be owned and not soft-deleted (files of a
+        # deleted thread stay in storage but are hidden from the owner's
+        # Storage view, same as the thread itself).
+        return session_id is None or session_id in owned_thread_ids
+
+    entries = [e for e in all_entries if _keep(e[0])]
     session_ids_by_key = {key: _session_id_from_key(key) for key, _, _ in entries}
 
     valid_uuids: list[uuid.UUID] = []
@@ -246,27 +302,29 @@ async def list_files(
 
 
 async def _thread_owner(
-    db: AsyncSession, tenant_id: str, thread_id: str
+    db: AsyncSession, claims: AuthClaims, thread_id: str
 ) -> str:
-    """The thread's actual owner (`Thread.user_identifier`) — conversation
-    storage now nests under that user's prefix, so building the right key
-    needs the real owner, not necessarily the caller (tenant-scoped access
-    to another owner's thread, where allowed, must still resolve the same
-    path that owner's own requests do)."""
+    """The thread's actual owner (`Thread.user_identifier`), after
+    confirming the *caller* may access it — same predicate as
+    ``get_owned_thread`` (owner, or an admin: platform-wide, or
+    tenant-scoped for a tenant_admin in its own tenant; a soft-deleted
+    thread 404s for its owner same as elsewhere).
+
+    Conversation storage nests under the owner's prefix, not necessarily
+    the caller's — an admin reading another user's thread must still
+    resolve the same key that owner's own requests do — but resolving the
+    owner is only reached once the caller is confirmed authorized; a plain
+    tenant match used to be enough here, letting any caller in the tenant
+    read or overwrite any other caller's conversation files by thread id.
+    """
     try:
         thread_uuid = uuid.UUID(thread_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Thread not found")
-    owner = (
-        await db.execute(
-            select(Thread.user_identifier).where(
-                Thread.id == thread_uuid, Thread.tenant_id == tenant_id
-            )
-        )
-    ).scalar_one_or_none()
-    if owner is None:
+    thread = await get_owned_thread(db, thread_uuid, claims)
+    if thread is None or thread.user_identifier is None:
         raise HTTPException(status_code=404, detail="Thread not found")
-    return owner
+    return thread.user_identifier
 
 
 def _session_key(tenant_id: str, user_id: str, thread_id: str, path: str) -> str:
@@ -382,7 +440,7 @@ async def serve_file(
     history stays honest without a per-turn scan.
     """
     store = _require_workspace_store(ctx)
-    owner_id = await _thread_owner(db, claims.tenant_id, thread_id)
+    owner_id = await _thread_owner(db, claims, thread_id)
     key = await _resolve_session_key(store, claims.tenant_id, owner_id, thread_id, path)
 
     if seq is not None:
@@ -469,7 +527,7 @@ async def save_file(
     is already versioned (via serve_file's lazy capture), so nothing is lost.
     """
     store = _require_workspace_store(ctx)
-    owner_id = await _thread_owner(db, claims.tenant_id, thread_id)
+    owner_id = await _thread_owner(db, claims, thread_id)
     key = await _resolve_session_key(store, claims.tenant_id, owner_id, thread_id, path)
     body = await request.body()
     base = request.headers.get("X-Base-Checksum", "")
@@ -527,7 +585,7 @@ async def get_versions(
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceVersionsResponse:
     store = _require_workspace_store(ctx)
-    owner_id = await _thread_owner(db, claims.tenant_id, thread_id)
+    owner_id = await _thread_owner(db, claims, thread_id)
     key = await _resolve_session_key(store, claims.tenant_id, owner_id, thread_id, path)
     versions = await list_versions(db, key)
     return WorkspaceVersionsResponse(
@@ -558,7 +616,7 @@ async def restore_version(
     (non-destructive — the current state was already captured, so it stays in
     history too)."""
     store = _require_workspace_store(ctx)
-    owner_id = await _thread_owner(db, claims.tenant_id, body.thread_id)
+    owner_id = await _thread_owner(db, claims, body.thread_id)
     key = await _resolve_session_key(store, claims.tenant_id, owner_id, body.thread_id, body.path)
     version = (
         await db.execute(

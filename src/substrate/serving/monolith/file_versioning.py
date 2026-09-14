@@ -32,6 +32,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from substrate.capabilities.storage.layout import conversation_version_key
 from substrate.serving.monolith.models import FileVersion
 
 # Per-user snapshot prefix, a sibling of `sessions/` and `uploads/` rather than
@@ -45,19 +46,36 @@ def sha256_hex(data: bytes) -> str:
 
 
 def _version_key(object_key: str, seq: int) -> str:
-    """`users/{uid}/sessions/{tid}/report.xlsx` →
-    `users/{uid}/versions/sessions/{tid}/report.xlsx/{seq}.xlsx`.
+    """``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/shared/{path}``
+    → ``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/versions/{path}/{seq}.ext``
+    — a sibling of ``shared/`` (see ``capabilities/storage/layout.py``'s
+    ``conversation_version_key``), never nested inside it: ``shared/`` is
+    bind-mounted into the code-interpreter sandbox and enumerated as the
+    user's files (``routes/workspace.py::list_files``), so a snapshot
+    written under it would be sandbox-reachable and show up as a "file".
 
-    The whole path below ``users/{uid}/`` is preserved under the prefix, so the
-    mapping is total (uploads version the same way as session files) and
-    reversible by inspection. Keys that aren't user-owned are left in place —
-    there is no user prefix to hang the snapshot off.
+    The whole relative path below ``shared/`` is preserved as a directory
+    under ``versions/``, holding one numbered file per snapshot — so the
+    mapping is total and reversible by inspection. Keys that don't match
+    the canonical conversation-workspace shape (e.g. a knowledge-base
+    document) are left versioned next to themselves — there's no per-user
+    prefix to hang the snapshot off.
     """
     p = PurePosixPath(object_key)
     parts = p.parts
-    # tenants/<tenant>/conversations/<thread>/workspace/shared/<path>
-    if len(parts) >= 7 and parts[:1] == ("tenants",) and parts[2:4] == ("conversations", parts[3]) and parts[4:6] == ("workspace", "shared"):
-        return str(PurePosixPath(*parts[:5]) / VERSIONS_DIR / PurePosixPath(*parts[6:]) / f"{seq}{p.suffix}")
+    # tenants/<tenant>/users/<user>/conversations/<thread>/workspace/shared/<path>
+    if (
+        len(parts) >= 9
+        and parts[0] == "tenants"
+        and parts[2] == "users"
+        and parts[4] == "conversations"
+        and parts[6] == "workspace"
+        and parts[7] == "shared"
+    ):
+        tenant_id, user_id, conversation_id = parts[1], parts[3], parts[5]
+        rel_path = str(PurePosixPath(*parts[8:]))
+        base = conversation_version_key(tenant_id, user_id, conversation_id, rel_path)
+        return f"{base}/{seq}{p.suffix}"
     if len(parts) >= 3 and parts[0] == "users":
         owner = parts[1]
         rest = PurePosixPath(*parts[2:])

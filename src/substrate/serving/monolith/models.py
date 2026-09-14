@@ -89,6 +89,14 @@ class Thread(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    # Soft delete — same real-column pattern as FileMetadata.deleted_at
+    # above, replacing the earlier metadata["deleted"] flag: a real column
+    # lets the ownership/listing queries filter it directly instead of a
+    # JSONB `contains` scan, and it can no longer be cleared by a user's own
+    # PATCH /threads (which only ever touches the `metadata` column).
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     user: Mapped[Optional["User"]] = relationship(back_populates="threads")
@@ -98,6 +106,10 @@ class Thread(Base):
     feedbacks: Mapped[List["Feedback"]] = relationship(
         back_populates="thread", cascade="all, delete-orphan"
     )
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
 
     def __repr__(self) -> str:
         return f"<Thread(id={self.id}, name={self.name!r})>"

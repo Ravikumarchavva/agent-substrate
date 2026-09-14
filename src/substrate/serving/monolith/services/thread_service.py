@@ -69,36 +69,31 @@ async def get_owned_thread(
     entirely — an admin's ``tenant_id`` is not assumed to match every
     tenant's threads.
 
-    Migration affordance: threads created before ownership/tenant stamping
-    existed have ``user_identifier``/``tenant_id IS NULL``; the first
-    authenticated user to access one claims it (stamped in place, both
-    fields together — a legacy thread can't be claimed into a mismatched
-    tenant). New threads are always created with an owner and tenant, so
-    this branch only fires for legacy rows.
+    Every thread is created with an owner and tenant stamped
+    (``routes/threads.py::create_thread_endpoint`` — login is required, so
+    there is no anonymous/unauthenticated creation path), so ownership is a
+    straight equality check with no NULL-claiming affordance for legacy
+    unowned rows.
     """
     thread = await get_thread(db, thread_id)
     if thread is None:
         return None
-    if claims.is_admin:
+    if claims.role == "platform_admin":
+        # Platform-wide bypass only — a tenant_admin still must not read
+        # another tenant's threads, checked below same as anyone else.
         return thread
     owned = thread.user_identifier == claims.sub
     same_tenant = thread.tenant_id == claims.tenant_id
+    if claims.is_admin and same_tenant:
+        # tenant_admin: any thread within its own tenant, not just its own.
+        return thread
     if owned and same_tenant:
         # Soft-deleted (see delete_thread below) — gone for its owner, but
         # never hard-erased, so a safety/abuse review still has it via the
         # admin path above. 404, not a distinct "deleted" error: the owner
         # deleted it, so from their side it simply no longer exists.
-        if (thread.metadata_ or {}).get("deleted"):
+        if thread.deleted_at is not None:
             return None
-        return thread
-    if owned and thread.tenant_id is None:
-        thread.tenant_id = claims.tenant_id
-        await db.flush()
-        return thread
-    if thread.user_identifier is None and thread.tenant_id is None:
-        thread.user_identifier = claims.sub
-        thread.tenant_id = claims.tenant_id
-        await db.flush()
         return thread
     return None
 
@@ -113,9 +108,9 @@ async def list_threads(
 ) -> List[Dict[str, Any]]:
     """List threads with message counts.
 
-    ``user_identifier`` scopes the list to threads owned by that user, plus
-    unowned legacy rows (``user_identifier IS NULL`` — claimable on access,
-    see ``get_owned_thread``).
+    ``user_identifier`` scopes the list to threads owned by that user.
+    Login is required to create a thread (see ``get_owned_thread``), so
+    there is no unowned-row case to special-case here.
 
     Message counts come from the EventLogProtocol (``substrate_run_queue`` joined to
     ``substrate_event_log``), not a separate steps table — see
@@ -133,19 +128,13 @@ async def list_threads(
     # Soft-deleted threads (see delete_thread) are gone for their owner but
     # deliberately not hard-erased — excluded here, still visible to a
     # separate admin/audit path.
-    query = query.where(
-        (Thread.metadata_ == None)  # noqa: E711
-        | (~Thread.metadata_.contains({"deleted": True}))
-    )
+    query = query.where(Thread.deleted_at.is_(None))
 
     if user_id:
         query = query.where(Thread.user_id == user_id)
 
     if user_identifier is not None:
-        query = query.where(
-            (Thread.user_identifier == user_identifier)
-            | (Thread.user_identifier == None)  # noqa: E711 — SQLAlchemy IS NULL
-        )
+        query = query.where(Thread.user_identifier == user_identifier)
 
     result = await db.execute(query)
     threads = list(result.scalars().all())
@@ -227,10 +216,7 @@ async def delete_thread(db: AsyncSession, thread_id: uuid.UUID) -> bool:
     thread = await get_thread(db, thread_id)
     if thread is None:
         return False
-    meta = dict(thread.metadata_ or {})
-    meta["deleted"] = True
-    meta["deleted_at"] = datetime.now(timezone.utc).isoformat()
-    thread.metadata_ = meta
+    thread.deleted_at = datetime.now(timezone.utc)
     thread.updated_at = datetime.now(timezone.utc)
     await db.flush()
     return True

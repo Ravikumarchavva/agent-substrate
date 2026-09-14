@@ -42,6 +42,7 @@ from substrate.serving.monolith.routes.chat_context import (
     _session_relative_path,
 )
 from substrate.serving.monolith.security.deps import get_current_user
+from substrate.serving.monolith.services import get_owned_thread
 from substrate.serving.shared.auth.claims import AuthClaims
 from substrate.serving.shared.contracts.file_store import (
     FileUploadResponse,
@@ -473,11 +474,13 @@ async def upload_file(
 ) -> FileUploadResponse:
     """Upload a file and store its metadata.
 
-    Object keys are scoped by user (and thread, when given): ``users/{sub}/
-    sessions/{thread_id}/{name}`` or ``users/{sub}/uploads/{name}``. This is
-    the same key layout the code interpreter's per-user PVC subPath mount
-    exposes, so a thread-scoped upload lands exactly where that thread's
-    sandbox session can see it.
+    Object keys are scoped by tenant, user, and thread (when given):
+    ``tenants/{tid}/users/{uid}/conversations/{thread_id}/workspace/shared/
+    uploads/{name}`` or, with no thread, ``tenants/{tid}/users/{uid}/
+    uploads/{name}`` — see ``capabilities/storage/layout.py``. This is the
+    same prefix the code interpreter's sandbox mounts for that thread, so a
+    thread-scoped upload lands exactly where that thread's sandbox session
+    can see it.
 
     RAG-eligible types (currently PDF only — see ``EXTRACTABLE_CONTENT_TYPES``)
     get extra, synchronous-before-storing checks (upload-attempt quota, size
@@ -489,6 +492,15 @@ async def upload_file(
     """
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
+
+    if thread_id is not None and await get_owned_thread(db, thread_id, claims) is None:
+        # Without this, any authenticated caller could tag an upload with
+        # someone else's thread_id: the bytes land in the caller's own
+        # prefix (harmless there), but the FileMetadata row still carries
+        # that thread_id — a confused-deputy path into a conversation the
+        # attacker doesn't own if anything trusts FileMetadata.thread_id
+        # for context/attachment lookups without re-checking ownership.
+        raise HTTPException(status_code=404, detail="Thread not found")
 
     data = await file.read()
     if len(data) > _MAX_BYTES:

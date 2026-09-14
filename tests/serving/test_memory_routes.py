@@ -4,6 +4,8 @@ established pattern for testing durable stores (see test_workspace_routes.py).""
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -22,7 +24,8 @@ def _claims_for(user_id: str) -> AuthClaims:
 async def test_list_memories_returns_only_this_users_facts() -> None:
     async with app.router.lifespan_context(app):
         store: DurableMemoryStore = app.state.ctx.long_term_memory
-        user_a, user_b = "memroute-user-a", "memroute-user-b"
+        suffix = uuid.uuid4().hex
+        user_a, user_b = f"memroute-user-a-{suffix}", f"memroute-user-b-{suffix}"
         await store.clear(AgentId(type="user", key=user_a))
         await store.clear(AgentId(type="user", key=user_b))
         await store.save(AgentId(type="user", key=user_a), "Always answer in French")
@@ -48,7 +51,7 @@ async def test_list_memories_returns_only_this_users_facts() -> None:
 async def test_delete_memory_removes_it() -> None:
     async with app.router.lifespan_context(app):
         store: DurableMemoryStore = app.state.ctx.long_term_memory
-        user_id = "memroute-delete-user"
+        user_id = f"memroute-delete-user-{uuid.uuid4().hex}"
         await store.clear(AgentId(type="user", key=user_id))
         mem_id = await store.save(AgentId(type="user", key=user_id), "delete me")
 
@@ -73,7 +76,8 @@ async def test_delete_memory_owned_by_another_user_is_not_found() -> None:
     (agent_name is part of the DELETE's WHERE clause, not just the id)."""
     async with app.router.lifespan_context(app):
         store: DurableMemoryStore = app.state.ctx.long_term_memory
-        owner, attacker = "memroute-owner", "memroute-attacker"
+        suffix = uuid.uuid4().hex
+        owner, attacker = f"memroute-owner-{suffix}", f"memroute-attacker-{suffix}"
         await store.clear(AgentId(type="user", key=owner))
         await store.clear(AgentId(type="user", key=attacker))
         mem_id = await store.save(AgentId(type="user", key=owner), "owner's secret")

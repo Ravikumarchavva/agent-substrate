@@ -77,11 +77,18 @@ async def test_list_storage_tenants_and_conversations(tmp_path) -> None:
         await store.connect()
         app.state.ctx.file_store = store
 
+        # c1 and c2 belong to different users under the same tenant —
+        # conversations nest under their owning user, not the tenant
+        # directly (capabilities/storage/layout.py), so the drill-down must
+        # walk every user directory, not a single tenant-level
+        # "conversations/" that no longer exists.
         await store.upload(
-            "tenants/tenant1/conversations/c1/workspace/shared/a.txt", b"aaa"
+            "tenants/tenant1/users/u1/conversations/c1/workspace/shared/a.txt",
+            b"aaa",
         )
         await store.upload(
-            "tenants/tenant1/conversations/c2/workspace/shared/b.txt", b"bb"
+            "tenants/tenant1/users/u2/conversations/c2/workspace/shared/b.txt",
+            b"bb",
         )
         await store.upload("tenants/tenant2/users/u2/uploads/c.txt", b"c")
 

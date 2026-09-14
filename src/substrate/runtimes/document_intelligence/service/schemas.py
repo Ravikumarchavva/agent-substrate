@@ -46,3 +46,19 @@ class HealthResponse(BaseModel):
     status: str
     pod_name: str
     uptime_seconds: float
+    # Which concrete engine this pod actually resolved to and is serving
+    # requests with -- "raw_text" | "paddleocr-vl" | "ppstructurev3". Lets
+    # a caller/dashboard see what's really running without guessing from
+    # the requested mode alone.
+    engine: str = ""
+    # The mode ServiceConfig.mode requested vs. what autoconfig.py's
+    # resolve_runtime actually resolved to on this hardware -- "auto" |
+    # "raw_text" | "vl_cpu" | "vl_gpu" | "ocr_classic".
+    requested_mode: str = ""
+    resolved_mode: str = ""
+    # Non-None only when the requested mode couldn't be satisfied on this
+    # hardware and autoconfig degraded to another one (e.g. vl_gpu
+    # requested, no eligible GPU present -> vl_cpu served). A silent
+    # capability downgrade must never actually be silent.
+    degraded_from: str | None = None
+    worker_count: int = 0

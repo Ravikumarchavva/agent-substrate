@@ -13,11 +13,9 @@ from __future__ import annotations
 
 from substrate.agents.storage.tasks import current_thread_id
 from substrate.capabilities.knowledge.backends import RagBackend
-from substrate.capabilities.knowledge.citations import (
-    CitationLedgerStore,
-    build_citations,
-)
-from substrate.kernel import ImageBlock, TextBlock
+from substrate.capabilities.knowledge.citations import CitationLedgerStore
+from substrate.capabilities.knowledge.result_rendering import render_search_results
+from substrate.kernel import TextBlock
 from substrate.kernel.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
 
@@ -153,64 +151,13 @@ class KnowledgeSearchTool:
             results = await self._backend.query(
                 text, collection=collection, limit=limit, filter=filter_ or None
             )
-            if not results:
-                return ToolExecutionResult(
-                    content=[TextBlock(text="No matching documents found.")],
-                )
-            cited = build_citations(
+            return render_search_results(
                 results,
                 backend_name=self._backend.name,
                 collection=collection,
                 ledger=self._ledgers.get(collection),
+                query_text=text,
                 min_score=self._min_rerank_score,
-            )
-            citation_by_index = {c.index: c for c in cited.citations}
-            # Full passages, not search-engine-style snippets — the model
-            # reasons over this text directly, so truncating it hard (this
-            # used to cut to 200 chars) starves it of the detail needed for
-            # a specific, confident answer even when retrieval found the
-            # right chunk. Each passage is labelled with its citation number
-            # so the model can cite [n] — see ATTACHMENT_ANALYSIS_INSTRUCTIONS
-            # in routes/chat_intents.py for how it's told to use this.
-            lines = [f"Top {len(results)} results for '{text}':"]
-            image_blocks: list[ImageBlock] = []
-            for i, result in enumerate(results):
-                index = cited.index_for[i]
-                citation = citation_by_index.get(index)
-                label = f"[{index}] {citation.label()}" if citation else "(unlabelled)"
-                # A chart/table hit's content IS the image — forward the real
-                # ImageBlock into the tool result (same path
-                # capabilities/tools/ai/image_generator.py already uses) so a
-                # vision-capable model sees the actual pixels, not just OCR
-                # text of it.
-                #
-                # Attach each image at most once per conversation. A document
-                # usually holds only a handful of chart/table images, so every
-                # search in a turn retrieves the *same* top-k images — attaching
-                # them each time re-sent identical pixels to the model and made
-                # the UI render the same "N charts generated" group once per
-                # call. `first_seen` comes from the citation ledger, which
-                # already tracks per-(file, page) novelty for the life of the
-                # collection, so this also covers repeats within one batch.
-                page_images = [b for b in result.content if isinstance(b, ImageBlock)]
-                is_new = cited.first_seen[i] if i < len(cited.first_seen) else True
-                if is_new:
-                    image_blocks.extend(page_images)
-                if page_images and not any(
-                    True for b in result.content if not isinstance(b, ImageBlock)
-                ):
-                    note = (
-                        "[see attached image]"
-                        if is_new
-                        else "[image already attached earlier in this conversation]"
-                    )
-                    lines.append(f"\n{label} (score: {result.score:.3f})\n{note}")
-                    continue
-                passage = result.to_text()[:4000]
-                lines.append(f"\n{label} (score: {result.score:.3f})\n{passage}")
-            return ToolExecutionResult(
-                content=[TextBlock(text="\n".join(lines)), *image_blocks],
-                structured_content=cited.to_wire() if cited.citations else {},
             )
 
         return ToolExecutionResult(

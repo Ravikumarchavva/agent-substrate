@@ -515,7 +515,20 @@ async def init_tool_registry(
             KnowledgeSearchTool(
                 rag_backend,
                 final_k=cfg.RAG_FINAL_K,
-                min_rerank_score=cfg.RAG_MIN_RERANK_SCORE,
+                # RAG_MIN_RERANK_SCORE is calibrated for a reranker's
+                # calibrated 0-1 relevance score, not raw hybrid/RRF fusion
+                # scores (real, found-not-assumed: unreranked LanceDB RRF
+                # scores land around 0.01-0.05, so the 0.1 default silently
+                # dropped every result -- "unlabelled" citations with no
+                # obvious cause -- whenever EMBEDDING_RERANKER_SERVICE_URL
+                # isn't configured, which is the common case, since
+                # reranking is opt-in). Only apply it when this backend is
+                # actually reranking; otherwise the existing top-K ordering
+                # (already sorted+limited) is the real signal, not an
+                # absolute score value.
+                min_rerank_score=(
+                    cfg.RAG_MIN_RERANK_SCORE if cfg.EMBEDDING_RERANKER_SERVICE_URL else 0.0
+                ),
             )
         )
     if model_client is not None and embedding_client is not None:
@@ -980,6 +993,90 @@ def build_session_index_vector_store(
     from pathlib import Path
 
     return LanceDBVectorStore(path=Path(cfg.SESSION_INDEX_LOCAL_PATH) / key)
+
+
+def build_session_rag_backend(
+    cfg: SubstrateConfig,
+    tenant_id: str,
+    user_id: str,
+    embedding_client: Any,
+    model_client: Any | None = None,
+) -> Any:
+    """Build a ``LocalRagBackend`` scoped to one user's session-document
+    Lance store, wrapping ``build_session_index_vector_store`` above with the
+    same prefilter → hybrid rerank retrieval path ``KnowledgeSearchTool``
+    gets from the tenant-KB ``LocalRagBackend`` (``build_rag_backend``,
+    ``backends/factory.py``) — closes the gap where
+    ``SessionDocumentSearchTool`` called ``store.hybrid_search()`` directly
+    on the raw vector store, skipping reranking and citation-ready
+    ``SearchResult`` scoring entirely.
+
+    ``embedding_client`` is a required parameter (unlike the tenant-KB path,
+    where it's built once at server startup and threaded through
+    ``build_rag_backend``): this function has no server-startup counterpart
+    of its own, so the caller — ``SessionDocumentSearchTool``, which already
+    holds its own ``self._embedding_client`` — passes it through instead of
+    this function rebuilding one per call.
+
+    Reranking mirrors ``backends/factory.py``'s ``"local"`` branch exactly:
+    only enabled when ``cfg.EMBEDDING_RERANKER_SERVICE_URL`` is configured,
+    preferring the free local ``CrossEncoderReranker`` and falling back to
+    an ``LLMReranker`` (needs ``model_client``) only if reranking is wanted
+    but that service isn't configured.
+
+    No extraction/image-store wiring: this backend is query-only — session
+    documents are ingested via ``session_ingest.py::ingest_session_document``,
+    a separate path that never calls ``.ingest()``/``.load()`` on the
+    ``RagBackend`` this function returns.
+    """
+    from substrate.capabilities.knowledge.backends.local import LocalRagBackend
+    from substrate.capabilities.knowledge.pipeline import RAGPipeline
+
+    vector_store = build_session_index_vector_store(cfg, tenant_id, user_id)
+    pipeline = RAGPipeline(
+        embedding_client=embedding_client,
+        vector_store=vector_store,
+        default_chunk_size=getattr(cfg, "RAG_CHUNK_SIZE", 512),
+        default_chunk_overlap=getattr(cfg, "RAG_CHUNK_OVERLAP", 128),
+    )
+
+    embedding_reranker_client = None
+    if cfg.EMBEDDING_RERANKER_SERVICE_URL:
+        from substrate.runtimes.embedding_reranker.client import (
+            EmbeddingRerankerClient,
+        )
+
+        embedding_reranker_client = EmbeddingRerankerClient(
+            base_url=cfg.EMBEDDING_RERANKER_SERVICE_URL,
+            auth_token=cfg.EMBEDDING_RERANKER_AUTH_TOKEN,
+            timeout_s=cfg.EMBEDDING_RERANKER_TIMEOUT_S,
+        )
+
+    reranker = None
+    if cfg.EMBEDDING_RERANKER_SERVICE_URL:
+        if embedding_reranker_client is not None:
+            from substrate.capabilities.knowledge.reranker import CrossEncoderReranker
+
+            reranker = CrossEncoderReranker(embedding_reranker_client)
+        elif model_client is not None:
+            from substrate.capabilities.knowledge.reranker import LLMReranker
+
+            reranker = LLMReranker(model_client)
+
+    return LocalRagBackend(
+        pipeline,
+        vector_store=vector_store,
+        embedding_reranker_service_url=cfg.EMBEDDING_RERANKER_SERVICE_URL,
+        embedding_reranker_auth_token=cfg.EMBEDDING_RERANKER_AUTH_TOKEN,
+        embedding_reranker_timeout_s=cfg.EMBEDDING_RERANKER_TIMEOUT_S,
+        embedding_reranker_client=embedding_reranker_client,
+        reranker=reranker,
+        model_client=model_client,
+        dense_k=cfg.RAG_DENSE_K,
+        lexical_k=cfg.RAG_LEXICAL_K,
+        fused_k=cfg.RAG_FUSED_K,
+        rerank_top_n=cfg.RAG_RERANK_TOP_N,
+    )
 
 
 def build_page_index_memory(cfg: SubstrateConfig, tenant_id: str, user_id: str) -> Any:

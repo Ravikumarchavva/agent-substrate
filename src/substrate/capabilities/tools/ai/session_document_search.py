@@ -23,6 +23,8 @@ from substrate.agents.storage.tasks import (
     current_thread_id,
     current_user_id,
 )
+from substrate.capabilities.knowledge.citations import CitationLedgerStore
+from substrate.capabilities.knowledge.result_rendering import render_search_results
 from substrate.kernel import TextBlock
 from substrate.kernel.llm import EmbeddingClient, LLMClient
 from substrate.kernel.storage.vector import SearchResult
@@ -87,6 +89,13 @@ class SessionDocumentSearchTool:
         self._cfg = cfg
         self._embedding_client = embedding_client
         self._model_client = model_client
+        # Own ledger, own collection-key namespace ("session-docs:..." —
+        # never a bare thread id, which KnowledgeSearchTool's ledger already
+        # keys by for the *tenant* KB) — the two tools' CitationLedgerStore
+        # instances are already separate objects so numbers can't literally
+        # collide, but a distinct key namespace keeps it that way even if
+        # this tool and KnowledgeSearchTool were ever made to share a store.
+        self._ledgers = CitationLedgerStore()
 
     def _scope(self) -> tuple[str, str, str] | None:
         """(tenant_id, user_id, session_id) from the active chat context, or
@@ -138,30 +147,42 @@ class SessionDocumentSearchTool:
                 tenant_id, user_id, query, limit=limit, filter=session_filter
             )
 
-        if not results:
-            return ToolExecutionResult(content=[TextBlock(text="No matching documents found.")])
-
-        lines = [f"Top {len(results)} results for {query!r} (mode={mode}):"]
-        for result in results:
-            filename = result.metadata.get("filename", "unknown")
-            lines.append(f"\n[{filename}] (score: {result.score:.3f})\n{result.to_text()[:4000]}")
-        return ToolExecutionResult(content=[TextBlock(text="\n".join(lines))])
+        # One ledger per (session, mode): stable numbering across repeated
+        # calls within a mode for this conversation, without a vector-mode
+        # hit and a graph-mode hit for unrelated documents sharing an
+        # index — each mode draws from a differently-shaped index (chunks
+        # vs. outline tree vs. entity graph), so there's no real reason for
+        # them to share one numbering sequence.
+        collection = f"session-docs:{session_id}:{mode}"
+        # RAG_MIN_RERANK_SCORE is calibrated for a reranker's calibrated
+        # 0-1 relevance score, not raw hybrid/RRF fusion scores -- only
+        # meaningful when this backend is actually reranking (mirrors the
+        # identical guard in serving_factory.py's KnowledgeSearchTool
+        # construction; see its comment for the real bug this avoids).
+        min_score = (
+            getattr(self._cfg, "RAG_MIN_RERANK_SCORE", 0.1)
+            if getattr(self._cfg, "EMBEDDING_RERANKER_SERVICE_URL", "")
+            else 0.0
+        )
+        return render_search_results(
+            results,
+            backend_name=self.name,
+            collection=collection,
+            ledger=self._ledgers.get(collection),
+            query_text=query,
+            min_score=min_score,
+        )
 
     async def _search_vector(
         self, tenant_id: str, user_id: str, query: str, *, limit: int, filter: dict | None
     ) -> list[SearchResult]:
-        from substrate.infrastructure.serving_factory import (
-            build_session_index_vector_store,
-        )
+        from substrate.infrastructure.serving_factory import build_session_rag_backend
 
-        store = build_session_index_vector_store(self._cfg, tenant_id, user_id)
-        embedded = await self._embedding_client.embed([query])
-        return await store.hybrid_search(
-            embedded.embeddings[0],
-            query,
-            collection=_VECTOR_COLLECTION,
-            limit=limit,
-            filter=filter,
+        backend = build_session_rag_backend(
+            self._cfg, tenant_id, user_id, self._embedding_client, self._model_client
+        )
+        return await backend.query(
+            query, collection=_VECTOR_COLLECTION, limit=limit, filter=filter
         )
 
     async def _search_tree(

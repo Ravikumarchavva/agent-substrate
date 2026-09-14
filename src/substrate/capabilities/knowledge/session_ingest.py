@@ -14,16 +14,12 @@ move later. The old ``FileMetadata.staged_at``/``rag_ingested_at``/
 "has this file finished processing" and "has the daily quota been charged
 for it" — see the call sites in ``routes/files.py``/``routes/chat_context.py``.
 
-Extraction is deliberately reused from ``LocalRagBackend._load`` rather than
-reimplemented — same document-intelligence-service-or-pypdf path, same
-quality, no drift between the tenant-KB flow and this one. It's a "private"
-method by convention (leading underscore), not by real encapsulation need;
-crossing that line here avoids duplicating an extraction path this project
-already tuned (OCR-service integration, chart/table image handling) rather
-than re-deriving a worse one. Requires ``RAG_BACKEND=local`` — a
-Pinecone-configured deployment has no local extraction path to reuse, and
-this feature is out of scope for that backend for now (raises clearly
-rather than silently degrading).
+Extraction goes through the shared ``extract_document`` (document-
+intelligence-service-or-local-fallback) rather than being reimplemented here
+— same quality, no drift between the tenant-KB flow and this one. Unlike the
+old approach of reaching into ``LocalRagBackend._load``, ``extract_document``
+doesn't care which ``RagBackend`` implementation the caller uses for
+storage, so this function works regardless of ``RAG_BACKEND``.
 """
 
 from __future__ import annotations
@@ -59,12 +55,7 @@ async def ingest_session_document(
 ) -> SessionIngestResult:
     """Extract, chunk, embed, and index one uploaded document into the
     caller's per-user Lance-backed vector/tree/graph stores.
-
-    ``rag_backend`` must be a ``LocalRagBackend`` (see module docstring for
-    why) — raises ``TypeError`` otherwise, rather than silently skipping the
-    new index.
     """
-    from substrate.capabilities.knowledge.backends.local import LocalRagBackend
     from substrate.capabilities.knowledge.graph_rag import GraphRAGPipeline
     from substrate.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
     from substrate.capabilities.knowledge.pipeline import RAGPipeline
@@ -73,17 +64,34 @@ async def ingest_session_document(
         build_session_graph_store,
         build_session_index_vector_store,
     )
-
-    if not isinstance(rag_backend, LocalRagBackend):
-        raise TypeError(
-            "ingest_session_document requires RAG_BACKEND=local (needs "
-            f"LocalRagBackend._load for extraction); got {type(rag_backend).__name__}"
-        )
+    from substrate.integrations.llm.endpoint import InferenceEndpoint
+    from substrate.kernel.storage.vector import Document
+    from substrate.runtimes.document_intelligence.extract import extract_document
 
     document_id = uuid.uuid4().hex
-    text_documents, _image_items = await rag_backend._load(
-        data, metadata={"filename": filename, "content_type": content_type}
-    )
+    endpoint = None
+    if cfg.DOCUMENT_INTELLIGENCE_SERVICE_URL:
+        endpoint = InferenceEndpoint(
+            model="",
+            base_url=cfg.DOCUMENT_INTELLIGENCE_SERVICE_URL,
+            api_key=cfg.DOCUMENT_INTELLIGENCE_AUTH_TOKEN,
+            timeout_s=cfg.DOCUMENT_INTELLIGENCE_TIMEOUT_S,
+        )
+    result = await extract_document(data, filename, content_type, endpoint=endpoint)
+    text_documents = [
+        Document.from_text(
+            page.text,
+            metadata={
+                "filename": filename,
+                "content_type": content_type,
+                "engine": result.engine,
+                "page_number": page.page_number,
+                "total_pages": len(result.pages),
+            },
+        )
+        for page in result.pages
+        if page.text.strip()
+    ]
     if not text_documents:
         return SessionIngestResult(
             document_id=document_id,
@@ -127,7 +135,7 @@ async def ingest_session_document(
     # rag_pipeline arg is required by GraphRAGPipeline's constructor but
     # unused here — we call _extract_and_store_graph directly (see module
     # docstring) instead of ingest_with_graph, which would re-chunk raw
-    # text through a different, simpler path than LocalRagBackend._load's
+    # text through a different, simpler path than extract_document's
     # already-extracted per-page Documents above.
     graph_pipeline = GraphRAGPipeline(
         rag_pipeline=rag, graph_store=graph_store, model_client=model_client

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from substrate.runtimes.document_intelligence.service.pipeline import (
+from substrate.runtimes.document_intelligence.service.engines.paddle_classic import (
     _nearest_score,
     _rewrite_markdown_images,
     _score_lookup,
@@ -160,6 +160,7 @@ def _pipeline_with_fake_result(blocks, *, boxes, markdown_texts=""):
     )
 
     pipeline = object.__new__(ExtractionPipeline)
+    pipeline._max_pages_per_call = None
     fake_result = _FakeResult(
         page_index=0, boxes=boxes, blocks=blocks, markdown_texts=markdown_texts
     )

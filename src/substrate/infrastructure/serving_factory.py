@@ -339,6 +339,8 @@ async def init_infrastructure(
             lexical_k=cfg.RAG_LEXICAL_K,
             fused_k=cfg.RAG_FUSED_K,
             rerank_top_n=cfg.RAG_RERANK_TOP_N,
+            chunk_size=cfg.RAG_CHUNK_SIZE,
+            chunk_overlap=cfg.RAG_CHUNK_OVERLAP,
         )
     except Exception as exc:  # noqa: BLE001 - degrade to "no RAG", never crash startup
         rag_backend = None
@@ -509,7 +511,13 @@ async def init_tool_registry(
     if code_interpreter_tool:
         registry.add(code_interpreter_tool)
     if rag_backend:
-        registry.add(KnowledgeSearchTool(rag_backend))
+        registry.add(
+            KnowledgeSearchTool(
+                rag_backend,
+                final_k=cfg.RAG_FINAL_K,
+                min_rerank_score=cfg.RAG_MIN_RERANK_SCORE,
+            )
+        )
     if model_client is not None and embedding_client is not None:
         from substrate.capabilities.tools.ai.session_document_search import (
             SessionDocumentSearchTool,

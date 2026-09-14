@@ -142,3 +142,20 @@ async def test_no_scope_without_context_vars(cfg, embedding_client) -> None:
     tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
     result = await tool.execute(query="anything")
     assert result.is_error
+
+
+async def test_omitted_limit_uses_cfg_rag_final_k(cfg, embedding_client) -> None:
+    """Mirrors config.py's RAG_FINAL_K -- a caller omitting `limit` entirely
+    should get the configured default, not a hardcoded 5."""
+    cfg.RAG_FINAL_K = 17
+    tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
+    captured = {}
+
+    async def _fake_search_vector(tenant_id, user_id, query, *, limit, filter=None):
+        captured["limit"] = limit
+        return []
+
+    tool._search_vector = _fake_search_vector
+    await tool.execute(query="anything")
+
+    assert captured["limit"] == 17

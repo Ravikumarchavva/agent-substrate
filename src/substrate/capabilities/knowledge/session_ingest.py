@@ -119,7 +119,12 @@ async def ingest_session_document(
     ]
 
     vector_store = build_session_index_vector_store(cfg, tenant_id, user_id)
-    rag = RAGPipeline(embedding_client=embedding_client, vector_store=vector_store)
+    rag = RAGPipeline(
+        embedding_client=embedding_client,
+        vector_store=vector_store,
+        default_chunk_size=getattr(cfg, "RAG_CHUNK_SIZE", 512),
+        default_chunk_overlap=getattr(cfg, "RAG_CHUNK_OVERLAP", 128),
+    )
     chunks = await rag.ingest_documents(text_documents, collection="vectors")
 
     memory_store = build_page_index_memory(cfg, tenant_id, user_id)

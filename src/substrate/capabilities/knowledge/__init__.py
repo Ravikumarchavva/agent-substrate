@@ -17,11 +17,15 @@ from substrate.capabilities.knowledge.chunking import (
     get_chunker,
 )
 from substrate.capabilities.knowledge.reranker import LLMReranker
-from substrate.capabilities.knowledge.document_ingest_pipeline import (
-    DocumentIngestPipeline,
-    ExtractionFailedError,
-)
 from substrate.capabilities.knowledge.ask import ask, AskResult, Citation, list_catalog
+
+# document_ingest_pipeline.DocumentIngestPipeline/ExtractionFailedError are
+# deliberately NOT re-exported here: zero production callers (confirmed via
+# repo-wide grep — only its own test file uses it), so nothing should be
+# able to pick it up as the package's "the" ingest pipeline by importing
+# from this top-level namespace. Import directly from
+# substrate.capabilities.knowledge.document_ingest_pipeline if you
+# specifically want it.
 
 __all__ = [
     "GraphStore",
@@ -41,8 +45,6 @@ __all__ = [
     "PageChunker",
     "get_chunker",
     "LLMReranker",
-    "DocumentIngestPipeline",
-    "ExtractionFailedError",
     "ask",
     "AskResult",
     "Citation",

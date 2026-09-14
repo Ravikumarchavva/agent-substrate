@@ -163,6 +163,52 @@ async def test_erase_user_deletes_threads_metadata_and_the_user_row(
 
 
 @pytest.mark.requires_postgres
+async def test_erase_user_also_clears_never_sent_pending_attachments(
+    db: AsyncSession, db_factory, cfg
+):
+    """A composer attachment never touches `store` until the message
+    carrying it is actually sent (routes/files.py) — before wiring
+    pending_store in, one staged but never sent survived erasure entirely."""
+    tenant_id = f"tenant-{uuid.uuid4()}"
+    user_uuid = uuid.uuid4()
+    db.add(User(id=user_uuid, identifier=f"owner-{user_uuid}@example.com"))
+    thread = Thread(
+        id=uuid.uuid4(), user_identifier=str(user_uuid), tenant_id=tenant_id
+    )
+    db.add(thread)
+    await db.commit()
+
+    store = FakeStore()
+    pending_store = FakeStore()
+    pending_key = (
+        f"tenants/{tenant_id}/users/{user_uuid}/conversations/"
+        f"{thread.id}/workspace/shared/never-sent.txt"
+    )
+    pending_store.objects[pending_key] = b"draft"
+
+    try:
+        summary = await erase_user(
+            db,
+            store=store,
+            redis=None,
+            tenant_id=tenant_id,
+            user_id=str(user_uuid),
+            cfg=cfg,
+            pending_store=pending_store,
+        )
+        assert pending_key not in pending_store.objects
+        assert summary.objects_deleted >= 1
+    finally:
+        row = await db.get(Thread, thread.id)
+        if row is not None:
+            await db.delete(row)
+        user_row = await db.get(User, user_uuid)
+        if user_row is not None:
+            await db.delete(user_row)
+        await db.commit()
+
+
+@pytest.mark.requires_postgres
 async def test_erase_user_with_non_uuid_sub_skips_the_user_table(
     db: AsyncSession, db_factory, cfg
 ):
@@ -204,8 +250,8 @@ async def test_erase_tenant_deletes_every_thread_in_that_tenant_only(
     await db.commit()
 
     store = FakeStore()
-    key_a = f"tenants/{tenant_a}/conversations/{thread_a.id}/workspace/shared/a.txt"
-    key_b = f"tenants/{tenant_b}/conversations/{thread_b.id}/workspace/shared/b.txt"
+    key_a = f"tenants/{tenant_a}/users/u1/conversations/{thread_a.id}/workspace/shared/a.txt"
+    key_b = f"tenants/{tenant_b}/users/u2/conversations/{thread_b.id}/workspace/shared/b.txt"
     store.objects[key_a] = b"a"
     store.objects[key_b] = b"b"
 

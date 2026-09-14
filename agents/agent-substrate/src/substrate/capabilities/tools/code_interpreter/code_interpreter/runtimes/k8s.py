@@ -63,6 +63,7 @@ class K8sRuntime:
                 spec.argv,
                 spec.timeout_s,
                 spec.user_id,
+                spec.tenant_id,
             )
         else:
             result = await asyncio.to_thread(
@@ -71,6 +72,7 @@ class K8sRuntime:
                 spec.code or "",
                 spec.timeout_s,
                 spec.user_id,
+                spec.tenant_id,
             )
 
         return ExecResult(

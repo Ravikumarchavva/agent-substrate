@@ -195,17 +195,4 @@ class CodeInterpreterTool:
         await self._runtime.stop()
 
 
-def _session_dir(user_id: str | None, thread_id: str) -> str:
-    """The store-relative session key the runtime scopes execution to.
-
-    Mirrors ``routes/workspace.py::_session_key`` so the sandbox writes exactly
-    where the file-serving endpoint, ``sandbox:`` refs, and versioning read.
-    Without a user identity there is no per-user tree to scope into, so fall
-    back to a session-only path.
-    """
-    if user_id:
-        return f"users/{user_id}/sessions/{thread_id}"
-    return f"sessions/{thread_id}"
-
-
 __all__ = ["CodeInterpreterTool"]

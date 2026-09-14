@@ -104,8 +104,11 @@ async def exchange_token(body: TokenExchangeRequest, request: Request):
         user_id=payload.sub,
         email=payload.email,
         role=payload.role,
+        tenant_id=payload.tenant_id,
     )
-    refresh_token, jti, refresh_exp = create_refresh_token(payload.sub)
+    refresh_token, jti, refresh_exp = create_refresh_token(
+        payload.sub, tenant_id=payload.tenant_id
+    )
     await _store_refresh_jti(request, jti, refresh_exp)
 
     expires_in = int(
@@ -142,8 +145,10 @@ async def refresh_tokens(body: RefreshRequest, request: Request):
     # Revoke old JTI before issuing new tokens
     await _revoke_refresh_jti(request, payload.jti)
 
-    access_token, _ = create_access_token(user_id=payload.sub)
-    refresh_token, new_jti, refresh_exp = create_refresh_token(payload.sub)
+    access_token, _ = create_access_token(user_id=payload.sub, tenant_id=payload.tenant_id)
+    refresh_token, new_jti, refresh_exp = create_refresh_token(
+        payload.sub, tenant_id=payload.tenant_id
+    )
     await _store_refresh_jti(request, new_jti, refresh_exp)
 
     expires_in = int(

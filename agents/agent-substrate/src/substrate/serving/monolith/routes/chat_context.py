@@ -280,9 +280,16 @@ async def _build_file_context(
             mount_path = "/workspace"
             relative_path = _session_relative_path(meta.object_key)
         elif settings.CI_WORKSPACE_PVC_CLAIM:
-            parts = meta.object_key.split("/", 2)
-            if len(parts) == 3 and parts[0] == "users":
-                relative_path = parts[2]
+            # The k8s pod's PVC subPath is `tenants/{tid}/users/{uid}`
+            # (sandbox_service.py::_ensure_user_template), so a path inside
+            # the pod is whatever follows that prefix in the object key —
+            # `conversations/{cid}/workspace/shared/{name}` for a real
+            # conversation file. Anchored at fixed positions, matching
+            # every other new-shape parser in this codebase (see
+            # routes/workspace.py's _is_version_key/_session_id_from_key).
+            parts = meta.object_key.split("/")
+            if len(parts) >= 5 and parts[0] == "tenants" and parts[2] == "users":
+                relative_path = "/".join(parts[4:])
         if relative_path is not None:
             attachment["workspace_path"] = f"{mount_path}/{relative_path}"
 

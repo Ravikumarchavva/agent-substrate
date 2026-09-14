@@ -28,7 +28,7 @@ from substrate.logger import setup_logging
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
-from substrate.serving.monolith.security.deps import get_current_user
+from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.schemas import (
     ScheduledTaskCreate,
     ScheduledTaskUpdate,
@@ -72,6 +72,7 @@ async def create_scheduled_task_endpoint(
     body: ScheduledTaskCreate,
     db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Create a new persistent scheduled task."""
     scheduler = ctx.trigger_scheduler
@@ -80,11 +81,18 @@ async def create_scheduled_task_endpoint(
     kind = body.kind or "cron"
     validate_schedule(body.cron_expression, kind)
 
-    # 1. Create a dedicated thread for the scheduled task
+    # 1. Create a dedicated thread for the scheduled task, owned by the
+    # caller — an unowned/untenanted thread here used to be silently
+    # tolerated by RLS's now-removed `tenant_id IS NULL` escape hatch and
+    # get_owned_thread's now-removed legacy-claim branch; both are gone
+    # (see thread_service.py/rls.py), so this insert must stamp real
+    # ownership itself now, same as routes/threads.py.
     thread = await create_thread(
         db,
         name=body.name,
         tags=["scheduled_task"],
+        user_identifier=user.sub,
+        tenant_id=user.tenant_id,
     )
 
     # 2. Save scheduled task definition

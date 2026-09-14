@@ -23,6 +23,7 @@ def create_access_token(
     user_id: str,
     email: str = "",
     role: str = "user",
+    tenant_id: str = "",
     extra: dict[str, Any] | None = None,
 ) -> tuple[str, datetime]:
     return _jwt.create_access_token(
@@ -30,16 +31,18 @@ def create_access_token(
         _SECRET,
         email=email,
         role=role,
+        tenant_id=tenant_id,
         algorithm=_ALG,
         expire_minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
         extra=extra,
     )
 
 
-def create_refresh_token(user_id: str) -> tuple[str, str, datetime]:
+def create_refresh_token(user_id: str, tenant_id: str = "") -> tuple[str, str, datetime]:
     return _jwt.create_refresh_token(
         user_id,
         _SECRET,
+        tenant_id=tenant_id,
         algorithm=_ALG,
         expire_days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS,
     )

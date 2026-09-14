@@ -5,21 +5,22 @@ docker-compose volume, or a k8s RWX PVC mount in production — never on the
 end user's machine). Keys are POSIX-relative paths under
 ``tenants/{tenant_id}/`` — see ``capabilities/storage/layout.py`` for the
 canonical builders (``tenants/{tid}/users/{uid}/...`` for a user's own
-uploads not tied to a conversation, ``tenants/{tid}/conversations/{cid}/workspace/...``
-for a conversation's shared/version files, ``tenants/{tid}/knowledge/{kb}/...``
-for knowledge-base documents). Callers (routes) build keys from authenticated
+uploads not tied to a conversation, ``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/...``
+for a conversation's shared/version files — nested under its owning user,
+not a tenant-level sibling — and ``tenants/{tid}/knowledge/{kb}/...`` for
+knowledge-base documents). Callers (routes) build keys from authenticated
 identity via ``layout.py``, never from raw client input.
 
 This is Phase 1 (single-tier): the filesystem tree IS the record, not a
 cache in front of object storage. Quota enforcement here is soft/app-layer,
-scoped per tenant (not per user): a conversation's files carry no user
-segment in their key by design (ownership lives in Postgres' ``threads``
-table, not the storage key), so a tenant is the only identity every key
-reliably carries — matching the same tenant-first quota key ``chat.py``'s
-daily-message-limit check already prefers over a raw user id. This check
-protects against accidental runaway usage, not a hostile actor with another
-path onto the same volume. The hard isolation boundary against other tenants
-is the k8s ``subPath`` mount into each sandbox pod (see
+scoped per tenant (not per user): even though a conversation's files do
+carry a user segment in their key (for real ownership resolution — see
+``routes/workspace.py::_thread_owner``), quota stays metered per tenant, the
+same coarser identity ``chat.py``'s daily-message-limit check already
+prefers over a raw user id. This check protects against accidental runaway
+usage, not a hostile actor with another path onto the same volume. The hard
+isolation boundary against other tenants is the k8s ``subPath`` mount into
+each sandbox pod (see
 ``capabilities/tools/code_interpreter/code_interpreter/sandbox_service.py``),
 not this quota check.
 """
@@ -173,23 +174,38 @@ class WorkspaceFileStore:
 
     async def list_conversations(self, tenant_id: str) -> list[tuple[str, int, int]]:
         """``(conversation_id, size_bytes, file_count)`` for every
-        conversation workspace under ``tenants/{tenant_id}/conversations/``
-        — the admin storage drill-down."""
-        conversations_root = self._root / "tenants" / tenant_id / "conversations"
-        if not conversations_root.is_dir():
+        conversation workspace under ``tenants/{tenant_id}/users/*/
+        conversations/`` — the admin storage drill-down.
+
+        Conversations nest under their owning user, not directly under the
+        tenant (see ``capabilities/storage/layout.py``'s
+        ``conversation_workspace_prefix``), so every user directory under
+        the tenant must be walked, not just a single ``conversations/``
+        that no longer exists at the tenant's top level. Conversation ids
+        are thread UUIDs — globally unique, so no user segment is needed to
+        disambiguate them in the result.
+        """
+        users_root = self._root / "tenants" / tenant_id / "users"
+        if not users_root.is_dir():
             return []
         results: list[tuple[str, int, int]] = []
-        for conv_dir in sorted(p for p in conversations_root.iterdir() if p.is_dir()):
-            size = 0
-            count = 0
-            for dirpath, _dirnames, filenames in os.walk(conv_dir):
-                for name in filenames:
-                    try:
-                        size += (Path(dirpath) / name).stat().st_size
-                    except OSError:
-                        continue
-                    count += 1
-            results.append((conv_dir.name, size, count))
+        for user_dir in sorted(p for p in users_root.iterdir() if p.is_dir()):
+            conversations_root = user_dir / "conversations"
+            if not conversations_root.is_dir():
+                continue
+            for conv_dir in sorted(
+                p for p in conversations_root.iterdir() if p.is_dir()
+            ):
+                size = 0
+                count = 0
+                for dirpath, _dirnames, filenames in os.walk(conv_dir):
+                    for name in filenames:
+                        try:
+                            size += (Path(dirpath) / name).stat().st_size
+                        except OSError:
+                            continue
+                        count += 1
+                results.append((conv_dir.name, size, count))
         return results
 
     async def upload(

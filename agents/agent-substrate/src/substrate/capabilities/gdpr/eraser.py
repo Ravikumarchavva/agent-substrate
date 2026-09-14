@@ -59,6 +59,7 @@ async def erase_user(
     tenant_id: str,
     user_id: str,
     cfg: Any,
+    pending_store: Any = None,
 ) -> ErasureSummary:
     threads = list(
         (
@@ -102,6 +103,11 @@ async def erase_user(
     # along with it — no separate per-conversation sweep needed, and
     # nothing to miss if a thread's ownership record were ever wrong.
     objects = await _delete_prefix(store, user_prefix(tenant_id, user_id))
+    if pending_store is not None and hasattr(pending_store, "delete_prefix"):
+        # A composer attachment never touches `store` until the message
+        # carrying it is sent (routes/files.py) — without this, one staged
+        # but never-sent survives erasure entirely.
+        objects += await pending_store.delete_prefix(user_prefix(tenant_id, user_id))
     redis_deleted = await _redis_sweep(redis, {user_id, *thread_ids})
     session_index_tables = await erase_session_index(cfg, tenant_id, user_id)
     return ErasureSummary(
@@ -116,7 +122,13 @@ async def erase_user(
 
 
 async def erase_tenant(
-    db: AsyncSession, *, store: Any, redis: Any, tenant_id: str, cfg: Any
+    db: AsyncSession,
+    *,
+    store: Any,
+    redis: Any,
+    tenant_id: str,
+    cfg: Any,
+    pending_store: Any = None,
 ) -> ErasureSummary:
     threads = list(
         (
@@ -131,6 +143,8 @@ async def erase_tenant(
     await db.execute(delete(Thread).where(Thread.tenant_id == tenant_id))
     await db.commit()
     objects = await _delete_prefix(store, tenant_prefix(tenant_id))
+    if pending_store is not None and hasattr(pending_store, "delete_prefix"):
+        objects += await pending_store.delete_prefix(tenant_prefix(tenant_id))
     redis_deleted = await _redis_sweep(redis, thread_ids | users)
     session_index_tables = await erase_session_index_for_tenant(cfg, tenant_id, users)
     return ErasureSummary(

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from substrate.logger import setup_logging
 from substrate.serving.shared.settings import settings
-from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun
+from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
 from substrate.infrastructure.serving_factory import (
     build_agent_for_thread,
     build_chat_tools,
@@ -71,6 +71,23 @@ async def execute_scheduled_task(
                 logger.info(
                     "Scheduled task %s is not active (status: %s)", task_id, task.status
                 )
+                return
+
+            # The owning thread may have been soft-deleted (user deleted the
+            # conversation from the sidebar) without the task itself being
+            # touched — without this check the task keeps running forever
+            # against a conversation its owner believes is gone. Pause it
+            # rather than silently skip-and-retry-next-time so it doesn't
+            # burn compute on every future firing too.
+            thread = await db.get(Thread, task.thread_id)
+            if thread is None or thread.deleted_at is not None:
+                logger.info(
+                    "Scheduled task %s's thread %s was deleted; pausing task",
+                    task_id,
+                    task.thread_id,
+                )
+                task.status = "paused"
+                await db.commit()
                 return
 
             # 1. Fetch recent runs for lookback

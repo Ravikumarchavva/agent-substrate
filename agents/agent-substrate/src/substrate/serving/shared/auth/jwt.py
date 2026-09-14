@@ -57,14 +57,22 @@ def create_refresh_token(
     user_id: str,
     secret: str,
     *,
+    tenant_id: str = "",
     algorithm: str = _DEFAULT_ALG,
     expire_days: int = 30,
 ) -> tuple[str, str, datetime]:
-    """Create a rotation-capable refresh token. Returns (jwt_str, jti, expires_at)."""
+    """Create a rotation-capable refresh token. Returns (jwt_str, jti, expires_at).
+
+    Carries ``tenant_id`` so the access token minted on refresh (see
+    ``verify_token``, which requires a non-empty ``tenant_id`` on every
+    non-service token) can preserve the caller's tenant without a DB
+    round-trip.
+    """
     expires_at = _now() + timedelta(days=expire_days)
     jti = str(uuid4())
     claims: dict[str, Any] = {
         "sub": user_id,
+        "tenant_id": tenant_id,
         "jti": jti,
         "type": "refresh",
         "iat": _now(),

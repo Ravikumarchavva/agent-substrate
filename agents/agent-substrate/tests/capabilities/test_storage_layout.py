@@ -12,8 +12,8 @@ from substrate.capabilities.storage.layout import (
 
 def test_canonical_keys_are_tenant_first() -> None:
     assert user_prefix("tenant-a", "user-a") == "tenants/tenant-a/users/user-a"
-    assert conversation_shared_key("tenant-a", "thread-a", "uploads/report.pdf") == (
-        "tenants/tenant-a/conversations/thread-a/workspace/shared/uploads/report.pdf"
+    assert conversation_shared_key("tenant-a", "user-a", "thread-a", "uploads/report.pdf") == (
+        "tenants/tenant-a/users/user-a/conversations/thread-a/workspace/shared/uploads/report.pdf"
     )
     assert knowledge_document_prefix("tenant-a", "kb-a", "doc-a") == (
         "tenants/tenant-a/knowledge/kb-a/documents/doc-a"
@@ -31,4 +31,4 @@ def test_identifiers_cannot_escape_storage_tree(value: str) -> None:
 
 def test_relative_paths_cannot_traverse() -> None:
     with pytest.raises(ValueError):
-        conversation_shared_key("tenant-a", "thread-a", "../../secret")
+        conversation_shared_key("tenant-a", "user-a", "thread-a", "../../secret")

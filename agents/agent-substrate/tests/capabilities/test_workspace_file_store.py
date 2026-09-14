@@ -129,9 +129,18 @@ async def test_list_all_tenants_empty_when_no_tenants_dir(store):
 
 
 async def test_list_conversations(store):
-    await store.upload("tenants/t1/conversations/c1/workspace/shared/a.txt", b"aa")
-    await store.upload("tenants/t1/conversations/c1/workspace/shared/b.txt", b"b")
-    await store.upload("tenants/t1/conversations/c2/workspace/shared/c.txt", b"ccc")
+    # Conversations nest under their owning user, not directly under the
+    # tenant (capabilities/storage/layout.py) — c1/c2 belong to different
+    # users, so the drill-down must walk every user directory.
+    await store.upload(
+        "tenants/t1/users/u1/conversations/c1/workspace/shared/a.txt", b"aa"
+    )
+    await store.upload(
+        "tenants/t1/users/u1/conversations/c1/workspace/shared/b.txt", b"b"
+    )
+    await store.upload(
+        "tenants/t1/users/u2/conversations/c2/workspace/shared/c.txt", b"ccc"
+    )
     # Not under conversations/ — must not show up as a "conversation".
     await store.upload("tenants/t1/users/u1/uploads/d.txt", b"dddd")
 

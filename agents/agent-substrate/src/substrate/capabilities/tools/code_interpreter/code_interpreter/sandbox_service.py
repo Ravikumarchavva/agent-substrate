@@ -58,9 +58,12 @@ class CodeInterpreterService:
         code: str,
         timeout: int | None = None,
         user_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> dict[str, Any]:
         with self._lock_for_thread(thread_id):
-            sandbox, session = self._get_or_create_sandbox(thread_id, user_id=user_id)
+            sandbox, session = self._get_or_create_sandbox(
+                thread_id, user_id=user_id, tenant_id=tenant_id
+            )
             payload = {"code": code, "session_id": thread_id}
             data = self._runtime_json(
                 sandbox,
@@ -77,6 +80,7 @@ class CodeInterpreterService:
         argv: list[str],
         timeout: int | None = None,
         user_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> dict[str, Any]:
         """Run a shell command in the session's pod (the ``command`` tool path).
 
@@ -85,7 +89,9 @@ class CodeInterpreterService:
         same isolation boundary as ``run_code`` applies.
         """
         with self._lock_for_thread(thread_id):
-            sandbox, session = self._get_or_create_sandbox(thread_id, user_id=user_id)
+            sandbox, session = self._get_or_create_sandbox(
+                thread_id, user_id=user_id, tenant_id=tenant_id
+            )
             effective_timeout = timeout or self.config.request_timeout
             data = self._runtime_json(
                 sandbox,
@@ -241,7 +247,11 @@ class CodeInterpreterService:
         return {"status": "ok", "action": "list_sessions", "sessions": sessions}
 
     def _get_or_create_sandbox(
-        self, thread_id: str, *, user_id: str | None = None
+        self,
+        thread_id: str,
+        *,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> tuple[Any, SandboxSession]:
         existing_session = self.store.get(thread_id)
         existing_handle = self._handles.get(thread_id)
@@ -269,10 +279,12 @@ class CodeInterpreterService:
         # Fall back to shared template if no user ID or workspace PVC configured
         template = self.config.template
         per_user_template = (
-            user_id is not None and self.config.workspace_pvc_claim is not None
+            user_id is not None
+            and tenant_id is not None
+            and self.config.workspace_pvc_claim is not None
         )
         if per_user_template:
-            template = self._ensure_user_template(str(user_id))
+            template = self._ensure_user_template(str(user_id), str(tenant_id))
 
         # Warm pools cannot carry user-specific subPath mounts; cold start required for isolation
         warmpool = None if per_user_template else self.config.warmpool
@@ -297,16 +309,21 @@ class CodeInterpreterService:
         self.store.upsert(session)
         return sandbox, session
 
-    def _ensure_user_template(self, user_id: str) -> str:
+    def _ensure_user_template(self, user_id: str, tenant_id: str) -> str:
         """Return a per-user SandboxTemplate name, creating it on first use.
 
         Clones the base ``self.config.template`` spec and adds a volume for
         ``self.config.workspace_pvc_claim`` mounted at
-        ``self.config.workspace_mount_path`` with ``subPath: users/{user_id}``
-        — that subPath is what makes one user's sandbox physically unable to
-        read another user's files on the shared PVC.
+        ``self.config.workspace_mount_path`` with ``subPath:
+        tenants/{tenant_id}/users/{user_id}`` — the same prefix every
+        object key carries (``capabilities/storage/layout.py``'s
+        ``user_prefix``), so a path *inside* the pod (what
+        ``routes/chat_context.py``'s PVC branch computes) is exactly the
+        object key with that prefix stripped. The subPath itself is what
+        makes one user's sandbox physically unable to read another user's
+        (or another tenant's) files on the shared PVC.
         """
-        name = f"python-sandbox-{hashlib.sha256(user_id.encode()).hexdigest()[:20]}"
+        name = f"python-sandbox-{hashlib.sha256(f'{tenant_id}/{user_id}'.encode()).hexdigest()[:20]}"
         if name in self._user_template_names:
             return name
 
@@ -365,12 +382,12 @@ class CodeInterpreterService:
                 {
                     "name": volume_name,
                     "mountPath": self.config.workspace_mount_path,
-                    "subPath": f"users/{user_id}",
+                    "subPath": f"tenants/{tenant_id}/users/{user_id}",
                 },
                 {
                     "name": volume_name,
                     "mountPath": kb_mount_path,
-                    "subPath": f"users/{user_id}/kb",
+                    "subPath": f"tenants/{tenant_id}/users/{user_id}/kb",
                     "readOnly": True,
                 },
             ]

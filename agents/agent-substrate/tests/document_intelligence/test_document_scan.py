@@ -31,11 +31,33 @@ class _FakeConfig:
     max_upload_bytes: int = 50 * 1024 * 1024
     pod_name: str = "document-intelligence-test"
     enable_document_security_scan: bool = True
+    mode: str = "auto"
 
 
-class _FakePipeline:
+@dataclass
+class _FakeResolved:
+    mode: str = "raw_text"
+    degraded_from: str | None = None
+    worker_count: int = 0
+
+
+class _FakeEngine:
+    name = "fake-engine"
+
     def __init__(self) -> None:
         self.extract_calls: list[bytes] = []
+
+    def supported_formats(self) -> set[str]:
+        return {"application/pdf"}
+
+    def accepts(self, filename: str, content_type: str) -> bool:
+        return content_type in self.supported_formats()
+
+    def warmup(self) -> None:
+        pass
+
+    async def aclose(self) -> None:
+        pass
 
     def extract(self, data: bytes, filename: str) -> ExtractionResult:
         self.extract_calls.append(data)
@@ -44,17 +66,21 @@ class _FakePipeline:
             markdown="parsed content",
         )
 
+    def extract_batch(self, items: list[tuple[bytes, str]]) -> list[ExtractionResult]:
+        return [self.extract(data, filename) for data, filename in items]
+
 
 def _client(
-    *, config: _FakeConfig | None = None, pipeline: _FakePipeline | None = None
+    *, config: _FakeConfig | None = None, pipeline: _FakeEngine | None = None
 ):
     app = FastAPI()
     app.include_router(router)
-    app.state.pipeline = pipeline or _FakePipeline()
+    app.state.engine = pipeline or _FakeEngine()
     app.state.embedding_reranker = None
     app.state.config = config or _FakeConfig()
+    app.state.resolved = _FakeResolved()
     app.state.start_time = time.monotonic()
-    return TestClient(app), app.state.pipeline
+    return TestClient(app), app.state.engine
 
 
 def _malicious_pdf_bytes() -> bytes:

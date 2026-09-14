@@ -14,6 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
+from .engines.base import DeclarativeExtractionEngine, ExtractionEngine, PaginatedExtractionEngine
 from .schemas import (
     ExtractBatchRequest,
     ExtractedImage,
@@ -26,16 +27,6 @@ from .schemas import (
 logger = setup_logging()
 
 router = APIRouter(prefix="/v1", tags=["document-intelligence"])
-
-# PaddleOCR/PaddleX reads PDF and raster images natively — no DOCX/PPTX
-# parser (verified: no docx/pptx handling anywhere in paddlex's own readers).
-# DOCX/PPTX chat attachments and RAG ingest fall back to metadata-only, same
-# as when no extraction service is configured at all.
-_SUPPORTED_CONTENT_TYPES = {
-    "application/pdf",
-    "image/png",
-    "image/jpeg",
-}
 
 
 async def _verify_token(
@@ -55,14 +46,36 @@ async def _verify_token(
 Authed = Annotated[None, Depends(_verify_token)]
 
 
+async def _run_engine(engine: ExtractionEngine, data: bytes, filename: str):
+    """Dispatch to whichever extraction shape this engine implements —
+    ``routes.py`` never hardcodes which concrete engine is running, only
+    which of the two ``ExtractionEngine`` Protocols it satisfies. Paginated
+    engines are already async (they may await a pooled worker); declarative
+    engines are sync library calls run off the event loop so one slow
+    extraction doesn't stall every other request this service is handling."""
+    if isinstance(engine, PaginatedExtractionEngine):
+        return await engine.aextract(data, filename)
+    assert isinstance(engine, DeclarativeExtractionEngine)
+    return await asyncio.to_thread(engine.extract, data, filename)
+
+
+async def _run_engine_batch(engine: ExtractionEngine, items: list[tuple[bytes, str]]):
+    if isinstance(engine, PaginatedExtractionEngine):
+        return await engine.aextract_batch(items)
+    assert isinstance(engine, DeclarativeExtractionEngine)
+    return await asyncio.to_thread(engine.extract_batch, items)
+
+
 @router.post("/extract", response_model=ExtractResponse)
 async def extract(body: ExtractRequest, request: Request, _: Authed):
     """Extract layout-aware text + chart/table images from a document."""
-    if body.content_type not in _SUPPORTED_CONTENT_TYPES:
+    engine: ExtractionEngine = request.app.state.engine
+    if not engine.accepts(body.filename, body.content_type):
         raise HTTPException(
             400,
-            f"Unsupported content_type {body.content_type!r}. "
-            f"Supported: {sorted(_SUPPORTED_CONTENT_TYPES)}",
+            f"Unsupported content_type {body.content_type!r} for "
+            f"filename {body.filename!r}. Supported by the running "
+            f"{engine.name!r} engine: {sorted(engine.supported_formats())}",
         )
 
     cfg = request.app.state.config
@@ -77,8 +90,8 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
         )
 
     # Structural/security scan on the RAW bytes, before the parser touches
-    # them — a hostile file must not get a chance to exploit PaddleOCR/
-    # PaddleX's own parsing first. See
+    # them — a hostile file must not get a chance to exploit the extraction
+    # engine's own parsing first. See
     # runtimes/document_intelligence/security_scan.py for what's actually
     # verified working here (not just wired up).
     if getattr(cfg, "enable_document_security_scan", True):
@@ -105,12 +118,8 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
                 error=f"Document failed security scan: {scan_verdict.detail}"[:500],
             )
 
-    pipeline = request.app.state.pipeline
     try:
-        # PaddleOCR inference is CPU-bound and synchronous — run off the
-        # event loop so one slow extraction doesn't stall every other
-        # request this service is handling.
-        result = await asyncio.to_thread(pipeline.extract, data, body.filename)
+        result = await _run_engine(engine, data, body.filename)
     except Exception as exc:
         logger.warning("Extraction failed for %r: %s", body.filename, exc)
         return ExtractResponse(success=False, error=str(exc)[:500])
@@ -119,8 +128,8 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
 
 
 def _build_extract_response(result) -> ExtractResponse:
-    """Shape a pipeline ``ExtractionResult`` into the wire ``ExtractResponse``
-    — shared by ``/extract`` and ``/extract-batch``."""
+    """Shape an engine's ``ExtractionResult`` into the wire
+    ``ExtractResponse`` — shared by ``/extract`` and ``/extract-batch``."""
     pages = result.pages
     page_texts = [
         ExtractedPageText(
@@ -148,6 +157,7 @@ def _build_extract_response(result) -> ExtractResponse:
         return ExtractResponse(
             success=False,
             error="No extractable content found (empty or scanned document)",
+            engine=result.engine,
         )
 
     return ExtractResponse(
@@ -155,23 +165,25 @@ def _build_extract_response(result) -> ExtractResponse:
         text=text,
         pages=page_texts,
         images=images,
+        engine=result.engine,
         page_count=len(pages),
         markdown=result.markdown,
     )
 
 
 async def _validate_batch_item(
-    cfg, item: ExtractRequest
+    engine: ExtractionEngine, cfg, item: ExtractRequest
 ) -> tuple[bytes | None, str | None]:
     """Per-item validation + security scan for ``/extract-batch`` — soft
     failures only (``(None, error)``), never an ``HTTPException``: one
     malformed or blocked file in a batch of N shouldn't fail the other
     N-1. Contrast with ``/extract``, which stays strict (raises) for the
     single-file case above."""
-    if item.content_type not in _SUPPORTED_CONTENT_TYPES:
+    if not engine.accepts(item.filename, item.content_type):
         return None, (
-            f"Unsupported content_type {item.content_type!r}. "
-            f"Supported: {sorted(_SUPPORTED_CONTENT_TYPES)}"
+            f"Unsupported content_type {item.content_type!r} for filename "
+            f"{item.filename!r}. Supported by the running {engine.name!r} "
+            f"engine: {sorted(engine.supported_formats())}"
         )
     try:
         data = base64.b64decode(item.content_base64, validate=True)
@@ -203,22 +215,22 @@ async def _validate_batch_item(
 
 @router.post("/extract-batch", response_model=list[ExtractResponse])
 async def extract_batch(body: ExtractBatchRequest, request: Request, _: Authed):
-    """Extract multiple documents in ONE PPStructureV3 call.
+    """Extract multiple documents in one batched engine call where the
+    engine supports it.
 
-    Real, measured motivation: a single document's pages often don't carry
-    enough text regions to fill a large OCR batch on their own, leaving
-    real GPU-batching headroom unused (see ``ExtractionPipeline.
-    extract_batch``'s own docstring). This groups OCR/layout inference
-    across every file in the batch instead of one sequential ``/extract``
-    call per file.
+    Real, measured motivation (``PaddleClassicEngine``/``PaddleVLEngine``):
+    a single document's pages often don't carry enough text regions to
+    fill a large OCR batch on their own, leaving real GPU-batching
+    headroom unused. This groups inference across every file in the batch
+    instead of one sequential ``/extract`` call per file.
     """
     cfg = request.app.state.config
-    pipeline = request.app.state.pipeline
+    engine: ExtractionEngine = request.app.state.engine
 
     responses: list[ExtractResponse | None] = [None] * len(body.items)
     validated: list[tuple[int, bytes, str]] = []
     for i, item in enumerate(body.items):
-        data, error = await _validate_batch_item(cfg, item)
+        data, error = await _validate_batch_item(engine, cfg, item)
         if error is not None:
             responses[i] = ExtractResponse(success=False, error=error)
         else:
@@ -227,9 +239,8 @@ async def extract_batch(body: ExtractBatchRequest, request: Request, _: Authed):
 
     if validated:
         try:
-            results = await asyncio.to_thread(
-                pipeline.extract_batch,
-                [(data, filename) for _, data, filename in validated],
+            results = await _run_engine_batch(
+                engine, [(data, filename) for _, data, filename in validated]
             )
         except Exception as exc:
             logger.warning(
@@ -247,8 +258,15 @@ async def extract_batch(body: ExtractBatchRequest, request: Request, _: Authed):
 @router.get("/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
     cfg = request.app.state.config
+    engine: ExtractionEngine = request.app.state.engine
+    resolved = request.app.state.resolved
     return HealthResponse(
         status="ok",
         pod_name=cfg.pod_name,
         uptime_seconds=time.monotonic() - request.app.state.start_time,
+        engine=engine.name,
+        requested_mode=cfg.mode,
+        resolved_mode=resolved.mode,
+        degraded_from=resolved.degraded_from,
+        worker_count=resolved.worker_count,
     )

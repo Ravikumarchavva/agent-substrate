@@ -25,14 +25,41 @@ class _FakeConfig:
     auth_token: str = ""
     max_upload_bytes: int = 50 * 1024 * 1024
     pod_name: str = "document-intelligence-test"
+    mode: str = "auto"
 
 
-class _FakePipeline:
+@dataclass
+class _FakeResolved:
+    mode: str = "raw_text"
+    degraded_from: str | None = None
+    worker_count: int = 0
+
+
+class _FakeEngine:
+    """Implements ``DeclarativeExtractionEngine`` structurally (only
+    ``extract``/``extract_batch``, no ``aextract``/``aextract_batch``) so
+    ``routes.py``'s isinstance dispatch runs it through the sync path,
+    same as the real ``RawTextEngine``."""
+
+    name = "fake-engine"
+
     def __init__(
         self, pages: list[ExtractedPage] | None = None, error: Exception | None = None
     ):
         self._pages = pages if pages is not None else []
         self._error = error
+
+    def supported_formats(self) -> set[str]:
+        return {"application/pdf"}
+
+    def accepts(self, filename: str, content_type: str) -> bool:
+        return content_type in self.supported_formats()
+
+    def warmup(self) -> None:
+        pass
+
+    async def aclose(self) -> None:
+        pass
 
     def extract(self, data: bytes, filename: str) -> ExtractionResult:
         if self._error is not None:
@@ -45,11 +72,12 @@ class _FakePipeline:
         return [ExtractionResult(pages=self._pages) for _ in items]
 
 
-def _client(*, pipeline: _FakePipeline | None = None, config=None) -> TestClient:
+def _client(*, pipeline: _FakeEngine | None = None, config=None) -> TestClient:
     app = FastAPI()
     app.include_router(router)
-    app.state.pipeline = pipeline or _FakePipeline()
+    app.state.engine = pipeline or _FakeEngine()
     app.state.config = config or _FakeConfig()
+    app.state.resolved = _FakeResolved()
     app.state.start_time = time.monotonic()
     return TestClient(app)
 
@@ -69,7 +97,7 @@ def test_extract_success_returns_pages_and_images():
             images=[ExtractedImage(data=b"png-bytes", label="chart", confidence=0.97)],
         )
     ]
-    client = _client(pipeline=_FakePipeline(pages=pages))
+    client = _client(pipeline=_FakeEngine(pages=pages))
 
     resp = client.post(
         "/v1/extract",
@@ -130,7 +158,7 @@ def test_extract_oversized_file_returns_413():
 
 
 def test_extract_pipeline_exception_returns_structured_failure_not_500():
-    client = _client(pipeline=_FakePipeline(error=RuntimeError("mkldnn boom")))
+    client = _client(pipeline=_FakeEngine(error=RuntimeError("mkldnn boom")))
     resp = client.post(
         "/v1/extract",
         json={
@@ -147,7 +175,7 @@ def test_extract_pipeline_exception_returns_structured_failure_not_500():
 
 def test_extract_empty_result_returns_structured_failure():
     client = _client(
-        pipeline=_FakePipeline(pages=[ExtractedPage(page_number=1, text="")])
+        pipeline=_FakeEngine(pages=[ExtractedPage(page_number=1, text="")])
     )
     resp = client.post(
         "/v1/extract",
@@ -174,7 +202,7 @@ def _item(filename: str = "test.pdf", data: bytes = b"data") -> dict:
 
 def test_extract_batch_success_returns_one_response_per_item():
     pages = [ExtractedPage(page_number=1, text="hello world")]
-    client = _client(pipeline=_FakePipeline(pages=pages))
+    client = _client(pipeline=_FakeEngine(pages=pages))
 
     resp = client.post(
         "/v1/extract-batch",
@@ -201,7 +229,7 @@ def test_extract_batch_partial_failure_does_not_fail_whole_batch():
     per-item soft-failure design over /extract's stricter single-file
     behavior."""
     pages = [ExtractedPage(page_number=1, text="hello world")]
-    client = _client(pipeline=_FakePipeline(pages=pages))
+    client = _client(pipeline=_FakeEngine(pages=pages))
 
     bad_item = _item("bad.docx")
     bad_item["content_type"] = (
@@ -223,7 +251,7 @@ def test_extract_batch_partial_failure_does_not_fail_whole_batch():
 
 def test_extract_batch_preserves_input_order_with_mixed_results():
     pages = [ExtractedPage(page_number=1, text="hello world")]
-    client = _client(pipeline=_FakePipeline(pages=pages))
+    client = _client(pipeline=_FakeEngine(pages=pages))
 
     bad_item = _item("bad.docx")
     bad_item["content_type"] = (
@@ -240,7 +268,7 @@ def test_extract_batch_preserves_input_order_with_mixed_results():
 
 
 def test_extract_batch_pipeline_exception_fails_only_validated_items():
-    client = _client(pipeline=_FakePipeline(error=RuntimeError("mkldnn boom")))
+    client = _client(pipeline=_FakeEngine(error=RuntimeError("mkldnn boom")))
 
     bad_item = _item("bad.docx")
     bad_item["content_type"] = (

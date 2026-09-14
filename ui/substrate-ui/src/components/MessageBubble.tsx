@@ -1077,7 +1077,7 @@ export function MessageBubble({
                             }}
                             className={`my-1 flex w-full max-w-md items-center gap-3 rounded-2xl border border-(--border) bg-(--card) p-3 shadow-xs hover:shadow-sm hover:bg-(--card-hover) hover:border-(--border-hover) transition-all duration-200 ${onOpenArtifact ? "cursor-pointer" : ""}`}
                           >
-                            <FileTypeIcon name={name} size="lg" />
+                            <FileTypeIcon name={name} size="lg" as="span" />
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm font-semibold text-foreground">
                                 {name}

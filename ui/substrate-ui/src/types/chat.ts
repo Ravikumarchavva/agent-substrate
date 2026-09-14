@@ -43,6 +43,11 @@ export type Thread = {
   created_at: string;
   updated_at: string;
   message_count: number;
+  // Set when a file this conversation depends on was deleted from storage —
+  // the composer should be disabled with this shown, from the moment the
+  // thread loads, not only after a send already 423s.
+  locked_at?: string | null;
+  locked_reason?: string | null;
 };
 
 export type UploadedFile = {

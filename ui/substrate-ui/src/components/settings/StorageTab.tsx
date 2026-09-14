@@ -630,7 +630,14 @@ export function StorageTab() {
   }, [location, sessionFolders, files, search, sort]);
 
   const getDownloadUrl = (file: WorkspaceFile) =>
-    file.session_id ? buildWorkspaceFileUrl(file.session_id, file.name) : buildObjectUrl(file.path);
+    // buildWorkspaceFileUrl needs the path *relative to the conversation's
+    // shared dir* (it re-resolves the full backend key from thread_id +
+    // this), not just the basename — file.name alone 404s (or serves the
+    // wrong file) for anything inside a subfolder. file.path is the full
+    // backend object key; strip everything through .../workspace/shared/.
+    file.session_id
+      ? buildWorkspaceFileUrl(file.session_id, file.path.replace(/^.*\/workspace\/shared\//, ""))
+      : buildObjectUrl(file.path);
 
   // Single click: select (Ctrl/Cmd toggles one, Shift range-selects from
   // the last click). Double click: open. Same model as Nautilus/Dolphin/
@@ -685,13 +692,31 @@ export function StorageTab() {
     setIsBulkDeleting(true);
     try {
       const toDelete = selectedFiles;
-      await Promise.all(toDelete.map((f) => api.deleteWorkspaceFile(f.path)));
-      const deletedPaths = new Set(toDelete.map((f) => f.path));
+      // allSettled, not all: one locked/already-gone file must not stop the
+      // rest from deleting, and must not leave successfully-deleted files
+      // still showing in the UI as if the whole batch failed.
+      const results = await Promise.allSettled(
+        toDelete.map((f) => api.deleteWorkspaceFile(f.path)),
+      );
+      const succeeded = toDelete.filter((_f, i) => results[i]?.status === "fulfilled");
+      const failed = toDelete.filter((_f, i) => results[i]?.status === "rejected");
+
+      const deletedPaths = new Set(succeeded.map((f) => f.path));
       setFiles((prev) => prev.filter((f) => !deletedPaths.has(f.path)));
-      const freedBytes = toDelete.reduce((a, f) => a + f.size_bytes, 0);
+      const freedBytes = succeeded.reduce((a, f) => a + f.size_bytes, 0);
       setUsage((prev) => (prev ? { ...prev, used_bytes: Math.max(0, prev.used_bytes - freedBytes) } : prev));
-      setSelected(new Set());
+      // Keep only the files that failed selected, so the user can see
+      // exactly what's left and retry just those.
+      setSelected(new Set(failed.map((f) => f.path)));
       setBulkDeleteConfirm(false);
+
+      if (failed.length > 0) {
+        setError(
+          succeeded.length > 0
+            ? `Deleted ${succeeded.length} of ${toDelete.length} files. ${failed.length} failed: ${failed.map((f) => f.name).join(", ")}.`
+            : `Failed to delete ${failed.length === 1 ? failed[0].name : `${failed.length} files`}.`,
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete files.");
     } finally {

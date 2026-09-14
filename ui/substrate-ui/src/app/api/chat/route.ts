@@ -39,10 +39,23 @@ export async function POST(req: Request) {
 
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => "Unknown engine error");
-    return new Response(
-      JSON.stringify({ error: text }),
-      { status: res.status, headers: { "Content-Type": "application/json" } }
-    );
+    // The backend's error body is itself JSON (FastAPI's {"detail": "..."}
+    // for e.g. a 423 locked-conversation response) — wrapping that raw text
+    // as a plain string inside {"error": text} double-encoded it, so the
+    // banner showed the literal JSON text instead of the human-readable
+    // message. Forward the backend's own shape when it parses as JSON;
+    // only fall back to wrapping raw text for a genuinely non-JSON body.
+    let body: string;
+    try {
+      JSON.parse(text);
+      body = text;
+    } catch {
+      body = JSON.stringify({ error: text });
+    }
+    return new Response(body, {
+      status: res.status,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   return new Response(res.body, {

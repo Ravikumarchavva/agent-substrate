@@ -290,6 +290,11 @@ export function useFileAttachments(
 
   return {
     attachedFiles,
+    // Exposed so a caller can restore a snapshot it captured before
+    // clearing — used when a send fails after the optimistic clear (e.g.
+    // POST /chat 423s because the conversation got locked) so the user's
+    // attachments aren't silently dropped along with the failed send.
+    setAttachedFiles,
     uploadingFile,
     fileInputRef,
     clearAttachedFiles,

@@ -17,16 +17,23 @@ export function FileTypeIcon({
   mime,
   size = "md",
   className = "",
+  as: As = "div",
 }: {
   name: string;
   mime?: string;
   size?: FileTypeIconSize;
   className?: string;
+  // "span" for anywhere this renders inside markdown-produced phrasing
+  // content (e.g. inside a link that markdown wraps in a <p>) — a <div>
+  // there is invalid HTML (block content inside <p>), which the browser
+  // silently "fixes" by closing the <p> early, causing a React hydration
+  // mismatch.
+  as?: "div" | "span";
 }) {
   const { Icon, bg } = getFileGlyph(name, mime);
   const px = SIZE_PX[size];
   return (
-    <div
+    <As
       className={`flex shrink-0 items-center justify-center rounded-[28%] ${bg} ${className}`}
       style={{ width: px, height: px }}
     >
@@ -35,6 +42,6 @@ export function FileTypeIcon({
         style={{ width: px * 0.52, height: px * 0.52 }}
         strokeWidth={2}
       />
-    </div>
+    </As>
   );
 }

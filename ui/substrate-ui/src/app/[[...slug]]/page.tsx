@@ -319,16 +319,21 @@ function ChatPageContent() {
   const { threads, setThreads, loadThreads, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
     autoSelectFirstThread: !settingsPanelOpen,
   });
-  const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
+  const { attachedFiles, setAttachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
   const { boards, upsertBoard, clearBoards, settleBoards } = useTaskBoards(currentThreadId);
-  // Set when POST /chat 423s (routes/chat.py — a file was deleted from this
-  // thread's storage, see routes/workspace.py::delete_file). Reset on
-  // thread switch since the lock is per-conversation.
+  // Set when a file was deleted from this thread's storage (see
+  // routes/workspace.py / routes/files.py delete_file) — loaded from the
+  // thread's own locked_reason as soon as it's known (the sidebar's thread
+  // list already carries it, via GET /threads), not only after a send
+  // already 423s (ChatLockedError below still overrides this for the
+  // brand-new-thread case, where there's no sidebar entry yet to read it
+  // from).
   const [lockedReason, setLockedReason] = useState<string | null>(null);
   useEffect(() => {
-    setLockedReason(null);
-  }, [currentThreadId]);
+    const thread = threads.find((t) => t.id === currentThreadId);
+    setLockedReason(thread?.locked_reason ?? null);
+  }, [currentThreadId, threads]);
   // Tracks which assistant messages we've already auto-opened an artifact for.
   const autoOpenedArtifactRef = useRef<Set<string>>(new Set());
 
@@ -847,6 +852,11 @@ function ChatPageContent() {
     }
 
     const currentInput = text;
+    // Snapshot of the raw attachment previews (as opposed to
+    // currentAttachments below, the simplified shape sent with the
+    // message) — restored into the composer if the send fails after the
+    // optimistic clear (see the ChatLockedError branch below).
+    const attachmentsSnapshot = attachedFiles;
     const currentFileIds = attachedFiles.map((f) => f.id);
     const requestedModel = selectedModel;
     const currentAttachments: UploadedFile[] = attachedFiles.map((file) => ({
@@ -962,7 +972,11 @@ function ChatPageContent() {
           model: requestedModel,
         },
         signal,
-      )
+      ),
+      () => {
+        setInput(currentInput);
+        setAttachedFiles(attachmentsSnapshot);
+      },
     );
   }
 
@@ -982,6 +996,7 @@ function ChatPageContent() {
       pendingSources: CitationSource[];
     },
     streamFactory: (signal: AbortSignal) => Promise<Response>,
+    onLocked?: () => void,
   ) {
     activeStreamThreadIdRef.current = threadId;
 
@@ -1529,7 +1544,16 @@ function ChatPageContent() {
         );
       } else if (err instanceof ChatLockedError) {
         setLockedReason(err.message);
-        setMessages((m) => m.filter((msg) => msg.id !== msgState.activeAssistantId));
+        // Restores what the user typed/attached (doSendMessage's optimistic
+        // clear already emptied the composer, but the send never actually
+        // went through) — undefined for the HITL-reconnect caller, which
+        // has no composer input to restore.
+        onLocked?.();
+        setMessages((m) =>
+          m.filter(
+            (msg) => msg.id !== msgState.activeAssistantId && msg.id !== msgState.userMsgId,
+          ),
+        );
       } else {
         setMessages((m) =>
           m.map((msg) =>

@@ -29,6 +29,11 @@ export function OoxmlViewer({ kind, fileUrl }: { kind: Kind; fileUrl: string }) 
 
   useEffect(() => {
     let cancelled = false;
+    // Holds whichever viewer instance actually got constructed, so cleanup
+    // can release its WASM/canvas resources — switching files (kind or
+    // fileUrl changing) or closing the panel used to just drop the
+    // reference, leaking every previously-opened viewer's resources.
+    let viewer: { load: (buffer: ArrayBuffer) => Promise<void>; destroy?: () => void } | null = null;
     setState("loading");
 
     (async () => {
@@ -42,15 +47,28 @@ export function OoxmlViewer({ kind, fileUrl }: { kind: Kind; fileUrl: string }) 
 
         if (kind === "xlsx") {
           const { XlsxViewer } = await import("@silurus/ooxml/xlsx");
-          await new XlsxViewer(el).load(buffer);
+          if (cancelled) return;
+          viewer = new XlsxViewer(el);
+          await viewer.load(buffer);
         } else if (kind === "pptx") {
           const { PptxScrollViewer } = await import("@silurus/ooxml/pptx");
-          await new PptxScrollViewer(el).load(buffer);
+          if (cancelled) return;
+          viewer = new PptxScrollViewer(el);
+          await viewer.load(buffer);
         } else {
           const { DocxScrollViewer } = await import("@silurus/ooxml/docx");
-          await new DocxScrollViewer(el).load(buffer);
+          if (cancelled) return;
+          viewer = new DocxScrollViewer(el);
+          await viewer.load(buffer);
         }
-        if (!cancelled) setState("ready");
+        if (cancelled) {
+          // Cancelled while `.load()` was in flight — a stale viewer must
+          // not surface as "ready" or keep holding its resources.
+          viewer?.destroy?.();
+          viewer = null;
+          return;
+        }
+        setState("ready");
       } catch (e) {
         if (cancelled) return;
         setState(e instanceof Error && e.message === "notfound" ? "notfound" : "error");
@@ -59,6 +77,8 @@ export function OoxmlViewer({ kind, fileUrl }: { kind: Kind; fileUrl: string }) 
 
     return () => {
       cancelled = true;
+      viewer?.destroy?.();
+      viewer = null;
     };
   }, [kind, fileUrl]);
 

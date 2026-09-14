@@ -143,7 +143,7 @@ class SubstrateConfig(BaseSettings):
     PINECONE_ASSISTANT_NAME: str = ""
     RAG_TEXT_EMBEDDING_DIM: int = 1536
     RAG_IMAGE_EMBEDDING_DIM: int = 2048
-    RAG_MAX_DOC_PAGES: int = 20
+    RAG_MAX_DOC_PAGES: int = 300
     RAG_MAX_DOC_MB: int = 5
     RAG_DAILY_DOC_LIMIT: int = 20
     RAG_DAILY_UPLOAD_ATTEMPT_LIMIT: int = 100

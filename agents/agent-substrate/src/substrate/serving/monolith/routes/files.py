@@ -392,12 +392,22 @@ async def _stage_uploaded_doc(
             rag_backend=ctx.rag_backend,
         )
     except Exception as exc:
+        # Full detail goes to the server log only — staging_error is served
+        # straight to the UI as-is (routes/files.py's status endpoint), and
+        # the raw exception text (a CUDA OOM traceback, a stack trace, an
+        # internal service's error body) is neither meaningful nor safe to
+        # show a user: it leaks infra internals and reads as broken, not as
+        # something they can act on.
         logger.warning("Eager staging failed for file %s: %s", file_id, exc)
         async with session_factory() as session:
             await _set_tenant_guc(session, tenant_id)
             row = await session.get(FileMetadata, file_id)
             if row is not None:
-                row.staging_error = str(exc)[:500]
+                row.staging_error = (
+                    "Couldn't process this document automatically. "
+                    "It may be too large or complex — try a smaller file, "
+                    "or ask the assistant about it directly."
+                )
                 await session.commit()
         return
     await _write_extracted_sidecar(

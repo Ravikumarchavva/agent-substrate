@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -46,6 +47,32 @@ class ServiceConfig(BaseSettings):
     # real room to go much higher. None on CPU regardless of this value —
     # pipeline.py only applies it when device starts with "gpu".
     ocr_batch_size: int = 16
+
+    # Real, found-not-assumed: a genuine 267-page PDF hit "CUDA out of
+    # memory... 18.50 MiB is free" partway through a single predict() call
+    # on a 4GB card, even with ocr_batch_size correctly tuned — PaddleX
+    # holds state across the whole document's pages within one predict()
+    # call regardless of that setting (community-reported ballpark:
+    # ~1GB base + ~200MB/page on GPU with the full model stack loaded,
+    # consistent with what actually happened here). Above this many pages,
+    # extract() (pipeline.py) splits the document into page-range chunks
+    # and calls predict() once per chunk instead of once for the whole
+    # file, bounding peak memory to one chunk regardless of total document
+    # length. None on CPU (ample system RAM, not the 4GB VRAM ceiling this
+    # was tuned against) and whenever unset for GPU too — only a default
+    # here, not a hard requirement.
+    max_pages_per_call: int | None = None
+
+    @field_validator("max_pages_per_call", mode="before")
+    @classmethod
+    def _empty_string_means_unset(cls, v: object) -> object:
+        # docker-compose's `${VAR:-}` always sets *some* value — an unset
+        # override becomes an empty string, not a missing env var, which
+        # pydantic otherwise rejects outright for `int | None` ("unable to
+        # parse string as an integer"). Real crash, hit deploying this via
+        # docker-compose.yml's own `${DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL:-}`
+        # default before this validator existed.
+        return None if v == "" else v
 
     # ── Document security scan (doc-firewall, security_scan.py) ──────────
     # Runs on raw bytes before PaddleOCR/PaddleX parses them — see

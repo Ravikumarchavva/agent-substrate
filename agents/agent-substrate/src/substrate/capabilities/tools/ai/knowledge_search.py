@@ -30,7 +30,12 @@ class KnowledgeSearchTool:
     tool_type = ToolType.KNOWLEDGE
     name: str = "knowledge_search"
     description: str = (
-        "Search or ingest into the project's knowledge base. "
+        "Search or ingest into the project's STANDING knowledge base — "
+        "curated documents shared across every user, not anything from "
+        "this chat. For a file the user just uploaded or attached in this "
+        "conversation (or their other recent chats), use "
+        "session_document_search instead — that tool, not this one, "
+        "searches what they actually attached. "
         "action=search: retrieve passages relevant to a query. "
         "action=ingest: index a document's text. "
         "Page navigation: after a search result names a file_id and "

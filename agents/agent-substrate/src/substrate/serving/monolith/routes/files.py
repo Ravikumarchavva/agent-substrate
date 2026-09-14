@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.capabilities.storage.layout import conversation_shared_key, user_prefix
 from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
+from substrate.integrations.llm.endpoint import InferenceEndpoint
 from substrate.logger import setup_logging
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
@@ -54,6 +55,8 @@ from substrate.serving.shared.doc_quota import (
     seconds_until_reset,
 )
 from substrate.serving.shared.settings import settings
+from substrate.runtimes.document_intelligence.extract import extract_document
+from substrate.runtimes.document_intelligence.service.types import ExtractionResult
 
 logger = setup_logging()
 
@@ -234,16 +237,12 @@ def _pdf_page_count(data: bytes) -> int:
     return len(PdfReader(io.BytesIO(data)).pages)
 
 
-async def _build_extracted_sidecar_text(
-    data: bytes, name: str, content_type: str
-) -> Optional[str]:
-    """Best-effort, page-marked plain text for ``code_interpreter`` to read
-    instead of re-parsing a PDF's raw bytes. Mirrors the extraction fallback
-    chain in ``routes/chat_context.py::_extract_document_text`` (extraction
-    service, then local pypdf), but keeps page boundaries — and any
-    image/table captions the extraction service returned — instead of
-    joining everything into one blob. Returns ``None`` when nothing could be
-    extracted.
+def render_page_marked_markdown(result: ExtractionResult) -> Optional[str]:
+    """Render an already-extracted ``ExtractionResult`` into page-marked
+    plain text for ``code_interpreter`` to read instead of re-parsing a
+    PDF's raw bytes. Keeps page boundaries — and any image/table captions
+    the extraction returned — instead of joining everything into one blob.
+    Returns ``None`` when nothing could be rendered.
 
     Page numbers are metadata, not content: an HTML comment (invisible when
     rendered, and not real document structure), never a Markdown heading. A
@@ -252,50 +251,44 @@ async def _build_extracted_sidecar_text(
     to Word" read it as literal structure and reproduced "Page 1" / "Page 2"
     headings in its output that were never in the source.
     """
-    pages: list[tuple[int, str]] = []
-    captions_by_page: dict[int, list[str]] = {}
-
-    if settings.DOCUMENT_INTELLIGENCE_SERVICE_URL:
-        from substrate.runtimes.document_intelligence.client import ExtractionClient
-
-        client = ExtractionClient(
-            base_url=settings.DOCUMENT_INTELLIGENCE_SERVICE_URL,
-            auth_token=settings.DOCUMENT_INTELLIGENCE_AUTH_TOKEN,
-            timeout_s=settings.DOCUMENT_INTELLIGENCE_TIMEOUT_S,
-        )
-        try:
-            result = await client.extract(data, name, content_type)
-        finally:
-            await client.close()
-        if result.success and result.pages:
-            pages = [(p.page_number, p.text) for p in result.pages]
-            for image in result.images:
-                if image.caption and image.page_number is not None:
-                    captions_by_page.setdefault(image.page_number, []).append(
-                        image.caption
-                    )
-
-    if not pages and content_type == "application/pdf":
-        from pypdf import PdfReader
-
-        try:
-            reader = PdfReader(io.BytesIO(data))
-            pages = [
-                (i + 1, page.extract_text() or "")
-                for i, page in enumerate(reader.pages)
-            ]
-        except Exception:
-            return None
-
-    if not pages:
+    if not result.pages:
         return None
 
+    captions_by_page: dict[int, list[str]] = {}
+    for page in result.pages:
+        for image in page.images:
+            if image.caption and image.page_number is not None:
+                captions_by_page.setdefault(image.page_number, []).append(
+                    image.caption
+                )
+
     sections: list[str] = []
-    for page_number, page_text in pages:
-        sections.append(f"<!-- page {page_number} -->\n{page_text.strip()}")
-        for caption in captions_by_page.get(page_number, []):
+    for page in result.pages:
+        sections.append(f"<!-- page {page.page_number} -->\n{page.text.strip()}")
+        for caption in captions_by_page.get(page.page_number, []):
             sections.append(f"> Image/table caption: {caption}")
     return "\n\n".join(sections).strip() or None
+
+
+async def _build_extracted_sidecar_text(
+    data: bytes, name: str, content_type: str
+) -> Optional[str]:
+    """Best-effort, page-marked plain text for ``code_interpreter`` to read
+    instead of re-parsing a PDF's raw bytes. Delegates the extraction
+    fallback chain (document-intelligence service, else local pypdf/etc.) to
+    ``extract_document``, then renders the result via
+    ``render_page_marked_markdown``.
+    """
+    endpoint = None
+    if settings.DOCUMENT_INTELLIGENCE_SERVICE_URL:
+        endpoint = InferenceEndpoint(
+            model="",
+            base_url=settings.DOCUMENT_INTELLIGENCE_SERVICE_URL,
+            api_key=settings.DOCUMENT_INTELLIGENCE_AUTH_TOKEN,
+            timeout_s=settings.DOCUMENT_INTELLIGENCE_TIMEOUT_S,
+        )
+    result = await extract_document(data, name, content_type, endpoint=endpoint)
+    return render_page_marked_markdown(result)
 
 
 async def _write_extracted_sidecar(

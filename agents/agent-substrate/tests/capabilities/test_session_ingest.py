@@ -130,21 +130,3 @@ async def test_ingest_session_document_writes_to_all_three_stores(
     # real landed via the narrow query_cypher path.
     rows = await graph_store.query_cypher("MATCH (n) RETURN n LIMIT 100")
     assert len(rows) == 1
-
-
-async def test_ingest_session_document_rejects_non_local_rag_backend(
-    cfg: SubstrateConfig, embedding_client: OpenAIEmbeddingClient
-) -> None:
-    with pytest.raises(TypeError):
-        await ingest_session_document(
-            data=b"whatever",
-            filename="x.pdf",
-            content_type="application/pdf",
-            tenant_id="tenant-a",
-            user_id="user-a",
-            session_id="session-1",
-            cfg=cfg,
-            embedding_client=embedding_client,
-            model_client=StubLLMClient("{}"),
-            rag_backend=object(),
-        )

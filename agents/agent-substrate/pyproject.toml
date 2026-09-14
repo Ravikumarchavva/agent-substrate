@@ -286,9 +286,6 @@ ignore_imports = [
     # gdpr route needs the erasure orchestrator itself, the same way
     # files/workspace routes need WorkspaceFileStore above
     "substrate.serving.monolith.routes.gdpr -> substrate.capabilities.gdpr.eraser",
-    # chat_context inlines PDF attachment text using the existing PDFLoader
-    # (pypdf/pdfplumber) rather than duplicating extraction logic
-    "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.loaders.pdf_loader",
     # files/chat_context routes call the per-user session-document ingestion
     # orchestrator directly (upload-time eager staging / send-time fallback
     # ingest) — same shape as the PDFLoader exception directly above

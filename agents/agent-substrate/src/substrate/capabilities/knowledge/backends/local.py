@@ -72,21 +72,6 @@ class LocalRagBackend:
         self._fused_k = fused_k
         self._rerank_top_n = rerank_top_n
 
-    def _get_extraction_client(self) -> "ExtractionClient | None":
-        if not self._extraction_url:
-            return None
-        if self._extraction_client is None:
-            from substrate.runtimes.document_intelligence.client import (
-                ExtractionClient,
-            )
-
-            self._extraction_client = ExtractionClient(
-                base_url=self._extraction_url,
-                auth_token=self._extraction_auth_token,
-                timeout_s=self._extraction_timeout_s,
-            )
-        return self._extraction_client
-
     def _get_embedding_reranker_client(self) -> "EmbeddingRerankerClient | None":
         if not self._embedding_reranker_url:
             return None
@@ -432,15 +417,20 @@ class LocalRagBackend:
     ) -> tuple[list[Document], list[tuple[bytes, dict[str, Any]]]] | None:
         if not self._extraction_url:
             return None
-        client = self._get_extraction_client()
-        if client is None:
-            return None
+
+        from substrate.integrations.llm.endpoint import InferenceEndpoint
+        from substrate.runtimes.document_intelligence.extract import extract_document
 
         data = source if isinstance(source, bytes) else Path(source).read_bytes()
         content_type = metadata.get("content_type", "application/octet-stream")
-        result = await client.extract(data, name, content_type)
-        if not result.success:
-            return None
+        endpoint = InferenceEndpoint(
+            model="",
+            base_url=self._extraction_url,
+            api_key=self._extraction_auth_token,
+            timeout_s=self._extraction_timeout_s,
+        )
+        result = await extract_document(data, name, content_type, endpoint=endpoint)
+        total_pages = len(result.pages)
 
         text_documents = [
             Document.from_text(
@@ -449,7 +439,7 @@ class LocalRagBackend:
                     **metadata,
                     "engine": result.engine,
                     "page_number": page.page_number,
-                    "total_pages": result.page_count,
+                    "total_pages": total_pages,
                 },
             )
             for page in result.pages
@@ -457,19 +447,20 @@ class LocalRagBackend:
         ]
         image_items = [
             (
-                _b64decode(img.data_base64),
+                img.data,
                 {
                     **metadata,
                     "engine": result.engine,
                     "page_number": img.page_number,
-                    "total_pages": result.page_count,
+                    "total_pages": total_pages,
                     "label": img.label,
                     "confidence": img.confidence,
                     "media_type": img.media_type,
                     "caption": img.caption,
                 },
             )
-            for img in result.images
+            for page in result.pages
+            for img in page.images
         ]
         if not text_documents and not image_items:
             return None
@@ -491,9 +482,7 @@ class LocalRagBackend:
         )
 
         registry = DocumentLoaderRegistry()
-        registry.register(
-            ".pdf", PDFLoader(extraction_client=self._get_extraction_client())
-        )
+        registry.register(".pdf", PDFLoader())
         for text_ext in (".txt", ".md"):
             registry.register(text_ext, TextLoader())
         registry.register(".csv", CSVLoader())
@@ -508,12 +497,6 @@ class LocalRagBackend:
                 f"{sorted(_LOCAL_FALLBACK_EXTENSIONS)}."
             ) from exc
         return await loader.load(source, metadata=metadata)
-
-
-def _b64decode(data: str) -> bytes:
-    import base64
-
-    return base64.b64decode(data)
 
 
 class RagLoadError(RuntimeError):

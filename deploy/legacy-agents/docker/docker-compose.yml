@@ -617,6 +617,53 @@ services:
       - paddlex-model-cache:/root/.paddlex
     restart: unless-stopped
 
+  # NEW `vl_gpu` mode (PaddleOCR-VL-1.6 over a real llama-server process,
+  # layout detection still classic Paddle locally — see
+  # document-intelligence-vl.gpu.Dockerfile's own header comment). Opposite
+  # GPU topology from the six document-intelligence-gpu-0..5 replicas above:
+  # those are pinned one-container-per-GPU-index because ocr_classic
+  # serializes requests internally; THIS image's own LocalLlamaServerPool
+  # (llama_pool.py) spawns and load-balances across N llama-server child
+  # processes itself, one per visible GPU, inside a single container — so
+  # it needs `count: all` (every GPU visible to one container), not
+  # `device_ids` pinning one GPU to one of several containers.
+  #
+  # Port 8027: 8021-8026 are already used by document-intelligence/
+  # document-intelligence-gpu-0..5 above, 8031-8033 by the llama-embed/
+  # llama-rerank sidecars below — 8027 is the next free port.
+  #
+  # Model provisioning: document-intelligence-vl.gpu.Dockerfile bakes the
+  # quantized GGUF files into the image at build time (ensure_models()'s
+  # documented default path, models.py) rather than downloading on first
+  # boot. A /models volume is still mounted below so a container recreate
+  # (not a rebuild) never has to re-download — and as a safety net for the
+  # Tier-2/Tier-3 fallback paths in ensure_models() if the baked files are
+  # ever missing/corrupt at runtime for any reason.
+  document-intelligence-vl-gpu:
+    profiles:
+      - document-intelligence-vl-gpu
+    build:
+      context: ../..
+      dockerfile: deployment/docker/document-intelligence-vl.gpu.Dockerfile
+    ports:
+      - "8027:8080"
+    environment:
+      DOCUMENT_INTELLIGENCE_MODE: vl_gpu
+      # huggingface_hub reads HF_TOKEN automatically -- needed here for the
+      # Tier-2/Tier-3 fallback paths in ensure_models() (gated/rate-limited
+      # HF pulls), even though the common case is the baked-image fast path.
+      HF_TOKEN: ${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - document-intelligence-vl-model-cache:/models/paddleocr-vl
+    restart: unless-stopped
+
   # Thin httpx proxy to the llama-embed/llama-rerank sidecars — a separate
   # service from document-intelligence since it shares no code or state
   # with the OCR/layout pipeline (see docs/claude_docs/decisions.md).
@@ -957,5 +1004,6 @@ volumes:
   workspaces:
   llama-model-cache:
   paddlex-model-cache:
+  document-intelligence-vl-model-cache:
   caddy_data:
   caddy_config:

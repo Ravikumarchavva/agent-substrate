@@ -1,11 +1,18 @@
-"""_extract_via_pypdf / _build_file_context — PDF attachments must be
-inlined as real extracted text, not left as metadata-only "attachments"
-the model can't read.
+"""_build_file_context — PDF attachments must be inlined as real extracted
+text, not left as metadata-only "attachments" the model can't read.
 
 Regression coverage for a real gap: PDF uploads used to always fall into
 the metadata-only bucket (same as .docx/.zip/etc.), so the model could
 never answer "what's in this file" without the user pasting the text
-themselves — see routes/chat_context.py."""
+themselves — see routes/chat_context.py.
+
+Extraction itself (service-vs-local fallback) is now owned by the shared
+``runtimes/document_intelligence/extract.py::extract_document`` — see
+``tests/document_intelligence/test_extract.py`` for that logic's own
+coverage and ``test_chat_context_extraction.py`` for chat_context's
+endpoint-building wiring around it. These tests exercise the real local
+(``raw_text``) engine end-to-end through ``_build_file_context`` with no
+document-intelligence service configured, same as before."""
 
 from __future__ import annotations
 
@@ -14,8 +21,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 from substrate.serving.monolith.routes.chat_context import (
     _build_file_context,
-    _extract_document_text,
-    _extract_via_pypdf,
     _session_relative_path,
 )
 
@@ -72,57 +77,6 @@ def _pdf_meta(file_id: str, name: str, object_key: str, size: int) -> MagicMock:
     return meta
 
 
-async def test_extract_via_pypdf_returns_real_content():
-    data = _FIXTURE.read_bytes()
-    text = await _extract_via_pypdf(data, "invoice.pdf")
-
-    assert text is not None
-    assert len(text) > 0
-
-
-async def test_extract_via_pypdf_returns_none_for_garbage_bytes():
-    text = await _extract_via_pypdf(b"not a real pdf", "bad.pdf")
-    assert text is None
-
-
-async def test_extract_document_text_truncates_over_configured_cap(monkeypatch):
-    from substrate.serving.monolith.routes import chat_context
-
-    monkeypatch.setattr(chat_context.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "")
-    monkeypatch.setattr(chat_context.settings, "ATTACHMENT_PDF_MAX_CHARS", 5)
-    data = _FIXTURE.read_bytes()
-    text, engine = await _extract_document_text(data, "invoice.pdf", "application/pdf")
-
-    assert text is not None
-    assert engine == "pypdf"
-    assert "truncated" in text
-
-
-async def test_extract_document_text_no_extraction_service_configured_uses_pypdf_for_pdf(
-    monkeypatch,
-):
-    from substrate.serving.monolith.routes import chat_context
-
-    monkeypatch.setattr(chat_context.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "")
-    data = _FIXTURE.read_bytes()
-    text, engine = await _extract_document_text(data, "invoice.pdf", "application/pdf")
-
-    assert text is not None
-    assert engine == "pypdf"
-
-
-async def test_extract_document_text_docx_returns_none():
-    """No pypdf equivalent exists for DOCX, and PaddleOCR has no DOCX reader
-    either — this must fail cleanly, not raise."""
-    text, engine = await _extract_document_text(
-        b"fake docx bytes",
-        "report.docx",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
-    assert text is None
-    assert engine is None
-
-
 async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
     """End-to-end through _build_file_context: a PDF attachment must land
     in the returned text block *and* still get an attachment record (the
@@ -173,7 +127,7 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
 
     # Extraction cache must be written back onto the row.
     assert meta.extracted_text is not None
-    assert meta.extraction_engine == "pypdf"
+    assert meta.extraction_engine == "raw_text"
     assert meta.extracted_at is not None
     db.commit.assert_awaited_once()
 

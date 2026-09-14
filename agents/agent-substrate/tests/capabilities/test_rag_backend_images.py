@@ -367,7 +367,7 @@ async def test_query_merges_text_and_image_candidates_before_reranking():
 # ── _load_via_extraction_service — splits text pages and images ────────────
 
 
-async def test_load_via_extraction_service_splits_text_and_images():
+async def test_load_via_extraction_service_splits_text_and_images(monkeypatch):
     client = AsyncMock()
     img_bytes = b"fake-png-bytes"
     client.extract = AsyncMock(
@@ -390,6 +390,10 @@ async def test_load_via_extraction_service_splits_text_and_images():
             page_count=2,
         )
     )
+    monkeypatch.setattr(
+        "substrate.runtimes.document_intelligence.extract.ExtractionClient",
+        lambda *a, **kw: client,
+    )
     backend, _ = _backend(image_store=StubImageStore(), extraction_client=client)
 
     result = await backend._load_via_extraction_service(
@@ -410,10 +414,18 @@ async def test_load_via_extraction_service_splits_text_and_images():
     assert meta["page_number"] == 1
 
 
-async def test_load_via_extraction_service_returns_none_on_failure():
+async def test_load_via_extraction_service_returns_none_on_failure(monkeypatch):
+    """Service failure now falls back to local raw_text extraction (inside
+    ``extract_document``) instead of just failing outright — but garbage
+    PDF bytes still yield an empty result there too, so this still ends in
+    ``None``."""
     client = AsyncMock()
     client.extract = AsyncMock(
         return_value=ExtractResponse(success=False, error="boom")
+    )
+    monkeypatch.setattr(
+        "substrate.runtimes.document_intelligence.extract.ExtractionClient",
+        lambda *a, **kw: client,
     )
     backend, _ = _backend(image_store=StubImageStore(), extraction_client=client)
 
@@ -427,7 +439,9 @@ async def test_load_via_extraction_service_returns_none_on_failure():
 # ── ingest() — wires both text and image paths ─────────────────────────────
 
 
-async def test_ingest_routes_pdf_text_through_pipeline_and_images_through_image_store():
+async def test_ingest_routes_pdf_text_through_pipeline_and_images_through_image_store(
+    monkeypatch,
+):
     image_store = StubImageStore()
     client = AsyncMock()
     img_bytes = b"fake-png-bytes"
@@ -448,6 +462,10 @@ async def test_ingest_routes_pdf_text_through_pipeline_and_images_through_image_
         )
     )
     client.embed_image = AsyncMock(return_value=[0.1, 0.2])
+    monkeypatch.setattr(
+        "substrate.runtimes.document_intelligence.extract.ExtractionClient",
+        lambda *a, **kw: client,
+    )
     backend, pipeline = _backend(
         image_store=image_store,
         extraction_client=client,

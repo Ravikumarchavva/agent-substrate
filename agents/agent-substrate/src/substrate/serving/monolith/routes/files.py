@@ -847,6 +847,20 @@ async def delete_file(
         raise HTTPException(status_code=503, detail="File store not configured")
 
     meta.deleted_at = datetime.now(timezone.utc)
+
+    # Same conversation-lock-on-delete as routes/workspace.py::delete_file —
+    # this route is the composer/document-manager's own delete path, so it
+    # needs the identical safeguard: an agent shouldn't silently keep acting
+    # on a file this conversation's own history references that's now gone.
+    if meta.thread_id is not None:
+        thread = await db.get(Thread, meta.thread_id)
+        if thread is not None:
+            thread.locked_at = datetime.now(timezone.utc)
+            thread.locked_reason = (
+                f"A file was deleted from this conversation's storage: "
+                f"{meta.original_name}"
+            )
+
     await db.commit()
 
     await store.delete(meta.object_key)

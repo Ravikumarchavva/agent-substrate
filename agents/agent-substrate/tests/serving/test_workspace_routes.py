@@ -346,6 +346,57 @@ async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None
 
 
 @pytest.mark.requires_postgres
+async def test_delete_file_locks_the_owners_own_thread(tmp_path) -> None:
+    """Regression test: deleting your *own* conversation's file used to
+    never lock the thread at all. own_prefix (the caller's own
+    tenants/{t}/users/{u}/ prefix) matches every one of the caller's own
+    conversation files under the nested layout, so the old code only ever
+    resolved thread_uuid — the only place the lock was set — in the *other*
+    branch (path outside the caller's own prefix), which a caller deleting
+    their own file never takes."""
+    async with app.router.lifespan_context(app):
+        store = WorkspaceFileStore(root=tmp_path, user_quota_bytes=10_000)
+        app.state.ctx.file_store = store
+        app.state.ctx.workspace_user_quota_bytes = 10_000
+        app.state.ctx.workspace_user_delete_allowed = True
+
+        async with _registered_user() as user_id:
+            thread_id = str(uuid.uuid4())
+            async with _registered_thread(thread_id, owner=user_id):
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(
+                    user_id
+                )
+                try:
+                    async with AsyncClient(
+                        transport=ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        upload_resp = await client.post(
+                            "/files/upload",
+                            data={"thread_id": thread_id},
+                            files={
+                                "file": ("report.txt", b"data", "text/plain")
+                            },
+                        )
+                        await _promote_file(upload_resp.json()["id"])
+
+                        key = conversation_shared_key(
+                            TENANT, user_id, thread_id, "uploads/report.txt"
+                        )
+                        del_resp = await client.delete(
+                            "/workspace/files", params={"path": key}
+                        )
+                        assert del_resp.status_code == 204
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)
+
+                async with _bypass_session() as db:
+                    thread = await db.get(Thread, uuid.UUID(thread_id))
+                    assert thread is not None
+                    assert thread.locked_at is not None
+                    assert "report.txt" in (thread.locked_reason or "")
+
+
+@pytest.mark.requires_postgres
 async def test_list_files_lists_each_conversation_file_once(tmp_path) -> None:
     """Regression test: conversations now nest under users/{uid}/, so a
     conversation file used to be listed twice — once by the removed

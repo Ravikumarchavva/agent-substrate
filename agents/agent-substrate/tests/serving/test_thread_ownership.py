@@ -15,6 +15,8 @@ removed along with the matching RLS `tenant_id IS NULL` escape hatch
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -27,6 +29,7 @@ from substrate.serving.monolith.services.thread_service import (
     delete_thread,
     get_owned_thread,
     list_threads,
+    update_thread,
 )
 from substrate.serving.shared.auth.claims import AuthClaims
 
@@ -157,4 +160,29 @@ async def test_list_threads_excludes_deleted(db: AsyncSession) -> None:
         rows = await list_threads(db, user_identifier=OWNER.sub, limit=200)
         assert str(thread.id) not in {str(r["id"]) for r in rows}
     finally:
+        await db.commit()
+
+
+async def test_update_thread_cannot_touch_the_lock(db: AsyncSession) -> None:
+    """locked_at/locked_reason are real columns update_thread has no
+    keyword for at all — PATCH /threads (which calls update_thread) can
+    edit name/tags/metadata but structurally cannot clear a lock a user's
+    own file-delete set, unlike the old metadata["locked"] flag it
+    replaced, which PATCH's own metadata write could silently overwrite."""
+    thread = await create_thread(
+        db, name="lockable", user_identifier=OWNER.sub, tenant_id=OWNER.tenant_id
+    )
+    thread.locked_at = datetime.now(timezone.utc)
+    thread.locked_reason = "A file was deleted from this conversation's storage: x.txt"
+    await db.commit()
+    try:
+        updated = await update_thread(
+            db, thread.id, name="renamed", metadata={"anything": "goes"}
+        )
+        assert updated is not None
+        assert updated.name == "renamed"
+        assert updated.locked_at is not None
+        assert updated.locked_reason == "A file was deleted from this conversation's storage: x.txt"
+    finally:
+        await delete_thread(db, thread.id)
         await db.commit()

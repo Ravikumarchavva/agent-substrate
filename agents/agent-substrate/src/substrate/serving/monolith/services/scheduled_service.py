@@ -89,6 +89,21 @@ async def execute_scheduled_task(
                 task.status = "paused"
                 await db.commit()
                 return
+            if thread.locked_at is not None:
+                # A file this conversation depends on was deleted from
+                # storage (routes/workspace.py/routes/files.py delete_file)
+                # — same reason POST /chat 423s, applied here too so a
+                # scheduled run doesn't silently keep acting on a thread
+                # whose context is now missing a file.
+                logger.info(
+                    "Scheduled task %s's thread %s is locked (%s); pausing task",
+                    task_id,
+                    task.thread_id,
+                    thread.locked_reason,
+                )
+                task.status = "paused"
+                await db.commit()
+                return
 
             # 1. Fetch recent runs for lookback
             stmt = (

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import mimetypes
 import uuid
+from datetime import datetime, timezone
 from typing import Protocol, runtime_checkable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -676,15 +677,18 @@ async def delete_file(
     store = _require_workspace_store(ctx)
 
     # A single-user (personal/dev) tenant has nobody else's data to protect,
-    # so any owner may delete their own files there. Once a second user is
-    # present, deletion becomes admin-only — one person's cleanup shouldn't
-    # be able to remove files another user's conversation still depends on.
+    # so any owner may delete their own files there. Once a second
+    # *currently-registered* user is present, deletion becomes admin-only —
+    # one person's cleanup shouldn't be able to remove files another user's
+    # conversation still depends on. Soft-deleted threads' owners don't
+    # count: a user whose only threads are gone isn't "present" anymore.
     other_users = (
         await db.execute(
             select(func.count(func.distinct(Thread.user_identifier))).where(
                 Thread.tenant_id == claims.tenant_id,
                 Thread.user_identifier.is_not(None),
                 Thread.user_identifier != claims.sub,
+                Thread.deleted_at.is_(None),
             )
         )
     ).scalar_one()
@@ -694,28 +698,37 @@ async def delete_file(
             detail="Only an admin may delete files once more than one user is present.",
         )
 
-    # Ownership check: must reside under caller's upload prefix or owned thread
+    # thread_uuid is resolved unconditionally (not only when the path falls
+    # outside the caller's own prefix) — it's needed below to lock the
+    # conversation on delete regardless of who's deleting, and under the
+    # nested layout a caller's *own* conversation files always start with
+    # their own prefix, so the old "only resolve it in the other branch"
+    # left the lock permanently unreachable for the common case (deleting
+    # your own file).
     own_prefix = f"{user_prefix(claims.tenant_id, claims.sub)}/"
+    session_id = _session_id_from_key(path)
     thread_uuid: uuid.UUID | None = None
+    if session_id is not None:
+        try:
+            thread_uuid = uuid.UUID(session_id)
+        except ValueError:
+            thread_uuid = None
+
     if not path.startswith(own_prefix):
-        session_id = _session_id_from_key(path)
-        owned = None
-        if session_id is not None:
-            try:
-                thread_uuid = uuid.UUID(session_id)
-            except ValueError:
-                thread_uuid = None
-            if thread_uuid is not None:
-                owned = (
-                    await db.execute(
-                        select(Thread.id).where(
-                            Thread.id == thread_uuid,
-                            Thread.user_identifier == claims.sub,
-                            Thread.tenant_id == claims.tenant_id,
-                        )
-                    )
-                ).scalar_one_or_none()
-        if owned is None:
+        # Not the caller's own prefix — only reachable for an admin (the
+        # other_users check above already 403s a non-admin here). If this
+        # file belongs to a conversation, that conversation must actually
+        # resolve for this caller (get_owned_thread's admin bypass — same
+        # predicate as everywhere else, so a tenant_admin can reach any
+        # thread in its own tenant, a platform_admin any thread at all —
+        # rather than re-checking the *caller's own* sub against the
+        # thread's owner, which always 404d for an admin deleting someone
+        # else's file).
+        if not claims.is_admin:
+            raise HTTPException(status_code=404, detail="File not found")
+        if thread_uuid is not None and await get_owned_thread(
+            db, thread_uuid, claims
+        ) is None:
             raise HTTPException(status_code=404, detail="File not found")
 
     try:
@@ -730,23 +743,21 @@ async def delete_file(
     )
     meta = result.scalar_one_or_none()
     if meta is not None:
-        from datetime import datetime, timezone
-
         meta.deleted_at = datetime.now(timezone.utc)
 
     # Deleting a file the conversation may still reference (earlier turns,
     # agent context) makes further replies in that thread unreliable — lock
     # it read-only rather than let the agent silently act on a file that no
-    # longer exists.
+    # longer exists. A real column (see models.py's Thread.locked_at), not
+    # `metadata` — PATCH /threads only ever touches `metadata`, so a user
+    # could otherwise clear their own lock by editing the thread's name.
     if thread_uuid is not None:
         thread = await db.get(Thread, thread_uuid)
         if thread is not None:
-            meta_dict = dict(thread.metadata_ or {})
-            meta_dict["locked"] = True
-            meta_dict["locked_reason"] = (
+            thread.locked_at = datetime.now(timezone.utc)
+            thread.locked_reason = (
                 f"A file was deleted from this conversation's storage: "
                 f"{path.rsplit('/', 1)[-1]}"
             )
-            thread.metadata_ = meta_dict
 
     await db.commit()

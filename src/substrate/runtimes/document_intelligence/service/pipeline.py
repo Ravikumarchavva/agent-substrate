@@ -69,6 +69,23 @@ class ExtractionResult:
     markdown: str = ""
 
 
+def _pdf_page_count(data: bytes) -> int | None:
+    """Page count for chunking decisions in ``extract()`` — ``None`` (not
+    an exception) for anything that isn't a readable PDF, so a corrupt or
+    non-PDF file just skips chunking and goes through the normal single
+    predict() path, which already has its own error handling."""
+    import pypdfium2 as pdfium
+
+    try:
+        doc = pdfium.PdfDocument(data)
+    except Exception:
+        return None
+    try:
+        return len(doc)
+    finally:
+        doc.close()
+
+
 def _disable_mkldnn() -> None:
     """Work around a real, reproducible paddlepaddle bug: every
     object-detection-style model (the layout detector here) crashes on
@@ -245,7 +262,12 @@ class ExtractionPipeline:
     detection + OCR, in a single call per document."""
 
     def __init__(
-        self, *, ocr_size: str = "tiny", device: str = "cpu", ocr_batch_size: int = 16
+        self,
+        *,
+        ocr_size: str = "tiny",
+        device: str = "cpu",
+        ocr_batch_size: int = 16,
+        max_pages_per_call: int | None = None,
     ) -> None:
         _disable_mkldnn()
         _parallelize_crop_image_regions()
@@ -267,6 +289,12 @@ class ExtractionPipeline:
             use_seal_recognition=False,
             use_chart_recognition=False,
         )
+        # See ServiceConfig.max_pages_per_call's docstring — bounds a
+        # single document's peak memory in extract() regardless of its
+        # total page count. Only meaningful on GPU (config.py leaves it
+        # None on CPU, ample system RAM); explicitly None here disables
+        # chunking (single predict() call, the original behavior).
+        self._max_pages_per_call = max_pages_per_call
 
     def warmup(self) -> None:
         """Run one tiny synthetic document through the pipeline so the
@@ -279,12 +307,60 @@ class ExtractionPipeline:
     def extract(self, data: bytes, filename: str) -> ExtractionResult:
         """Run layout+chart detection + OCR over every page of *data*."""
         suffix = Path(filename).suffix or ".pdf"
+        if self._max_pages_per_call is not None and suffix.lower() == ".pdf":
+            page_count = _pdf_page_count(data)
+            if page_count is not None and page_count > self._max_pages_per_call:
+                return self._extract_pdf_in_chunks(data, page_count)
         with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
             tmp.write(data)
             tmp.flush()
             results = list(self._pipeline.predict(tmp.name))
-        pages, document_markdown = self._pages_from_results(results)
-        return ExtractionResult(pages=pages, markdown=document_markdown)
+        pages, markdown_pages = self._pages_from_results(results)
+        return ExtractionResult(
+            pages=pages, markdown=self._finalize_markdown(pages, markdown_pages)
+        )
+
+    def _extract_pdf_in_chunks(self, data: bytes, page_count: int) -> ExtractionResult:
+        """Split a PDF wider than ``max_pages_per_call`` into page-range
+        chunks and run one ``predict()`` call per chunk instead of one for
+        the whole document, bounding peak memory to a single chunk's
+        worth of pages regardless of the document's total length. Page
+        numbers and markdown paragraph-continuation are made identical to
+        a single predict() call would have produced — chunking is an
+        internal memory-management detail, not something a caller should
+        be able to observe in the result shape.
+        """
+        import pypdfium2 as pdfium
+
+        chunk_size = self._max_pages_per_call
+        assert chunk_size is not None  # only called when set
+        pages: list[ExtractedPage] = []
+        markdown_pages: list[dict[str, Any]] = []
+        src = pdfium.PdfDocument(data)
+        try:
+            for start in range(0, page_count, chunk_size):
+                end = min(start + chunk_size, page_count)
+                chunk_doc = pdfium.PdfDocument.new()
+                try:
+                    chunk_doc.import_pages(src, list(range(start, end)))
+                    buf = io.BytesIO()
+                    chunk_doc.save(buf)
+                finally:
+                    chunk_doc.close()
+                with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
+                    tmp.write(buf.getvalue())
+                    tmp.flush()
+                    results = list(self._pipeline.predict(tmp.name))
+                chunk_pages, chunk_markdown_pages = self._pages_from_results(
+                    results, page_offset=start
+                )
+                pages.extend(chunk_pages)
+                markdown_pages.extend(chunk_markdown_pages)
+        finally:
+            src.close()
+        return ExtractionResult(
+            pages=pages, markdown=self._finalize_markdown(pages, markdown_pages)
+        )
 
     def extract_batch(self, items: list[tuple[bytes, str]]) -> list[ExtractionResult]:
         """Extract multiple documents in ONE ``predict()`` call.
@@ -322,21 +398,33 @@ class ExtractionPipeline:
 
         out: list[ExtractionResult] = []
         for p in tmp_paths:
-            pages, document_markdown = self._pages_from_results(by_path[p])
-            out.append(ExtractionResult(pages=pages, markdown=document_markdown))
+            pages, markdown_pages = self._pages_from_results(by_path[p])
+            out.append(
+                ExtractionResult(
+                    pages=pages, markdown=self._finalize_markdown(pages, markdown_pages)
+                )
+            )
         return out
 
     def _pages_from_results(
-        self, results: Iterable[Any]
-    ) -> tuple[list[ExtractedPage], str]:
+        self, results: Iterable[Any], *, page_offset: int = 0
+    ) -> tuple[list[ExtractedPage], list[dict[str, Any]]]:
         """Turn a ``predict()`` results iterable for ONE document's pages
-        into ``(pages, document_markdown)`` — shared by ``extract()`` and
+        into ``(pages, markdown_pages)`` — shared by ``extract()`` and
         ``extract_batch()`` (which demuxes a multi-document batch back into
-        per-document result groups before calling this)."""
+        per-document result groups before calling this). ``markdown_pages``
+        is the raw per-page structure ``concatenate_markdown_pages`` needs,
+        not yet joined — ``extract()`` accumulates it across page-chunks
+        (see ``_extract_large_pdf_in_chunks``) and joins once at the end,
+        so paragraph continuation across a chunk boundary is identical to
+        one predict() call over the whole document. ``page_offset`` shifts
+        ``page_index`` (always 0-based *within whatever was predict()-ed*)
+        back to the real page number in the source document, for a page
+        range chunk that isn't the document's first."""
         pages: list[ExtractedPage] = []
         markdown_pages: list[dict[str, Any]] = []
         for res in results:
-            page_no = int(res.get("page_index") or 0) + 1
+            page_no = page_offset + int(res.get("page_index") or 0) + 1
             # Match blocks to nearest bounding box to recover detector confidence scores
             score_by_bbox = _score_lookup(res.get("layout_det_res"))
 
@@ -413,15 +501,23 @@ class ExtractionPipeline:
                 )
             )
 
-        document_markdown = ""
-        if markdown_pages:
-            try:
-                document_markdown = self._pipeline.concatenate_markdown_pages(
-                    markdown_pages
-                ).get("markdown_texts", "")
-            except Exception:
-                document_markdown = "\n\n".join(p.markdown for p in pages)
-        return pages, document_markdown
+        return pages, markdown_pages
+
+    def _finalize_markdown(
+        self, pages: list[ExtractedPage], markdown_pages: list[dict[str, Any]]
+    ) -> str:
+        """Join every page's markdown into one document, via PaddleX's own
+        CJK-aware ``concatenate_markdown_pages`` (paragraph continuation
+        across a page break) when possible, falling back to a plain join
+        if that ever raises."""
+        if not markdown_pages:
+            return ""
+        try:
+            return self._pipeline.concatenate_markdown_pages(markdown_pages).get(
+                "markdown_texts", ""
+            )
+        except Exception:
+            return "\n\n".join(p.markdown for p in pages)
 
 
 def _score_lookup(

@@ -370,7 +370,23 @@ services:
       # these are 24GB cards. Starting point to measure real VRAM/speed
       # against, not a final verified number.
       DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE: ${DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE:-64}
+      # Empty by default (no chunking) — these are 24GB cards; a 4GB
+      # dev card overrides this at `docker compose up` time. See
+      # ServiceConfig.max_pages_per_call's docstring for the real OOM
+      # this addresses.
+      DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL: ${DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL:-}
       HF_TOKEN: ${HF_TOKEN:-}
+      # Real finding, not precautionary: a genuine 267-page PDF (batch
+      # size 16, the value already tuned for a 4GB card above) still hit
+      # "CUDA out of memory... 18.50 MiB is free... try setting
+      # PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid
+      # fragmentation" mid-document on a 4GB card — the allocator's own
+      # suggestion, applied here. Long single requests (hundreds of
+      # sequential batches within one predict() call) fragment the CUDA
+      # allocator's memory pool over the request's lifetime even when each
+      # individual batch fits; expandable_segments lets it grow one
+      # virtual segment instead of hunting for contiguous free blocks.
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     deploy:
       resources:
         reservations:
@@ -398,7 +414,23 @@ services:
       # these are 24GB cards. Starting point to measure real VRAM/speed
       # against, not a final verified number.
       DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE: ${DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE:-64}
+      # Empty by default (no chunking) — these are 24GB cards; a 4GB
+      # dev card overrides this at `docker compose up` time. See
+      # ServiceConfig.max_pages_per_call's docstring for the real OOM
+      # this addresses.
+      DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL: ${DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL:-}
       HF_TOKEN: ${HF_TOKEN:-}
+      # Real finding, not precautionary: a genuine 267-page PDF (batch
+      # size 16, the value already tuned for a 4GB card above) still hit
+      # "CUDA out of memory... 18.50 MiB is free... try setting
+      # PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid
+      # fragmentation" mid-document on a 4GB card — the allocator's own
+      # suggestion, applied here. Long single requests (hundreds of
+      # sequential batches within one predict() call) fragment the CUDA
+      # allocator's memory pool over the request's lifetime even when each
+      # individual batch fits; expandable_segments lets it grow one
+      # virtual segment instead of hunting for contiguous free blocks.
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     deploy:
       resources:
         reservations:
@@ -426,7 +458,23 @@ services:
       # these are 24GB cards. Starting point to measure real VRAM/speed
       # against, not a final verified number.
       DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE: ${DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE:-64}
+      # Empty by default (no chunking) — these are 24GB cards; a 4GB
+      # dev card overrides this at `docker compose up` time. See
+      # ServiceConfig.max_pages_per_call's docstring for the real OOM
+      # this addresses.
+      DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL: ${DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL:-}
       HF_TOKEN: ${HF_TOKEN:-}
+      # Real finding, not precautionary: a genuine 267-page PDF (batch
+      # size 16, the value already tuned for a 4GB card above) still hit
+      # "CUDA out of memory... 18.50 MiB is free... try setting
+      # PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid
+      # fragmentation" mid-document on a 4GB card — the allocator's own
+      # suggestion, applied here. Long single requests (hundreds of
+      # sequential batches within one predict() call) fragment the CUDA
+      # allocator's memory pool over the request's lifetime even when each
+      # individual batch fits; expandable_segments lets it grow one
+      # virtual segment instead of hunting for contiguous free blocks.
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     deploy:
       resources:
         reservations:
@@ -461,7 +509,23 @@ services:
       DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-false}
       DOCUMENT_INTELLIGENCE_DEVICE: gpu:0
       DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE: ${DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE:-64}
+      # Empty by default (no chunking) — these are 24GB cards; a 4GB
+      # dev card overrides this at `docker compose up` time. See
+      # ServiceConfig.max_pages_per_call's docstring for the real OOM
+      # this addresses.
+      DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL: ${DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL:-}
       HF_TOKEN: ${HF_TOKEN:-}
+      # Real finding, not precautionary: a genuine 267-page PDF (batch
+      # size 16, the value already tuned for a 4GB card above) still hit
+      # "CUDA out of memory... 18.50 MiB is free... try setting
+      # PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid
+      # fragmentation" mid-document on a 4GB card — the allocator's own
+      # suggestion, applied here. Long single requests (hundreds of
+      # sequential batches within one predict() call) fragment the CUDA
+      # allocator's memory pool over the request's lifetime even when each
+      # individual batch fits; expandable_segments lets it grow one
+      # virtual segment instead of hunting for contiguous free blocks.
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     deploy:
       resources:
         reservations:
@@ -485,7 +549,23 @@ services:
       DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-false}
       DOCUMENT_INTELLIGENCE_DEVICE: gpu:0
       DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE: ${DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE:-64}
+      # Empty by default (no chunking) — these are 24GB cards; a 4GB
+      # dev card overrides this at `docker compose up` time. See
+      # ServiceConfig.max_pages_per_call's docstring for the real OOM
+      # this addresses.
+      DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL: ${DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL:-}
       HF_TOKEN: ${HF_TOKEN:-}
+      # Real finding, not precautionary: a genuine 267-page PDF (batch
+      # size 16, the value already tuned for a 4GB card above) still hit
+      # "CUDA out of memory... 18.50 MiB is free... try setting
+      # PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid
+      # fragmentation" mid-document on a 4GB card — the allocator's own
+      # suggestion, applied here. Long single requests (hundreds of
+      # sequential batches within one predict() call) fragment the CUDA
+      # allocator's memory pool over the request's lifetime even when each
+      # individual batch fits; expandable_segments lets it grow one
+      # virtual segment instead of hunting for contiguous free blocks.
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     deploy:
       resources:
         reservations:
@@ -509,7 +589,23 @@ services:
       DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN: ${DOCUMENT_INTELLIGENCE_ENABLE_DOCUMENT_SECURITY_SCAN:-false}
       DOCUMENT_INTELLIGENCE_DEVICE: gpu:0
       DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE: ${DOCUMENT_INTELLIGENCE_OCR_BATCH_SIZE:-64}
+      # Empty by default (no chunking) — these are 24GB cards; a 4GB
+      # dev card overrides this at `docker compose up` time. See
+      # ServiceConfig.max_pages_per_call's docstring for the real OOM
+      # this addresses.
+      DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL: ${DOCUMENT_INTELLIGENCE_MAX_PAGES_PER_CALL:-}
       HF_TOKEN: ${HF_TOKEN:-}
+      # Real finding, not precautionary: a genuine 267-page PDF (batch
+      # size 16, the value already tuned for a 4GB card above) still hit
+      # "CUDA out of memory... 18.50 MiB is free... try setting
+      # PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid
+      # fragmentation" mid-document on a 4GB card — the allocator's own
+      # suggestion, applied here. Long single requests (hundreds of
+      # sequential batches within one predict() call) fragment the CUDA
+      # allocator's memory pool over the request's lifetime even when each
+      # individual batch fits; expandable_segments lets it grow one
+      # virtual segment instead of hunting for contiguous free blocks.
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     deploy:
       resources:
         reservations:

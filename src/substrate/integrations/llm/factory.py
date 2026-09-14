@@ -577,7 +577,16 @@ def create_embedding_client(
             SentenceTransformersEmbeddingClient,
         )
 
-        return SentenceTransformersEmbeddingClient(bare, batch_size=64)
+        # Force CPU: this model is small (384-dim MiniLM class) and fast
+        # enough there by design (see the client's own docstring). Left to
+        # auto-detect, it silently grabs CUDA whenever a GPU is visible on
+        # the host — which now means fighting the document-intelligence
+        # service for the same few GB of VRAM. Real, reproduced failure:
+        # a small-file upload's embedding step hit "CUDA error: out of
+        # memory" loading this model's weights onto a GPU the
+        # document-intelligence container was already using, even though
+        # document extraction itself had just succeeded.
+        return SentenceTransformersEmbeddingClient(bare, batch_size=64, device="cpu")
 
     raise ValueError(f"Unsupported embedding provider: {provider!r}")
 

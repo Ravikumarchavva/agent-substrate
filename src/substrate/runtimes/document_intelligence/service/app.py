@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI):
         ocr_size=svc_config.ocr_size,
         device=svc_config.device,
         ocr_batch_size=svc_config.ocr_batch_size,
+        max_pages_per_call=svc_config.max_pages_per_call,
     )
 
     app.state.pipeline = pipeline

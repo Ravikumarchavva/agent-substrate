@@ -434,9 +434,14 @@ async def test_attachment_dict_includes_session_path_for_ui_to_open_the_file(
     assert attachment["session_path"] == "uploads/data.xlsx"
 
 
-async def test_attachment_dict_omits_session_path_for_extractable_types():
-    """PDFs (and other RAG-indexed types) return early, before session_path
-    is ever computed — they're opened via citations, not this path."""
+async def test_attachment_dict_omits_workspace_path_for_extractable_types():
+    """PDFs (and other RAG-indexed types) omit workspace_path — the only
+    field the model prompt reads (attachments_block) — so the model is
+    steered toward session_document_search instead of reading the raw file
+    via code_interpreter. session_path is UI-only (opens the file in the
+    read-only side-panel viewer) and the model never sees it, so it must
+    still be set for every content type — see
+    test_attachment_dict_still_sets_session_path_for_extractable_types."""
     file_id = "88888888-8888-8888-8888-888888888888"
     meta = _pdf_meta(
         file_id,
@@ -467,7 +472,47 @@ async def test_attachment_dict_omits_session_path_for_extractable_types():
     _text, _images, attachments, _new = await _build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
-    assert "session_path" not in attachments[0]
+    assert "workspace_path" not in attachments[0]
+    assert attachments[0]["session_path"] == "uploads/corrupt.pdf"
+
+
+async def test_attachment_dict_still_sets_session_path_for_extractable_types():
+    """Real, reported bug: a PDF's attachment card fell back to an
+    external-tab download link instead of substrate-ui's in-panel viewer,
+    because this used to return before session_path was ever computed —
+    collateral damage from the workspace_path skip above, since session_path
+    is UI-only and the model prompt (attachments_block) never reads it."""
+    file_id = "99999999-9999-9999-9999-999999999999"
+    meta = _pdf_meta(
+        file_id,
+        "AAPL_2002.pdf",
+        "tenants/t1/users/u1/conversations/c1/workspace/shared/uploads/AAPL_2002.pdf",
+        12,
+    )
+
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [meta]
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_result
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=execute_result)
+    db.commit = AsyncMock()
+
+    file_store = MagicMock()
+    file_store.download = AsyncMock(return_value=b"not a real pdf")
+
+    ctx = MagicMock()
+    ctx.file_store = file_store
+    ctx.rag_backend = None
+
+    body = MagicMock()
+    body.file_ids = [file_id]
+
+    _text, _images, attachments, _new = await _build_file_context(
+        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
+    )
+    assert attachments[0]["session_path"] == "uploads/AAPL_2002.pdf"
 
 
 async def test_workspace_path_strips_tenant_and_user_prefix_for_k8s_pvc_mode(

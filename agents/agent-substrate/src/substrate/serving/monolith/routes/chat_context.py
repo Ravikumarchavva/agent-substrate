@@ -271,27 +271,34 @@ async def _build_file_context(
         relative_path: str | None = None
         mount_path = _SANDBOX_WORKSPACE_MOUNT_PATH
 
-        # Extractable types (e.g. PDF) are indexed into RAG; omit raw workspace path
-        # so the model prioritizes knowledge_search over direct file inspection.
-        if meta.content_type in EXTRACTABLE_CONTENT_TYPES:
-            return attachment
-
-        if settings.SANDBOX_RUNTIME == "nsjail":
-            mount_path = "/workspace"
-            relative_path = _session_relative_path(meta.object_key)
-        elif settings.CI_WORKSPACE_PVC_CLAIM:
-            # The k8s pod's PVC subPath is `tenants/{tid}/users/{uid}`
-            # (sandbox_service.py::_ensure_user_template), so a path inside
-            # the pod is whatever follows that prefix in the object key —
-            # `conversations/{cid}/workspace/shared/{name}` for a real
-            # conversation file. Anchored at fixed positions, matching
-            # every other new-shape parser in this codebase (see
-            # routes/workspace.py's _is_version_key/_session_id_from_key).
-            parts = meta.object_key.split("/")
-            if len(parts) >= 5 and parts[0] == "tenants" and parts[2] == "users":
-                relative_path = "/".join(parts[4:])
-        if relative_path is not None:
-            attachment["workspace_path"] = f"{mount_path}/{relative_path}"
+        # Extractable types (e.g. PDF) are indexed into RAG, so workspace_path
+        # (the only field attachments_block/chat_intents.py actually puts in
+        # front of the model) is omitted for them — that's what steers the
+        # model toward knowledge_search/session_document_search instead of
+        # reading the raw file via code_interpreter. session_path below is a
+        # UI-only field the model never sees (opens the file in the read-only
+        # side-panel viewer — substrate-ui's AttachmentDocumentCard), so it
+        # must still be set regardless of content type: this early-skip used
+        # to fall all the way through past it too, silently downgrading every
+        # extractable file's attachment card to an external-tab download link
+        # instead of the in-panel viewer.
+        if meta.content_type not in EXTRACTABLE_CONTENT_TYPES:
+            if settings.SANDBOX_RUNTIME == "nsjail":
+                mount_path = "/workspace"
+                relative_path = _session_relative_path(meta.object_key)
+            elif settings.CI_WORKSPACE_PVC_CLAIM:
+                # The k8s pod's PVC subPath is `tenants/{tid}/users/{uid}`
+                # (sandbox_service.py::_ensure_user_template), so a path inside
+                # the pod is whatever follows that prefix in the object key —
+                # `conversations/{cid}/workspace/shared/{name}` for a real
+                # conversation file. Anchored at fixed positions, matching
+                # every other new-shape parser in this codebase (see
+                # routes/workspace.py's _is_version_key/_session_id_from_key).
+                parts = meta.object_key.split("/")
+                if len(parts) >= 5 and parts[0] == "tenants" and parts[2] == "users":
+                    relative_path = "/".join(parts[4:])
+            if relative_path is not None:
+                attachment["workspace_path"] = f"{mount_path}/{relative_path}"
 
         # Workspace-relative path (no sandbox mount prefix, no dependency
         # on which SANDBOX_RUNTIME happens to be configured) — lets the UI

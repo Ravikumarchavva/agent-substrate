@@ -227,6 +227,17 @@ async def lifespan(app: FastAPI):
         embedding_client=app.state.embedding_client,
     )
 
+    from substrate.serving.monolith.routes.files import sweep_stuck_staging_uploads
+
+    dispatched = await sweep_stuck_staging_uploads(
+        app.state.ctx, ttl_minutes=settings.STAGING_RECONCILIATION_TTL_MINUTES
+    )
+    if dispatched:
+        logger.info(
+            "Staging reconciliation: re-dispatched %d stuck upload(s) on startup",
+            dispatched,
+        )
+
     for name in ("httpx", "urllib3", "openai"):
         setup_logging().setLevel(logging.WARNING)
 

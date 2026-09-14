@@ -474,6 +474,97 @@ async def sweep_stale_pending_uploads(
     return len(stale_ids)
 
 
+async def _read_stuck_upload_bytes(
+    ctx: ServerDependencies, row: FileMetadata
+) -> Optional[bytes]:
+    """A stuck row's bytes live in the pending store (the common case —
+    ``promoted_at`` only gets set at chat-send time, well after staging) or
+    the permanent ``file_store`` (already promoted, staging just never
+    finished for some other reason). Never raises — a download failure
+    (the object was itself swept/deleted independently) just skips this
+    one row, logged, rather than crashing the whole reconciliation pass."""
+    store = ctx.pending_file_store if row.promoted_at is None else ctx.file_store
+    if store is None:
+        return None
+    try:
+        return await store.download(row.object_key)
+    except Exception as exc:
+        logger.warning(
+            "Staging reconciliation: could not re-download %r for file %s: %s",
+            row.object_key,
+            row.id,
+            exc,
+        )
+        return None
+
+
+async def sweep_stuck_staging_uploads(
+    ctx: ServerDependencies, *, ttl_minutes: float = 10.0
+) -> int:
+    """Re-dispatch eager staging (``_stage_uploaded_doc``) for uploads whose
+    staging started but never finished — a server restart mid-task leaves
+    ``staged_at`` permanently unset (``_stage_uploaded_doc``'s own
+    ``asyncio.create_task`` has no durability across a restart, by design —
+    see its docstring), and the send-time path then blocks forever on "still
+    processing" instead of ever recovering. Run once at startup from
+    ``app.py``, after ``app.state.ctx`` is built — turns "stuck forever
+    after a restart" into "delayed by up to one restart", the documented
+    real gap this closes without inventing new durable-job infrastructure
+    (see the phase-6 plan notes: the pipeline core is already a pure
+    function of its inputs, so a re-dispatch is a legitimate fix here,
+    not a workaround).
+
+    Deliberately narrow: a row that already failed with a real
+    ``staging_error`` is NOT retried here — it already surfaced a clear
+    error to the user (see ``_stage_uploaded_doc``'s except branch);
+    silently retrying it behind their back would contradict that. Only
+    rows that look like they're still "in flight" (both ``staged_at`` and
+    ``staging_error`` NULL) past *ttl_minutes* qualify — a real one is
+    never in flight for anywhere near 10 minutes under normal operation,
+    so this only ever fires for genuinely abandoned (restart-orphaned)
+    work. Cross-tenant by design (a startup sweep, not a request), same
+    ``app.bypass_rls`` pattern as ``sweep_stale_pending_uploads`` above.
+    """
+    if ctx.session_factory is None or ctx.rag_backend is None:
+        return 0
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=ttl_minutes)
+    async with ctx.session_factory() as session:
+        await session.execute(text("SELECT set_config('app.bypass_rls', 'on', false)"))
+        result = await session.execute(
+            select(FileMetadata).where(
+                FileMetadata.staged_at.is_(None),
+                FileMetadata.staging_error.is_(None),
+                FileMetadata.deleted_at.is_(None),
+                FileMetadata.thread_id.isnot(None),
+                FileMetadata.user_id.isnot(None),
+                FileMetadata.created_at < cutoff,
+            )
+        )
+        rows = result.scalars().all()
+
+    dispatched = 0
+    for row in rows:
+        data = await _read_stuck_upload_bytes(ctx, row)
+        if data is None:
+            continue
+        asyncio.create_task(
+            _stage_uploaded_doc(
+                ctx,
+                row.id,
+                data,
+                object_key=row.object_key,
+                original_name=row.original_name,
+                content_type=row.content_type,
+                owner_sub=str(row.user_id),
+                tenant_id=row.org_id or "",
+                session_id=str(row.thread_id),
+            )
+        )
+        dispatched += 1
+    return dispatched
+
+
 @router.post("/upload", response_model=FileUploadResponse, status_code=201)
 async def upload_file(
     request: Request,

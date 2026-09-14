@@ -468,3 +468,142 @@ async def test_doc_quota_status_disabled_without_redis():
         request=_request_mock(None), claims=_claims_mock()
     )
     assert status["enabled"] is False
+
+
+# ── sweep_stuck_staging_uploads (phase-6 reconciliation sweep) ─────────────
+
+
+def _stuck_file_metadata(**overrides):
+    from datetime import datetime, timedelta, timezone
+
+    from substrate.serving.monolith.models import FileMetadata
+
+    defaults = dict(
+        id=uuid.uuid4(),
+        object_key="tenant/user/uploads/stuck.pdf",
+        original_name="stuck.pdf",
+        content_type="application/pdf",
+        org_id="test-tenant",
+        user_id=uuid.uuid4(),
+        thread_id=_THREAD_ID,
+        staged_at=None,
+        staging_error=None,
+        deleted_at=None,
+        promoted_at=None,
+        created_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
+    defaults.update(overrides)
+    return FileMetadata(**defaults)
+
+
+def _session_ctx_mock(rows: list) -> MagicMock:
+    """A ctx whose session_factory() async-context-manager yields a session
+    whose execute().scalars().all() returns *rows* -- the exact shape
+    sweep_stuck_staging_uploads reads."""
+    session = MagicMock()
+    # AsyncMock().return_value auto-vivifies as ANOTHER AsyncMock unless
+    # explicitly overridden -- session.execute()'s real result is a plain
+    # (sync) SQLAlchemy Result, so .return_value must be a plain MagicMock
+    # or .scalars() below returns an unawaited coroutine instead of the
+    # fake ScalarResult.
+    execute_result = MagicMock()
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = rows
+    execute_result.scalars.return_value = scalars_result
+    session.execute = AsyncMock(return_value=execute_result)
+    # The re-dispatched _stage_uploaded_doc also opens its own
+    # session_factory() session to mark staged_at/staging_error -- give it
+    # a real awaitable .get() too (None is fine: it just means that
+    # bookkeeping update silently no-ops, matching "if row is not None").
+    session.get = AsyncMock(return_value=None)
+    session.commit = AsyncMock()
+
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session)
+    session_cm.__aexit__ = AsyncMock(return_value=False)
+
+    ctx = MagicMock()
+    ctx.session_factory = MagicMock(return_value=session_cm)
+    ctx.rag_backend = MagicMock()
+    ctx.pending_file_store = MagicMock()
+    ctx.pending_file_store.download = AsyncMock(return_value=b"%PDF-1.4 stuck bytes")
+    ctx.file_store = MagicMock()
+    ctx.file_store.download = AsyncMock(return_value=b"%PDF-1.4 promoted bytes")
+    return ctx
+
+
+async def test_sweep_redispatches_a_genuinely_stuck_upload(monkeypatch):
+    from substrate.serving.monolith.routes import files as files_module
+
+    row = _stuck_file_metadata()
+    ctx = _session_ctx_mock([row])
+
+    captured_coros = []
+    monkeypatch.setattr(
+        files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
+    )
+
+    with patch(
+        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        new=AsyncMock(),
+    ) as mock_ingest:
+        dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
+        assert dispatched == 1
+        assert len(captured_coros) == 1
+        await captured_coros[0]  # run the re-dispatched staging task
+
+    ctx.pending_file_store.download.assert_awaited_once_with(row.object_key)
+    mock_ingest.assert_awaited_once()
+    kwargs = mock_ingest.await_args.kwargs
+    assert kwargs["session_id"] == str(_THREAD_ID)
+    assert kwargs["tenant_id"] == "test-tenant"
+    assert kwargs["user_id"] == str(row.user_id)
+
+
+async def test_sweep_reads_from_file_store_when_already_promoted(monkeypatch):
+    """promoted_at set -> bytes live in the permanent file_store, not the
+    pending store (promotion already moved them)."""
+    from datetime import datetime, timezone
+
+    from substrate.serving.monolith.routes import files as files_module
+
+    row = _stuck_file_metadata(promoted_at=datetime.now(timezone.utc))
+    ctx = _session_ctx_mock([row])
+    monkeypatch.setattr(files_module.asyncio, "create_task", lambda coro: coro.close())
+
+    with patch(
+        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        new=AsyncMock(),
+    ):
+        dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
+
+    assert dispatched == 1
+    ctx.file_store.download.assert_awaited_once_with(row.object_key)
+    ctx.pending_file_store.download.assert_not_awaited()
+
+
+async def test_sweep_skips_row_when_bytes_cannot_be_read(monkeypatch):
+    from substrate.serving.monolith.routes import files as files_module
+
+    row = _stuck_file_metadata()
+    ctx = _session_ctx_mock([row])
+    ctx.pending_file_store.download = AsyncMock(side_effect=FileNotFoundError("gone"))
+    monkeypatch.setattr(
+        files_module.asyncio, "create_task", lambda coro: (_ for _ in ()).throw(
+            AssertionError("must not dispatch when bytes can't be read")
+        )
+    )
+
+    dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
+
+    assert dispatched == 0
+
+
+async def test_sweep_ignores_no_session_factory_or_rag_backend():
+    ctx = MagicMock()
+    ctx.session_factory = None
+    ctx.rag_backend = MagicMock()
+
+    from substrate.serving.monolith.routes import files as files_module
+
+    assert await files_module.sweep_stuck_staging_uploads(ctx) == 0

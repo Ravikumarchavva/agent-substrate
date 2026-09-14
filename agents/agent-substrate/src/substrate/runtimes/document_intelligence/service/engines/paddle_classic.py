@@ -234,6 +234,130 @@ def _rewrite_markdown_images(
     return markdown_texts
 
 
+def _pages_from_results_for_pipeline(
+    results: Iterable[Any], *, page_offset: int = 0
+) -> tuple[list[ExtractedPage], list[dict[str, Any]]]:
+    """Turn a ``predict()`` results iterable for ONE document's pages into
+    ``(pages, markdown_pages)`` — shared by ``PaddleClassicEngine``
+    (``extract()``/``extract_batch()``, which demuxes a multi-document
+    batch back into per-document result groups before calling this) AND
+    ``engines/paddle_vl.py``'s ``PaddleVLEngine`` — verified this session
+    the two pipelines yield the same result shape (same PaddleX
+    layout-parsing pipeline family), so this is a genuine, not
+    coincidental, code-reuse opportunity rather than two engines that
+    happen to look similar.
+
+    ``markdown_pages`` is the raw per-page structure
+    ``concatenate_markdown_pages`` needs, not yet joined — ``extract()``
+    accumulates it across page-chunks (see ``_extract_pdf_in_chunks``) and
+    joins once at the end, so paragraph continuation across a chunk
+    boundary is identical to one predict() call over the whole document.
+    ``page_offset`` shifts ``page_index`` (always 0-based *within whatever
+    was predict()-ed*) back to the real page number in the source
+    document, for a page range chunk that isn't the document's first."""
+    pages: list[ExtractedPage] = []
+    markdown_pages: list[dict[str, Any]] = []
+    for res in results:
+        page_no = page_offset + int(res.get("page_index") or 0) + 1
+        # Match blocks to nearest bounding box to recover detector confidence scores
+        score_by_bbox = _score_lookup(res.get("layout_det_res"))
+
+        text_parts: list[str] = []
+        images: list[ExtractedImage] = []
+        kept_image_paths: dict[str, str] = {}
+        dropped_image_paths: set[str] = set()
+        for block in res.get("parsing_res_list") or []:
+            label = getattr(block, "label", "") or ""
+            confidence = _nearest_score(score_by_bbox, getattr(block, "bbox", None))
+            raw_content = (getattr(block, "content", "") or "").strip()
+            # Convert structured table HTML to Markdown for plain-text search stream
+            md_table = (
+                _html_table_to_markdown(raw_content) if label == "table" else ""
+            )
+            img_dict = getattr(block, "image", None)
+            img_path = img_dict.get("path") if isinstance(img_dict, dict) else None
+            pil_img = img_dict.get("img") if isinstance(img_dict, dict) else None
+
+            # Crop as image if label matches, confidence clears threshold, and PIL image exists
+            keep_as_image = (
+                label in _IMAGE_LABELS
+                and confidence >= _MIN_IMAGE_CONFIDENCE
+                and pil_img is not None
+            )
+            if keep_as_image and pil_img is not None:
+                buf = io.BytesIO()
+                pil_img.convert("RGB").save(buf, format="PNG")
+                caption = md_table or raw_content or None
+                img_id = f"img-p{page_no}-{len(images)}"
+                images.append(
+                    ExtractedImage(
+                        data=buf.getvalue(),
+                        page_number=page_no,
+                        label=label,
+                        confidence=confidence,
+                        caption=caption,
+                        id=img_id,
+                    )
+                )
+                if img_path:
+                    kept_image_paths[img_path] = img_id
+                if md_table:
+                    text_parts.append(md_table)
+                continue
+            if img_path:
+                dropped_image_paths.add(img_path)
+            # Non-image blocks or marginal detections fall through to plain text
+            content = md_table or raw_content
+            if content:
+                text_parts.append(content)
+
+        # Assemble page markdown using PaddleX reading order
+        page_md = res.markdown
+        page_markdown_text = _rewrite_markdown_images(
+            page_md.get("markdown_texts", ""), kept_image_paths, dropped_image_paths
+        )
+        # Retain only compressed ExtractedImage.data (drop PIL copies to save memory)
+        markdown_pages.append(
+            {
+                "markdown_texts": page_markdown_text,
+                "page_continuation_flags": page_md.get(
+                    "page_continuation_flags", (True, True)
+                ),
+            }
+        )
+
+        pages.append(
+            ExtractedPage(
+                page_number=page_no,
+                text="\n\n".join(text_parts),
+                images=images,
+                markdown=page_markdown_text,
+            )
+        )
+
+    return pages, markdown_pages
+
+
+def _finalize_markdown_for_pipeline(
+    pipeline: Any, pages: list[ExtractedPage], markdown_pages: list[dict[str, Any]]
+) -> str:
+    """Join every page's markdown into one document, via PaddleX's own
+    CJK-aware ``concatenate_markdown_pages`` (paragraph continuation across
+    a page break) when possible, falling back to a plain join if that ever
+    raises. *pipeline* is whatever real PaddleX pipeline object produced
+    *markdown_pages* — both ``PPStructureV3`` and ``PaddleOCR-VL-1.6``
+    pipeline objects expose the same ``concatenate_markdown_pages`` method,
+    verified this session."""
+    if not markdown_pages:
+        return ""
+    try:
+        return pipeline.concatenate_markdown_pages(markdown_pages).get(
+            "markdown_texts", ""
+        )
+    except Exception:
+        return "\n\n".join(p.markdown for p in pages)
+
+
 class PaddleClassicEngine:
     """One PaddleOCR ``PPStructureV3`` pipeline: layout + chart/table
     detection + OCR, in a single call per document. Mode ``ocr_classic``.
@@ -418,115 +542,12 @@ class PaddleClassicEngine:
     def _pages_from_results(
         self, results: Iterable[Any], *, page_offset: int = 0
     ) -> tuple[list[ExtractedPage], list[dict[str, Any]]]:
-        """Turn a ``predict()`` results iterable for ONE document's pages
-        into ``(pages, markdown_pages)`` — shared by ``extract()`` and
-        ``extract_batch()`` (which demuxes a multi-document batch back into
-        per-document result groups before calling this). ``markdown_pages``
-        is the raw per-page structure ``concatenate_markdown_pages`` needs,
-        not yet joined — ``extract()`` accumulates it across page-chunks
-        (see ``_extract_pdf_in_chunks``) and joins once at the end, so
-        paragraph continuation across a chunk boundary is identical to one
-        predict() call over the whole document. ``page_offset`` shifts
-        ``page_index`` (always 0-based *within whatever was predict()-ed*)
-        back to the real page number in the source document, for a page
-        range chunk that isn't the document's first."""
-        pages: list[ExtractedPage] = []
-        markdown_pages: list[dict[str, Any]] = []
-        for res in results:
-            page_no = page_offset + int(res.get("page_index") or 0) + 1
-            # Match blocks to nearest bounding box to recover detector confidence scores
-            score_by_bbox = _score_lookup(res.get("layout_det_res"))
-
-            text_parts: list[str] = []
-            images: list[ExtractedImage] = []
-            kept_image_paths: dict[str, str] = {}
-            dropped_image_paths: set[str] = set()
-            for block in res.get("parsing_res_list") or []:
-                label = getattr(block, "label", "") or ""
-                confidence = _nearest_score(score_by_bbox, getattr(block, "bbox", None))
-                raw_content = (getattr(block, "content", "") or "").strip()
-                # Convert structured table HTML to Markdown for plain-text search stream
-                md_table = (
-                    _html_table_to_markdown(raw_content) if label == "table" else ""
-                )
-                img_dict = getattr(block, "image", None)
-                img_path = img_dict.get("path") if isinstance(img_dict, dict) else None
-                pil_img = img_dict.get("img") if isinstance(img_dict, dict) else None
-
-                # Crop as image if label matches, confidence clears threshold, and PIL image exists
-                keep_as_image = (
-                    label in _IMAGE_LABELS
-                    and confidence >= _MIN_IMAGE_CONFIDENCE
-                    and pil_img is not None
-                )
-                if keep_as_image and pil_img is not None:
-                    buf = io.BytesIO()
-                    pil_img.convert("RGB").save(buf, format="PNG")
-                    caption = md_table or raw_content or None
-                    img_id = f"img-p{page_no}-{len(images)}"
-                    images.append(
-                        ExtractedImage(
-                            data=buf.getvalue(),
-                            page_number=page_no,
-                            label=label,
-                            confidence=confidence,
-                            caption=caption,
-                            id=img_id,
-                        )
-                    )
-                    if img_path:
-                        kept_image_paths[img_path] = img_id
-                    if md_table:
-                        text_parts.append(md_table)
-                    continue
-                if img_path:
-                    dropped_image_paths.add(img_path)
-                # Non-image blocks or marginal detections fall through to plain text
-                content = md_table or raw_content
-                if content:
-                    text_parts.append(content)
-
-            # Assemble page markdown using PaddleX reading order
-            page_md = res.markdown
-            page_markdown_text = _rewrite_markdown_images(
-                page_md.get("markdown_texts", ""), kept_image_paths, dropped_image_paths
-            )
-            # Retain only compressed ExtractedImage.data (drop PIL copies to save memory)
-            markdown_pages.append(
-                {
-                    "markdown_texts": page_markdown_text,
-                    "page_continuation_flags": page_md.get(
-                        "page_continuation_flags", (True, True)
-                    ),
-                }
-            )
-
-            pages.append(
-                ExtractedPage(
-                    page_number=page_no,
-                    text="\n\n".join(text_parts),
-                    images=images,
-                    markdown=page_markdown_text,
-                )
-            )
-
-        return pages, markdown_pages
+        return _pages_from_results_for_pipeline(results, page_offset=page_offset)
 
     def _finalize_markdown(
         self, pages: list[ExtractedPage], markdown_pages: list[dict[str, Any]]
     ) -> str:
-        """Join every page's markdown into one document, via PaddleX's own
-        CJK-aware ``concatenate_markdown_pages`` (paragraph continuation
-        across a page break) when possible, falling back to a plain join
-        if that ever raises."""
-        if not markdown_pages:
-            return ""
-        try:
-            return self._pipeline.concatenate_markdown_pages(markdown_pages).get(
-                "markdown_texts", ""
-            )
-        except Exception:
-            return "\n\n".join(p.markdown for p in pages)
+        return _finalize_markdown_for_pipeline(self._pipeline, pages, markdown_pages)
 
 
 def _score_lookup(

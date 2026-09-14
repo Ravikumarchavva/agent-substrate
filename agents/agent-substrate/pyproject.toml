@@ -111,12 +111,27 @@ document-intelligence = [
     "doc-firewall>=0.5.1",
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle==3.3.0",
+    # Mode raw_text's Tier 1 DOCX/PPTX conversion — pure Python (mammoth/
+    # python-pptx under the hood), no rendering engine, no LibreOffice
+    # needed for the common (born-digital) case. Scoped extras only, not
+    # [all] — this service has no use for markitdown's audio/HTML/zip/
+    # hosted-Azure-OCR support.
+    "markitdown[docx,pptx]>=0.1.0",
+    # Model provisioning (models.py) — HF Hub lookups/downloads for the
+    # PaddleOCR-VL GGUF files.
+    "huggingface-hub>=0.24.0",
 ]
 # same, CUDA wheel — pick one, not both
 document-intelligence-gpu = [
     "doc-firewall>=0.5.1",
     "paddleocr[doc-parser]>=3.7.0",
     "paddlepaddle-gpu==3.3.0",
+    "markitdown[docx,pptx]>=0.1.0",
+    "huggingface-hub>=0.24.0",
+    # hardware.py's GPU-detection chain — thin ctypes wrapper over
+    # libnvidia-ml.so.1, which the NVIDIA Container Toolkit mounts from
+    # the host driver; no CUDA dev toolkit needed at build or run time.
+    "nvidia-ml-py>=12.0",
 ]
 # local embedding provider (brings torch back)
 sentence-transformers = ["sentence-transformers>=3.0.0"]

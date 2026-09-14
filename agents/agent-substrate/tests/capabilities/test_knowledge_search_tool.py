@@ -262,3 +262,51 @@ async def test_knowledge_search_tool_no_structured_content_when_uncitable():
 
     assert result.structured_content == {}
     assert "(unlabelled)" in result.content[0].text
+
+
+async def test_knowledge_search_tool_uses_final_k_as_default_limit_when_omitted():
+    """Mirrors config.py's RAG_FINAL_K -- the server wires the real value in
+    via serving_factory.py; a caller omitting `limit` entirely should get
+    that constructor default, not a hardcoded 5."""
+    backend = FakeRagBackend()
+    tool = KnowledgeSearchTool(backend, final_k=12)
+
+    await tool.execute(action="search", text="what is X?")
+
+    assert backend.query_calls[0][2] == 12
+
+
+async def test_knowledge_search_tool_explicit_limit_overrides_final_k():
+    backend = FakeRagBackend()
+    tool = KnowledgeSearchTool(backend, final_k=12)
+
+    await tool.execute(action="search", text="what is X?", limit=3)
+
+    assert backend.query_calls[0][2] == 3
+
+
+async def test_knowledge_search_tool_min_rerank_score_filters_low_scoring_results():
+    """Mirrors config.py's RAG_MIN_RERANK_SCORE -- passed through to
+    build_citations() instead of relying on citations.py's own independent
+    hardcoded default."""
+
+    class LowScoreRagBackend:
+        name = "fake"
+
+        async def query(self, question, *, collection="default", limit=5, filter=None):
+            return [
+                SearchResult(
+                    id="1",
+                    content=[TextBlock(text="weak match")],
+                    score=0.05,
+                    metadata={"filename": "doc.pdf", "page_number": 1},
+                )
+            ]
+
+    tool = KnowledgeSearchTool(LowScoreRagBackend(), min_rerank_score=0.5)
+
+    result = await tool.execute(action="search", text="anything")
+
+    # Below the 0.5 threshold this instance was configured with -> dropped
+    # to the same "uncitable" path as a result with no filename at all.
+    assert result.structured_content == {}

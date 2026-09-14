@@ -84,9 +84,21 @@ class KnowledgeSearchTool:
         "additionalProperties": False,
     }
 
-    def __init__(self, backend: RagBackend, *, collection: str = "default") -> None:
+    def __init__(
+        self,
+        backend: RagBackend,
+        *,
+        collection: str = "default",
+        final_k: int = 5,
+        min_rerank_score: float = 0.1,
+    ) -> None:
         self._backend = backend
         self._default_collection = collection
+        # Mirrors config.py's RAG_FINAL_K/RAG_MIN_RERANK_SCORE — the
+        # server wires the real config values in via serving_factory.py;
+        # these defaults are library defaults for direct/non-server use.
+        self._final_k = final_k
+        self._min_rerank_score = min_rerank_score
         # One ledger per collection (chat thread), held for the tool's
         # lifetime — init_tool_registry runs once in lifespan, so this
         # instance is process-wide and citation numbers stay stable across
@@ -106,12 +118,12 @@ class KnowledgeSearchTool:
         *,
         action: str,
         text: str = "",
-        limit: int = 5,
+        limit: int | None = None,
         file_id: str = "",
         page_number: int | None = None,
         **_: object,
     ) -> ToolExecutionResult:
-        limit = max(1, min(limit, 20))
+        limit = max(1, min(limit if limit is not None else self._final_k, 20))
 
         if not text.strip():
             return ToolExecutionResult(
@@ -150,6 +162,7 @@ class KnowledgeSearchTool:
                 backend_name=self._backend.name,
                 collection=collection,
                 ledger=self._ledgers.get(collection),
+                min_score=self._min_rerank_score,
             )
             citation_by_index = {c.index: c for c in cited.citations}
             # Full passages, not search-engine-style snippets — the model

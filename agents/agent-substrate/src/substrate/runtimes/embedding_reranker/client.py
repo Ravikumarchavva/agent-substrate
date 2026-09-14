@@ -14,10 +14,13 @@ no session affinity to route on.
 from __future__ import annotations
 from substrate.logger import setup_logging
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx2 as httpx
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from substrate.kernel.llm import EmbeddingResult
 
 logger = setup_logging()
 
@@ -125,8 +128,50 @@ class EmbeddingRerankerClient:
             self._client = None
 
 
+class EmbeddingRerankerTextEmbeddingClient:
+    """Adapts ``EmbeddingRerankerClient.embed_text()`` to the kernel
+    ``EmbeddingClient`` Protocol (``embed``/``embed_single`` —
+    ``substrate.kernel.llm.EmbeddingClient``).
+
+    A shape unification, not a dimension one: this service's embedding
+    space (``RAG_IMAGE_EMBEDDING_DIM``, 2048-dim — ``PgVectorStore``
+    already switches its column type from ``vector`` to ``halfvec`` above
+    2000 dims to accommodate it) stays intentionally distinct from the
+    main text-embedding model's space (1536-dim, or whatever
+    ``EMBEDDING_MODEL`` resolves to). This only lets code written
+    generically against ``EmbeddingClient`` call this service's text
+    embedding without a bespoke ``embed_text``-shaped call.
+    """
+
+    def __init__(
+        self, client: EmbeddingRerankerClient, *, model: str = "qwen3-vl-embedding-2b"
+    ) -> None:
+        self._client = client
+        self._model = model
+
+    async def embed(self, texts: list[str]) -> EmbeddingResult:
+        from substrate.kernel.llm import EmbeddingResult
+
+        embeddings: list[list[float]] = []
+        for text in texts:
+            vec = await self._client.embed_text(text)
+            if vec is None:
+                raise RuntimeError(
+                    f"embedding-reranker service failed to embed text: {text[:80]!r}"
+                )
+            embeddings.append(vec)
+        return EmbeddingResult(embeddings=embeddings, model=self._model)
+
+    async def embed_single(self, text: str) -> list[float]:
+        vec = await self._client.embed_text(text)
+        if vec is None:
+            raise RuntimeError("embedding-reranker service failed to embed text")
+        return vec
+
+
 __all__ = [
     "EmbeddingRerankerClient",
+    "EmbeddingRerankerTextEmbeddingClient",
     "EmbedResponse",
     "RerankResponse",
     "HealthResponse",

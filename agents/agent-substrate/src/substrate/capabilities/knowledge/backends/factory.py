@@ -45,6 +45,9 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
     ``dense_k``/``lexical_k``/``fused_k``/``rerank_top_n`` (optional —
     hybrid-retrieval budgets, forwarded to ``LocalRagBackend``; see
     config.py's ``RAG_DENSE_K`` etc. for the defaults these mirror).
+    ``chunk_size``/``chunk_overlap`` (optional — forwarded to the
+    underlying ``RAGPipeline`` as its default chunk size/overlap; see
+    config.py's ``RAG_CHUNK_SIZE``/``RAG_CHUNK_OVERLAP``).
 
     ``kind="pinecone"`` kwargs: ``api_key`` (falls back to
     ``PINECONE_API_KEY`` env var), ``assistant_name`` (required).
@@ -117,7 +120,12 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
                 reranker = LLMReranker(model_client)
 
         return LocalRagBackend(
-            RAGPipeline(embedding_client, vector_store),
+            RAGPipeline(
+                embedding_client,
+                vector_store,
+                default_chunk_size=kwargs.get("chunk_size", 512),
+                default_chunk_overlap=kwargs.get("chunk_overlap", 128),
+            ),
             vector_store=vector_store,
             image_store=image_store,
             extraction_service_url=extraction_service_url,

@@ -104,7 +104,7 @@ class SessionDocumentSearchTool:
         *,
         query: str,
         mode: str = "vector",
-        limit: int = 5,
+        limit: int | None = None,
         current_session_only: bool = False,
         **_: object,
     ) -> ToolExecutionResult:
@@ -119,7 +119,10 @@ class SessionDocumentSearchTool:
                 is_error=True,
             )
         tenant_id, user_id, session_id = scope
-        limit = max(1, min(limit, 20))
+        # RAG_FINAL_K — same default this tool's sibling KnowledgeSearchTool
+        # uses, sourced from the same config field.
+        default_limit = getattr(self._cfg, "RAG_FINAL_K", 5)
+        limit = max(1, min(limit if limit is not None else default_limit, 20))
         session_filter = (
             {"session_id": session_id} if current_session_only and session_id else None
         )

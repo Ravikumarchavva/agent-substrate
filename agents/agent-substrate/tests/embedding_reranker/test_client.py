@@ -5,8 +5,12 @@ unreranked order or skip indexing one bad image."""
 from __future__ import annotations
 
 import httpx2 as httpx
+import pytest
 
-from substrate.runtimes.embedding_reranker.client import EmbeddingRerankerClient
+from substrate.runtimes.embedding_reranker.client import (
+    EmbeddingRerankerClient,
+    EmbeddingRerankerTextEmbeddingClient,
+)
 
 
 def _client_with_transport(transport: httpx.MockTransport) -> EmbeddingRerankerClient:
@@ -127,3 +131,51 @@ async def test_close_is_idempotent():
     client = EmbeddingRerankerClient()
     await client.close()
     await client.close()  # must not raise on a second call
+
+
+# ── EmbeddingRerankerTextEmbeddingClient (kernel EmbeddingClient adapter) ──
+
+
+async def test_adapter_embed_batches_via_repeated_embed_text_calls():
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(200, json={"embedding": [0.1, 0.2]})
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    adapter = EmbeddingRerankerTextEmbeddingClient(client, model="qwen3-vl-embedding-2b")
+
+    result = await adapter.embed(["a", "b", "c"])
+
+    assert len(calls) == 3
+    assert result.embeddings == [[0.1, 0.2], [0.1, 0.2], [0.1, 0.2]]
+    assert result.model == "qwen3-vl-embedding-2b"
+
+
+async def test_adapter_embed_single_returns_the_raw_vector():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"embedding": [0.7, 0.8]})
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    adapter = EmbeddingRerankerTextEmbeddingClient(client)
+
+    assert await adapter.embed_single("query") == [0.7, 0.8]
+
+
+async def test_adapter_embed_raises_on_underlying_failure_not_silent_none():
+    """Unlike the raw client's own embed_text() (which returns None on
+    failure for callers built to skip-and-continue), the EmbeddingClient
+    Protocol has no None-return contract -- an adapter caller expects a
+    real EmbeddingResult or an exception, so a failure must raise."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="internal error")
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    adapter = EmbeddingRerankerTextEmbeddingClient(client)
+
+    with pytest.raises(RuntimeError):
+        await adapter.embed(["a"])
+    with pytest.raises(RuntimeError):
+        await adapter.embed_single("a")

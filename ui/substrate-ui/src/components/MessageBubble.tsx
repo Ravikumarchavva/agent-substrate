@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useCallback, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -26,12 +26,8 @@ import { Mermaid } from "@/components/Mermaid";
 import { CitationChip } from "@/components/CitationChip";
 import { SourcesStrip } from "@/components/SourcesStrip";
 import { buildWorkspaceFileUrl } from "@/lib/api/_client";
-import {
-  getAttachmentKind,
-  getAttachmentIcon,
-  getDocumentBadge,
-  formatFileSize,
-} from "@/lib/file-utils";
+import { getAttachmentKind, getFileGlyph, formatFileSize } from "@/lib/file-utils";
+import { FileTypeIcon } from "@/components/FileTypeIcon";
 
 function isPersistentToolCall(toolCall: ToolCall): boolean {
   return Boolean(toolCall._meta?.ui?.httpUrl);
@@ -272,19 +268,6 @@ interface AttachmentDocumentCardProps {
 }
 
 function AttachmentDocumentCard({ attachment, onOpenArtifact }: AttachmentDocumentCardProps) {
-  const kind = getAttachmentKind(attachment.mime, attachment.name);
-  // Office/text documents (xlsx, docx, pptx, csv, md) get the same
-  // per-type icon+color as the assistant-generated file card below
-  // (getDocumentBadge, which itself now covers PDF too) instead of one
-  // generic FileIcon for every non-image/audio/video kind — the two cards
-  // render right next to each other in a thread and previously looked
-  // inconsistent for no reason (a user-uploaded .xlsx read as a plain
-  // "file", while a generated .pptx got a colored Presentation icon; a PDF
-  // got neither, agent-generated or uploaded).
-  const { Icon: attachmentIcon, badgeClass } =
-    kind === "document" || kind === "pdf"
-      ? getDocumentBadge(attachment.name)
-      : { Icon: getAttachmentIcon(kind), badgeClass: "" };
   const extension = attachment.name.split(".").pop()?.toUpperCase() || "FILE";
   // ArrowUpRight signals "this navigates you away" (opens a download in a
   // new tab) — wrong affordance for the in-panel viewer button below, which
@@ -295,9 +278,7 @@ function AttachmentDocumentCard({ attachment, onOpenArtifact }: AttachmentDocume
   const opensInPanel = Boolean(attachment.session_path && onOpenArtifact);
   const content = (
     <div className="attachment-card group/file p-3">
-      <div className={`attachment-card__icon ${badgeClass || "text-(--accent)"}`}>
-        {createElement(attachmentIcon, { className: "h-5 w-5" })}
-      </div>
+      <FileTypeIcon name={attachment.name} mime={attachment.mime} size="lg" />
       <div className="min-w-0 flex-1 pr-1">
         <div className="truncate text-sm font-semibold text-foreground">{attachment.name}</div>
         <div className="mt-1 flex items-center gap-2 text-[11px] text-(--muted)">
@@ -1081,7 +1062,7 @@ export function MessageBubble({
                         const path = raw.replace(/^sandbox:/, "").replace(/^\.?\//, "");
                         const name = path.split("/").pop() || path;
                         const url = buildWorkspaceFileUrl(threadId, raw);
-                        const { Icon, label, badgeClass } = getDocumentBadge(name);
+                        const { label } = getFileGlyph(name);
                         const ext = name.split(".").pop()?.toUpperCase() || "FILE";
                         return (
                           <span
@@ -1096,9 +1077,7 @@ export function MessageBubble({
                             }}
                             className={`my-1 flex w-full max-w-md items-center gap-3 rounded-2xl border border-(--border) bg-(--card) p-3 shadow-xs hover:shadow-sm hover:bg-(--card-hover) hover:border-(--border-hover) transition-all duration-200 ${onOpenArtifact ? "cursor-pointer" : ""}`}
                           >
-                            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${badgeClass}`}>
-                              <Icon className="h-5 w-5" />
-                            </span>
+                            <FileTypeIcon name={name} size="lg" />
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm font-semibold text-foreground">
                                 {name}

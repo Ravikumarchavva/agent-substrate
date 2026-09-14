@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { createSession } from "@/lib/session";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 
@@ -38,23 +39,22 @@ export async function GET(req: NextRequest) {
     const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
     const isAdmin = !!adminEmail && adminEmail === email;
 
-    // Upsert user in database
+    // Upsert user in database. On failure, don't pretend login succeeded —
+    // no session, no cookies, matches the real OAuth callback's behavior.
+    let dbUserId: string;
     try {
-      await prisma.user.upsert({
+      const dbUser = await prisma.user.upsert({
         where: { email },
-        update: {
-          name,
-          isAdmin,
-        },
-        create: {
-          email,
-          googleId: "dev-bypass",
-          name,
-          isAdmin,
-        },
+        update: { name, isAdmin },
+        create: { email, googleId: "dev-bypass", name, isAdmin },
       });
+      dbUserId = dbUser.id;
     } catch (err) {
       console.error("[OAuth Bypass] Database upsert failed:", err);
+      return NextResponse.json(
+        { error: "Dev-bypass login failed: could not create/update the local user." },
+        { status: 500 },
+      );
     }
 
     // Success callback response
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
     if (window.opener) {
       window.opener.postMessage({
         type: "google_auth_success",
-        user: { email: "${email}", name: "${name}", picture: "", isAdmin: true }
+        user: { email: "${email}", name: "${name}", picture: "", isAdmin: ${isAdmin} }
       }, window.location.origin);
       setTimeout(() => window.close(), 500);
     } else {
@@ -94,7 +94,9 @@ export async function GET(req: NextRequest) {
       headers: { "Content-Type": "text/html" },
     });
 
-    // Store tokens in cookies
+    // Store mock tokens (Google API access — unused by the bypass path,
+    // kept only so downstream code that checks for their presence doesn't
+    // need a special case).
     res.cookies.set("google_access_token", "mock-access-token", {
       httpOnly: true,
       maxAge: 3600,
@@ -103,26 +105,11 @@ export async function GET(req: NextRequest) {
       secure: process.env.NODE_ENV === "production",
     });
 
-    res.cookies.set("google_refresh_token", "mock-refresh-token", {
-      httpOnly: true,
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
-
-    res.cookies.set("google_user", JSON.stringify({
-      email,
-      name,
-      picture: "",
-      isAdmin,
-    }), {
-      httpOnly: false,
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
+    // The real identity: a DB-backed session, same as the production OAuth
+    // callback creates. Previously this route never set one, so every
+    // dev-bypass login left the browser acting as an anonymous visitor for
+    // every actual API call despite the UI showing "signed in."
+    await createSession(res, { id: dbUserId, email });
 
     return res;
   }

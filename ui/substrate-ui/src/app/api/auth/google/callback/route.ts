@@ -1,15 +1,25 @@
 /**
  * Google OAuth – Callback
  * GET /api/auth/google/callback?code=...&state=...
- * Exchanges code for tokens, stores in httpOnly cookies
+ * Exchanges code for tokens, creates a DB-backed session.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { createSession } from "@/lib/session";
 
 const ADMIN_EMAILS = new Set(process.env.ADMIN_EMAIL ? [process.env.ADMIN_EMAIL.toLowerCase().trim()] : []);
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -84,37 +94,47 @@ export async function GET(req: NextRequest) {
       console.warn("[Google OAuth] Failed to fetch user info:", err);
     }
 
-    // Upsert user in Prisma database
-    const isAdmin = ADMIN_EMAILS.has((userInfo?.email ?? "").toLowerCase().trim());
-    let dbUserId: string | null = null;
-    if (userInfo?.email) {
-      try {
-        const dbUser = await prisma.user.upsert({
-          where: { email: userInfo.email },
-          update: {
-            name: userInfo.name ?? undefined,
-            avatarUrl: userInfo.picture ?? undefined,
-            isAdmin,
-          },
-          create: {
-            email: userInfo.email,
-            googleId: userInfo.id ?? undefined,
-            name: userInfo.name ?? undefined,
-            avatarUrl: userInfo.picture ?? undefined,
-            isAdmin,
-          },
-        });
-        dbUserId = dbUser.id;
-      } catch (err) {
-        console.error("[Google OAuth] Failed to upsert user:", err);
-      }
+    if (!userInfo?.email) {
+      return new NextResponse(
+        buildCallbackHTML(false, "Google did not return an email address"),
+        { status: 502, headers: { "Content-Type": "text/html" } }
+      );
     }
 
-    // Build success response with cookies
+    // Upsert user in Prisma database. On failure, set NO cookies at all —
+    // a partial login (display cookie but no real session) is exactly the
+    // silent-identity-mismatch bug this flow used to have.
+    const isAdmin = ADMIN_EMAILS.has(userInfo.email.toLowerCase().trim());
+    let dbUserId: string;
+    try {
+      const dbUser = await prisma.user.upsert({
+        where: { email: userInfo.email },
+        update: {
+          name: userInfo.name ?? undefined,
+          avatarUrl: userInfo.picture ?? undefined,
+          isAdmin,
+        },
+        create: {
+          email: userInfo.email,
+          googleId: userInfo.id ?? undefined,
+          name: userInfo.name ?? undefined,
+          avatarUrl: userInfo.picture ?? undefined,
+          isAdmin,
+        },
+      });
+      dbUserId = dbUser.id;
+    } catch (err) {
+      console.error("[Google OAuth] Failed to upsert user:", err);
+      return new NextResponse(
+        buildCallbackHTML(false, "Failed to create your account. Please try again."),
+        { status: 500, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
     const html = buildCallbackHTML(true, undefined, {
-      email: userInfo?.email,
-      name: userInfo?.name,
-      picture: userInfo?.picture,
+      email: userInfo.email,
+      name: userInfo.name,
+      picture: userInfo.picture,
       isAdmin,
     });
 
@@ -123,7 +143,8 @@ export async function GET(req: NextRequest) {
       headers: { "Content-Type": "text/html" },
     });
 
-    // Store tokens in httpOnly cookies
+    // Store tokens in httpOnly cookies (Google API access, unrelated to
+    // this app's own session).
     const expiresIn = tokens.expires_in || 3600;
     res.cookies.set("google_access_token", tokens.access_token, {
       httpOnly: true,
@@ -143,42 +164,10 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Store user info cookie (not httpOnly, so frontend can read it)
-    if (userInfo) {
-      res.cookies.set("google_user", JSON.stringify({
-        email: userInfo.email,
-        name: userInfo.name,
-        picture: userInfo.picture,
-        isAdmin,
-      }), {
-        httpOnly: false,
-        maxAge: 60 * 60 * 24 * 365,
-        path: "/",
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-      });
-    }
-
-    // httpOnly session identity used by the /api/backend proxy to mint a
-    // per-user engine JWT (see src/lib/engine-auth.ts::makeUserToken).
-    // Deliberately separate from the readable `google_user` cookie above:
-    // that one is UI display data a client script can read (and in an XSS
-    // scenario, tamper with); this one carries the actual trust boundary
-    // for "which agent-substrate user does this request act as," so it
-    // must not be script-readable/writable.
-    if (dbUserId && userInfo?.email) {
-      res.cookies.set(
-        "user_session",
-        JSON.stringify({ id: dbUserId, email: userInfo.email, isAdmin }),
-        {
-          httpOnly: true,
-          maxAge: 60 * 60 * 24 * 365,
-          path: "/",
-          sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
-        }
-      );
-    }
+    // The one cookie that establishes identity: an opaque, DB-backed
+    // session token (see lib/session.ts). Nothing readable/parseable by a
+    // script determines who this request acts as anymore.
+    await createSession(res, { id: dbUserId, email: userInfo.email });
 
     // Clear state cookie
     res.cookies.delete("google_oauth_state");
@@ -199,6 +188,7 @@ function buildCallbackHTML(
   user?: { email?: string; name?: string; picture?: string; isAdmin?: boolean }
 ): string {
   if (!success) {
+    const safeError = escapeHtml(error || "Unknown error");
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -208,11 +198,11 @@ function buildCallbackHTML(
 </head>
 <body>
   <h1>❌ Sign-In Failed</h1>
-  <p>${error || "Unknown error"}</p>
+  <p>${safeError}</p>
   <p><a href="/chat" style="color:#4285f4">Return to Home</a></p>
   <script>
     if (window.opener) {
-      window.opener.postMessage({ type: "google_auth_error", error: "${error || 'Unknown error'}" }, window.location.origin);
+      window.opener.postMessage({ type: "google_auth_error", error: ${JSON.stringify(error || "Unknown error")} }, window.location.origin);
       setTimeout(() => window.close(), 3000);
     } else {
       setTimeout(() => window.location.href = "/chat", 3000);
@@ -237,9 +227,9 @@ function buildCallbackHTML(
   <h1>✅ Signed in with Google</h1>
   ${user ? `
     <div class="user">
-      ${user.picture ? `<img src="${user.picture}" alt="Profile" />` : ""}
-      <p><strong>${user.name || "User"}</strong></p>
-      <p>${user.email || ""}</p>
+      ${user.picture ? `<img src="${escapeHtml(user.picture)}" alt="Profile" />` : ""}
+      <p><strong>${escapeHtml(user.name || "User")}</strong></p>
+      <p>${escapeHtml(user.email || "")}</p>
     </div>
   ` : ""}
   <p>Redirecting...</p>

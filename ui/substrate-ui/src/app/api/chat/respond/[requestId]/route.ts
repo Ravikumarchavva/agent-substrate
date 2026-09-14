@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authHeaderFromCookieHeader } from "@/lib/engine-auth";
+import { requireUserAuthHeaderFromRequest } from "@/lib/engine-auth";
 
 export async function POST(
   req: NextRequest,
@@ -8,14 +8,17 @@ export async function POST(
   const { requestId } = await params;
   const body = await req.json();
 
+  const auth = await requireUserAuthHeaderFromRequest(req);
+  if (!auth) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   try {
     const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const cookieHeader = req.headers.get("cookie");
     const headers: HeadersInit = {
       "Content-Type": "application/json",
-      ...authHeaderFromCookieHeader(cookieHeader),
+      ...auth.headers,
     };
-    if (cookieHeader) (headers as Record<string, string>)["cookie"] = cookieHeader;
 
     const upstream = await fetch(
       `${BACKEND_URL}/chat/respond/${requestId}`,

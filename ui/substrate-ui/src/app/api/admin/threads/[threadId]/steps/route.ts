@@ -1,35 +1,24 @@
 /**
  * GET /api/admin/threads/[threadId]/steps
- * Proxies to backend /admin/threads/{id}/steps.
+ * Proxies to backend /admin/threads/{id}/steps (admin only).
  */
 import { NextRequest, NextResponse } from "next/server";
+import { requireUserAuthHeaderFromRequest } from "@/lib/engine-auth";
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "";
 const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-function getAdminEmail(req: NextRequest): string | null {
-  const cookie = req.cookies.get("google_user")?.value;
-  if (!cookie) return null;
-  try {
-    const user = JSON.parse(decodeURIComponent(cookie));
-    return user?.email ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ threadId: string }> }
 ) {
-  const email = getAdminEmail(req);
-  if (!email || email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  const auth = await requireUserAuthHeaderFromRequest(req);
+  if (!auth || !auth.user.isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { threadId } = await params;
   const res = await fetch(`${BACKEND_URL}/admin/threads/${threadId}/steps`, {
-    headers: { "X-Admin-Email": email },
+    headers: auth.headers,
   });
 
   const data = await res.json();

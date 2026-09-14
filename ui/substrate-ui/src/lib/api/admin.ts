@@ -38,13 +38,11 @@ export const adminApi = {
     return requestJsonFromUrl<AdminStep[]>(`/api/admin/threads/${threadId}/steps`);
   },
 
-  // Routed through /api/backend/* (the engine-JWT proxy), not a bespoke
-  // /api/admin/* route handler — agent-substrate's /admin/storage* routes
-  // require a real Bearer JWT with role=platform_admin (require_admin), and
-  // /api/backend/[...path]/route.ts is the one proxy that actually mints
-  // one (from the isAdmin flag on the user_session cookie). The other
-  // /api/admin/* routes only send an X-Admin-Email header, which agent-
-  // substrate's auth middleware doesn't look at.
+  // Routed through /api/backend/* (the verified-session proxy) rather than
+  // a bespoke /api/admin/* route handler — agent-substrate's
+  // /admin/storage* routes require a real Bearer JWT with role=
+  // platform_admin (require_admin), and /api/backend/[...path]/route.ts is
+  // the proxy that mints one from the caller's DB-backed session.
   async getAdminStorageUsers(): Promise<AdminStorageUser[]> {
     return requestJsonFromUrl<AdminStorageUser[]>(`${API_BASE}/admin/storage`);
   },

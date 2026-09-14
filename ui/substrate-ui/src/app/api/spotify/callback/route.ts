@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { signState } from "../login/route";
 import { getCredentialManager } from "@/lib/credentials";
-import { prisma } from "@/lib/prisma";
+import { getSessionFromRequest } from "@/lib/session";
 
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
 
@@ -131,25 +131,19 @@ export async function GET(req: NextRequest) {
     }),
   }).catch((err) => console.error('[Spotify OAuth] Failed to push token to backend:', err));
 
-  // Persist tokens in DB (encrypted) for the logged-in user
+  // Persist tokens in DB (encrypted) for the signed-in session's own user.
   try {
-    const userCookie = req.cookies.get("google_user")?.value;
-    if (userCookie) {
-      const userData = JSON.parse(decodeURIComponent(userCookie));
-      if (userData.email) {
-        const dbUser = await prisma.user.findUnique({ where: { email: userData.email } });
-        if (dbUser) {
-          const cm = getCredentialManager();
-          await cm.storeCredential(
-            dbUser.id,
-            "spotify",
-            tokens.access_token,
-            tokens.refresh_token,
-            expiresIn,
-            tokens.scope,
-          );
-        }
-      }
+    const session = await getSessionFromRequest(req);
+    if (session) {
+      const cm = getCredentialManager();
+      await cm.storeCredential(
+        session.id,
+        "spotify",
+        tokens.access_token,
+        tokens.refresh_token,
+        expiresIn,
+        tokens.scope,
+      );
     }
   } catch (err) {
     console.error("[Spotify OAuth] Failed to persist tokens in DB:", err);

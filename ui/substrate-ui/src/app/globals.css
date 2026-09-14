@@ -171,24 +171,13 @@ select {
   background: var(--card-hover);
 }
 
-.attachment-card__preview,
-.attachment-card__icon {
+.attachment-card__preview {
   position: relative;
   flex-shrink: 0;
   width: 56px;
   height: 56px;
   overflow: hidden;
   border-radius: 10px;
-}
-
-.attachment-card__preview {
-  background: var(--card-hover);
-}
-
-.attachment-card__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   background: var(--card-hover);
 }
 

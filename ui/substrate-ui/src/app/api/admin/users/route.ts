@@ -5,19 +5,7 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "";
-
-function getAdminEmail(req: NextRequest): string | null {
-  const cookie = req.cookies.get("google_user")?.value;
-  if (!cookie) return null;
-  try {
-    const user = JSON.parse(decodeURIComponent(cookie));
-    return user?.email ?? null;
-  } catch {
-    return null;
-  }
-}
+import { getSessionFromRequest } from "@/lib/session";
 
 function isDatabaseUnavailableError(error: unknown): boolean {
   return (
@@ -27,8 +15,8 @@ function isDatabaseUnavailableError(error: unknown): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  const email = getAdminEmail(req);
-  if (!email || !ADMIN_EMAIL || email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  const session = await getSessionFromRequest(req);
+  if (!session || !session.isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

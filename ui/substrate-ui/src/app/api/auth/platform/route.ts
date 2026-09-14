@@ -13,14 +13,14 @@
  * secret, no crypto to keep in sync between the two apps.
  *
  * On a valid platform session we upsert-by-email into this app's own User
- * table (the exact same upsert the Google OAuth callback already does) and
- * set the same google_user/user_session cookies it sets — so every
- * downstream consumer (AuthContext, engine-auth.ts, admin checks) needs no
- * changes at all. The platform account and the local account are the same
- * row, joined on email; nothing is duplicated as a separate identity.
+ * table (the exact same upsert the Google OAuth callback does) and create
+ * this app's own DB-backed session (src/lib/session.ts) — the platform
+ * account and the local account are the same row, joined on email; nothing
+ * is duplicated as a separate identity.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { SESSION_COOKIE_NAME, createSession, deleteSessionByToken } from "@/lib/session";
 
 const PLATFORM_URL = process.env.PLATFORM_URL || "http://localhost:3000";
 
@@ -51,6 +51,16 @@ export async function GET(req: NextRequest) {
 
   const email = session.user?.email;
   if (!email) {
+    // The platform says there's no session — if we're holding a local
+    // session token, it's now orphaned from the identity provider's point
+    // of view, so drop it rather than let the UI keep showing "logged in."
+    const staleToken = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+    if (staleToken) {
+      await deleteSessionByToken(staleToken);
+      const res = NextResponse.json({ authenticated: false });
+      res.cookies.delete(SESSION_COOKIE_NAME);
+      return res;
+    }
     return NextResponse.json({ authenticated: false });
   }
 
@@ -79,38 +89,6 @@ export async function GET(req: NextRequest) {
   }
 
   const res = NextResponse.json({ authenticated: true });
-
-  // Readable by the client (UI display) — same shape as the Google login flow.
-  res.cookies.set(
-    "google_user",
-    JSON.stringify({
-      email,
-      name: session.user?.name,
-      picture: session.user?.image,
-      isAdmin,
-    }),
-    {
-      httpOnly: false,
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    },
-  );
-
-  // httpOnly trust boundary used by the /api/backend proxy to mint a
-  // per-user engine JWT — see src/lib/engine-auth.ts::makeUserToken.
-  res.cookies.set(
-    "user_session",
-    JSON.stringify({ id: dbUserId, email, isAdmin }),
-    {
-      httpOnly: true,
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    },
-  );
-
+  await createSession(res, { id: dbUserId, email });
   return res;
 }

@@ -110,6 +110,58 @@ export function getDocumentBadge(name: string): DocumentBadge {
   return { Icon: FileIcon, label: "File", badgeClass: "bg-(--muted)/15 text-(--muted)" };
 }
 
+export interface FileGlyph {
+  Icon: LucideIcon;
+  label: string;
+  /** Solid Tailwind bg color (not the soft /15 tint getDocumentBadge uses)
+   *  — the flat colored-square glyph FileTypeIcon renders everywhere. */
+  bg: string;
+}
+
+// One color/icon per file type, shared by every icon in the app (see
+// FileTypeIcon.tsx) — a superset of getDocumentBadge's mapping (same colors,
+// so nothing looks disconnected from the existing badges) plus image/audio/
+// video, which getDocumentBadge never had to cover.
+export function getFileGlyph(name: string, mime?: string): FileGlyph {
+  const kind = getAttachmentKind(mime, name);
+  if (kind === "image") return { Icon: ImageIcon, label: "Image", bg: "bg-sky-500" };
+  if (kind === "audio") return { Icon: Music2, label: "Audio", bg: "bg-pink-500" };
+  if (kind === "video") return { Icon: Film, label: "Video", bg: "bg-purple-500" };
+
+  const extension = getFileExtension(name);
+  if (extension === "pptx" || extension === "ppt") {
+    return { Icon: Presentation, label: "Presentation", bg: "bg-orange-500" };
+  }
+  if (extension === "xlsx" || extension === "xls" || extension === "csv") {
+    return { Icon: FileSpreadsheet, label: "Spreadsheet", bg: "bg-emerald-500" };
+  }
+  if (extension === "docx" || extension === "doc") {
+    return { Icon: FileText, label: "Document", bg: "bg-blue-500" };
+  }
+  if (extension === "pdf") {
+    return { Icon: FileText, label: "PDF", bg: "bg-red-500" };
+  }
+  if (extension === "md" || extension === "markdown") {
+    return { Icon: FileText, label: "Document", bg: "bg-teal-500" };
+  }
+  if (extension === "html" || extension === "htm") {
+    return { Icon: FileCode, label: "Web page", bg: "bg-amber-500" };
+  }
+  if (extension === "json") {
+    return { Icon: FileJson, label: "Data", bg: "bg-violet-500" };
+  }
+  if (CODE_EXTENSIONS.has(extension)) {
+    return { Icon: FileCode, label: "Code", bg: "bg-indigo-500" };
+  }
+  if (ARCHIVE_EXTENSIONS.has(extension)) {
+    return { Icon: FileArchive, label: "Archive", bg: "bg-stone-500" };
+  }
+  if (extension === "txt") {
+    return { Icon: FileText, label: "Text", bg: "bg-slate-500" };
+  }
+  return { Icon: FileIcon, label: "File", bg: "bg-neutral-500" };
+}
+
 export function formatFileSize(size: number | undefined): string {
   if (!size) return "";
 

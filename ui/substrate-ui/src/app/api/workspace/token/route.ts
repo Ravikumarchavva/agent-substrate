@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCredentialManager } from "@/lib/credentials";
 import { prisma } from "@/lib/prisma";
 import { userAuthHeader, type UserSession } from "@/lib/engine-auth";
+import { getSessionFromRequest } from "@/lib/session";
 
 const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://localhost:8000";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -125,40 +126,12 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json({ success: true });
 }
 
-// Prefers the httpOnly `user_session` cookie (set at Google OAuth login,
-// see api/auth/google/callback) since it carries the Prisma user id
-// directly. Falls back to resolving via the readable `google_user` cookie
-// for any request that predates that cookie being set (e.g. a session from
-// before this was added).
+// The DB-backed session (src/lib/session.ts) is the only thing that
+// determines identity here — no cookie-derived fallback.
 async function resolveUserSession(req: NextRequest): Promise<UserSession | null> {
-  const sessionCookie = req.cookies.get("user_session")?.value;
-  if (sessionCookie) {
-    try {
-      const parsed = JSON.parse(sessionCookie) as UserSession;
-      if (parsed.id && parsed.email) return parsed;
-    } catch (err) {
-      console.error("[Workspace Token] Failed to parse user_session cookie:", err);
-    }
-  }
-
-  try {
-    const userCookie = req.cookies.get("google_user")?.value;
-    if (!userCookie) return null;
-    const userData = JSON.parse(decodeURIComponent(userCookie)) as {
-      email?: string;
-      isAdmin?: boolean;
-    };
-    if (!userData.email) return null;
-    const dbUser = await prisma.user.findUnique({
-      where: { email: userData.email },
-      select: { id: true },
-    });
-    if (!dbUser) return null;
-    return { id: dbUser.id, email: userData.email, isAdmin: userData.isAdmin };
-  } catch (err) {
-    console.error("[Workspace Token] Failed to resolve user:", err);
-    return null;
-  }
+  const session = await getSessionFromRequest(req);
+  if (!session) return null;
+  return { id: session.id, email: session.email, isAdmin: session.isAdmin };
 }
 
 async function refreshGoogleToken(

@@ -7,11 +7,10 @@
  * Notifies the opener window on success.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getCredentialManager } from "@/lib/credentials";
+import { getSessionFromRequest } from "@/lib/session";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://localhost:8000";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -39,6 +38,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!savedState || savedState !== state) {
     return new NextResponse(buildHTML(false, "Invalid state (CSRF protection failed)"), {
       status: 400,
+      headers: { "Content-Type": "text/html" },
+    });
+  }
+
+  // This must attach the Workspace grant to whoever is actually logged in
+  // right now — not to "whichever local account happens to share an email
+  // with the Google account that authorized," which is a distinct (and
+  // spoofable-in-principle) identity. Requiring the app's own verified
+  // session closes that gap.
+  const session = await getSessionFromRequest(req);
+  if (!session) {
+    return new NextResponse(buildHTML(false, "You must be signed in to connect Google Workspace."), {
+      status: 401,
       headers: { "Content-Type": "text/html" },
     });
   }
@@ -80,20 +92,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     };
     const expiresIn = tokens.expires_in ?? 3600;
 
-    // Fetch email so we can link to the user record
-    let email: string | null = null;
-    try {
-      const userRes = await fetch(GOOGLE_USERINFO_URL, {
-        headers: { Authorization: `Bearer ${tokens.access_token}` },
-      });
-      if (userRes.ok) {
-        const info = (await userRes.json()) as { email?: string };
-        email = info.email ?? null;
-      }
-    } catch (err) {
-      console.error("[Workspace OAuth] Failed to fetch user info:", err);
-    }
-
     try {
       const backendRes = await fetch(`${BACKEND_URL}/auth/workspace/set-token`, {
         method: "POST",
@@ -115,26 +113,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       console.error("[Workspace OAuth] Failed to push token to backend:", err);
     }
 
-    // Persist in Prisma as provider='google_workspace'
-    if (email) {
-      try {
-        const dbUser = await prisma.user.findUnique({
-          where: { email },
-          select: { id: true },
-        });
-        if (dbUser) {
-          const cm = getCredentialManager();
-          await cm.storeCredential(
-            dbUser.id,
-            "google_workspace",
-            tokens.access_token,
-            tokens.refresh_token ?? "",
-            expiresIn,
-          );
-        }
-      } catch (err) {
-        console.error("[Workspace OAuth] Failed to persist tokens:", err);
-      }
+    // Persist in Prisma as provider='google_workspace', bound to the
+    // signed-in session's own user — not a Google-userinfo email lookup.
+    try {
+      const cm = getCredentialManager();
+      await cm.storeCredential(
+        session.id,
+        "google_workspace",
+        tokens.access_token,
+        tokens.refresh_token ?? "",
+        expiresIn,
+      );
+    } catch (err) {
+      console.error("[Workspace OAuth] Failed to persist tokens:", err);
     }
 
     const res = new NextResponse(buildHTML(true), {

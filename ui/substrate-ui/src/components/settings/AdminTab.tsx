@@ -287,7 +287,14 @@ export function AdminTab({
                       }`}
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{thread.name}</p>
+                      <p className="truncate text-sm font-semibold">
+                        {thread.name}
+                        {thread.deleted_at && (
+                          <span className="ml-2 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-medium text-rose-400">
+                            Deleted
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-(--muted)">
                         {thread.user_identifier ?? "Anonymous"} · {thread.step_count} steps ·{" "}
                         {thread.updated_at

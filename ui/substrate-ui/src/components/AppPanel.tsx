@@ -5,8 +5,9 @@ import { X, PanelRightClose, PanelRightOpen, Maximize2, Minimize2, Download, Pen
 import { AppIcon } from "@/components/AppIcon";
 import { artifactKind, FileArtifactViewer } from "@/components/FileArtifactViewer";
 import { VersionHistoryDropdown } from "@/components/VersionHistoryDropdown";
-import { getDocumentBadge } from "@/lib/file-utils";
+import { FileTypeIcon } from "@/components/FileTypeIcon";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Strip a `#page=N` viewer fragment for the download link's href. The
 // fragment steers FileArtifactViewer to a citation's page — it does nothing
@@ -96,6 +97,7 @@ export function AppPanel({
   // ── Per-item iframe refs (never cleared — iframes stay mounted) ──
   const iframeRefs = useRef<Map<string, HTMLIFrameElement | null>>(new Map());
   const { theme } = useTheme();
+  const { user } = useAuth();
   // Full-screen the panel (for reading/editing file artifacts).
   const [maximized, setMaximized] = useState(false);
   // Office files open read-only; the header Edit toggle flips the active file
@@ -195,15 +197,7 @@ export function AppPanel({
       const data = await res.json() as { access_token?: string; connected?: boolean };
       if (!data.access_token) return;
 
-      // Also get email from cookie for the workspace panel
-      let email = "";
-      try {
-        const cookie = document.cookie.split("; ").find(r => r.startsWith("google_user="));
-        if (cookie) {
-          const parsed = JSON.parse(decodeURIComponent(cookie.split("=")[1])) as { email?: string };
-          email = parsed.email ?? "";
-        }
-      } catch { /* ignore */ }
+      const email = user?.email ?? "";
 
       iframeRefs.current.forEach((iframe) => {
         iframe?.contentWindow?.postMessage(
@@ -214,7 +208,7 @@ export function AppPanel({
     } catch {
       // Not connected — silent
     }
-  }, []);
+  }, [user?.email]);
 
   // ── Notify iframes when theme changes ─────────────────────────────
   useEffect(() => {
@@ -646,14 +640,7 @@ export function AppPanel({
                 style={item.id === activeItem?.id ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
               >
                 {item.kind === "file" ? (
-                  (() => {
-                    const { Icon, badgeClass } = getDocumentBadge(item.fileName ?? item.toolName);
-                    return (
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${badgeClass}`}>
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
-                    );
-                  })()
+                  <FileTypeIcon name={item.fileName ?? item.toolName} size="sm" />
                 ) : (
                   <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-background text-foreground">
                     <AppIcon toolName={item.toolName} className="h-3.5 w-3.5 text-foreground" />

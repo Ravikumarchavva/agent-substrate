@@ -15,7 +15,6 @@ import {
   Clock,
   Download,
   Eye,
-  File,
   FileCode,
   FileImage,
   FileSpreadsheet,
@@ -38,6 +37,7 @@ import { api } from "@/lib/api";
 import { buildObjectUrl, buildWorkspaceFileUrl } from "@/lib/api/_client";
 import { formatFileSize, getFileExtension } from "@/lib/file-utils";
 import { FileArtifactViewer } from "@/components/FileArtifactViewer";
+import { FileTypeIcon, type FileTypeIconSize } from "@/components/FileTypeIcon";
 import type { Thread, WorkspaceFile, WorkspaceUsage } from "@/types";
 
 // ─── Constants & Types ───────────────────────────────────────────────────────
@@ -172,26 +172,6 @@ function sortFolders(folders: SessionFolder[], sort: SortKey): SessionFolder[] {
     }
   });
   return copy;
-}
-
-// ─── File Type Config ────────────────────────────────────────────────────────
-
-interface FileTypeConfig {
-  icon: LucideIcon;
-  color: string;
-  bg: string;
-}
-
-function getFileTypeConfig(name: string): FileTypeConfig {
-  const cat = getFileCategory(name);
-  switch (cat) {
-    case "pdf":   return { icon: FileText,        color: "text-rose-400",    bg: "bg-rose-500/10"    };
-    case "doc":   return { icon: FileText,        color: "text-blue-400",    bg: "bg-blue-500/10"    };
-    case "sheet": return { icon: FileSpreadsheet, color: "text-emerald-400", bg: "bg-emerald-500/10" };
-    case "image": return { icon: FileImage,       color: "text-violet-400",  bg: "bg-violet-500/10"  };
-    case "code":  return { icon: FileCode,        color: "text-amber-400",   bg: "bg-amber-500/10"   };
-    default:      return { icon: File,            color: "text-slate-400",   bg: "bg-slate-500/10"   };
-  }
 }
 
 // ─── Subcomponents ───────────────────────────────────────────────────────────
@@ -470,51 +450,10 @@ function FileContextMenu({
   );
 }
 
-/** A page silhouette with a folded top-right corner and an extension
- * label at the foot — the classic desktop file-icon shape (Explorer,
- * Finder, Drive) — instead of a flat colored square badge, which read as
- * a generic app icon rather than a *file*. */
-function FileIconDisplay({ file, size = "md" }: { file: WorkspaceFile; size?: "sm" | "md" | "lg" | "xl" }) {
-  const config = getFileTypeConfig(file.name);
-  const Icon = config.icon;
-  const ext = getFileExtension(file.name).toUpperCase().slice(0, 4);
-  const dims = {
-    sm: { w: 26, h: 32, fold: 8, icon: "h-3 w-3", label: "text-[5px]" },
-    md: { w: 34, h: 42, fold: 10, icon: "h-3.5 w-3.5", label: "text-[6px]" },
-    lg: { w: 46, h: 56, fold: 13, icon: "h-[18px] w-[18px]", label: "text-[7px]" },
-    xl: { w: 64, h: 78, fold: 17, icon: "h-6 w-6", label: "text-[8px]" },
-  }[size];
-  return (
-    <div className="relative shrink-0" style={{ width: dims.w, height: dims.h }}>
-      <div
-        className={`absolute inset-0 border border-(--border) ${config.bg}`}
-        style={{
-          borderRadius: 3,
-          clipPath: `polygon(0 0, calc(100% - ${dims.fold}px) 0, 100% ${dims.fold}px, 100% 100%, 0 100%)`,
-        }}
-      />
-      {/* Folded corner */}
-      <div
-        className="absolute right-0 top-0"
-        style={{
-          width: 0,
-          height: 0,
-          borderStyle: "solid",
-          borderWidth: `0 ${dims.fold}px ${dims.fold}px 0`,
-          borderColor: `transparent var(--background) transparent transparent`,
-          opacity: 0.55,
-        }}
-      />
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 pb-1">
-        <Icon className={`${dims.icon} ${config.color} shrink-0`} />
-        {ext && (
-          <span className={`${dims.label} font-bold uppercase leading-none tracking-wide ${config.color} opacity-80`}>
-            {ext}
-          </span>
-        )}
-      </div>
-    </div>
-  );
+/** The app-wide flat colored-square file icon (see FileTypeIcon.tsx) — one
+ * shared component/mapping instead of this tab's own separate shape. */
+function FileIconDisplay({ file, size = "md" }: { file: WorkspaceFile; size?: FileTypeIconSize }) {
+  return <FileTypeIcon name={file.name} size={size} />;
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────

@@ -33,11 +33,8 @@ import {
   groupModelOptions,
 } from "@/lib/model-preferences";
 import { parseChatPath, buildChatPath, buildChatRoute, buildSettingsPath } from "@/lib/chat-routes";
-import {
-  getAttachmentIcon,
-  getDocumentBadge,
-  formatFileSize,
-} from "@/lib/file-utils";
+import { formatFileSize } from "@/lib/file-utils";
+import { FileTypeIcon } from "@/components/FileTypeIcon";
 import { useAuth } from "@/contexts/AuthContext";
 import { useThreads } from "@/hooks/useThreads";
 import type { WireEvent } from "@/protocol";
@@ -232,10 +229,20 @@ function ChatPageContent() {
       // still picks up the new thread (via lastActiveThreadId, updated
       // above) and calls loadMessages normally. Same technique
       // promoteThreadUrl already uses for the brand-new-thread case.
+      //
+      // Pass `null` as the data arg, not `window.history.state` — Next
+      // patches history.pushState/replaceState to sync usePathname(), but
+      // skips that sync whenever `data.__NA` is true, which
+      // `window.history.state` always carries after Next's own router has
+      // committed once. Passing it back verbatim silently disables the
+      // sync forever: the URL bar updates but usePathname() goes stale,
+      // which is why sidebar thread clicks stopped updating the page after
+      // the first navigation. `null` still gets Next's internal tree state
+      // merged in (see copyNextJsInternalHistoryState) and keeps the sync.
       if (mode === "push") {
-        window.history.pushState(window.history.state, "", nextUrl);
+        window.history.pushState(null, "", nextUrl);
       } else {
-        window.history.replaceState(window.history.state, "", nextUrl);
+        window.history.replaceState(null, "", nextUrl);
       }
     },
     [updateLastActiveThreadId],
@@ -259,7 +266,9 @@ function ChatPageContent() {
       streamedThreadRef.current = threadId;
       isNavigatingToNewThread.current = true;
       updateLastActiveThreadId(threadId);
-      window.history.replaceState(window.history.state, "", buildChatPath(threadId));
+      // See selectThread's comment above: `null`, not `window.history.state`,
+      // or Next's usePathname() sync gets silently skipped.
+      window.history.replaceState(null, "", buildChatPath(threadId));
     },
     [updateLastActiveThreadId],
   );
@@ -461,13 +470,6 @@ function ChatPageContent() {
   }, [authLoading, clearBoards, isAuthenticated, pathname, router, routeState.threadId, setActivePanelId, setPanelItems, settingsPanelOpen, updateLastActiveThreadId]);
 
   const renderComposerAttachment = useCallback((file: AttachedFilePreview) => {
-    // Same per-type icon/color as the sent-message attachment card
-    // (MessageBubble's AttachmentDocumentCard) — see getDocumentBadge's
-    // comment for why this exists.
-    const { Icon: AttachmentIcon, badgeClass } =
-      file.previewKind === "document" || file.previewKind === "pdf"
-        ? getDocumentBadge(file.name)
-        : { Icon: getAttachmentIcon(file.previewKind), badgeClass: "" };
     const previewSource = file.previewUrl || file.url || (currentThreadId
       ? `/api/backend/threads/${currentThreadId}/files/${file.id}/content`
       : "");
@@ -497,9 +499,7 @@ function ChatPageContent() {
             />
           </div>
         ) : (
-          <div className={`attachment-card__icon ${badgeClass || "text-(--accent)"}`}>
-            <AttachmentIcon className="h-5 w-5" />
-          </div>
+          <FileTypeIcon name={file.name} size="lg" />
         )}
 
         {showRing && (
@@ -799,7 +799,11 @@ function ChatPageContent() {
       wsRef.current.abort();
       wsRef.current = null;
     }
-    const cancelId = currentThreadId || activeStreamThreadIdRef.current;
+    // currentThreadIdRef, not currentThreadId: handleNewChat/handleSelectThread
+    // call this through a useCallback that doesn't (and can't cheaply) list
+    // handleStop as a dep, so this can run from a stale render's closure —
+    // the ref read here is always current regardless.
+    const cancelId = currentThreadIdRef.current || activeStreamThreadIdRef.current;
     if (cancelId) {
       api.cancelChat(cancelId).catch((error: unknown) => {
         console.error("Failed to cancel active run:", error);

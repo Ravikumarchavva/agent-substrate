@@ -20,20 +20,18 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function readGoogleUserCookie(): AuthUser | null {
-  const userCookie = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("google_user="));
+interface SessionResponse {
+  authenticated: boolean;
+  user: { id: string; email: string; name: string | null; avatarUrl: string | null; isAdmin: boolean } | null;
+}
 
-  if (!userCookie) {
-    return null;
-  }
-
+async function fetchSession(): Promise<SessionResponse> {
   try {
-    return JSON.parse(decodeURIComponent(userCookie.split("=")[1])) as AuthUser;
-  } catch (error) {
-    console.error("Failed to parse user cookie:", error);
-    return null;
+    const res = await fetch("/chat/api/auth/session", { credentials: "include" });
+    if (!res.ok) return { authenticated: false, user: null };
+    return (await res.json()) as SessionResponse;
+  } catch {
+    return { authenticated: false, user: null };
   }
 }
 
@@ -51,59 +49,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const promise = (async () => {
-      // Synchronous fast-path: if the user cookie is already present we know the
-      // user is authenticated. Unblock canLoadData immediately (before any await)
-      // so a concurrent SSE stream finishing doesn't wipe the message list when
-      // isLoading flips back to false later.
-      const existingUser = readGoogleUserCookie();
-      if (existingUser) {
-        setUser(existingUser);
-        setGoogleAuth(true);
-        setIsLoading(false);
-      } else {
-        setIsLoading(true);
-      }
+      setIsLoading(true);
 
-      let nextUser: AuthUser | null = existingUser;
-      let nextGoogleAuth = existingUser !== null;
+      let nextUser: AuthUser | null = null;
+      let nextGoogleAuth = false;
       let nextSpotifyAuth = false;
       let nextWorkspaceAuth = false;
 
       try {
-        if (!existingUser) {
-          const googleRes = await fetch("/chat/api/auth/google/token", {
+        // The server-verified session is the only source of truth for who is
+        // logged in — never trust a client-readable cookie for identity.
+        let sessionData = await fetchSession();
+
+        // No local session yet — check whether the platform
+        // (agent-substrate-platform) already has one. Same origin means its
+        // Auth.js session cookie is already on this request; /api/auth/platform
+        // asks the platform to confirm it and, if valid, creates the local
+        // DB-backed session, so re-checking /api/auth/session picks it up.
+        if (!sessionData.authenticated) {
+          const platformRes = await fetch("/chat/api/auth/platform", {
             credentials: "include",
           });
-
-          if (googleRes.ok) {
-            const googleData = await googleRes.json();
-            if (googleData.authenticated) {
-              nextGoogleAuth = true;
-              nextUser = readGoogleUserCookie();
-              setUser(nextUser);
-              setGoogleAuth(true);
+          if (platformRes.ok) {
+            const platformData = (await platformRes.json()) as { authenticated?: boolean };
+            if (platformData.authenticated) {
+              sessionData = await fetchSession();
             }
           }
+        }
 
-          // No local session yet — check whether the platform
-          // (agent-substrate-platform) already has one. Same origin means
-          // its session cookie is already on this request; /api/auth/platform
-          // asks the platform to confirm it and, if valid, mints the same
-          // local cookies the Google flow above would have set.
-          if (!nextGoogleAuth) {
-            const platformRes = await fetch("/chat/api/auth/platform", {
-              credentials: "include",
-            });
-            if (platformRes.ok) {
-              const platformData = await platformRes.json();
-              if (platformData.authenticated) {
-                nextGoogleAuth = true;
-                nextUser = readGoogleUserCookie();
-                setUser(nextUser);
-                setGoogleAuth(true);
-              }
-            }
-          }
+        if (sessionData.authenticated && sessionData.user) {
+          nextGoogleAuth = true;
+          nextUser = {
+            email: sessionData.user.email,
+            name: sessionData.user.name ?? undefined,
+            picture: sessionData.user.avatarUrl ?? undefined,
+            isAdmin: sessionData.user.isAdmin,
+          };
         }
 
         if (nextGoogleAuth) {
@@ -129,14 +111,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error("Auth check failed:", err);
       } finally {
+        setUser(nextUser);
+        setGoogleAuth(nextGoogleAuth);
         setSpotifyAuth(nextSpotifyAuth);
         setWorkspaceAuth(nextWorkspaceAuth);
-        // If we didn't find an existing user we need to update everything here
-        if (!existingUser) {
-          setUser(nextUser);
-          setGoogleAuth(nextGoogleAuth);
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     })().finally(() => {
       checkAuthPromiseRef.current = null;
@@ -248,12 +227,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      if (googleAuth) {
-        await fetch("/chat/api/auth/google/logout", {
-          method: "POST",
-          credentials: "include",
-        });
-      }
+      await fetch("/chat/api/auth/google/logout", {
+        method: "POST",
+        credentials: "include",
+      });
 
       if (spotifyAuth) {
         await fetch("/chat/api/spotify/token", {

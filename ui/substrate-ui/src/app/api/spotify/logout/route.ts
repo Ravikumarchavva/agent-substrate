@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getCredentialManager } from "@/lib/credentials";
-import { prisma } from "@/lib/prisma";
+import { getSessionFromRequest } from "@/lib/session";
 
 const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://localhost:8000";
 
@@ -19,16 +19,10 @@ export async function POST(req: NextRequest) {
 
   // Remove from DB
   try {
-    const userCookie = req.cookies.get("google_user")?.value;
-    if (userCookie) {
-      const userData = JSON.parse(decodeURIComponent(userCookie));
-      if (userData.email) {
-        const dbUser = await prisma.user.findUnique({ where: { email: userData.email }, select: { id: true } });
-        if (dbUser) {
-          const cm = getCredentialManager();
-          await cm.deleteCredential(dbUser.id, "spotify");
-        }
-      }
+    const session = await getSessionFromRequest(req);
+    if (session) {
+      const cm = getCredentialManager();
+      await cm.deleteCredential(session.id, "spotify");
     }
   } catch (err) {
     console.error("[Spotify OAuth] Failed to remove DB credential:", err);

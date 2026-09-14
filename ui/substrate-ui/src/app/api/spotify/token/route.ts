@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCredentialManager } from '@/lib/credentials';
 import { prisma } from '@/lib/prisma';
+import { getSessionFromRequest } from '@/lib/session';
 
 const BACKEND_URL = process.env.BACKEND_API_URL ?? 'http://localhost:8000';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
@@ -101,16 +102,8 @@ function pushToEngine(accessToken: string, refreshToken: string | null, expiresI
 }
 
 async function resolveUserId(req: NextRequest): Promise<string | null> {
-  try {
-    const userCookie = req.cookies.get('google_user')?.value;
-    if (!userCookie) return null;
-    const userData = JSON.parse(decodeURIComponent(userCookie)) as { email?: string };
-    if (!userData.email) return null;
-    const dbUser = await prisma.user.findUnique({ where: { email: userData.email }, select: { id: true } });
-    return dbUser?.id ?? null;
-  } catch {
-    return null;
-  }
+  const session = await getSessionFromRequest(req);
+  return session?.id ?? null;
 }
 
 async function refreshAccessToken(

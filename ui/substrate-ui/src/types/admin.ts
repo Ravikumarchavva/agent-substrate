@@ -5,6 +5,7 @@ export interface AdminThread {
   user_identifier: string | null;
   created_at: string | null;
   updated_at: string | null;
+  deleted_at: string | null;
   step_count: number;
 }
 

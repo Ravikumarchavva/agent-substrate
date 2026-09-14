@@ -6,20 +6,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCredentialManager } from "@/lib/credentials";
 import { prisma } from "@/lib/prisma";
+import { getSessionFromRequest } from "@/lib/session";
 
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
 
 async function resolveUserId(req: NextRequest): Promise<string | null> {
-  try {
-    const userCookie = req.cookies.get("google_user")?.value;
-    if (!userCookie) return null;
-    const userData = JSON.parse(decodeURIComponent(userCookie));
-    if (!userData.email) return null;
-    const dbUser = await prisma.user.findUnique({ where: { email: userData.email }, select: { id: true } });
-    return dbUser?.id ?? null;
-  } catch {
-    return null;
-  }
+  const session = await getSessionFromRequest(req);
+  return session?.id ?? null;
 }
 
 export async function POST(req: NextRequest) {

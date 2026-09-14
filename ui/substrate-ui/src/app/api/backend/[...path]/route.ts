@@ -3,41 +3,17 @@
  *
  * Adds an engine-scoped JWT so the engine's auth middleware is satisfied.
  * The JWT is signed with ENGINE_JWT_SECRET (same value as agent-substrate JWT_SECRET).
- * A new token is generated per request (short-lived).
- *
- * If the request carries an httpOnly `user_session` cookie (set at Google
- * OAuth login, see api/auth/google/callback), the token is signed with that
- * real user's id as `sub` so agent-substrate-side scoping (file ownership,
- * workspace storage) is per-person. With no login it falls back to the
- * per-browser `anon_id` cookie, and only to the shared service-account token
- * if even that is missing.
+ * A new token is generated per request (short-lived), minted from the
+ * caller's DB-backed session (src/lib/session.ts) — never from a
+ * client-editable cookie. No session → 401; there is no anonymous or
+ * service-account fallback for user-data routes anymore (see the beta
+ * security audit this replaces: the previous unsigned `user_session`
+ * cookie let anyone become any user, including an admin, just by editing
+ * it in devtools).
  */
 import { NextRequest } from "next/server";
-import {
-  ANON_COOKIE,
-  anonAuthHeader,
-  engineAuthHeader,
-  userAuthHeader,
-  type UserSession,
-} from "@/lib/engine-auth";
+import { requireUserAuthHeaderFromRequest } from "@/lib/engine-auth";
 import { streamingDispatcher } from "@/lib/streaming-dispatcher";
-
-function authHeaderFor(req: NextRequest): HeadersInit {
-  const raw = req.cookies.get("user_session")?.value;
-  if (raw) {
-    try {
-      const session = JSON.parse(raw) as UserSession;
-      if (session.id && session.email) return userAuthHeader(session);
-    } catch {
-      // Malformed cookie — fall through to a weaker identity.
-    }
-  }
-  // No login: a per-browser anonymous id (planted by middleware.ts) keeps this
-  // visitor's workspace and quota separate from every other visitor's.
-  const anonId = req.cookies.get(ANON_COOKIE)?.value;
-  if (anonId) return anonAuthHeader(anonId);
-  return engineAuthHeader();
-}
 
 // Stream responses (SSE) must not be buffered or statically optimized.
 export const runtime = "nodejs";
@@ -49,14 +25,21 @@ const BACKEND_URL =
   "http://localhost:8000";
 
 async function proxyRequest(req: NextRequest, path: string[]): Promise<Response> {
+  const auth = await requireUserAuthHeaderFromRequest(req);
+  if (!auth) {
+    return Response.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const targetUrl = `${BACKEND_URL}/${path.join("/")}${req.nextUrl.search}`;
 
   const headers = new Headers();
-  // Forward safe request headers
+  // Forward safe request headers — deliberately NOT "cookie": this app's
+  // own auth/session/OAuth cookies have no meaning to agent-substrate and
+  // forwarding them just leaks them into another service's logs/traces.
   for (const [k, v] of req.headers.entries()) {
     const lower = k.toLowerCase();
     if (
-      ["content-type", "accept", "cookie", "x-request-id", "x-base-checksum", "if-none-match"].includes(
+      ["content-type", "accept", "x-request-id", "x-base-checksum", "if-none-match"].includes(
         lower,
       )
     ) {
@@ -64,9 +47,7 @@ async function proxyRequest(req: NextRequest, path: string[]): Promise<Response>
     }
   }
 
-  // Inject engine JWT — per-user if a session cookie is present, else
-  // the fixed service-account token.
-  for (const [k, v] of Object.entries(authHeaderFor(req))) headers.set(k, v);
+  for (const [k, v] of Object.entries(auth.headers)) headers.set(k, v);
 
   const body =
     req.method === "GET" || req.method === "HEAD" ? undefined : req.body;

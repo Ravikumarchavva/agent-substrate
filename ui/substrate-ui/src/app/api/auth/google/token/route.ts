@@ -4,6 +4,7 @@
  * Returns current access token (auto-refreshes if expired)
  */
 import { NextRequest, NextResponse } from "next/server";
+import { SESSION_COOKIE_NAME, deleteSessionByToken } from "@/lib/session";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
@@ -40,14 +41,21 @@ export async function GET(req: NextRequest) {
       return res;
     }
     
-    // Refresh failed – clear stale cookies
+    // Refresh failed — this app's own session is a separate concern from
+    // Google API access, but if we can no longer act as this user's Google
+    // account, don't leave a half-valid app session lying around either:
+    // destroy it so the UI is forced to re-authenticate cleanly instead of
+    // silently continuing to look "logged in" while Google access is dead.
+    const sessionToken = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+    await deleteSessionByToken(sessionToken);
+
     const res = NextResponse.json({
       authenticated: false,
       error: "Token refresh failed",
     });
     res.cookies.delete("google_access_token");
     res.cookies.delete("google_refresh_token");
-    res.cookies.delete("google_user");
+    res.cookies.delete(SESSION_COOKIE_NAME);
     return res;
   }
 

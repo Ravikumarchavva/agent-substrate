@@ -16,11 +16,11 @@ import {
   Download,
   Eye,
   FileCode,
-  FileImage,
   FileSpreadsheet,
   FileText,
   Folder,
   HardDrive,
+  ImageIcon,
   LayoutGrid,
   List,
   Loader2,
@@ -179,6 +179,7 @@ function sortFolders(folders: SessionFolder[], sort: SortKey): SessionFolder[] {
 function SidebarItem({
   icon: Icon,
   iconColor,
+  glyphName,
   label,
   badge,
   active,
@@ -186,6 +187,11 @@ function SidebarItem({
 }: {
   icon: LucideIcon;
   iconColor?: string;
+  /** File name whose extension picks a getFileGlyph icon+color — renders
+   *  the same flat colored-square badge as a file's own tile (FileTypeIcon)
+   *  instead of a plain line icon, so a "PDFs"/"Images"/etc. filter reads as
+   *  a miniature file icon, not just a colored outline. */
+  glyphName?: string;
   label: string;
   badge?: number;
   active: boolean;
@@ -201,11 +207,15 @@ function SidebarItem({
           : "font-medium text-(--muted) hover:bg-background/50 hover:text-foreground"
       }`}
     >
-      <Icon
-        className={`h-[15px] w-[15px] shrink-0 ${
-          active ? "text-(--accent)" : iconColor ?? "text-(--muted)"
-        }`}
-      />
+      {glyphName ? (
+        <FileTypeIcon name={glyphName} size="sm" className="shrink-0" />
+      ) : (
+        <Icon
+          className={`h-[15px] w-[15px] shrink-0 ${
+            active ? "text-(--accent)" : iconColor ?? "text-(--muted)"
+          }`}
+        />
+      )}
       <span className="flex-1 truncate text-left">{label}</span>
       {badge !== undefined && (
         <span
@@ -819,11 +829,16 @@ export function StorageTab() {
             </div>
             <div className="space-y-0.5">
               <p className="mb-1.5 px-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-(--muted)/60">File Types</p>
-              <SidebarItem icon={FileText}        iconColor="text-rose-400"    label="PDFs"          active={location.type === "category" && location.category === "pdf"}   onClick={() => navigateTo({ type: "category", category: "pdf" })} />
-              <SidebarItem icon={FileText}        iconColor="text-blue-400"    label="Documents"     active={location.type === "category" && location.category === "doc"}   onClick={() => navigateTo({ type: "category", category: "doc" })} />
-              <SidebarItem icon={FileSpreadsheet} iconColor="text-emerald-400" label="Data & Sheets" active={location.type === "category" && location.category === "sheet"} onClick={() => navigateTo({ type: "category", category: "sheet" })} />
-              <SidebarItem icon={FileImage}       iconColor="text-violet-400"  label="Images"        active={location.type === "category" && location.category === "image"} onClick={() => navigateTo({ type: "category", category: "image" })} />
-              <SidebarItem icon={FileCode}        iconColor="text-amber-400"   label="Code & Scripts" active={location.type === "category" && location.category === "code"}  onClick={() => navigateTo({ type: "category", category: "code" })} />
+              {/* Same flat colored-square badge a file's own tile uses
+                  (FileTypeIcon → getFileGlyph, file-utils.ts) — a representative
+                  extension per category — not a plain line icon, so this list
+                  reads as miniature file icons matching the explorer grid and
+                  chat bubbles exactly, not just matching their colors. */}
+              <SidebarItem icon={FileText}        glyphName="x.pdf"  label="PDFs"          active={location.type === "category" && location.category === "pdf"}   onClick={() => navigateTo({ type: "category", category: "pdf" })} />
+              <SidebarItem icon={FileText}        glyphName="x.docx" label="Documents"     active={location.type === "category" && location.category === "doc"}   onClick={() => navigateTo({ type: "category", category: "doc" })} />
+              <SidebarItem icon={FileSpreadsheet} glyphName="x.xlsx" label="Data & Sheets" active={location.type === "category" && location.category === "sheet"} onClick={() => navigateTo({ type: "category", category: "sheet" })} />
+              <SidebarItem icon={ImageIcon}       glyphName="x.png"  label="Images"        active={location.type === "category" && location.category === "image"} onClick={() => navigateTo({ type: "category", category: "image" })} />
+              <SidebarItem icon={FileCode}        glyphName="x.js"   label="Code & Scripts" active={location.type === "category" && location.category === "code"}  onClick={() => navigateTo({ type: "category", category: "code" })} />
             </div>
           </div>
 

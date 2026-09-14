@@ -186,26 +186,104 @@ async def test_convert_office_document_falls_back_to_tier1_when_tier2_unavailabl
 def test_tier1_markitdown_returns_empty_result_when_package_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """markitdown isn't installed in this dev venv today — the real,
-    current behavior of this exact function in this exact environment,
-    not a simulated case."""
+    """A real, still-real failure mode even with markitdown installed here
+    now — an environment without it must still degrade to an empty result,
+    not raise. Simulated via a blocked import, since markitdown genuinely
+    is installed in this dev venv now (see the real-conversion tests
+    below)."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _blocked_import(name, *args, **kwargs):
+        if name == "markitdown":
+            raise ImportError("simulated: markitdown not installed")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _blocked_import)
+
     result = convert._tier1_markitdown(b"data", "doc.docx", "application/msword")
     assert result.pages == []
     assert result.engine == "raw_text"
 
 
-def test_markitdown_package_not_yet_installed_in_dev_venv() -> None:
-    """Documents the current real state so this doesn't silently bit-rot:
-    once `uv sync --extra document-intelligence` pulls in markitdown (added
-    to pyproject.toml alongside this change), this test starts failing and
-    should be replaced with real Tier 1 conversion tests using
-    pytest.importorskip("markitdown") + a real tiny .docx/.pptx fixture."""
-    pytest.importorskip(
-        "markitdown",
-        reason="not yet installed in this dev venv -- sync the "
-        "document-intelligence extra to get real Tier 1 coverage",
+def _real_docx_bytes(paragraph: str, heading: str) -> bytes:
+    import io
+
+    from docx import Document as DocxDocument
+
+    doc = DocxDocument()
+    doc.add_paragraph(paragraph)
+    doc.add_heading(heading, level=1)
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _real_pptx_bytes(title: str, body: str) -> bytes:
+    import io
+
+    from pptx import Presentation
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = title
+    slide.placeholders[1].text = body
+    buf = io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue()
+
+
+def test_tier1_markitdown_converts_a_real_docx() -> None:
+    """Real markitdown package, real python-docx-built .docx bytes, real
+    conversion -- the placeholder this replaces (bit-rot canary from when
+    markitdown wasn't installed in this dev venv) fired once `uv sync`
+    actually pulled it in; this is the real coverage it asked for."""
+    data = _real_docx_bytes("Hello real markitdown test.", "A Heading")
+
+    result = convert._tier1_markitdown(
+        data,
+        "doc.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
-    pytest.fail(
-        "markitdown is now installed -- replace this placeholder with real "
-        "Tier 1 conversion tests against a tiny real .docx/.pptx fixture"
+
+    assert result.engine == "raw_text"
+    assert len(result.pages) == 1
+    assert "Hello real markitdown test." in result.pages[0].text
+    assert "A Heading" in result.pages[0].text
+    assert result.markdown == result.pages[0].markdown
+
+
+def test_tier1_markitdown_converts_a_real_pptx() -> None:
+    data = _real_pptx_bytes("Real Slide Title", "Real slide body text")
+
+    result = convert._tier1_markitdown(
+        data,
+        "deck.pptx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
+
+    assert result.engine == "raw_text"
+    assert len(result.pages) == 1
+    assert "Real Slide Title" in result.pages[0].text
+    assert "Real slide body text" in result.pages[0].text
+
+
+async def test_convert_office_document_end_to_end_with_a_real_plump_docx() -> None:
+    """The full public entry point, real markitdown, no LibreOffice
+    escalation needed since the real converted text is well above the
+    thin-text threshold."""
+    data = _real_docx_bytes(
+        "This paragraph has plenty of real text content, well past the "
+        "default 100-character thin-text escalation threshold on its own.",
+        "A Real Heading",
+    )
+
+    result = await convert.convert_office_document(
+        data,
+        "doc.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+    assert result.engine == "raw_text"
+    assert "plenty of real text content" in result.markdown

@@ -147,17 +147,25 @@ class SubstrateConfig(BaseSettings):
     EMBEDDING_RERANKER_TIMEOUT_S: int = 30
 
     # ── RAG backend & retrieval ──────────────────────────────────────────────
-    RAG_BACKEND: str = "local"  # "local" | "pinecone"
-    PINECONE_API_KEY: str = ""
-    PINECONE_ASSISTANT_NAME: str = ""
+    # "local" (LocalRagBackend, PgVectorStore) is the only real backend --
+    # Pinecone support was removed as dead weight (never the standard
+    # path); the per-user session-document index already uses LanceDB as
+    # this project's own self-hosted alternative where a second backend
+    # was actually needed (capabilities/vector/lancedb_store.py).
+    RAG_BACKEND: str = "local"
     RAG_TEXT_EMBEDDING_DIM: int = 1536
     RAG_IMAGE_EMBEDDING_DIM: int = 2048
     RAG_MAX_DOC_PAGES: int = 300
     RAG_MAX_DOC_MB: int = 5
     RAG_DAILY_DOC_LIMIT: int = 20
     RAG_DAILY_UPLOAD_ATTEMPT_LIMIT: int = 100
-    RAG_CHUNK_SIZE: int = 512
-    RAG_CHUNK_OVERLAP: int = 128
+    # None (default) means "let capabilities/knowledge/chunking.py's
+    # recommend_chunk_params(EMBEDDING_MODEL) pick a size informed by the
+    # configured embedding model's real max input token limit" -- an
+    # explicit value here always wins over that (same explicit-always-wins
+    # precedence document_intelligence's autoconfig.py already uses).
+    RAG_CHUNK_SIZE: int | None = None
+    RAG_CHUNK_OVERLAP: int | None = None
     RAG_DENSE_K: int = 50
     RAG_LEXICAL_K: int = 50
     RAG_FUSED_K: int = 50

@@ -41,7 +41,7 @@ def _result(
     )
 
 
-def _cite(results, ledger=None, *, collection="thread-1", backend="pinecone"):
+def _cite(results, ledger=None, *, collection="thread-1", backend="managed"):
     return build_citations(
         results,
         backend_name=backend,
@@ -104,7 +104,7 @@ def test_results_are_deduped_by_file_id_not_filename():
 
 
 def test_coarse_multipage_chunk_jumps_to_first_page_and_shows_the_range():
-    """Pinecone's multimodal chunker can merge a whole doc into one chunk."""
+    """A coarse-chunking (e.g. managed multimodal) backend can merge a whole doc into one chunk."""
     cited = _cite([_result(pages=[1, 2, 3, 4, 5, 6, 7])])
     citation = cited.citations[0]
 
@@ -196,7 +196,7 @@ def test_to_wire_shape_is_json_native_snake_case():
     assert entry["page"] == 5
     assert entry["pages"] == [5]
     assert entry["thread_id"] == "thread-1"
-    assert entry["backend"] == "pinecone"
+    assert entry["backend"] == "managed"
     # Whitespace collapsed for a clean hover preview.
     assert entry["snippet"] == "a long passage"
 
@@ -319,7 +319,7 @@ def test_build_citations_dedup_is_opt_in_and_higher_score_wins():
     # Opted in: the near-duplicate loses to the higher-scoring result.
     deduped = build_citations(
         [weaker, stronger],
-        backend_name="pinecone",
+        backend_name="managed",
         collection="thread-1",
         ledger=CitationLedger(),
         dedup_similarity_threshold=0.9,

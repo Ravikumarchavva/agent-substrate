@@ -1,12 +1,18 @@
 """RagBackend — the contract every RAG backend (local or managed) implements.
 
 Deliberately coarse: one Protocol with ``ingest``/``query``, not separately
-swappable loader/embedder/store/reranker pieces. A managed service like
-Pinecone Assistant does parsing, chunking, embedding, storage, and retrieval
-as one opaque call — it has no seam to plug in at the sub-component level, so
+swappable loader/embedder/store/reranker pieces. A managed RAG service
+typically does parsing, chunking, embedding, storage, and retrieval as one
+opaque call — it has no seam to plug in at the sub-component level, so
 forcing a layered design would mean maintaining two incompatible shapes at
 once. Swap the whole backend; that's the granularity every option here
 actually supports.
+
+``LocalRagBackend`` is the only backend today (a managed-service backend,
+Pinecone Assistant, existed briefly but was removed as dead weight — never
+the standard path). The Protocol stays this coarse regardless, since it's
+the right shape for whatever backend comes next, not just the one that's
+gone.
 """
 
 from __future__ import annotations
@@ -22,9 +28,9 @@ from substrate.kernel.storage.vector import SearchResult
 class IngestResult:
     """Outcome of one ``ingest()`` call.
 
-    ``chunks_indexed`` is ``-1`` when the backend doesn't report a chunk
-    count (Pinecone Assistant manages chunking internally and never
-    surfaces it) — callers that need an exact count should check for that
+    ``chunks_indexed`` is ``-1`` when a backend doesn't report a chunk
+    count (a managed backend that chunks internally and never surfaces it,
+    for example) — callers that need an exact count should check for that
     sentinel rather than assume it's always meaningful.
     """
 
@@ -62,9 +68,9 @@ class RagBackend(Protocol):
     ) -> list[SearchResult]:
         """``filter`` restricts results by metadata equality (e.g.
         ``{"file_id": ..., "page_number": 13}`` for explicit page
-        navigation) — currently only honored by ``LocalRagBackend``;
-        ``PineconeRagBackend`` accepts and ignores it (Assistant has its own
-        opaque filtering, no generic metadata-equality seam)."""
+        navigation) — honored by ``LocalRagBackend``, the only backend
+        today; a future opaque managed backend might accept and ignore it
+        instead (no generic metadata-equality seam of its own)."""
         ...
 
     async def query_with_context(

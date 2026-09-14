@@ -120,27 +120,49 @@ async def lifespan(app: FastAPI):
             ledger, hw, _RERANK_WORKER_VRAM_BUDGET_MIB, label="rerank"
         )
 
+        # main_gguf/mmproj_gguf stay None -- these two serve via
+        # llama-server's own --hf-repo/--hf-file runtime download (the
+        # real, already-working mechanism docker-compose.yml's sidecars
+        # use), passed through extra_args instead. --embedding/--reranking
+        # are llama-server's actual real flags for these two model roles
+        # (verified against docker-compose.yml's own llama-embed/
+        # llama-rerank command blocks, not guessed); slots= (not
+        # extra_args) covers --parallel, see config.py's own comment.
         embed_pool = LocalLlamaServerPool(
             binary=svc_config.llama_server_bin,
-            main_gguf=svc_config.embed_main_gguf,
-            mmproj_gguf=svc_config.embed_mmproj_gguf,
             gpu_devices=[embed_device],
             base_port=svc_config.embed_base_port,
+            slots=svc_config.embed_slots,
             ctx_size=svc_config.local_ctx_size,
             startup_timeout_s=svc_config.local_startup_timeout_s,
             max_restarts=svc_config.local_max_restarts,
             model_name="compatible/Qwen3-VL-Embedding-2B",
+            extra_args=[
+                "--hf-repo",
+                svc_config.embed_hf_repo,
+                "--hf-file",
+                svc_config.embed_hf_file,
+                "--embedding",
+                "--pooling",
+                "last",
+            ],
         )
         rerank_pool = LocalLlamaServerPool(
             binary=svc_config.llama_server_bin,
-            main_gguf=svc_config.rerank_main_gguf,
-            mmproj_gguf=svc_config.rerank_mmproj_gguf,
             gpu_devices=[rerank_device],
             base_port=svc_config.rerank_base_port,
+            slots=svc_config.rerank_slots,
             ctx_size=svc_config.local_ctx_size,
             startup_timeout_s=svc_config.local_startup_timeout_s,
             max_restarts=svc_config.local_max_restarts,
             model_name="compatible/Qwen3-VL-Reranker-2B",
+            extra_args=[
+                "--hf-repo",
+                svc_config.rerank_hf_repo,
+                "--hf-file",
+                svc_config.rerank_hf_file,
+                "--reranking",
+            ],
         )
         await embed_pool.start()
         await rerank_pool.start()

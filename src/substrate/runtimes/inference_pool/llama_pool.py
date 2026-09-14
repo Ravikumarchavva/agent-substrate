@@ -86,8 +86,8 @@ class LocalLlamaServerPool:
         self,
         *,
         binary: str,
-        main_gguf: str,
-        mmproj_gguf: str,
+        main_gguf: str | None = None,
+        mmproj_gguf: str | None = None,
         gpu_devices: list[str],
         base_port: int = 8090,
         ngl: int = 99,
@@ -97,7 +97,28 @@ class LocalLlamaServerPool:
         startup_timeout_s: float = 300.0,
         max_restarts: int = 5,
         model_name: str = "compatible/PaddleOCR-VL-1.6",
+        extra_args: list[str] | None = None,
     ) -> None:
+        """``main_gguf``/``mmproj_gguf`` are optional — a consumer that
+        serves via llama-server's own ``--hf-repo``/``--hf-file`` runtime
+        download (the real pattern this codebase's own docker-compose.yml
+        already uses for the embedding/reranking sidecars) passes those
+        through ``extra_args`` instead and leaves both ``None``.
+
+        ``extra_args`` is the general escape hatch that makes this pool
+        genuinely reusable across model families, not hand-tuned to one:
+        appended verbatim after every flag this class already knows is
+        universal (``--host``/``--port``/``-ngl``/``-np``/``-cb``/
+        ``--ctx-size``/``--temp 0``/``--seed 0``/``--threads``). PaddleOCR-VL
+        needs none of it (``main_gguf``/``mmproj_gguf`` alone suffice);
+        an embedding server needs ``--embedding --pooling last``, a
+        reranker needs ``--reranking``, a future consumer needs whatever
+        it needs — this class doesn't need to know any of those flag
+        names to spawn and supervise the process correctly. ``slots``
+        already covers `-np`/`--parallel` (the same flag, different
+        spelling in llama.cpp's own CLI) — do NOT also pass `--parallel`
+        via ``extra_args``, that would pass the same flag twice.
+        """
         self._binary = binary
         self._main_gguf = main_gguf
         self._mmproj_gguf = mmproj_gguf
@@ -110,6 +131,7 @@ class LocalLlamaServerPool:
         self._startup_timeout_s = startup_timeout_s
         self._max_restarts = max_restarts
         self._model_name = model_name
+        self._extra_args = list(extra_args) if extra_args else []
 
         self.ready = False
         self.worker_count = 0
@@ -120,12 +142,12 @@ class LocalLlamaServerPool:
         self._close_lock = asyncio.Lock()
 
     def _argv(self, port: int) -> list[str]:
-        argv = [
-            self._binary,
-            "-m",
-            self._main_gguf,
-            "--mmproj",
-            self._mmproj_gguf,
+        argv = [self._binary]
+        if self._main_gguf is not None:
+            argv += ["-m", self._main_gguf]
+        if self._mmproj_gguf is not None:
+            argv += ["--mmproj", self._mmproj_gguf]
+        argv += [
             "--host",
             "127.0.0.1",
             "--port",
@@ -144,6 +166,7 @@ class LocalLlamaServerPool:
         ]
         if self._threads is not None:
             argv += ["--threads", str(self._threads)]
+        argv += self._extra_args
         return argv
 
     async def _drain_stream(self, stream: asyncio.StreamReader, index: int, tag: str) -> None:

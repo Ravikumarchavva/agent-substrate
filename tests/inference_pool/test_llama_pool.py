@@ -181,6 +181,74 @@ async def test_zero_of_n_workers_healthy_leaves_pool_not_ready(monkeypatch: pyte
     await pool.aclose()
 
 
+# ── generic argv (main_gguf/mmproj_gguf optional, extra_args) ──────────────
+
+
+def test_argv_includes_m_and_mmproj_when_both_given() -> None:
+    pool = LocalLlamaServerPool(
+        binary=sys.executable,
+        main_gguf="/models/main.gguf",
+        mmproj_gguf="/models/mmproj.gguf",
+        gpu_devices=["gpu:0"],
+        base_port=18090,
+    )
+    argv = pool._argv(18090)
+    assert "-m" in argv and argv[argv.index("-m") + 1] == "/models/main.gguf"
+    assert "--mmproj" in argv and argv[argv.index("--mmproj") + 1] == "/models/mmproj.gguf"
+
+
+def test_argv_omits_m_and_mmproj_when_both_none() -> None:
+    """The real fix this covers: a consumer that serves via --hf-repo/
+    --hf-file (embedding_reranker's local mode) must not get a spurious
+    `-m None --mmproj None` in its argv."""
+    pool = LocalLlamaServerPool(
+        binary=sys.executable,
+        gpu_devices=["gpu:0"],
+        base_port=18090,
+    )
+    argv = pool._argv(18090)
+    assert "-m" not in argv
+    assert "--mmproj" not in argv
+
+
+def test_argv_appends_extra_args_after_universal_flags() -> None:
+    pool = LocalLlamaServerPool(
+        binary=sys.executable,
+        gpu_devices=["gpu:0"],
+        base_port=18090,
+        slots=2,
+        extra_args=["--hf-repo", "org/Repo-GGUF", "--hf-file", "model.gguf", "--embedding"],
+    )
+    argv = pool._argv(18090)
+    assert argv[-5:] == ["--hf-repo", "org/Repo-GGUF", "--hf-file", "model.gguf", "--embedding"]
+    # slots still covers -np, no double --parallel from extra_args in this test
+    assert "-np" in argv and argv[argv.index("-np") + 1] == "2"
+
+
+async def test_pool_with_no_gguf_files_and_extra_args_still_spawns_and_becomes_healthy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real, end-to-end (subprocess-level, via the same stub every other
+    test here uses) proof that a PaddleOCR-VL-shaped gguf pair is NOT
+    required — a pool built the way embedding_reranker's local mode
+    builds one (main_gguf/mmproj_gguf both None, real flags via
+    extra_args) genuinely spawns and health-gates correctly."""
+    pool = LocalLlamaServerPool(
+        binary=sys.executable,
+        gpu_devices=["gpu:0"],
+        base_port=18170,
+        startup_timeout_s=10.0,
+        extra_args=["--hf-repo", "org/Repo-GGUF", "--hf-file", "model.gguf", "--embedding"],
+    )
+    _argv_patch(monkeypatch, pool)
+    await pool.start()
+    try:
+        assert pool.ready is True
+        assert pool.worker_count == 1
+    finally:
+        await pool.aclose()
+
+
 async def test_remote_pool_cycles_preconfigured_endpoints() -> None:
     endpoints = [
         InferenceEndpoint(model="compatible/PaddleOCR-VL-1.6", base_url="http://vl-a:9000"),

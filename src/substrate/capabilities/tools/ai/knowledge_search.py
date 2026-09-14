@@ -1,8 +1,8 @@
 """KnowledgeSearchTool — semantic search over a real knowledge base.
 
 Thin wrapper around a ``RagBackend`` (``capabilities/knowledge/backends/``) —
-all ingestion/retrieval logic lives there (local pgvector pipeline, or a
-managed service like Pinecone Assistant). This tool only adapts the agent
+all ingestion/retrieval logic lives there (``LocalRagBackend``'s pgvector
+pipeline today). This tool only adapts the agent
 tool-call shape to ``backend.ingest``/``backend.query``, and labels each
 retrieved passage with a stable citation number (``capabilities/knowledge/
 citations.py``) so the model can cite ``[n]`` and the UI can render a

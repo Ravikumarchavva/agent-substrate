@@ -113,7 +113,7 @@ async def test_knowledge_search_tool_unknown_action():
 
 class CitableRagBackend(FakeRagBackend):
     """A backend whose results carry real citation metadata (filename +
-    page), like LocalRagBackend/PineconeRagBackend after ingest."""
+    page), like LocalRagBackend after ingest."""
 
     def __init__(self, results=None) -> None:
         super().__init__()

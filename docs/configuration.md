@@ -95,17 +95,15 @@ Agent Substrate provides secure, isolated execution environments for executing u
 
 | Environment Variable | Default | Description |
 |---|---|---|
-| `RAG_BACKEND` | `local` | RAG implementation: `local` (self-hosted pgvector + RAG pipeline) or `pinecone` (managed Pinecone Assistant) |
-| `PINECONE_API_KEY` | `""` | Pinecone API key (when using Pinecone backend) |
-| `PINECONE_ASSISTANT_NAME` | `""` | Name of the Pinecone Assistant |
+| `RAG_BACKEND` | `local` | RAG implementation — `local` (self-hosted pgvector + RAG pipeline) is the only backend; a managed Pinecone Assistant backend existed briefly but was removed |
 | `RAG_TEXT_EMBEDDING_DIM` | `1536` | Dimension of text embeddings (must match model output, e.g. 1536 for OpenAI `text-embedding-3-small`) |
 | `RAG_IMAGE_EMBEDDING_DIM` | `2048` | Dimension of multimodal image embeddings (must match model output, e.g. 2048 for `Qwen3-VL-Embedding-2B`) |
 | `RAG_MAX_DOC_PAGES` | `20` | Maximum page count allowed for synchronous document upload |
 | `RAG_MAX_DOC_MB` | `5` | Maximum file size in MB for uploaded documents |
 | `RAG_DAILY_DOC_LIMIT` | `20` | Daily document commitment quota per user |
 | `RAG_DAILY_UPLOAD_ATTEMPT_LIMIT` | `100` | Daily upload attempt ceiling to prevent extraction abuse |
-| `RAG_CHUNK_SIZE` | `512` | Token chunk size for document splitting |
-| `RAG_CHUNK_OVERLAP` | `128` | Token overlap between adjacent chunks |
+| `RAG_CHUNK_SIZE` | (auto) | Character chunk size for document splitting. Unset (default) derives a size from the configured `EMBEDDING_MODEL`'s real max input token limit instead of one flat value; set explicitly to override |
+| `RAG_CHUNK_OVERLAP` | (auto) | Character overlap between adjacent chunks — same auto-derivation as `RAG_CHUNK_SIZE` when unset |
 
 ### Hybrid Search & Reranking Budgets
 The local RAG pipeline narrows candidates across multi-stage retrieval budgets:

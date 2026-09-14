@@ -41,9 +41,11 @@ class Citation:
     """One numbered source reference behind a retrieved passage.
 
     ``page`` is the jump target for the UI; ``pages`` is everything the chunk
-    spanned. They differ when a backend chunks coarsely — Pinecone's multimodal
-    parser can merge a whole document into one chunk, giving ``pages=(1..7)``
-    and ``page=1``. ``label()`` surfaces the full range so a wide span reads as
+    spanned. They differ when a backend chunks coarsely — a managed
+    multimodal parser could in principle merge a whole document into one
+    chunk, giving ``pages=(1..7)`` and ``page=1`` (``LocalRagBackend``, the
+    only backend today, never does this — it indexes one ``Document`` per
+    page). ``label()`` surfaces the full range so a wide span reads as
     imprecise rather than as a confident pointer at page 1.
     """
 
@@ -106,12 +108,11 @@ def _pages_label(pages: tuple[int, ...]) -> str:
 
 
 def _pages_of(metadata: Mapping[str, Any]) -> tuple[int, ...]:
-    """Normalise the two shapes backends produce into one tuple.
-
-    Pinecone reports a whole chunk's span as ``pages``; the local pypdf/
-    pdfplumber path indexes one ``Document`` per page and reports a single
-    ``page_number``. Coercing here keeps that difference out of everything
-    downstream.
+    """Normalise the two shapes a backend can produce into one tuple: a
+    coarse-chunking backend reports a whole chunk's span as ``pages``;
+    ``LocalRagBackend`` (the only backend today) indexes one ``Document``
+    per page and reports a single ``page_number``. Coercing here keeps
+    that difference out of everything downstream.
     """
     raw = metadata.get("pages")
     if isinstance(raw, (list, tuple)) and raw:

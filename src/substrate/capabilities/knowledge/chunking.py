@@ -560,3 +560,71 @@ def get_chunker(
     if cls is None:
         raise ValueError(f"Unknown chunker: {name!r}. Available: {list(_CHUNKERS)}")
     return cls(**kwargs)
+
+
+# ── Model-informed chunk sizing ─────────────────────────────────────────────
+
+# Rough, standard English-text heuristic (~4 characters per token) — every
+# chunk_size/overlap value in this module is in characters, not tokens (see
+# TextChunker's own docstring), so a token-based limit needs converting.
+_CHARS_PER_TOKEN_ESTIMATE = 4
+
+# Real, documented max-input-token limits per embedding provider family
+# (substrate.integrations.llm.factory.detect_embedding_provider's own
+# provider names) — not guessed:
+#   - "openai": 8191 tokens, OpenAI embeddings API docs (ada-002 and the
+#     text-embedding-3-* family share this ceiling).
+#   - "gemini": 2048 tokens, Google's text-embedding-004 docs.
+#   - "sentence_transformers": the client's own default model
+#     (all-MiniLM-L6-v2, see sentence_transformers_embedding_client.py) has
+#     a real 256-token max sequence length. The specific configured model
+#     isn't inspected here, so 256 is used as a conservative floor for the
+#     whole family — a larger sentence-transformers model would just get a
+#     smaller-than-necessary chunk, never a silently-truncated one.
+#   - "openai_compatible": no universal ceiling (any local/remote server) —
+#     2048 mirrors this repo's own real, configured deployment
+#     (embedding_reranker's Qwen3-VL-Embedding-2B service, ctx_size=2048 in
+#     both docker-compose.yml and embedding_reranker/service/config.py),
+#     the one openai_compatible embedding backend this codebase actually
+#     ships today.
+_PROVIDER_MAX_INPUT_TOKENS: dict[str, int] = {
+    "openai": 8191,
+    "gemini": 2048,
+    "sentence_transformers": 256,
+    "openai_compatible": 2048,
+}
+
+# A general-purpose RAG chunk target, independent of any one embedding
+# model's max context — deliberately NOT "half the model's max window."
+# A chunk sized to a model's full capacity dilutes retrieval precision even
+# when the model could technically embed it whole: a huge chunk mixes the
+# genuinely relevant sentence with a lot of irrelevant surrounding text,
+# hurting both similarity-search precision and citation usefulness. ~400
+# tokens (~1600 chars) sits in the range most RAG guidance converges on —
+# dense enough to carry real semantic content, small enough that a
+# retrieved chunk stays specific. This is a principled, per-model-ceiling-
+# aware DEFAULT, not a measured-optimal value — a real re-tune needs actual
+# retrieval-quality A/B testing on this project's own corpus, which has not
+# been run (see the phase-3 plan notes: deliberately not decided by fiat).
+_DEFAULT_TARGET_TOKENS = 400
+
+
+def recommend_chunk_params(embedding_model: str) -> tuple[int, int]:
+    """(chunk_size, overlap), in characters, sized to *embedding_model*'s
+    real max input token limit rather than one flat default for every
+    provider. The target token count is capped DOWN to the model's real
+    ceiling when that's smaller than the general-purpose default (today,
+    only ``sentence_transformers``'s conservative 256-token assumption
+    triggers this) — never scaled UP just because a model's window happens
+    to be much bigger, since bigger chunks are not automatically better
+    chunks for retrieval. Overlap is a fixed 25% of chunk_size, matching
+    this codebase's original 512/128 default's own ratio.
+    """
+    from substrate.integrations.llm.factory import detect_embedding_provider
+
+    provider = detect_embedding_provider(embedding_model)
+    max_tokens = _PROVIDER_MAX_INPUT_TOKENS.get(provider, _PROVIDER_MAX_INPUT_TOKENS["openai_compatible"])
+    target_tokens = min(_DEFAULT_TARGET_TOKENS, max_tokens)
+    chunk_size = target_tokens * _CHARS_PER_TOKEN_ESTIMATE
+    overlap = chunk_size // 4
+    return chunk_size, overlap

@@ -88,8 +88,6 @@ sandbox = [
 rag = ["pypdf>=6.13.0", "lancedb>=0.37.1", "networkx>=3.6.1"]
 # model-based sentence segmentation (SaTSegmenter)
 chunking = ["wtpsplit[onnx-cpu]>=2.1.0"]
-# managed RAG via Pinecone Assistant
-rag-pinecone = ["pinecone>=9.0.0"]
 # non-OpenAI LLM providers — LLMFactory lazy-imports each client, so only
 # the provider(s) you actually select need to be installed
 anthropic = ["anthropic>=0.95.0"]

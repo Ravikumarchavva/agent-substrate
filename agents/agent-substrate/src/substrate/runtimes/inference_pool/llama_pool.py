@@ -1,6 +1,8 @@
 """``LocalLlamaServerPool`` / ``RemoteInferencePool`` — the two
-:class:`~substrate.runtimes.document_intelligence.service.pool_types.InferencePool`
-implementations ``engines/paddle_vl.py`` dispatches VL inference through.
+:class:`~substrate.runtimes.inference_pool.pool_types.InferencePool`
+implementations any consumer (``document_intelligence/service/engines/
+paddle_vl.py``, ``embedding_reranker``'s local mode) dispatches inference
+through.
 
 ``LocalLlamaServerPool`` spawns and supervises N real ``llama-server``
 subprocess children (one per GPU, or one CPU child) via
@@ -27,7 +29,7 @@ import httpx2 as httpx
 
 from substrate.integrations.llm.endpoint import InferenceEndpoint
 from substrate.logger import setup_logging
-from substrate.runtimes.document_intelligence.service.pool_types import PoolWorker
+from substrate.runtimes.inference_pool.pool_types import PoolWorker
 
 logger = setup_logging()
 

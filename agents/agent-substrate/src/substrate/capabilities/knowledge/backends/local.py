@@ -200,15 +200,34 @@ class LocalRagBackend:
     ) -> list[SearchResult]:
         hybrid = getattr(store, "hybrid_search", None)
         if hybrid is not None:
-            return await hybrid(
-                query_vec,
-                query_text,
-                collection=collection,
-                dense_k=self._dense_k,
-                lexical_k=self._lexical_k,
-                fused_k=self._fused_k,
-                filter=filter,
-            )
+            # Not every VectorStore's hybrid_search takes the same knobs --
+            # PgVectorStore does its own manual dense/lexical fusion
+            # (dense_k/lexical_k/fused_k size each stage's candidate pool);
+            # LanceDBVectorStore fuses via LanceDB's own native RRF
+            # reranker over one fetch and only takes `limit` (real,
+            # found-not-assumed: this method's plain `getattr(store,
+            # "hybrid_search", None)` existence check had never actually
+            # been exercised against LanceDBVectorStore before
+            # SessionDocumentSearchTool started routing through
+            # LocalRagBackend.query() -- it raised
+            # `TypeError: hybrid_search() got an unexpected keyword
+            # argument 'dense_k'` the first time it was). Inspect the real
+            # signature rather than hardcoding a second branch per store
+            # class, so a third VectorStore's own hybrid_search shape
+            # works here without another special case.
+            import inspect
+
+            accepted = inspect.signature(hybrid).parameters
+            kwargs: dict[str, Any] = {"collection": collection, "filter": filter}
+            if "dense_k" in accepted:
+                kwargs["dense_k"] = self._dense_k
+            if "lexical_k" in accepted:
+                kwargs["lexical_k"] = self._lexical_k
+            if "fused_k" in accepted:
+                kwargs["fused_k"] = self._fused_k
+            elif "limit" in accepted:
+                kwargs["limit"] = self._fused_k
+            return await hybrid(query_vec, query_text, **kwargs)
         return await store.search(
             query_vec, collection=collection, limit=self._fused_k, filter=filter
         )

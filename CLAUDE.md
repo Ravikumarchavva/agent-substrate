@@ -54,6 +54,22 @@ uv run python -m ruff check .
 uv run python -m ruff format .
 ```
 
+**`make infra-up`/`make infra-down` and `uv run substrate up`/`down` are NOT
+interchangeable in this repo** — they target two different docker-compose
+projects. `make infra-*` uses `deployment/docker/docker-compose.yml` at the
+repo root (`name: agent-framework` — what actually runs when you work in
+this repo, e.g. via `make infra-up`). `substrate up`/`down` resolve to a
+separate, packaged copy shipped inside the installed package
+(`src/substrate/deployment/docker/docker-compose.yml`, `name:
+substrate-infra`) — meant for a downstream project depending on
+`agent-substrate` with no clone of this repo, not for repo contributors.
+Real, hit-live bug: running `substrate down` in this repo silently did
+nothing — it stopped containers under the `substrate-infra` project name,
+which were never running, while the real `agent-framework-*` containers
+(started via `make infra-up`) kept running with no error. **Inside this
+repo, always use `make infra-up`/`make infra-down` — never `substrate
+up`/`down`.**
+
 ---
 
 ## Full Directory Map

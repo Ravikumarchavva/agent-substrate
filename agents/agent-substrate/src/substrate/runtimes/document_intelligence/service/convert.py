@@ -68,11 +68,6 @@ def _tier1_markitdown(data: bytes, filename: str, content_type: str) -> Extracti
     degrade to an empty result, which ``convert_office_document`` then
     treats as "thin" and escalates to Tier 2."""
     try:
-        # TODO: verify against installed markitdown once dependency is added
-        # to pyproject.toml — this repo's venv does not have it installed
-        # yet, so the shape below is written against the documented/
-        # expected API (MarkItDown().convert(path) -> result with
-        # .text_content), not confirmed against a real install.
         from markitdown import MarkItDown
     except ImportError:
         logger.warning("markitdown not installed — Tier 1 conversion skipped")
@@ -90,9 +85,10 @@ def _tier1_markitdown(data: bytes, filename: str, content_type: str) -> Extracti
             tmp.flush()
             md = MarkItDown()
             result = md.convert(tmp.name)
-            # TODO: verify attribute name against installed markitdown —
-            # documented as `.text_content` in older versions, `.markdown`
-            # in newer ones; try both defensively.
+            # Verified against markitdown==0.1.7's real DocumentConverterResult:
+            # `.markdown` is the real attribute; `.text_content` is a
+            # soft-deprecated property that just returns `.markdown` (kept
+            # here for older-version compat, not because both are needed).
             text = getattr(result, "text_content", None) or getattr(
                 result, "markdown", ""
             )

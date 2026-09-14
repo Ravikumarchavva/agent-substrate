@@ -367,6 +367,77 @@ async def test_disconnected_stops_local_relay_without_cancelling_run() -> None:
 
 
 # ---------------------------------------------------------------------------
+# bridge=None — the thin, HITL-free consumer (substrate.serve.add_routes)
+# ---------------------------------------------------------------------------
+
+
+async def test_bridge_none_still_completes_and_terminates() -> None:
+    """The real bug this guards against: without a bridge, nothing but
+    _agent_worker's own completion can signal events()'s queue-draining
+    loop to stop -- a naive `bridge=None` would just poll forever after the
+    run finishes. Real Runtime, real agent, no bridge object anywhere."""
+    agent = ReplyAgent(reply="no bridge needed", name="no_bridge_agent")
+    async with Runtime() as rt:
+        msg = _make_msg(agent.id)
+        session = AgentStreamSession(runtime=rt, agent=agent, msg=msg)
+        events = await asyncio.wait_for(_collect(session), timeout=5.0)
+
+    assert isinstance(events[0], HelloEvent)
+    assert isinstance(events[-1], RunCompletedEvent)
+
+
+async def test_bridge_none_error_still_emits_run_failed() -> None:
+    agent = CrashAgent(name="crash_no_bridge")
+    async with Runtime() as rt:
+        msg = _make_msg(agent.id)
+        session = AgentStreamSession(runtime=rt, agent=agent, msg=msg)
+        events = await asyncio.wait_for(_collect(session), timeout=5.0)
+
+    assert any(isinstance(e, RunFailedEvent) for e in events)
+
+
+async def test_bridge_none_disconnect_does_not_crash_on_missing_bridge() -> None:
+    """_check_disconnect's bridge.cancel_all_pending()/signal_done() calls
+    must be skipped, not crash with AttributeError on None, when this
+    session has no bridge."""
+    is_disconnected = False
+
+    async def check_disconnected() -> bool:
+        return is_disconnected
+
+    @dataclass
+    class SlowAgent:
+        name: str = "slow_no_bridge"
+
+        @property
+        def id(self) -> AgentId:
+            return AgentId(type="agent", key=self.name)
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            for msg in inbox:
+                await asyncio.sleep(0.2)
+
+    async with Runtime() as rt:
+        agent = SlowAgent()
+        msg = _make_msg(agent.id)
+        session = AgentStreamSession(
+            runtime=rt,
+            agent=agent,
+            msg=msg,
+            is_disconnected=check_disconnected,
+            poll_interval=0.01,
+        )
+
+        events = []
+        async for ev in session.events():
+            events.append(ev)
+            if isinstance(ev, HelloEvent):
+                is_disconnected = True
+
+        assert any(isinstance(e, RunCancelledEvent) for e in events)
+
+
+# ---------------------------------------------------------------------------
 # tail_wire_events — reconnect tailer (GET /stream/{thread_id})
 # ---------------------------------------------------------------------------
 

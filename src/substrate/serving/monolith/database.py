@@ -25,6 +25,8 @@ from substrate.serving.monolith.rls import enable_row_level_security, ensure_app
 _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("threads", "tenant_id", "VARCHAR"),
     ("threads", "deleted_at", "TIMESTAMPTZ"),
+    ("threads", "locked_at", "TIMESTAMPTZ"),
+    ("threads", "locked_reason", "TEXT"),
     ("file_metadata", "extracted_text", "TEXT"),
     ("file_metadata", "extracted_at", "TIMESTAMPTZ"),
     ("file_metadata", "extraction_engine", "VARCHAR"),

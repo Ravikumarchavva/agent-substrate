@@ -43,6 +43,12 @@ class ThreadOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
+    # Set when a file this conversation depends on was deleted from storage
+    # (routes/workspace.py / routes/files.py delete_file) — lets the
+    # frontend disable the composer and show why as soon as the thread
+    # loads, not only after a send already 423s.
+    locked_at: Optional[datetime] = None
+    locked_reason: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

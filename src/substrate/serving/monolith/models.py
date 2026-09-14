@@ -97,6 +97,17 @@ class Thread(Base):
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Conversation lock — set when a file this conversation depends on is
+    # deleted from storage (routes/workspace.py::delete_file,
+    # routes/files.py::delete_file), so an agent run doesn't silently
+    # reference a file that's gone. A real column, not `metadata`, for the
+    # same reason as `deleted_at`: PATCH /threads only ever touches
+    # `metadata`, so a user could otherwise clear their own lock by editing
+    # the thread's name/tags.
+    locked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    locked_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Relationships
     user: Mapped[Optional["User"]] = relationship(back_populates="threads")
@@ -110,6 +121,10 @@ class Thread(Base):
     @property
     def is_deleted(self) -> bool:
         return self.deleted_at is not None
+
+    @property
+    def is_locked(self) -> bool:
+        return self.locked_at is not None
 
     def __repr__(self) -> str:
         return f"<Thread(id={self.id}, name={self.name!r})>"

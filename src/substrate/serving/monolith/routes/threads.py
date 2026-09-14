@@ -62,6 +62,8 @@ async def create_thread_endpoint(
         created_at=thread.created_at,
         updated_at=thread.updated_at,
         message_count=0,
+        locked_at=thread.locked_at,
+        locked_reason=thread.locked_reason,
     )
 
 
@@ -101,6 +103,8 @@ async def get_thread_endpoint(
         created_at=thread.created_at,
         updated_at=thread.updated_at,
         message_count=0,
+        locked_at=thread.locked_at,
+        locked_reason=thread.locked_reason,
     )
 
 
@@ -132,6 +136,8 @@ async def update_thread_endpoint(
         created_at=thread.created_at,
         updated_at=thread.updated_at,
         message_count=0,
+        locked_at=thread.locked_at,
+        locked_reason=thread.locked_reason,
     )
 
 

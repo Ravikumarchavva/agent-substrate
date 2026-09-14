@@ -168,6 +168,8 @@ async def list_threads(
             "created_at": thread.created_at,
             "updated_at": thread.updated_at,
             "message_count": counts.get(str(thread.id), 0),
+            "locked_at": thread.locked_at,
+            "locked_reason": thread.locked_reason,
         }
         for thread in threads
     ]

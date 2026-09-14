@@ -243,7 +243,15 @@ async def _build_extracted_sidecar_text(
     service, then local pypdf), but keeps page boundaries — and any
     image/table captions the extraction service returned — instead of
     joining everything into one blob. Returns ``None`` when nothing could be
-    extracted."""
+    extracted.
+
+    Page numbers are metadata, not content: an HTML comment (invisible when
+    rendered, and not real document structure), never a Markdown heading. A
+    ``## Page N`` heading previously sat indistinguishable from a genuine
+    section heading in the document itself — a model asked to "convert this
+    to Word" read it as literal structure and reproduced "Page 1" / "Page 2"
+    headings in its output that were never in the source.
+    """
     pages: list[tuple[int, str]] = []
     captions_by_page: dict[int, list[str]] = {}
 
@@ -284,7 +292,7 @@ async def _build_extracted_sidecar_text(
 
     sections: list[str] = []
     for page_number, page_text in pages:
-        sections.append(f"## Page {page_number}\n\n{page_text.strip()}")
+        sections.append(f"<!-- page {page_number} -->\n{page_text.strip()}")
         for caption in captions_by_page.get(page_number, []):
             sections.append(f"> Image/table caption: {caption}")
     return "\n\n".join(sections).strip() or None

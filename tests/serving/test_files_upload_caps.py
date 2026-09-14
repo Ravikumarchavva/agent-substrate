@@ -347,8 +347,14 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
     ]
     assert len(sidecar_calls) == 1
     sidecar_text = sidecar_calls[0].args[1].decode("utf-8")
-    assert "## Page 1" in sidecar_text
-    assert "## Page 2" in sidecar_text
+    # Page boundaries are metadata (an HTML comment, invisible when
+    # rendered), never a Markdown heading — a heading here was
+    # indistinguishable from real document structure, and a model asked to
+    # convert the file reproduced "Page 1" / "Page 2" headings that were
+    # never in the source (see _build_extracted_sidecar_text's docstring).
+    assert "<!-- page 1 -->" in sidecar_text
+    assert "<!-- page 2 -->" in sidecar_text
+    assert "## Page" not in sidecar_text
     assert sidecar_calls[0].kwargs["content_type"] == "text/markdown"
 
 

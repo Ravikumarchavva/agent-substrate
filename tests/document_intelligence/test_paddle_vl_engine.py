@@ -16,7 +16,7 @@ from substrate.runtimes.document_intelligence.service.engines.paddle_vl import (
     _apply_paddle_patches_once,
     _build_pipeline_config,
 )
-from substrate.runtimes.document_intelligence.service.pool_types import PoolWorker
+from substrate.runtimes.inference_pool.pool_types import PoolWorker
 
 
 class _FakeBlock:

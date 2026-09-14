@@ -22,7 +22,7 @@ from substrate.runtimes.document_intelligence.service.engines.paddle_classic imp
 )
 from substrate.runtimes.document_intelligence.service.engines.paddle_vl import PaddleVLEngine
 from substrate.runtimes.document_intelligence.service.engines.raw_text import RawTextEngine
-from substrate.runtimes.document_intelligence.service.llama_pool import (
+from substrate.runtimes.inference_pool.llama_pool import (
     LocalLlamaServerPool,
     RemoteInferencePool,
 )

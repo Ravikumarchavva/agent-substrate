@@ -30,10 +30,72 @@ from substrate.runtimes.document_intelligence.service.models import ensure_model
 
 logger = setup_logging("substrate.document_intelligence.factory")
 
+# Verified this session's benchmark: ~1.3GB resident for the llama-server
+# child (Q8_0, ctx=6144) + ~2.2GB for the layout-detection stack (still
+# classic Paddle models, running on the same GPU) per worker -- the real
+# number the whole Phase 1 batch_size/ctx tuning was chasing. Used only as
+# an additive pre-flight admission check against hardware.detect()'s real
+# free_mib (see vram_ledger.py's own scope-boundary docstring: this stays
+# entirely within THIS process); autoconfig.py's own static
+# _GPU_ELIGIBLE_MIB threshold remains the primary, field-verified gate.
+_VL_WORKER_VRAM_BUDGET_MIB = 3500
+
+
+async def _admit_gpu_workers(layout_devices: list[str]) -> list[str]:
+    """Drop any GPU worker whose real, currently-detected free VRAM can't
+    cover this session's verified per-worker budget -- a dynamic check on
+    top of autoconfig.py's static eligibility threshold, catching the case
+    where real free_mib is lower than that threshold assumed (e.g. another
+    process already holding VRAM on the same card the instant this
+    container starts). CPU entries pass through untouched -- there's
+    nothing to reserve against."""
+    gpu_devices = [d for d in layout_devices if d != "cpu"]
+    if not gpu_devices:
+        return layout_devices
+
+    from substrate.runtimes.document_intelligence.service.hardware import detect
+    from substrate.runtimes.inference_pool.vram_ledger import VramLedger
+
+    hw = detect()
+    free_by_device = {f"gpu:{g.index}": g.free_mib for g in hw.gpus}
+    ledger = VramLedger(free_by_device)
+
+    admitted: list[str] = []
+    for device in layout_devices:
+        if device == "cpu":
+            admitted.append(device)
+            continue
+        real_free = ledger.available(device)
+        lease = await ledger.reserve(device, _VL_WORKER_VRAM_BUDGET_MIB)
+        if lease is None:
+            logger.warning(
+                "PaddleOCR-VL worker on %s skipped: real free VRAM (%d MiB) "
+                "does not cover this session's verified per-worker budget "
+                "(%d MiB) -- degrading worker_count by one rather than "
+                "risking a real CUDA OOM crash.",
+                device,
+                real_free,
+                _VL_WORKER_VRAM_BUDGET_MIB,
+            )
+            continue
+        admitted.append(device)
+
+    return admitted
+
 
 async def _build_vl_engine(cfg: Any, resolved: ResolvedRuntime) -> PaddleVLEngine:
     remote_base_url = getattr(cfg, "vl_remote_base_url", None)
     layout_devices = resolved.layout_device_for_worker or ["cpu"]
+    if not remote_base_url:
+        # Local pool only -- a remote endpoint's own VRAM is someone else's
+        # process to arbitrate, not this one's.
+        layout_devices = await _admit_gpu_workers(layout_devices)
+        if not layout_devices:
+            logger.error(
+                "PaddleOCR-VL: every GPU worker failed VRAM admission -- "
+                "0 workers will be started. This mode's extraction "
+                "requests will fail until hardware/VRAM pressure changes."
+            )
 
     if remote_base_url:
         # A pre-existing OpenAI-compatible deployment (sglang/vLLM/another

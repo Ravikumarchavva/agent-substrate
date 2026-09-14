@@ -194,6 +194,60 @@ async def test_local_mode_with_insufficient_vram_degrades_to_cpu(
         assert rerank_pool.kwargs["gpu_devices"] == ["cpu"]
 
 
+async def test_local_mode_passes_real_embed_and_rerank_flags_via_extra_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The genuine fix for the gap flagged when local mode first landed:
+    LocalLlamaServerPool now takes main_gguf/mmproj_gguf=None + extra_args
+    instead of forcing PaddleOCR-VL-shaped -m/--mmproj flags onto an
+    embedding/reranking model. Verifies the exact real flags docker-
+    compose.yml's llama-embed/llama-rerank sidecars use (--hf-repo/
+    --hf-file/--embedding/--pooling last/--reranking) actually reach the
+    pool constructor, and that --parallel is NOT duplicated in extra_args
+    since `slots` already covers it."""
+    import substrate.runtimes.document_intelligence.service.hardware as hardware_mod
+
+    profile = _FakeHardwareProfile(gpus=[_FakeGpu(index=0, free_mib=8192)])
+    monkeypatch.setattr(hardware_mod, "detect", lambda: profile)
+    monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
+
+    import substrate.runtimes.inference_pool.llama_pool as llama_pool_mod
+
+    monkeypatch.setattr(llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool)
+
+    monkeypatch.setenv("EMBEDDING_RERANKER_MODE", "local")
+    fake_app = _fake_app()
+
+    async with app_module.lifespan(fake_app):
+        embed_pool, rerank_pool = _FakeLocalLlamaServerPool.instances
+
+        assert embed_pool.kwargs.get("main_gguf") is None
+        assert embed_pool.kwargs.get("mmproj_gguf") is None
+        assert embed_pool.kwargs["slots"] == 2
+        assert embed_pool.kwargs["extra_args"] == [
+            "--hf-repo",
+            "Rizwan313/Qwen3-VL-Embedding-2B-GGUF",
+            "--hf-file",
+            "qwen3-vl-embedding-2b-Q4_K_M.gguf",
+            "--embedding",
+            "--pooling",
+            "last",
+        ]
+        assert "--parallel" not in embed_pool.kwargs["extra_args"]
+
+        assert rerank_pool.kwargs.get("main_gguf") is None
+        assert rerank_pool.kwargs.get("mmproj_gguf") is None
+        assert rerank_pool.kwargs["slots"] == 1
+        assert rerank_pool.kwargs["extra_args"] == [
+            "--hf-repo",
+            "staralt/Qwen3-VL-Reranker-2B-Q4_K_M-GGUF",
+            "--hf-file",
+            "qwen3-vl-reranker-2b-q4_k_m-imat.gguf",
+            "--reranking",
+        ]
+        assert "--parallel" not in rerank_pool.kwargs["extra_args"]
+
+
 async def test_local_mode_with_no_gpu_detected_uses_cpu_without_reserving(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

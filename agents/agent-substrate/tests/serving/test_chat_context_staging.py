@@ -237,15 +237,15 @@ async def test_send_ingests_a_file_staged_under_a_different_thread():
     assert len(attachments) == 1
 
 
-async def test_send_pinecone_backend_unaffected_by_staging_logic():
-    """Pinecone has no staging concept at all — a file with staged_at=None
-    (which would 425 under local) must NOT be blocked; it goes straight to
-    the existing direct-ingest path, unchanged."""
+async def test_send_non_local_backend_unaffected_by_staging_logic():
+    """A non-local backend has no staging concept at all — a file with
+    staged_at=None (which would 425 under local) must NOT be blocked; it
+    goes straight to the existing direct-ingest path, unchanged."""
     meta = _staged_meta("f1", staged_at=None)
     db = _db_with_rows([meta])
 
     rag_backend = MagicMock()
-    rag_backend.name = "pinecone"
+    rag_backend.name = "managed"
     rag_backend.ingest = AsyncMock()
     ctx = MagicMock()
     ctx.file_store = MagicMock()

@@ -317,13 +317,14 @@ async def _build_file_context(
                                 await release(redis, "docquota:commit", claims.sub)
                             raise
                     else:
-                        # Pinecone (no local staging concept — managed
-                        # ingest, unchanged from before this feature). For a
-                        # "local" backend this branch should be unreachable:
-                        # the pre-validation pass above already 425/422'd
-                        # any local-backend new commit whose staged_at
-                        # wasn't set, before this loop ever runs. Kept as a
-                        # defensive fallback, not a designed code path.
+                        # A non-local backend (no eager-staging concept --
+                        # managed ingest at send time instead). For the
+                        # "local" backend (the only one today) this branch
+                        # should be unreachable: the pre-validation pass
+                        # above already 425/422'd any local-backend new
+                        # commit whose staged_at wasn't set, before this
+                        # loop ever runs. Kept as a defensive fallback, not
+                        # a designed code path.
                         data = await ctx.file_store.download(meta.object_key)
                         await ctx.rag_backend.ingest(
                             data,

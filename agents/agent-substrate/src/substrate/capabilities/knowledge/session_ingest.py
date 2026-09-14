@@ -118,12 +118,26 @@ async def ingest_session_document(
         for doc in text_documents
     ]
 
+    from substrate.capabilities.knowledge.chunking import recommend_chunk_params
+
+    # None (the default) -> derive from the configured embedding model,
+    # same "explicit wins, else model-informed default" resolution
+    # backends/factory.py's build_rag_backend uses for the tenant-KB path
+    # -- see recommend_chunk_params's own docstring for why.
+    _recommended_size, _recommended_overlap = recommend_chunk_params(
+        getattr(cfg, "EMBEDDING_MODEL", "") or ""
+    )
+    chunk_size = getattr(cfg, "RAG_CHUNK_SIZE", None)
+    chunk_overlap = getattr(cfg, "RAG_CHUNK_OVERLAP", None)
+
     vector_store = build_session_index_vector_store(cfg, tenant_id, user_id)
     rag = RAGPipeline(
         embedding_client=embedding_client,
         vector_store=vector_store,
-        default_chunk_size=getattr(cfg, "RAG_CHUNK_SIZE", 512),
-        default_chunk_overlap=getattr(cfg, "RAG_CHUNK_OVERLAP", 128),
+        default_chunk_size=chunk_size if chunk_size is not None else _recommended_size,
+        default_chunk_overlap=(
+            chunk_overlap if chunk_overlap is not None else _recommended_overlap
+        ),
     )
     chunks = await rag.ingest_documents(text_documents, collection="vectors")
 

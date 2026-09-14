@@ -16,7 +16,6 @@ from .base import IngestResult
 logger = setup_logging("substrate.knowledge.local")
 
 if TYPE_CHECKING:
-    from substrate.runtimes.document_intelligence.client import ExtractionClient
     from substrate.runtimes.embedding_reranker.client import EmbeddingRerankerClient
     from substrate.capabilities.knowledge.pipeline import RAGPipeline
     from substrate.kernel.llm import LLMClient
@@ -45,7 +44,6 @@ class LocalRagBackend:
         embedding_reranker_timeout_s: int = 30,
         reranker: Any | None = None,
         model_client: "LLMClient | None" = None,
-        extraction_client: "ExtractionClient | None" = None,
         embedding_reranker_client: "EmbeddingRerankerClient | None" = None,
         file_store: Any | None = None,
         dense_k: int = 50,
@@ -64,7 +62,6 @@ class LocalRagBackend:
         self._embedding_reranker_timeout_s = embedding_reranker_timeout_s
         self._reranker = reranker
         self._model_client = model_client
-        self._extraction_client = extraction_client
         self._embedding_reranker_client = embedding_reranker_client
         self._file_store = file_store
         self._dense_k = dense_k
@@ -251,9 +248,10 @@ class LocalRagBackend:
             limit=limit,
         )
 
-    # ── local-only management (not part of RagBackend — no collection concept
-    # in Pinecone Assistant; routes/rag.py checks `backend.name == "local"`
-    # before calling these) ─────────────────────────────────────────────────
+    # ── local-only management (not part of the RagBackend Protocol — a
+    # future opaque managed backend might have no collection concept of
+    # its own; routes/rag.py checks `backend.name == "local"` before
+    # calling these) ────────────────────────────────────────────────────
 
     async def list_collections(self) -> list[str]:
         if self._vector_store is None:

@@ -630,10 +630,7 @@ async def upload_file(
     if is_extractable:
         # The upload-attempt quota specifically bounds eager-staging compute
         # abuse (repeated upload-then-discard) — only meaningful when eager
-        # staging actually runs (local backend). Pinecone stays lazy-on-send
-        # as it always has, so there's no matching compute cost to bound
-        # here; skip straight to the (backend-agnostic) size/page hygiene
-        # checks below.
+        # staging actually runs.
         if will_stage:
             redis = getattr(request.app.state, "redis", None)
             if redis is not None:

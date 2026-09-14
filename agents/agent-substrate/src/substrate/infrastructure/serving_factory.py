@@ -309,9 +309,9 @@ async def init_infrastructure(
         for row in rows:
             file_store.set_quota_override(row.user_id, row.quota_bytes)
     # Fail-closed at construction, degrade gracefully at startup: an
-    # unreachable/misconfigured RAG backend (e.g. RAG_BACKEND=pinecone with no
-    # API key) disables RAG rather than crashing the whole server, matching
-    # the code-interpreter sandbox's degrade pattern below.
+    # unreachable/misconfigured RAG backend disables RAG rather than
+    # crashing the whole server, matching the code-interpreter sandbox's
+    # degrade pattern below.
     try:
         rag_backend = build_rag_backend(
             cfg.RAG_BACKEND,
@@ -333,14 +333,13 @@ async def init_infrastructure(
             embedding_reranker_auth_token=cfg.EMBEDDING_RERANKER_AUTH_TOKEN,
             embedding_reranker_timeout_s=cfg.EMBEDDING_RERANKER_TIMEOUT_S,
             file_store=file_store,
-            api_key=cfg.PINECONE_API_KEY,
-            assistant_name=cfg.PINECONE_ASSISTANT_NAME,
             dense_k=cfg.RAG_DENSE_K,
             lexical_k=cfg.RAG_LEXICAL_K,
             fused_k=cfg.RAG_FUSED_K,
             rerank_top_n=cfg.RAG_RERANK_TOP_N,
             chunk_size=cfg.RAG_CHUNK_SIZE,
             chunk_overlap=cfg.RAG_CHUNK_OVERLAP,
+            embedding_model=cfg.EMBEDDING_MODEL,
         )
     except Exception as exc:  # noqa: BLE001 - degrade to "no RAG", never crash startup
         rag_backend = None
@@ -1030,14 +1029,26 @@ def build_session_rag_backend(
     ``RagBackend`` this function returns.
     """
     from substrate.capabilities.knowledge.backends.local import LocalRagBackend
+    from substrate.capabilities.knowledge.chunking import recommend_chunk_params
     from substrate.capabilities.knowledge.pipeline import RAGPipeline
+
+    # None (the default) -> derive from the configured embedding model --
+    # same resolution backends/factory.py's build_rag_backend and
+    # session_ingest.py use; see recommend_chunk_params's own docstring.
+    _recommended_size, _recommended_overlap = recommend_chunk_params(
+        getattr(cfg, "EMBEDDING_MODEL", "") or ""
+    )
+    _chunk_size = getattr(cfg, "RAG_CHUNK_SIZE", None)
+    _chunk_overlap = getattr(cfg, "RAG_CHUNK_OVERLAP", None)
 
     vector_store = build_session_index_vector_store(cfg, tenant_id, user_id)
     pipeline = RAGPipeline(
         embedding_client=embedding_client,
         vector_store=vector_store,
-        default_chunk_size=getattr(cfg, "RAG_CHUNK_SIZE", 512),
-        default_chunk_overlap=getattr(cfg, "RAG_CHUNK_OVERLAP", 128),
+        default_chunk_size=_chunk_size if _chunk_size is not None else _recommended_size,
+        default_chunk_overlap=(
+            _chunk_overlap if _chunk_overlap is not None else _recommended_overlap
+        ),
     )
 
     embedding_reranker_client = None

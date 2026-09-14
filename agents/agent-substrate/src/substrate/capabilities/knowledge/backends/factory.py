@@ -6,12 +6,17 @@ One explicit switch, mirroring
 * **Library use** — call directly with explicit kwargs, exactly like
   ``LLMFactory("gpt-4o", api_key=...).build()``::
 
-      rag = build_rag_backend("pinecone", api_key="...", assistant_name="docs")
+      rag = build_rag_backend("local", embedding_client=..., vector_store=...)
 
 * **Server default** — ``serving_factory.py`` calls this with ``cfg.RAG_BACKEND``
-  and the pieces it already constructs (embedding client, vector store, ...),
-  so ``RAG_BACKEND=pinecone`` switches the whole server's RAG (HTTP routes and
-  the agent tool alike) in one place.
+  and the pieces it already constructs (embedding client, vector store, ...).
+
+``"local"`` (``LocalRagBackend``, backed by ``PgVectorStore``) is the only
+backend today. A managed-service backend (Pinecone Assistant) existed
+briefly but was removed as dead weight — never the standard path, and this
+project's own per-user session-document index already uses LanceDB
+(``capabilities/vector/lancedb_store.py``) where a second, self-hosted
+backend was actually needed.
 """
 
 from __future__ import annotations
@@ -47,10 +52,10 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
     config.py's ``RAG_DENSE_K`` etc. for the defaults these mirror).
     ``chunk_size``/``chunk_overlap`` (optional — forwarded to the
     underlying ``RAGPipeline`` as its default chunk size/overlap; see
-    config.py's ``RAG_CHUNK_SIZE``/``RAG_CHUNK_OVERLAP``).
-
-    ``kind="pinecone"`` kwargs: ``api_key`` (falls back to
-    ``PINECONE_API_KEY`` env var), ``assistant_name`` (required).
+    config.py's ``RAG_CHUNK_SIZE``/``RAG_CHUNK_OVERLAP``). When either is
+    left unset (``None``), it's derived from ``embedding_model`` (optional
+    — the raw model string, e.g. ``cfg.EMBEDDING_MODEL``) via
+    ``chunking.py::recommend_chunk_params`` instead of one flat default.
 
     Raises ``RagBackendUnavailableError`` for an unknown name or missing
     prerequisites — fail loudly at construction, not at the first real call.
@@ -72,18 +77,6 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
         extraction_service_url = kwargs.get("extraction_service_url", "")
         extraction_auth_token = kwargs.get("extraction_auth_token", "")
         extraction_timeout_s = kwargs.get("extraction_timeout_s", 90)
-
-        extraction_client = None
-        if extraction_service_url:
-            from substrate.runtimes.document_intelligence.client import (
-                ExtractionClient,
-            )
-
-            extraction_client = ExtractionClient(
-                base_url=extraction_service_url,
-                auth_token=extraction_auth_token,
-                timeout_s=extraction_timeout_s,
-            )
 
         embedding_reranker_service_url = kwargs.get(
             "embedding_reranker_service_url", ""
@@ -119,19 +112,38 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
 
                 reranker = LLMReranker(model_client)
 
+        chunk_size = kwargs.get("chunk_size")
+        chunk_overlap = kwargs.get("chunk_overlap")
+        if chunk_size is None or chunk_overlap is None:
+            # None means "let the configured embedding model decide" --
+            # see chunking.py::recommend_chunk_params's own docstring for
+            # why this beats one flat default for every provider. An
+            # explicit chunk_size/chunk_overlap always wins per-field
+            # (same explicit-wins precedence used throughout this codebase).
+            from substrate.capabilities.knowledge.chunking import (
+                recommend_chunk_params,
+            )
+
+            recommended_size, recommended_overlap = recommend_chunk_params(
+                kwargs.get("embedding_model") or ""
+            )
+            chunk_size = chunk_size if chunk_size is not None else recommended_size
+            chunk_overlap = (
+                chunk_overlap if chunk_overlap is not None else recommended_overlap
+            )
+
         return LocalRagBackend(
             RAGPipeline(
                 embedding_client,
                 vector_store,
-                default_chunk_size=kwargs.get("chunk_size", 512),
-                default_chunk_overlap=kwargs.get("chunk_overlap", 128),
+                default_chunk_size=chunk_size,
+                default_chunk_overlap=chunk_overlap,
             ),
             vector_store=vector_store,
             image_store=image_store,
             extraction_service_url=extraction_service_url,
             extraction_auth_token=extraction_auth_token,
             extraction_timeout_s=extraction_timeout_s,
-            extraction_client=extraction_client,
             embedding_reranker_service_url=embedding_reranker_service_url,
             embedding_reranker_auth_token=embedding_reranker_auth_token,
             embedding_reranker_timeout_s=embedding_reranker_timeout_s,
@@ -145,22 +157,7 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
             rerank_top_n=kwargs.get("rerank_top_n", 10),
         )
 
-    if name == "pinecone":
-        import os
-
-        from .pinecone import PineconeRagBackend
-
-        api_key = kwargs.get("api_key") or os.environ.get("PINECONE_API_KEY", "")
-        assistant_name = kwargs.get("assistant_name", "")
-        if not assistant_name:
-            raise RagBackendUnavailableError(
-                "build_rag_backend('pinecone', ...) requires assistant_name."
-            )
-        return PineconeRagBackend(api_key=api_key, assistant_name=assistant_name)
-
-    raise RagBackendUnavailableError(
-        f"Unknown RAG_BACKEND {kind!r}. Valid: local, pinecone."
-    )
+    raise RagBackendUnavailableError(f"Unknown RAG_BACKEND {kind!r}. Valid: local.")
 
 
 __all__ = ["build_rag_backend"]

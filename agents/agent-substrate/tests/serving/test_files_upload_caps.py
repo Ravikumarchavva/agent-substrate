@@ -237,14 +237,14 @@ async def test_upload_non_extractable_type_skips_all_new_checks(monkeypatch):
     rag_backend.ingest.assert_not_called()
 
 
-async def test_upload_pinecone_backend_skips_upload_attempt_quota(monkeypatch):
+async def test_upload_non_local_backend_skips_upload_attempt_quota(monkeypatch):
     """The upload-attempt quota specifically bounds eager-staging compute
-    abuse — Pinecone never stages eagerly, so it shouldn't be gated by it."""
+    abuse — a non-local backend never stages eagerly, so it shouldn't be gated by it."""
     from substrate.serving.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_DAILY_UPLOAD_ATTEMPT_LIMIT", 1)
     rag_backend = MagicMock()
-    rag_backend.name = "pinecone"
+    rag_backend.name = "managed"
     redis = _FakeRedis()
     data = _pdf_bytes(1)
 
@@ -400,7 +400,7 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
         await captured_coros[0]  # must not raise
 
 
-async def test_upload_pinecone_backend_skips_eager_staging(monkeypatch):
+async def test_upload_non_local_backend_skips_eager_staging(monkeypatch):
     from substrate.serving.monolith.routes import files as files_module
 
     captured_coros = []
@@ -409,7 +409,7 @@ async def test_upload_pinecone_backend_skips_eager_staging(monkeypatch):
     )
 
     rag_backend = MagicMock()
-    rag_backend.name = "pinecone"
+    rag_backend.name = "managed"
     data = _pdf_bytes(1)
 
     await upload_file(

@@ -5,6 +5,7 @@ import pytest
 from substrate.capabilities.knowledge.chunking import (
     StructureAwareChunker,
     get_chunker,
+    recommend_chunk_params,
 )
 from substrate.capabilities.knowledge.segmentation import (
     RegexSegmenter,
@@ -289,3 +290,52 @@ def test_small_html_table_is_kept_whole() -> None:
 
     table_docs = [doc for doc in docs if table in doc.to_text()]
     assert len(table_docs) == 1
+
+
+# ── recommend_chunk_params ──────────────────────────────────────────────────
+
+
+def test_openai_gets_the_general_purpose_target_not_scaled_to_its_8191_ceiling() -> None:
+    """OpenAI's real ceiling (8191 tokens) is far above the general-purpose
+    RAG target (400 tokens) -- the target wins, not half the model's max."""
+    size, overlap = recommend_chunk_params("text-embedding-3-small")
+    assert size == 400 * 4  # 1600 chars
+    assert overlap == size // 4
+
+
+def test_sentence_transformers_is_capped_down_to_its_real_256_token_limit() -> None:
+    """The one case where the model's real ceiling IS the binding
+    constraint -- MiniLM-class models cap at 256 tokens, below the 400
+    general-purpose target, so the target must yield to the real limit."""
+    size, overlap = recommend_chunk_params("sentence-transformers/all-MiniLM-L6-v2")
+    assert size == 256 * 4  # 1024 chars
+    assert overlap == size // 4
+
+
+def test_gemini_uses_its_real_2048_token_ceiling_which_still_exceeds_the_target() -> None:
+    size, overlap = recommend_chunk_params("gemini/text-embedding-004")
+    assert size == 400 * 4
+    assert overlap == size // 4
+
+
+def test_openai_compatible_uses_this_repos_own_2048_ctx_deployment() -> None:
+    """compatible/vllm/ollama/lmstudio/llamacpp prefixes all route to the
+    same "openai_compatible" provider family."""
+    size, overlap = recommend_chunk_params("compatible/qwen3-vl-embedding-2b")
+    assert size == 400 * 4
+    assert overlap == size // 4
+
+
+def test_unknown_model_string_falls_back_to_a_safe_default() -> None:
+    """detect_embedding_provider's own fallback ("openai") applies here
+    too -- an unrecognized model string must never crash chunk sizing."""
+    size, overlap = recommend_chunk_params("some-totally-unknown-model")
+    assert size > 0
+    assert overlap > 0
+    assert overlap < size
+
+
+def test_empty_model_string_never_raises() -> None:
+    size, overlap = recommend_chunk_params("")
+    assert size > 0
+    assert overlap > 0

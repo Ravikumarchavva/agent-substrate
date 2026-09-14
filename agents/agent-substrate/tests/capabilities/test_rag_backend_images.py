@@ -104,7 +104,6 @@ class StubFileStore:
 def _backend(
     *,
     image_store=None,
-    extraction_client=None,
     embedding_reranker_client=None,
     vector_store=None,
     file_store=None,
@@ -115,7 +114,6 @@ def _backend(
         vector_store=vector_store,
         image_store=image_store,
         extraction_service_url="http://extraction-test:8080",
-        extraction_client=extraction_client,
         embedding_reranker_service_url="http://embedding-reranker-test:8080",
         embedding_reranker_client=embedding_reranker_client,
         file_store=file_store,
@@ -394,7 +392,7 @@ async def test_load_via_extraction_service_splits_text_and_images(monkeypatch):
         "substrate.runtimes.document_intelligence.extract.ExtractionClient",
         lambda *a, **kw: client,
     )
-    backend, _ = _backend(image_store=StubImageStore(), extraction_client=client)
+    backend, _ = _backend(image_store=StubImageStore())
 
     result = await backend._load_via_extraction_service(
         b"pdf bytes", "report.pdf", {"filename": "report.pdf"}
@@ -427,7 +425,7 @@ async def test_load_via_extraction_service_returns_none_on_failure(monkeypatch):
         "substrate.runtimes.document_intelligence.extract.ExtractionClient",
         lambda *a, **kw: client,
     )
-    backend, _ = _backend(image_store=StubImageStore(), extraction_client=client)
+    backend, _ = _backend(image_store=StubImageStore())
 
     result = await backend._load_via_extraction_service(
         b"pdf bytes", "report.pdf", {"filename": "report.pdf"}
@@ -468,7 +466,6 @@ async def test_ingest_routes_pdf_text_through_pipeline_and_images_through_image_
     )
     backend, pipeline = _backend(
         image_store=image_store,
-        extraction_client=client,
         embedding_reranker_client=client,
     )
 

@@ -42,30 +42,36 @@ class ServiceConfig(BaseSettings):
     # sidecar over the network. See the local-mode fields below and
     # app.py's lifespan for the real wiring.
     #
-    # Known, out-of-scope gap: LocalLlamaServerPool's argv builder
-    # (llama_pool.py::_argv) is hardcoded to the flag shape
-    # document_intelligence's PaddleOCR-VL worker needs -- it always
-    # passes `-m <main_gguf> --mmproj <mmproj_gguf>` and has no mechanism
-    # to add `--embedding --pooling last` (llama-embed's real flags) or
-    # `--reranking` (llama-rerank's), nor to use `--hf-repo`/`--hf-file`
-    # runtime download the way docker-compose.yml's sidecars do. Local
-    # mode below is real, working plumbing -- hardware detection, VRAM
-    # admission, pool lifecycle, EmbeddingReranker wiring -- but a spawned
-    # child will only behave as a genuine embed/rerank server if
-    # embed_main_gguf/rerank_main_gguf point at GGUF files that already
-    # bake in the right serving behavior; closing this gap for real would
-    # need an additive change to llama_pool.py's argv construction, which
-    # this task was explicitly scoped to leave untouched.
+    # LocalLlamaServerPool's argv builder (llama_pool.py::_argv) accepts
+    # an `extra_args` list appended after its universal flags, and
+    # main_gguf/mmproj_gguf are optional -- this service passes
+    # --hf-repo/--hf-file/--embedding/--pooling/--reranking through
+    # extra_args instead (see app.py's lifespan), the same real mechanism
+    # docker-compose.yml's llama-embed/llama-rerank sidecars already use.
     mode: Literal["remote", "local"] = "remote"
 
     # ── mode "local" only ────────────────────────────────────────────────
     llama_server_bin: str = "llama-server"
-    embed_main_gguf: str = "/models/embedding-reranker/qwen3-vl-embedding-2b.gguf"
-    embed_mmproj_gguf: str = "/models/embedding-reranker/qwen3-vl-embedding-2b-mmproj.gguf"
-    rerank_main_gguf: str = "/models/embedding-reranker/qwen3-vl-reranker-2b.gguf"
-    rerank_mmproj_gguf: str = "/models/embedding-reranker/qwen3-vl-reranker-2b-mmproj.gguf"
+    # --hf-repo/--hf-file (llama-server's own runtime-download mechanism),
+    # not a local GGUF path -- matches the real, already-working values
+    # docker-compose.yml's llama-embed/llama-rerank sidecars use today
+    # (see their service blocks). Unlike document_intelligence's VL model,
+    # there's no local build-time quantization step for these two --
+    # llama-server downloads and caches the file itself on first boot
+    # (LLAMA_CACHE env var / the "llama-model-cache" compose volume).
+    embed_hf_repo: str = "Rizwan313/Qwen3-VL-Embedding-2B-GGUF"
+    embed_hf_file: str = "qwen3-vl-embedding-2b-Q4_K_M.gguf"
+    rerank_hf_repo: str = "staralt/Qwen3-VL-Reranker-2B-Q4_K_M-GGUF"
+    rerank_hf_file: str = "qwen3-vl-reranker-2b-q4_k_m-imat.gguf"
     embed_base_port: int = 8090
     rerank_base_port: int = 8095
+    # Mirrors docker-compose.yml's real --parallel values for each sidecar
+    # (llama-embed: 2, llama-rerank: 1) -- see llama_pool.py's own
+    # docstring: `slots` already covers `-np`/`--parallel` (same flag,
+    # different spelling), so these feed the pool's existing `slots` param
+    # rather than needing a `--parallel` entry in extra_args.
+    embed_slots: int = 2
+    rerank_slots: int = 1
     # 2048 mirrors the real --ctx-size docker-compose.yml passes to both
     # llama-embed and llama-rerank today.
     local_ctx_size: int = 2048

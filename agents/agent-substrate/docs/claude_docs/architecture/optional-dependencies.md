@@ -55,13 +55,6 @@ deep-learning backend of its own and fails at model construction with
 `SaTSegmenter` defaults to the ONNX path — see its docstring to opt back
 into `torch`.
 
-## `rag-pinecone`
-
-Managed RAG via Pinecone Assistant (`RAG_BACKEND=pinecone`) — parsing,
-chunking, embedding, storage, and retrieval all run on Pinecone's side, so
-none of the local `rag`/`document-intelligence` extras are needed with this
-backend.
-
 ## `s3`
 
 S3-compatible object storage backend for `FILE_STORE_BACKEND=s3` (the

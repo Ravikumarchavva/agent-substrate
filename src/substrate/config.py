@@ -111,6 +111,15 @@ class SubstrateConfig(BaseSettings):
     PENDING_UPLOAD_LOCAL_PATH: str = "./data/pending-uploads"
     PENDING_UPLOAD_TTL_HOURS: float = 24.0
     FILE_MAX_UPLOAD_BYTES: int = 200 * 1024 * 1024
+    # routes/files.py::sweep_stuck_staging_uploads -- a startup-time
+    # reconciliation pass for uploads whose eager staging (extraction +
+    # embedding) started but never finished before a server restart (the
+    # in-process asyncio.create_task it runs on has no durability across
+    # one). A real upload is never "in flight" for anywhere near this long
+    # under normal operation, so this only ever fires for genuinely
+    # abandoned, restart-orphaned work -- turns "stuck forever" into
+    # "delayed by up to one restart."
+    STAGING_RECONCILIATION_TTL_MINUTES: float = 10.0
 
     # ── Workspace quotas ─────────────────────────────────────────────────────
     WORKSPACE_USER_QUOTA_BYTES: int = 1024 * 1024 * 1024

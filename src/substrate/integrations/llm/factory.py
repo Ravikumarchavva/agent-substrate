@@ -588,14 +588,50 @@ def create_embedding_client(
         # document extraction itself had just succeeded.
         return SentenceTransformersEmbeddingClient(bare, batch_size=64, device="cpu")
 
+    if provider == "openai_compatible":
+        # Same "point an OpenAI-compatible client at any base_url" pattern
+        # the chat-completions side already has via the "compatible"/"vllm"
+        # providers (see LLMFactory.build above) — closes the one real
+        # asymmetry between the two factories: chat/VL models could already
+        # target an arbitrary local/remote OpenAI-compatible server (e.g. a
+        # llama-server/sglang/vLLM VL endpoint), embeddings could not,
+        # short of smuggling it through provider="openai" + an explicit
+        # base_url=.
+        from substrate.integrations.llm.openai.openai_embedding_client import (
+            OpenAIEmbeddingClient,
+        )
+
+        if not base_url:
+            prefix = model.split("/", 1)[0] if "/" in model else model
+            raise ValueError(
+                f"provider {prefix!r} requires an explicit base_url= kwarg. Example: "
+                "create_embedding_client('compatible/my-embed-model', "
+                "base_url='http://...')"
+            )
+
+        return OpenAIEmbeddingClient(
+            model=bare,
+            api_key=resolved_key,
+            dimensions=dimensions,
+            base_url=base_url,
+        )
+
     raise ValueError(f"Unsupported embedding provider: {provider!r}")
 
 
 # ── Embedding provider detection ──────────────────────────────────────────────
 
 
+_EMBEDDING_COMPATIBLE_PREFIXES = ("compatible", "vllm", "ollama", "lmstudio", "llamacpp")
+
+
 def detect_embedding_provider(model: str) -> str:
-    """Detect the embedding provider — ``"openai"``, ``"gemini"``, or ``"sentence_transformers"``."""
+    """Detect the embedding provider — ``"openai"``, ``"gemini"``,
+    ``"sentence_transformers"``, or ``"openai_compatible"`` (any local/remote
+    OpenAI-compatible embedding endpoint — llama-server, sglang, vLLM,
+    Ollama, LM Studio, or a bare "compatible" catch-all — reached via an
+    explicit ``base_url=``, mirroring the chat-completions side's
+    ``"compatible"``/``"vllm"`` providers)."""
     m = model.lower().strip()
 
     if "/" in m:
@@ -606,6 +642,8 @@ def detect_embedding_provider(model: str) -> str:
             return "gemini"
         if prefix in ("sentence-transformers",):
             return "sentence_transformers"
+        if prefix in _EMBEDDING_COMPATIBLE_PREFIXES:
+            return "openai_compatible"
         logger.warning(
             "Unknown embedding provider prefix %r — defaulting to openai", prefix
         )

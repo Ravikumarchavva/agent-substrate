@@ -25,7 +25,6 @@ from substrate.serving.monolith.database import init_db
 from substrate.serving.monolith.dependencies import ServerDependencies
 from substrate.serving.monolith.routes.admin import router as admin_router
 from substrate.serving.monolith.routes.audio import router as audio_router
-from substrate.serving.monolith.routes.auth import router as auth_router
 from substrate.serving.monolith.routes.workspace_oauth import (
     router as workspace_oauth_router,
 )
@@ -312,7 +311,6 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(admin_router)
-    app.include_router(auth_router)
     app.include_router(workspace_oauth_router)
     app.include_router(threads_router)
     app.include_router(memory_router)

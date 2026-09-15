@@ -257,3 +257,7 @@ logs/
 
 # Graphify knowledge-graph output (generated, multi-MB)
 graphify-out/
+
+# Archived user-facing docs -- docs are now maintained in agent-substrate-platform's
+# docs site, not here. docs/claude_docs/ (internal engineering memory) stays tracked.
+docs_archive/

@@ -49,8 +49,53 @@ class _SupervisionMixin:
         boot: Message,
         supervision: Supervision | None = None,
     ) -> RunHandle:
-        """Spawn a child run.  Returns a handle; does NOT wait for completion."""
+        """Spawn a child run at an address you already know.
+
+        For a pre-existing, already-addressable actor — a flow's fixed
+        steps, an orchestrator's configured sub-agents. If you're spawning
+        a *new* actor by type and want the runtime to pick a collision-safe
+        address, use ``spawn_child`` instead: two parents independently
+        spawning e.g. an "assistant" would otherwise both land on the same
+        key, sharing one mailbox.
+        """
         self.check()
+        path = self._alloc_path()
+        return await self._spawn_at_path(child_agent, boot=boot, supervision=supervision, path=path)
+
+    async def spawn_child(
+        self,
+        actor_type: str,
+        *,
+        boot: Message,
+        supervision: Supervision | None = None,
+    ) -> RunHandle:
+        """Spawn a new actor of ``actor_type``, with the address derived.
+
+        The address is ``{root_key}/{run_id}.{path}`` — ``root_key`` is the
+        conversation's own key (or this run's id, standalone), ``run_id`` is
+        this run's globally unique id, ``path`` is the replay-stable index
+        among this run's own spawn calls. The ``run_id`` component is what
+        makes two different parents spawning the same ``actor_type`` land on
+        different addresses even when ``path`` happens to match (both spawn
+        their first child) — ``path`` alone repeats across runs; ``run_id``
+        never does. The ``root_key`` prefix is what keeps "everything under
+        this conversation" a prefix match for cleanup and cancellation.
+        """
+        self.check()
+        path = self._alloc_path()
+        root = self._meta.supervision.root_id if self._meta.supervision else None
+        root_key = (root.key or root.type) if root is not None else self.run_id
+        child = Actor(type=actor_type, key=f"{root_key}/{self.run_id}.{path}")
+        return await self._spawn_at_path(child, boot=boot, supervision=supervision, path=path)
+
+    async def _spawn_at_path(
+        self,
+        child_agent: Actor,
+        *,
+        boot: Message,
+        supervision: Supervision | None,
+        path: str,
+    ) -> RunHandle:
         if supervision is not None:
             sup = supervision
         elif self._meta.supervision is not None:
@@ -67,16 +112,16 @@ class _SupervisionMixin:
         else:
             sup = Supervision.root(child_agent)
         # The spawn effect's identity, and the boot message's correlation_id,
-        # must come from OUR OWN replay-stable path allocation — never from
-        # anything the SupervisorProtocol computes fresh (e.g. the parent log's
-        # current last_seq) or from boot.id/boot.correlation_id (agent
-        # authors routinely construct a fresh Message, with fresh
-        # auto-generated ids, on every call to their own run()). Any of
-        # those would drift across replay attempts: the first defeats
-        # "replaying returns the same child_run_id", the second means a
-        # later ctx.ask(handle, ...) can never find the reply it's waiting
-        # for (see that method's docstring for the full trace).
-        path = self._alloc_path()
+        # must come from OUR OWN replay-stable path allocation (passed in by
+        # the caller, already consumed once) — never from anything the
+        # SupervisorProtocol computes fresh (e.g. the parent log's current
+        # last_seq) or from boot.id/boot.correlation_id (agent authors
+        # routinely construct a fresh Message, with fresh auto-generated
+        # ids, on every call to their own run()). Any of those would drift
+        # across replay attempts: the first defeats "replaying returns the
+        # same child_run_id", the second means a later ctx.ask(handle, ...)
+        # can never find the reply it's waiting for (see that method's
+        # docstring for the full trace).
         correlation_id = f"{self.run_id}.{path}"
         handle = await self._supervisor.spawn(
             child_agent,

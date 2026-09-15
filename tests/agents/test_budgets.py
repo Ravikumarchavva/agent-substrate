@@ -8,7 +8,7 @@ from substrate.agents.resources.budget import ExecutionTracker
 from substrate.agents.supervision.budget import SpawnTracker
 from substrate.kernel.agent.supervision import Priority, SpawnBudget
 from substrate.kernel.core.errors import BudgetExhaustedError
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ def test_execution_tracker_unlimited_by_default() -> None:
 
 
 def _agent(key: str) -> Actor:
-    return Actor(role=ActorRole.AGENT, id=key)
+    return Actor(type="agent", key=key)
 
 
 def test_spawn_tracker_acquires_and_releases() -> None:
@@ -117,7 +117,7 @@ async def test_react_agent_respects_execution_budget() -> None:
     from substrate.agents.core.react import ReActAgent
     from substrate.agents.runtime import Runtime
     from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
     from substrate.kernel.core.usage import Usage
     from substrate.kernel.messaging.message import Message, ChatPayload
     from substrate.kernel.messaging.stream import CompletionEvent
@@ -152,7 +152,7 @@ async def test_react_agent_respects_execution_budget() -> None:
 
         msg = Message(
             target=agent.id,
-            sender=Actor(role=ActorRole.PROXY, id="user"),
+            sender=Actor(type="proxy", key="user"),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
             ),
@@ -177,7 +177,7 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
     from substrate.agents.runtime import Runtime
     from substrate.kernel.agent.supervision import ExecutionBudget, Supervision
     from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
     from substrate.kernel.core.usage import Usage
     from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
     from substrate.kernel.messaging.stream import CompletionEvent
@@ -198,8 +198,8 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
             )
 
     llm = MockLLMClient()
-    child_id = Actor(role=ActorRole.AGENT, id="budget-child")
-    parent_id = Actor(role=ActorRole.AGENT, id="budget-parent")
+    child_id = Actor(type="agent", key="budget-child")
+    parent_id = Actor(type="agent", key="budget-parent")
 
     # No execution_budget passed here — proves the enforcement comes from
     # the inherited Supervision, not a constructor default.
@@ -229,7 +229,7 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
 
         msg = Message(
             target=parent_id,
-            sender=Actor(role=ActorRole.PROXY, id="user"),
+            sender=Actor(type="proxy", key="user"),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
             ),

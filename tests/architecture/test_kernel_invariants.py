@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from substrate.kernel.core.identity import ActorRole
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 KERNEL_DIR = REPO_ROOT / "src" / "substrate" / "kernel"
@@ -157,7 +156,7 @@ def test_message_round_trip() -> None:
     from substrate.kernel.core.content import TextBlock, ChatMessage
     from substrate.kernel.messaging.message import Message, ChatPayload
 
-    agent = Actor(role=ActorRole.AGENT, id="assistant")
+    agent = Actor(type="agent", key="assistant")
     chat = ChatMessage(role="user", content=[TextBlock(text="hello")])
     payload = ChatPayload(message=chat)
     msg = Message(target=agent, payload=payload, sender=agent)

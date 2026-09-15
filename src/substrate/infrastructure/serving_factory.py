@@ -1268,10 +1268,10 @@ def build_memory_tool(
     if short_term_memory is None and long_term_memory is None:
         return None
     from substrate.capabilities.tools.memory import MemoryTool
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
 
     return MemoryTool(
-        Actor(role=ActorRole.USER, id=user_id or session_id),
+        Actor(type="user", key=user_id or session_id),
         session_id,
         short_term=short_term_memory,
         long_term=long_term_memory,
@@ -1316,13 +1316,13 @@ async def build_user_memory_context_block(
     """
     if long_term_memory is None or not user_id:
         return ""
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
 
     # namespace="default": MemoryTool.remember() never passes a namespace,
     # so every fact it saves lands in DurableMemoryStore's default one —
     # this must read from the same place things are actually written to.
     memories = await long_term_memory.list_all(
-        Actor(role=ActorRole.USER, id=user_id), limit=limit
+        Actor(type="user", key=user_id), limit=limit
     )
     if not memories:
         return ""

@@ -16,7 +16,7 @@ from substrate.fabric.evals import (
     TOOL_USAGE,
 )
 from substrate.fabric.evals.judge import LLMJudge
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 
 
@@ -29,7 +29,7 @@ from substrate.kernel.messaging.message import Message
 class OKAgent:
     @property
     def id(self) -> Actor:
-        return Actor(role=ActorRole.AGENT, id="ok_agent")
+        return Actor(type="agent", key="ok_agent")
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
@@ -51,7 +51,7 @@ class OKAgent:
 class SlowAgent:
     @property
     def id(self) -> Actor:
-        return Actor(role=ActorRole.AGENT, id="slow_agent")
+        return Actor(type="agent", key="slow_agent")
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         await asyncio.sleep(10)  # exceeds any reasonable timeout
@@ -69,7 +69,7 @@ class TracingAgent:
 
     @property
     def id(self) -> Actor:
-        return Actor(role=ActorRole.AGENT, id="tracing_agent")
+        return Actor(type="agent", key="tracing_agent")
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:

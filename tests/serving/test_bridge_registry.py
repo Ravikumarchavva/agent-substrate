@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
 from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.ids import RunStatus
 from substrate.kernel.runtime.wakeup import Wakeup
 from substrate.serving.monolith.sse.bridge import BridgeRegistry
@@ -21,7 +21,7 @@ async def test_resolve_falls_back_to_durable_lookup_when_no_local_bridge() -> No
 
     run_id = "run-durable-hitl"
     request_id = "req-123"
-    scheduler.register_run(run_id, Actor(role=ActorRole.AGENT, id="x"))
+    scheduler.register_run(run_id, Actor(type="agent", key="x"))
     await scheduler.enqueue(run_id, priority=5, tenant="default")
     # Simulate the run having suspended waiting on this HITL signal — same
     # state Worker._run_agent would leave behind via release(SUSPENDED, ...).

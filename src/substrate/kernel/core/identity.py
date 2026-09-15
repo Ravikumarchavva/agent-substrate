@@ -12,64 +12,39 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from enum import Enum
-
-
-class ActorRole(str, Enum):
-    """What kind of thing an address points at.
-
-    Deliberately closed and small. ``role`` gates no behaviour — every actor
-    gets the same ``RunContext`` with the same spawn/ask/emit/follow surface,
-    and pub/sub is keyed on the run, not the role. What it *does* do is keep
-    ids from colliding across categories (``proxy``'s well-known ``"job"``
-    constant vs. an agent someone named ``"job"``) and tell a human reading a
-    log or trace what they're looking at.
-    """
-
-    AGENT = "agent"
-    """A registered, runnable actor whose next step the model decides."""
-
-    FLOW = "flow"
-    """A registered, runnable actor whose next step fixed code decides.
-
-    Runtime-identical to ``AGENT`` — same registration, same protocol, same
-    primitives. Kept separate because the address is the only place that
-    distinction survives into logs and traces.
-    """
-
-    PROXY = "proxy"
-    """A message originating outside the actor system (HTTP, a scheduled job)."""
-
-    USER = "user"
-    """A human. Never runs; used only to scope memory and history."""
-
-    INTERNAL = "internal"
-    """Framework-internal bookkeeping — run subscriptions, tool-chain
-    invocations, capability owner tags. Never constructed by agent authors."""
 
 
 @dataclass(frozen=True, slots=True)
 class Actor:
-    """Stable routing address for one actor.
+    """Stable routing address for one actor: which definition, which instance.
 
-    ``id`` is deliberately meaningful and predictable, not random: several
-    call sites independently construct the same address without a shared
-    lookup (the ``PROXY`` ``"http"``/``"job"`` constants), an agent must
-    resolve to the same address across a process restart, and ``USER``
-    addresses carry the real external user id so memory stays attached to
-    the right person.
+    ``type`` says *how to build this* — it selects the factory the runtime
+    calls to activate the actor. It is bounded: the set of registered
+    factories, small enough to enumerate (``"conversation"``, ``"video"``,
+    ``"http_proxy"``).
+
+    ``key`` says *which instance* — the entity this address points at. It is
+    unbounded: one per conversation, per video, per user. ``""`` means a
+    singleton, where the type has exactly one instance.
+
+    Both parts are deliberately meaningful and predictable rather than
+    random: several call sites independently construct the same address
+    without a shared lookup (the ``http_proxy`` constant), an actor must
+    resolve to the same address across a process restart, and user-scoped
+    addresses carry the real external id so memory stays attached to the
+    right person.
     """
 
-    role: ActorRole
-    id: str
+    type: str
+    key: str = ""
 
     def __str__(self) -> str:
-        return f"{self.role.value}/{self.id}"
+        return f"{self.type}/{self.key}" if self.key else self.type
 
     @classmethod
-    def generate(cls, role: ActorRole) -> Actor:
-        """Create an Actor with a random id, for genuinely anonymous actors."""
-        return cls(role=role, id=uuid.uuid4().hex)
+    def generate(cls, type: str) -> Actor:
+        """Create an Actor with a random key, for genuinely anonymous actors."""
+        return cls(type=type, key=uuid.uuid4().hex)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,4 +68,4 @@ class Topic:
         return self.name
 
 
-__all__ = ["ActorRole", "Actor", "Topic"]
+__all__ = ["Actor", "Topic"]

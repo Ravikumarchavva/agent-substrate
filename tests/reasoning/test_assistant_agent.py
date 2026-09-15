@@ -21,7 +21,7 @@ from substrate.kernel import (
     ToolUseBlock,
 )
 from substrate.kernel.core.content import Role
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
@@ -118,7 +118,7 @@ async def run_agent(
     sid = session_id or agent.id.id
     msg = Message(
         target=agent.id,
-        sender=Actor(role=ActorRole.PROXY, id="proxy"),
+        sender=Actor(type="proxy", key="proxy"),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
         ),

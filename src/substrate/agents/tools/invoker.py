@@ -38,7 +38,7 @@ from substrate.kernel.tools.chain import (
     InvocationResult,
 )
 from substrate.kernel.core.content import ImageBlock, JsonObject
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.stream import AgentProgress, AgentStep
 from substrate.kernel.tools import (
     ToolCallRequest,
@@ -257,12 +257,12 @@ class ToolInvoker:
                 signal_payload = await ctx.sleep_until_signal(f"hitl:{request_id}")
                 result: ApprovalResult = _approval_result_from_signal(signal_payload)
             else:
-                from substrate.kernel.core.identity import ActorRole, Actor
+                from substrate.kernel.core.identity import Actor
 
                 approval_req = ApprovalRequest(
                     call=call,
                     risk=tool_risk,
-                    agent_id=Actor(role=ActorRole.INTERNAL, id=call.call_id),
+                    agent_id=Actor(type="internal", key=call.call_id),
                     run_id=call.call_id,
                     context={"source": "tool_chain", "summary": risk_summary or ""},
                 )
@@ -504,7 +504,7 @@ def _emit_progress(
     run_id: str = "",
 ) -> None:
     try:
-        aid = agent_id or Actor(role=ActorRole.INTERNAL, id="tool_invoker")
+        aid = agent_id or Actor(type="internal", key="tool_invoker")
         progress = AgentProgress(
             agent_id=aid,
             step=step,

@@ -115,11 +115,11 @@ class RedisHistoryProvider:
         return self._client
 
     def _key(self, agent_id: Actor, session_id: str) -> str:
-        return f"{self._key_prefix}:{agent_id.role.value}:{agent_id.id}:{session_id}"
+        return f"{self._key_prefix}:{agent_id.type}:{agent_id.key or session_id}"
 
     def _seed_lock_key(self, agent_id: Actor, session_id: str) -> str:
         return (
-            f"{self._key_prefix}:seedlock:{agent_id.role.value}:{agent_id.id}:{session_id}"
+            f"{self._key_prefix}:seedlock:{agent_id.type}:{agent_id.key or session_id}"
         )
 
     async def try_acquire_seed_lock(

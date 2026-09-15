@@ -38,7 +38,7 @@ class SubagentTracker:
     _counter: int = 0
 
     def ingest(self, ev: AgentProgress) -> None:
-        key = ev.agent_id.id
+        key = ev.agent_id.key or ev.agent_id.type
         parent_key = ev.parent_id.id if ev.parent_id is not None else None
         node = self.nodes.get(key)
         if node is None:

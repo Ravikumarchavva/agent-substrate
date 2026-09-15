@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from substrate.kernel.core.content import content_blocks_to_str
-from substrate.kernel.core.identity import ActorRole, Actor, Topic
+from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
 
 from substrate.agents.core._loop import summarize
@@ -54,7 +54,7 @@ class InformationAgent:
         system_instructions: str = "Summarize the following content concisely.",
         source_signal: str = "new_source_item",
     ) -> None:
-        self.id = Actor(role=ActorRole.AGENT, id=name)
+        self.id = Actor(type="agent", key=name)
         self.model = model
         self.tools = None  # producer doesn't need tools
         self._output_topic = output_topic

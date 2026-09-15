@@ -115,7 +115,7 @@ class LanceLongTermMemory:
 
     @staticmethod
     def _agent_key(agent_id: Actor) -> tuple[str, str]:
-        return (agent_id.role.value, agent_id.id)
+        return (agent_id.type, agent_id.key)
 
     async def save(
         self,

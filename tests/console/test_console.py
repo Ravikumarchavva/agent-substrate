@@ -23,7 +23,7 @@ from substrate.console.stream_adapter import (
 from substrate.console.subagents import SubagentTracker
 from substrate.console.status import StatusLine
 from substrate.console.theme import DEFAULT_THEME
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.stream import (
     AgentProgress,
     AgentStep,
@@ -78,7 +78,7 @@ class _FakeAgent:
 
     @property
     def id(self) -> Actor:
-        return Actor(role=ActorRole.AGENT, id=self.key)
+        return Actor(type="agent", key=self.key)
 
 
 async def _collect(entries: list[RunLogEntry]) -> list[Any]:
@@ -274,10 +274,10 @@ def _ap(
     seq: int = 0,
 ) -> AgentProgress:
     return AgentProgress(
-        agent_id=Actor(role=ActorRole.AGENT, id=key),
+        agent_id=Actor(type="agent", key=key),
         step=step,
         content="",
-        parent_id=Actor(role=ActorRole.AGENT, id=parent) if parent else None,
+        parent_id=Actor(type="agent", key=parent) if parent else None,
         depth=depth,
         seq=seq,
     )

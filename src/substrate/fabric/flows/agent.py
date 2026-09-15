@@ -37,7 +37,7 @@ from substrate.kernel.core.content import (
     TextBlock,
     content_blocks_to_str,
 )
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
 from substrate.kernel.runtime.communication import AskOutcome
 
@@ -110,7 +110,7 @@ class SequentialFlow:
 
     @cached_property
     def id(self) -> Actor:
-        return Actor(role=ActorRole.FLOW, id=self.name)
+        return Actor(type="flow", key=self.name)
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
@@ -157,7 +157,7 @@ class ParallelFlow:
 
     @cached_property
     def id(self) -> Actor:
-        return Actor(role=ActorRole.FLOW, id=self.name)
+        return Actor(type="flow", key=self.name)
 
     def _merge_outputs(self, outputs: list[str]) -> str:
         if callable(self.merge):
@@ -210,7 +210,7 @@ class ConditionalFlow:
 
     @cached_property
     def id(self) -> Actor:
-        return Actor(role=ActorRole.FLOW, id=self.name)
+        return Actor(type="flow", key=self.name)
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:

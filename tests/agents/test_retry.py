@@ -23,11 +23,10 @@ from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import DataPayload, Message
 from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.kernel.runtime.scheduler import RunRetryPolicy
-from substrate.kernel.core.identity import ActorRole
 
 
 def _agent_id(name: str) -> Actor:
-    return Actor(role=ActorRole.AGENT, id=name)
+    return Actor(type="agent", key=name)
 
 
 def _msg(target: Actor) -> Message:

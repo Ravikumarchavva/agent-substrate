@@ -230,7 +230,7 @@ class DurableHistoryProvider:
 
     def _session_key(self, agent_id: Actor, session_id: str) -> str:
         """Derive the internal storage key for a (agent_id, session_id) pair."""
-        key = f"{agent_id.role.value}:{agent_id.id}:{session_id}"
+        key = f"{agent_id.type}:{agent_id.key or session_id}"
         if len(key) <= _MAX_STORAGE_SESSION_KEY_LENGTH:
             return key
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()

@@ -27,7 +27,6 @@ from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
 from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
 from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
 from substrate.kernel.core.content import ChatMessage, Role
-from substrate.kernel.core.identity import ActorRole
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +126,7 @@ class _PingTool:
 async def test_run_start_end_fire() -> None:
     """RUN_START and RUN_END are dispatched around every agent.run() call."""
     hooks, log = _recording_hooks(HookEvent.RUN_START, HookEvent.RUN_END)
-    agent_id = Actor(role=ActorRole.AGENT, id="minimal")
+    agent_id = Actor(type="agent", key="minimal")
     agent = _MinimalAgent(agent_id, hooks)
 
     async with Runtime() as rt:
@@ -152,7 +151,7 @@ async def test_run_end_fires_even_on_agent_crash() -> None:
     """RUN_END fires in the finally block even when agent.run() raises."""
 
     class _CrashingAgent:
-        id = Actor(role=ActorRole.AGENT, id="crasher")
+        id = Actor(type="agent", key="crasher")
 
         def __init__(self, hooks: HookManager) -> None:
             self.hooks = hooks

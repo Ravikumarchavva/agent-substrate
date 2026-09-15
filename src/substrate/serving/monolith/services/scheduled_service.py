@@ -23,7 +23,7 @@ from substrate.kernel.core.content import (
     Role,
     TextBlock as KernelTextBlock,
 )
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 
 logger = setup_logging()
 
@@ -154,7 +154,7 @@ async def execute_scheduled_task(
             # 6. Submit to runtime
             msg = Message(
                 target=agent.id,
-                sender=Actor(role=ActorRole.PROXY, id="job"),
+                sender=Actor(type="job_proxy"),
                 payload=ChatPayload(
                     message=KernelChatMessage(
                         role=Role.USER, content=[KernelTextBlock(text=task.prompt)]

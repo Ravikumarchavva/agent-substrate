@@ -22,7 +22,7 @@ from uuid import uuid4
 
 import pytest
 
-from substrate.kernel.core.identity import ActorRole, Actor, Topic
+from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import Message, DataPayload
 from substrate.kernel.core.errors import ConcurrentAppendError
 from substrate.kernel.agent.runtime_context import RunMeta
@@ -44,7 +44,7 @@ from substrate.kernel.runtime.agent import AgentRunContext, Agent
 
 
 def _agent_id(name: str = "test") -> Actor:
-    return Actor(role=ActorRole.AGENT, id=f"{name}-{uuid4().hex}")
+    return Actor(type="agent", key=f"{name}-{uuid4().hex}")
 
 
 def _topic() -> Topic:
@@ -456,7 +456,7 @@ class TestLease:
 
         lease = Lease(
             run_id=new_run_id(),
-            agent_id=Actor(role=ActorRole.AGENT, id="agent"),
+            agent_id=Actor(type="agent", key="agent"),
             worker_id="worker-1",
             expires_at=datetime(2026, 12, 31, tzinfo=timezone.utc),
         )

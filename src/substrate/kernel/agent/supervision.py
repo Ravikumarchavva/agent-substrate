@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from uuid import uuid4
 
-from substrate.kernel.core.identity import Actor, ActorRole, Topic
+from substrate.kernel.core.identity import Actor, Topic
 
 
 class HistoryRetention(str, Enum):
@@ -218,13 +218,13 @@ class Supervision:
             "run_id": self.run_id,
             "session_id": self.session_id,
             "root_id": {
-                "role": self.root_id.role.value,
-                "id": self.root_id.id,
+                "type": self.root_id.type,
+                "key": self.root_id.key,
             },
             "parent_id": (
                 {
-                    "role": self.parent_id.role.value,
-                    "id": self.parent_id.id,
+                    "type": self.parent_id.type,
+                    "key": self.parent_id.key,
                 }
                 if self.parent_id
                 else None
@@ -252,13 +252,13 @@ class Supervision:
             run_id=data["run_id"],
             session_id=data["session_id"],
             root_id=Actor(
-                role=ActorRole(root["role"]),
-                id=root["id"],
+                type=root["type"],
+                key=root["key"],
             ),
             parent_id=(
                 Actor(
-                    role=ActorRole(parent["role"]),
-                    id=parent["id"],
+                    type=parent["type"],
+                    key=parent["key"],
                 )
                 if parent
                 else None

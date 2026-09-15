@@ -12,7 +12,7 @@ from typing import Any
 from substrate.agents.runtime.context import RunContext
 from substrate.agents.runtime.runtime import Runtime
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.serving.monolith.sse.bridge import BRIDGE_DONE
 from substrate.serving.protocol import (
@@ -70,7 +70,7 @@ class ReplyAgent:
 
     @property
     def id(self) -> Actor:
-        return Actor(role=ActorRole.AGENT, id=self.name)
+        return Actor(type="agent", key=self.name)
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
@@ -86,7 +86,7 @@ class CrashAgent:
 
     @property
     def id(self) -> Actor:
-        return Actor(role=ActorRole.AGENT, id=self.name)
+        return Actor(type="agent", key=self.name)
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         raise RuntimeError("intentional crash")
@@ -178,7 +178,7 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
 
         @property
         def id(self) -> Actor:
-            return Actor(role=ActorRole.AGENT, id=self.name)
+            return Actor(type="agent", key=self.name)
 
         async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
             for msg in inbox:
@@ -252,7 +252,7 @@ async def test_durable_cancel_ends_session() -> None:
     with no session-owned cancel Event/registry involved at all. This is
     what makes cancel work correctly even when POST /cancel lands on a
     different replica than the one running the SSE stream."""
-    from substrate.kernel.core.identity import ActorRole, Actor as _Actor
+    from substrate.kernel.core.identity import Actor as _Actor
     from substrate.kernel.runtime.supervisor import RunHandle
 
     @dataclass
@@ -261,7 +261,7 @@ async def test_durable_cancel_ends_session() -> None:
 
         @property
         def id(self) -> Actor:
-            return Actor(role=ActorRole.AGENT, id=self.name)
+            return Actor(type="agent", key=self.name)
 
         async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
             for msg in inbox:
@@ -292,7 +292,7 @@ async def test_durable_cancel_ends_session() -> None:
             # agent_id/parent_run are placeholders — SupervisorProtocol.cancel() only
             # reads handle.run_id (see routes/cancel.py for the same pattern).
             handle = RunHandle(
-                run_id=run_id, agent_id=_Actor(role=ActorRole.INTERNAL, id=""), parent_run=""
+                run_id=run_id, agent_id=_Actor(type="unresolved"), parent_run=""
             )
             await rt.supervisor.cancel(handle, reason="test")
 
@@ -321,7 +321,7 @@ async def test_disconnected_stops_local_relay_without_cancelling_run() -> None:
 
         @property
         def id(self) -> Actor:
-            return Actor(role=ActorRole.AGENT, id=self.name)
+            return Actor(type="agent", key=self.name)
 
         async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
             for msg in inbox:
@@ -411,7 +411,7 @@ async def test_bridge_none_disconnect_does_not_crash_on_missing_bridge() -> None
 
         @property
         def id(self) -> Actor:
-            return Actor(role=ActorRole.AGENT, id=self.name)
+            return Actor(type="agent", key=self.name)
 
         async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
             for msg in inbox:
@@ -461,7 +461,7 @@ async def test_tail_wire_events_skips_non_streamable_kinds_without_crashing() ->
         await ctx._log("run.completed", {})
 
     class InlineAgent:
-        id = Actor(role=ActorRole.AGENT, id="tail_wire_test")
+        id = Actor(type="agent", key="tail_wire_test")
         run = staticmethod(agent_run)
 
     async with Runtime() as rt:
@@ -494,7 +494,7 @@ async def test_tail_wire_events_maps_run_failed() -> None:
         raise RuntimeError("boom")
 
     class CrashInlineAgent:
-        id = Actor(role=ActorRole.AGENT, id="tail_wire_fail_test")
+        id = Actor(type="agent", key="tail_wire_fail_test")
         run = staticmethod(agent_run)
 
     async with Runtime() as rt:

@@ -13,7 +13,6 @@ from substrate.agents.context import (
 from substrate.kernel import Actor
 from substrate.kernel.core.content import ChatMessage, TextBlock
 from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
-from substrate.kernel.core.identity import ActorRole
 
 
 @pytest.mark.asyncio
@@ -49,7 +48,7 @@ async def test_context_config():
 async def test_agent_context():
     history = InMemoryHistoryProvider()
     pipeline = CompactionPipeline([SlidingWindowCompaction(max_messages=10)])
-    agent_id = Actor(role=ActorRole.AGENT, id="agent_1")
+    agent_id = Actor(type="agent", key="agent_1")
     session_id = "test-session"
 
     chat_msg = ChatMessage(role="user", content=[TextBlock(text="hi")])

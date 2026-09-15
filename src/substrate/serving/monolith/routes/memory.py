@@ -30,14 +30,14 @@ async def list_memories(
 ) -> list[MemoryOut]:
     if ctx.long_term_memory is None:
         return []
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
 
     # No namespace override: MemoryTool.remember() never passes one, so
     # every fact lands in DurableMemoryStore's default namespace — read from
     # the same place things are actually written to (see also
     # infrastructure/serving_factory.py::build_user_memory_context_block()).
     memories = await ctx.long_term_memory.list_all(
-        Actor(role=ActorRole.USER, id=user.sub), limit=100
+        Actor(type="user", key=user.sub), limit=100
     )
     return [MemoryOut(id=m.id, content=m.content) for m in memories]
 
@@ -50,10 +50,10 @@ async def delete_memory(
 ) -> None:
     if ctx.long_term_memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
 
     deleted = await ctx.long_term_memory.delete(
-        Actor(role=ActorRole.USER, id=user.sub), memory_id
+        Actor(type="user", key=user.sub), memory_id
     )
     if not deleted:
         raise HTTPException(status_code=404, detail="Memory not found")

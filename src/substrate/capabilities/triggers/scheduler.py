@@ -253,10 +253,10 @@ class TriggerScheduler:
         )
 
         if self._runtime is not None:
-            from substrate.kernel.core.identity import Actor, ActorRole
+            from substrate.kernel.core.identity import Actor
             from substrate.kernel.messaging.message import Message, DataPayload
 
-            agent_id = Actor(role=ActorRole.FLOW, id=f"{trigger.target_type}/{trigger.target_name}")
+            agent_id = Actor(type=trigger.target_type, key=trigger.target_name)
             msg = Message(
                 target=agent_id,
                 payload=DataPayload(data=trigger.target_params),

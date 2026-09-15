@@ -41,7 +41,6 @@ from substrate.agents.core._loop import (
     message_to_chat,
     persist_turns,
 )
-from substrate.kernel.core.identity import ActorRole
 
 if TYPE_CHECKING:
     from substrate.agents.runtime.context import Agent, RunContext
@@ -105,9 +104,7 @@ class OrchestratorAgent:
         spawn_budget: SpawnBudget | None = None,
         session_id: str | None = None,
     ) -> None:
-        self.id = Actor(
-            role=ActorRole.AGENT, id=f"{name}-{session_id}" if session_id else name
-        )
+        self.id = Actor(type=name, key=session_id or "")
         self.name = name
         self.model = model
         self.tools = None  # built dynamically from sub-agents

@@ -18,7 +18,6 @@ from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import DataPayload, Message
 from substrate.kernel.runtime.communication import AskOutcome
 from substrate.agents.runtime import Runtime, RunContext
-from substrate.kernel.core.identity import ActorRole
 
 
 # ---------------------------------------------------------------------------
@@ -27,7 +26,7 @@ from substrate.kernel.core.identity import ActorRole
 
 
 def _agent_id(name: str) -> Actor:
-    return Actor(role=ActorRole.AGENT, id=name)
+    return Actor(type="agent", key=name)
 
 
 def _msg(target: Actor | Topic, data: dict | None = None) -> Message:
@@ -137,7 +136,7 @@ class FanoutListenerAgent:
 
 async def test_social_fanout() -> None:
     listener1_id = _agent_id("listener1")
-    listener2_id = Actor(role=ActorRole.AGENT, id="listener2")
+    listener2_id = Actor(type="agent", key="listener2")
     listener1 = FanoutListenerAgent(listener1_id)
     listener2 = FanoutListenerAgent(listener2_id)
 
@@ -252,7 +251,7 @@ class TimeoutAskerAgent:
 
 async def test_ask_timeout_is_not_target_failed() -> None:
     slow_id = _agent_id("slow_agent")
-    asker_id = Actor(role=ActorRole.AGENT, id="timeout_asker")
+    asker_id = Actor(type="agent", key="timeout_asker")
     slow = SlowAgent(slow_id)
     asker = TimeoutAskerAgent(asker_id, slow_id)
 

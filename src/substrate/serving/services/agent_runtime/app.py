@@ -59,7 +59,7 @@ async def _cancel_listener(runtime: object, event_bus: object) -> None:
     ``cancel_requested`` flag the owning replica's own heartbeat observes,
     same as the monolith's ``POST /chat/{id}/cancel`` (see routes/cancel.py).
     """
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
     from substrate.kernel.runtime.supervisor import RunHandle
 
     try:
@@ -74,7 +74,7 @@ async def _cancel_listener(runtime: object, event_bus: object) -> None:
                     await runtime.cancel(run_id)  # type: ignore[union-attr]
                     handle = RunHandle(
                         run_id=run_id,
-                        agent_id=Actor(role=ActorRole.INTERNAL, id=""),
+                        agent_id=Actor(type="unresolved"),
                         parent_run="",
                     )
                     await runtime.supervisor.cancel(handle, reason="user_requested")  # type: ignore[union-attr]

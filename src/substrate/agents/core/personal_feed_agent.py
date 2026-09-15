@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from substrate.kernel.core.identity import ActorRole, Actor, Topic
+from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import DataPayload, Message
 
 from substrate.agents.core._loop import summarize
@@ -55,7 +55,7 @@ class PersonalFeedAgent:
         ),
         preferences: str = "",
     ) -> None:
-        self.id = Actor(role=ActorRole.AGENT, id=name)
+        self.id = Actor(type="agent", key=name)
         self.model = model
         self.tools = None
         self._follow_topics = follow_topics

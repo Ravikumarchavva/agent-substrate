@@ -115,7 +115,7 @@ async def run_agent(
     session_id: str | None = None,
 ) -> dict:
     await rt.register(agent)
-    sid = session_id or agent.id.id
+    sid = session_id or agent.id.type
     msg = Message(
         target=agent.id,
         sender=Actor(type="proxy", key="proxy"),
@@ -231,7 +231,7 @@ async def test_multi_turn_history():
         assert r2["status"] == "success"
         assert r2["output"] == "You said hi earlier."
 
-        msgs = await agent.history.get_messages(agent.id, session_id=agent.id.id)
+        msgs = await agent.history.get_messages(agent.id, session_id=agent.id.type)
         assert len(msgs) == 4  # 2 user + 2 assistant
 
 

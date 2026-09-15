@@ -235,7 +235,7 @@ async def test_subagent_start_and_done_produce_depth1_progress() -> None:
         e for e in events if isinstance(e, AgentProgress) and e.depth == 1
     ]
     assert len(subagent_events) == 2
-    assert subagent_events[0].agent_id.id == "worker"
+    assert subagent_events[0].agent_id.key == "worker"
     assert subagent_events[0].step == AgentStep.THINKING
     assert subagent_events[1].step == AgentStep.DONE
 
@@ -254,7 +254,7 @@ async def test_failed_subagent_done_maps_to_error_step() -> None:
         e
         for e in events
         if isinstance(e, AgentProgress)
-        and e.agent_id.id == "flaky"
+        and e.agent_id.key == "flaky"
         and e.step != AgentStep.THINKING
     )
     assert done_ev.step == AgentStep.ERROR

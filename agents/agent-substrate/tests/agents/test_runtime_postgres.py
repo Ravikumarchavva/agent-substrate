@@ -1284,7 +1284,7 @@ async def test_pg_thread_single_flight(pg_runtime) -> None:
     agent = SleepForeverAgent(agent_id)
     await pg_runtime.register(agent)
 
-    thread_id = f"thread-{agent_id.id}"
+    thread_id = f"thread-{agent_id.key}"
     run_id_1 = await pg_runtime.submit(
         agent_id, _msg(agent_id, {}), thread_id=thread_id
     )
@@ -1319,7 +1319,7 @@ async def test_pg_thread_single_flight_frees_after_completion(pg_runtime) -> Non
     agent = RecorderAgent(agent_id)
     await pg_runtime.register(agent)
 
-    thread_id = f"thread-{agent_id.id}"
+    thread_id = f"thread-{agent_id.key}"
     await pg_runtime.submit(agent_id, _msg(agent_id, {}), thread_id=thread_id)
     await asyncio.wait_for(agent.done.wait(), timeout=8.0)
 
@@ -1651,7 +1651,7 @@ async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
     from substrate.agents.core.react import ReActAgent
 
     agent1 = ReActAgent("pg-crash-resume-agent", model=ScriptedLLM("first answer"))
-    thread_id = f"thread-crash-resume-{_agent_id('x').id}"
+    thread_id = f"thread-crash-resume-{_agent_id('x').key}"
 
     await pg_runtime.register(agent1)
     msg1 = Message(

@@ -4,6 +4,26 @@ from __future__ import annotations
 
 import os
 
+# Real-billing guardrail. ServerSettings (serving/shared/settings.py) reads
+# .env directly off disk (env_file=".env", relative to CWD) — that bypasses
+# every os.environ override below, and its module-level `settings =
+# ServerSettings()` singleton constructs at IMPORT time. So the real
+# OPENAI_API_KEY from .env loads into every test process the instant
+# anything imports substrate.serving.shared.settings, regardless of what
+# this file sets. A test that builds an embedding/LLM client from that
+# singleton instead of an explicitly mocked one would silently make a real,
+# billed API call.
+#
+# setdefault, not a hard overwrite: if you deliberately `export
+# OPENAI_API_KEY=sk-...` before running pytest (the documented way to opt
+# tests/eval/test_retrieval_eval.py into its real, billed run), that real
+# value already occupies this slot before conftest ever executes, so
+# setdefault leaves it alone. Only the common case — nothing exported,
+# ServerSettings would otherwise silently fall through to reading the real
+# key from .env — gets the fake value, so a slip elsewhere fails loudly
+# (401) instead of succeeding and billing.
+os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-a-real-key-see-conftest")
+
 import pytest
 
 # The safety guardrail's classifiers (PromptGuardClassifier,

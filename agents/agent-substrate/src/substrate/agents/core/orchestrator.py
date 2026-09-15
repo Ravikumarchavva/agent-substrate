@@ -181,8 +181,8 @@ class OrchestratorAgent:
                 await ctx._log(
                     "subagent.start",
                     {
-                        "agent": cfg.agent.id.id,
-                        "parent": self.id.id,
+                        "agent": cfg.agent.id.type,
+                        "parent": self.id.type,
                         "task": str(task_text)[:200],
                     },
                 )
@@ -216,8 +216,8 @@ class OrchestratorAgent:
                 await ctx._log(
                     "subagent.done",
                     {
-                        "agent": cfg.agent.id.id,
-                        "parent": self.id.id,
+                        "agent": cfg.agent.id.type,
+                        "parent": self.id.type,
                         "ok": outcome.kind == "replied",
                     },
                 )
@@ -266,9 +266,9 @@ class OrchestratorAgent:
     def _build_tools(self) -> list[AnyTool]:
         tools: list[AnyTool] = [
             _DelegateTool(
-                name=f"handoff_{cfg.agent.id.id}",
+                name=f"handoff_{cfg.agent.id.type}",
                 description=cfg.description
-                or f"Delegate to the {cfg.agent.id.id} sub-agent",
+                or f"Delegate to the {cfg.agent.id.type} sub-agent",
             )
             for cfg in self._sub_agents
         ]
@@ -276,7 +276,7 @@ class OrchestratorAgent:
 
     def _find_sub_agent_config(self, name: str) -> SubAgentConfig | None:
         for cfg in self._sub_agents:
-            if f"handoff_{cfg.agent.id.id}" == name or cfg.agent.id.id == name:
+            if f"handoff_{cfg.agent.id.type}" == name or cfg.agent.id.type == name:
                 return cfg
         return None
 

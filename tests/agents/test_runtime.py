@@ -220,6 +220,71 @@ async def test_spawn_child_receives_boot() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 4b. spawn_child — derived addresses don't collide across parents
+# ---------------------------------------------------------------------------
+
+
+class RecordingChild:
+    """Records the address it was actually spawned at, then replies."""
+
+    def __init__(self, agent_id: Actor) -> None:
+        self.id = agent_id
+
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for msg in inbox:
+            await ctx.reply(msg, {"seen_at": str(self.id)})
+
+
+class SpawnsAssistantByType:
+    """Spawns a same-named ('assistant') child via spawn_child, records
+    the address the runtime actually gave it."""
+
+    def __init__(self, agent_id: Actor) -> None:
+        self.id = agent_id
+        self.child_address: str | None = None
+        self.done = asyncio.Event()
+
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for msg in inbox:
+            boot = _msg(self.id, {"task": "help"})
+            handle = await ctx.spawn_child("assistant", boot=boot)
+            outcome = await ctx.ask(handle, boot, timeout=3.0)
+            output = outcome.result.output  # type: ignore[union-attr]
+            self.child_address = output.data["seen_at"] if isinstance(output, DataPayload) else None
+            self.done.set()
+
+
+async def test_spawn_child_derives_distinct_addresses_for_same_type() -> None:
+    """The real bug this guards against: two parents both calling
+    ctx.spawn_child("assistant", ...) must not land on the same address —
+    same type, same locally-allocated path if built naively (both are each
+    parent's *first* spawn call), but different run_id per parent is what
+    has to keep them apart."""
+    data_analyst_id = _agent_id("data_analyst")
+    researcher_id = _agent_id("researcher")
+    data_analyst = SpawnsAssistantByType(data_analyst_id)
+    researcher = SpawnsAssistantByType(researcher_id)
+
+    async with Runtime() as rt:
+        rt.register_factory("assistant", lambda actor: RecordingChild(actor))
+        await rt.register(data_analyst)
+        await rt.register(researcher)
+
+        await rt.submit(data_analyst_id, _msg(data_analyst_id, {}))
+        await rt.submit(researcher_id, _msg(researcher_id, {}))
+        await asyncio.wait_for(data_analyst.done.wait(), timeout=5.0)
+        await asyncio.wait_for(researcher.done.wait(), timeout=5.0)
+
+    assert data_analyst.child_address is not None
+    assert researcher.child_address is not None
+    assert data_analyst.child_address != researcher.child_address, (
+        "two parents spawning the same actor type must not collide on one address"
+    )
+    assert data_analyst.child_address.startswith("assistant/")
+    assert researcher.child_address.startswith("assistant/")
+
+
+# ---------------------------------------------------------------------------
 # 5. Timeout → AskOutcome discrimination
 # ---------------------------------------------------------------------------
 

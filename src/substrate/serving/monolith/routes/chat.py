@@ -40,7 +40,7 @@ from substrate.kernel.core.content import (
     ChatMessage as _ChatMessage,
     Role,
 )
-from substrate.kernel.core.identity import AgentId as _AgentId
+from substrate.kernel.core.identity import ActorRole, Actor as _Actor
 from substrate.kernel.messaging.message import (
     ChatPayload as _ChatPayload,
     Message as _Message,
@@ -347,7 +347,7 @@ async def chat(
     _user_blocks: list = build_user_blocks(user_content, image_inputs)
     _entry_msg = _Message(
         target=agent.id,
-        sender=_AgentId(type="proxy", key="http"),
+        sender=_Actor(role=ActorRole.PROXY, id="http"),
         payload=_ChatPayload(
             message=_ChatMessage(role=Role.USER, content=_user_blocks)
         ),

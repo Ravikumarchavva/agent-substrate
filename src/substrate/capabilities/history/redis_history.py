@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 
 import redis.asyncio as aioredis
 
-from substrate.kernel import AgentId
+from substrate.kernel import Actor
 from substrate.kernel.core.content import ChatMessage
 from substrate.logger import setup_logging
 
@@ -114,16 +114,16 @@ class RedisHistoryProvider:
             )
         return self._client
 
-    def _key(self, agent_id: AgentId, session_id: str) -> str:
-        return f"{self._key_prefix}:{agent_id.type}:{agent_id.key}:{session_id}"
+    def _key(self, agent_id: Actor, session_id: str) -> str:
+        return f"{self._key_prefix}:{agent_id.role.value}:{agent_id.id}:{session_id}"
 
-    def _seed_lock_key(self, agent_id: AgentId, session_id: str) -> str:
+    def _seed_lock_key(self, agent_id: Actor, session_id: str) -> str:
         return (
-            f"{self._key_prefix}:seedlock:{agent_id.type}:{agent_id.key}:{session_id}"
+            f"{self._key_prefix}:seedlock:{agent_id.role.value}:{agent_id.id}:{session_id}"
         )
 
     async def try_acquire_seed_lock(
-        self, agent_id: AgentId, session_id: str, *, ttl: int = 30
+        self, agent_id: Actor, session_id: str, *, ttl: int = 30
     ) -> bool:
         """Atomic ``SET NX EX`` — True if the caller won the race to seed.
 
@@ -149,7 +149,7 @@ class RedisHistoryProvider:
 
     async def append(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         message: ChatMessage,
         *,
         session_id: str,
@@ -168,7 +168,7 @@ class RedisHistoryProvider:
 
     async def append_many(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         messages: list[ChatMessage],
         *,
         session_id: str,
@@ -179,7 +179,7 @@ class RedisHistoryProvider:
 
     async def get_messages(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         *,
         session_id: str,
         limit: int | None = None,
@@ -192,12 +192,12 @@ class RedisHistoryProvider:
         raw_items: list[str] = await client.lrange(key, start, end)  # type: ignore[misc]
         return [_deserialize(r)[1] for r in raw_items]
 
-    async def clear(self, agent_id: AgentId, *, session_id: str) -> None:
+    async def clear(self, agent_id: Actor, *, session_id: str) -> None:
         client = self._require_client()
         await client.delete(self._key(agent_id, session_id))
 
     async def clear_run(
-        self, agent_id: AgentId, *, session_id: str, run_id: str
+        self, agent_id: Actor, *, session_id: str, run_id: str
     ) -> None:
         client = self._require_client()
         key = self._key(agent_id, session_id)
@@ -211,11 +211,11 @@ class RedisHistoryProvider:
                 pipe.expire(key, self._ttl)
         await pipe.execute()
 
-    async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int:
+    async def count_messages(self, agent_id: Actor, *, session_id: str) -> int:
         client = self._require_client()
         return await client.llen(self._key(agent_id, session_id))  # type: ignore[misc]
 
-    async def refresh_ttl(self, agent_id: AgentId, *, session_id: str) -> None:
+    async def refresh_ttl(self, agent_id: Actor, *, session_id: str) -> None:
         if self._ttl <= 0:
             return
         client = self._require_client()

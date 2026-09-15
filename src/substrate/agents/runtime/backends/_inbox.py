@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from typing import TYPE_CHECKING, Callable
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.runtime.inbox import DeadLetterEntry, DeadLetterReason
 
@@ -18,7 +18,7 @@ class InMemoryInbox:
 
     Robustness guarantees honoured (identical to the Protocol contract):
     1. Dedup by Message.id — deliver is idempotent.
-    2. Per-sender FIFO — sender key is ``Message.sender`` (str of AgentId) or
+    2. Per-sender FIFO — sender key is ``Message.sender`` (str of Actor) or
        ``"__anon__"`` for anonymous senders.
     3. Retry + dead-letter after ``max_retries`` nacks.
 
@@ -28,20 +28,20 @@ class InMemoryInbox:
 
     def __init__(self, max_retries: int = 3) -> None:
         self._max_retries = max_retries
-        self._on_deliver: Callable[[AgentId], None] | None = None
+        self._on_deliver: Callable[[Actor], None] | None = None
 
         # msg_id → Message, per agent
-        self._messages: dict[AgentId, dict[str, Message]] = defaultdict(dict)
+        self._messages: dict[Actor, dict[str, Message]] = defaultdict(dict)
         # per-sender FIFO order: agent_id → sender_key → deque[msg_id]
-        self._order: dict[AgentId, dict[str, deque[str]]] = defaultdict(
+        self._order: dict[Actor, dict[str, deque[str]]] = defaultdict(
             lambda: defaultdict(deque)
         )
         # retry counter: (agent_id, msg_id) → attempts
-        self._retries: dict[tuple[AgentId, str], int] = defaultdict(int)
+        self._retries: dict[tuple[Actor, str], int] = defaultdict(int)
         # dead letters
-        self._dead: dict[AgentId, list[DeadLetterEntry]] = defaultdict(list)
+        self._dead: dict[Actor, list[DeadLetterEntry]] = defaultdict(list)
 
-    def set_deliver_hook(self, cb: Callable[[AgentId], None] | None) -> None:
+    def set_deliver_hook(self, cb: Callable[[Actor], None] | None) -> None:
         """Wire the Runtime's wakeup callback, invoked after each new delivery."""
         self._on_deliver = cb
 
@@ -49,7 +49,7 @@ class InMemoryInbox:
         return str(msg.sender) if msg.sender else "__anon__"
 
     async def deliver(
-        self, agent_id: AgentId, msg: Message, *, notify: bool = True
+        self, agent_id: Actor, msg: Message, *, notify: bool = True
     ) -> bool:
         if msg.id in self._messages[agent_id]:
             return False  # duplicate
@@ -59,7 +59,7 @@ class InMemoryInbox:
             self._on_deliver(agent_id)
         return True
 
-    async def drain(self, agent_id: AgentId, *, max: int = 100) -> list[Message]:
+    async def drain(self, agent_id: Actor, *, max: int = 100) -> list[Message]:
         result: list[Message] = []
         msgs = self._messages[agent_id]
         for sender_queue in self._order[agent_id].values():
@@ -70,7 +70,7 @@ class InMemoryInbox:
                     result.append(msgs[msg_id])
         return result
 
-    async def ack(self, agent_id: AgentId, msg_id: str) -> None:
+    async def ack(self, agent_id: Actor, msg_id: str) -> None:
         self._messages[agent_id].pop(msg_id, None)
         self._retries.pop((agent_id, msg_id), None)
         for q in self._order[agent_id].values():
@@ -79,7 +79,7 @@ class InMemoryInbox:
             except ValueError:
                 pass
 
-    async def nack(self, agent_id: AgentId, msg_id: str, *, error: str = "") -> None:
+    async def nack(self, agent_id: Actor, msg_id: str, *, error: str = "") -> None:
         key = (agent_id, msg_id)
         self._retries[key] += 1
         if self._retries[key] >= self._max_retries:
@@ -96,8 +96,8 @@ class InMemoryInbox:
                 )
             await self.ack(agent_id, msg_id)
 
-    async def dead_letters(self, agent_id: AgentId) -> list[DeadLetterEntry]:
+    async def dead_letters(self, agent_id: Actor) -> list[DeadLetterEntry]:
         return list(self._dead[agent_id])
 
-    async def pending_count(self, agent_id: AgentId) -> int:
+    async def pending_count(self, agent_id: Actor) -> int:
         return len(self._messages[agent_id])

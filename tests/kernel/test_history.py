@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import pytest
 from substrate.agents.context import InMemoryHistoryProvider
-from substrate.kernel import AgentId
+from substrate.kernel import Actor
 from substrate.kernel.core.content import ChatMessage, TextBlock
+from substrate.kernel.core.identity import ActorRole
 
 
 @pytest.mark.asyncio
 async def test_history_provider_contract():
     provider = InMemoryHistoryProvider()
-    agent_id = AgentId(type="test", key="agent_123")
+    agent_id = Actor(role=ActorRole.AGENT, id="agent_123")
     session_id = "session-abc"
 
     msgs = await provider.get_messages(agent_id, session_id=session_id)
@@ -34,7 +35,7 @@ async def test_history_provider_contract():
 @pytest.mark.asyncio
 async def test_clear_run_scope():
     provider = InMemoryHistoryProvider()
-    agent_id = AgentId(type="test", key="agent_run")
+    agent_id = Actor(role=ActorRole.AGENT, id="agent_run")
     session_id = "sess"
 
     m1 = ChatMessage(role="user", content=[TextBlock(text="run1")])

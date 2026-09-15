@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from substrate.kernel.core.content import JsonObject
 from substrate.kernel.core.errors import SuspendInterrupt
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.runtime.effects import Effect
 from substrate.kernel.runtime.ids import RunStatus
@@ -44,7 +44,7 @@ class _SupervisionMixin:
 
     async def spawn(
         self,
-        child_agent: AgentId,
+        child_agent: Actor,
         *,
         boot: Message,
         supervision: Supervision | None = None,

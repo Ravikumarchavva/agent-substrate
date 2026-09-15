@@ -220,7 +220,7 @@ class LiveTurn:
         if ev.step == AgentStep.TOOL_CALL:
             self._commit_streaming()  # a tool call ends the current text block
             self.status.tool_calls += 1
-            call = ToolCall(name=ev.content, agent_key=ev.agent_id.key, depth=ev.depth)
+            call = ToolCall(name=ev.content, agent_key=ev.agent_id.id, depth=ev.depth)
             self._active_tools.append(call)
             if self._sequential:
                 self._seq_tool_running(call)
@@ -363,7 +363,7 @@ class LiveTurn:
         else:
             detail = "running…"
         self.console.print(
-            f"  [subagent]{icon} {ev.agent_id.key}[/subagent] [info]{detail}[/info]"
+            f"  [subagent]{icon} {ev.agent_id.id}[/subagent] [info]{detail}[/info]"
         )
 
     def _seq_print(self, section: str, text: str) -> None:

@@ -1,7 +1,7 @@
 """Multi-agent flows — kernel-native agent orchestration pipelines.
 
 Each flow implements the kernel Agent protocol:
-    id: AgentId
+    id: Actor
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None
 
 Flows coordinate steps or branches via ctx.spawn() + ctx.ask(), replying to
@@ -37,7 +37,7 @@ from substrate.kernel.core.content import (
     TextBlock,
     content_blocks_to_str,
 )
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import ActorRole, Actor
 from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
 from substrate.kernel.runtime.communication import AskOutcome
 
@@ -63,7 +63,7 @@ def _text_from_message(msg: Message) -> str:
     return ""
 
 
-def _make_step_message(target: AgentId, text: str, *, sender: AgentId) -> Message:
+def _make_step_message(target: Actor, text: str, *, sender: Actor) -> Message:
     """Build a ChatPayload Message with a fresh correlation_id for each step call."""
     return Message(
         target=target,
@@ -109,8 +109,8 @@ class SequentialFlow:
             raise ValueError("SequentialFlow requires at least one step")
 
     @cached_property
-    def id(self) -> AgentId:
-        return AgentId(type="flow", key=self.name)
+    def id(self) -> Actor:
+        return Actor(role=ActorRole.FLOW, id=self.name)
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
@@ -156,8 +156,8 @@ class ParallelFlow:
             raise ValueError("ParallelFlow requires at least one branch")
 
     @cached_property
-    def id(self) -> AgentId:
-        return AgentId(type="flow", key=self.name)
+    def id(self) -> Actor:
+        return Actor(role=ActorRole.FLOW, id=self.name)
 
     def _merge_outputs(self, outputs: list[str]) -> str:
         if callable(self.merge):
@@ -209,8 +209,8 @@ class ConditionalFlow:
     branch_timeout: float = 300.0
 
     @cached_property
-    def id(self) -> AgentId:
-        return AgentId(type="flow", key=self.name)
+    def id(self) -> Actor:
+        return Actor(role=ActorRole.FLOW, id=self.name)
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:

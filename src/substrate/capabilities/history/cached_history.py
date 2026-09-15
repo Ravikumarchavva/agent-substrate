@@ -35,7 +35,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 
 from substrate.kernel.core.content import ChatMessage
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.storage.history import HistoryProvider
 from substrate.logger import setup_logging
 
@@ -70,7 +70,7 @@ class CachedHistoryProvider:
 
     async def append(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         message: ChatMessage,
         *,
         session_id: str,
@@ -82,7 +82,7 @@ class CachedHistoryProvider:
 
     async def append_many(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         messages: list[ChatMessage],
         *,
         session_id: str,
@@ -94,7 +94,7 @@ class CachedHistoryProvider:
 
     async def get_messages(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         *,
         session_id: str,
         limit: int | None = None,
@@ -105,21 +105,21 @@ class CachedHistoryProvider:
             agent_id, session_id=session_id, limit=limit, offset=offset
         )
 
-    async def clear(self, agent_id: AgentId, *, session_id: str) -> None:
+    async def clear(self, agent_id: Actor, *, session_id: str) -> None:
         await self._cache.clear(agent_id, session_id=session_id)
 
     async def clear_run(
-        self, agent_id: AgentId, *, session_id: str, run_id: str
+        self, agent_id: Actor, *, session_id: str, run_id: str
     ) -> None:
         await self._cache.clear_run(agent_id, session_id=session_id, run_id=run_id)
 
-    async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int:
+    async def count_messages(self, agent_id: Actor, *, session_id: str) -> int:
         await self._ensure_seeded(agent_id, session_id=session_id)
         return await self._cache.count_messages(agent_id, session_id=session_id)
 
     # -- cold-store reseed ------------------------------------------------------
 
-    async def _ensure_seeded(self, agent_id: AgentId, *, session_id: str) -> None:
+    async def _ensure_seeded(self, agent_id: Actor, *, session_id: str) -> None:
         if self._reseed is None:
             return
         if await self._cache.count_messages(agent_id, session_id=session_id) > 0:

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Literal
 
 from substrate.kernel.core.content import JsonObject
 from substrate.kernel.core.errors import SuspendInterrupt
-from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.core.identity import ActorRole, Actor, Topic
 from substrate.kernel.messaging.message import Message, DataPayload
 from substrate.kernel.runtime.communication import AskOutcome, RunStatusSummary
 from substrate.kernel.runtime.effects import Effect, EffectResult
@@ -51,12 +51,12 @@ class _MessagingMixin:
         ) -> None: ...
         async def _resolve_effect_value(self, result: EffectResult) -> JsonObject: ...
 
-    async def send(self, target: AgentId, msg: Message) -> None:
+    async def send(self, target: Actor, msg: Message) -> None:
         """Fire-and-forget delivery.  Does not suspend the caller."""
         await self._inbox.deliver(target, msg)
         await self._scheduler.wake_agent(target)
 
-    async def emit(self, topic: TopicId, msg: Message) -> None:
+    async def emit(self, topic: Topic, msg: Message) -> None:
         """Publish to all followers of ``topic`` (fire-and-forget)."""
         await self._fanout.publish(
             topic, msg, graph=self._follow_graph, inbox=self._inbox
@@ -64,7 +64,7 @@ class _MessagingMixin:
 
     async def ask(
         self,
-        target: AgentId | RunHandle,
+        target: Actor | RunHandle,
         msg: Message,
         *,
         timeout: float,
@@ -84,7 +84,7 @@ class _MessagingMixin:
           whichever delivery lands second is silently dropped, and if it's
           this one, the correlation_id this wait listens on is never the one
           the child actually replies with.)
-        - ``target`` is a plain ``AgentId``: this call both sends and waits.
+        - ``target`` is a plain ``Actor``: this call both sends and waits.
           The correlation_id is derived from this call's own replay-stable
           path, NOT taken from ``msg.correlation_id`` (unless
           ``idempotency_key`` is given explicitly) — a caller that builds a
@@ -103,7 +103,7 @@ class _MessagingMixin:
         """
         self.check()
 
-        target_agent: AgentId = (
+        target_agent: Actor = (
             target.agent_id if isinstance(target, RunHandle) else target
         )
         target_run: RunId | None = (
@@ -246,15 +246,15 @@ class _MessagingMixin:
     # Social graph
     # ------------------------------------------------------------------
 
-    async def follow(self, topic: TopicId) -> None:
+    async def follow(self, topic: Topic) -> None:
         """Subscribe this agent to a topic."""
-        agent_id = AgentId(type="run", key=self.run_id)
+        agent_id = Actor(role=ActorRole.INTERNAL, id=self.run_id)
         await self._follow_graph.follow(agent_id, topic)
 
-    async def unfollow(self, topic: TopicId) -> None:
+    async def unfollow(self, topic: Topic) -> None:
         from substrate.kernel.messaging.message import Subscription
 
-        agent_id = AgentId(type="run", key=self.run_id)
+        agent_id = Actor(role=ActorRole.INTERNAL, id=self.run_id)
         sub = Subscription(topic=topic, agent_id=agent_id)
         await self._follow_graph.unfollow(sub)
 

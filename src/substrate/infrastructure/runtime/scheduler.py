@@ -36,10 +36,11 @@ from substrate.infrastructure.observability.runtime_metrics import (
     retry_counter,
     suspension_counter,
 )
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
 from substrate.kernel.runtime.wakeup import Wakeup
+from substrate.kernel.core.identity import ActorRole
 
 if TYPE_CHECKING:
     import asyncpg
@@ -129,7 +130,7 @@ class Scheduler:
 
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
-        self._pending_registrations: dict[RunId, AgentId] = {}
+        self._pending_registrations: dict[RunId, Actor] = {}
 
     async def setup(self) -> None:
         async with self._pool.acquire() as conn:
@@ -169,7 +170,7 @@ class Scheduler:
                 run_id,
             )
 
-    async def pending_run_specs(self) -> list[tuple[RunId, AgentId, dict]]:
+    async def pending_run_specs(self) -> list[tuple[RunId, Actor, dict]]:
         """Return (run_id, agent_id, spec) for all pending runs that have a spec.
 
         Used by the cold-resume hook to rebuild and register agents for orphaned
@@ -186,7 +187,7 @@ class Scheduler:
                 WHERE rq.status = 'pending' AND ar.spec IS NOT NULL
                 """
             )
-        result: list[tuple[RunId, AgentId, dict]] = []
+        result: list[tuple[RunId, Actor, dict]] = []
         for row in rows:
             type_, _, key = row["agent_id"].partition("/")
             spec = (
@@ -194,7 +195,7 @@ class Scheduler:
                 if isinstance(row["spec"], str)
                 else dict(row["spec"])
             )
-            result.append((RunId(row["run_id"]), AgentId(type=type_, key=key), spec))
+            result.append((RunId(row["run_id"]), Actor(role=ActorRole(type_), id=key), spec))
         return result
 
     async def reclaim_orphans(self) -> int:
@@ -240,11 +241,11 @@ class Scheduler:
         except (ValueError, IndexError):
             return 0
 
-    def register_run(self, run_id: RunId, agent_id: AgentId) -> None:
+    def register_run(self, run_id: RunId, agent_id: Actor) -> None:
         """The actual INSERT happens lazily in enqueue; store mapping here first."""
         self._pending_registrations[run_id] = agent_id
 
-    def agent_for(self, run_id: RunId) -> AgentId | None:
+    def agent_for(self, run_id: RunId) -> Actor | None:
         return self._pending_registrations.get(run_id)
 
     def wakeup_for(self, run_id: RunId) -> Wakeup | None:
@@ -271,7 +272,7 @@ class Scheduler:
         return row is not None
 
     async def find_run_for_agent(
-        self, agent_id: AgentId
+        self, agent_id: Actor
     ) -> tuple[RunId, RunStatus] | None:
         """Return the most recent non-terminal (run_id, status) for agent_id."""
         async with self._pool.acquire() as conn:
@@ -340,7 +341,7 @@ class Scheduler:
             )
         return [RunId(row["run_id"]) for row in rows]
 
-    async def wake_agent(self, agent_id: AgentId, *, priority: int = 5) -> None:
+    async def wake_agent(self, agent_id: Actor, *, priority: int = 5) -> None:
         """Re-enqueue the active suspended run for agent_id, if any."""
         async with self._pool.acquire() as conn:
             await conn.execute(
@@ -490,7 +491,7 @@ class Scheduler:
             if raw_aid is None:
                 continue  # no agent registered — skip
             type_, _, key = raw_aid.partition("/")
-            agent_id = AgentId(type=type_, key=key)
+            agent_id = Actor(role=ActorRole(type_), id=key)
             leases.append(
                 Lease(
                     run_id=RunId(row["run_id"]),

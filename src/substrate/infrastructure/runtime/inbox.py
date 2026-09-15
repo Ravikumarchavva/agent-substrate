@@ -36,7 +36,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Callable
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.runtime.inbox import DeadLetterEntry, DeadLetterReason
 
@@ -78,9 +78,9 @@ class Inbox:
     ) -> None:
         self._pool = pool
         self._max_retries = max_retries
-        self._on_deliver: Callable[[AgentId], None] | None = None
+        self._on_deliver: Callable[[Actor], None] | None = None
 
-    def set_deliver_hook(self, cb: Callable[[AgentId], None] | None) -> None:
+    def set_deliver_hook(self, cb: Callable[[Actor], None] | None) -> None:
         """Wire the Runtime's wakeup callback, invoked after each new delivery."""
         self._on_deliver = cb
 
@@ -89,7 +89,7 @@ class Inbox:
             await conn.execute(_CREATE_TABLES)
 
     async def deliver(
-        self, agent_id: AgentId, msg: Message, *, notify: bool = True
+        self, agent_id: Actor, msg: Message, *, notify: bool = True
     ) -> bool:
         sender_key = str(msg.sender) if msg.sender else "__anon__"
         payload_json = msg.model_dump_json()
@@ -112,7 +112,7 @@ class Inbox:
             self._on_deliver(agent_id)
         return True
 
-    async def drain(self, agent_id: AgentId, *, max: int = 100) -> list[Message]:
+    async def drain(self, agent_id: Actor, *, max: int = 100) -> list[Message]:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -127,7 +127,7 @@ class Inbox:
             )
         return [Message.model_validate_json(row["payload"]) for row in rows]
 
-    async def ack(self, agent_id: AgentId, msg_id: str) -> None:
+    async def ack(self, agent_id: Actor, msg_id: str) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(
                 "DELETE FROM substrate_inbox WHERE agent_id = $1 AND msg_id = $2",
@@ -137,7 +137,7 @@ class Inbox:
 
     async def nack(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         msg_id: str,
         *,
         error: str = "",
@@ -180,7 +180,7 @@ class Inbox:
                         msg_id,
                     )
 
-    async def dead_letters(self, agent_id: AgentId) -> list[DeadLetterEntry]:
+    async def dead_letters(self, agent_id: Actor) -> list[DeadLetterEntry]:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -207,7 +207,7 @@ class Inbox:
             )
         return entries
 
-    async def pending_count(self, agent_id: AgentId) -> int:
+    async def pending_count(self, agent_id: Actor) -> int:
         async with self._pool.acquire() as conn:
             return (
                 await conn.fetchval(

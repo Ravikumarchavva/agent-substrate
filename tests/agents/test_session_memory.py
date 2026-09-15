@@ -12,9 +12,9 @@ from substrate.agents.context import (
 )
 from substrate.agents.core import ReActAgent
 from substrate.agents.runtime import Runtime
-from substrate.kernel import ChatMessage, ContentBlock, TextBlock
+from substrate.kernel import ActorRole, ChatMessage, ContentBlock, TextBlock
 from substrate.kernel.core.content import Role
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
@@ -76,10 +76,10 @@ async def run_agent(
 ) -> dict:
     """Submit one message and block until the run completes."""
     await rt.register(agent)
-    sid = session_id or agent.id.key
+    sid = session_id or agent.id.id
     msg = Message(
         target=agent.id,
-        sender=AgentId(type="proxy", key="test"),
+        sender=Actor(role=ActorRole.PROXY, id="proxy"),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
         ),
@@ -146,7 +146,7 @@ async def test_standalone_session_accumulates_across_runs():
         assert r2["output"] == "You said hi earlier."
 
         # 2 user + 2 assistant = 4 messages in the session
-        msgs = await shared_history.get_messages(agent.id, session_id=agent.id.key)
+        msgs = await shared_history.get_messages(agent.id, session_id=agent.id.id)
         assert len(msgs) == 4
 
 

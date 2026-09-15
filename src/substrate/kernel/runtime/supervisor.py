@@ -67,7 +67,7 @@ from typing import AsyncIterator, Protocol
 from pydantic import BaseModel, Field
 
 from substrate.kernel.core.content import JsonObject
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message, Payload
 from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.agent.supervision import Supervision
@@ -90,7 +90,7 @@ class RunHandle(BaseModel):
     """
 
     run_id: RunId
-    agent_id: AgentId
+    agent_id: Actor
     parent_run: RunId
     boot_correlation_id: str | None = None
 
@@ -137,7 +137,7 @@ class SupervisorProtocol(Protocol):
 
     async def spawn(
         self,
-        child_agent: AgentId,
+        child_agent: Actor,
         *,
         parent: RunId,
         supervision: Supervision,

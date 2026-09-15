@@ -31,13 +31,14 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING, AsyncIterator
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.runtime.effects import Effect
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.kernel.runtime.supervisor import RunHandle, RunResult
 from substrate.kernel.agent.supervision import Supervision
+from substrate.kernel.core.identity import ActorRole
 
 if TYPE_CHECKING:
     import asyncpg
@@ -108,7 +109,7 @@ class Supervisor:
 
     async def spawn(
         self,
-        child_agent: AgentId,
+        child_agent: Actor,
         *,
         parent: RunId,
         supervision: Supervision,
@@ -346,7 +347,7 @@ class Supervisor:
             type_, _, key = row["agent_id"].partition("/")
             yield RunHandle(
                 run_id=RunId(row["run_id"]),
-                agent_id=AgentId(type=type_, key=key),
+                agent_id=Actor(role=ActorRole(type_), id=key),
                 parent_run=parent,
             )
 

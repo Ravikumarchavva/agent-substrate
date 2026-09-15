@@ -29,7 +29,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 
 
 @dataclass(frozen=True)
@@ -97,7 +97,7 @@ class LongTermMemory(Protocol):
 
     async def save(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         content: str,
         *,
         namespace: str = "default",
@@ -113,7 +113,7 @@ class LongTermMemory(Protocol):
 
     async def search(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         query: str,
         *,
         namespace: str = "default",
@@ -124,7 +124,7 @@ class LongTermMemory(Protocol):
 
     async def get(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         memory_id: str,
         *,
         namespace: str = "default",
@@ -134,7 +134,7 @@ class LongTermMemory(Protocol):
 
     async def delete(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         memory_id: str,
         *,
         namespace: str = "default",
@@ -142,7 +142,7 @@ class LongTermMemory(Protocol):
         """Delete the memory with *memory_id*. Returns ``True`` if deleted."""
         ...
 
-    async def clear(self, agent_id: AgentId, *, namespace: str = "default") -> None:
+    async def clear(self, agent_id: Actor, *, namespace: str = "default") -> None:
         """Delete all memories for *agent_id* in *namespace*."""
         ...
 

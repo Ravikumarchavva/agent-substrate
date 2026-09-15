@@ -20,7 +20,7 @@ from substrate.infrastructure.observability.runtime_metrics import (
     retry_counter,
     suspension_counter,
 )
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
 from substrate.kernel.runtime.wakeup import Wakeup
@@ -49,18 +49,18 @@ class InMemoryScheduler:
         self._pending: set[RunId] = set()  # coalescing: don't enqueue twice
         self._leases: dict[RunId, Lease] = {}
         self._status: dict[RunId, RunStatus] = {}
-        self._agents: dict[RunId, AgentId] = {}  # run_id → which agent to wake
+        self._agents: dict[RunId, Actor] = {}  # run_id → which agent to wake
         self._wakeups: dict[RunId, Wakeup | None] = {}
         self._retry_policies: dict[RunId, RunRetryPolicy] = {}
         self._retry_counts: dict[RunId, int] = {}
         self._threads: dict[RunId, str] = {}  # run_id → thread_id
         self._tenants: dict[RunId, str] = {}  # run_id → tenant
 
-    def register_run(self, run_id: RunId, agent_id: AgentId) -> None:
+    def register_run(self, run_id: RunId, agent_id: Actor) -> None:
         """Associate a run_id with its agent before enqueue."""
         self._agents[run_id] = agent_id
 
-    def agent_for(self, run_id: RunId) -> AgentId | None:
+    def agent_for(self, run_id: RunId) -> Actor | None:
         return self._agents.get(run_id)
 
     def wakeup_for(self, run_id: RunId) -> Wakeup | None:
@@ -240,7 +240,7 @@ class InMemoryScheduler:
         return None
 
     async def find_run_for_agent(
-        self, agent_id: AgentId
+        self, agent_id: Actor
     ) -> tuple[RunId, RunStatus] | None:
         """Return (run_id, status) of the most recent non-terminal run for agent_id.
 
@@ -255,7 +255,7 @@ class InMemoryScheduler:
                     return (run_id, status)
         return None
 
-    async def wake_agent(self, agent_id: AgentId, *, priority: int = 5) -> None:
+    async def wake_agent(self, agent_id: Actor, *, priority: int = 5) -> None:
         """Wake the active run for agent_id, if any."""
         for run_id, aid in list(self._agents.items()):
             if aid == agent_id:

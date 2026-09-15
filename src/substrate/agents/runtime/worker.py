@@ -58,7 +58,7 @@ class Worker:
         scheduler: SchedulerProtocol,
         supervisor: SupervisorProtocol,
         signal_bus: SignalBusProtocol,
-        registry: dict,  # AgentId → Agent
+        registry: dict,  # Actor → Agent
     ) -> None:
         self._worker_id = worker_id
         self._event_log = event_log

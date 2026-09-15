@@ -10,7 +10,7 @@ from substrate.agents.runtime.context import RunContext
 from substrate.agents.runtime.runtime import Runtime
 from substrate.fabric.flows import ConditionalFlow, ParallelFlow, SequentialFlow
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import ActorRole, Actor
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.runtime.ids import new_run_id
 
@@ -28,8 +28,8 @@ class EchoAgent:
     name: str = "echo"
 
     @property
-    def id(self) -> AgentId:
-        return AgentId(type="agent", key=self.name)
+    def id(self) -> Actor:
+        return Actor(role=ActorRole.AGENT, id=self.name)
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
@@ -111,8 +111,8 @@ async def test_sequential_step_order():
         label: str
 
         @property
-        def id(self) -> AgentId:
-            return AgentId(type="agent", key=self.name)
+        def id(self) -> Actor:
+            return Actor(role=ActorRole.AGENT, id=self.name)
 
         async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
             for msg in inbox:

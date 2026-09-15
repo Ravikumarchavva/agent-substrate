@@ -41,7 +41,7 @@ from typing import AsyncIterator, Protocol
 
 from pydantic import BaseModel
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.runtime.wakeup import Wakeup
 
@@ -79,7 +79,7 @@ class Lease(BaseModel):
     """
 
     run_id: RunId
-    agent_id: AgentId
+    agent_id: Actor
     worker_id: str
     expires_at: datetime
     attempt: int = 0
@@ -219,7 +219,7 @@ class SchedulerProtocol(Protocol):
         """Yield run_ids currently in the pending queue (for monitoring)."""
         ...
 
-    def register_run(self, run_id: RunId, agent_id: AgentId) -> None:
+    def register_run(self, run_id: RunId, agent_id: Actor) -> None:
         """Associate ``run_id`` with ``agent_id`` before enqueuing.
 
         Must be called before ``enqueue`` so the scheduler can map a lease
@@ -227,7 +227,7 @@ class SchedulerProtocol(Protocol):
         """
         ...
 
-    def agent_for(self, run_id: RunId) -> AgentId | None:
+    def agent_for(self, run_id: RunId) -> Actor | None:
         """Return the agent that owns ``run_id``, or ``None`` if unknown."""
         ...
 
@@ -258,7 +258,7 @@ class SchedulerProtocol(Protocol):
         ...
 
     async def find_run_for_agent(
-        self, agent_id: AgentId
+        self, agent_id: Actor
     ) -> tuple[RunId, RunStatus] | None:
         """Return ``(run_id, status)`` for any active run owned by ``agent_id``.
 
@@ -313,7 +313,7 @@ class SchedulerProtocol(Protocol):
         """Transition a SUSPENDED run back to PENDING so a worker re-leases it."""
         ...
 
-    async def wake_agent(self, agent_id: AgentId, *, priority: int = 5) -> None:
+    async def wake_agent(self, agent_id: Actor, *, priority: int = 5) -> None:
         """Enqueue a wakeup for any suspended run owned by ``agent_id``."""
         ...
 

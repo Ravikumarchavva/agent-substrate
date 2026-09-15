@@ -22,7 +22,7 @@ from uuid import uuid4
 
 import pytest
 
-from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.core.identity import ActorRole, Actor, Topic
 from substrate.kernel.messaging.message import Message, DataPayload
 from substrate.kernel.core.errors import ConcurrentAppendError
 from substrate.kernel.agent.runtime_context import RunMeta
@@ -43,15 +43,15 @@ from substrate.kernel.runtime.agent import AgentRunContext, Agent
 # ---------------------------------------------------------------------------
 
 
-def _agent_id(name: str = "test") -> AgentId:
-    return AgentId(type=name, key=uuid4().hex)
+def _agent_id(name: str = "test") -> Actor:
+    return Actor(role=ActorRole.AGENT, id=f"{name}-{uuid4().hex}")
 
 
-def _topic() -> TopicId:
-    return TopicId(type="test.topic", source=uuid4().hex)
+def _topic() -> Topic:
+    return Topic(f"test.topic/{uuid4().hex}")
 
 
-def _message(sender: AgentId | None = None, target: AgentId | None = None) -> Message:
+def _message(sender: Actor | None = None, target: Actor | None = None) -> Message:
     target = target or _agent_id()
     return Message(
         target=target,
@@ -302,10 +302,10 @@ class InMemoryInbox:
         self._retries: dict[str, dict[str, int]] = defaultdict(dict)
         self._dead: dict[str, list[DeadLetterEntry]] = defaultdict(list)
 
-    def _key(self, agent_id: AgentId) -> str:
+    def _key(self, agent_id: Actor) -> str:
         return str(agent_id)
 
-    async def deliver(self, agent_id: AgentId, msg: Message) -> bool:
+    async def deliver(self, agent_id: Actor, msg: Message) -> bool:
         k = self._key(agent_id)
         if msg.id in self._seen[k]:
             return False
@@ -313,7 +313,7 @@ class InMemoryInbox:
         self._queues[k].append(msg)
         return True
 
-    async def drain(self, agent_id: AgentId, *, max: int = 100) -> list[Message]:
+    async def drain(self, agent_id: Actor, *, max: int = 100) -> list[Message]:
         k = self._key(agent_id)
         q = self._queues[k]
         result = []
@@ -322,13 +322,13 @@ class InMemoryInbox:
             q.rotate(-1)  # move to back (not yet acked)
         return result
 
-    async def ack(self, agent_id: AgentId, msg_id: str) -> None:
+    async def ack(self, agent_id: Actor, msg_id: str) -> None:
         k = self._key(agent_id)
         q = self._queues[k]
         self._queues[k] = deque(m for m in q if m.id != msg_id)
         self._retries[k].pop(msg_id, None)
 
-    async def nack(self, agent_id: AgentId, msg_id: str, *, error: str = "") -> None:
+    async def nack(self, agent_id: Actor, msg_id: str, *, error: str = "") -> None:
         k = self._key(agent_id)
         count = self._retries[k].get(msg_id, 0) + 1
         self._retries[k][msg_id] = count
@@ -346,10 +346,10 @@ class InMemoryInbox:
                     )
                 )
 
-    async def dead_letters(self, agent_id: AgentId) -> list[DeadLetterEntry]:
+    async def dead_letters(self, agent_id: Actor) -> list[DeadLetterEntry]:
         return list(self._dead[self._key(agent_id)])
 
-    async def pending_count(self, agent_id: AgentId) -> int:
+    async def pending_count(self, agent_id: Actor) -> int:
         return len(self._queues[self._key(agent_id)])
 
 
@@ -452,11 +452,11 @@ class TestRunRetryPolicy:
 
 class TestLease:
     def test_round_trip_json(self) -> None:
-        from substrate.kernel.core.identity import AgentId
+        from substrate.kernel.core.identity import Actor
 
         lease = Lease(
             run_id=new_run_id(),
-            agent_id=AgentId(type="agent", key="test"),
+            agent_id=Actor(role=ActorRole.AGENT, id="agent"),
             worker_id="worker-1",
             expires_at=datetime(2026, 12, 31, tzinfo=timezone.utc),
         )

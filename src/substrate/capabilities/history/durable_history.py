@@ -44,7 +44,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from substrate.kernel import ChatMessage, AgentId
+from substrate.kernel import ChatMessage, Actor
 from substrate.logger import setup_logging
 
 logger = setup_logging()
@@ -228,9 +228,9 @@ class DurableHistoryProvider:
 
     # -- HistoryProvider protocol (kernel contract) ---------------------------
 
-    def _session_key(self, agent_id: AgentId, session_id: str) -> str:
+    def _session_key(self, agent_id: Actor, session_id: str) -> str:
         """Derive the internal storage key for a (agent_id, session_id) pair."""
-        key = f"{agent_id.type}:{agent_id.key}:{session_id}"
+        key = f"{agent_id.role.value}:{agent_id.id}:{session_id}"
         if len(key) <= _MAX_STORAGE_SESSION_KEY_LENGTH:
             return key
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -238,7 +238,7 @@ class DurableHistoryProvider:
 
     async def append(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         message: ChatMessage,
         *,
         session_id: str,
@@ -250,7 +250,7 @@ class DurableHistoryProvider:
 
     async def append_many(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         messages: list[ChatMessage],
         *,
         session_id: str,
@@ -262,7 +262,7 @@ class DurableHistoryProvider:
 
     async def get_messages(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         *,
         session_id: str,
         limit: int | None = None,
@@ -272,13 +272,13 @@ class DurableHistoryProvider:
         storage_key = self._session_key(agent_id, session_id)
         return await self.load_messages(storage_key, limit=limit, offset=offset)
 
-    async def clear(self, agent_id: AgentId, *, session_id: str) -> None:
+    async def clear(self, agent_id: Actor, *, session_id: str) -> None:
         _validate_session_id(session_id)
         storage_key = self._session_key(agent_id, session_id)
         await self.clear_session(storage_key)
 
     async def clear_run(
-        self, agent_id: AgentId, *, session_id: str, run_id: str
+        self, agent_id: Actor, *, session_id: str, run_id: str
     ) -> None:
         _validate_session_id(session_id)
         storage_key = self._session_key(agent_id, session_id)
@@ -391,7 +391,7 @@ class DurableHistoryProvider:
                 session_obj.message_count = 0
             await db.commit()
 
-    async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int:
+    async def count_messages(self, agent_id: Actor, *, session_id: str) -> int:
         """Return the number of messages for *agent_id* in *session_id*."""
         _validate_session_id(session_id)
         storage_key = self._session_key(agent_id, session_id)

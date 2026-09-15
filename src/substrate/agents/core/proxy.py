@@ -10,7 +10,7 @@ to a ``ReActAgent`` via ``Runtime.submit()``.
 
 from __future__ import annotations
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import ActorRole, Actor
 from substrate.kernel.messaging.message import ChatPayload, Message
 
 from typing import TYPE_CHECKING
@@ -40,7 +40,7 @@ class UserProxyAgent:
     """
 
     def __init__(self, name: str = "proxy", *, key: str = "default") -> None:
-        self.id = AgentId(type="proxy", key=key)
+        self.id = Actor(role=ActorRole.PROXY, id=key)
         self.model = None  # no LLM needed
         self.tools = None  # no tools needed
 

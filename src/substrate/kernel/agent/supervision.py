@@ -220,13 +220,11 @@ class Supervision:
             "root_id": {
                 "type": self.root_id.type,
                 "key": self.root_id.key,
-                "namespace": self.root_id.namespace,
             },
             "parent_id": (
                 {
                     "type": self.parent_id.type,
                     "key": self.parent_id.key,
-                    "namespace": self.parent_id.namespace,
                 }
                 if self.parent_id
                 else None
@@ -256,13 +254,11 @@ class Supervision:
             root_id=AgentId(
                 type=root["type"],
                 key=root["key"],
-                namespace=root.get("namespace", "default"),
             ),
             parent_id=(
                 AgentId(
                     type=parent["type"],
                     key=parent["key"],
-                    namespace=parent.get("namespace", "default"),
                 )
                 if parent
                 else None

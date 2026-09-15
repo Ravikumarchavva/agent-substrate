@@ -12,36 +12,26 @@ class AgentId:
 
     ``type`` is the agent role name; ``key`` uniquely identifies the instance
     within that type (e.g. a session ID or a generated UUID).
-
-    ``namespace`` scopes agents in a multi-tenant deployment so that agents
-    in different tenants with the same type and key do not collide on shared
-    routing infrastructure (e.g. Redis pub/sub, NATS subjects).
     """
 
     type: str
     key: str
-    namespace: str = "default"
 
     def __str__(self) -> str:
-        if self.namespace == "default":
-            return f"{self.type}/{self.key}"
-        return f"{self.namespace}/{self.type}/{self.key}"
+        return f"{self.type}/{self.key}"
 
     @classmethod
-    def generate(cls, agent_type: str, *, namespace: str = "default") -> AgentId:
+    def generate(cls, agent_type: str) -> AgentId:
         """Create an AgentId with a random key."""
-        return cls(type=agent_type, key=uuid.uuid4().hex, namespace=namespace)
+        return cls(type=agent_type, key=uuid.uuid4().hex)
 
 
 @dataclass(frozen=True, slots=True)
 class TopicId:
     """Routing key for a pub/sub topic.
 
-    ``type`` identifies the topic category; ``source`` scopes it to a
-    particular origin (e.g. a run_id, a session, or a pipeline).
-
-    ``namespace`` scopes topics in a multi-tenant deployment to prevent
-    cross-tenant event bleed on shared message brokers.
+    ``type`` identifies the topic category; 
+    ``source`` scopes it to a particular origin (e.g. a run_id, a session, or a pipeline).
 
     Standard topic conventions:
         agent.progress / <run_id>   — all progress events for one execution run
@@ -50,12 +40,9 @@ class TopicId:
 
     type: str
     source: str = "default"
-    namespace: str = "default"
 
     def __str__(self) -> str:
-        if self.namespace == "default":
-            return f"{self.type}/{self.source}"
-        return f"{self.namespace}/{self.type}/{self.source}"
+        return f"{self.type}/{self.source}"
 
 
 __all__ = ["AgentId", "TopicId"]

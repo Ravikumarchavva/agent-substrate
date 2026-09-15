@@ -18,7 +18,7 @@ from substrate.kernel.core.content import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.llm.llm import GenerationOptions
 from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
 from substrate.kernel.tools import AnyTool
@@ -41,6 +41,7 @@ from substrate.agents.core._loop import (
     message_to_chat,
     persist_turns,
 )
+from substrate.kernel.core.identity import ActorRole
 
 if TYPE_CHECKING:
     from substrate.agents.runtime.context import Agent, RunContext
@@ -104,8 +105,8 @@ class OrchestratorAgent:
         spawn_budget: SpawnBudget | None = None,
         session_id: str | None = None,
     ) -> None:
-        self.id = AgentId(
-            type="agent", key=f"{name}-{session_id}" if session_id else name
+        self.id = Actor(
+            role=ActorRole.AGENT, id=f"{name}-{session_id}" if session_id else name
         )
         self.name = name
         self.model = model
@@ -183,8 +184,8 @@ class OrchestratorAgent:
                 await ctx._log(
                     "subagent.start",
                     {
-                        "agent": cfg.agent.id.key,
-                        "parent": self.id.key,
+                        "agent": cfg.agent.id.id,
+                        "parent": self.id.id,
                         "task": str(task_text)[:200],
                     },
                 )
@@ -218,8 +219,8 @@ class OrchestratorAgent:
                 await ctx._log(
                     "subagent.done",
                     {
-                        "agent": cfg.agent.id.key,
-                        "parent": self.id.key,
+                        "agent": cfg.agent.id.id,
+                        "parent": self.id.id,
                         "ok": outcome.kind == "replied",
                     },
                 )
@@ -268,9 +269,9 @@ class OrchestratorAgent:
     def _build_tools(self) -> list[AnyTool]:
         tools: list[AnyTool] = [
             _DelegateTool(
-                name=f"handoff_{cfg.agent.id.key}",
+                name=f"handoff_{cfg.agent.id.id}",
                 description=cfg.description
-                or f"Delegate to the {cfg.agent.id.key} sub-agent",
+                or f"Delegate to the {cfg.agent.id.id} sub-agent",
             )
             for cfg in self._sub_agents
         ]
@@ -278,7 +279,7 @@ class OrchestratorAgent:
 
     def _find_sub_agent_config(self, name: str) -> SubAgentConfig | None:
         for cfg in self._sub_agents:
-            if f"handoff_{cfg.agent.id.key}" == name or cfg.agent.id.key == name:
+            if f"handoff_{cfg.agent.id.id}" == name or cfg.agent.id.id == name:
                 return cfg
         return None
 

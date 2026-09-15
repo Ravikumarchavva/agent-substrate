@@ -11,7 +11,7 @@ are scoped to the agent.
 from __future__ import annotations
 
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.storage.memory import LongTermMemory, ShortTermMemory
 from substrate.kernel.tools import ToolExecutionResult
 from substrate.kernel import TextBlock
@@ -67,7 +67,7 @@ class MemoryTool:
 
     def __init__(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         session_id: str,
         *,
         short_term: ShortTermMemory | None = None,

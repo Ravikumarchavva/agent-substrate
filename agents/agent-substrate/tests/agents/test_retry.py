@@ -19,17 +19,18 @@ from substrate.agents.runtime import Runtime
 from substrate.agents.runtime.backends._event_log import InMemoryEventLog
 from substrate.agents.runtime.effect_cache import EffectCache
 from substrate.kernel.core.errors import PermanentError
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import DataPayload, Message
 from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.kernel.runtime.scheduler import RunRetryPolicy
+from substrate.kernel.core.identity import ActorRole
 
 
-def _agent_id(name: str) -> AgentId:
-    return AgentId(type=name, key="test")
+def _agent_id(name: str) -> Actor:
+    return Actor(role=ActorRole.AGENT, id=name)
 
 
-def _msg(target: AgentId) -> Message:
+def _msg(target: Actor) -> Message:
     return Message(target=target, payload=DataPayload(data={}))
 
 
@@ -44,7 +45,7 @@ class _FlakyAgent:
     """Fails via a generic (unclassified) exception on the first attempt,
     then succeeds — the classic transient-failure shape a retry should fix."""
 
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
         self.attempts = 0
 
@@ -57,7 +58,7 @@ class _FlakyAgent:
 class _AlwaysCrashingAgent:
     """Raises PermanentError unconditionally — never worth retrying."""
 
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
         self.attempts = 0
 

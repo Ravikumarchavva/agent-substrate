@@ -44,7 +44,7 @@ from __future__ import annotations
 
 from typing import Protocol, TypeVar, runtime_checkable
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 
 
@@ -113,7 +113,7 @@ class Agent(Protocol[CtxT]):
     ignore the type parameter, same as before this became generic.
     """
 
-    id: AgentId
+    id: Actor
 
     async def run(
         self,

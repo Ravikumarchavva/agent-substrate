@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from substrate.kernel.core.content import ChatMessage
 from substrate.kernel.storage.history import HistoryProvider
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 
 
 class InMemoryHistoryProvider:
@@ -15,7 +15,7 @@ class InMemoryHistoryProvider:
     """
 
     def __init__(self) -> None:
-        self._store: dict[tuple[AgentId, str], list[tuple[str, ChatMessage]]] = {}
+        self._store: dict[tuple[Actor, str], list[tuple[str, ChatMessage]]] = {}
 
     @staticmethod
     def _tag(message: ChatMessage, run_id: str) -> ChatMessage:
@@ -27,7 +27,7 @@ class InMemoryHistoryProvider:
 
     async def append(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         message: ChatMessage,
         *,
         session_id: str,
@@ -38,7 +38,7 @@ class InMemoryHistoryProvider:
 
     async def append_many(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         messages: list[ChatMessage],
         *,
         session_id: str,
@@ -49,7 +49,7 @@ class InMemoryHistoryProvider:
 
     async def get_messages(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         *,
         session_id: str,
         limit: int | None = None,
@@ -63,11 +63,11 @@ class InMemoryHistoryProvider:
             msgs = msgs[:limit]
         return msgs
 
-    async def clear(self, agent_id: AgentId, *, session_id: str) -> None:
+    async def clear(self, agent_id: Actor, *, session_id: str) -> None:
         self._store.pop((agent_id, session_id), None)
 
     async def clear_run(
-        self, agent_id: AgentId, *, session_id: str, run_id: str
+        self, agent_id: Actor, *, session_id: str, run_id: str
     ) -> None:
         key = (agent_id, session_id)
         if key in self._store:
@@ -75,7 +75,7 @@ class InMemoryHistoryProvider:
                 (rid, m) for rid, m in self._store[key] if rid != run_id
             ]
 
-    async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int:
+    async def count_messages(self, agent_id: Actor, *, session_id: str) -> int:
         """Return the number of stored messages for *agent_id* in *session_id*."""
         return len(self._store.get((agent_id, session_id), []))
 

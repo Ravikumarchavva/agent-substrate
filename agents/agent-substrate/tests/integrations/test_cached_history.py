@@ -5,7 +5,7 @@ import redis.exceptions
 
 from substrate.capabilities.history import CachedHistoryProvider, RedisHistoryProvider
 from substrate.agents.context import InMemoryHistoryProvider
-from substrate.kernel import AgentId
+from substrate.kernel import Actor, ActorRole
 from substrate.kernel.core.content import ChatMessage, TextBlock
 
 pytestmark = [pytest.mark.requires_redis]
@@ -23,7 +23,7 @@ async def test_write_propagates_to_cache():
     except (redis.exceptions.ConnectionError, OSError) as e:
         pytest.skip(f"Redis is not available: {e}")
 
-    agent_id = AgentId(type="user", key="cached-write-test")
+    agent_id = Actor(role=ActorRole.USER, id="cached-write-test")
     session_id = "cached-write-sess"
     cached = CachedHistoryProvider(cache=provider)
     try:
@@ -50,7 +50,7 @@ async def test_cache_miss_reseeds_from_cold_store_and_repopulates():
     except (redis.exceptions.ConnectionError, OSError) as e:
         pytest.skip(f"Redis is not available: {e}")
 
-    agent_id = AgentId(type="user", key="cached-miss-test")
+    agent_id = Actor(role=ActorRole.USER, id="cached-miss-test")
     session_id = "cached-miss-sess"
 
     cold_store_messages = [_msg("from cold store 1"), _msg("from cold store 2")]
@@ -83,7 +83,7 @@ async def test_cache_miss_reseeds_from_cold_store_and_repopulates():
 async def test_no_reseed_is_a_thin_passthrough():
     cache = InMemoryHistoryProvider()
     cached = CachedHistoryProvider(cache=cache)
-    agent_id = AgentId(type="user", key="passthrough-test")
+    agent_id = Actor(role=ActorRole.USER, id="passthrough-test")
     session_id = "passthrough-sess"
 
     assert await cached.get_messages(agent_id, session_id=session_id) == []
@@ -100,7 +100,7 @@ async def test_clear_run_propagates_to_cache():
     except (redis.exceptions.ConnectionError, OSError) as e:
         pytest.skip(f"Redis is not available: {e}")
 
-    agent_id = AgentId(type="user", key="cached-clear-run-test")
+    agent_id = Actor(role=ActorRole.USER, id="cached-clear-run-test")
     session_id = "cached-clear-run-sess"
     cached = CachedHistoryProvider(cache=provider)
     try:

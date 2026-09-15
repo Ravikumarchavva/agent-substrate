@@ -37,7 +37,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 
 
@@ -56,7 +56,7 @@ class DeadLetterEntry(BaseModel):
     error string from ``nack()``.
     """
 
-    agent_id: AgentId
+    agent_id: Actor
     msg: Message
     reason: DeadLetterReason
     attempts: int
@@ -74,7 +74,7 @@ class InboxProtocol(Protocol):
     """
 
     async def deliver(
-        self, agent_id: AgentId, msg: Message, *, notify: bool = True
+        self, agent_id: Actor, msg: Message, *, notify: bool = True
     ) -> bool:
         """Deliver ``msg`` to ``agent_id``'s inbox.
 
@@ -88,7 +88,7 @@ class InboxProtocol(Protocol):
         """
         ...
 
-    async def drain(self, agent_id: AgentId, *, max: int = 100) -> list[Message]:
+    async def drain(self, agent_id: Actor, *, max: int = 100) -> list[Message]:
         """Return up to ``max`` pending messages in per-sender FIFO order.
 
         Does not ack them — the caller must call ``ack`` or ``nack`` for
@@ -97,13 +97,13 @@ class InboxProtocol(Protocol):
         """
         ...
 
-    async def ack(self, agent_id: AgentId, msg_id: str) -> None:
+    async def ack(self, agent_id: Actor, msg_id: str) -> None:
         """Mark ``msg_id`` as successfully processed and remove it from the inbox."""
         ...
 
     async def nack(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         msg_id: str,
         *,
         error: str = "",
@@ -116,11 +116,11 @@ class InboxProtocol(Protocol):
         """
         ...
 
-    async def dead_letters(self, agent_id: AgentId) -> list[DeadLetterEntry]:
+    async def dead_letters(self, agent_id: Actor) -> list[DeadLetterEntry]:
         """Return all dead-lettered messages for ``agent_id``."""
         ...
 
-    async def pending_count(self, agent_id: AgentId) -> int:
+    async def pending_count(self, agent_id: Actor) -> int:
         """Return the number of unacked messages in ``agent_id``'s inbox."""
         ...
 

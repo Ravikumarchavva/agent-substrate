@@ -10,7 +10,7 @@ from substrate.kernel.core.content import (
     TextBlock,
     content_blocks_to_str,
 )
-from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
 from substrate.kernel.llm.llm import GenerationOptions
 
@@ -68,7 +68,7 @@ async def log_user_message(
 
 
 async def load_history(
-    ctx_cfg: ContextConfig, agent_id: AgentId, session_id: str
+    ctx_cfg: ContextConfig, agent_id: Actor, session_id: str
 ) -> list[ChatMessage]:
     """Load session history and apply the compaction pipeline."""
     raw = await ctx_cfg.history.get_messages(agent_id, session_id=session_id)
@@ -77,7 +77,7 @@ async def load_history(
 
 async def persist_turns(
     ctx_cfg: ContextConfig,
-    agent_id: AgentId,
+    agent_id: Actor,
     session_id: str,
     run_id: str,
     new_turns: list[ChatMessage],
@@ -101,8 +101,8 @@ async def deliver(
     src_msg: Message,
     result: dict[str, Any],
     *,
-    sender: AgentId,
-    output_topic: TopicId | None = None,
+    sender: Actor,
+    output_topic: Topic | None = None,
 ) -> None:
     """Deliver a result back to the sender or emit it to a topic."""
     session_id = src_msg.correlation_id or ctx.run_id

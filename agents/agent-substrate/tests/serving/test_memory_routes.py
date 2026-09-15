@@ -10,7 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from substrate.capabilities.memory.durable_memory_store import DurableMemoryStore
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import ActorRole, Actor
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims
@@ -26,10 +26,10 @@ async def test_list_memories_returns_only_this_users_facts() -> None:
         store: DurableMemoryStore = app.state.ctx.long_term_memory
         suffix = uuid.uuid4().hex
         user_a, user_b = f"memroute-user-a-{suffix}", f"memroute-user-b-{suffix}"
-        await store.clear(AgentId(type="user", key=user_a))
-        await store.clear(AgentId(type="user", key=user_b))
-        await store.save(AgentId(type="user", key=user_a), "Always answer in French")
-        await store.save(AgentId(type="user", key=user_b), "Not user a's memory")
+        await store.clear(Actor(role=ActorRole.USER, id=user_a))
+        await store.clear(Actor(role=ActorRole.USER, id=user_b))
+        await store.save(Actor(role=ActorRole.USER, id=user_a), "Always answer in French")
+        await store.save(Actor(role=ActorRole.USER, id=user_b), "Not user a's memory")
 
         app.dependency_overrides[get_current_user] = lambda: _claims_for(user_a)
         try:
@@ -43,8 +43,8 @@ async def test_list_memories_returns_only_this_users_facts() -> None:
                 assert bodies[0]["content"] == "Always answer in French"
         finally:
             app.dependency_overrides.pop(get_current_user, None)
-            await store.clear(AgentId(type="user", key=user_a))
-            await store.clear(AgentId(type="user", key=user_b))
+            await store.clear(Actor(role=ActorRole.USER, id=user_a))
+            await store.clear(Actor(role=ActorRole.USER, id=user_b))
 
 
 @pytest.mark.requires_postgres
@@ -52,8 +52,8 @@ async def test_delete_memory_removes_it() -> None:
     async with app.router.lifespan_context(app):
         store: DurableMemoryStore = app.state.ctx.long_term_memory
         user_id = f"memroute-delete-user-{uuid.uuid4().hex}"
-        await store.clear(AgentId(type="user", key=user_id))
-        mem_id = await store.save(AgentId(type="user", key=user_id), "delete me")
+        await store.clear(Actor(role=ActorRole.USER, id=user_id))
+        mem_id = await store.save(Actor(role=ActorRole.USER, id=user_id), "delete me")
 
         app.dependency_overrides[get_current_user] = lambda: _claims_for(user_id)
         try:
@@ -67,7 +67,7 @@ async def test_delete_memory_removes_it() -> None:
                 assert remaining.json() == []
         finally:
             app.dependency_overrides.pop(get_current_user, None)
-            await store.clear(AgentId(type="user", key=user_id))
+            await store.clear(Actor(role=ActorRole.USER, id=user_id))
 
 
 @pytest.mark.requires_postgres
@@ -78,9 +78,9 @@ async def test_delete_memory_owned_by_another_user_is_not_found() -> None:
         store: DurableMemoryStore = app.state.ctx.long_term_memory
         suffix = uuid.uuid4().hex
         owner, attacker = f"memroute-owner-{suffix}", f"memroute-attacker-{suffix}"
-        await store.clear(AgentId(type="user", key=owner))
-        await store.clear(AgentId(type="user", key=attacker))
-        mem_id = await store.save(AgentId(type="user", key=owner), "owner's secret")
+        await store.clear(Actor(role=ActorRole.USER, id=owner))
+        await store.clear(Actor(role=ActorRole.USER, id=attacker))
+        mem_id = await store.save(Actor(role=ActorRole.USER, id=owner), "owner's secret")
 
         app.dependency_overrides[get_current_user] = lambda: _claims_for(attacker)
         try:
@@ -90,11 +90,11 @@ async def test_delete_memory_owned_by_another_user_is_not_found() -> None:
                 resp = await client.delete(f"/me/memories/{mem_id}")
                 assert resp.status_code == 404
 
-            assert await store.get(AgentId(type="user", key=owner), mem_id) is not None
+            assert await store.get(Actor(role=ActorRole.USER, id=owner), mem_id) is not None
         finally:
             app.dependency_overrides.pop(get_current_user, None)
-            await store.clear(AgentId(type="user", key=owner))
-            await store.clear(AgentId(type="user", key=attacker))
+            await store.clear(Actor(role=ActorRole.USER, id=owner))
+            await store.clear(Actor(role=ActorRole.USER, id=attacker))
 
 
 @pytest.mark.requires_postgres

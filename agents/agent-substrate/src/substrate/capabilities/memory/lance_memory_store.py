@@ -34,7 +34,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.storage.memory import Memory
 
 
@@ -114,12 +114,12 @@ class LanceLongTermMemory:
         )
 
     @staticmethod
-    def _agent_key(agent_id: AgentId) -> tuple[str, str]:
-        return (agent_id.type, agent_id.key)
+    def _agent_key(agent_id: Actor) -> tuple[str, str]:
+        return (agent_id.role.value, agent_id.id)
 
     async def save(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         content: str,
         *,
         namespace: str = "default",
@@ -151,7 +151,7 @@ class LanceLongTermMemory:
 
     async def search(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         query: str,
         *,
         namespace: str = "default",
@@ -175,7 +175,7 @@ class LanceLongTermMemory:
 
     async def get(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         memory_id: str,
         *,
         namespace: str = "default",
@@ -189,7 +189,7 @@ class LanceLongTermMemory:
 
     async def delete(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         memory_id: str,
         *,
         namespace: str = "default",
@@ -203,7 +203,7 @@ class LanceLongTermMemory:
         after = await table.count_rows()
         return after < before
 
-    async def clear(self, agent_id: AgentId, *, namespace: str = "default") -> None:
+    async def clear(self, agent_id: Actor, *, namespace: str = "default") -> None:
         db = await self._connection()
         if self._table_name not in await self._table_names(db):
             return

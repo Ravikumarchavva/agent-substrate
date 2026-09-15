@@ -580,7 +580,7 @@ def build_research_orchestrator(
             InMemoryHistoryProvider(), pipeline=build_token_budget_pipeline()
         ),
     )
-    # Display names only — AgentId routing keys stay lowercase (unchanged
+    # Display names only — Actor routing keys stay lowercase (unchanged
     # from before this was extracted from infrastructure/serving_factory.py).
     researcher.name = "Researcher"
     calculator.name = "Calculator"

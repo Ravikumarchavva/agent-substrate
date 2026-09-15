@@ -14,15 +14,15 @@ import asyncio
 
 from substrate.agents.runtime import Runtime
 from substrate.kernel.agent.supervision import HistoryRetention
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import ActorRole, Actor
 from substrate.kernel.messaging.message import DataPayload, Message
 
 
-def _agent_id(name: str) -> AgentId:
-    return AgentId(type="agent", key=name)
+def _agent_id(name: str) -> Actor:
+    return Actor(role=ActorRole.AGENT, id=name)
 
 
-def _msg(target: AgentId) -> Message:
+def _msg(target: Actor) -> Message:
     return Message(target=target, payload=DataPayload(data={}))
 
 

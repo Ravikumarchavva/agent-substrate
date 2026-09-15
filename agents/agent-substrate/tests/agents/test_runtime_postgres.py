@@ -17,9 +17,10 @@ import uuid
 
 import pytest
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import DataPayload, Message
 from substrate.kernel.runtime.communication import AskOutcome
+from substrate.kernel.core.identity import ActorRole
 
 pytestmark = [pytest.mark.requires_postgres]
 
@@ -55,14 +56,14 @@ async def pg_runtime():
 # ---------------------------------------------------------------------------
 
 
-def _agent_id(name: str) -> AgentId:
+def _agent_id(name: str) -> Actor:
     # id(object()) is not safe here: CPython reuses freed memory addresses,
     # so two unrelated tests can collide on the same "unique" key and trip
     # each other's thread-singleflight guard. uuid4 is actually unique.
-    return AgentId(type=name, key=f"pg-test-{uuid.uuid4().hex}")
+    return Actor(role=ActorRole.AGENT, id=f"pg-test-{uuid.uuid4().hex}")
 
 
-def _msg(target: AgentId, data: dict | None = None) -> Message:
+def _msg(target: Actor, data: dict | None = None) -> Message:
     return Message(target=target, payload=DataPayload(data=data or {}))
 
 
@@ -72,7 +73,7 @@ def _msg(target: AgentId, data: dict | None = None) -> Message:
 
 
 class RecorderAgent:
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
         self.received: list[Message] = []
         self.done = asyncio.Event()
@@ -83,7 +84,7 @@ class RecorderAgent:
 
 
 class EchoAgent:
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
 
     async def run(self, ctx: object, inbox: list[Message]) -> None:
@@ -100,7 +101,7 @@ class EchoAgent:
 
 
 class AskerAgent:
-    def __init__(self, agent_id: AgentId, target: AgentId) -> None:
+    def __init__(self, agent_id: Actor, target: Actor) -> None:
         self.id = agent_id
         self.target = target
         self.outcome: AskOutcome | None = None
@@ -189,7 +190,7 @@ async def test_pg_ask_reply(pg_runtime) -> None:
 
 
 class ChildAgent:
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
 
     async def run(self, ctx: object, inbox: list[Message]) -> None:
@@ -197,7 +198,7 @@ class ChildAgent:
 
 
 class ParentJoinAgent:
-    def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor, child_id: Actor) -> None:
         self.id = agent_id
         self.child_id = child_id
         self.done = asyncio.Event()
@@ -235,7 +236,7 @@ class CrashingChildAgent:
     fast-path fires on the first crash instead of backing off for retries
     that would just crash identically again."""
 
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
 
     async def run(self, ctx: object, inbox: list[Message]) -> None:
@@ -245,7 +246,7 @@ class CrashingChildAgent:
 
 
 class ParentJoinCrashAgent:
-    def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor, child_id: Actor) -> None:
         self.id = agent_id
         self.child_id = child_id
         self.done = asyncio.Event()
@@ -304,7 +305,7 @@ class _StubBridge:
 class StreamingAgent:
     """Logs the wire-relevant event kinds, exactly as ctx.llm()/ctx.tool() would."""
 
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
 
     async def run(self, ctx: object, inbox: list[Message]) -> None:
@@ -483,7 +484,7 @@ async def test_pg_cold_resume() -> None:
     class EchoSpecAgent:
         """Completes immediately after one message."""
 
-        def __init__(self, aid: AgentId) -> None:
+        def __init__(self, aid: Actor) -> None:
             self.id = aid
 
         async def run(self, ctx: object, inbox: list[Message]) -> None:
@@ -725,7 +726,7 @@ async def test_pg_spawn_denied_once_headcount_cap_reached() -> None:
         await supervisor.setup()
 
         spawn_effect_ids: list[str] = []
-        children: list[AgentId] = []
+        children: list[Actor] = []
 
         # root counts as 1; max_agents=3 allows exactly 2 more spawns.
         for i in range(2):
@@ -756,7 +757,7 @@ async def test_pg_spawn_denied_once_headcount_cap_reached() -> None:
             )
 
         # Replay of an already-recorded spawn (same path AND same child
-        # AgentId, matching the effect_id exactly) must still succeed even
+        # Actor, matching the effect_id exactly) must still succeed even
         # though the budget is now fully consumed.
         replay_child = children[0]
         replayed = await supervisor.spawn(
@@ -921,7 +922,7 @@ async def test_pg_tool_approval_survives_full_pool_close_and_reopen() -> None:
 class SleepForeverAgent:
     """Suspends on a signal that never arrives — stays SUSPENDED indefinitely."""
 
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
 
     async def run(self, ctx: object, inbox: list[Message]) -> None:
@@ -931,7 +932,7 @@ class SleepForeverAgent:
 class SpawnChainAgent:
     """Spawns one SleepForeverAgent child and reports the handle via the event."""
 
-    def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor, child_id: Actor) -> None:
         self.id = agent_id
         self.child_id = child_id
         self.spawned = asyncio.Event()
@@ -1004,7 +1005,7 @@ async def test_pg_cancel_cascade(pg_runtime) -> None:
 class BusyAgent:
     """Holds its lease with a real RUNNING status — no suspend — until told to stop."""
 
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
         self.started = asyncio.Event()
         self.stop = asyncio.Event()
@@ -1070,7 +1071,7 @@ class DeadlineAgent:
     deadline-enforcement test (deadline is set directly via SQL, mirroring
     the plan's own verification approach: "fire signal via bare DB write")."""
 
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
 
     async def run(self, ctx: object, inbox: list[Message]) -> None:
@@ -1117,12 +1118,12 @@ async def test_pg_deadline_enforcement(pg_runtime) -> None:
 
 
 class SpawnThenAskAgent:
-    """Spawns a child (so ctx.ask gets a RunHandle, not a bare AgentId) and
+    """Spawns a child (so ctx.ask gets a RunHandle, not a bare Actor) and
     asks it with a deliberately generous timeout — the crash fast-path
     (child:{run_id} in ask()'s wait_names) must resolve long before that
     timeout, not wait it out."""
 
-    def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor, child_id: Actor) -> None:
         self.id = agent_id
         self.child_id = child_id
         self.done = asyncio.Event()
@@ -1147,7 +1148,7 @@ async def test_pg_ask_crash_fast_path(pg_runtime) -> None:
     class CrashingAgent:
         """Crashes unconditionally — PermanentError, see CrashingChildAgent."""
 
-        def __init__(self, agent_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor) -> None:
             self.id = agent_id
 
         async def run(self, ctx: object, inbox: list[Message]) -> None:
@@ -1284,7 +1285,7 @@ async def test_pg_thread_single_flight(pg_runtime) -> None:
     agent = SleepForeverAgent(agent_id)
     await pg_runtime.register(agent)
 
-    thread_id = f"thread-{agent_id.key}"
+    thread_id = f"thread-{agent_id.id}"
     run_id_1 = await pg_runtime.submit(
         agent_id, _msg(agent_id, {}), thread_id=thread_id
     )
@@ -1319,7 +1320,7 @@ async def test_pg_thread_single_flight_frees_after_completion(pg_runtime) -> Non
     agent = RecorderAgent(agent_id)
     await pg_runtime.register(agent)
 
-    thread_id = f"thread-{agent_id.key}"
+    thread_id = f"thread-{agent_id.id}"
     await pg_runtime.submit(agent_id, _msg(agent_id, {}), thread_id=thread_id)
     await asyncio.wait_for(agent.done.wait(), timeout=8.0)
 
@@ -1503,7 +1504,7 @@ async def test_pg_spawn_inherits_execution_budget(pg_runtime) -> None:
     from substrate.kernel.agent.supervision import ExecutionBudget, Supervision
 
     class GrandchildAgent:
-        def __init__(self, agent_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor) -> None:
             self.id = agent_id
             self.seen_max_tokens = "unset"
             self.done = asyncio.Event()
@@ -1514,7 +1515,7 @@ async def test_pg_spawn_inherits_execution_budget(pg_runtime) -> None:
             self.done.set()
 
     class ChildAgent:
-        def __init__(self, agent_id: AgentId, grandchild_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor, grandchild_id: Actor) -> None:
             self.id = agent_id
             self.grandchild_id = grandchild_id
 
@@ -1523,7 +1524,7 @@ async def test_pg_spawn_inherits_execution_budget(pg_runtime) -> None:
             await ctx.spawn(self.grandchild_id, boot=boot)  # type: ignore[attr-defined]
 
     class RootAgent:
-        def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor, child_id: Actor) -> None:
             self.id = agent_id
             self.child_id = child_id
 
@@ -1563,7 +1564,7 @@ async def test_pg_flaky_retry_genuinely_re_executes(pg_runtime) -> None:
     from substrate.kernel.runtime.scheduler import RunRetryPolicy
 
     class FlakyAgent:
-        def __init__(self, agent_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor) -> None:
             self.id = agent_id
             self.attempts = 0
 
@@ -1596,7 +1597,7 @@ async def test_pg_permanent_error_skips_retry(pg_runtime) -> None:
     from substrate.kernel.runtime.scheduler import RunRetryPolicy
 
     class AlwaysCrashingAgent:
-        def __init__(self, agent_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor) -> None:
             self.id = agent_id
             self.attempts = 0
 
@@ -1651,7 +1652,7 @@ async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
     from substrate.agents.core.react import ReActAgent
 
     agent1 = ReActAgent("pg-crash-resume-agent", model=ScriptedLLM("first answer"))
-    thread_id = f"thread-crash-resume-{_agent_id('x').key}"
+    thread_id = f"thread-crash-resume-{_agent_id('x').id}"
 
     await pg_runtime.register(agent1)
     msg1 = Message(

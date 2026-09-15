@@ -21,7 +21,7 @@ import asyncio
 from collections import defaultdict
 from typing import TYPE_CHECKING, AsyncIterator
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from substrate.kernel.runtime.supervisor import RunHandle, RunResult
@@ -58,7 +58,7 @@ class InMemorySupervisor:
 
     async def spawn(
         self,
-        child_agent: AgentId,
+        child_agent: Actor,
         *,
         parent: RunId,
         supervision: Supervision,

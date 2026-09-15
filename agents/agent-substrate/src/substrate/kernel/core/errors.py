@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 
 if TYPE_CHECKING:
     from substrate.kernel.runtime.wakeup import Wakeup
@@ -38,7 +38,7 @@ class AgentCrashError(KernelError):
         message: str,
         *,
         run_id: str,
-        agent_id: AgentId,
+        agent_id: Actor,
     ) -> None:
         super().__init__(message)
         self.run_id = run_id

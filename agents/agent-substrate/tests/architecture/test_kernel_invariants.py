@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from substrate.kernel.core.identity import ActorRole
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 KERNEL_DIR = REPO_ROOT / "src" / "substrate" / "kernel"
@@ -152,11 +153,11 @@ def test_kernel_has_no_vendor_strings() -> None:
 
 def test_message_round_trip() -> None:
     """Message must serialize/deserialize cleanly via model_dump_json()."""
-    from substrate.kernel.core.identity import AgentId
+    from substrate.kernel.core.identity import Actor
     from substrate.kernel.core.content import TextBlock, ChatMessage
     from substrate.kernel.messaging.message import Message, ChatPayload
 
-    agent = AgentId(type="assistant", key="test")
+    agent = Actor(role=ActorRole.AGENT, id="assistant")
     chat = ChatMessage(role="user", content=[TextBlock(text="hello")])
     payload = ChatPayload(message=chat)
     msg = Message(target=agent, payload=payload, sender=agent)

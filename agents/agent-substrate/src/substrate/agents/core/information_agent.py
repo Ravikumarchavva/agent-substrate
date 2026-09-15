@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from substrate.kernel.core.content import content_blocks_to_str
-from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.core.identity import ActorRole, Actor, Topic
 from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
 
 from substrate.agents.core._loop import summarize
@@ -36,7 +36,7 @@ class InformationAgent:
     model:
         LLMClient for summarization.
     output_topic:
-        TopicId to emit summaries to.  Followers (PersonalFeedAgents) wake
+        Topic to emit summaries to.  Followers (PersonalFeedAgents) wake
         on delivery.
     system_instructions:
         System prompt for the summarization step.
@@ -50,11 +50,11 @@ class InformationAgent:
         name: str,
         *,
         model: LLMClient,
-        output_topic: TopicId,
+        output_topic: Topic,
         system_instructions: str = "Summarize the following content concisely.",
         source_signal: str = "new_source_item",
     ) -> None:
-        self.id = AgentId(type="agent", key=name)
+        self.id = Actor(role=ActorRole.AGENT, id=name)
         self.model = model
         self.tools = None  # producer doesn't need tools
         self._output_topic = output_topic

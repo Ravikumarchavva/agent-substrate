@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from substrate.kernel.core.content import ChatMessage
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 
 
 class CompactionStrategy(Protocol):
@@ -31,6 +31,6 @@ class AgentContextProtocol(Protocol):
     """
 
     @property
-    def agent_id(self) -> AgentId: ...
+    def agent_id(self) -> Actor: ...
 
     async def get_prompt_window(self, session_id: str) -> list[ChatMessage]: ...

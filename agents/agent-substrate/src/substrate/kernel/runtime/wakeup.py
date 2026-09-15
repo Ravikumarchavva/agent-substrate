@@ -40,7 +40,7 @@ class Wakeup(BaseModel):
 
     Fields by kind
     --------------
-    message:    ``source_run`` — the AgentId/RunId that sent the message (informational)
+    message:    ``source_run`` — the Actor/RunId that sent the message (informational)
     timer:      ``at`` — the datetime that expired
     signal:     ``signals`` — the signal name(s) being waited on (a wait can watch
                 more than one name at once, e.g. ``ask()`` waits on both a reply

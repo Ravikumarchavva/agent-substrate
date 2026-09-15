@@ -18,7 +18,7 @@ agents:
 
 Relationship to existing primitives
 ------------------------------------
-``TopicId`` and ``Subscription`` (``kernel/message.py``) are reused as-is —
+``Topic`` and ``Subscription`` (``kernel/message.py``) are reused as-is —
 they are the identity and record types.  ``FollowGraph`` is the durable store
 that keeps the graph alive across restarts and provides the fan-out query
 (``followers_of``).  ``FanoutStrategy`` (``kernel/runtime/fanout.py``) uses
@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import AsyncIterator, Protocol
 
-from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import Subscription
 
 
@@ -51,8 +51,8 @@ class FollowGraph(Protocol):
 
     async def follow(
         self,
-        follower: AgentId,
-        topic: TopicId,
+        follower: Actor,
+        topic: Topic,
     ) -> Subscription:
         """Subscribe ``follower`` to ``topic``.
 
@@ -68,7 +68,7 @@ class FollowGraph(Protocol):
         """
         ...
 
-    def followers_of(self, topic: TopicId) -> AsyncIterator[AgentId]:
+    def followers_of(self, topic: Topic) -> AsyncIterator[Actor]:
         """Yield all agents currently subscribed to ``topic``.
 
         Returns an async iterator directly (not a coroutine), matching
@@ -79,7 +79,7 @@ class FollowGraph(Protocol):
         """
         ...
 
-    def following(self, agent: AgentId) -> AsyncIterator[TopicId]:
+    def following(self, agent: Actor) -> AsyncIterator[Topic]:
         """Yield all topics that ``agent`` is currently subscribed to."""
         ...
 

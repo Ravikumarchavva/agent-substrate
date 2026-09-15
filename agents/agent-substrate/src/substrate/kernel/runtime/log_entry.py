@@ -24,7 +24,7 @@ Standard ``kind`` values
 ``msg.received``    — message delivered to inbox and drained
 ``tool.called``     — tool invocation; payload carries Effect.id + spec
 ``tool.result``     — tool result journaled; payload carries EffectResult
-``child.spawned``   — subagent spawned; payload carries child RunId + AgentId
+``child.spawned``   — subagent spawned; payload carries child RunId + Actor
 ``child.completed`` — child reached terminal state; payload carries RunResult ref
 ``run.suspended``   — run going dormant; payload carries Wakeup
 ``run.completed``   — terminal success; payload carries output

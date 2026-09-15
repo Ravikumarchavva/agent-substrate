@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from substrate.kernel.core.identity import TopicId
+from substrate.kernel.core.identity import Topic
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.runtime.follow_graph import FollowGraph
 from substrate.kernel.runtime.inbox import InboxProtocol
@@ -43,7 +43,7 @@ class FanoutStrategy(Protocol):
 
     async def publish(
         self,
-        topic: TopicId,
+        topic: Topic,
         msg: Message,
         *,
         graph: FollowGraph,

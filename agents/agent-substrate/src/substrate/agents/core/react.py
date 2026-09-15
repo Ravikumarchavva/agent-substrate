@@ -12,7 +12,7 @@ from substrate.kernel.core.content import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.llm.llm import GenerationOptions, LLMResponse
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.storage.history import HistoryProvider
@@ -46,6 +46,7 @@ from substrate.agents.core._loop import (
     message_to_chat,
     persist_turns,
 )
+from substrate.kernel.core.identity import ActorRole
 
 if TYPE_CHECKING:
     from substrate.agents.runtime.context import RunContext
@@ -80,7 +81,7 @@ class ReActAgent:
         context: ContextConfig | None = None,
         system_instructions: str = "",
         max_iterations: int = 10,
-        output_topic: TopicId | None = None,
+        output_topic: Topic | None = None,
         approval_handler: ApprovalHandler | None = None,
         approval_required_risk: ToolRisk | None = None,
         execution_budget: ExecutionTracker | None = None,
@@ -89,8 +90,8 @@ class ReActAgent:
         initial_tool_choice: str | None = None,
         session_id: str | None = None,
     ) -> None:
-        self.id = AgentId(
-            type="agent", key=f"{name}-{session_id}" if session_id else name
+        self.id = Actor(
+            role=ActorRole.AGENT, id=f"{name}-{session_id}" if session_id else name
         )
         self.name = name
         self.model = model

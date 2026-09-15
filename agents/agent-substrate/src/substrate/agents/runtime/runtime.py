@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from substrate.agents.core.orchestrator import SubAgentConfig
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import ActorRole, Actor
 from substrate.kernel.messaging.message import Message
 from substrate.agents.runtime.context import Agent
 from substrate.kernel.runtime.fanout import FanoutStrategy
@@ -109,10 +109,10 @@ class Runtime:
             self._scheduler  # type: ignore[arg-type]
         )
         self._supervisor: SupervisorProtocol | None = supervisor
-        self._registry: dict[AgentId, Agent] = {}
+        self._registry: dict[Actor, Agent] = {}
         self._worker: Worker | None = None
 
-    def _on_inbox_deliver(self, agent_id: AgentId) -> None:
+    def _on_inbox_deliver(self, agent_id: Actor) -> None:
         """Sync hook called by InboxProtocol.deliver(); schedules an async dispatch task."""
         import asyncio
 
@@ -124,7 +124,7 @@ class Runtime:
             lambda: asyncio.create_task(self._handle_inbox_delivery(agent_id))
         )
 
-    async def _handle_inbox_delivery(self, agent_id: AgentId) -> None:
+    async def _handle_inbox_delivery(self, agent_id: Actor) -> None:
         """Async: decide whether to wake a suspended run or spawn a fresh one.
 
         - Suspended run → wake it.
@@ -142,7 +142,7 @@ class Runtime:
         if status == RunStatus.SUSPENDED:
             await self._scheduler.wake_suspended(run_id)
 
-    async def _spawn_run_for_inbox(self, agent_id: AgentId) -> None:
+    async def _spawn_run_for_inbox(self, agent_id: Actor) -> None:
         """Create a fresh run so a queued inbox message gets processed."""
         run_id = new_run_id()
         self._scheduler.register_run(run_id, agent_id)
@@ -168,7 +168,7 @@ class Runtime:
 
     async def submit(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         msg: Message,
         *,
         priority: int = 5,
@@ -245,7 +245,7 @@ class Runtime:
         await self.register(agent)
         msg = Message(
             target=agent.id,
-            sender=AgentId(type="user", key="run"),
+            sender=Actor(role=ActorRole.USER, id="run"),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
             ),
@@ -312,7 +312,7 @@ class Runtime:
         sentinel = new_run_id()
         msg = Message(
             target=agent.id,
-            sender=AgentId(type="user", key="ask"),
+            sender=Actor(role=ActorRole.USER, id="ask"),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
             ),
@@ -338,20 +338,20 @@ class Runtime:
         )
 
     async def follow(
-        self, follower: AgentId, topic_type: str, topic_source: str
+        self, follower: Actor, topic_type: str, topic_source: str
     ) -> None:
         """Subscribe ``follower`` to a topic."""
-        from substrate.kernel.core.identity import TopicId
+        from substrate.kernel.core.identity import Topic
 
         await self._follow_graph.follow(
-            follower, TopicId(type=topic_type, source=topic_source)
+            follower, Topic(f"{topic_type}/{topic_source}")
         )
 
     async def publish(self, topic_type: str, topic_source: str, msg: Message) -> None:
         """Publish ``msg`` to all followers of a topic."""
-        from substrate.kernel.core.identity import TopicId
+        from substrate.kernel.core.identity import Topic
 
-        topic = TopicId(type=topic_type, source=topic_source)
+        topic = Topic(f"{topic_type}/{topic_source}")
         await self._fanout.publish(
             topic, msg, graph=self._follow_graph, inbox=self._inbox
         )

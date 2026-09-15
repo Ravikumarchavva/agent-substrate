@@ -6,7 +6,7 @@ from substrate.kernel.core.content import ChatMessage
 from substrate.kernel.agent.context import AgentContextProtocol
 from substrate.kernel.agent.supervision import HistoryRetention
 from substrate.kernel.storage.history import HistoryProvider
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.logger import setup_logging
 from .compaction import SlidingWindowCompaction, CompactionPipeline
 
@@ -86,7 +86,7 @@ class AgentContext:
 
     def __init__(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         history: HistoryProvider,
         pipeline: CompactionPipeline,
     ) -> None:
@@ -95,7 +95,7 @@ class AgentContext:
         self._pipeline = pipeline
 
     @property
-    def agent_id(self) -> AgentId:
+    def agent_id(self) -> Actor:
         return self._agent_id
 
     @property

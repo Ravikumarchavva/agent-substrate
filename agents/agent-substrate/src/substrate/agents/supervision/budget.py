@@ -39,7 +39,7 @@ from __future__ import annotations
 import threading
 
 from substrate.kernel.core.errors import BudgetExhaustedError
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.agent.supervision import Priority, SpawnBudget
 
 
@@ -58,13 +58,13 @@ class SpawnTracker:
     def __init__(self, spawn_budget: SpawnBudget) -> None:
         self._max_agents = spawn_budget.max_agents
         self._total = 1  # root agent already counts as 1
-        self._active: dict[AgentId, Priority] = {}  # agent → its current priority
-        self._paused: set[AgentId] = set()  # cooperative pause signals
+        self._active: dict[Actor, Priority] = {}  # agent → its current priority
+        self._paused: set[Actor] = set()  # cooperative pause signals
         self._lock = threading.Lock()
 
     # -- Acquisition ---------------------------------------------------------
 
-    def acquire(self, agent_id: AgentId, priority: Priority = Priority.NORMAL) -> None:
+    def acquire(self, agent_id: Actor, priority: Priority = Priority.NORMAL) -> None:
         """Reserve a slot for *agent_id* at *priority*.
 
         If the pool has room, grants the slot immediately.
@@ -108,7 +108,7 @@ class SpawnTracker:
 
     # -- Release -------------------------------------------------------------
 
-    def release(self, agent_id: AgentId) -> None:
+    def release(self, agent_id: Actor) -> None:
         """Return *agent_id*'s slot to the pool.
 
         Removes from active tracking and the pause set (if present).
@@ -123,7 +123,7 @@ class SpawnTracker:
 
     # -- Cooperative pause check --------------------------------------------
 
-    def is_paused(self, agent_id: AgentId) -> bool:
+    def is_paused(self, agent_id: Actor) -> bool:
         """Return True if *agent_id* has been issued a cooperative pause signal.
 
         A caller that wants cooperative preemption (stop spawning new work,
@@ -135,7 +135,7 @@ class SpawnTracker:
 
     # -- Dynamic reprioritization --------------------------------------------
 
-    def reprioritize(self, agent_id: AgentId, new_priority: Priority) -> None:
+    def reprioritize(self, agent_id: Actor, new_priority: Priority) -> None:
         """Change *agent_id*'s priority mid-run.
 
         If demoted below NORMAL and the pool is at capacity, the agent is
@@ -159,7 +159,7 @@ class SpawnTracker:
         """Current total agent count in the run (including root)."""
         return self._total
 
-    def priority_of(self, agent_id: AgentId) -> Priority | None:
+    def priority_of(self, agent_id: Actor) -> Priority | None:
         """Return the current priority of *agent_id*, or None if not active."""
         with self._lock:
             return self._active.get(agent_id)

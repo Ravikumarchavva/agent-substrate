@@ -23,7 +23,7 @@ from substrate.console.stream_adapter import (
 from substrate.console.subagents import SubagentTracker
 from substrate.console.status import StatusLine
 from substrate.console.theme import DEFAULT_THEME
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import ActorRole, Actor
 from substrate.kernel.messaging.stream import (
     AgentProgress,
     AgentStep,
@@ -77,8 +77,8 @@ class _FakeAgent:
     key: str = "agent"
 
     @property
-    def id(self) -> AgentId:
-        return AgentId(type="agent", key=self.key)
+    def id(self) -> Actor:
+        return Actor(role=ActorRole.AGENT, id=self.key)
 
 
 async def _collect(entries: list[RunLogEntry]) -> list[Any]:
@@ -235,7 +235,7 @@ async def test_subagent_start_and_done_produce_depth1_progress() -> None:
         e for e in events if isinstance(e, AgentProgress) and e.depth == 1
     ]
     assert len(subagent_events) == 2
-    assert subagent_events[0].agent_id.key == "worker"
+    assert subagent_events[0].agent_id.id == "worker"
     assert subagent_events[0].step == AgentStep.THINKING
     assert subagent_events[1].step == AgentStep.DONE
 
@@ -254,7 +254,7 @@ async def test_failed_subagent_done_maps_to_error_step() -> None:
         e
         for e in events
         if isinstance(e, AgentProgress)
-        and e.agent_id.key == "flaky"
+        and e.agent_id.id == "flaky"
         and e.step != AgentStep.THINKING
     )
     assert done_ev.step == AgentStep.ERROR
@@ -274,10 +274,10 @@ def _ap(
     seq: int = 0,
 ) -> AgentProgress:
     return AgentProgress(
-        agent_id=AgentId(type="agent", key=key),
+        agent_id=Actor(role=ActorRole.AGENT, id=key),
         step=step,
         content="",
-        parent_id=AgentId(type="agent", key=parent) if parent else None,
+        parent_id=Actor(role=ActorRole.AGENT, id=parent) if parent else None,
         depth=depth,
         seq=seq,
     )

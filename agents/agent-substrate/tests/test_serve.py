@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from substrate.agents.runtime.context import RunContext
 from substrate.agents.runtime.runtime import Runtime
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import ActorRole, Actor
 from substrate.kernel.messaging.message import Message
 from substrate.serve import add_routes
 
@@ -28,8 +28,8 @@ class ReplyAgent:
     name: str = "reply"
 
     @property
-    def id(self) -> AgentId:
-        return AgentId(type="agent", key=self.name)
+    def id(self) -> Actor:
+        return Actor(role=ActorRole.AGENT, id=self.name)
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
@@ -42,8 +42,8 @@ class CrashAgent:
     name: str = "crash"
 
     @property
-    def id(self) -> AgentId:
-        return AgentId(type="agent", key=self.name)
+    def id(self) -> Actor:
+        return Actor(role=ActorRole.AGENT, id=self.name)
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         raise RuntimeError("intentional crash")

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from substrate.kernel.core.content import ChatMessage
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 
 
 class HistoryProvider(Protocol):
@@ -28,7 +28,7 @@ class HistoryProvider(Protocol):
 
     async def append(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         message: ChatMessage,
         *,
         session_id: str,
@@ -43,7 +43,7 @@ class HistoryProvider(Protocol):
 
     async def append_many(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         messages: list[ChatMessage],
         *,
         session_id: str,
@@ -54,7 +54,7 @@ class HistoryProvider(Protocol):
 
     async def get_messages(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         *,
         session_id: str,
         limit: int | None = None,
@@ -63,12 +63,12 @@ class HistoryProvider(Protocol):
         """Return the chronological message history for *agent_id* in *session_id*."""
         ...
 
-    async def clear(self, agent_id: AgentId, *, session_id: str) -> None:
+    async def clear(self, agent_id: Actor, *, session_id: str) -> None:
         """Delete all history for *agent_id* in *session_id* (all runs)."""
         ...
 
     async def clear_run(
-        self, agent_id: AgentId, *, session_id: str, run_id: str
+        self, agent_id: Actor, *, session_id: str, run_id: str
     ) -> None:
         """Delete only messages belonging to *run_id* within *session_id*.
 
@@ -78,7 +78,7 @@ class HistoryProvider(Protocol):
         """
         ...
 
-    async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int:
+    async def count_messages(self, agent_id: Actor, *, session_id: str) -> int:
         """Return the number of messages stored for *agent_id* in *session_id*.
 
         Implementations backed by a durable store (Redis, Postgres) may

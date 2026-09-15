@@ -35,7 +35,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.storage.memory import Memory
 from substrate.logger import setup_logging
 
@@ -115,7 +115,7 @@ class DurableMemoryStore:
 
     async def save(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         content: str,
         *,
         namespace: str = "default",
@@ -144,7 +144,7 @@ class DurableMemoryStore:
 
     async def search(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         query: str,
         *,
         namespace: str = "default",
@@ -182,7 +182,7 @@ class DurableMemoryStore:
 
     async def list_all(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         *,
         namespace: str = "default",
         limit: int = 20,
@@ -219,7 +219,7 @@ class DurableMemoryStore:
 
     async def get(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         memory_id: str,
         *,
         namespace: str = "default",
@@ -250,7 +250,7 @@ class DurableMemoryStore:
 
     async def delete(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         memory_id: str,
         *,
         namespace: str = "default",
@@ -266,7 +266,7 @@ class DurableMemoryStore:
 
     async def clear(
         self,
-        agent_id: AgentId,
+        agent_id: Actor,
         *,
         namespace: str = "default",
     ) -> None:

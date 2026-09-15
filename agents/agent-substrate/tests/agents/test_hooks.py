@@ -22,11 +22,12 @@ from substrate.agents.runtime import Runtime
 from substrate.agents.tools.invoker import ToolInvoker
 from substrate.agents.tools.toolbox import Toolbox
 from substrate.kernel import TextBlock, ToolExecutionResult, ToolRisk
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
 from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
 from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
 from substrate.kernel.core.content import ChatMessage, Role
+from substrate.kernel.core.identity import ActorRole
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +61,7 @@ def _recording_hooks(*tracked: HookEvent) -> tuple[HookManager, list[dict]]:
 
 
 class _MinimalAgent:
-    def __init__(self, agent_id: AgentId, hooks: HookManager) -> None:
+    def __init__(self, agent_id: Actor, hooks: HookManager) -> None:
         self.id = agent_id
         self.hooks = hooks
 
@@ -126,7 +127,7 @@ class _PingTool:
 async def test_run_start_end_fire() -> None:
     """RUN_START and RUN_END are dispatched around every agent.run() call."""
     hooks, log = _recording_hooks(HookEvent.RUN_START, HookEvent.RUN_END)
-    agent_id = AgentId(type="minimal", key="test")
+    agent_id = Actor(role=ActorRole.AGENT, id="minimal")
     agent = _MinimalAgent(agent_id, hooks)
 
     async with Runtime() as rt:
@@ -151,7 +152,7 @@ async def test_run_end_fires_even_on_agent_crash() -> None:
     """RUN_END fires in the finally block even when agent.run() raises."""
 
     class _CrashingAgent:
-        id = AgentId(type="crasher", key="test")
+        id = Actor(role=ActorRole.AGENT, id="crasher")
 
         def __init__(self, hooks: HookManager) -> None:
             self.hooks = hooks

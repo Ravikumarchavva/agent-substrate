@@ -23,7 +23,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, SerializeAsAny, field_validator
 
 from substrate.kernel.core.content import ChatMessage, JsonObject
-from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.tools import PayloadBase, ToolCallRequest, ToolExecutionResult
 
 
@@ -96,9 +96,9 @@ class Message(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     schema_version: int = 1
     created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
-    target: AgentId | TopicId
+    target: Actor | Topic
     payload: Payload
-    sender: AgentId | None = None
+    sender: Actor | None = None
     correlation_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     causation_id: str | None = None
     metadata: JsonObject = Field(default_factory=dict)
@@ -127,7 +127,7 @@ class Message(BaseModel):
     @property
     def is_broadcast(self) -> bool:
         """True when this message is addressed to a topic (pub/sub fan-out)."""
-        return isinstance(self.target, TopicId)
+        return isinstance(self.target, Topic)
 
 
 # ---------------------------------------------------------------------------
@@ -139,8 +139,8 @@ class Subscription(BaseModel):
     """Tracks a single active topic subscription."""
 
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
-    topic: TopicId
-    agent_id: AgentId
+    topic: Topic
+    agent_id: Actor
 
     model_config = {"arbitrary_types_allowed": True}
 

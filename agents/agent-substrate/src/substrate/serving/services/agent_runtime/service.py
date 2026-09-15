@@ -11,10 +11,10 @@ from substrate.infrastructure.serving_factory import (
 from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
 from substrate.kernel.core.content import ChatMessage, Role
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.storage.history import HistoryProvider
-from substrate.kernel import TextBlock
+from substrate.kernel import ActorRole, TextBlock
 
 logger = setup_logging()
 
@@ -72,7 +72,7 @@ async def execute_agent_run(
 
     msg = Message(
         target=agent.id,  # type: ignore[union-attr]
-        sender=AgentId(type="proxy", key="job"),
+        sender=Actor(role=ActorRole.PROXY, id="job"),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=user_content)])
         ),

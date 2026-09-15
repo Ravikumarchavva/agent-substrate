@@ -14,14 +14,15 @@ from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
 from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
 from substrate.kernel.agent.supervision import Supervision, SpawnBudget
 from substrate.kernel.core.errors import BudgetExhaustedError
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.core.identity import ActorRole
 
 
 def _boot(text: str = "hi") -> Message:
     return Message(
-        target=AgentId(type="child", key="x"),
+        target=Actor(role=ActorRole.AGENT, id="x"),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
         ),
@@ -40,13 +41,13 @@ async def test_spawn_denied_once_headcount_cap_reached_bypassing_spawn_tracker()
     """Direct ctx.spawn()-equivalent calls, not routed through
     OrchestratorAgent/SpawnTracker at all, still hit the cap."""
     supervisor = _make_supervisor()
-    root_agent = AgentId(type="root", key="r1")
+    root_agent = Actor(role=ActorRole.AGENT, id="r1")
     # root counts as 1 -- max_agents=3 allows exactly 2 more spawns.
     root = Supervision.root(root_agent, spawn_budget=SpawnBudget(max_agents=3))
 
     for i in range(2):
         await supervisor.spawn(
-            AgentId(type="child", key=f"c{i}"),
+            Actor(role=ActorRole.AGENT, id=f"c{i}"),
             parent=root.run_id,
             supervision=root,
             boot=_boot(),
@@ -56,7 +57,7 @@ async def test_spawn_denied_once_headcount_cap_reached_bypassing_spawn_tracker()
 
     with pytest.raises(BudgetExhaustedError, match="headcount cap reached"):
         await supervisor.spawn(
-            AgentId(type="child", key="c-over"),
+            Actor(role=ActorRole.AGENT, id="c-over"),
             parent=root.run_id,
             supervision=root,
             boot=_boot(),
@@ -70,11 +71,11 @@ async def test_spawn_replay_of_already_recorded_spawn_never_rechecks_budget():
     not re-raise, even if siblings spawned since then exhausted the budget —
     otherwise a run that legitimately succeeded once could fail on replay."""
     supervisor = _make_supervisor()
-    root_agent = AgentId(type="root", key="r2")
+    root_agent = Actor(role=ActorRole.AGENT, id="r2")
     root = Supervision.root(root_agent, spawn_budget=SpawnBudget(max_agents=2))
 
     first = await supervisor.spawn(
-        AgentId(type="child", key="c0"),
+        Actor(role=ActorRole.AGENT, id="c0"),
         parent=root.run_id,
         supervision=root,
         boot=_boot(),
@@ -85,7 +86,7 @@ async def test_spawn_replay_of_already_recorded_spawn_never_rechecks_budget():
     # Budget is now fully consumed (1 root + 1 child == max_agents). A
     # replay of the SAME spawn (identical path) must still succeed.
     replayed = await supervisor.spawn(
-        AgentId(type="child", key="c0"),
+        Actor(role=ActorRole.AGENT, id="c0"),
         parent=root.run_id,
         supervision=root,
         boot=_boot(),
@@ -97,7 +98,7 @@ async def test_spawn_replay_of_already_recorded_spawn_never_rechecks_budget():
     # But a genuinely NEW spawn is still correctly denied.
     with pytest.raises(BudgetExhaustedError):
         await supervisor.spawn(
-            AgentId(type="child", key="c1"),
+            Actor(role=ActorRole.AGENT, id="c1"),
             parent=root.run_id,
             supervision=root,
             boot=_boot(),

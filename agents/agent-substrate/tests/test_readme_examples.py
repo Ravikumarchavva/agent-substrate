@@ -10,9 +10,10 @@ from substrate.agents import OrchestratorAgent, ReActAgent, Runtime, SubAgentCon
 from substrate.capabilities.tools.compute.calculator import CalculatorTool
 from substrate.fabric.flows import ConditionalFlow, ParallelFlow, SequentialFlow
 from substrate.kernel.core.content import TextBlock
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.core.usage import Usage
 from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+from substrate.kernel.core.identity import ActorRole
 
 
 class _StubLLM:
@@ -110,14 +111,14 @@ async def test_sequential_flow_example() -> None:
     """README 'Flows — Coordination Primitives' — Runtime.ask()."""
 
     class FetchStep:
-        id = AgentId(type="step", key="fetch")
+        id = Actor(role=ActorRole.AGENT, id="fetch")
 
         async def run(self, ctx, inbox):
             for msg in inbox:
                 await ctx.reply(msg, {"text": "Fetched 3 records."})
 
     class AnalyzeStep:
-        id = AgentId(type="step", key="analyze")
+        id = Actor(role=ActorRole.AGENT, id="analyze")
 
         async def run(self, ctx, inbox):
             for msg in inbox:
@@ -141,7 +142,7 @@ async def test_sequential_flow_example() -> None:
 async def test_parallel_flow() -> None:
     class FixedReply:
         def __init__(self, key: str, text: str) -> None:
-            self.id = AgentId(type="step", key=key)
+            self.id = Actor(role=ActorRole.AGENT, id=key)
             self.text = text
 
         async def run(self, ctx, inbox):
@@ -164,7 +165,7 @@ async def test_parallel_flow() -> None:
 async def test_conditional_flow() -> None:
     class FixedReply:
         def __init__(self, key: str, text: str) -> None:
-            self.id = AgentId(type="step", key=key)
+            self.id = Actor(role=ActorRole.AGENT, id=key)
             self.text = text
 
         async def run(self, ctx, inbox):

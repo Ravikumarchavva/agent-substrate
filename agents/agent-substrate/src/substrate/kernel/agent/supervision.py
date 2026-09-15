@@ -1,7 +1,7 @@
 """Supervision hierarchy — agent execution policy and tree position.
 
 Supervision types live here rather than in ``identity`` because they model
-execution policy, not routing identity.  ``AgentId`` and ``TopicId``
+execution policy, not routing identity.  ``Actor`` and ``Topic``
 (in ``identity.py``) are pure routing keys; ``Supervision``, ``Priority``,
 and ``HistoryRetention`` are policy metadata that flows down the agent tree.
 
@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from uuid import uuid4
 
-from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.core.identity import Actor, ActorRole, Topic
 
 
 class HistoryRetention(str, Enum):
@@ -111,7 +111,7 @@ class Supervision:
     - ``run_id`` — one execution tree (short-lived; one run() call).
       Scopes budget, supervision, resume, and the progress pub/sub topic.
 
-    Progress channel: ``TopicId("agent.progress", run_id)``
+    Progress channel: ``Topic("agent.progress", run_id)``
     All agents in one run publish there; the UI subscribes once.
 
     ``depth`` is informational only (for UI indentation and AgentProgress).
@@ -120,8 +120,8 @@ class Supervision:
 
     run_id: str
     session_id: str
-    root_id: AgentId
-    parent_id: AgentId | None
+    root_id: Actor
+    parent_id: Actor | None
     depth: int = 0
     spawn_budget: SpawnBudget = field(default_factory=SpawnBudget)
     execution_budget: ExecutionBudget = field(default_factory=ExecutionBudget)
@@ -131,7 +131,7 @@ class Supervision:
     @classmethod
     def root(
         cls,
-        agent_id: AgentId,
+        agent_id: Actor,
         *,
         session_id: str | None = None,
         spawn_budget: SpawnBudget | None = None,
@@ -170,7 +170,7 @@ class Supervision:
 
     def spawn_child(
         self,
-        parent_id: AgentId,
+        parent_id: Actor,
         *,
         retention: HistoryRetention = HistoryRetention.RUN,
         priority: Priority = Priority.NORMAL,
@@ -196,9 +196,9 @@ class Supervision:
         )
 
     @property
-    def progress_topic(self) -> TopicId:
+    def progress_topic(self) -> Topic:
         """The single pub/sub topic for all progress events in this run."""
-        return TopicId("agent.progress", self.run_id)
+        return Topic(f"agent.progress/{self.run_id}")
 
     @property
     def is_root(self) -> bool:
@@ -218,13 +218,13 @@ class Supervision:
             "run_id": self.run_id,
             "session_id": self.session_id,
             "root_id": {
-                "type": self.root_id.type,
-                "key": self.root_id.key,
+                "role": self.root_id.role.value,
+                "id": self.root_id.id,
             },
             "parent_id": (
                 {
-                    "type": self.parent_id.type,
-                    "key": self.parent_id.key,
+                    "role": self.parent_id.role.value,
+                    "id": self.parent_id.id,
                 }
                 if self.parent_id
                 else None
@@ -251,14 +251,14 @@ class Supervision:
         return cls(
             run_id=data["run_id"],
             session_id=data["session_id"],
-            root_id=AgentId(
-                type=root["type"],
-                key=root["key"],
+            root_id=Actor(
+                role=ActorRole(root["role"]),
+                id=root["id"],
             ),
             parent_id=(
-                AgentId(
-                    type=parent["type"],
-                    key=parent["key"],
+                Actor(
+                    role=ActorRole(parent["role"]),
+                    id=parent["id"],
                 )
                 if parent
                 else None

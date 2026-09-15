@@ -1,6 +1,6 @@
 """EvalRunner — execute evaluation suites against kernel-native agents.
 
-Accepts any real ``Agent`` (``id: AgentId``, ``run(ctx: RunContext, inbox) ->
+Accepts any real ``Agent`` (``id: Actor``, ``run(ctx: RunContext, inbox) ->
 None``) — drives it through a real in-memory ``Runtime``, so it needs the
 concrete ``RunContext``-typed agent, not just kernel's minimal ``Agent``
 bound. Collects the reply via the signal bus and returns a structured
@@ -54,7 +54,7 @@ class EvalRunner:
 
     Parameters
     ----------
-    agent:       Agent (``id: AgentId``, ``run(ctx: RunContext, inbox) -> None``).
+    agent:       Agent (``id: Actor``, ``run(ctx: RunContext, inbox) -> None``).
     judge:       Optional LLMJudge for scoring outputs.
     concurrency: Number of cases to run in parallel (default 1 = sequential).
     timeout:     Per-case timeout in seconds.  ``None`` = no timeout.

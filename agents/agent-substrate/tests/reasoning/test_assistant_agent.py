@@ -21,7 +21,7 @@ from substrate.kernel import (
     ToolUseBlock,
 )
 from substrate.kernel.core.content import Role
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import ActorRole, Actor
 from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
@@ -115,10 +115,10 @@ async def run_agent(
     session_id: str | None = None,
 ) -> dict:
     await rt.register(agent)
-    sid = session_id or agent.id.key
+    sid = session_id or agent.id.id
     msg = Message(
         target=agent.id,
-        sender=AgentId(type="proxy", key="test"),
+        sender=Actor(role=ActorRole.PROXY, id="proxy"),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
         ),
@@ -231,7 +231,7 @@ async def test_multi_turn_history():
         assert r2["status"] == "success"
         assert r2["output"] == "You said hi earlier."
 
-        msgs = await agent.history.get_messages(agent.id, session_id=agent.id.key)
+        msgs = await agent.history.get_messages(agent.id, session_id=agent.id.id)
         assert len(msgs) == 4  # 2 user + 2 assistant
 
 

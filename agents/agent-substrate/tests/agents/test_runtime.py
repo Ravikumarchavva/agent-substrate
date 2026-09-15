@@ -14,10 +14,11 @@ from __future__ import annotations
 import asyncio
 
 
-from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import DataPayload, Message
 from substrate.kernel.runtime.communication import AskOutcome
 from substrate.agents.runtime import Runtime, RunContext
+from substrate.kernel.core.identity import ActorRole
 
 
 # ---------------------------------------------------------------------------
@@ -25,11 +26,11 @@ from substrate.agents.runtime import Runtime, RunContext
 # ---------------------------------------------------------------------------
 
 
-def _agent_id(name: str) -> AgentId:
-    return AgentId(type=name, key="test")
+def _agent_id(name: str) -> Actor:
+    return Actor(role=ActorRole.AGENT, id=name)
 
 
-def _msg(target: AgentId | TopicId, data: dict | None = None) -> Message:
+def _msg(target: Actor | Topic, data: dict | None = None) -> Message:
     return Message(target=target, payload=DataPayload(data=data or {}))
 
 
@@ -39,7 +40,7 @@ def _msg(target: AgentId | TopicId, data: dict | None = None) -> Message:
 
 
 class RecorderAgent:
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
         self.received: list[Message] = []
         self.done = asyncio.Event()
@@ -73,7 +74,7 @@ async def test_fire_and_forget_delivery() -> None:
 class EchoAgent:
     """Replies to every message that has reply_to set."""
 
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
@@ -84,7 +85,7 @@ class EchoAgent:
 
 
 class AskerAgent:
-    def __init__(self, agent_id: AgentId, target: AgentId) -> None:
+    def __init__(self, agent_id: Actor, target: Actor) -> None:
         self.id = agent_id
         self.target = target
         self.outcome: AskOutcome | None = None
@@ -121,7 +122,7 @@ async def test_ask_reply_round_trip() -> None:
 
 
 class FanoutListenerAgent:
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
         self.received: list[Message] = []
         self.fanout_done = asyncio.Event()
@@ -136,7 +137,7 @@ class FanoutListenerAgent:
 
 async def test_social_fanout() -> None:
     listener1_id = _agent_id("listener1")
-    listener2_id = AgentId(type="listener2", key="test")
+    listener2_id = Actor(role=ActorRole.AGENT, id="listener2")
     listener1 = FanoutListenerAgent(listener1_id)
     listener2 = FanoutListenerAgent(listener2_id)
 
@@ -149,7 +150,7 @@ async def test_social_fanout() -> None:
         await rt.follow(listener1_id, "news.tech", "feed")
         await rt.follow(listener2_id, "news.tech", "feed")
 
-        topic = TopicId(type="news.tech", source="feed")
+        topic = Topic("news.tech/feed")
         broadcast = _msg(topic, {"headline": "AI breakthrough"})
         await rt.publish("news.tech", "feed", broadcast)
 
@@ -179,7 +180,7 @@ async def test_social_fanout() -> None:
 
 
 class ChildAgent:
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
         self.boot_received: dict | None = None
         self.done = asyncio.Event()
@@ -192,7 +193,7 @@ class ChildAgent:
 
 
 class SpawnParentAgent:
-    def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor, child_id: Actor) -> None:
         self.id = agent_id
         self.child_id = child_id
         self.done = asyncio.Event()
@@ -227,7 +228,7 @@ async def test_spawn_child_receives_boot() -> None:
 class SlowAgent:
     """Sleeps indefinitely — never replies."""
 
-    def __init__(self, agent_id: AgentId) -> None:
+    def __init__(self, agent_id: Actor) -> None:
         self.id = agent_id
         self.started = asyncio.Event()
 
@@ -237,7 +238,7 @@ class SlowAgent:
 
 
 class TimeoutAskerAgent:
-    def __init__(self, agent_id: AgentId, target: AgentId) -> None:
+    def __init__(self, agent_id: Actor, target: Actor) -> None:
         self.id = agent_id
         self.target = target
         self.outcome: AskOutcome | None = None
@@ -251,7 +252,7 @@ class TimeoutAskerAgent:
 
 async def test_ask_timeout_is_not_target_failed() -> None:
     slow_id = _agent_id("slow_agent")
-    asker_id = AgentId(type="timeout_asker", key="test")
+    asker_id = Actor(role=ActorRole.AGENT, id="timeout_asker")
     slow = SlowAgent(slow_id)
     asker = TimeoutAskerAgent(asker_id, slow_id)
 
@@ -280,7 +281,7 @@ async def test_journal_dedup_via_context() -> None:
     """_journaled() does not re-execute fn if the effect_id is already cached."""
 
     class CountingAgent:
-        def __init__(self, agent_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor) -> None:
             self.id = agent_id
             self.call_count = 0
             self.done = asyncio.Event()
@@ -351,7 +352,7 @@ async def test_nested_effect_inside_journal_hit_tool_stays_replay_safe() -> None
             return ToolExecutionResult(content=[TextBlock(text=request_id)])
 
     class NestedEffectAgent:
-        def __init__(self, agent_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor) -> None:
             self.id = agent_id
             self.tools = Toolbox()
             self.tools.add(NestedUuidTool())
@@ -407,7 +408,7 @@ async def test_supervisor_join() -> None:
     from substrate.kernel.runtime.ids import RunStatus
 
     class ChildJoinAgent:
-        def __init__(self, agent_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor) -> None:
             self.id = agent_id
 
         async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
@@ -415,7 +416,7 @@ async def test_supervisor_join() -> None:
             pass
 
     class ParentJoinAgent:
-        def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor, child_id: Actor) -> None:
             self.id = agent_id
             self.child_id = child_id
             self.parent_done = asyncio.Event()
@@ -454,7 +455,7 @@ async def test_spawn_inherits_execution_budget_transitively() -> None:
     from substrate.kernel.agent.supervision import ExecutionBudget, Supervision
 
     class GrandchildAgent:
-        def __init__(self, agent_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor) -> None:
             self.id = agent_id
             self.seen_max_tokens: int | None = "unset"  # type: ignore[assignment]
             self.done = asyncio.Event()
@@ -465,7 +466,7 @@ async def test_spawn_inherits_execution_budget_transitively() -> None:
             self.done.set()
 
     class ChildAgent:
-        def __init__(self, agent_id: AgentId, grandchild_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor, grandchild_id: Actor) -> None:
             self.id = agent_id
             self.grandchild_id = grandchild_id
 
@@ -475,7 +476,7 @@ async def test_spawn_inherits_execution_budget_transitively() -> None:
             await ctx.spawn(self.grandchild_id, boot=boot)
 
     class RootAgent:
-        def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor, child_id: Actor) -> None:
             self.id = agent_id
             self.child_id = child_id
 
@@ -534,7 +535,7 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
             return ToolExecutionResult(content=[TextBlock(text=str(payload))])
 
     class SuspendingAgent:
-        def __init__(self, agent_id: AgentId) -> None:
+        def __init__(self, agent_id: Actor) -> None:
             self.id = agent_id
             self.done = asyncio.Event()
 

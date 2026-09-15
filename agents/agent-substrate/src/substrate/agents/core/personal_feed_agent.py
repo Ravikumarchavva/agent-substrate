@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.core.identity import ActorRole, Actor, Topic
 from substrate.kernel.messaging.message import DataPayload, Message
 
 from substrate.agents.core._loop import summarize
@@ -47,7 +47,7 @@ class PersonalFeedAgent:
         name: str,
         *,
         model: LLMClient,
-        follow_topics: list[TopicId],
+        follow_topics: list[Topic],
         system_instructions: str = (
             "You are a personal feed curator.  "
             "Given a new item and the user's preferences, "
@@ -55,7 +55,7 @@ class PersonalFeedAgent:
         ),
         preferences: str = "",
     ) -> None:
-        self.id = AgentId(type="agent", key=name)
+        self.id = Actor(role=ActorRole.AGENT, id=name)
         self.model = model
         self.tools = None
         self._follow_topics = follow_topics

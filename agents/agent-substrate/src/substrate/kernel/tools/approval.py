@@ -23,7 +23,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from substrate.kernel.core.content import JsonObject
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.tools import ToolCallRequest, ToolRisk
 
 
@@ -50,7 +50,7 @@ class ApprovalRequest:
 
     call: ToolCallRequest
     risk: ToolRisk
-    agent_id: AgentId
+    agent_id: Actor
     run_id: str
     context: JsonObject = field(default_factory=dict)
     requested_at: datetime = field(

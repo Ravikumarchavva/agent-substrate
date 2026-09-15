@@ -7,13 +7,13 @@ import pytest
 async def test_runtime_agent_registration():
     """Runtime: register + submit routes message to the agent inbox."""
     from substrate.agents.runtime import Runtime
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
     from substrate.kernel.messaging.message import Message, DataPayload
 
     received: list = []
 
     class EchoAgent:
-        id = Actor(role=ActorRole.AGENT, id="echo")
+        id = Actor(type="agent", key="echo")
         model = None
         tools = None
 

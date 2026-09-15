@@ -73,7 +73,7 @@ def add_routes(
     for you, since it doesn't own your app's startup/shutdown.
     """
     from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
     from substrate.kernel.messaging.message import ChatPayload, Message
     from substrate.serving.stream.session import AgentStreamSession, sse_lines
 
@@ -87,7 +87,7 @@ def add_routes(
             message_kwargs["correlation_id"] = body.thread_id
         msg = Message(
             target=agent.id,
-            sender=Actor(role=ActorRole.PROXY, id="http"),
+            sender=Actor(type="http_proxy"),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text=body.message)])
             ),

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.messaging.stream import (
     AgentProgress,
@@ -151,11 +151,11 @@ def _subagent_progress(
     agent_key = str(payload.get("agent", "subagent"))
     parent_key = payload.get("parent")
     return AgentProgress(
-        agent_id=Actor(role=ActorRole.AGENT, id=agent_key),
+        agent_id=Actor(type="agent", key=agent_key),
         step=step,
         content=str(payload.get("task", "")),
         run_id=run_id,
-        parent_id=Actor(role=ActorRole.AGENT, id=str(parent_key)) if parent_key else None,
+        parent_id=Actor(type="agent", key=str(parent_key)) if parent_key else None,
         depth=1,
         seq=seq,
     )

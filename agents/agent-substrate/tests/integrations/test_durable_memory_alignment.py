@@ -6,7 +6,7 @@ from sqlalchemy.exc import OperationalError
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from substrate.kernel import ActorRole, Actor, ChatMessage
+from substrate.kernel import Actor, ChatMessage
 from substrate.kernel.core.content import TextBlock
 from substrate.kernel.storage.vector import Document
 from substrate.kernel.tools import ToolExecutionResult, ToolCallRequest
@@ -77,7 +77,7 @@ async def test_postgres_memory_store_tenancy():
     await store.connect()
     await store.create_tables()
 
-    agent_id = Actor(role=ActorRole.AGENT, id="agent-1")
+    agent_id = Actor(type="agent", key="agent-1")
 
     try:
         # Clear both namespaces
@@ -127,8 +127,8 @@ async def test_durable_memory_store_list_all():
     await store.connect()
     await store.create_tables()
 
-    agent_id = Actor(role=ActorRole.USER, id="list-all-test-user")
-    other_agent_id = Actor(role=ActorRole.USER, id="list-all-test-other-user")
+    agent_id = Actor(type="user", key="list-all-test-user")
+    other_agent_id = Actor(type="user", key="list-all-test-other-user")
 
     try:
         await store.clear(agent_id, namespace="preference")
@@ -174,7 +174,7 @@ async def test_postgres_history_provider_conformance():
     provider = DurableHistoryProvider(db_url)
     await provider.connect()
 
-    agent_id = Actor(role=ActorRole.AGENT, id="agent-history-test")
+    agent_id = Actor(type="agent", key="agent-history-test")
     session_id = "sess-history-test"
 
     try:

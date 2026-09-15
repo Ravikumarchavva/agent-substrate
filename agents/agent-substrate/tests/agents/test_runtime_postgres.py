@@ -20,7 +20,6 @@ import pytest
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import DataPayload, Message
 from substrate.kernel.runtime.communication import AskOutcome
-from substrate.kernel.core.identity import ActorRole
 
 pytestmark = [pytest.mark.requires_postgres]
 
@@ -60,7 +59,7 @@ def _agent_id(name: str) -> Actor:
     # id(object()) is not safe here: CPython reuses freed memory addresses,
     # so two unrelated tests can collide on the same "unique" key and trip
     # each other's thread-singleflight guard. uuid4 is actually unique.
-    return Actor(role=ActorRole.AGENT, id=f"pg-test-{uuid.uuid4().hex}")
+    return Actor(type="agent", key=f"pg-test-{uuid.uuid4().hex}")
 
 
 def _msg(target: Actor, data: dict | None = None) -> Message:

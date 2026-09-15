@@ -7,14 +7,13 @@ from sqlalchemy.exc import OperationalError
 from substrate.capabilities.history import DurableHistoryProvider
 from substrate.kernel import Actor, ChatMessage
 from substrate.kernel.core.content import TextBlock
-from substrate.kernel.core.identity import ActorRole
 
 pytestmark = [pytest.mark.requires_postgres]
 
 
 def test_postgres_history_internal_key_fits_legacy_column() -> None:
     provider = DurableHistoryProvider("postgresql+asyncpg://user:pass@localhost/db")
-    agent_id = Actor(role=ActorRole.AGENT, id="agent-" + ("x" * 80))
+    agent_id = Actor(type="agent", key="agent-" + ("x" * 80))
     session_id = "session-" + ("y" * 120)
 
     storage_key = provider._session_key(agent_id, session_id)
@@ -36,7 +35,7 @@ async def test_postgres_history_provider():
     except (OperationalError, Exception) as e:
         pytest.skip(f"PostgreSQL database not available: {e}")
 
-    agent_id = Actor(role=ActorRole.AGENT, id="test-agent")
+    agent_id = Actor(type="agent", key="test-agent")
     session_id = "test-session-456"
 
     try:

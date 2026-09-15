@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import pytest
 
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message, DataPayload
 from substrate.capabilities.triggers.scheduler import TriggerScheduler, TriggerDef
 from substrate.capabilities.triggers.webhooks import WebhookRegistry
@@ -74,7 +74,7 @@ async def test_scheduler_trigger_dispatch():
 
     assert len(rt.submitted) == 1
     agent_id, msg = rt.submitted[0]
-    assert agent_id == Actor(role=ActorRole.FLOW, id="pipeline/test-pipeline")
+    assert agent_id == Actor(type="flow", key="pipeline/test-pipeline")
     assert isinstance(msg.payload, DataPayload)
     assert msg.payload.data == {"param1": "val1"}
 
@@ -119,7 +119,7 @@ async def test_webhook_trigger_dispatch():
 
     assert len(rt.submitted) == 1
     agent_id, msg = rt.submitted[0]
-    assert agent_id == Actor(role=ActorRole.FLOW, id="chain/test-chain")
+    assert agent_id == Actor(type="flow", key="chain/test-chain")
     assert msg.payload.data == {"fixed": "data", "dynamic": "input"}
 
 
@@ -241,7 +241,7 @@ async def test_condition_trigger_dispatch(redis_url):
 
     assert len(rt.submitted) == 1
     agent_id, msg = rt.submitted[0]
-    assert agent_id == Actor(role=ActorRole.FLOW, id="pipeline/on-admin-created")
+    assert agent_id == Actor(type="flow", key="pipeline/on-admin-created")
     # Check that event data was merged
     assert msg.payload.data["action"] == "setup"
     assert msg.payload.data["event"]["type"] == "user.created"

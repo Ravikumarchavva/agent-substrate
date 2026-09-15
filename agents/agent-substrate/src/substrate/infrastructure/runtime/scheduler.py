@@ -40,7 +40,6 @@ from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
 from substrate.kernel.runtime.wakeup import Wakeup
-from substrate.kernel.core.identity import ActorRole
 
 if TYPE_CHECKING:
     import asyncpg
@@ -195,7 +194,7 @@ class Scheduler:
                 if isinstance(row["spec"], str)
                 else dict(row["spec"])
             )
-            result.append((RunId(row["run_id"]), Actor(role=ActorRole(type_), id=key), spec))
+            result.append((RunId(row["run_id"]), Actor(type=type_, key=key), spec))
         return result
 
     async def reclaim_orphans(self) -> int:
@@ -491,7 +490,7 @@ class Scheduler:
             if raw_aid is None:
                 continue  # no agent registered — skip
             type_, _, key = raw_aid.partition("/")
-            agent_id = Actor(role=ActorRole(type_), id=key)
+            agent_id = Actor(type=type_, key=key)
             leases.append(
                 Lease(
                     run_id=RunId(row["run_id"]),

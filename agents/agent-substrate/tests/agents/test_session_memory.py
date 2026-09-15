@@ -12,7 +12,7 @@ from substrate.agents.context import (
 )
 from substrate.agents.core import ReActAgent
 from substrate.agents.runtime import Runtime
-from substrate.kernel import ActorRole, ChatMessage, ContentBlock, TextBlock
+from substrate.kernel import ChatMessage, ContentBlock, TextBlock
 from substrate.kernel.core.content import Role
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
@@ -79,7 +79,7 @@ async def run_agent(
     sid = session_id or agent.id.id
     msg = Message(
         target=agent.id,
-        sender=Actor(role=ActorRole.PROXY, id="proxy"),
+        sender=Actor(type="proxy", key="proxy"),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
         ),

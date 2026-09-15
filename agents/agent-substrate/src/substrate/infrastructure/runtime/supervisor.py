@@ -38,7 +38,6 @@ from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.kernel.runtime.supervisor import RunHandle, RunResult
 from substrate.kernel.agent.supervision import Supervision
-from substrate.kernel.core.identity import ActorRole
 
 if TYPE_CHECKING:
     import asyncpg
@@ -347,7 +346,7 @@ class Supervisor:
             type_, _, key = row["agent_id"].partition("/")
             yield RunHandle(
                 run_id=RunId(row["run_id"]),
-                agent_id=Actor(role=ActorRole(type_), id=key),
+                agent_id=Actor(type=type_, key=key),
                 parent_run=parent,
             )
 

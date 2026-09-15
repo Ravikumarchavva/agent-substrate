@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Literal
 
 from substrate.kernel.core.content import JsonObject
 from substrate.kernel.core.errors import SuspendInterrupt
-from substrate.kernel.core.identity import ActorRole, Actor, Topic
+from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import Message, DataPayload
 from substrate.kernel.runtime.communication import AskOutcome, RunStatusSummary
 from substrate.kernel.runtime.effects import Effect, EffectResult
@@ -248,13 +248,13 @@ class _MessagingMixin:
 
     async def follow(self, topic: Topic) -> None:
         """Subscribe this agent to a topic."""
-        agent_id = Actor(role=ActorRole.INTERNAL, id=self.run_id)
+        agent_id = Actor(type="internal", key=self.run_id)
         await self._follow_graph.follow(agent_id, topic)
 
     async def unfollow(self, topic: Topic) -> None:
         from substrate.kernel.messaging.message import Subscription
 
-        agent_id = Actor(role=ActorRole.INTERNAL, id=self.run_id)
+        agent_id = Actor(type="internal", key=self.run_id)
         sub = Subscription(topic=topic, agent_id=agent_id)
         await self._follow_graph.unfollow(sub)
 

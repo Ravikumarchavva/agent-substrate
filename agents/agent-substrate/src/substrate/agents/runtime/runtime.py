@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from substrate.agents.core.orchestrator import SubAgentConfig
 
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.agents.runtime.context import Agent
 from substrate.kernel.runtime.fanout import FanoutStrategy
@@ -53,6 +53,7 @@ from substrate.agents.runtime.backends._inbox import InMemoryInbox
 from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
 from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
 from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
+from substrate.agents.runtime.resolver import ActorFactory, ActorResolver
 from substrate.agents.runtime.worker import Worker
 
 
@@ -109,7 +110,7 @@ class Runtime:
             self._scheduler  # type: ignore[arg-type]
         )
         self._supervisor: SupervisorProtocol | None = supervisor
-        self._registry: dict[Actor, Agent] = {}
+        self._resolver = ActorResolver()
         self._worker: Worker | None = None
 
     def _on_inbox_deliver(self, agent_id: Actor) -> None:
@@ -153,18 +154,35 @@ class Runtime:
     # ------------------------------------------------------------------
 
     async def register(self, agent: Agent) -> None:
-        """Register an agent so the runtime can dispatch runs to it.
+        """Register one already-built agent, pinned for the process lifetime.
 
         If ``agent`` is an OrchestratorAgent whose ``_sub_agents`` list is
         populated, every sub-agent is also registered automatically.  This
         prevents the Worker from silently holding the lease (for up to its
-        timeout) when the orchestrator spawns a child that isn't in the
-        registry.
+        timeout) when the orchestrator spawns a child that isn't registered.
+
+        Pinning one object per entity does not scale past a few thousand —
+        see ``register_factory`` for the on-demand alternative.
         """
-        self._registry[agent.id] = agent
+        self._resolver.register_instance(agent)
         sub_agents: list[SubAgentConfig] = getattr(agent, "_sub_agents", [])
         for cfg in sub_agents:
-            self._registry[cfg.agent.id] = cfg.agent
+            self._resolver.register_instance(cfg.agent)
+
+    def register_factory(self, actor_type: str, factory: ActorFactory) -> None:
+        """Register how to build *any* actor of ``actor_type``, on demand.
+
+        The bounded alternative to registering an instance per entity: one
+        entry per type, with instances materialized from their address when a
+        run is leased for them and evicted once idle. ``factory`` receives the
+        full ``Actor`` — ``actor.key`` says which instance to build.
+
+            runtime.register_factory(
+                "conversation",
+                lambda actor: ReActAgent("conversation", session_id=actor.key, ...),
+            )
+        """
+        self._resolver.register_factory(actor_type, factory)
 
     async def submit(
         self,
@@ -245,7 +263,7 @@ class Runtime:
         await self.register(agent)
         msg = Message(
             target=agent.id,
-            sender=Actor(role=ActorRole.USER, id="run"),
+            sender=Actor(type="user", key="run"),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
             ),
@@ -312,7 +330,7 @@ class Runtime:
         sentinel = new_run_id()
         msg = Message(
             target=agent.id,
-            sender=Actor(role=ActorRole.USER, id="ask"),
+            sender=Actor(type="user", key="ask"),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
             ),
@@ -386,7 +404,7 @@ class Runtime:
             scheduler=self._scheduler,
             supervisor=supervisor,
             signal_bus=self._signal_bus,
-            registry=self._registry,
+            resolver=self._resolver,
         )
         await self._worker.start()
 

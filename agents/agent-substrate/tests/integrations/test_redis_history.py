@@ -4,7 +4,7 @@ import pytest
 import redis.exceptions
 
 from substrate.capabilities.history import RedisHistoryProvider
-from substrate.kernel import Actor, ActorRole
+from substrate.kernel import Actor
 from substrate.kernel.core.content import ChatMessage, TextBlock
 
 pytestmark = [pytest.mark.requires_redis]
@@ -19,7 +19,7 @@ async def test_redis_history_provider():
         pytest.skip(f"Redis is not available: {e}")
 
     try:
-        agent_id = Actor(role=ActorRole.USER, id="123")
+        agent_id = Actor(type="user", key="123")
         session_id = "test-session-001"
         run_id = "run-abc"
 
@@ -51,7 +51,7 @@ async def test_redis_clear_run():
         pytest.skip(f"Redis is not available: {e}")
 
     try:
-        agent_id = Actor(role=ActorRole.USER, id="clear-run-test")
+        agent_id = Actor(type="user", key="clear-run-test")
         session_id = "sess"
 
         await provider.clear(agent_id, session_id=session_id)
@@ -80,7 +80,7 @@ async def test_try_acquire_seed_lock_is_exclusive():
     except (redis.exceptions.ConnectionError, OSError) as e:
         pytest.skip(f"Redis is not available: {e}")
 
-    agent_id = Actor(role=ActorRole.USER, id="seedlock-test")
+    agent_id = Actor(type="user", key="seedlock-test")
     session_id = "seedlock-sess"
     try:
         # Clean slate: delete any leftover lock key from a prior run.
@@ -110,7 +110,7 @@ async def test_cached_history_provider_concurrent_reads_seed_once():
         pytest.skip(f"Redis is not available: {e}")
 
     session_id = "concurrent-seed-sess"
-    agent_id = Actor(role=ActorRole.AGENT, id=session_id)
+    agent_id = Actor(type="agent", key=session_id)
     try:
         await provider.clear(agent_id, session_id=session_id)
 

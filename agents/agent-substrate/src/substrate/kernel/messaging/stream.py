@@ -14,7 +14,7 @@ Two independent event channels:
 
 Standard topic convention (enforced by the agents layer, not the kernel):
 
-    token stream  → Topic("agent.stream",   agent_id.id)
+    token stream  → Topic("agent.stream/<run_id>")
     progress      → Topic("agent.progress", run_id)        ← ONE per run
 
 These are pure data types. Transport (SSE, WebSocket, console) lives in the

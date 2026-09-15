@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from substrate.capabilities.memory.lance_memory_store import LanceLongTermMemory
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ def store(tmp_path) -> LanceLongTermMemory:
     return LanceLongTermMemory(path=tmp_path / "memories")
 
 
-AGENT = Actor(role=ActorRole.INTERNAL, id="page_index")
+AGENT = Actor(type="internal", key="page_index")
 
 
 def test_constructor_requires_exactly_one_of_path_or_namespace_uri() -> None:
@@ -35,7 +35,7 @@ async def test_save_and_search_roundtrip(store: LanceLongTermMemory) -> None:
 
 
 async def test_search_scoped_by_namespace_and_agent(store: LanceLongTermMemory) -> None:
-    other_agent = Actor(role=ActorRole.INTERNAL, id="other")
+    other_agent = Actor(type="internal", key="other")
     await store.save(AGENT, "a", namespace="ns1")
     await store.save(AGENT, "b", namespace="ns2")
     await store.save(other_agent, "c", namespace="ns1")

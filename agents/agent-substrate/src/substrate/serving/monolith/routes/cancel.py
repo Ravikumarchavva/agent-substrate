@@ -20,7 +20,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.kernel.core.identity import ActorRole, Actor
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.supervisor import RunHandle
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
@@ -64,7 +64,7 @@ async def cancel_chat(
     # agent_id/parent_run are unused by SupervisorProtocol.cancel() (it only reads
     # handle.run_id — see Supervisor.cancel()); find_run_for_thread
     # doesn't resolve the agent, so these are placeholders, not real values.
-    handle = RunHandle(run_id=run_id, agent_id=Actor(role=ActorRole.INTERNAL, id=""), parent_run="")
+    handle = RunHandle(run_id=run_id, agent_id=Actor(type="unresolved"), parent_run="")
 
     # Best-effort fast path: if this request happens to land on the replica
     # actually running the task, this cancels its local CancellationToken

@@ -58,7 +58,7 @@ class Worker:
         scheduler: SchedulerProtocol,
         supervisor: SupervisorProtocol,
         signal_bus: SignalBusProtocol,
-        registry: dict,  # Actor → Agent
+        resolver: ActorResolver,
     ) -> None:
         self._worker_id = worker_id
         self._event_log = event_log
@@ -68,7 +68,7 @@ class Worker:
         self._scheduler = scheduler
         self._supervisor = supervisor
         self._signal_bus = signal_bus
-        self._registry = registry
+        self._resolver = resolver
         self._running = False
         self._poll_task: asyncio.Task | None = None
         self._tokens: dict[
@@ -152,9 +152,10 @@ class Worker:
                     worker_id=self._worker_id, capacity=10
                 )
                 for lease in leases:
-                    agent = self._registry.get(lease.agent_id)
+                    agent = self._resolver.resolve(lease.agent_id)
                     if agent is None:
-                        # Agent not yet registered (e.g. startup cold-resume race).
+                        # No live instance and no factory for this type (e.g.
+                        # startup cold-resume race, before registration runs).
                         # Hold the lease and skip — it expires after 30 s, at which
                         # point the run is reclaimed as pending and retried once the
                         # resume hook has registered the agent.
@@ -232,6 +233,7 @@ class Worker:
 
     async def _run_agent(self, lease, agent: Agent) -> None:
         from substrate.agents.runtime.context import RunContext
+from substrate.agents.runtime.resolver import ActorResolver
         from substrate.agents.runtime.effect_cache import EffectCache
 
         run_id = lease.run_id

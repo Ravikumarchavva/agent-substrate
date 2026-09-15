@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from substrate.kernel import ActorRole, ChatMessage, TextBlock
+from substrate.kernel import ChatMessage, TextBlock
 from substrate.kernel.llm import LLMClient, GenerationOptions
 from substrate.kernel.storage.vector import SearchResult
 from substrate.kernel.storage.memory import LongTermMemory
@@ -84,7 +84,7 @@ class PageIndexRAGPipeline:
         self._model = model_client
         self._memory = memory_store
         if isinstance(agent_id, str):
-            self._agent_id = Actor(role=ActorRole.INTERNAL, id=agent_id)
+            self._agent_id = Actor(type="internal", key=agent_id)
         else:
             self._agent_id = agent_id
         # Fallback local in-memory store for trees if memory_store is not provided

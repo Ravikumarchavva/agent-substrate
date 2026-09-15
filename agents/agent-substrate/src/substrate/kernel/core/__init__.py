@@ -19,7 +19,7 @@ from .content import (
     content_block_from_dict,
     content_blocks_to_str,
 )
-from .identity import Actor, ActorRole, Topic
+from .identity import Actor, Topic
 from .errors import (
     KernelError,
     AgentCrashError,
@@ -51,7 +51,6 @@ __all__ = [
     "content_block_from_dict",
     "content_blocks_to_str",
     "Actor",
-    "ActorRole",
     "Topic",
     "KernelError",
     "AgentCrashError",

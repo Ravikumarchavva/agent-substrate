@@ -187,11 +187,11 @@ class ConditionMonitor:
         )
 
         if self._runtime is not None:
-            from substrate.kernel.core.identity import Actor, ActorRole
+            from substrate.kernel.core.identity import Actor
             from substrate.kernel.messaging.message import Message, DataPayload
 
             combined_params = {**condition.target_params, "event": event}
-            agent_id = Actor(role=ActorRole.FLOW, id=f"{condition.target_type}/{condition.target_name}")
+            agent_id = Actor(type=condition.target_type, key=condition.target_name)
             msg = Message(
                 target=agent_id,
                 payload=DataPayload(data=combined_params),

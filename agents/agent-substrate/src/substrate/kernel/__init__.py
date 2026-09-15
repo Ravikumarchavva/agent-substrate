@@ -29,7 +29,6 @@ from substrate.kernel.core.content import (
 )
 from substrate.kernel.core.identity import (
     Actor,
-    ActorRole,
     Topic,
 )
 from substrate.kernel.agent.supervision import (
@@ -179,7 +178,6 @@ __all__ = [
     "content_blocks_to_str",
     # Identity
     "Actor",
-    "ActorRole",
     "Topic",
     # Supervision
     "Supervision",

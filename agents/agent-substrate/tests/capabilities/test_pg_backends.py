@@ -136,7 +136,7 @@ async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
 
 async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
     from substrate.infrastructure.runtime import Inbox
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
     from substrate.kernel.messaging.message import Message
     from substrate.kernel.core.content import TextBlock
     from substrate.kernel.core.content import ChatMessage, Role
@@ -145,7 +145,7 @@ async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
     inbox = Inbox(pg_pool)
     await inbox.setup()
 
-    agent_id = Actor(role=ActorRole.AGENT, id=f"test-inbox-agent-{id(object())}")
+    agent_id = Actor(type="agent", key=f"test-inbox-agent-{id(object())}")
     msg = Message(
         target=agent_id,
         payload=ChatPayload(
@@ -169,7 +169,7 @@ async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
 
 async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
     from substrate.infrastructure.runtime import Inbox
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
     from substrate.kernel.messaging.message import Message
     from substrate.kernel.core.content import TextBlock
     from substrate.kernel.core.content import ChatMessage, Role
@@ -178,7 +178,7 @@ async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
     inbox = Inbox(pg_pool, max_retries=2)
     await inbox.setup()
 
-    agent_id = Actor(role=ActorRole.AGENT, id=f"test-nack-agent-{id(object())}")
+    agent_id = Actor(type="agent", key=f"test-nack-agent-{id(object())}")
     msg = Message(
         target=agent_id,
         payload=ChatPayload(
@@ -205,13 +205,13 @@ async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
 async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
     from substrate.infrastructure.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id, RunStatus
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
 
     sched = Scheduler(pg_pool)
     await sched.setup()
 
     run_id = new_run_id()
-    agent_id = Actor(role=ActorRole.AGENT, id="sched-test")
+    agent_id = Actor(type="agent", key="sched-test")
     sched.register_run(run_id, agent_id)
     await sched.enqueue(run_id, priority=5, tenant="test")
 
@@ -226,13 +226,13 @@ async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
 async def test_pg_scheduler_coalescing(pg_pool) -> None:
     from substrate.infrastructure.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
 
     sched = Scheduler(pg_pool)
     await sched.setup()
 
     run_id = new_run_id()
-    agent_id = Actor(role=ActorRole.AGENT, id=f"coalesce-{id(object())}")
+    agent_id = Actor(type="agent", key=f"coalesce-{id(object())}")
     sched.register_run(run_id, agent_id)
     await sched.enqueue(run_id, priority=5, tenant="test")
     await sched.enqueue(run_id, priority=5, tenant="test")  # no-op
@@ -245,13 +245,13 @@ async def test_pg_scheduler_coalescing(pg_pool) -> None:
 async def test_pg_scheduler_release_completed(pg_pool) -> None:
     from substrate.infrastructure.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id, RunStatus
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
 
     sched = Scheduler(pg_pool)
     await sched.setup()
 
     run_id = new_run_id()
-    agent_id = Actor(role=ActorRole.AGENT, id=f"release-{id(object())}")
+    agent_id = Actor(type="agent", key=f"release-{id(object())}")
     sched.register_run(run_id, agent_id)
     await sched.enqueue(run_id, priority=5, tenant="test")
     leases = await sched.lease(worker_id="w1", capacity=100)
@@ -515,12 +515,12 @@ async def test_pg_vector_store_rename_collection_noop_when_nothing_matches() -> 
 async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:
     from substrate.infrastructure.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id, RunStatus
-    from substrate.kernel.core.identity import ActorRole, Actor
+    from substrate.kernel.core.identity import Actor
 
     sched = Scheduler(pg_pool)
     await sched.setup()
 
-    agent_id = Actor(role=ActorRole.AGENT, id="find-agent-test")
+    agent_id = Actor(type="agent", key="find-agent-test")
     run_id = new_run_id()
     sched.register_run(run_id, agent_id)
     await sched.enqueue(run_id, priority=5, tenant="test")

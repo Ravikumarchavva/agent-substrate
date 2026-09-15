@@ -69,7 +69,7 @@ class ToolCallEvent(BaseModel):
     call_id: str = ""
     tool_name: str
     args: dict[str, Any] = Field(default_factory=dict)
-    agent: str = ""  # which agent in the tree ran it (agent_id.id)
+    agent: str = ""  # which agent in the tree ran it (agent_id.type/key)
     depth: int = 0  # 0 = root agent, 1 = direct subagent, …
     risk: str | None = None  # ToolRisk value, when known
 

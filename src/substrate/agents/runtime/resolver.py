@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import OrderedDict
-from typing import Callable, Protocol
+from typing import Callable
 
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.agent import Agent
@@ -37,15 +37,26 @@ ActorFactory = Callable[[Actor], Agent]
 ``actor.key`` says which instance to build."""
 
 
-class _HasInMemoryHistory(Protocol):
-    history: object
-
-
 def _history_is_in_memory(agent: Agent) -> bool:
     """True when this agent's history lives in the object itself, making
-    eviction lossy. Best-effort: unknown providers are treated as durable."""
+    eviction lossy. Unknown providers are treated as durable — this only
+    ever *adds* pinning, so a wrong guess costs memory, never a conversation.
+
+    Imported lazily: ``agents/context`` pulls in the compaction pipeline,
+    which this module has no reason to load just to be imported.
+    """
     provider = getattr(agent, "history", None)
-    return provider is not None and type(provider).__name__ == "InMemoryHistoryProvider"
+    if provider is None:
+        return False
+    try:
+        from substrate.agents.context import InMemoryHistoryProvider
+
+        if isinstance(provider, InMemoryHistoryProvider):
+            return True
+    except ImportError:  # pragma: no cover - context layer always present
+        pass
+    # Fallback for stand-ins that mirror the provider without subclassing it.
+    return "InMemoryHistoryProvider" in type(provider).__name__
 
 
 class ActorResolver:

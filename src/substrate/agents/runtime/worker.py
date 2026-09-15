@@ -31,6 +31,7 @@ from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.kernel.core.errors import CancellationError, SuspendInterrupt
 
 if TYPE_CHECKING:
+    from substrate.agents.runtime.resolver import ActorResolver
     from substrate.kernel.runtime.log_entry import EventLogProtocol
     from substrate.kernel.runtime.inbox import InboxProtocol
     from substrate.kernel.runtime.scheduler import SchedulerProtocol
@@ -233,7 +234,6 @@ class Worker:
 
     async def _run_agent(self, lease, agent: Agent) -> None:
         from substrate.agents.runtime.context import RunContext
-from substrate.agents.runtime.resolver import ActorResolver
         from substrate.agents.runtime.effect_cache import EffectCache
 
         run_id = lease.run_id

@@ -12,11 +12,13 @@ pytestmark = [pytest.mark.requires_postgres]
 
 
 def test_postgres_history_internal_key_fits_legacy_column() -> None:
+    """A conversation actor's key is its session_id (see identity.py's
+    ``Actor`` docstring) -- realistic overflow is a long ``type:key`` pair,
+    not a separate session_id the key already made redundant."""
     provider = DurableHistoryProvider("postgresql+asyncpg://user:pass@localhost/db")
-    agent_id = Actor(type="agent", key="agent-" + ("x" * 80))
-    session_id = "session-" + ("y" * 120)
+    agent_id = Actor(type="conversation", key="session-" + ("y" * 120))
 
-    storage_key = provider._session_key(agent_id, session_id)
+    storage_key = provider._session_key(agent_id, agent_id.key)
 
     assert len(storage_key) <= 128
     assert storage_key.startswith("h:")

@@ -53,8 +53,12 @@ async def _pg_engine():
 
 
 async def test_retrieval_eval_starter_dataset(capsys) -> None:
-    if not os.environ.get("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
+    # conftest.py sets a fake OPENAI_API_KEY by default (see its own comment)
+    # so ServerSettings can't silently pick up the real one from .env — this
+    # test is the one deliberate exception, opted into by exporting a real
+    # key before running pytest, which conftest's setdefault leaves alone.
+    if os.environ.get("OPENAI_API_KEY", "").startswith("sk-test-not-a-real-key"):
+        pytest.skip("OPENAI_API_KEY not set (export a real key to run this test)")
     engine = await _pg_engine()
     if engine is None:
         pytest.skip("Postgres not reachable")

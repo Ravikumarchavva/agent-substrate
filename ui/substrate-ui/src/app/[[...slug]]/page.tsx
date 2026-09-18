@@ -1872,6 +1872,7 @@ function ChatPageContent() {
                               toolCalls={m.toolCalls}
                               isToolExecuting={m.isToolExecuting}
                               isContinuation={m.isContinuation}
+                              isStreaming={loading && m.id === messages[messages.length - 1]?.id}
                               threadId={currentThreadId}
                               sources={m.sources}
                               onOpenArtifact={(path, fileName, readOnly) =>

@@ -28,6 +28,7 @@ import { SourcesStrip } from "@/components/SourcesStrip";
 import { buildWorkspaceFileUrl } from "@/lib/api/_client";
 import { getAttachmentKind, getFileGlyph, formatFileSize } from "@/lib/file-utils";
 import { FileTypeIcon } from "@/components/FileTypeIcon";
+import { AdSlot } from "@/components/AdSlot";
 
 function isPersistentToolCall(toolCall: ToolCall): boolean {
   return Boolean(toolCall._meta?.ui?.httpUrl);
@@ -334,6 +335,10 @@ type Props = {
   toolCalls?: ToolCall[];
   isToolExecuting?: boolean;
   isContinuation?: boolean;
+  /** True while this specific message is still generating — the ad slot
+   * waits for this to go false so an ad never sits under text that's
+   * still writing itself. */
+  isStreaming?: boolean;
   onRegenerate?: () => void;
   /** Called when an MCP App should open in the side panel */
   onOpenInPanel?: (toolCall: ToolCall) => void;
@@ -356,6 +361,7 @@ export function MessageBubble({
   timestamp,
   toolCalls,
   isToolExecuting,
+  isStreaming,
   onRegenerate,
   onOpenInPanel,
   threadId,
@@ -1198,6 +1204,11 @@ export function MessageBubble({
                 )}
               </div>
             )}
+
+            {/* One ad slot per completed assistant message — same bottom-
+              of-completion placement as ChatGPT's. Gated on !isStreaming
+              so it appears once the message stops writing, not mid-token. */}
+            {role === "assistant" && safeContent && !isStreaming && <AdSlot />}
           </div>
         </div>
       </div>

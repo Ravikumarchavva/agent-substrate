@@ -153,7 +153,7 @@ class Worker:
                     worker_id=self._worker_id, capacity=10
                 )
                 for lease in leases:
-                    agent = self._resolver.resolve(lease.agent_id)
+                    agent = await self._resolver.resolve(lease.agent_id)
                     if agent is None:
                         # No live instance and no factory for this type (e.g.
                         # startup cold-resume race, before registration runs).

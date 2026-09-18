@@ -22,19 +22,22 @@ dev behaviour doesn't quietly diverge from production.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 from collections import OrderedDict
-from typing import Callable
+from typing import Awaitable, Callable, Union
 
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.agent import Agent
 
 logger = logging.getLogger(__name__)
 
-ActorFactory = Callable[[Actor], Agent]
+ActorFactory = Callable[[Actor], Union[Agent, Awaitable[Agent]]]
 """Builds an actor from its address. ``actor.type`` selected this factory;
-``actor.key`` says which instance to build."""
+``actor.key`` says which instance to build. May be sync or async — building
+a real agent (e.g. acquiring its HITL bridge, wiring history) is usually a
+coroutine, so ``resolve()`` awaits the result when the factory returns one."""
 
 
 def _history_is_in_memory(agent: Agent) -> bool:
@@ -88,18 +91,40 @@ class ActorResolver:
         """Register how to build actors of ``actor_type``, for every instance."""
         self._factories[actor_type] = factory
 
-    def register_instance(self, agent: Agent) -> None:
-        """Pin one already-built actor, never evicted.
+    def register_instance(self, agent: Agent, *, pinned: bool = True) -> None:
+        """Register one already-built actor.
 
-        The escape hatch for singletons and for callers that build an actor
-        eagerly. Prefer ``register_factory`` for anything with many instances.
+        ``pinned=True`` (the default) is the escape hatch for singletons and
+        for callers that build an actor eagerly and want it kept resident
+        for the process lifetime — unchanged behavior for every existing
+        caller.
+
+        ``pinned=False`` is what turns an ordinary "build one instance per
+        entity" call site into virtual-actor behavior *without changing how
+        that instance is built*: the object is registered exactly the same
+        way, but now participates in the same LRU/idle-TTL eviction a
+        factory-activated actor gets. This is the intended migration path —
+        a caller that already constructs a fresh, fully-current instance on
+        every call (a per-request chat agent, say) doesn't need a factory at
+        all to behave like a virtual actor: eviction is safe because the
+        next call rebuilds it anyway, and not pinning it is what stops a
+        million distinct entities from being held in memory forever.
         """
         self._live[agent.id] = (agent, time.monotonic())
-        self._pinned.add(agent.id)
+        if pinned:
+            self._pinned.add(agent.id)
+        else:
+            # Capacity eviction otherwise only ever ran from resolve()'s
+            # factory-build branch — an unpinned instance registered
+            # directly (the pinned=False migration path above) would never
+            # be capacity-bounded, only idle-TTL-bounded. Enforcing it here
+            # too makes max_live an actual ceiling regardless of how an
+            # actor entered the registry.
+            self._evict_over_capacity()
 
     # -- resolution -----------------------------------------------------------
 
-    def resolve(self, actor: Actor) -> Agent | None:
+    async def resolve(self, actor: Actor) -> Agent | None:
         """Return the live actor for this address, activating it if needed.
 
         ``None`` means neither a live instance nor a factory exists — the
@@ -118,6 +143,8 @@ class ActorResolver:
             return None
 
         agent = factory(actor)
+        if inspect.isawaitable(agent):
+            agent = await agent
         self._live[actor] = (agent, time.monotonic())
         if not self._allow_unsafe_eviction and _history_is_in_memory(agent):
             # Evicting would drop this conversation entirely — see module docstring.

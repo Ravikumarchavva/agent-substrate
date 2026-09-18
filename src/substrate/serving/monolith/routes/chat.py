@@ -323,6 +323,10 @@ async def chat(
             initial_tool_choice=initial_tool_choice or None,
             bridge=deps["bridge"],
             safety_middleware=ctx.safety_middleware,
+            # Virtual actor: a fresh, fully-current agent is rebuilt on every
+            # turn anyway, so pinning this in the registry forever just leaks
+            # one entry per thread ever chatted with. Evictable is safe here.
+            pinned=False,
         )
 
         # 4. Extract user content from last message

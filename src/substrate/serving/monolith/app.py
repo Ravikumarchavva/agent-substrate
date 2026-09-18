@@ -19,6 +19,7 @@ from substrate.infrastructure.serving_factory import (
     init_llm_clients,
     init_runtime_services,
     init_tool_registry,
+    register_assistant_actor_factory,
     resume_pending_runs,
 )
 from substrate.serving.monolith.database import init_db
@@ -165,6 +166,24 @@ async def lifespan(app: FastAPI):
     # has no reason to ever call `skills(action="list")` in the first place.
     app.state.system_instructions = infra.skill_manager.inject_into_prompt(
         _prompt_path.read_text(encoding="utf-8").strip()
+    )
+
+    # Virtual-actor activation for chat agents — lets the Worker rebuild a
+    # thread's agent purely from its address (e.g. after eviction, or for a
+    # message delivered outside the chat route). The interactive route still
+    # builds its own agent eagerly per turn; this is the fallback for
+    # everything that doesn't. See register_assistant_actor_factory's
+    # docstring.
+    register_assistant_actor_factory(
+        infra.runtime,
+        bridge_registry=infra.bridge_registry,
+        toolbox=tools.registry,
+        model_client=llm.model_client,
+        system_instructions=app.state.system_instructions,
+        cfg=settings,
+        history=infra.history,
+        short_term_memory=infra.short_term_memory,
+        long_term_memory=infra.long_term_memory,
     )
 
     app.state.mcp_servers = {}

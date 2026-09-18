@@ -112,7 +112,12 @@ class AgentStreamSession:
         from substrate.kernel.core.errors import ThreadBusyError
 
         try:
-            await self._runtime.register(self._agent)
+            # pinned=False must match the caller's own registration (see
+            # routes/chat.py) — register_instance's pin is additive with no
+            # unpin, so if either call defaulted to pinned=True this actor
+            # would stay resident forever regardless of what the other one
+            # asked for.
+            await self._runtime.register(self._agent, pinned=False)
             # max_retries=0: interactive chat runs must not be retried with the
             # same run_id — retries replay the journal and re-hit journaled errors.
             try:

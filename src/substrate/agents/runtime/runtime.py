@@ -95,6 +95,7 @@ class Runtime:
         supervisor: SupervisorProtocol | None = None,
         follow_graph: FollowGraph | None = None,
         fanout: FanoutStrategy | None = None,
+        resolver: ActorResolver | None = None,
     ) -> None:
         self._event_log: EventLogProtocol = event_log or InMemoryEventLog()
         self._scheduler: SchedulerProtocol = scheduler or InMemoryScheduler()
@@ -110,7 +111,11 @@ class Runtime:
             self._scheduler  # type: ignore[arg-type]
         )
         self._supervisor: SupervisorProtocol | None = supervisor
-        self._resolver = ActorResolver()
+        # Injectable like every other backend, rather than hardcoded, so
+        # infrastructure wiring can tune capacity/TTL (e.g. for a production
+        # deployment expecting far more than the 10k-actor default) without
+        # reaching into a private attribute.
+        self._resolver = resolver or ActorResolver()
         self._worker: Worker | None = None
 
     def _on_inbox_deliver(self, agent_id: Actor) -> None:
@@ -153,18 +158,32 @@ class Runtime:
     # Public API
     # ------------------------------------------------------------------
 
-    async def register(self, agent: Agent) -> None:
-        """Register one already-built agent, pinned for the process lifetime.
+    async def register(self, agent: Agent, *, pinned: bool = True) -> None:
+        """Register one already-built agent.
+
+        ``pinned=True`` (the default, unchanged) keeps it resident for the
+        process lifetime — right for singletons and low-cardinality agents.
+
+        ``pinned=False`` is the virtual-actor migration path for a call site
+        that already builds a fresh instance per entity on every call (a
+        per-request chat agent keyed by thread id, say): the construction
+        code doesn't change at all, but the registered instance now
+        participates in LRU/idle-TTL eviction instead of being held forever.
+        Safe specifically because such a call site rebuilds unconditionally
+        on its next invocation — eviction just means "rebuilt next time"
+        instead of "never freed." See ``ActorResolver.register_instance``.
 
         If ``agent`` is an OrchestratorAgent whose ``_sub_agents`` list is
-        populated, every sub-agent is also registered automatically.  This
-        prevents the Worker from silently holding the lease (for up to its
-        timeout) when the orchestrator spawns a child that isn't registered.
+        populated, every sub-agent is also registered automatically (always
+        pinned — sub-agent lifecycle isn't part of this migration path).
+        This prevents the Worker from silently holding the lease (for up to
+        its timeout) when the orchestrator spawns a child that isn't
+        registered.
 
         Pinning one object per entity does not scale past a few thousand —
         see ``register_factory`` for the on-demand alternative.
         """
-        self._resolver.register_instance(agent)
+        self._resolver.register_instance(agent, pinned=pinned)
         sub_agents: list[SubAgentConfig] = getattr(agent, "_sub_agents", [])
         for cfg in sub_agents:
             self._resolver.register_instance(cfg.agent)

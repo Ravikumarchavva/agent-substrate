@@ -20,6 +20,7 @@ from typing import Any, List, Optional, cast
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from substrate.config import SubstrateConfig
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.llm import EmbeddingClient, LLMClient
 from substrate.kernel.storage.history import HistoryProvider
 from substrate.kernel.tools import (
@@ -750,8 +751,18 @@ async def build_agent_for_thread(
     initial_tool_choice: str | None = None,
     bridge: Any = None,
     safety_middleware: Any = None,
+    register: bool = True,
+    pinned: bool = True,
 ) -> Any:
     """Build and register a kernel Agent for this thread.
+
+    ``register``/``pinned`` only affect the final registration step, not
+    construction: ``register=False`` returns the built agent without
+    registering it at all (for a caller — e.g. a virtual-actor factory —
+    that will register the result itself, via ``ActorResolver.resolve()``).
+    ``pinned=False`` registers it normally but evictable, the migration path
+    for turning this per-thread-per-call agent into a virtual actor without
+    touching how it's built — see ``Runtime.register``.
 
     ``safety_middleware`` (built once at startup by ``build_safety_middleware``,
     threaded through ``app.state``) is appended to the assistant agent's
@@ -873,8 +884,64 @@ async def build_agent_for_thread(
         approval_handler=approval_handler,
         middleware=[safety_middleware] if safety_middleware is not None else None,
     )
-    await runtime.register(agent)
+    if register:
+        await runtime.register(agent, pinned=pinned)
     return agent
+
+
+def register_assistant_actor_factory(
+    runtime: Any,
+    *,
+    bridge_registry: Any,
+    toolbox: Any,
+    model_client: LLMClient,
+    system_instructions: str,
+    cfg: SubstrateConfig,
+    history: Optional[HistoryProvider] = None,
+    short_term_memory: Any = None,
+    long_term_memory: Any = None,
+    model_context_window: int = 40,
+) -> None:
+    """Register the on-demand activation path for chat agents (``type="assistant"``).
+
+    This is the other half of the virtual-actor migration alongside
+    ``pinned=False`` above: a factory lets the Worker activate a thread's
+    agent purely from its address, for the case nothing has eagerly called
+    ``build_agent_for_thread`` yet for it this process (e.g. a message
+    delivered to a thread whose actor was evicted, or one that's never been
+    built in this process at all). The interactive chat route still calls
+    ``build_agent_for_thread`` eagerly for its own turn — this factory is
+    the fallback for everything that doesn't go through that route.
+
+    Deliberately reuses ``build_agent_for_thread`` unchanged (``register=
+    False`` so this factory — not that function — owns registration, since
+    ``ActorResolver.resolve()`` registers the result itself). ``user_id`` is
+    not recoverable from the actor's address alone, so an actor activated
+    this way gets no personalization block; ``build_agent_for_thread``
+    already treats ``user_id`` as optional, so this is a graceful
+    degradation, not an error path.
+    """
+
+    async def _activate(actor: Actor) -> Any:
+        thread_id = uuid.UUID(actor.key)
+        bridge = await bridge_registry.acquire(actor.key)
+        tools = build_chat_tools(toolbox, bridge)
+        return await build_agent_for_thread(
+            thread_id,
+            model_client=model_client,
+            tools=tools,
+            system_instructions=system_instructions,
+            cfg=cfg,
+            history=history,
+            short_term_memory=short_term_memory,
+            long_term_memory=long_term_memory,
+            model_context_window=model_context_window,
+            runtime=runtime,
+            bridge=bridge,
+            register=False,
+        )
+
+    runtime.register_factory("assistant", _activate)
 
 
 def build_chat_tools(toolbox: Any, bridge: Any) -> list[Any]:

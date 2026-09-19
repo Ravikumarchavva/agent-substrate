@@ -28,7 +28,7 @@ from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.agents.runtime.cancellation import CancellationToken
 from substrate.kernel.runtime.ids import RunStatus
 from substrate.kernel.runtime.log_entry import RunLogEntry
-from substrate.kernel.core.errors import CancellationError, SuspendInterrupt
+from substrate.kernel.exceptions import CancellationError, SuspendInterrupt
 
 if TYPE_CHECKING:
     from substrate.agents.runtime.resolver import ActorResolver
@@ -359,7 +359,7 @@ class Worker:
             await self._supervisor.finish_run(run_id, RunStatus.CANCELLED)
 
         except Exception as exc:
-            from substrate.kernel.core.errors import (
+            from substrate.kernel.exceptions import (
                 AgentCrashError,
                 BudgetExhaustedError,
                 MiddlewareTermination,
@@ -394,7 +394,7 @@ class Worker:
                     payload = {
                         "error": f"Request blocked: {exc.message}",
                         "status": "guardrail_tripped",
-                    }  # type: ignore[union-attr]
+                    }
                 elif is_budget:
                     payload = {"error": str(exc), "status": "budget_exhausted"}
                 elif is_permanent:

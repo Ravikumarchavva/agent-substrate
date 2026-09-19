@@ -383,7 +383,7 @@ class Scheduler:
     ) -> None:
         import asyncpg
 
-        from substrate.kernel.core.errors import ThreadBusyError
+        from substrate.kernel.exceptions import ThreadBusyError
 
         agent_id = self._pending_registrations.pop(run_id, None)
         wakeup_json = wake.model_dump_json() if wake else None

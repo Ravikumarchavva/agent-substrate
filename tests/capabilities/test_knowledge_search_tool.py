@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from substrate.capabilities.knowledge.backends.base import IngestResult
 from substrate.capabilities.tools.ai.knowledge_search import KnowledgeSearchTool
-from substrate.kernel.core.content import ImageBlock, TextBlock
+from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.storage.vector import SearchResult
 
 
@@ -199,7 +199,7 @@ def _chart_result(page: int) -> SearchResult:
     what LocalRagBackend's image_store path returns."""
     return SearchResult(
         id=f"img-{page}",
-        content=[ImageBlock(data=f"png-bytes-{page}".encode(), media_type="image/png")],
+        content=[MediaBlock.image(data=f"png-bytes-{page}".encode(), media_type="image/png")],
         score=0.9,
         metadata={"filename": "financials.pdf", "page_number": page},
     )
@@ -215,11 +215,11 @@ async def test_knowledge_search_tool_attaches_each_image_once_per_conversation()
     tool = KnowledgeSearchTool(backend)
 
     first = await tool.execute(action="search", text="net sales")
-    assert len([b for b in first.content if isinstance(b, ImageBlock)]) == 3
+    assert len([b for b in first.content if isinstance(b, MediaBlock) and b.is_image]) == 3
 
     # Same images come back for a differently-worded question in the same turn.
     second = await tool.execute(action="search", text="total assets")
-    assert [b for b in second.content if isinstance(b, ImageBlock)] == []
+    assert [b for b in second.content if isinstance(b, MediaBlock) and b.is_image] == []
     # The model still gets the passage labelled and told why there's no image,
     # so it doesn't read the absence as "the chart is missing".
     assert "already attached earlier" in second.content[0].text
@@ -235,7 +235,7 @@ async def test_knowledge_search_tool_deduplicates_repeated_image_within_one_batc
 
     result = await tool.execute(action="search", text="net sales")
 
-    assert len([b for b in result.content if isinstance(b, ImageBlock)]) == 1
+    assert len([b for b in result.content if isinstance(b, MediaBlock) and b.is_image]) == 1
 
 
 async def test_knowledge_search_tool_still_attaches_a_genuinely_new_image():
@@ -248,7 +248,7 @@ async def test_knowledge_search_tool_still_attaches_a_genuinely_new_image():
     backend._results = [_chart_result(1), _chart_result(4)]
     second = await tool.execute(action="search", text="cash flows")
 
-    images = [b for b in second.content if isinstance(b, ImageBlock)]
+    images = [b for b in second.content if isinstance(b, MediaBlock) and b.is_image]
     assert len(images) == 1
     assert images[0].data == b"png-bytes-4"
 

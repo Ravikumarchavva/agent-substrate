@@ -37,7 +37,7 @@ from substrate.kernel.tools.chain import (
     ChainPolicy,
     InvocationResult,
 )
-from substrate.kernel.core.content import ImageBlock, JsonObject
+from substrate.kernel.core.content import JsonObject, MediaBlock
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.stream import AgentProgress, AgentStep
 from substrate.kernel.tools import (
@@ -370,7 +370,7 @@ class ToolInvoker:
         policy = self._policy
 
         # Keep media blocks inline on InvocationResult.media (bytes preserved)
-        media_blocks = [b for b in content if isinstance(b, ImageBlock)]
+        media_blocks = [b for b in content if isinstance(b, MediaBlock)]
         files: list[ChainFile] = []
         media = [b for b in media_blocks if b.data is not None]
 

@@ -33,7 +33,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from substrate.kernel.core.content import ImageBlock
+from substrate.kernel.core.content import MediaBlock
 from substrate.kernel.tools.tools import ToolRisk
 
 # ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ class InvocationResult(BaseModel):
     structured: dict[str, object] = Field(default_factory=dict)
     artifact_ref: str | None = None
     files: list[ChainFile] = Field(default_factory=list)
-    media: list[ImageBlock] = Field(default_factory=list)
+    media: list[MediaBlock] = Field(default_factory=list)
 
     model_config = {"frozen": True}
 

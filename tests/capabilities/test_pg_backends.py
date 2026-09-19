@@ -73,7 +73,7 @@ async def test_pg_event_log_append_and_read(pg_pool) -> None:
 async def test_pg_event_log_occ_raises(pg_pool) -> None:
     from substrate.infrastructure.runtime import EventLog
     from substrate.kernel.runtime.log_entry import RunLogEntry
-    from substrate.kernel.core.errors import ConcurrentAppendError
+    from substrate.kernel.exceptions import ConcurrentAppendError
     from substrate.kernel.runtime.ids import new_run_id
 
     log = EventLog(pg_pool)

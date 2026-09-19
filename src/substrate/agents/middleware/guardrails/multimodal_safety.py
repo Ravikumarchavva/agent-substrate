@@ -57,7 +57,7 @@ from substrate.kernel.agent.safety import (
     TextSafetyClassifier,
     max_severity,
 )
-from substrate.kernel.core.content import ImageBlock, TextBlock
+from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.logger import setup_logging
 
 logger = setup_logging("substrate.agents.middleware.multimodal_safety")
@@ -136,7 +136,7 @@ class MultimodalSafetyMiddleware:
             )
         return model_verdict
 
-    async def _classify_image(self, block: ImageBlock) -> SafetyVerdict:
+    async def _classify_image(self, block: MediaBlock) -> SafetyVerdict:
         if self._image_classifier is None or block.data is None:
             return SafetyVerdict(
                 severity=Severity.NONE, detector="image_safety", modality="image"
@@ -156,7 +156,7 @@ class MultimodalSafetyMiddleware:
         for block in last_msg.content:
             if isinstance(block, TextBlock) and block.text.strip():
                 verdicts.append(await self._classify_text(block.text))
-            elif isinstance(block, ImageBlock):
+            elif isinstance(block, MediaBlock) and block.is_image:
                 verdicts.append(await self._classify_image(block))
 
         if not verdicts:

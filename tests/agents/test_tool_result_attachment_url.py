@@ -10,11 +10,11 @@ on every tool call that returned it.
 from __future__ import annotations
 
 from substrate.agents.runtime.context.tool import _attachment_url
-from substrate.kernel.core.content import ImageBlock
+from substrate.kernel.core.content import MediaBlock
 
 
 def test_image_with_storage_key_becomes_a_bare_object_scheme():
-    img = ImageBlock(
+    img = MediaBlock.image(
         data=b"PNGBYTES",
         media_type="image/png",
         storage_key="users/u1/rag/f9/p1-0.png",
@@ -26,7 +26,7 @@ def test_image_with_storage_key_becomes_a_bare_object_scheme():
 def test_image_without_storage_key_still_inlines_as_a_data_uri():
     """Nothing durable behind it (e.g. a matplotlib chart with no file store
     configured) — must survive in the log the old way, not vanish."""
-    img = ImageBlock(data=b"PNGBYTES", media_type="image/png")
+    img = MediaBlock.image(data=b"PNGBYTES", media_type="image/png")
 
     url = _attachment_url(img)
 
@@ -39,7 +39,7 @@ def test_object_scheme_url_does_not_encode_the_key():
     frontend resolver strips the scheme and encodes once itself. Encoding
     here too would double-encode every `/` by the time it reaches a real URL
     (see the module comment above _OBJECT_URL_TEMPLATE)."""
-    img = ImageBlock(
+    img = MediaBlock.image(
         data=b"x", media_type="image/png", storage_key="users/u 1/rag/f 9/p1.png"
     )
 
@@ -47,6 +47,6 @@ def test_object_scheme_url_does_not_encode_the_key():
 
 
 def test_data_uri_defaults_to_png_when_media_type_is_empty():
-    img = ImageBlock(data=b"x", media_type="")
+    img = MediaBlock.image(data=b"x", media_type="")
 
     assert _attachment_url(img).startswith("data:image/png;base64,")

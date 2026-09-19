@@ -92,7 +92,7 @@ class InMemorySupervisor:
             max_agents = supervision.spawn_budget.max_agents
             active = self._count_active(root_run)
             if 1 + active >= max_agents:
-                from substrate.kernel.core.errors import BudgetExhaustedError
+                from substrate.kernel.exceptions import BudgetExhaustedError
 
                 raise BudgetExhaustedError(
                     f"Run headcount cap reached ({1 + active}/{max_agents} "

@@ -25,16 +25,12 @@ from substrate.integrations.llm.encoders._media import (
 
 from substrate.kernel import ChatMessage
 from substrate.kernel.core.content import (
-    AudioBlock,
-    CodeBlock,
     DataBlock,
-    DocumentBlock,
     ErrorBlock,
-    ImageBlock,
+    MediaBlock,
     TextBlock,
-    VideoBlock,
-    ToolUseBlock,
     ToolResultBlock,
+    ToolUseBlock,
 )
 
 
@@ -126,62 +122,8 @@ def _encode_image(img: Image.Image) -> dict[str, Any]:
     }
 
 
-def _encode_image_content(ic: ImageBlock) -> dict[str, Any]:
-    """ImageBlock → OpenAI Responses API ``input_image`` block."""
-    block: dict[str, Any] = {"type": "input_image"}
-    if ic.url:
-        block["image_url"] = ic.url
-    elif ic.file_id:
-        block["file_id"] = ic.file_id
-    else:
-        block["image_url"] = (
-            f"data:{ic.media_type};base64,{bytes_to_base64(ic.data or b'')}"
-        )
-    if ic.detail != "auto":
-        block["detail"] = ic.detail
-    return block
-
-
-def _encode_audio_content(ac: AudioBlock, role: str) -> dict[str, Any]:
-    """AudioBlock → OpenAI Responses API audio block."""
-    if isinstance(ac.data, (str, Path)):
-        with open(ac.data, "rb") as f:
-            audio_bytes = f.read()
-    else:
-        audio_bytes = ac.data
-    audio_type = "input_audio" if role == "user" else "output_audio"
-    return {
-        "type": audio_type,
-        "source": {
-            "type": "base64",
-            "media_type": ac.media_type,
-            "data": bytes_to_base64(audio_bytes or b""),
-        },
-    }
-
-
-def _encode_video_content(vc: VideoBlock, role: str) -> dict[str, Any]:
-    """VideoBlock → OpenAI Responses API video block."""
-    if isinstance(vc.data, (str, Path)):
-        with open(vc.data, "rb") as f:
-            video_bytes = f.read()
-    else:
-        video_bytes = vc.data
-    if video_bytes is None:
-        raise ValueError("VideoBlock requires data bytes to encode for OpenAI")
-    video_type = "input_video" if role == "user" else "output_video"
-    return {
-        "type": video_type,
-        "source": {
-            "type": "base64",
-            "media_type": vc.media_type,
-            "data": bytes_to_base64(video_bytes),
-        },
-    }
-
-
 def _encode_media_item(
-    item: str | Image.Image | ImageBlock | AudioBlock | VideoBlock | DocumentBlock,
+    item: str | Image.Image | MediaBlock,
     role: str,
 ) -> dict[str, Any]:
     """Encode a single media block to OpenAI Responses API format."""
@@ -189,16 +131,46 @@ def _encode_media_item(
 
     if isinstance(item, Image.Image):
         return _encode_image(item)
-    if isinstance(item, ImageBlock):
-        return _encode_image_content(item)
-    if isinstance(item, AudioBlock):
-        return _encode_audio_content(item, role)
-    if isinstance(item, VideoBlock):
-        return _encode_video_content(item, role)
-    if isinstance(item, DocumentBlock):
-        text_type = "input_text" if role == "user" else "output_text"
-        ref = item.filename or item.url or "document"
-        return {"type": text_type, "text": f"[Document Attachment: {ref}]"}
+    if isinstance(item, MediaBlock):
+        if item.type == "image":
+            block: dict[str, Any] = {"type": "input_image"}
+            if item.url:
+                block["image_url"] = item.url
+            elif item.file_id:
+                block["file_id"] = item.file_id
+            else:
+                block["image_url"] = (
+                    f"data:{item.media_type};base64,{bytes_to_base64(item.data or b'')}"
+                )
+            if item.detail != "auto":
+                block["detail"] = item.detail
+            return block
+        if item.type == "audio":
+            audio_type = "input_audio" if role == "user" else "output_audio"
+            return {
+                "type": audio_type,
+                "source": {
+                    "type": "base64",
+                    "media_type": item.media_type,
+                    "data": bytes_to_base64(item.data or b""),
+                },
+            }
+        if item.type == "video":
+            if item.data is None:
+                raise ValueError("Video MediaBlock requires data bytes to encode for OpenAI")
+            video_type = "input_video" if role == "user" else "output_video"
+            return {
+                "type": video_type,
+                "source": {
+                    "type": "base64",
+                    "media_type": item.media_type,
+                    "data": bytes_to_base64(item.data),
+                },
+            }
+        if item.type == "document":
+            text_type = "input_text" if role == "user" else "output_text"
+            ref = item.filename or item.url or "document"
+            return {"type": text_type, "text": f"[Document Attachment: {ref}]"}
     if isinstance(item, str):
         text_type = "input_text" if role == "user" else "output_text"
         return {"type": text_type, "text": item}
@@ -219,7 +191,7 @@ def _encode_user(msg: ChatMessage) -> dict[str, Any]:
     """User ChatMessage → Responses API message item."""
     content = []
     for block in msg.content:
-        if isinstance(block, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock)):
+        if isinstance(block, MediaBlock):
             content.append(_encode_media_item(block, "user"))
         elif isinstance(block, TextBlock):
             content.append({"type": "input_text", "text": block.text})
@@ -230,7 +202,7 @@ def _encode_assistant(msg: ChatMessage, items: list[dict[str, Any]]) -> None:
     """Assistant ChatMessage → Responses API message + function_call items."""
     content = []
     for block in msg.content:
-        if isinstance(block, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock)):
+        if isinstance(block, MediaBlock):
             content.append(_encode_media_item(block, "assistant"))
         elif isinstance(block, TextBlock):
             content.append({"type": "output_text", "text": block.text})
@@ -254,22 +226,10 @@ def _encode_content_block(block: Any) -> str:
     """Encode a single ContentBlock to a string for OpenAI tool output."""
     if isinstance(block, TextBlock):
         return block.text
-    if isinstance(block, ImageBlock):
-        return f"[Image: {block.media_type}]"
-    if isinstance(block, AudioBlock):
-        if block.transcript:
-            return f"[Audio transcript]: {block.transcript}"
-        return f"[Audio: {block.media_type}]"
-    if isinstance(block, VideoBlock):
-        ref = block.url or block.media_type
-        return f"[Video: {ref}]"
-    if isinstance(block, DocumentBlock):
-        name = block.filename or block.media_type
-        return f"[Document: {name}]"
+    if isinstance(block, MediaBlock):
+        return str(block)
     if isinstance(block, DataBlock):
         return json.dumps(block.data)
-    if isinstance(block, CodeBlock):
-        return f"```{block.language}\n{block.code}\n```"
     if isinstance(block, ErrorBlock):
         return f"[{block.error_type}]: {block.message}"
     # Fallback for unknown block types or legacy dicts
@@ -303,7 +263,7 @@ def _encode_tool_result(block: ToolResultBlock) -> list[dict[str, Any]]:
     media_blocks = [
         b
         for b in block.content
-        if isinstance(b, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock))
+        if isinstance(b, MediaBlock)
     ]
     if media_blocks:
         media_content = [

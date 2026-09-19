@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Protocol
 
-from substrate.kernel.core.errors import CancellationError
+from substrate.kernel.exceptions import CancellationError
 from substrate.kernel.agent.supervision import Supervision
 
 

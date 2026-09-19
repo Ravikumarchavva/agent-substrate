@@ -16,7 +16,7 @@ from substrate.runtimes.document_intelligence.client import (
     ExtractedPageText,
     ExtractResponse,
 )
-from substrate.kernel.core.content import ImageBlock, TextBlock
+from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.storage.vector import Document, SearchResult
 
 
@@ -151,7 +151,7 @@ async def test_ingest_images_stores_bytes_in_the_file_store_not_the_vector_row()
     assert doc.metadata["image_key"] == key
     assert doc.embedding == [0.1, 0.2]
     # No raw bytes anywhere in the stored row.
-    assert not any(isinstance(b, ImageBlock) for b in doc.content)
+    assert not any(isinstance(b, MediaBlock) for b in doc.content)
 
 
 async def test_query_rehydrates_image_bytes_from_the_stored_key():
@@ -169,7 +169,8 @@ async def test_query_rehydrates_image_bytes_from_the_stored_key():
     results = await backend.query("chart?", collection="kb", limit=5)
 
     block = results[0].content[0]
-    assert isinstance(block, ImageBlock)
+    assert isinstance(block, MediaBlock)
+    assert block.is_image
     assert block.data == b"PNGBYTES"
     assert block.media_type == "image/png"
 
@@ -204,7 +205,8 @@ async def test_ingest_images_falls_back_to_inlining_when_the_upload_fails():
     await backend._ingest_images([(b"PNGBYTES", dict(IMG_META))], collection="kb")
 
     doc = image_store.documents[0]
-    assert isinstance(doc.content[0], ImageBlock)
+    assert isinstance(doc.content[0], MediaBlock)
+    assert doc.content[0].is_image
     assert doc.content[0].data == b"PNGBYTES"
     assert "image_key" not in doc.metadata
 
@@ -222,7 +224,8 @@ async def test_ingest_images_inlines_when_the_owner_is_unknown():
     await backend._ingest_images([(b"PNGBYTES", {"file_id": "f9"})], collection="kb")
 
     assert store.objects == {}
-    assert isinstance(image_store.documents[0].content[0], ImageBlock)
+    assert isinstance(image_store.documents[0].content[0], MediaBlock)
+    assert image_store.documents[0].content[0].is_image
 
 
 async def test_image_key_is_independent_of_collection_so_promote_need_not_move_it():
@@ -278,7 +281,8 @@ async def test_ingest_images_skips_one_bad_image_without_failing_the_rest():
     assert len(image_store.documents) == 1
     assert image_store.documents[0].metadata["page_number"] == 2
     assert image_store.documents[0].embedding == [0.1, 0.2]
-    assert isinstance(image_store.documents[0].content[0], ImageBlock)
+    assert isinstance(image_store.documents[0].content[0], MediaBlock)
+    assert image_store.documents[0].content[0].is_image
     assert image_store.added_collections == ["kb"]
 
 
@@ -318,7 +322,7 @@ async def test_hybrid_candidates_searches_image_store_with_embedded_query():
     image_store = StubImageStore()
     image_store.documents = [
         Document(
-            content=[ImageBlock(data=b"png", media_type="image/png")], embedding=[0.5]
+            content=[MediaBlock.image(data=b"png", media_type="image/png")], embedding=[0.5]
         )
     ]
     client = AsyncMock()
@@ -344,7 +348,7 @@ async def test_query_merges_text_and_image_candidates_before_reranking():
     image_store = StubImageStore()
     image_store.documents = [
         Document(
-            content=[ImageBlock(data=b"png", media_type="image/png")], embedding=[0.5]
+            content=[MediaBlock.image(data=b"png", media_type="image/png")], embedding=[0.5]
         )
     ]
     client = AsyncMock()
@@ -359,7 +363,7 @@ async def test_query_merges_text_and_image_candidates_before_reranking():
 
     assert len(results) == 2
     assert any(isinstance(b, TextBlock) for r in results for b in r.content)
-    assert any(isinstance(b, ImageBlock) for r in results for b in r.content)
+    assert any(isinstance(b, MediaBlock) and b.is_image for r in results for b in r.content)
 
 
 # ── _load_via_extraction_service — splits text pages and images ────────────

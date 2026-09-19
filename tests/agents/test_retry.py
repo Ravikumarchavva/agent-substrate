@@ -18,7 +18,7 @@ import time
 from substrate.agents.runtime import Runtime
 from substrate.agents.runtime.backends._event_log import InMemoryEventLog
 from substrate.agents.runtime.effect_cache import EffectCache
-from substrate.kernel.core.errors import PermanentError
+from substrate.kernel.exceptions import PermanentError
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import DataPayload, Message
 from substrate.kernel.runtime.log_entry import RunLogEntry

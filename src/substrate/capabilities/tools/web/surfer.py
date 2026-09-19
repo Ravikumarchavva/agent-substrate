@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 
 from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel import ContentBlock, ImageBlock, TextBlock
+from substrate.kernel import ContentBlock, MediaBlock, TextBlock
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, Page, Playwright
@@ -309,7 +309,7 @@ class WebSurferTool:
                 # Handle screenshot with image content
                 content: list[ContentBlock] = [
                     TextBlock(text=f"Screenshot captured: {result['url']}"),
-                    ImageBlock(
+                    MediaBlock.image(
                         data=base64.b64decode(result["screenshot"]),
                         media_type="image/png",
                     ),

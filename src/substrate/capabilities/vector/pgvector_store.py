@@ -34,7 +34,7 @@ from typing import Any, Optional
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from substrate.kernel.core.content import content_block_from_dict
+from substrate.kernel.core.content import parse_content_block
 from substrate.kernel.storage.vector import Document, SearchResult
 from substrate.logger import setup_logging
 
@@ -49,7 +49,7 @@ def _blocks_to_json(doc: Document) -> str:
 def _blocks_from_json(raw: str | list) -> list:
     """Deserialize blocks from the content_json column."""
     items: list = json.loads(raw) if isinstance(raw, str) else raw
-    return [content_block_from_dict(item) for item in items]
+    return [parse_content_block(item) for item in items]
 
 
 _TABLE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")

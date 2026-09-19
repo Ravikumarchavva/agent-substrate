@@ -24,7 +24,7 @@ from substrate.agents.runtime.context import RunContext
 from substrate.agents.runtime.effect_cache import EffectCache
 from substrate.agents.runtime.cancellation import CancellationToken
 from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.kernel.core.errors import ConcurrentAppendError
+from substrate.kernel.exceptions import ConcurrentAppendError
 from substrate.kernel.runtime.effects import EffectResult
 from substrate.kernel.runtime.log_entry import RunLogEntry
 

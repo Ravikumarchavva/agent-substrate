@@ -172,10 +172,10 @@ def test_message_round_trip() -> None:
 
 def test_content_block_unknown_preserved() -> None:
     """Unknown block types must be preserved as UnknownBlock, not silently mangled."""
-    from substrate.kernel.core.content import content_block_from_dict, UnknownBlock
+    from substrate.kernel.core.content import UnknownBlock, parse_content_block
 
     raw = {"type": "future_block_v99", "some_field": "some_value"}
-    result = content_block_from_dict(raw)  # type: ignore[arg-type]
+    result = parse_content_block(raw)  # type: ignore[arg-type]
     assert isinstance(result, UnknownBlock)
     assert result.raw["type"] == "future_block_v99"
 
@@ -183,13 +183,13 @@ def test_content_block_unknown_preserved() -> None:
 def test_content_block_invalid_raises() -> None:
     """Invalid data for a known block type must raise BlockValidationError."""
     from substrate.kernel.core.content import (
-        content_block_from_dict,
         BlockValidationError,
+        parse_content_block,
     )
 
     bad = {"type": "text"}  # missing required 'text' field
     try:
-        content_block_from_dict(bad)  # type: ignore[arg-type]
+        parse_content_block(bad)  # type: ignore[arg-type]
         assert False, "Should have raised BlockValidationError"
     except BlockValidationError:
         pass

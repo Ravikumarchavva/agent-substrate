@@ -8,7 +8,7 @@ resolved for the request — the model always saw text-only content."""
 
 from __future__ import annotations
 
-from substrate.kernel.core.content import ImageBlock, TextBlock
+from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.serving.monolith.routes.chat_wire import _ImagePayload, build_user_blocks
 
 
@@ -24,7 +24,8 @@ def test_build_user_blocks_includes_images():
     assert len(blocks) == 2
     assert isinstance(blocks[0], TextBlock)
     assert blocks[0].text == "what's in this image"
-    assert isinstance(blocks[1], ImageBlock)
+    assert isinstance(blocks[1], MediaBlock)
+    assert blocks[1].is_image
     assert blocks[1].data == b"\x89PNG..."
     assert blocks[1].media_type == "image/png"
 
@@ -37,5 +38,5 @@ def test_build_user_blocks_multiple_images_preserve_order():
     blocks = build_user_blocks("compare these", payloads)
 
     assert len(blocks) == 3
-    images = [b for b in blocks if isinstance(b, ImageBlock)]
+    images = [b for b in blocks if isinstance(b, MediaBlock) and b.is_image]
     assert [img.data for img in images] == [b"first", b"second"]

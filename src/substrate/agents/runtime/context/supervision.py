@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from substrate.kernel.core.content import JsonObject
-from substrate.kernel.core.errors import SuspendInterrupt
+from substrate.kernel.exceptions import SuspendInterrupt
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.runtime.effects import Effect

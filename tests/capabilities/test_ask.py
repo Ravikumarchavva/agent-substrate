@@ -5,7 +5,7 @@ this targets the two behaviors this session's storage rewrite changed)."""
 from __future__ import annotations
 
 from substrate.capabilities.knowledge.ask import _is_text, ask
-from substrate.kernel.core.content import ImageBlock, TextBlock
+from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.core.usage import Usage
 from substrate.kernel.llm.llm import LLMResponse
 from substrate.kernel.storage.vector import SearchResult
@@ -20,7 +20,7 @@ def _text_result(**metadata) -> SearchResult:
 def _image_result(**metadata) -> SearchResult:
     return SearchResult(
         id="i1",
-        content=[ImageBlock(data=b"png-bytes", media_type="image/png")],
+        content=[MediaBlock.image(data=b"png-bytes", media_type="image/png")],
         score=0.8,
         metadata=metadata,
     )

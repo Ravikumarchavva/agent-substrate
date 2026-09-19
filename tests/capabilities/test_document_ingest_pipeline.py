@@ -15,7 +15,7 @@ from substrate.capabilities.knowledge.document_ingest_pipeline import (
     ExtractedFile,
     ExtractionFailedError,
 )
-from substrate.kernel.core.content import ImageBlock, TextBlock
+from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.runtimes.document_intelligence.client import (
     ExtractedImage,
     ExtractResponse,
@@ -137,7 +137,7 @@ async def test_ingest_file_with_images_and_no_blob_store_inlines_them(tmp_path):
     assert n_image == 1
     docs, collection = store.added[0]
     assert collection == "kb"
-    image_docs = [d for d in docs if isinstance(d.content[0], ImageBlock)]
+    image_docs = [d for d in docs if isinstance(d.content[0], MediaBlock) and d.content[0].is_image]
     assert len(image_docs) == 1
     assert image_docs[0].content[0].data == b"fake-png-bytes"
     assert image_docs[0].metadata["kind"] == "image"
@@ -332,7 +332,8 @@ async def test_image_upload_failure_degrades_to_inline_not_dropped(tmp_path):
     assert n_image == 1
     docs, _ = store.added[0]
     image_docs = [d for d in docs if d.metadata.get("kind") == "image"]
-    assert isinstance(image_docs[0].content[0], ImageBlock)
+    assert isinstance(image_docs[0].content[0], MediaBlock)
+    assert image_docs[0].content[0].is_image
     assert image_docs[0].content[0].data == b"fake-png-bytes"
 
 

@@ -109,7 +109,7 @@ class AgentStreamSession:
 
     async def _agent_worker(self) -> str:
         """Register agent, submit message, tail EventLogProtocol. Returns terminal reason."""
-        from substrate.kernel.core.errors import ThreadBusyError
+        from substrate.kernel.exceptions import ThreadBusyError
 
         try:
             # pinned=False must match the caller's own registration (see

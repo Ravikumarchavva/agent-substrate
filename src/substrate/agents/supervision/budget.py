@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import threading
 
-from substrate.kernel.core.errors import BudgetExhaustedError
+from substrate.kernel.exceptions import BudgetExhaustedError
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.agent.supervision import Priority, SpawnBudget
 

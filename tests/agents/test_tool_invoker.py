@@ -14,7 +14,7 @@ from substrate.kernel.tools.approval import (
     ApprovalResult,
 )
 from substrate.kernel.tools.chain import ChainPolicy
-from substrate.kernel.core.content import ImageBlock, TextBlock
+from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
 
 
@@ -80,7 +80,7 @@ class ImageTool:
 
     async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:
         return ToolExecutionResult(
-            content=[ImageBlock(data=b"PNG_DATA", media_type="image/png")],
+            content=[MediaBlock.image(data=b"PNG_DATA", media_type="image/png")],
         )
 
 

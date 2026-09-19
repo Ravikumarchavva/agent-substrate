@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, ClassVar
 
 from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.kernel.agent.middleware import MiddlewareStage
-from substrate.kernel.core.errors import MiddlewareTermination
+from substrate.kernel.exceptions import MiddlewareTermination
 from substrate.logger import setup_logging
 
 if TYPE_CHECKING:

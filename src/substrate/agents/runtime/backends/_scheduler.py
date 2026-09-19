@@ -90,7 +90,7 @@ class InMemoryScheduler:
         if thread_id is not None:
             existing = await self.find_run_for_thread(thread_id)
             if existing is not None and existing[0] != run_id:
-                from substrate.kernel.core.errors import ThreadBusyError
+                from substrate.kernel.exceptions import ThreadBusyError
 
                 raise ThreadBusyError(
                     f"thread {thread_id} already has an active run", thread_id=thread_id

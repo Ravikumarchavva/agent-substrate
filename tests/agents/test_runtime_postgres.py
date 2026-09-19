@@ -239,7 +239,7 @@ class CrashingChildAgent:
         self.id = agent_id
 
     async def run(self, ctx: object, inbox: list[Message]) -> None:
-        from substrate.kernel.core.errors import PermanentError
+        from substrate.kernel.exceptions import PermanentError
 
         raise PermanentError("child deliberately crashes")
 
@@ -701,7 +701,7 @@ async def test_pg_spawn_denied_once_headcount_cap_reached() -> None:
     from substrate.infrastructure.runtime.signal_bus import SignalBus
     from substrate.infrastructure.runtime.supervisor import Supervisor
     from substrate.kernel.agent.supervision import Supervision, SpawnBudget
-    from substrate.kernel.core.errors import BudgetExhaustedError
+    from substrate.kernel.exceptions import BudgetExhaustedError
     from substrate.kernel.runtime.effects import Effect
 
     pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
@@ -802,7 +802,7 @@ async def test_pg_tool_approval_survives_full_pool_close_and_reopen() -> None:
     from substrate.infrastructure.runtime.signal_bus import SignalBus
     from substrate.infrastructure.runtime.supervisor import Supervisor
     from substrate.kernel.agent.runtime_context import RunMeta
-    from substrate.kernel.core.errors import SuspendInterrupt
+    from substrate.kernel.exceptions import SuspendInterrupt
     from substrate.kernel.tools import ToolExecutionResult, ToolRisk
     from substrate.kernel.tools.approval import ApprovalRequest, ApprovalResult
 
@@ -1152,7 +1152,7 @@ async def test_pg_ask_crash_fast_path(pg_runtime) -> None:
             self.id = agent_id
 
         async def run(self, ctx: object, inbox: list[Message]) -> None:
-            from substrate.kernel.core.errors import PermanentError
+            from substrate.kernel.exceptions import PermanentError
 
             raise PermanentError("target deliberately crashes")
 
@@ -1279,7 +1279,7 @@ async def test_pg_thread_single_flight(pg_runtime) -> None:
     """A second submit() for the same thread_id, while the first run is still
     active, raises ThreadBusyError — durably, via a unique partial index on
     substrate_run_queue, not a per-process lock (see routes/chat.py)."""
-    from substrate.kernel.core.errors import ThreadBusyError
+    from substrate.kernel.exceptions import ThreadBusyError
 
     agent_id = _agent_id("pg-singleflight")
     agent = SleepForeverAgent(agent_id)
@@ -1593,7 +1593,7 @@ async def test_pg_flaky_retry_genuinely_re_executes(pg_runtime) -> None:
 async def test_pg_permanent_error_skips_retry(pg_runtime) -> None:
     """PermanentError terminal-fails on the first attempt against the real
     Scheduler — no backoff, no retry_count increment wasted."""
-    from substrate.kernel.core.errors import PermanentError
+    from substrate.kernel.exceptions import PermanentError
     from substrate.kernel.runtime.scheduler import RunRetryPolicy
 
     class AlwaysCrashingAgent:

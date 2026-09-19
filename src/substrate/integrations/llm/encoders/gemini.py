@@ -25,16 +25,12 @@ from substrate.integrations.llm.encoders._media import pil_to_png_bytes
 
 from substrate.kernel import ChatMessage
 from substrate.kernel.core.content import (
-    AudioBlock,
-    ImageBlock,
-    VideoBlock,
-    DocumentBlock,
-    TextBlock,
-    ToolUseBlock,
-    ToolResultBlock,
-    ErrorBlock,
     DataBlock,
-    CodeBlock,
+    ErrorBlock,
+    MediaBlock,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
 )
 
 
@@ -52,60 +48,10 @@ def _encode_image(img: Image.Image) -> genai_types.Part:
     )
 
 
-def _encode_image_content(ic: ImageBlock) -> genai_types.Part:
-    """ImageBlock → Gemini Part."""
-    if ic.url:
-        if ic.url.startswith("data:"):
-            parts = ic.url.split(",", 1)
-            media_type = (
-                parts[0].split(":")[1].split(";")[0] if ":" in parts[0] else "image/png"
-            )
-            data = base64.b64decode(parts[1]) if len(parts) > 1 else b""
-            return genai_types.Part(
-                inline_data=genai_types.Blob(mime_type=media_type, data=data)
-            )
-        return genai_types.Part(
-            file_data=genai_types.FileData(file_uri=ic.url, mime_type="image/jpeg")
-        )
-    if ic.file_id:
-        return _encode_text(f"[Image file: {ic.file_id}]")
-    # Raw bytes
-    return genai_types.Part(
-        inline_data=genai_types.Blob(mime_type=ic.media_type, data=ic.data or b"")
-    )
-
-
-def _encode_audio_content(ac: AudioBlock) -> genai_types.Part:
-    """AudioBlock → Gemini inline_data Part."""
-    if isinstance(ac.data, (str, Path)):
-        with open(ac.data, "rb") as f:
-            audio_bytes = f.read()
-    else:
-        audio_bytes = ac.data
-    return genai_types.Part(
-        inline_data=genai_types.Blob(mime_type=ac.media_type, data=audio_bytes)
-    )
-
-
-def _encode_video_content(vc: VideoBlock) -> genai_types.Part:
-    """VideoBlock → Gemini inline_data Part."""
-    if isinstance(vc.data, (str, Path)):
-        with open(vc.data, "rb") as f:
-            video_bytes = f.read()
-    else:
-        video_bytes = vc.data
-    return genai_types.Part(
-        inline_data=genai_types.Blob(mime_type=vc.media_type, data=video_bytes)
-    )
-
-
 def _encode_media_item(
     item: str
     | Image.Image
-    | ImageBlock
-    | AudioBlock
-    | VideoBlock
-    | DocumentBlock
+    | MediaBlock
     | TextBlock,
 ) -> genai_types.Part:
     """Encode a single block item to a Gemini Part."""
@@ -115,24 +61,52 @@ def _encode_media_item(
         return _encode_text(item.text)
     if isinstance(item, Image.Image):
         return _encode_image(item)
-    if isinstance(item, ImageBlock):
-        return _encode_image_content(item)
-    if isinstance(item, AudioBlock):
-        return _encode_audio_content(item)
-    if isinstance(item, VideoBlock):
-        return _encode_video_content(item)
-    if isinstance(item, DocumentBlock):
-        if item.data:
+    if isinstance(item, MediaBlock):
+        if item.type == "image":
+            if item.url:
+                if item.url.startswith("data:"):
+                    parts = item.url.split(",", 1)
+                    media_type = (
+                        parts[0].split(":")[1].split(";")[0]
+                        if ":" in parts[0]
+                        else "image/png"
+                    )
+                    data = base64.b64decode(parts[1]) if len(parts) > 1 else b""
+                    return genai_types.Part(
+                        inline_data=genai_types.Blob(mime_type=media_type, data=data)
+                    )
+                return genai_types.Part(
+                    file_data=genai_types.FileData(
+                        file_uri=item.url, mime_type="image/jpeg"
+                    )
+                )
+            if item.file_id:
+                return _encode_text(f"[Image file: {item.file_id}]")
             return genai_types.Part(
-                inline_data=genai_types.Blob(mime_type=item.media_type, data=item.data)
-            )
-        elif item.url:
-            return genai_types.Part(
-                file_data=genai_types.FileData(
-                    file_uri=item.url, mime_type=item.media_type
+                inline_data=genai_types.Blob(
+                    mime_type=item.media_type, data=item.data or b""
                 )
             )
-        return _encode_text(f"[Document Attachment: {item.filename or 'document'}]")
+        if item.type in ("audio", "video"):
+            return genai_types.Part(
+                inline_data=genai_types.Blob(
+                    mime_type=item.media_type, data=item.data or b""
+                )
+            )
+        if item.type == "document":
+            if item.data:
+                return genai_types.Part(
+                    inline_data=genai_types.Blob(
+                        mime_type=item.media_type, data=item.data
+                    )
+                )
+            if item.url:
+                return genai_types.Part(
+                    file_data=genai_types.FileData(
+                        file_uri=item.url, mime_type=item.media_type
+                    )
+                )
+            return _encode_text(f"[Document Attachment: {item.filename or 'document'}]")
     if isinstance(item, str):
         return _encode_text(item)
     raise ValueError(f"Unsupported content type: {type(item)}")
@@ -145,9 +119,7 @@ def _encode_user(msg: ChatMessage) -> genai_types.Content:
     """User ChatMessage → Gemini Content with user role."""
     parts = []
     for item in msg.content:
-        if isinstance(
-            item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock, TextBlock)
-        ):
+        if isinstance(item, (MediaBlock, TextBlock)):
             parts.append(_encode_media_item(item))
     return genai_types.Content(role="user", parts=parts)
 
@@ -230,11 +202,11 @@ def _encode_tool_result(block: ToolResultBlock) -> genai_types.Content:
         for item in block.content:
             if isinstance(item, TextBlock):
                 parts_text.append(item.text)
-            elif isinstance(item, (DataBlock, CodeBlock, ErrorBlock)):
+            elif isinstance(item, (DataBlock, ErrorBlock)):
                 text = _get_block_text(item)
                 if text:
                     parts_text.append(text)
-            elif isinstance(item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock)):
+            elif isinstance(item, MediaBlock):
                 try:
                     media_parts.append(_encode_media_item(item))
                 except Exception as e:

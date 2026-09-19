@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.core.errors import ConcurrentAppendError
+from substrate.kernel.exceptions import ConcurrentAppendError
 from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.serving.protocol.events import WireEvent
 from substrate.serving.protocol.from_log import wire_from_log

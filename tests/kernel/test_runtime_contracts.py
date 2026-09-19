@@ -24,7 +24,7 @@ import pytest
 
 from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import Message, DataPayload
-from substrate.kernel.core.errors import ConcurrentAppendError
+from substrate.kernel.exceptions import ConcurrentAppendError
 from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.agents.runtime.cancellation import CancellationToken
 from substrate.kernel.agent.supervision import Supervision

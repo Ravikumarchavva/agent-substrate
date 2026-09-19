@@ -61,7 +61,7 @@ async def test_crash_records_agent_crashed_status() -> None:
 
 async def test_guardrail_trip_records_guardrail_tripped_status() -> None:
     """MiddlewareTermination is recorded as guardrail_tripped, not agent_crashed."""
-    from substrate.kernel.core.errors import MiddlewareTermination
+    from substrate.kernel.exceptions import MiddlewareTermination
 
     class GuardrailAgent:
         id = _agent_id("guardrail")
@@ -83,7 +83,7 @@ async def test_guardrail_trip_records_guardrail_tripped_status() -> None:
 
 async def test_budget_exhausted_records_budget_exhausted_status() -> None:
     """BudgetExhaustedError is recorded as budget_exhausted."""
-    from substrate.kernel.core.errors import BudgetExhaustedError
+    from substrate.kernel.exceptions import BudgetExhaustedError
 
     class BudgetAgent:
         id = _agent_id("budgeter")

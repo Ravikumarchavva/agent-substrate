@@ -99,7 +99,7 @@ class Agent(Protocol[CtxT]):
     to the parent or the caller of ``SupervisorProtocol.join``.
 
     A journaled call (``ctx.tool()``, ``ctx.sleep_until_signal()``, etc.) can
-    raise ``kernel.core.errors.SuspendInterrupt`` to unwind this run to the
+    raise ``kernel.exceptions.SuspendInterrupt`` to unwind this run to the
     Worker. It's a ``BaseException``, not an ``Exception``, specifically so a
     broad ``except Exception`` around a journaled call — a normal pattern for
     recording a tool/journal error and re-raising — doesn't accidentally

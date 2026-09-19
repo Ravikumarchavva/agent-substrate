@@ -23,7 +23,7 @@ from typing import List, Optional
 from substrate.fabric.evals.criteria import EvalCriterion
 from substrate.fabric.evals.models import EvalScore
 from substrate.kernel.llm import LLMClient
-from substrate.kernel import ChatMessage, ContentBlock
+from substrate.kernel import ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -159,11 +159,7 @@ class LLMJudge:
                 )
 
                 # Parse response
-                text_parts = [
-                    b.text for b in response.content if isinstance(b, TextBlock)
-                ]
-                response_text = "".join(text_parts)
-                parsed = self._parse_judge_response(response_text)
+                parsed = self._parse_judge_response(response.text)
 
                 raw_score = parsed["score"]
                 reasoning = parsed.get("reasoning", "")
@@ -246,10 +242,3 @@ class LLMJudge:
             return json.loads(json_match.group())
 
         raise json.JSONDecodeError("No valid JSON with 'score' found", cleaned, 0)
-
-    @staticmethod
-    def _extract_text(response: list[ContentBlock]) -> str:
-        """Extract plain text from a list of content blocks."""
-        from substrate.kernel import TextBlock
-
-        return "".join(b.text for b in response if isinstance(b, TextBlock))

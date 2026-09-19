@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, AsyncIterator, Protocol
 
-from substrate.kernel.core.content import ChatMessage, ContentBlock
+from substrate.kernel.core.content import ChatMessage, ContentBlock, TextBlock
 from substrate.kernel.messaging.stream import CompletionEvent, ReasoningDelta, TextDelta
 from substrate.kernel.core.usage import Usage
 
@@ -21,6 +21,15 @@ class LLMResponse:
 
     content: list[ContentBlock]
     usage: Usage
+
+    @property
+    def text(self) -> str:
+        """The concatenated text of every ``TextBlock`` in ``content``.
+
+        Mirrors ``ChatMessage.text``/``ToolResultBlock.text`` — the same
+        derived property on the kernel's other content-bearing types.
+        """
+        return "".join(b.text for b in self.content if isinstance(b, TextBlock))
 
 
 @dataclass(frozen=True, slots=True)

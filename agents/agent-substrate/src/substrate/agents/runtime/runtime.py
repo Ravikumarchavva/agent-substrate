@@ -227,7 +227,7 @@ class Runtime:
         ``thread_id`` (optional) enforces durable, cross-replica single-flight
         for the conversation thread this run belongs to — a second
         ``submit(..., thread_id=X)`` while thread X already has an active run
-        raises ``kernel.core.errors.ThreadBusyError`` instead of enqueuing.
+        raises ``kernel.exceptions.ThreadBusyError`` instead of enqueuing.
         On that (rare) rejection, ``msg`` may already be sitting in
         ``agent_id``'s inbox — delivery happens first, before the
         single-flight check, because the run must find its own message

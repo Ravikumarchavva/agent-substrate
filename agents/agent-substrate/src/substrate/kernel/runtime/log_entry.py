@@ -1,7 +1,8 @@
 """RunLogEntry and EventLogProtocol — the append-only durable spine of every run.
 
 Named ``RunLogEntry`` (not ``RunEvent``) to avoid collision with
-``kernel/events.py::Event`` (the generic pub/sub envelope — a different thing).
+``integrations/events/envelope.py::EventEnvelope`` (the generic pub/sub
+envelope — a different thing).
 
 Truth model
 -----------
@@ -89,7 +90,7 @@ class EventLogProtocol(Protocol):
 
         Returns the new sequence number assigned to the entry.
 
-        Raises ``ConcurrentAppendError`` (from ``kernel/core/exceptions.py``) when
+        Raises ``ConcurrentAppendError`` (from ``kernel/exceptions.py``) when
         the log's current ``last_seq`` differs from ``expected_seq`` — meaning
         another writer raced ahead.  Callers must reload and retry.
         """

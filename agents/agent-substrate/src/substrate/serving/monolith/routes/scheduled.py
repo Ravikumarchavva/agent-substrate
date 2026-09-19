@@ -466,9 +466,7 @@ async def parse_schedule_endpoint(
             messages,
             options=GenerationOptions(system_instructions=system_instructions),
         )
-        response_text = " ".join(
-            b.text for b in resp.content if isinstance(b, TextBlock)
-        ).strip()
+        response_text = resp.text.strip()
 
         data = None
         try:

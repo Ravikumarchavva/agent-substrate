@@ -2,9 +2,9 @@
 
 This realizes supervision-v2 on the event-sourced substrate.
 
-Relationship to kernel/supervision.py
---------------------------------------
-``kernel/supervision.py::Supervision`` is the **policy** half: tree position
+Relationship to kernel/agent/supervision.py
+-------------------------------------------
+``kernel/agent/supervision.py::Supervision`` is the **policy** half: tree position
 (run_id, parent_id, root_id, depth), budget (SpawnBudget), and retention
 (HistoryRetention).  ``SupervisorProtocol`` (this file) is the **runtime** half: the
 contract that actually creates and joins running entities.
@@ -30,7 +30,7 @@ The four hard properties realized on the durable substrate
 
 3. **Budget, not depth.**
    ``spawn`` consults a ``SpawnBudget`` bound to the root ``run_id``.  Over
-   budget → ``BudgetExhaustedError`` (``kernel/core/exceptions.py`` — the same
+   budget → ``BudgetExhaustedError`` (``kernel/exceptions.py`` — the same
    exception ``ExecutionTracker`` raises for token/cost/turn exhaustion; one
    exception type for "a budget of some kind ran out," not a spawn-specific
    one).  Per supervision-v2, ``max_agents`` / ``depth`` ceilings are
@@ -170,7 +170,7 @@ class SupervisorProtocol(Protocol):
         ``boot_correlation_id`` — this is what ``ctx.ask(handle, ...)`` waits
         on, so the child's reply is found without a second delivery.
 
-        Raises ``BudgetExhaustedError`` (``kernel/core/exceptions.py``) when the
+        Raises ``BudgetExhaustedError`` (``kernel/exceptions.py``) when the
         root's ``SpawnBudget`` is exhausted.
 
         The spawn is journaled on the parent before the child is enqueued —

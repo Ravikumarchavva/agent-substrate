@@ -122,7 +122,7 @@ class SchedulerProtocol(Protocol):
     ) -> None:
         """Add ``run_id`` to the work-queue (or coalesce into existing entry).
 
-        ``priority`` is an integer weight (see ``kernel/supervision.py::Priority``).
+        ``priority`` is an integer weight (see ``kernel/agent/supervision.py::Priority``).
         ``tenant`` is used for per-tenant fairness and quota enforcement.
         ``wake`` is the trigger that caused this enqueue (informational for
         the worker when it drains the wakeup reason).
@@ -136,7 +136,7 @@ class SchedulerProtocol(Protocol):
         thread. At most one PENDING/RUNNING/SUSPENDED run may exist per
         ``thread_id`` at a time — a second ``enqueue()`` for the same
         ``thread_id`` while one is still active raises
-        ``kernel.core.errors.ThreadBusyError`` (enforced durably: a unique
+        ``kernel.exceptions.ThreadBusyError`` (enforced durably: a unique
         partial index on the backing store, not a per-process lock, so it
         holds across replicas). This also backs ``find_run_for_thread`` —
         the durable way to resolve "which run is this thread's cancel
@@ -196,7 +196,7 @@ class SchedulerProtocol(Protocol):
         attempt, regardless of ``max_retries``. The Worker passes ``False``
         for failures the retry policy's `EffectCache` replay can never fix
         (a guardrail trip, a budget exhaustion, or agent/tool code raising
-        ``kernel.core.errors.PermanentError``) — retrying those re-executes
+        ``kernel.exceptions.PermanentError``) — retrying those re-executes
         the identical deterministic decision and wastes a lease cycle.
 
         Returns ``True`` if the run actually reached a terminal state

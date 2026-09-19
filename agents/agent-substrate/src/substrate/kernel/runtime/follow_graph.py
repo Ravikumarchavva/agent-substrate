@@ -1,7 +1,7 @@
 """FollowGraph — the durable social follow-graph between agents.
 
 Named ``FollowGraph`` (not ``SubscriptionGraph``) to avoid collision with
-``kernel/graph.py::GraphStore``, which is the RAG knowledge graph (entities,
+``kernel/storage/graph.py::GraphStore``, which is the RAG knowledge graph (entities,
 relationships, Cypher) — a completely different concept.
 
 What this is
@@ -18,7 +18,7 @@ agents:
 
 Relationship to existing primitives
 ------------------------------------
-``Topic`` and ``Subscription`` (``kernel/message.py``) are reused as-is —
+``Topic`` and ``Subscription`` (``kernel/messaging/message.py``) are reused as-is —
 they are the identity and record types.  ``FollowGraph`` is the durable store
 that keeps the graph alive across restarts and provides the fan-out query
 (``followers_of``).  ``FanoutStrategy`` (``kernel/runtime/fanout.py``) uses

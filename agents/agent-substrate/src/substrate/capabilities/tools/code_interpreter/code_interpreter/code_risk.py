@@ -199,7 +199,7 @@ async def _llm_summary(code: str, model_client: LLMClient) -> str:
     resp = await model_client.generate(
         messages, options=GenerationOptions(system_instructions=_SUMMARY_SYSTEM_PROMPT)
     )
-    return " ".join(b.text for b in resp.content if isinstance(b, TextBlock)).strip()
+    return resp.text.strip()
 
 
 async def classify_and_summarize(

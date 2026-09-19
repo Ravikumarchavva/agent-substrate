@@ -44,18 +44,14 @@ class LLMJudgeMiddleware:
         if not context.chat_result:
             return
 
-        from substrate.kernel import TextBlock
-
-        text = " ".join(
-            b.text for b in context.chat_result.content if isinstance(b, TextBlock)
-        )
+        text = context.chat_result.text
         if not text:
             return
 
         logger.debug("[LLMJudge] checking %r (agent=%s)", text[:80], context.agent_name)
 
         try:
-            from substrate.kernel import ChatMessage
+            from substrate.kernel import ChatMessage, TextBlock
 
             classify_request = f'Classify this message:\n"""\n{text}\n"""'
             messages = [
@@ -67,10 +63,7 @@ class LLMJudgeMiddleware:
                 messages,
                 options=GenerationOptions(system_instructions=self._judge_prompt),
             )
-            response_text = " ".join(
-                b.text for b in resp.content if isinstance(b, TextBlock)
-            )
-            judgment = self._parse_judgment(response_text)
+            judgment = self._parse_judgment(resp.text)
             safe = judgment.get("safe", True)
             reason = judgment.get("reason", "")
 

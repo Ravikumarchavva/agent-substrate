@@ -11,6 +11,8 @@ from substrate.capabilities.tools.code_interpreter.code_interpreter.code_risk im
     templated_summary,
 )
 from substrate.kernel.core.content import TextBlock
+from substrate.kernel.core.usage import Usage
+from substrate.kernel.llm.llm import LLMResponse
 from substrate.kernel.tools.tools import ToolRisk
 
 
@@ -130,9 +132,9 @@ async def test_safe_never_calls_llm():
 
 async def test_critical_uses_llm_summary_when_available():
     client = AsyncMock()
-    client.generate.return_value = type(
-        "R", (), {"content": [TextBlock(text="Deletes the database file.")]}
-    )()
+    client.generate.return_value = LLMResponse(
+        content=[TextBlock(text="Deletes the database file.")], usage=Usage()
+    )
     risk, summary = await classify_and_summarize(
         "import os\nos.remove('db.sqlite')\n", client
     )

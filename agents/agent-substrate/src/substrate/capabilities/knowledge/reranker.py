@@ -113,11 +113,8 @@ class LLMReranker:
                     )
                 ),
             )
-            text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
-            text = "".join(text_parts)
-
             # Parse the JSON array of indices
-            indices = json.loads(text.strip())
+            indices = json.loads(response.text.strip())
             if isinstance(indices, list):
                 reranked: list[SearchResult] = []
                 seen: set[int] = set()

@@ -1,19 +1,15 @@
-"""substrate.capabilities.history — Concrete HistoryProvider backends (Redis, Postgres)."""
+"""substrate.capabilities.history — Concrete HistoryProvider backends (Postgres)."""
 
 from __future__ import annotations
 
-from substrate.capabilities.history.redis_history import RedisHistoryProvider
 from substrate.capabilities.history.durable_history import (
     DurableHistoryProvider,
-    HistorySession,
     HistoryMessage,
+    HistorySession,
 )
-from substrate.capabilities.history.cached_history import CachedHistoryProvider
 
 __all__ = [
-    "RedisHistoryProvider",
     "DurableHistoryProvider",
     "HistorySession",
     "HistoryMessage",
-    "CachedHistoryProvider",
 ]

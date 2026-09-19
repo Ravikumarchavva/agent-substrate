@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
-from substrate.kernel.core.content import ChatMessage
-from substrate.kernel.agent.context import AgentContextProtocol
+from substrate.agents.context.builder import DefaultContextBuilder
+from substrate.agents.context.compaction import CompactionPipeline, SlidingWindowCompaction
+from substrate.agents.context.history import (
+    AncestryCheckpointResolver,
+    DefaultHistoryResolver,
+)
+from substrate.kernel.agent.context import (
+    AgentContextProtocol,
+    CompactionCoordinator,
+    ContextBuilder,
+)
 from substrate.kernel.agent.supervision import HistoryRetention
-from substrate.kernel.storage.history import HistoryProvider
+from substrate.kernel.core.content import ChatMessage
 from substrate.kernel.core.identity import Actor
+from substrate.kernel.storage.history import HistoryProvider
 from substrate.logger import setup_logging
-from .compaction import SlidingWindowCompaction, CompactionPipeline
 
 logger = setup_logging()
 
@@ -46,20 +55,24 @@ class ContextConfig:
         pipeline: CompactionPipeline | None = None,
         *,
         retention: HistoryRetention = HistoryRetention.PERMANENT,
+        builder: ContextBuilder | None = None,
+        coordinator: CompactionCoordinator | None = None,
     ) -> None:
         self.history = history
         self.retention = retention
         self.pipeline: CompactionPipeline = pipeline or CompactionPipeline(
             [SlidingWindowCompaction()]
         )
+        self.builder = builder or DefaultContextBuilder()
+        self.coordinator = coordinator
+
         if retention == HistoryRetention.PERMANENT:
             ttl = getattr(history, "_ttl", None)
             if isinstance(ttl, int) and ttl > 0:
                 logger.warning(
                     "ContextConfig: retention=PERMANENT with a TTL'd history "
                     "provider (%s, ttl=%ds) — history will silently expire "
-                    "after %ds of inactivity. Wrap it (e.g. "
-                    "CachedHistoryProvider) or use a durable provider "
+                    "after %ds of inactivity. Use a durable provider "
                     "directly, or lower retention to RUN/NONE if that's "
                     "actually intended.",
                     type(history).__name__,
@@ -79,7 +92,7 @@ class AgentContext:
     """Concrete implementation of ``AgentContextProtocol`` for in-process use.
 
     Wraps a ``HistoryProvider`` and a ``CompactionPipeline`` into the full
-    runtime context that agents drive.  All history reads and writes are
+    runtime context that agents drive. All history reads and writes are
     scoped to ``session_id`` so one agent instance can participate in
     multiple sequential runs without history leaking between them.
     """
@@ -89,10 +102,12 @@ class AgentContext:
         agent_id: Actor,
         history: HistoryProvider,
         pipeline: CompactionPipeline,
+        builder: ContextBuilder | None = None,
     ) -> None:
         self._agent_id = agent_id
         self._history = history
         self._pipeline = pipeline
+        self._builder = builder or DefaultContextBuilder()
 
     @property
     def agent_id(self) -> Actor:
@@ -102,8 +117,22 @@ class AgentContext:
     def history(self) -> HistoryProvider:
         return self._history
 
-    async def get_prompt_window(self, session_id: str) -> list[ChatMessage]:
+    async def get_prompt_window(
+        self, session_id: str, *, branch_id: str = "main"
+    ) -> list[ChatMessage]:
         """Return the compacted history as ChatMessages for LLM generation."""
+        if hasattr(self._history, "get_branch"):
+            branch = await self._history.get_branch(session_id, branch_id)
+            if branch is not None and branch.head_message_id is not None:
+                resolver = DefaultHistoryResolver(self._history)
+                nodes = await resolver.resolve_ancestry(branch.head_message_id)
+                cp_resolver = AncestryCheckpointResolver(self._history)
+                cp = await cp_resolver.find_applicable_checkpoint(
+                    branch.head_message_id
+                )
+                window = await self._builder.build(nodes, checkpoint=cp)
+                return list(window.messages)
+
         raw = await self._history.get_messages(self._agent_id, session_id=session_id)
         return await self._pipeline.compact(raw)
 

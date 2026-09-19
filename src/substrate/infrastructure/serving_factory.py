@@ -235,7 +235,7 @@ async def init_infrastructure(
     from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
     history = await build_history_provider(
-        cfg.REDIS_URL, ttl=cfg.REDIS_SESSION_TTL, max_messages=cfg.SESSION_MAX_MESSAGES
+        database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL
     )
 
     short_term_memory = await build_short_term_memory(
@@ -785,15 +785,8 @@ async def build_agent_for_thread(
     rather than imported from ``substrate.serving.*`` — this module
     (``infrastructure/``) must not reach into ``serving/``, only the reverse.
 
-    Cold-store memory-seeding reads straight off ``runtime``'s EventLogProtocol
-    (``agents.factory.step_rows_from_log`` — the EventLogProtocol is the single
-    source of truth for conversation history, not a separate steps table;
-    see ``serving/stream/history.py::project_thread()``, the sibling
-    projection for UI display). ``history`` (the shared, TTL'd Redis cache)
-    is wrapped in ``CachedHistoryProvider`` per request so it self-heals from
-    the EventLogProtocol on a cold cache — one contract any caller holding
-    ``memory: HistoryProvider`` benefits from, not a side-channel step a
-    caller has to remember to invoke first.
+    ``history`` (the shared HistoryProvider) is provided to the agent
+    for session conversation history.
 
     ``bridge`` (the per-thread ``WebHITLBridge``, when given) wires
     ``approval_handler=SSEApprovalHandler(bridge)`` so a CRITICAL/HIGH-risk
@@ -810,7 +803,6 @@ async def build_agent_for_thread(
         rebuild_messages_from_steps,
         step_rows_from_log,
     )
-    from substrate.capabilities.history.cached_history import CachedHistoryProvider
 
     if runtime is None:
         raise ValueError("build_agent_for_thread() requires a runtime.")
@@ -831,19 +823,9 @@ async def build_agent_for_thread(
     if memory_context:
         system_instructions = system_instructions.rstrip() + "\n\n" + memory_context
 
-    async def _reseed_from_event_log() -> list:
-        step_rows = await step_rows_from_log(
-            runtime.event_log, runtime.scheduler, session_id
-        )
-        return await rebuild_messages_from_steps(
-            step_rows, system_instructions, include_mcp_app_context=True
-        )
-
     if history is None:
         history = InMemoryHistoryProvider()
-    memory = CachedHistoryProvider(
-        cache=history, reseed=_reseed_from_event_log, cold_store_name="EventLogProtocol"
-    )
+    memory = history
 
     memory_tool = build_memory_tool(
         session_id, user_id, short_term_memory, long_term_memory
@@ -973,21 +955,24 @@ def build_chat_tools(toolbox: Any, bridge: Any) -> list[Any]:
 
 
 async def build_history_provider(
-    redis_url: str, *, ttl: int = 3600, max_messages: int = 200
+    *,
+    database_url: str = "",
+    redis_url: str = "",
+    ttl: int = 3600,
+    max_messages: int = 200,
 ) -> Any:
-    """Build and connect the shared RedisHistoryProvider cache.
+    """Build the shared HistoryProvider.
 
-    Shared by the monolith (``init_infrastructure``) and the ``agent_runtime``
-    microservice — one construction path instead of two, so both deployment
-    modes honor ``REDIS_SESSION_TTL``/``SESSION_MAX_MESSAGES`` the same way.
+    Uses DurableHistoryProvider when database_url is provided, else InMemoryHistoryProvider.
     """
-    from substrate.capabilities.history.redis_history import RedisHistoryProvider
+    if database_url:
+        from substrate.capabilities.history.durable_history import DurableHistoryProvider
 
-    provider = RedisHistoryProvider(
-        redis_url=redis_url, ttl=ttl, max_messages=max_messages
-    )
-    await provider.connect()
-    return provider
+        return DurableHistoryProvider(database_url=database_url)
+
+    from substrate.agents.context import InMemoryHistoryProvider
+
+    return InMemoryHistoryProvider()
 
 
 async def build_short_term_memory(
@@ -1287,31 +1272,10 @@ async def build_cached_history_for_thread(
     history: Any,
     conversation_service_url: str,
 ) -> Any:
-    """Wrap the agent_runtime microservice's shared history cache so it
-    self-heals from the ``conversation`` service (its cold store — the
-    microservices deployment has no local EventLogProtocol, see
-    ``build_agent_for_thread``'s monolith equivalent) on a cold session."""
-    import httpx
-
+    """Return the history provider for this thread."""
     from substrate.agents.context import InMemoryHistoryProvider
-    from substrate.agents.factory import rebuild_messages_from_steps
-    from substrate.capabilities.history.cached_history import CachedHistoryProvider
 
-    async def _reseed_from_conversation_service() -> list:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                f"{conversation_service_url}/internal/threads/{thread_id}/memory"
-            )
-            response.raise_for_status()
-            step_rows = response.json()
-        return await rebuild_messages_from_steps(step_rows, system_instructions)
-
-    cache = history if history is not None else InMemoryHistoryProvider()
-    return CachedHistoryProvider(
-        cache=cache,
-        reseed=_reseed_from_conversation_service,
-        cold_store_name="Conversation service",
-    )
+    return history if history is not None else InMemoryHistoryProvider()
 
 
 def build_memory_tool(

@@ -161,6 +161,10 @@ class BlockValidationError(PermanentError, ValueError):
 class PolicyTermination(KernelError):
     """Base for intentional, policy-enforced halts (not bugs or crashes)."""
 
+    def __init__(self, message: str = "") -> None:
+        super().__init__(message)
+        self.message = message
+
 
 class BudgetExhaustedError(PolicyTermination):
     """Raised when an agent headcount or token/cost/turn budget is exhausted."""
@@ -169,9 +173,54 @@ class BudgetExhaustedError(PolicyTermination):
 class MiddlewareTermination(PolicyTermination):
     """Raised by any middleware to immediately halt the agent run (e.g. guardrail)."""
 
-    def __init__(self, message: str) -> None:
+class BranchHeadConflictError(TransientError):
+    """Raised when set_branch_head or append_and_advance fails optimistic concurrency."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        session_id: str,
+        branch_id: str,
+        expected: str | int | None,
+        actual: str | int | None,
+    ) -> None:
         super().__init__(message)
-        self.message = message
+        self.session_id = session_id
+        self.branch_id = branch_id
+        self.expected = expected
+        self.actual = actual
+
+
+class SnapshotConflictError(TransientError):
+    """Raised when commit_snapshot fails optimistic concurrency check."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        session_id: str,
+        branch_id: str,
+        expected_parent_id: str | None,
+        actual_parent_id: str | None,
+    ) -> None:
+        super().__init__(message)
+        self.session_id = session_id
+        self.branch_id = branch_id
+        self.expected_parent_id = expected_parent_id
+        self.actual_parent_id = actual_parent_id
+
+
+class BranchNotFoundError(PermanentError, KeyError):
+    """Raised when a requested branch_id does not exist in the session."""
+
+
+class BranchAlreadyExistsError(PermanentError, ValueError):
+    """Raised when attempting to create or fork to a branch_id that already exists."""
+
+
+class DAGIntegrityError(PermanentError, ValueError):
+    """Raised on cross-session edges, self-loops, invalid parents, or DAG corruption."""
 
 
 __all__ = [
@@ -185,10 +234,15 @@ __all__ = [
     "TransientError",
     "ConcurrentAppendError",
     "ThreadBusyError",
+    "BranchHeadConflictError",
+    "SnapshotConflictError",
     # Permanent / Fatal
     "PermanentError",
     "AgentCrashError",
     "BlockValidationError",
+    "BranchNotFoundError",
+    "BranchAlreadyExistsError",
+    "DAGIntegrityError",
     # Governance / Policy
     "PolicyTermination",
     "BudgetExhaustedError",

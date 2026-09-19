@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
-from .history import HistoryProvider, InMemoryHistoryProvider
+from .history import (
+    AncestryCheckpointResolver,
+    CheckpointResolver,
+    DefaultHistoryResolver,
+    HistoryProvider,
+    HistoryResolver,
+    InMemoryHistoryProvider,
+)
+from .builder import DefaultContextBuilder
 from .compaction import (
     CompactionStrategy,
     CompactionPipeline,
+    DefaultCompactionCoordinator,
     SlidingWindowCompaction,
     SummarizationCompaction,
     ToolResultCompactionStrategy,
@@ -14,12 +23,20 @@ from .compaction import (
     TokenBudgetComposedStrategy,
 )
 from .context import AgentContext, AgentContextProtocol, ContextConfig
+from .workspace import InMemoryWorkspaceStore
 
 __all__ = [
     "HistoryProvider",
+    "HistoryResolver",
+    "CheckpointResolver",
     "InMemoryHistoryProvider",
+    "DefaultHistoryResolver",
+    "AncestryCheckpointResolver",
+    "InMemoryWorkspaceStore",
+    "DefaultContextBuilder",
     "CompactionStrategy",
     "CompactionPipeline",
+    "DefaultCompactionCoordinator",
     "SlidingWindowCompaction",
     "SummarizationCompaction",
     "ToolResultCompactionStrategy",

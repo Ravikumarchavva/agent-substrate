@@ -157,7 +157,7 @@ so the decision is visible, not silently dropped.
   markers removed from the three risk-gated tools that prompted this —
   they needed no code changes themselves, since the fix lives entirely in
   the invoker/bridge layer.
-- **`RedisHistoryProvider._key`/`GlobalTaskStore` tenant-namespacing.**
+- **`DurableHistoryProvider`/`GlobalTaskStore` tenant-namespacing.**
   Evaluated and scoped out: both are keyed by `session_id`/`conversation_id`,
   which are UUIDs in every real call path — two different tenants can never
   collide on the same key by construction, so the actual cross-tenant risk

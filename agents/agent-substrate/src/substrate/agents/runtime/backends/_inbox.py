@@ -18,8 +18,7 @@ class InMemoryInbox:
 
     Robustness guarantees honoured (identical to the Protocol contract):
     1. Dedup by Message.id — deliver is idempotent.
-    2. Per-sender FIFO — sender key is ``Message.sender`` (str of Actor) or
-       ``"__anon__"`` for anonymous senders.
+    2. Per-sender FIFO — sender key is ``Message.sender`` (str of Actor).
     3. Retry + dead-letter after ``max_retries`` nacks.
 
     The ``on_deliver`` callback is called after a new (non-duplicate) message
@@ -46,7 +45,7 @@ class InMemoryInbox:
         self._on_deliver = cb
 
     def _sender_key(self, msg: Message) -> str:
-        return str(msg.sender) if msg.sender else "__anon__"
+        return str(msg.sender)
 
     async def deliver(
         self, agent_id: Actor, msg: Message, *, notify: bool = True

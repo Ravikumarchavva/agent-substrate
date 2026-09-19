@@ -11,6 +11,7 @@ from __future__ import annotations
 from substrate.agents.core.react import ReActAgent
 from substrate.agents.runtime import Runtime
 from substrate.kernel.core.content import TextBlock
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.core.usage import Usage
 from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
 from substrate.serving.protocol.events import (
@@ -41,6 +42,7 @@ async def test_project_thread_returns_one_runs_full_conversation() -> None:
 
         msg = Message(
             target=agent.id,
+            sender=Actor.user(),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="hello")])
             ),
@@ -71,6 +73,7 @@ async def test_project_thread_spans_multiple_runs_in_order() -> None:
 
         msg1 = Message(
             target=agent.id,
+            sender=Actor.user(),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="first")])
             ),
@@ -83,6 +86,7 @@ async def test_project_thread_spans_multiple_runs_in_order() -> None:
 
         msg2 = Message(
             target=agent.id,
+            sender=Actor.user(),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="second")])
             ),
@@ -110,6 +114,7 @@ async def test_project_thread_skips_non_streaming_log_kinds() -> None:
         await rt.register(agent)
         msg = Message(
             target=agent.id,
+            sender=Actor.user(),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
             ),

@@ -212,6 +212,7 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
         async def run(self, ctx: object, inbox: list[Message]) -> None:
             boot = Message(
                 target=child_id,
+                sender=parent_id,
                 payload=DataPayload(data={}),
             )
             tight_supervision = Supervision.root(

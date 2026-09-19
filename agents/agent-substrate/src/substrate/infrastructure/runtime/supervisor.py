@@ -343,10 +343,9 @@ class Supervisor:
                 parent,
             )
         for row in rows:
-            type_, _, key = row["agent_id"].partition("/")
             yield RunHandle(
                 run_id=RunId(row["run_id"]),
-                agent_id=Actor(type=type_, key=key),
+                agent_id=Actor.from_str(row["agent_id"]),
                 parent_run=parent,
             )
 

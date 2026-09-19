@@ -259,6 +259,7 @@ class TriggerScheduler:
             agent_id = Actor(type=trigger.target_type, key=trigger.target_name)
             msg = Message(
                 target=agent_id,
+                sender=Actor(type="trigger", key=trigger_name),
                 payload=DataPayload(data=trigger.target_params),
             )
             try:

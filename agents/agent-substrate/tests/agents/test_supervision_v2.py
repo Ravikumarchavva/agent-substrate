@@ -23,7 +23,7 @@ def _agent_id(name: str) -> Actor:
 
 
 def _msg(target: Actor) -> Message:
-    return Message(target=target, payload=DataPayload(data={}))
+    return Message(target=target, sender=Actor.system("test"), payload=DataPayload(data={}))
 
 
 # ---------------------------------------------------------------------------

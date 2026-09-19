@@ -25,6 +25,7 @@ async def test_runtime_agent_registration():
         await rt.register(agent)
         msg = Message(
             target=agent.id,
+            sender=Actor.system("test"),
             payload=DataPayload(data={"hello": "world"}),
         )
         await rt.submit(agent.id, msg)

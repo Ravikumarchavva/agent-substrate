@@ -53,10 +53,11 @@ def _topic() -> Topic:
 
 def _message(sender: Actor | None = None, target: Actor | None = None) -> Message:
     target = target or _agent_id()
+    sender = sender or _agent_id()
     return Message(
         target=target,
-        payload=DataPayload(data={"x": 1}),
         sender=sender,
+        payload=DataPayload(data={"x": 1}),
     )
 
 

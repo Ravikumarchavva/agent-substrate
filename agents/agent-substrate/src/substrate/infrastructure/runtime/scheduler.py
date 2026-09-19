@@ -188,13 +188,14 @@ class Scheduler:
             )
         result: list[tuple[RunId, Actor, dict]] = []
         for row in rows:
-            type_, _, key = row["agent_id"].partition("/")
             spec = (
                 json.loads(row["spec"])
                 if isinstance(row["spec"], str)
                 else dict(row["spec"])
             )
-            result.append((RunId(row["run_id"]), Actor(type=type_, key=key), spec))
+            result.append(
+                (RunId(row["run_id"]), Actor.from_str(row["agent_id"]), spec)
+            )
         return result
 
     async def reclaim_orphans(self) -> int:
@@ -489,8 +490,7 @@ class Scheduler:
             raw_aid: str | None = row["agent_id"]
             if raw_aid is None:
                 continue  # no agent registered — skip
-            type_, _, key = raw_aid.partition("/")
-            agent_id = Actor(type=type_, key=key)
+            agent_id = Actor.from_str(raw_aid)
             leases.append(
                 Lease(
                     run_id=RunId(row["run_id"]),

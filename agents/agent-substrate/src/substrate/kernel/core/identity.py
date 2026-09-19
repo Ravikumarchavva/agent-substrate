@@ -26,25 +26,51 @@ class Actor:
     ``key`` says *which instance* — the entity this address points at. It is
     unbounded: one per conversation, per video, per user. ``""`` means a
     singleton, where the type has exactly one instance.
-
-    Both parts are deliberately meaningful and predictable rather than
-    random: several call sites independently construct the same address
-    without a shared lookup (the ``http_proxy`` constant), an actor must
-    resolve to the same address across a process restart, and user-scoped
-    addresses carry the real external id so memory stays attached to the
-    right person.
     """
 
     type: str
     key: str = ""
 
+    def __post_init__(self) -> None:
+        if not self.type:
+            raise ValueError("Actor type cannot be empty")
+        if "/" in self.type:
+            raise ValueError(f"Actor type cannot contain '/': {self.type!r}")
+
+    @property
+    def is_singleton(self) -> bool:
+        """True if this address targets a singleton actor with no instance key."""
+        return not bool(self.key)
+
     def __str__(self) -> str:
         return f"{self.type}/{self.key}" if self.key else self.type
+
+    @classmethod
+    def from_str(cls, address: str) -> Actor:
+        """Reconstruct an Actor address from its string representation.
+
+        Mirrors ``__str__``: splits on the first '/' into (type, key).
+        If no '/' is present, key defaults to ''.
+        """
+        if not address:
+            raise ValueError("Actor address string cannot be empty")
+        type_, sep, key = address.partition("/")
+        return cls(type=type_, key=key if sep else "")
 
     @classmethod
     def generate(cls, type: str) -> Actor:
         """Create an Actor with a random key, for genuinely anonymous actors."""
         return cls(type=type, key=uuid.uuid4().hex)
+
+    @classmethod
+    def system(cls, key: str = "bootstrap") -> Actor:
+        """Standard address for system-originated operations."""
+        return cls(type="system", key=key)
+
+    @classmethod
+    def user(cls, key: str = "default") -> Actor:
+        """Standard address for human user ingress."""
+        return cls(type="user", key=key)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,18 +80,27 @@ class Topic:
     One flat name, matching what real pub/sub primitives at this tier
     actually do — a Postgres ``LISTEN``/``NOTIFY`` channel and a Redis
     ``PUBLISH`` channel are both bare names with no metadata and no
-    registration step. Scoping to an instance is done by putting it in the
-    name (``"agent.progress/<run_id>"``), not by a second field.
-
-    Standard conventions:
-        agent.progress/<run_id>   — all progress events for one execution run
-        agent.stream/<run_id>     — token stream for a specific run
+    registration step.
     """
 
     name: str
 
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("Topic name cannot be empty")
+
     def __str__(self) -> str:
         return self.name
+
+    @classmethod
+    def progress(cls, run_id: str) -> Topic:
+        """Standard channel for execution progress events of a specific run."""
+        return cls(f"agent.progress/{run_id}")
+
+    @classmethod
+    def stream(cls, run_id: str) -> Topic:
+        """Standard channel for token streaming of a specific run."""
+        return cls(f"agent.stream/{run_id}")
 
 
 __all__ = ["Actor", "Topic"]

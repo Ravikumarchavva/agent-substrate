@@ -8,14 +8,14 @@ Two independent event channels:
 
 2. **Progress stream** (``AgentProgress``) — structured step events emitted
    by every agent in the supervision tree throughout execution. All agents in
-   one run publish to ``Topic("agent.progress", run_id)`` — a single topic
+   one run publish to ``Topic.progress(run_id)`` — a single topic
    shared across the whole tree. The UI subscribes once to that topic and
    reconstructs the hierarchy from ``agent_id``, ``parent_id``, and ``depth``.
 
 Standard topic convention (enforced by the agents layer, not the kernel):
 
-    token stream  → Topic("agent.stream/<run_id>")
-    progress      → Topic("agent.progress", run_id)        ← ONE per run
+    token stream  → Topic(f"agent.stream/{run_id}")
+    progress      → Topic.progress(run_id)                  ← ONE per run
 
 These are pure data types. Transport (SSE, WebSocket, console) lives in the
 serving layer.
@@ -113,7 +113,7 @@ class AgentStep(StrEnum):
 class AgentProgress(BaseModel):
     """Structured progress event emitted by every agent at every step.
 
-    Published to ``Topic("agent.progress", run_id)`` — ONE topic per
+    Published to ``Topic.progress(run_id)`` — ONE topic per
     execution run shared by all agents in the tree. The ``agent_id``,
     ``parent_id``, and ``depth`` fields let the UI reconstruct the hierarchy
     from a single subscription.

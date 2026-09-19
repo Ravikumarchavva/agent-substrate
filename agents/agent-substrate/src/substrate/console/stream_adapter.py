@@ -50,6 +50,7 @@ async def stream_events(
     """Submit *task* and yield UI stream events as the run progresses."""
     msg = Message(
         target=agent.id,
+        sender=Actor(type="cli", key="stream_adapter"),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=task)])
         ),

@@ -87,7 +87,8 @@ class Message(BaseModel):
     messages are persisted across deployments.
 
     ``target`` is always required — a ``Message`` with no destination cannot
-    be delivered.  ``sender`` may be ``None`` for anonymous or bootstrap sends.
+    be delivered.  ``sender`` is also required — all messages must have
+    explicit actor provenance (e.g. ``Actor.user()`` or ``Actor.system()``).
 
     ``correlation_id`` ties every message in one logical conversation;
     ``causation_id`` names the specific message that triggered this one.
@@ -97,8 +98,8 @@ class Message(BaseModel):
     schema_version: int = 1
     created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     target: Actor | Topic
+    sender: Actor
     payload: Payload
-    sender: Actor | None = None
     correlation_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     causation_id: str | None = None
     metadata: JsonObject = Field(default_factory=dict)

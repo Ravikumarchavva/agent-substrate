@@ -8,6 +8,7 @@ from __future__ import annotations
 from substrate.agents.core.react import ReActAgent
 from substrate.agents.runtime import Runtime
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.core.usage import Usage
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
@@ -47,6 +48,7 @@ async def test_user_message_prefers_display_text_metadata() -> None:
         await rt.register(agent)
         msg = Message(
             target=agent.id,
+            sender=Actor.user(),
             payload=ChatPayload(
                 message=ChatMessage(
                     role=Role.USER,

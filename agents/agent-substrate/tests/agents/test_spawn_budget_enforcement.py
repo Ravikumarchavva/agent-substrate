@@ -22,6 +22,7 @@ from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 def _boot(text: str = "hi") -> Message:
     return Message(
         target=Actor(type="agent", key="x"),
+        sender=Actor(type="supervisor", key="root"),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
         ),

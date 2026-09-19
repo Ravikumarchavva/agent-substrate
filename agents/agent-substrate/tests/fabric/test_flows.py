@@ -41,6 +41,7 @@ async def _run_flow(flow, text: str, *extra_agents, timeout: float = 5.0) -> str
     sentinel = new_run_id()
     msg = Message(
         target=flow.id,
+        sender=Actor.user(),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
         ),

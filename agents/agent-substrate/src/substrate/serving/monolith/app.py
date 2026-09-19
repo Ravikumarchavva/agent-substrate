@@ -48,6 +48,7 @@ from substrate.serving.monolith.routes.memory import router as memory_router
 from substrate.serving.monolith.routes.triggers import router as triggers_router
 from substrate.serving.monolith.routes.scheduled import router as scheduled_router
 from substrate.serving.monolith.routes.workspace import router as workspace_router
+from substrate.serving.monolith.routes.branches import router as branches_router
 from substrate.serving.monolith.routes.gdpr import router as gdpr_router
 from substrate.serving.monolith.routes.knowledge import router as knowledge_router
 from substrate.serving.shared.observability.telemetry import (
@@ -332,6 +333,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(workspace_oauth_router)
     app.include_router(threads_router)
+    app.include_router(branches_router)
     app.include_router(memory_router)
     app.include_router(artifacts_router)
     app.include_router(chat_router)

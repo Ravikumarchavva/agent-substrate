@@ -276,6 +276,41 @@ class WorkspaceFileStore:
         self._usage_cache.clear()
         return deleted
 
+    async def copy_prefix(self, source_prefix: str, dest_prefix: str) -> int:
+        """Copy all files from source_prefix to dest_prefix (for branch workspace forking).
+
+        Returns the number of files copied.
+        """
+        src_root = self._resolve(source_prefix.rstrip("/") or source_prefix)
+        dest_root = self._resolve(dest_prefix.rstrip("/") or dest_prefix)
+
+        if not src_root.exists() or not src_root.is_dir():
+            return 0
+
+        copied = 0
+        tenant_id = self._tenant_id_from_key(dest_prefix)
+
+        for src_path in src_root.rglob("*"):
+            if src_path.is_file():
+                rel = src_path.relative_to(src_root)
+                dest_path = dest_root / rel
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                data = src_path.read_bytes()
+
+                if tenant_id is not None:
+                    used = await self.usage_bytes(tenant_id)
+                    quota = self.effective_quota(tenant_id)
+                    if used + len(data) > quota:
+                        raise WorkspaceQuotaExceededError(tenant_id, used, quota)
+
+                dest_path.write_bytes(data)
+                copied += 1
+
+        if tenant_id is not None:
+            self._invalidate_usage(tenant_id)
+        return copied
+
+
     async def presign_url(self, key: str, *, expires_in: int = 3600) -> str:
         del expires_in
         # No real URL — caller detects "workspace://" and falls back to

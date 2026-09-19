@@ -328,6 +328,33 @@ class ReActAgent:
             branch_id=branch_id,
         )
 
+        # Post-turn compaction execution (Phase 1D: POST_TURN)
+        if getattr(self._context, "coordinator", None) is not None and hasattr(
+            self._context.history, "save_checkpoint"
+        ):
+            try:
+                from substrate.kernel.agent.context import CompactionContext, CompactionPhase
+
+                branch = None
+                if hasattr(self._context.history, "get_branch"):
+                    branch = await self._context.history.get_branch(session_id, branch_id)
+
+                compaction_ctx = CompactionContext(
+                    session_id=session_id,
+                    branch_id=branch_id,
+                    messages=messages,
+                    leaf_node_id=branch.head_message_id if branch else None,
+                )
+                compaction_res = await self._context.coordinator.compact(
+                    CompactionPhase.POST_TURN, compaction_ctx
+                )
+                if compaction_res.checkpoint_proposal is not None:
+                    await self._context.history.save_checkpoint(compaction_res.checkpoint_proposal)
+            except Exception as exc:
+                logger.warning(
+                    "Post-turn compaction failed (%s); continuing without blocking turn", exc
+                )
+
         ans = final_text(messages)
         await deliver(
             ctx, msg, {"text": ans}, sender=self.id, output_topic=self._output_topic

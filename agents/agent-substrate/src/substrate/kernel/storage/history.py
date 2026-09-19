@@ -83,6 +83,11 @@ class HistoryProvider(Protocol):
         """Fetch a branch head pointer by session and branch ID."""
         ...
 
+    async def list_branches(self, session_id: str) -> list[Branch]:
+        """List all branches stored for a session."""
+        ...
+
+
     async def fork_branch(
         self,
         session_id: str,

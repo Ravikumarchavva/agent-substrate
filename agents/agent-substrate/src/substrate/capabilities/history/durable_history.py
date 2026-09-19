@@ -417,6 +417,19 @@ class DurableHistoryProvider:
                 return None
             return _branch_from_row(row)
 
+    async def list_branches(self, session_id: str) -> list[Branch]:
+        """List all branches stored for a session."""
+        factory = self._get_session()
+        async with factory() as db:
+            stmt = (
+                select(HistoryBranch)
+                .where(HistoryBranch.session_id == session_id)
+                .order_by(HistoryBranch.created_at)
+            )
+            res = await db.execute(stmt)
+            return [_branch_from_row(r) for r in res.scalars().all()]
+
+
     async def ensure_branch(
         self, session_id: str, branch_id: str, *, head_message_id: str | None = None
     ) -> Branch:

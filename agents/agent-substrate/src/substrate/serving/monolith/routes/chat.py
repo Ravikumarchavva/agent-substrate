@@ -134,7 +134,7 @@ async def chat(
         )
 
     # 2. Single-flight: only one active stream per thread at a time (enforced
-    # durably across replicas via Scheduler unique partial index on substrate_run_queue)
+    # durably across replicas via Scheduler unique partial index on run_queue)
     if await runtime.scheduler.find_run_for_thread(str(body.thread_id)):
         raise HTTPException(
             status_code=409,
@@ -364,6 +364,7 @@ async def chat(
             "attachments": new_attachments,
             "user_id": user.sub,
             "tenant_id": user.tenant_id,
+            "branch_id": getattr(body, "branch_id", None) or "main",
         },
     )
 
@@ -403,7 +404,7 @@ async def chat(
         All concurrency (agent run, HITL merge, cancel/disconnect, persistence)
         lives in `AgentStreamSession`; this only frames events for the transport.
         Single-flight is enforced durably by Runtime.submit() itself (a unique
-        index on substrate_run_queue), not by anything this generator owns, so
+        index on run_queue), not by anything this generator owns, so
         there's no per-thread lock left to release here.
         """
         _thread_id_token = current_thread_id.set(str(body.thread_id))

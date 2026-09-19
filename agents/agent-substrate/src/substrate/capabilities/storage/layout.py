@@ -44,6 +44,24 @@ def conversation_workspace_prefix(
     )
 
 
+def conversation_branch_workspace_prefix(
+    tenant_id: str, user_id: str, conversation_id: str, branch_id: str = "main"
+) -> str:
+    """Workspace prefix for a specific branch of a conversation.
+
+    For 'main' branch, preserves legacy path directly under conversation workspace.
+    For other branches, isolates under branches/{branch_id}/workspace.
+    """
+    base = (
+        f"{user_prefix(tenant_id, user_id)}/conversations/"
+        f"{_id(conversation_id, 'conversation id')}"
+    )
+    if branch_id == "main":
+        return f"{base}/workspace"
+    return f"{base}/branches/{_id(branch_id, 'branch id')}/workspace"
+
+
+
 def conversation_shared_key(
     tenant_id: str, user_id: str, conversation_id: str, path: str
 ) -> str:

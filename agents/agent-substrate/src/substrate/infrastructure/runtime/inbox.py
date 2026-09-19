@@ -2,7 +2,7 @@
 
 Schema::
 
-    CREATE TABLE substrate_inbox (
+    CREATE TABLE inbox (
         agent_id   TEXT        NOT NULL,
         msg_id     TEXT        NOT NULL,
         sender_key TEXT        NOT NULL DEFAULT '__anon__',
@@ -12,7 +12,7 @@ Schema::
         PRIMARY KEY (agent_id, msg_id)
     );
 
-    CREATE TABLE substrate_dead_letters (
+    CREATE TABLE dead_letters (
         agent_id   TEXT        NOT NULL,
         msg_id     TEXT        NOT NULL,
         reason     TEXT        NOT NULL,
@@ -28,7 +28,7 @@ Delivery guarantees
 - ``deliver`` is idempotent via ON CONFLICT DO NOTHING (dedup by msg_id).
 - ``drain`` returns messages in per-sender FIFO order (sender_key, created_at).
 - ``nack`` increments the attempt counter; after ``max_retries`` the message
-  is moved to substrate_dead_letters.
+  is moved to dead_letters.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     import asyncpg
 
 _CREATE_TABLES = """
-CREATE TABLE IF NOT EXISTS substrate_inbox (
+CREATE TABLE IF NOT EXISTS inbox (
     agent_id   TEXT        NOT NULL,
     msg_id     TEXT        NOT NULL,
     sender_key TEXT        NOT NULL DEFAULT '__anon__',
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS substrate_inbox (
     PRIMARY KEY (agent_id, msg_id)
 );
 
-CREATE TABLE IF NOT EXISTS substrate_dead_letters (
+CREATE TABLE IF NOT EXISTS dead_letters (
     agent_id   TEXT        NOT NULL,
     msg_id     TEXT        NOT NULL,
     reason     TEXT        NOT NULL,
@@ -96,7 +96,7 @@ class Inbox:
         async with self._pool.acquire() as conn:
             result = await conn.fetchrow(
                 """
-                INSERT INTO substrate_inbox (agent_id, msg_id, sender_key, payload)
+                INSERT INTO inbox (agent_id, msg_id, sender_key, payload)
                 VALUES ($1, $2, $3, $4::jsonb)
                 ON CONFLICT (agent_id, msg_id) DO NOTHING
                 RETURNING msg_id
@@ -117,7 +117,7 @@ class Inbox:
             rows = await conn.fetch(
                 """
                 SELECT payload
-                FROM substrate_inbox
+                FROM inbox
                 WHERE agent_id = $1
                 ORDER BY sender_key, created_at
                 LIMIT $2
@@ -130,7 +130,7 @@ class Inbox:
     async def ack(self, agent_id: Actor, msg_id: str) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM substrate_inbox WHERE agent_id = $1 AND msg_id = $2",
+                "DELETE FROM inbox WHERE agent_id = $1 AND msg_id = $2",
                 str(agent_id),
                 msg_id,
             )
@@ -146,7 +146,7 @@ class Inbox:
             async with conn.transaction():
                 row = await conn.fetchrow(
                     """
-                    UPDATE substrate_inbox
+                    UPDATE inbox
                     SET attempts = attempts + 1
                     WHERE agent_id = $1 AND msg_id = $2
                     RETURNING attempts, payload
@@ -160,7 +160,7 @@ class Inbox:
                 if attempts >= self._max_retries:
                     await conn.execute(
                         """
-                        INSERT INTO substrate_dead_letters
+                        INSERT INTO dead_letters
                             (agent_id, msg_id, reason, attempts, last_error, payload)
                         VALUES ($1, $2, $3, $4, $5, $6::jsonb)
                         ON CONFLICT (agent_id, msg_id) DO UPDATE
@@ -175,7 +175,7 @@ class Inbox:
                         row["payload"],
                     )
                     await conn.execute(
-                        "DELETE FROM substrate_inbox WHERE agent_id = $1 AND msg_id = $2",
+                        "DELETE FROM inbox WHERE agent_id = $1 AND msg_id = $2",
                         str(agent_id),
                         msg_id,
                     )
@@ -185,7 +185,7 @@ class Inbox:
             rows = await conn.fetch(
                 """
                 SELECT msg_id, reason, attempts, last_error, payload
-                FROM substrate_dead_letters
+                FROM dead_letters
                 WHERE agent_id = $1
                 ORDER BY created_at
                 """,
@@ -211,7 +211,7 @@ class Inbox:
         async with self._pool.acquire() as conn:
             return (
                 await conn.fetchval(
-                    "SELECT COUNT(*) FROM substrate_inbox WHERE agent_id = $1",
+                    "SELECT COUNT(*) FROM inbox WHERE agent_id = $1",
                     str(agent_id),
                 )
                 or 0

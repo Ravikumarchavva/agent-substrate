@@ -35,7 +35,7 @@ loading/pending state, not the suspend/resume mechanism.
 ## Step 2 — inspect the actual persisted state
 
 There is no separate `steps` table anymore — conversation history was
-collapsed onto the EventLog (`substrate_event_log`), which is now the single
+collapsed onto the EventLog (`event_log`), which is now the single
 source of truth for both runtime replay *and* chat-history display (see
 `serving/stream/history.py::project_thread()`). Find the thread's run(s):
 
@@ -45,7 +45,7 @@ SELECT id, updated_at FROM threads ORDER BY updated_at DESC LIMIT 5;"
 
 docker exec agent-framework-postgres-1 psql -U postgres -d agentdb -t -c "
 SELECT run_id, status, worker_id, expires_at, wake_at, created_at
-FROM substrate_run_queue
+FROM run_queue
 WHERE thread_id='<THREAD_ID>'
 ORDER BY created_at;"
 ```
@@ -56,7 +56,7 @@ for what actually happened, independent of anything the UI renders:
 ```bash
 docker exec agent-framework-postgres-1 psql -U postgres -d agentdb -t -c "
 SELECT seq, kind, ts, left(payload::text, 160) AS payload
-FROM substrate_event_log
+FROM event_log
 WHERE run_id='<RUN_ID>'
 ORDER BY seq;"
 ```
@@ -65,7 +65,7 @@ What to look for:
 - A `tool.result` entry for `ask_human` immediately followed (same second or
   two) by fresh `text.delta`/`tool.call` entries in a *later* `run_id` for the
   same thread → **the run resumed correctly** (each suspend/resume cycle gets
-  its own `run_id` — check `substrate_run_queue` for all runs on the thread,
+  its own `run_id` — check `run_queue` for all runs on the thread,
   not just the most recent), the bug is elsewhere (frontend, or the LLM's own
   answer-processing logic).
 - Check the actual `tool.result` payload for `ask_human` — if the answer
@@ -94,11 +94,11 @@ Check these in order:
    path `ask_human` already used (see `ToolInvoker._invoke_inner` in
    `agents/tools/invoker.py` and `SSEApprovalHandler` in
    `serving/monolith/sse/approval.py`). Any worker on any replica can
-   resume from `substrate_run_queue`/`substrate_event_log` after a full
+   resume from `run_queue`/`event_log` after a full
    restart, for either kind. If you still see a lost approval, that's a
-   real regression — check `substrate_event_log` for an
+   real regression — check `event_log` for an
    `approval.requested` entry with the request_id from the stale card, and
-   confirm `substrate_signals` has (or ever had) a matching
+   confirm `signals` has (or ever had) a matching
    `hitl:{request_id}` row.
 3. **Is `run_id` actually reaching the frontend?** Check
    `InputRequestedEvent.run_id` isn't empty — `BridgeRegistry.register_signal_request()`

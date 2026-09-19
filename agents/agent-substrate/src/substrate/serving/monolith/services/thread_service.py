@@ -112,8 +112,8 @@ async def list_threads(
     Login is required to create a thread (see ``get_owned_thread``), so
     there is no unowned-row case to special-case here.
 
-    Message counts come from the EventLogProtocol (``substrate_run_queue`` joined to
-    ``substrate_event_log``), not a separate steps table — see
+    Message counts come from the EventLogProtocol (``run_queue`` joined to
+    ``event_log``), not a separate steps table — see
     ``routes/admin.py::list_all_threads`` for the same join pattern.
     """
     query = (
@@ -147,8 +147,8 @@ async def list_threads(
             text(
                 """
                 SELECT rq.thread_id AS thread_id, COUNT(el.*) AS message_count
-                FROM substrate_run_queue rq
-                JOIN substrate_event_log el ON el.run_id = rq.run_id
+                FROM run_queue rq
+                JOIN event_log el ON el.run_id = rq.run_id
                 WHERE rq.thread_id = ANY(:thread_ids)
                 GROUP BY rq.thread_id
                 """

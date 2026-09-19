@@ -71,6 +71,50 @@ class ChatRequest(BaseModel):
     system_instructions: Optional[str] = None  # appended to base prompt when provided
     file_ids: Optional[List[uuid.UUID]] = None  # IDs of files to inject for this turn
     model: Optional[str] = None  # per-request LLM override (e.g. "gpt-4o")
+    branch_id: Optional[str] = "main"  # conversation branch to drive
+
+
+# ── Branch / Checkpoint schemas ──────────────────────────────────────────────
+
+
+class BranchOut(BaseModel):
+    """Branch details returned for a thread."""
+
+    id: str
+    session_id: str
+    head_message_id: Optional[str] = None
+    forked_from_message_id: Optional[str] = None
+    version: int = 0
+    created_at: datetime
+
+
+class BranchForkRequest(BaseModel):
+    """POST /threads/{id}/branches/fork – create a new branch."""
+
+    new_branch_id: str
+    source_branch_id: str = "main"
+    fork_from_message_id: Optional[str] = None
+
+
+class CheckpointOut(BaseModel):
+    """Compaction checkpoint details."""
+
+    id: str
+    session_id: str
+    anchor_message_id: str
+    summary: str
+    state: JsonObject = Field(default_factory=dict)
+    parent_checkpoint_id: Optional[str] = None
+    created_at: datetime
+
+
+class CheckpointCreateRequest(BaseModel):
+    """POST /threads/{id}/branches/{branch_id}/checkpoints – save a checkpoint."""
+
+    anchor_message_id: str
+    summary: str
+    state: Optional[JsonObject] = None
+
 
 
 # ── Feedback schemas ─────────────────────────────────────────────────────────

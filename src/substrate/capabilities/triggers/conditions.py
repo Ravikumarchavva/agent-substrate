@@ -194,6 +194,7 @@ class ConditionMonitor:
             agent_id = Actor(type=condition.target_type, key=condition.target_name)
             msg = Message(
                 target=agent_id,
+                sender=Actor(type="condition", key=condition.name),
                 payload=DataPayload(data=combined_params),
             )
             try:

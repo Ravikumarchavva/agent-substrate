@@ -24,6 +24,7 @@ from substrate.agents.runtime import Runtime
 from substrate.config import SubstrateConfig
 from substrate.infrastructure.serving_factory import build_agent_for_thread
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock, ToolUseBlock
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.core.usage import Usage
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.messaging.stream import CompletionEvent
@@ -88,6 +89,7 @@ async def test_critical_tool_call_pauses_for_approval_and_resumes():
 
         msg = Message(
             target=agent.id,
+            sender=Actor.user(),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="drop it")])
             ),
@@ -133,6 +135,7 @@ async def test_critical_tool_call_denied_does_not_execute():
 
         msg = Message(
             target=agent.id,
+            sender=Actor.user(),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="drop it")])
             ),

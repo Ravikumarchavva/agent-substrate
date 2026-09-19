@@ -111,7 +111,7 @@ class Supervision:
     - ``run_id`` — one execution tree (short-lived; one run() call).
       Scopes budget, supervision, resume, and the progress pub/sub topic.
 
-    Progress channel: ``Topic("agent.progress", run_id)``
+    Progress channel: ``Topic.progress(run_id)``
     All agents in one run publish there; the UI subscribes once.
 
     ``depth`` is informational only (for UI indentation and AgentProgress).
@@ -198,7 +198,7 @@ class Supervision:
     @property
     def progress_topic(self) -> Topic:
         """The single pub/sub topic for all progress events in this run."""
-        return Topic(f"agent.progress/{self.run_id}")
+        return Topic.progress(self.run_id)
 
     @property
     def is_root(self) -> bool:

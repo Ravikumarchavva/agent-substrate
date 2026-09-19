@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from substrate.agents.runtime.runtime import Runtime
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.runtime.ids import RunId, new_run_id
 
@@ -119,6 +120,7 @@ class EvalRunner:
         sentinel_run_id = new_run_id()
         msg = Message(
             target=self._agent.id,
+            sender=Actor(type="eval_runner", key=case.case_id),
             payload=ChatPayload(
                 message=ChatMessage(
                     role=Role.USER, content=[TextBlock(text=case.input)]

@@ -63,7 +63,7 @@ def _agent_id(name: str) -> Actor:
 
 
 def _msg(target: Actor, data: dict | None = None) -> Message:
-    return Message(target=target, payload=DataPayload(data=data or {}))
+    return Message(target=target, sender=Actor.system("test"), payload=DataPayload(data=data or {}))
 
 
 # ---------------------------------------------------------------------------
@@ -339,6 +339,7 @@ async def test_pg_streaming_session(pg_runtime) -> None:
     agent = StreamingAgent(agent_id)
     msg = Message(
         target=agent_id,
+        sender=Actor.user(),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
         ),
@@ -1656,6 +1657,7 @@ async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
     await pg_runtime.register(agent1)
     msg1 = Message(
         target=agent1.id,
+        sender=Actor.user(),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text="turn one")])
         ),
@@ -1673,6 +1675,7 @@ async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
     await pg_runtime.register(agent2)
     msg2 = Message(
         target=agent2.id,
+        sender=Actor.user(),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text="turn two")])
         ),

@@ -30,7 +30,7 @@ def _agent_id(name: str) -> Actor:
 
 
 def _msg(target: Actor | Topic, data: dict | None = None) -> Message:
-    return Message(target=target, payload=DataPayload(data=data or {}))
+    return Message(target=target, sender=Actor.system("test"), payload=DataPayload(data=data or {}))
 
 
 # ---------------------------------------------------------------------------

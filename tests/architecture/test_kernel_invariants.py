@@ -193,3 +193,47 @@ def test_content_block_invalid_raises() -> None:
         assert False, "Should have raised BlockValidationError"
     except BlockValidationError:
         pass
+
+
+def test_message_requires_sender() -> None:
+    """Message must enforce non-anonymous provenance — omitting sender raises ValidationError."""
+    import pytest
+    from pydantic import ValidationError
+    from substrate.kernel.core.identity import Actor
+    from substrate.kernel.messaging.message import Message, DataPayload
+
+    target = Actor(type="agent", key="worker")
+
+    # Missing sender
+    with pytest.raises(ValidationError):
+        Message(target=target, payload=DataPayload(data={}))  # type: ignore[call-arg]
+
+    # Explicit None sender
+    with pytest.raises(ValidationError):
+        Message(target=target, sender=None, payload=DataPayload(data={}))  # type: ignore[arg-type]
+
+    # Valid sender
+    msg = Message(target=target, sender=Actor.user(), payload=DataPayload(data={}))
+    assert msg.sender == Actor(type="user", key="default")
+
+
+def test_actor_factory_helpers() -> None:
+    """Actor factory classmethods must provide canonical standard addresses."""
+    from substrate.kernel.core.identity import Actor
+
+    system_default = Actor.system()
+    assert system_default == Actor(type="system", key="bootstrap")
+    assert str(system_default) == "system/bootstrap"
+
+    system_custom = Actor.system("cron")
+    assert system_custom == Actor(type="system", key="cron")
+    assert str(system_custom) == "system/cron"
+
+    user_default = Actor.user()
+    assert user_default == Actor(type="user", key="default")
+    assert str(user_default) == "user/default"
+
+    user_custom = Actor.user("alice")
+    assert user_custom == Actor(type="user", key="alice")
+    assert str(user_custom) == "user/alice"
+

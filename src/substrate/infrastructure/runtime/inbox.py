@@ -91,7 +91,7 @@ class Inbox:
     async def deliver(
         self, agent_id: Actor, msg: Message, *, notify: bool = True
     ) -> bool:
-        sender_key = str(msg.sender) if msg.sender else "__anon__"
+        sender_key = str(msg.sender)
         payload_json = msg.model_dump_json()
         async with self._pool.acquire() as conn:
             result = await conn.fetchrow(

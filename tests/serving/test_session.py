@@ -100,6 +100,7 @@ class CrashAgent:
 def _make_msg(agent_id: Actor, text: str = "hello") -> Message:
     return Message(
         target=agent_id,
+        sender=Actor.user(),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
         ),
@@ -469,6 +470,7 @@ async def test_tail_wire_events_skips_non_streamable_kinds_without_crashing() ->
         await rt.register(agent)
         msg = Message(
             target=agent.id,
+            sender=Actor.user(),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
             ),
@@ -502,6 +504,7 @@ async def test_tail_wire_events_maps_run_failed() -> None:
         await rt.register(agent)
         msg = Message(
             target=agent.id,
+            sender=Actor.user(),
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
             ),

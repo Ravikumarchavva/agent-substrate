@@ -148,6 +148,7 @@ async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
     agent_id = Actor(type="agent", key=f"test-inbox-agent-{id(object())}")
     msg = Message(
         target=agent_id,
+        sender=Actor.user(),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text="hello")])
         ),
@@ -181,6 +182,7 @@ async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
     agent_id = Actor(type="agent", key=f"test-nack-agent-{id(object())}")
     msg = Message(
         target=agent_id,
+        sender=Actor.user(),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text="fail-me")])
         ),

@@ -132,7 +132,12 @@ async def test_run_start_end_fire() -> None:
     async with Runtime() as rt:
         await rt.register(agent)
         run_id = await rt.submit(
-            agent_id, Message(target=agent_id, payload=DataPayload(data={}))
+            agent_id,
+            Message(
+                target=agent_id,
+                sender=Actor.system("test"),
+                payload=DataPayload(data={}),
+            ),
         )
         # Wait for the run to complete
         async for entry in rt.event_log.tail(run_id):
@@ -169,7 +174,11 @@ async def test_run_end_fires_even_on_agent_crash() -> None:
         # and retry rather than terminal-failing on the first attempt.
         run_id = await rt.submit(
             agent.id,
-            Message(target=agent.id, payload=DataPayload(data={})),
+            Message(
+                target=agent.id,
+                sender=Actor.system("test"),
+                payload=DataPayload(data={}),
+            ),
             max_retries=0,
         )
         async for entry in rt.event_log.tail(run_id):
@@ -224,6 +233,7 @@ async def test_llm_start_end_fire() -> None:
             agent_id,
             Message(
                 target=agent_id,
+                sender=Actor.user(),
                 payload=ChatPayload(
                     message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
                 ),

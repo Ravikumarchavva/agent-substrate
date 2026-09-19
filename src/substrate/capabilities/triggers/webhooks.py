@@ -163,6 +163,7 @@ class WebhookRegistry:
             agent_id = Actor(type=webhook.target_type, key=webhook.target_name)
             msg = Message(
                 target=agent_id,
+                sender=Actor(type="webhook", key=webhook.name),
                 payload=DataPayload(data=combined_params),
             )
             try:

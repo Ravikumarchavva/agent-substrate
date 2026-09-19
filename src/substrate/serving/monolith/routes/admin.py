@@ -51,13 +51,13 @@ async def admin_stats(
 ) -> Dict[str, Any]:
     """Return top-level aggregate stats.
 
-    ``total_events`` counts durable EventLogProtocol rows (``substrate_event_log``)
+    ``total_events`` counts durable EventLogProtocol rows (``event_log``)
     directly — conversation history has no separate steps table anymore; the
     EventLogProtocol is the single source of truth (see ``serving/stream/history.py``).
     """
     thread_count: int = (await db.execute(select(func.count(Thread.id)))).scalar_one()
     event_count: int = (
-        await db.execute(text("SELECT COUNT(*) FROM substrate_event_log"))
+        await db.execute(text("SELECT COUNT(*) FROM event_log"))
     ).scalar_one()
 
     return {
@@ -75,8 +75,8 @@ async def list_all_threads(
 ) -> List[Dict[str, Any]]:
     """Return all threads with EventLogProtocol event counts, newest first.
 
-    Raw SQL (not the ORM) for the event-count join: substrate_run_queue and
-    substrate_event_log are asyncpg-managed tables in the same physical
+    Raw SQL (not the ORM) for the event-count join: run_queue and
+    event_log are asyncpg-managed tables in the same physical
     database, not SQLAlchemy models, so a plain JOIN is simpler than
     stitching a raw subquery onto ORM Core constructs.
     """
@@ -91,8 +91,8 @@ async def list_all_threads(
                 FROM threads t
                 LEFT JOIN (
                     SELECT rq.thread_id AS thread_id, COUNT(el.*) AS event_count
-                    FROM substrate_run_queue rq
-                    JOIN substrate_event_log el ON el.run_id = rq.run_id
+                    FROM run_queue rq
+                    JOIN event_log el ON el.run_id = rq.run_id
                     WHERE rq.thread_id IS NOT NULL
                     GROUP BY rq.thread_id
                 ) ec ON ec.thread_id = t.id::text

@@ -26,11 +26,13 @@ from substrate.agents.context.compaction.token_budget_composed import (
 )
 from substrate.agents.context.compaction.pipeline import CompactionPipeline
 from substrate.agents.context.compaction.coordinator import DefaultCompactionCoordinator
+from substrate.agents.context.compaction.threshold import ThresholdCheckpointStrategy
 
 __all__ = [
     "CompactionStrategy",
     "CompactionPipeline",
     "DefaultCompactionCoordinator",
+    "ThresholdCheckpointStrategy",
     "SlidingWindowCompaction",
     "SummarizationCompaction",
     "ToolResultCompactionStrategy",
@@ -38,3 +40,4 @@ __all__ = [
     "TruncationStrategy",
     "TokenBudgetComposedStrategy",
 ]
+

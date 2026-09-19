@@ -968,7 +968,9 @@ async def build_history_provider(
     if database_url:
         from substrate.capabilities.history.durable_history import DurableHistoryProvider
 
-        return DurableHistoryProvider(database_url=database_url)
+        provider = DurableHistoryProvider(database_url=database_url)
+        await provider.connect()
+        return provider
 
     from substrate.agents.context import InMemoryHistoryProvider
 

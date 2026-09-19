@@ -89,6 +89,10 @@ class InMemoryHistoryProvider:
     async def get_branch(self, session_id: str, branch_id: str) -> Branch | None:
         return self._branches.get((session_id, branch_id))
 
+    async def list_branches(self, session_id: str) -> list[Branch]:
+        return [b for (s_id, _), b in self._branches.items() if s_id == session_id]
+
+
     async def ensure_branch(
         self, session_id: str, branch_id: str, *, head_message_id: str | None = None
     ) -> Branch:

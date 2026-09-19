@@ -3,7 +3,7 @@
 ``spawn`` is lifecycle: creates a child run, records the spawn in
 ``_spawn_effects`` (so replay returns the same child_run_id), delivers the
 boot message, and enqueues the child.  It does NOT wait.  Mirrors
-``Supervisor``'s dedicated ``substrate_spawn_effects`` table — spawn
+``Supervisor``'s dedicated ``spawn_effects`` table — spawn
 dedup is a SupervisorProtocol-local concern, not the generic effect Journal (which no
 longer exists; ``ctx.llm()``/``ctx.tool()`` dedup through the EventLogProtocol itself
 via ``EffectCache.fold()``).

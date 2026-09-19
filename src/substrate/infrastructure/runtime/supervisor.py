@@ -2,7 +2,7 @@
 
 Schema::
 
-    CREATE TABLE substrate_run_tree (
+    CREATE TABLE run_tree (
         run_id      TEXT PRIMARY KEY,
         parent_run  TEXT,
         root_run    TEXT NOT NULL,
@@ -12,16 +12,16 @@ Schema::
         created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
-    CREATE TABLE substrate_spawn_effects (
+    CREATE TABLE spawn_effects (
         effect_id     TEXT PRIMARY KEY,
         child_run_id  TEXT NOT NULL
     );
 
-``spawn`` is idempotent against ``substrate_spawn_effects``, keyed by the caller's
+``spawn`` is idempotent against ``spawn_effects``, keyed by the caller's
 replay-stable effect_id (derived from ``RunContext._alloc_path()`` — see the
 kernel ``SupervisorProtocol.spawn()`` docstring for why it must never be computed
 fresh). ``finish_run`` is the durable completion path: it marks the run
-terminal in ``substrate_run_tree`` and fires a ``child:{run_id}`` signal to the
+terminal in ``run_tree`` and fires a ``child:{run_id}`` signal to the
 parent — that's what a suspended ``ctx.join``/``ctx.ask`` consumes to resume,
 closing the "parent stalls the full timeout waiting on a crashed child" gap.
 """
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from substrate.infrastructure.runtime.signal_bus import SignalBus
 
 _CREATE_TABLES = """
-CREATE TABLE IF NOT EXISTS substrate_run_tree (
+CREATE TABLE IF NOT EXISTS run_tree (
     run_id      TEXT NOT NULL PRIMARY KEY,
     parent_run  TEXT,
     root_run    TEXT NOT NULL,
@@ -57,10 +57,10 @@ CREATE TABLE IF NOT EXISTS substrate_run_tree (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     supervision JSONB
 );
-CREATE INDEX IF NOT EXISTS substrate_run_tree_parent_idx ON substrate_run_tree (parent_run);
-CREATE INDEX IF NOT EXISTS substrate_run_tree_root_idx ON substrate_run_tree (root_run);
+CREATE INDEX IF NOT EXISTS run_tree_parent_idx ON run_tree (parent_run);
+CREATE INDEX IF NOT EXISTS run_tree_root_idx ON run_tree (root_run);
 
-CREATE TABLE IF NOT EXISTS substrate_spawn_effects (
+CREATE TABLE IF NOT EXISTS spawn_effects (
     effect_id    TEXT NOT NULL PRIMARY KEY,
     child_run_id TEXT NOT NULL
 );
@@ -103,7 +103,7 @@ class Supervisor:
             await conn.execute(_CREATE_TABLES)
             for col, defn in _MIGRATE_COLUMNS:
                 await conn.execute(
-                    f"ALTER TABLE substrate_run_tree ADD COLUMN IF NOT EXISTS {col} {defn}"
+                    f"ALTER TABLE run_tree ADD COLUMN IF NOT EXISTS {col} {defn}"
                 )
 
     async def spawn(
@@ -124,7 +124,7 @@ class Supervisor:
         )
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT child_run_id FROM substrate_spawn_effects WHERE effect_id = $1",
+                "SELECT child_run_id FROM spawn_effects WHERE effect_id = $1",
                 effect_id,
             )
             if row is not None:
@@ -149,7 +149,7 @@ class Supervisor:
                     await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
                     active = await conn.fetchval(
                         """
-                        SELECT count(*) FROM substrate_run_tree
+                        SELECT count(*) FROM run_tree
                         WHERE root_run = $1 AND status IN ('pending', 'running', 'suspended')
                         """,
                         root_run,
@@ -173,7 +173,7 @@ class Supervisor:
                     child_run_id = new_run_id()
                     await conn.execute(
                         """
-                        INSERT INTO substrate_spawn_effects (effect_id, child_run_id)
+                        INSERT INTO spawn_effects (effect_id, child_run_id)
                         VALUES ($1, $2)
                         """,
                         effect_id,
@@ -183,7 +183,7 @@ class Supervisor:
 
                     await conn.execute(
                         """
-                        INSERT INTO substrate_run_tree (run_id, parent_run, root_run, agent_id, status, supervision)
+                        INSERT INTO run_tree (run_id, parent_run, root_run, agent_id, status, supervision)
                         VALUES ($1, $2, $3, $4, 'pending', $5::jsonb)
                         """,
                         child_run_id,
@@ -242,7 +242,7 @@ class Supervisor:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                UPDATE substrate_run_tree
+                UPDATE run_tree
                 SET status = $1, error = $2
                 WHERE run_id = $3
                 RETURNING parent_run
@@ -255,11 +255,11 @@ class Supervisor:
             # again — any row still addressed to it (consumed or a stale
             # unconsumed buffer, e.g. a late ask() reply nobody's waiting on
             # anymore) is now permanently dead weight. Regardless of whether
-            # this run was ever in substrate_run_tree (a top-level submit() run
+            # this run was ever in run_tree (a top-level submit() run
             # never is, but can still have accumulated signals as an ask()
             # target or sleep_until_signal() waiter).
             await conn.execute(
-                "DELETE FROM substrate_signals WHERE run_id = $1", run_id
+                "DELETE FROM signals WHERE run_id = $1", run_id
             )
         if row is None:
             return  # this run was never spawned via ctx.spawn() (a top-level submit())
@@ -283,7 +283,7 @@ class Supervisor:
           plan accepts, tightened by ``ctx.check()`` calls elsewhere in the
           agent loop) and self-terminates via ``CancellationError``, which
           the Worker turns into ``finish_run(CANCELLED)`` — that's what
-          actually flips ``substrate_run_tree`` and signals the parent.
+          actually flips ``run_tree`` and signals the parent.
         - **suspended**: no live task is polling anything — nothing will
           ever heartbeat it again — so it's terminal-marked directly, right
           here, via the same ``finish_run`` path.
@@ -294,13 +294,13 @@ class Supervisor:
                 WITH RECURSIVE subtree(run_id) AS (
                     -- Seed with the handle's own run_id unconditionally —
                     -- it may be a top-level submit() run with no
-                    -- substrate_run_tree row at all (only ctx.spawn()'d runs get
+                    -- run_tree row at all (only ctx.spawn()'d runs get
                     -- one), and cancelling it must still cascade to its
                     -- spawned children.
                     SELECT $1::text
                     UNION ALL
                     SELECT rt.run_id
-                    FROM substrate_run_tree rt
+                    FROM run_tree rt
                     JOIN subtree s ON rt.parent_run = s.run_id
                 )
                 SELECT run_id FROM subtree
@@ -312,7 +312,7 @@ class Supervisor:
                 return
             await conn.execute(
                 """
-                UPDATE substrate_run_queue
+                UPDATE run_queue
                 SET cancel_requested = true
                 WHERE run_id = ANY($1) AND status IN ('pending', 'running')
                 """,
@@ -320,7 +320,7 @@ class Supervisor:
             )
             suspended_rows = await conn.fetch(
                 """
-                UPDATE substrate_run_queue
+                UPDATE run_queue
                 SET status = 'cancelled', worker_id = NULL, expires_at = NULL,
                     wake_signals = NULL, wake_at = NULL, terminated_at = now()
                 WHERE run_id = ANY($1) AND status = 'suspended'
@@ -339,7 +339,7 @@ class Supervisor:
     async def _children_iter(self, parent: RunId) -> AsyncIterator[RunHandle]:  # type: ignore[return]
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT run_id, agent_id FROM substrate_run_tree WHERE parent_run = $1",
+                "SELECT run_id, agent_id FROM run_tree WHERE parent_run = $1",
                 parent,
             )
         for row in rows:
@@ -359,7 +359,7 @@ class Supervisor:
         """
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT status, error FROM substrate_run_tree WHERE run_id = $1",
+                "SELECT status, error FROM run_tree WHERE run_id = $1",
                 handle.run_id,
             )
         if row is None:
@@ -376,7 +376,7 @@ class Supervisor:
 
         async with self._pool.acquire() as conn:
             raw = await conn.fetchval(
-                "SELECT supervision FROM substrate_run_tree WHERE run_id = $1", run_id
+                "SELECT supervision FROM run_tree WHERE run_id = $1", run_id
             )
         if raw is None:
             return None

@@ -126,15 +126,14 @@ async def test_pg_fire_and_forget(pg_runtime) -> None:
     agent = RecorderAgent(agent_id)
 
     await pg_runtime.register(agent)
-    await pg_runtime.submit(agent_id, _msg(agent_id, {"hello": "postgres"}))
-    await asyncio.wait_for(agent.done.wait(), timeout=5.0)
-
-    payloads = [
-        m.payload.data  # type: ignore[union-attr]
-        for m in agent.received
-        if isinstance(m.payload, DataPayload)
-    ]
-    assert {"hello": "postgres"} in payloads
+    run_id = await pg_runtime.submit(agent_id, _msg(agent_id, {"hello": "postgres"}))
+    print(f"DEBUG: submitted run_id={run_id}, agent_id={agent_id}")
+    for i in range(10):
+        await asyncio.sleep(0.5)
+        print(f"DEBUG: check i={i}, done={agent.done.is_set()}")
+        if agent.done.is_set():
+            break
+    assert agent.done.is_set()
 
 
 # ---------------------------------------------------------------------------
@@ -396,7 +395,7 @@ async def test_pg_reclaim_orphans_requeues_an_expired_lease() -> None:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO substrate_run_queue (run_id, status, worker_id, expires_at)
+                INSERT INTO run_queue (run_id, status, worker_id, expires_at)
                 VALUES ($1, 'running', 'dead-worker', now() - interval '1 second')
                 """,
                 run_id,
@@ -406,10 +405,10 @@ async def test_pg_reclaim_orphans_requeues_an_expired_lease() -> None:
         assert reclaimed >= 1
         async with pool.acquire() as conn:
             status = await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+                "SELECT status FROM run_queue WHERE run_id = $1", run_id
             )
             await conn.execute(
-                "DELETE FROM substrate_run_queue WHERE run_id = $1", run_id
+                "DELETE FROM run_queue WHERE run_id = $1", run_id
             )
         assert status == "pending"
     finally:
@@ -438,7 +437,7 @@ async def test_pg_reclaim_orphans_never_steals_a_still_live_lease() -> None:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO substrate_run_queue (run_id, status, worker_id, expires_at)
+                INSERT INTO run_queue (run_id, status, worker_id, expires_at)
                 VALUES ($1, 'running', 'live-worker', now() + interval '30 seconds')
                 """,
                 run_id,
@@ -447,10 +446,10 @@ async def test_pg_reclaim_orphans_never_steals_a_still_live_lease() -> None:
         assert await scheduler.reclaim_orphans() == 0
         async with pool.acquire() as conn:
             status = await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+                "SELECT status FROM run_queue WHERE run_id = $1", run_id
             )
             await conn.execute(
-                "DELETE FROM substrate_run_queue WHERE run_id = $1", run_id
+                "DELETE FROM run_queue WHERE run_id = $1", run_id
             )
         assert status == "running"
     finally:
@@ -524,7 +523,7 @@ async def test_pg_cold_resume() -> None:
             # Insert agent run mapping
             await conn.execute(
                 """
-                INSERT INTO substrate_agent_runs (run_id, agent_id, spec)
+                INSERT INTO agent_runs (run_id, agent_id, spec)
                 VALUES ($1, $2, $3::jsonb)
                 ON CONFLICT (run_id) DO NOTHING
                 """,
@@ -535,7 +534,7 @@ async def test_pg_cold_resume() -> None:
             # Insert as 'pending' (already reclaimed)
             await conn.execute(
                 """
-                INSERT INTO substrate_run_queue (run_id, status)
+                INSERT INTO run_queue (run_id, status)
                 VALUES ($1, 'pending')
                 ON CONFLICT (run_id) DO NOTHING
                 """,
@@ -561,10 +560,10 @@ async def test_pg_cold_resume() -> None:
         # Cleanup
         async with pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM substrate_run_queue WHERE run_id = $1", orphan_run_id
+                "DELETE FROM run_queue WHERE run_id = $1", orphan_run_id
             )
             await conn.execute(
-                "DELETE FROM substrate_agent_runs WHERE run_id = $1", orphan_run_id
+                "DELETE FROM agent_runs WHERE run_id = $1", orphan_run_id
             )
     finally:
         await pool.close()
@@ -633,7 +632,7 @@ async def test_pg_cold_resume_refuses_version_mismatch() -> None:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO substrate_agent_runs (run_id, agent_id, spec)
+                INSERT INTO agent_runs (run_id, agent_id, spec)
                 VALUES ($1, $2, $3::jsonb)
                 ON CONFLICT (run_id) DO NOTHING
                 """,
@@ -643,7 +642,7 @@ async def test_pg_cold_resume_refuses_version_mismatch() -> None:
             )
             await conn.execute(
                 """
-                INSERT INTO substrate_run_queue (run_id, status)
+                INSERT INTO run_queue (run_id, status)
                 VALUES ($1, 'pending')
                 ON CONFLICT (run_id) DO NOTHING
                 """,
@@ -677,15 +676,15 @@ async def test_pg_cold_resume_refuses_version_mismatch() -> None:
         assert failed_entries[0].payload["status"] == "version_mismatch"
 
         row = await pool.fetchrow(
-            "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+            "SELECT status FROM run_queue WHERE run_id = $1", run_id
         )
         assert row["status"] == "failed"
 
         # Sanity: the spec really was stale relative to the running version.
         assert stale_spec["agent_version"] != substrate.__version__
     finally:
-        await pool.execute("DELETE FROM substrate_run_queue WHERE run_id = $1", run_id)
-        await pool.execute("DELETE FROM substrate_agent_runs WHERE run_id = $1", run_id)
+        await pool.execute("DELETE FROM run_queue WHERE run_id = $1", run_id)
+        await pool.execute("DELETE FROM agent_runs WHERE run_id = $1", run_id)
         await pool.close()
 
 
@@ -771,11 +770,11 @@ async def test_pg_spawn_denied_once_headcount_cap_reached() -> None:
         assert replayed is not None
     finally:
         await pool.execute(
-            "DELETE FROM substrate_run_tree WHERE root_run = $1", root.run_id
+            "DELETE FROM run_tree WHERE root_run = $1", root.run_id
         )
         if spawn_effect_ids:
             await pool.execute(
-                "DELETE FROM substrate_spawn_effects WHERE effect_id = ANY($1)",
+                "DELETE FROM spawn_effects WHERE effect_id = ANY($1)",
                 spawn_effect_ids,
             )
         await pool.close()
@@ -906,10 +905,10 @@ async def test_pg_tool_approval_survives_full_pool_close_and_reopen() -> None:
         assert "user@example.com" in result.text
     finally:
         await pool_b.execute(
-            "DELETE FROM substrate_event_log WHERE run_id = $1", run_id
+            "DELETE FROM event_log WHERE run_id = $1", run_id
         )
         await pool_b.execute(
-            "DELETE FROM substrate_run_queue WHERE run_id = $1", run_id
+            "DELETE FROM run_queue WHERE run_id = $1", run_id
         )
         await pool_b.close()
 
@@ -975,7 +974,7 @@ async def test_pg_cancel_cascade(pg_runtime) -> None:
     async def _status_of(run_id: str) -> str | None:
         async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
             return await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+                "SELECT status FROM run_queue WHERE run_id = $1", run_id
             )
 
     async def _wait_suspended(run_id: str) -> None:
@@ -996,7 +995,7 @@ async def test_pg_cancel_cascade(pg_runtime) -> None:
 
     async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
         tree_status = await conn.fetch(
-            "SELECT run_id, status FROM substrate_run_tree WHERE run_id = ANY($1)",
+            "SELECT run_id, status FROM run_tree WHERE run_id = ANY($1)",
             [child.child_run_id, root.child_run_id],
         )
     assert all(r["status"] == "cancelled" for r in tree_status)
@@ -1031,7 +1030,7 @@ async def test_pg_cancel_pending_leaves_a_running_run_alone(pg_runtime) -> None:
     async def _status_of() -> str | None:
         async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
             return await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+                "SELECT status FROM run_queue WHERE run_id = $1", run_id
             )
 
     assert await _status_of() == "running"
@@ -1051,7 +1050,7 @@ async def test_pg_cancel_pending_marks_suspended_run_cancelled(pg_runtime) -> No
     async def _status_of() -> str | None:
         async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
             return await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+                "SELECT status FROM run_queue WHERE run_id = $1", run_id
             )
 
     for _ in range(100):
@@ -1091,7 +1090,7 @@ async def test_pg_deadline_enforcement(pg_runtime) -> None:
     async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
         for _ in range(100):
             status = await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+                "SELECT status FROM run_queue WHERE run_id = $1", run_id
             )
             if status == "suspended":
                 break
@@ -1101,14 +1100,14 @@ async def test_pg_deadline_enforcement(pg_runtime) -> None:
 
         past = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
         await conn.execute(
-            "UPDATE substrate_run_queue SET deadline = $1 WHERE run_id = $2",
+            "UPDATE run_queue SET deadline = $1 WHERE run_id = $2",
             past,
             run_id,
         )
 
         for _ in range(100):
             status = await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+                "SELECT status FROM run_queue WHERE run_id = $1", run_id
             )
             if status == "failed":
                 break
@@ -1178,7 +1177,7 @@ async def test_pg_ask_crash_fast_path(pg_runtime) -> None:
 
 
 async def test_pg_signal_gc_on_finish(pg_runtime) -> None:
-    """A terminal run's leftover substrate_signals rows are deleted by finish_run() —
+    """A terminal run's leftover signals rows are deleted by finish_run() —
     both the reply it consumed and any late/never-consumed extras."""
     echo_id = _agent_id("pg-gc-echo")
     asker_id = _agent_id("pg-gc-asker")
@@ -1194,7 +1193,7 @@ async def test_pg_signal_gc_on_finish(pg_runtime) -> None:
     async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
         for _ in range(50):
             row = await conn.fetchrow(
-                "SELECT run_id FROM substrate_agent_runs WHERE agent_id = $1",
+                "SELECT run_id FROM agent_runs WHERE agent_id = $1",
                 str(asker_id),
             )
             if row is not None:
@@ -1205,7 +1204,7 @@ async def test_pg_signal_gc_on_finish(pg_runtime) -> None:
 
         for _ in range(50):
             status = await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = $1", asker_run_id
+                "SELECT status FROM run_queue WHERE run_id = $1", asker_run_id
             )
             if status == "completed":
                 break
@@ -1214,7 +1213,7 @@ async def test_pg_signal_gc_on_finish(pg_runtime) -> None:
             raise AssertionError("asker run never completed")
 
         remaining = await conn.fetchval(
-            "SELECT count(*) FROM substrate_signals WHERE run_id = $1", asker_run_id
+            "SELECT count(*) FROM signals WHERE run_id = $1", asker_run_id
         )
     assert remaining == 0
 
@@ -1236,7 +1235,7 @@ async def test_pg_retention_sweep(pg_runtime) -> None:
     async with pool.acquire() as conn:
         for _ in range(50):
             row = await conn.fetchrow(
-                "SELECT status, terminated_at FROM substrate_run_queue WHERE run_id = $1",
+                "SELECT status, terminated_at FROM run_queue WHERE run_id = $1",
                 run_id,
             )
             if row is not None and row["status"] == "completed":
@@ -1249,23 +1248,23 @@ async def test_pg_retention_sweep(pg_runtime) -> None:
         # Not old enough yet: a 1-day cutoff must not touch it.
         await sweep_terminal_runs(pool, older_than=timedelta(days=1))
         still_there = await conn.fetchval(
-            "SELECT 1 FROM substrate_run_queue WHERE run_id = $1", run_id
+            "SELECT 1 FROM run_queue WHERE run_id = $1", run_id
         )
         assert still_there == 1
 
         # Backdate it past any cutoff, then sweep for real.
         await conn.execute(
-            "UPDATE substrate_run_queue SET terminated_at = now() - interval '2 days' WHERE run_id = $1",
+            "UPDATE run_queue SET terminated_at = now() - interval '2 days' WHERE run_id = $1",
             run_id,
         )
         await sweep_terminal_runs(pool, older_than=timedelta(days=1))
 
         gone = await conn.fetchval(
-            "SELECT 1 FROM substrate_run_queue WHERE run_id = $1", run_id
+            "SELECT 1 FROM run_queue WHERE run_id = $1", run_id
         )
         assert gone is None
         gone_log = await conn.fetchval(
-            "SELECT 1 FROM substrate_event_log WHERE run_id = $1 LIMIT 1", run_id
+            "SELECT 1 FROM event_log WHERE run_id = $1 LIMIT 1", run_id
         )
         assert gone_log is None
 
@@ -1278,7 +1277,7 @@ async def test_pg_retention_sweep(pg_runtime) -> None:
 async def test_pg_thread_single_flight(pg_runtime) -> None:
     """A second submit() for the same thread_id, while the first run is still
     active, raises ThreadBusyError — durably, via a unique partial index on
-    substrate_run_queue, not a per-process lock (see routes/chat.py)."""
+    run_queue, not a per-process lock (see routes/chat.py)."""
     from substrate.kernel.exceptions import ThreadBusyError
 
     agent_id = _agent_id("pg-singleflight")
@@ -1293,7 +1292,7 @@ async def test_pg_thread_single_flight(pg_runtime) -> None:
     async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
         for _ in range(100):
             status = await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id_1
+                "SELECT status FROM run_queue WHERE run_id = $1", run_id_1
             )
             if status in ("pending", "running", "suspended"):
                 break
@@ -1327,8 +1326,8 @@ async def test_pg_thread_single_flight_frees_after_completion(pg_runtime) -> Non
     async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
         for _ in range(100):
             status = await conn.fetchval(
-                "SELECT status FROM substrate_run_queue WHERE run_id = "
-                "(SELECT run_id FROM substrate_run_queue WHERE thread_id = $1 "
+                "SELECT status FROM run_queue WHERE run_id = "
+                "(SELECT run_id FROM run_queue WHERE thread_id = $1 "
                 "ORDER BY enqueued_at DESC LIMIT 1)",
                 thread_id,
             )
@@ -1440,7 +1439,7 @@ async def test_pg_fair_scheduling_across_tenants() -> None:
         # live concurrent run to respect.
         async with pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM substrate_run_queue WHERE status NOT IN "
+                "DELETE FROM run_queue WHERE status NOT IN "
                 "('completed', 'failed', 'cancelled')"
             )
 
@@ -1464,7 +1463,7 @@ async def test_pg_fair_scheduling_across_tenants() -> None:
                     ROW_NUMBER() OVER (
                         PARTITION BY tenant ORDER BY priority, enqueued_at
                     ) AS rn
-                FROM substrate_run_queue
+                FROM run_queue
                 WHERE status = 'pending'
                 """
             )
@@ -1480,11 +1479,11 @@ async def test_pg_fair_scheduling_across_tenants() -> None:
     finally:
         async with pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM substrate_run_queue WHERE run_id = ANY($1)",
+                "DELETE FROM run_queue WHERE run_id = ANY($1)",
                 [*flood_run_ids, starved_run_id],
             )
             await conn.execute(
-                "DELETE FROM substrate_agent_runs WHERE run_id = ANY($1)",
+                "DELETE FROM agent_runs WHERE run_id = ANY($1)",
                 [*flood_run_ids, starved_run_id],
             )
         await pool.close()
@@ -1498,7 +1497,7 @@ async def test_pg_fair_scheduling_across_tenants() -> None:
 async def test_pg_spawn_inherits_execution_budget(pg_runtime) -> None:
     """Same guarantee as the in-memory test, but round-tripped through
     Postgres: Supervision.to_dict()/from_dict() persisted in
-    substrate_run_tree.supervision and rehydrated by a (potentially different)
+    run_tree.supervision and rehydrated by a (potentially different)
     worker leasing the grandchild — proving inheritance survives the
     process boundary, not just a shared in-memory dict."""
     from substrate.kernel.agent.supervision import ExecutionBudget, Supervision

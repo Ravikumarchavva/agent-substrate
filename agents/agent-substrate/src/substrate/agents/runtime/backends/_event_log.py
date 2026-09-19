@@ -6,7 +6,7 @@ import asyncio
 from collections import defaultdict
 from typing import AsyncIterator
 
-from substrate.kernel.core.errors import ConcurrentAppendError
+from substrate.kernel.exceptions import ConcurrentAppendError
 from substrate.kernel.runtime.ids import RunId
 from substrate.kernel.runtime.log_entry import RunLogEntry
 

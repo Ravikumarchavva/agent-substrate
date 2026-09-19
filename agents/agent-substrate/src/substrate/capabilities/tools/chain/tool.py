@@ -33,7 +33,7 @@ from substrate.agents.tools.invoker import InvokerSession, ToolInvoker
 from substrate.capabilities.tools.chain.bridge import BridgeSession, ChainBridgeRegistry
 from substrate.capabilities.tools.chain.prelude import build_prelude
 from substrate.kernel.tools.chain import ChainRunResult
-from substrate.kernel.core.content import ImageBlock, TextBlock
+from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.tools import ToolExecutionResult, ToolRisk
 from substrate.logger import setup_logging
 
@@ -223,7 +223,7 @@ class ToolChainTool:
         # Check for media blocks returned from code interpreter
         media = getattr(exec_result, "media", None) or []
         for block in media:
-            if isinstance(block, ImageBlock):
+            if isinstance(block, MediaBlock):
                 output_content.append(block)
 
         chain_result = ChainRunResult(

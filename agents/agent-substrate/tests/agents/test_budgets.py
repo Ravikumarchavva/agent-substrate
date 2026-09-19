@@ -7,7 +7,7 @@ import pytest
 from substrate.agents.resources.budget import ExecutionTracker
 from substrate.agents.supervision.budget import SpawnTracker
 from substrate.kernel.agent.supervision import Priority, SpawnBudget
-from substrate.kernel.core.errors import BudgetExhaustedError
+from substrate.kernel.exceptions import BudgetExhaustedError
 from substrate.kernel.core.identity import Actor
 
 

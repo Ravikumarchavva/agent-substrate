@@ -24,17 +24,13 @@ from substrate.integrations.llm.encoders._media import (
 
 from substrate.kernel import ChatMessage
 from substrate.kernel.core.content import (
-    AudioBlock,
-    ImageBlock,
-    VideoBlock,
-    DocumentBlock,
-    TextBlock,
-    ToolUseBlock,
-    ToolResultBlock,
-    ErrorBlock,
     DataBlock,
-    CodeBlock,
+    ErrorBlock,
+    MediaBlock,
     ReasoningBlock,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
 )
 
 
@@ -57,8 +53,8 @@ def _encode_image(img: Image.Image) -> dict[str, Any]:
     }
 
 
-def _encode_image_content(ic: ImageBlock) -> dict[str, Any]:
-    """ImageBlock → Anthropic image block."""
+def _encode_image_content(ic: MediaBlock) -> dict[str, Any]:
+    """MediaBlock(type="image") → Anthropic image block."""
     if ic.url:
         return {"type": "image", "source": {"type": "url", "url": ic.url}}
     if ic.file_id:
@@ -78,10 +74,7 @@ def _encode_image_content(ic: ImageBlock) -> dict[str, Any]:
 def _encode_media_item(
     item: str
     | Image.Image
-    | ImageBlock
-    | AudioBlock
-    | VideoBlock
-    | DocumentBlock
+    | MediaBlock
     | TextBlock,
 ) -> dict[str, Any]:
     """Encode a single block to Anthropic content block."""
@@ -91,27 +84,25 @@ def _encode_media_item(
         return _encode_text(item.text)
     if isinstance(item, Image.Image):
         return _encode_image(item)
-    if isinstance(item, ImageBlock):
-        return _encode_image_content(item)
-    if isinstance(item, AudioBlock):
-        # Anthropic doesn't support audio natively — text fallback
-        return _encode_text("[Audio content]")
-    if isinstance(item, VideoBlock):
-        # Anthropic doesn't support video natively — text fallback
-        return _encode_text("[Video content]")
-    if isinstance(item, DocumentBlock):
-        # Anthropic supports PDF documents natively!
-        if item.media_type == "application/pdf" and item.data:
-            return {
-                "type": "document",
-                "source": {
-                    "type": "base64",
-                    "media_type": "application/pdf",
-                    "data": bytes_to_base64(item.data),
-                },
-            }
-        ref = item.filename or item.url or "document"
-        return _encode_text(f"[Document Attachment: {ref}]")
+    if isinstance(item, MediaBlock):
+        if item.type == "image":
+            return _encode_image_content(item)
+        if item.type == "audio":
+            return _encode_text("[Audio content]")
+        if item.type == "video":
+            return _encode_text("[Video content]")
+        if item.type == "document":
+            if item.media_type == "application/pdf" and item.data:
+                return {
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": bytes_to_base64(item.data),
+                    },
+                }
+            ref = item.filename or item.url or "document"
+            return _encode_text(f"[Document Attachment: {ref}]")
     if isinstance(item, str):
         return _encode_text(item)
     raise ValueError(f"Unsupported content type: {type(item)}")
@@ -124,9 +115,7 @@ def _encode_user(msg: ChatMessage) -> dict[str, Any]:
     """User ChatMessage → Anthropic user message."""
     content = []
     for item in msg.content:
-        if isinstance(
-            item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock, TextBlock)
-        ):
+        if isinstance(item, (MediaBlock, TextBlock)):
             content.append(_encode_media_item(item))
     return {"role": "user", "content": content}
 
@@ -227,7 +216,7 @@ def _encode_tool_result(block: ToolResultBlock) -> dict[str, Any]:
         for item in block.content:
             if isinstance(item, TextBlock):
                 content_blocks.append(_encode_text(item.text))
-            elif isinstance(item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock)):
+            elif isinstance(item, MediaBlock):
                 try:
                     content_blocks.append(_encode_media_item(item))
                 except Exception as e:
@@ -238,7 +227,7 @@ def _encode_tool_result(block: ToolResultBlock) -> dict[str, Any]:
                     ).warning(
                         "Failed to encode media item for Anthropic tool result: %s", e
                     )
-            elif isinstance(item, (DataBlock, CodeBlock, ErrorBlock)):
+            elif isinstance(item, (DataBlock, ErrorBlock)):
                 text = _get_block_text(item)
                 if text:
                     content_blocks.append(_encode_text(text))

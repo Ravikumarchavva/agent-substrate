@@ -242,7 +242,7 @@ class DocumentIngestPipeline:
         back to inlining the bytes as ``ImageBlock(data=...)`` — degrade,
         never drop.
         """
-        from substrate.kernel.core.content import ImageBlock, TextBlock
+        from substrate.kernel.core.content import MediaBlock, TextBlock
         from substrate.kernel.storage.vector import Document
         from substrate.runtimes.embedding_reranker.service.embedding import (
             EmbeddingServiceError,
@@ -282,7 +282,7 @@ class DocumentIngestPipeline:
                     )
             # Fall back to inlining image data on upload failure or without blob store
             return Document(
-                content=[ImageBlock(data=img_bytes, media_type=img.media_type)],
+                content=[MediaBlock.image(data=img_bytes, media_type=img.media_type)],
                 embedding=embedding,
                 metadata=base_meta,
             )

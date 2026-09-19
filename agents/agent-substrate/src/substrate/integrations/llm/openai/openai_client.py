@@ -22,7 +22,7 @@ from substrate.kernel import ChatMessage, ContentBlock
 from substrate.kernel.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
 from substrate.kernel.core.content import (
     TextBlock,
-    ImageBlock,
+    MediaBlock,
     ToolUseBlock,
     DataBlock,
     ToolResultBlock,
@@ -261,7 +261,7 @@ class OpenAIClient(LLMClient):
                 if isinstance(block, ToolResultBlock) and block.content:
                     new_tool_content = []
                     for item in block.content:
-                        if isinstance(item, ImageBlock) and item.data is not None:
+                        if isinstance(item, MediaBlock) and item.is_image and item.data is not None:
                             media_type = item.media_type or "image/png"
                             file_id = await self._upload_image_input(
                                 image_bytes=item.data,
@@ -271,7 +271,7 @@ class OpenAIClient(LLMClient):
                                 ),
                             )
                             new_tool_content.append(
-                                ImageBlock(file_id=file_id, detail=item.detail)
+                                MediaBlock.image(file_id=file_id, detail=item.detail)
                             )
                             changed = True
                         else:

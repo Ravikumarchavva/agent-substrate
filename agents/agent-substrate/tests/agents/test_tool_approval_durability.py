@@ -25,7 +25,7 @@ from substrate.agents.tools.invoker import ToolInvoker
 from substrate.agents.tools.toolbox import Toolbox
 from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.core.content import TextBlock
-from substrate.kernel.core.errors import SuspendInterrupt
+from substrate.kernel.exceptions import SuspendInterrupt
 from substrate.kernel.runtime.ids import new_run_id
 from substrate.kernel.tools import ToolExecutionResult, ToolRisk
 from substrate.kernel.tools.approval import ApprovalRequest, ApprovalResult

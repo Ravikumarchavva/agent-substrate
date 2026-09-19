@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from substrate.kernel.core.errors import BudgetExhaustedError
+from substrate.kernel.exceptions import BudgetExhaustedError
 
 
 @dataclass

@@ -14,7 +14,7 @@ per-tool.
 from __future__ import annotations
 
 from substrate.capabilities.knowledge.citations import CitationLedger, build_citations
-from substrate.kernel import ImageBlock, TextBlock
+from substrate.kernel import MediaBlock, TextBlock
 from substrate.kernel.storage.vector import SearchResult
 from substrate.kernel.tools import ToolExecutionResult
 
@@ -56,13 +56,13 @@ def render_search_results(
     # so the model can cite [n] — see ATTACHMENT_ANALYSIS_INSTRUCTIONS
     # in routes/chat_intents.py for how it's told to use this.
     lines = [f"Top {len(results)} results for '{query_text}':"]
-    image_blocks: list[ImageBlock] = []
+    image_blocks: list[MediaBlock] = []
     for i, result in enumerate(results):
         index = cited.index_for[i]
         citation = citation_by_index.get(index)
         label = f"[{index}] {citation.label()}" if citation else "(unlabelled)"
         # A chart/table hit's content IS the image — forward the real
-        # ImageBlock into the tool result (same path
+        # MediaBlock into the tool result (same path
         # capabilities/tools/ai/image_generator.py already uses) so a
         # vision-capable model sees the actual pixels, not just OCR
         # text of it.
@@ -75,12 +75,12 @@ def render_search_results(
         # call. `first_seen` comes from the citation ledger, which
         # already tracks per-(file, page) novelty for the life of the
         # collection, so this also covers repeats within one batch.
-        page_images = [b for b in result.content if isinstance(b, ImageBlock)]
+        page_images = [b for b in result.content if isinstance(b, MediaBlock) and b.is_image]
         is_new = cited.first_seen[i] if i < len(cited.first_seen) else True
         if is_new:
             image_blocks.extend(page_images)
         if page_images and not any(
-            True for b in result.content if not isinstance(b, ImageBlock)
+            True for b in result.content if not (isinstance(b, MediaBlock) and b.is_image)
         ):
             note = (
                 "[see attached image]"

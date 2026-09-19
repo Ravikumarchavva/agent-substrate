@@ -24,7 +24,7 @@ from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
 from substrate.kernel.core.content import (
     DataBlock,
-    ImageBlock,
+    MediaBlock,
     TextBlock,
     ToolResultBlock,
     ToolUseBlock,
@@ -201,7 +201,7 @@ class OpenAIChatCompletionClient:
                 for item in msg.content:
                     if isinstance(item, TextBlock):
                         parts.append({"type": "text", "text": item.text})
-                    elif isinstance(item, ImageBlock):
+                    elif isinstance(item, MediaBlock) and item.is_image:
                         url = item.url
                         if not url and item.data:
                             import base64 as _b64

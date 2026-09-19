@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from substrate.kernel.core.content import DocumentBlock, ImageBlock, TextBlock
+from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.tools import ToolExecutionResult, ToolType
 from substrate.integrations.tools.mcp.client import MCPClient
 
@@ -85,7 +85,7 @@ class MCPTool:
                     elif item.type == "image" and hasattr(item, "data"):
                         mime = getattr(item, "mimeType", "image/png")
                         content.append(
-                            ImageBlock(
+                            MediaBlock.image(
                                 data=base64.b64decode(item.data), media_type=mime
                             )
                         )
@@ -94,7 +94,7 @@ class MCPTool:
                         uri = getattr(r, "uri", "")
                         text = getattr(r, "text", None)
                         content.append(
-                            DocumentBlock(url=uri or None)
+                            MediaBlock.document(url=uri or None)
                             if not text
                             else TextBlock(text=f"[{uri}]\n{text}" if uri else text)
                         )
@@ -108,7 +108,7 @@ class MCPTool:
                         content.append(TextBlock(text=str(item.get("text", ""))))
                     elif item_type == "image":
                         content.append(
-                            ImageBlock(
+                            MediaBlock.image(
                                 data=base64.b64decode(str(item.get("data", ""))),
                                 media_type=str(
                                     item.get(
@@ -123,7 +123,7 @@ class MCPTool:
                         uri = str(r.get("uri", ""))
                         text = r.get("text")
                         content.append(
-                            DocumentBlock(url=uri or None)
+                            MediaBlock.document(url=uri or None)
                             if not text
                             else TextBlock(text=f"[{uri}]\n{text}" if uri else text)
                         )

@@ -251,7 +251,7 @@ class OrchestratorAgent:
 
             messages.append(ChatMessage(role=Role.TOOL, content=results))  # type: ignore[arg-type]
         else:
-            from substrate.kernel.core.errors import BudgetExhaustedError
+            from substrate.kernel.exceptions import BudgetExhaustedError
 
             raise BudgetExhaustedError(
                 f"Agent reached max iterations limit ({self._max_iterations})"

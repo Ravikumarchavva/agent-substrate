@@ -19,7 +19,7 @@ from substrate.agents.middleware.guardrails.multimodal_safety import (
 from substrate.exceptions import MiddlewareTermination
 from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.agent.safety import SafetyVerdict, Severity
-from substrate.kernel.core.content import ChatMessage, ImageBlock, TextBlock
+from substrate.kernel.core.content import ChatMessage, MediaBlock, TextBlock
 
 
 class _FakeTextClassifier:
@@ -146,7 +146,7 @@ async def test_group_evaluation_benign_text_plus_flagged_image_flags_whole_turn(
     ctx = _turn_ctx(
         [
             TextBlock(text="here's a nice photo"),
-            ImageBlock(data=b"fake-image-bytes", media_type="image/png"),
+            MediaBlock.image(data=b"fake-image-bytes", media_type="image/png"),
         ]
     )
     with pytest.raises(MiddlewareTermination):
@@ -162,7 +162,7 @@ async def test_benign_text_and_benign_image_both_pass():
     ctx = _turn_ctx(
         [
             TextBlock(text="here's a nice photo"),
-            ImageBlock(data=b"fake-image-bytes", media_type="image/png"),
+            MediaBlock.image(data=b"fake-image-bytes", media_type="image/png"),
         ]
     )
     called = await _run(mw, ctx)
@@ -171,14 +171,14 @@ async def test_benign_text_and_benign_image_both_pass():
 
 @pytest.mark.asyncio
 async def test_image_without_inline_data_is_not_flagged_known_gap():
-    """Documents the deliberate, named gap: url/file_id-only ImageBlocks
+    """Documents the deliberate, named gap: url/file_id-only MediaBlocks
     (no inline bytes) can't be classified by this guardrail and are treated
     as unable-to-verify, not flagged — see the module's own docstring."""
     image_classifier = _FakeImageClassifier(flag=True)  # would flag if called
     mw = MultimodalSafetyMiddleware(
         text_classifier=_FakeTextClassifier(), image_classifier=image_classifier
     )
-    ctx = _turn_ctx([ImageBlock(url="https://example.com/image.png")])
+    ctx = _turn_ctx([MediaBlock.image(url="https://example.com/image.png")])
     called = await _run(mw, ctx)
     assert len(called) == 1  # not flagged
     assert image_classifier.calls == 0  # classifier never invoked on url-only block

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Literal
 
 from substrate.kernel.core.content import JsonObject
-from substrate.kernel.core.errors import SuspendInterrupt
+from substrate.kernel.exceptions import SuspendInterrupt
 from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import Message, DataPayload
 from substrate.kernel.runtime.communication import AskOutcome, RunStatusSummary

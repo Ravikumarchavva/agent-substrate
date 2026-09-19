@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, AsyncIterator
 
 from substrate.kernel.core.content import JsonObject
-from substrate.kernel.core.errors import ConcurrentAppendError
+from substrate.kernel.exceptions import ConcurrentAppendError
 from substrate.kernel.runtime.ids import RunId
 from substrate.kernel.runtime.log_entry import RunLogEntry
 

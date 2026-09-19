@@ -13,7 +13,7 @@ from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
 from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
 from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
 from substrate.kernel.agent.supervision import Supervision, SpawnBudget
-from substrate.kernel.core.errors import BudgetExhaustedError
+from substrate.kernel.exceptions import BudgetExhaustedError
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock

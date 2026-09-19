@@ -6,7 +6,7 @@ Wraps the OpenAI Images API to produce images from text prompts.
 from __future__ import annotations
 
 from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel import ImageBlock, TextBlock
+from substrate.kernel import MediaBlock, TextBlock
 
 
 class ImageGeneratorTool:
@@ -119,7 +119,7 @@ class ImageGeneratorTool:
         return ToolExecutionResult(
             content=[
                 TextBlock(text=f"Generated image for: {revised_prompt}"),
-                ImageBlock(data=image_url, media_type="image/png"),
+                MediaBlock.image(url=image_url, media_type="image/png"),
             ],
             structured_content={"url": image_url, "revised_prompt": revised_prompt},
         )

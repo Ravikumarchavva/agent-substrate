@@ -12,7 +12,7 @@ import base64
 import json
 from typing import Any
 
-from substrate.kernel import ImageBlock, TextBlock
+from substrate.kernel import MediaBlock, TextBlock
 from substrate.kernel.tools import ToolExecutionResult
 
 # Appended to both code-interpreter tools' descriptions. Teaches the model the
@@ -69,7 +69,7 @@ def sandbox_result_to_tool_result(result: dict[str, Any]) -> ToolExecutionResult
     output_files: list[dict[str, Any]] = result.get("output_files", [])
 
     text_parts: list[str] = []
-    media: list[ImageBlock] = []
+    media: list[MediaBlock] = []
 
     if stdout:
         text_parts.append(stdout.rstrip())
@@ -84,7 +84,7 @@ def sandbox_result_to_tool_result(result: dict[str, Any]) -> ToolExecutionResult
         if mime.startswith("image/") and content_b64:
             try:
                 media.append(
-                    ImageBlock(data=base64.b64decode(content_b64), media_type=mime)
+                    MediaBlock.image(data=base64.b64decode(content_b64), media_type=mime)
                 )
                 text_parts.append(f"[Generated {name}]")
             except Exception:

@@ -64,12 +64,12 @@ class _LLMMixin:
             }
 
         def _deserialize(v: JsonObject) -> LLMResponse:
-            from substrate.kernel.core.content import content_block_from_dict
+            from substrate.kernel.core.content import parse_content_block
 
             # LLM responses only ever carry known ContentBlock variants; the
-            # UnknownBlock fallback from content_block_from_dict never appears here.
+            # UnknownBlock fallback from parse_content_block never appears here.
             blocks: list[ContentBlock] = [
-                content_block_from_dict(d)  # type: ignore[misc]
+                parse_content_block(d)  # type: ignore[misc]
                 for d in v["content"]  # type: ignore[union-attr]
             ]
             u = v["usage"]  # type: ignore[index]

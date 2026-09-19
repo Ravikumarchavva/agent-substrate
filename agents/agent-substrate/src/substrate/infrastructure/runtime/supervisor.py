@@ -158,7 +158,7 @@ class Supervisor:
                     # run_tree row (only ctx.spawn()'d children do — see
                     # finish_run's comment).
                     if 1 + active >= max_agents:
-                        from substrate.kernel.core.errors import BudgetExhaustedError
+                        from substrate.kernel.exceptions import BudgetExhaustedError
 
                         raise BudgetExhaustedError(
                             f"Run headcount cap reached ({1 + active}/{max_agents} "

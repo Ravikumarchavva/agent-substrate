@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from substrate.capabilities.storage.layout import user_prefix
-from substrate.kernel.core.content import ImageBlock, TextBlock
+from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.storage.vector import Document, SearchResult
 from substrate.logger import setup_logging
 
@@ -350,7 +350,7 @@ class LocalRagBackend:
             else:
                 documents.append(
                     Document(
-                        content=[ImageBlock(data=data, media_type=media_type)],
+                        content=[MediaBlock.image(data=data, media_type=media_type)],
                         embedding=vector,
                         metadata=meta,
                     )
@@ -395,7 +395,7 @@ class LocalRagBackend:
         return replace(
             result,
             content=[
-                ImageBlock(
+                MediaBlock.image(
                     data=data,
                     media_type=media_type,
                     storage_key=str(key),

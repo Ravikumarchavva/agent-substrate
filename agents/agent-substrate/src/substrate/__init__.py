@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     )
     from substrate.agents.runtime import Runtime, RunOutcome
     from substrate.kernel.tools import Skill
-    from substrate.kernel.core.errors import MiddlewareTermination
+    from substrate.kernel.exceptions import MiddlewareTermination
     from substrate.kernel import ChatMessage, TextBlock, ToolExecutionResult
     from substrate.kernel.messaging.stream import (
         CompletionEvent,
@@ -170,7 +170,7 @@ _LAZY: dict[str, tuple[str, str]] = {
         "substrate.agents.middleware",
         "ToolCallValidationMiddleware",
     ),
-    "MiddlewareTermination": ("substrate.kernel.core.errors", "MiddlewareTermination"),
+    "MiddlewareTermination": ("substrate.kernel.exceptions", "MiddlewareTermination"),
     # factory
     "create_model_client": (
         "substrate.integrations.llm.factory",

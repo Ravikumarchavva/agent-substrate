@@ -12,7 +12,7 @@ import base64
 import uuid
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from substrate.kernel.core.content import ImageBlock, JsonObject
+from substrate.kernel.core.content import JsonObject, MediaBlock
 from substrate.kernel.runtime.effects import Effect, EffectResult
 from substrate.kernel.tools.chain import InvocationResult
 
@@ -36,7 +36,7 @@ from substrate.kernel.tools.chain import InvocationResult
 _OBJECT_URL_TEMPLATE = "object:{key}"
 
 
-def _attachment_url(img: ImageBlock) -> str:
+def _attachment_url(img: MediaBlock) -> str:
     """Durable reference when the image is backed by the file store, else the
     bytes inline."""
     if img.storage_key:

@@ -89,7 +89,7 @@ class EventLogProtocol(Protocol):
 
         Returns the new sequence number assigned to the entry.
 
-        Raises ``ConcurrentAppendError`` (from ``kernel/errors.py``) when
+        Raises ``ConcurrentAppendError`` (from ``kernel/core/exceptions.py``) when
         the log's current ``last_seq`` differs from ``expected_seq`` — meaning
         another writer raced ahead.  Callers must reload and retry.
         """

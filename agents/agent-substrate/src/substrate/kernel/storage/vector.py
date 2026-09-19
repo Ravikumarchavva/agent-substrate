@@ -62,7 +62,7 @@ class Document:
         """Return a human-readable text representation of the content.
 
         Suitable for embedding, display, or passing to an LLM as context.
-        Each block contributes its own text via ``to_text_repr()``.
+        Each block contributes its own text via ``str(block)``.
         """
         return content_blocks_to_str(self.content)
 

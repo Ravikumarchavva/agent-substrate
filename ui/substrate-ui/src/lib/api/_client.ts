@@ -105,6 +105,7 @@ export type ChatStreamRequest = {
   file_ids?: string[];
   system_instructions?: string;
   model?: string;
+  branch_id?: string;
 };
 
 function getStructuredErrorMessage(payload: unknown): string | null {

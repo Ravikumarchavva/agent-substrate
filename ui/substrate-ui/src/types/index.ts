@@ -2,7 +2,7 @@
 // Barrel re-exports — grouped by domain
 // ---------------------------------------------------------------------------
 
-export type { ToolCallMeta, ToolCall, Message, Thread, UploadedFile } from "./chat";
+export type { ToolCallMeta, ToolCall, Message, Thread, UploadedFile, Branch, HistoryCheckpoint } from "./chat";
 export type { CitationSource } from "./citations";
 export type {
   AdminThread,

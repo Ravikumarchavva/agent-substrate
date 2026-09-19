@@ -5,6 +5,8 @@ import { nanoid } from "nanoid";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { MessageBubble } from "@/components/MessageBubble";
+import { Header } from "@/components/Header";
+import { ForkBranchModal } from "@/components/ForkBranchModal";
 import { SubstrateMark } from "@/components/SubstrateMark";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
@@ -19,7 +21,7 @@ import { ModelEffortPicker } from "@/components/ModelEffortPicker";
 import type { SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
-import { Message, UploadedFile, TaskList, CitationSource } from "@/types";
+import { Message, UploadedFile, TaskList, CitationSource, Branch } from "@/types";
 import { api } from "@/lib/api";
 import { ChatConflictError, ChatLockedError } from "@/lib/api/chat";
 import { getMessageAttachments, buildWorkspaceFileUrl } from "@/lib/api/_client";
@@ -662,7 +664,25 @@ function ChatPageContent() {
 
   async function loadMessages(threadId: string) {
     try {
-      const fetchedMessages = await api.getMessages(threadId);
+      const [fetchedMessages, branchNodes] = await Promise.all([
+        api.getMessages(threadId),
+        api.getBranchMessages(threadId, activeBranchId || "main").catch(() => []),
+      ]);
+
+      const correlated = fetchedMessages.map((msg, idx) => {
+        const node = branchNodes[idx];
+        if (node) {
+          return {
+            ...msg,
+            metadata: {
+              ...(msg.metadata || {}),
+              historyNodeId: node.id,
+            },
+          };
+        }
+        return msg;
+      });
+
       setMessages((current) => {
         // The user already navigated away from this thread while the fetch
         // was in flight — a newer loadMessages call (or handleNewChat) owns
@@ -673,7 +693,7 @@ function ChatPageContent() {
         // This thread just finished streaming; in-memory messages are more
         // current than the DB snapshot (persistence may not have caught up).
         if (streamedThreadRef.current === threadId) return current;
-        return fetchedMessages;
+        return correlated;
       });
     } catch (error) {
       console.error("Failed to load messages:", error);
@@ -719,6 +739,106 @@ function ChatPageContent() {
       console.error("Failed to load HITL status:", error);
     }
   }
+
+  // Branching support: fetch branches and track active branch
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [activeBranchId, setActiveBranchId] = useState<string>("main");
+
+  useEffect(() => {
+    if (!currentThreadId) {
+      setBranches([]);
+      setActiveBranchId("main");
+      return;
+    }
+    api.getBranches(currentThreadId)
+      .then((bList) => {
+        setBranches(bList);
+        if (!bList.some((b) => b.id === activeBranchId)) {
+          setActiveBranchId("main");
+        }
+      })
+      .catch(() => setBranches([]));
+  }, [currentThreadId]);
+
+  const handleSelectBranch = useCallback(
+    async (branchId: string) => {
+      if (!currentThreadId) return;
+      setActiveBranchId(branchId);
+      try {
+        if (branchId === "main") {
+          await loadMessages(currentThreadId);
+          return;
+        }
+        const branchMsgs = await api.getBranchMessages(currentThreadId, branchId);
+        const mapped: Message[] = branchMsgs.map((m) => ({
+          id: m.id,
+          role: m.role as Message["role"],
+          content: m.text || "",
+          timestamp: new Date(m.created_at),
+        }));
+        setMessages(mapped);
+      } catch (err) {
+        console.error("Failed to load branch messages:", err);
+      }
+    },
+    [currentThreadId],
+  );
+
+  const handleForkBranch = useCallback(
+    async (sourceBranchId: string, newBranchId: string, forkFromMessageId?: string) => {
+      if (!currentThreadId) return;
+      try {
+        const newBranch = await api.forkBranch(currentThreadId, {
+          source_branch_id: sourceBranchId,
+          new_branch_id: newBranchId,
+          fork_from_message_id: forkFromMessageId,
+        });
+        const updated = await api.getBranches(currentThreadId);
+        setBranches(updated);
+        await handleSelectBranch(newBranch.id);
+      } catch (err) {
+        console.error("Failed to fork branch:", err);
+      }
+    },
+    [currentThreadId, handleSelectBranch],
+  );
+
+  // Fork branch modal state
+  const [forkModalOpen, setForkModalOpen] = useState(false);
+  const [forkSourceBranchId, setForkSourceBranchId] = useState("main");
+  const [forkSourceMessageId, setForkSourceMessageId] = useState<string | null>(null);
+  const [forkSourceMessageText, setForkSourceMessageText] = useState<string | null>(null);
+
+  const handleForkFromMessage = useCallback(
+    (messageId: string) => {
+      if (!currentThreadId) return;
+      const targetMsg = messages.find((m) => m.id === messageId);
+      const dagNodeId = (targetMsg?.metadata as Record<string, unknown> | undefined)?.historyNodeId as string | undefined || messageId;
+      setForkSourceBranchId(activeBranchId);
+      setForkSourceMessageId(dagNodeId);
+      setForkSourceMessageText(targetMsg?.content || null);
+      setForkModalOpen(true);
+    },
+    [currentThreadId, activeBranchId, messages],
+  );
+
+  const handleOpenHeaderFork = useCallback(
+    (sourceBranchId: string) => {
+      setForkSourceBranchId(sourceBranchId);
+      setForkSourceMessageId(null);
+      setForkSourceMessageText(null);
+      setForkModalOpen(true);
+    },
+    [],
+  );
+
+  const handleModalForkSubmit = useCallback(
+    async (newBranchName: string) => {
+      if (!currentThreadId) return;
+      await handleForkBranch(forkSourceBranchId, newBranchName, forkSourceMessageId || undefined);
+    },
+    [currentThreadId, forkSourceBranchId, forkSourceMessageId, handleForkBranch],
+  );
 
   // HITL: respond to a tool approval or human input request.
   // The Next.js route at /api/chat/respond/[requestId] proxies to the backend.
@@ -970,6 +1090,7 @@ function ChatPageContent() {
             return combined ? { system_instructions: combined } : {};
           })(),
           model: requestedModel,
+          branch_id: activeBranchId || "main",
         },
         signal,
       ),
@@ -1665,7 +1786,16 @@ function ChatPageContent() {
       {/* Main Content */}
       <div className="flex min-w-0 flex-1">
         <div className="relative flex min-w-0 flex-1 flex-col">
-          <div className="pointer-events-none absolute left-4 top-4 z-20 flex gap-2">
+          <Header
+            onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+            desktopSidebarOpen={desktopSidebarOpen}
+            threadName={threads.find((t) => t.id === currentThreadId)?.name}
+            branches={branches}
+            activeBranchId={activeBranchId}
+            onSelectBranch={handleSelectBranch}
+            onOpenForkModal={handleOpenHeaderFork}
+          />
+          <div className="pointer-events-none absolute left-3 top-1.5 z-20 flex gap-2">
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
@@ -1891,6 +2021,8 @@ function ChatPageContent() {
                                   timestamp: Date.now(),
                                 });
                               }}
+                              messageId={m.id}
+                              onForkBranch={handleForkFromMessage}
                             />
                             {anchoredBoards && anchoredBoards.length > 0 && (
                               <div className="px-4 sm:px-6">
@@ -2091,6 +2223,15 @@ function ChatPageContent() {
         )}
 
       </div>
+
+      {/* Fork Branch Modal */}
+      <ForkBranchModal
+        isOpen={forkModalOpen}
+        onClose={() => setForkModalOpen(false)}
+        onFork={handleModalForkSubmit}
+        sourceBranchId={forkSourceBranchId}
+        sourceMessageText={forkSourceMessageText}
+      />
 
       {/* Mobile Sidebar Drawer */}
       {mobileSidebarOpen && (

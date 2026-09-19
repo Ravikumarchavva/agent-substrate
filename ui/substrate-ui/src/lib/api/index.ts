@@ -9,6 +9,7 @@ import { scheduledApi } from "./scheduled";
 import { workspaceApi } from "./workspace";
 import { memoryApi } from "./memory";
 import { artifactsApi } from "./artifacts";
+import { branchApi } from "./branches";
 
 export const api = {
   ...threadApi,
@@ -22,6 +23,8 @@ export const api = {
   ...workspaceApi,
   ...memoryApi,
   ...artifactsApi,
+  ...branchApi,
 };
+export { branchApi };
 
 export type { ChatStreamRequest } from "./_client";

@@ -19,6 +19,7 @@ import {
   ArrowUpRight,
   X,
   Download,
+  GitFork,
 } from "lucide-react";
 import { CitationSource, ToolCall, UploadedFile } from "@/types";
 import { AudioPlayer } from "@/components/AudioPlayer";
@@ -351,6 +352,8 @@ type Props = {
   sources?: CitationSource[];
   /** Open a citation's source file in the side panel, at its cited page. */
   onOpenSource?: (source: CitationSource) => void;
+  messageId?: string;
+  onForkBranch?: (messageId: string) => void;
 };
 
 export function MessageBubble({
@@ -368,6 +371,8 @@ export function MessageBubble({
   onOpenArtifact,
   sources,
   onOpenSource,
+  messageId,
+  onForkBranch,
 }: Props) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
@@ -828,6 +833,18 @@ export function MessageBubble({
                       >
                         {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
+                      {onForkBranch && messageId && (
+                        <button
+                          type="button"
+                          onClick={() => onForkBranch(messageId)}
+                          className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                          title="Fork branch from here"
+                          aria-label="Fork branch from here"
+                          style={{ minWidth: "unset", minHeight: "unset" }}
+                        >
+                          <GitFork className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   )}
                   {timestamp && (
@@ -1195,6 +1212,16 @@ export function MessageBubble({
                     title="Regenerate"
                   >
                     <RotateCw className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {onForkBranch && messageId && (
+                  <button
+                    onClick={() => onForkBranch(messageId)}
+                    className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                    title="Fork branch from here"
+                    aria-label="Fork branch from here"
+                  >
+                    <GitFork className="w-3.5 h-3.5" />
                   </button>
                 )}
                 {timestamp && (

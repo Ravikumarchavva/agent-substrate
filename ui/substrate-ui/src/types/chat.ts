@@ -50,6 +50,25 @@ export type Thread = {
   locked_reason?: string | null;
 };
 
+export type Branch = {
+  id: string;
+  session_id: string;
+  head_message_id: string | null;
+  forked_from_message_id: string | null;
+  version: number;
+  created_at: string;
+};
+
+export type HistoryCheckpoint = {
+  id: string;
+  session_id: string;
+  anchor_message_id: string;
+  summary: string;
+  state?: Record<string, unknown>;
+  parent_checkpoint_id?: string | null;
+  created_at: string;
+};
+
 export type UploadedFile = {
   id: string;
   thread_id?: string;

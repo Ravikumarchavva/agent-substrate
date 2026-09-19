@@ -7,9 +7,21 @@ from substrate.capabilities.storage.workspace import (
     WorkspaceQuotaExceededError,
 )
 
+from substrate.capabilities.storage.workspace_store import (
+    BranchSnapshotHead,
+    PostgresWorkspaceStore,
+    SnapshotRecord,
+    WorkspaceSnapshotBase,
+)
+
 __all__ = [
     "S3FileStore",
     "WorkspaceFileStore",
     "WorkspacePathError",
     "WorkspaceQuotaExceededError",
+    "PostgresWorkspaceStore",
+    "WorkspaceSnapshotBase",
+    "SnapshotRecord",
+    "BranchSnapshotHead",
 ]
+

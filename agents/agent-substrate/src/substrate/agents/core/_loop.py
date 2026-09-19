@@ -68,9 +68,33 @@ async def log_user_message(
 
 
 async def load_history(
-    ctx_cfg: ContextConfig, agent_id: Actor, session_id: str
+    ctx_cfg: ContextConfig,
+    agent_id: Actor,
+    session_id: str,
+    *,
+    branch_id: str = "main",
 ) -> list[ChatMessage]:
-    """Load session history and apply the compaction pipeline."""
+    """Load session history, using DAG resolution & checkpoints if available, else falling back to linear history."""
+    if hasattr(ctx_cfg.history, "get_branch"):
+        branch = await ctx_cfg.history.get_branch(session_id, branch_id)
+        if branch is not None and branch.head_message_id is not None:
+            from substrate.agents.context.history import (
+                AncestryCheckpointResolver,
+                DefaultHistoryResolver,
+            )
+
+            resolver = DefaultHistoryResolver(ctx_cfg.history)
+            nodes = await resolver.resolve_ancestry(branch.head_message_id)
+            cp_resolver = AncestryCheckpointResolver(ctx_cfg.history)
+            cp = await cp_resolver.find_applicable_checkpoint(branch.head_message_id)
+            builder = getattr(ctx_cfg, "builder", None)
+            if builder is None:
+                from substrate.agents.context.builder import DefaultContextBuilder
+
+                builder = DefaultContextBuilder()
+            window = await builder.build(nodes, checkpoint=cp)
+            return list(window.messages)
+
     raw = await ctx_cfg.history.get_messages(agent_id, session_id=session_id)
     return list(await ctx_cfg.pipeline.compact(list(raw)))
 
@@ -81,11 +105,29 @@ async def persist_turns(
     session_id: str,
     run_id: str,
     new_turns: list[ChatMessage],
+    *,
+    branch_id: str = "main",
 ) -> None:
     """Persist new turns using ContextConfig."""
-    await ctx_cfg.history.append_many(
-        agent_id, new_turns, session_id=session_id, run_id=run_id
-    )
+    if hasattr(ctx_cfg.history, "append_and_advance"):
+        from substrate.kernel.storage.history import MessageNode
+
+        for turn in new_turns:
+            branch = await ctx_cfg.history.get_branch(session_id, branch_id)
+            current_head = branch.head_message_id if branch else None
+            node = MessageNode(
+                parent_id=current_head,
+                session_id=session_id,
+                run_id=run_id,
+                payload=turn,
+            )
+            await ctx_cfg.history.append_and_advance(node, branch_id=branch_id)
+
+    if hasattr(ctx_cfg.history, "append_many"):
+        await ctx_cfg.history.append_many(
+            agent_id, new_turns, session_id=session_id, run_id=run_id
+        )
+
 
 
 def final_text(messages: list[ChatMessage]) -> str:

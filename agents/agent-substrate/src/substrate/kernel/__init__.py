@@ -38,6 +38,11 @@ from substrate.kernel.exceptions import (
     SuspendInterrupt,
     ConcurrentAppendError,
     ThreadBusyError,
+    BranchHeadConflictError,
+    SnapshotConflictError,
+    BranchNotFoundError,
+    BranchAlreadyExistsError,
+    DAGIntegrityError,
 )
 from substrate.kernel.core.identity import (
     Actor,
@@ -80,8 +85,24 @@ from substrate.kernel.llm.llm import (
     EmbeddingClient,
     EmbeddingResult,
 )
-from substrate.kernel.storage.history import HistoryProvider
-from substrate.kernel.agent.context import CompactionStrategy, AgentContextProtocol
+from substrate.kernel.storage.history import (
+    Branch,
+    CheckpointResolver,
+    HistoryCheckpoint,
+    HistoryProvider,
+    HistoryResolver,
+    MessageNode,
+)
+from substrate.kernel.agent.context import (
+    AgentContextProtocol,
+    CompactionStrategy,
+    CompactionPhase,
+    CompactionContext,
+    CompactionResult,
+    CompactionCoordinator,
+    ContextBuilder,
+    ContextWindow,
+)
 from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.agent.safety import (
     Severity,
@@ -114,6 +135,12 @@ from substrate.kernel.storage.document import (
     ExtractedImage,
     ExtractedPage,
     ExtractionResult,
+)
+from substrate.kernel.storage.snapshots import (
+    WorkspaceFileEntry,
+    WorkspaceManifest,
+    WorkspaceSnapshot,
+    WorkspaceStore,
 )
 from substrate.kernel.agent.runtime_context import CancellationToken, RunMeta
 from substrate.kernel.tools.approval import (
@@ -188,6 +215,11 @@ __all__ = [
     "SuspendInterrupt",
     "ConcurrentAppendError",
     "ThreadBusyError",
+    "BranchHeadConflictError",
+    "SnapshotConflictError",
+    "BranchNotFoundError",
+    "BranchAlreadyExistsError",
+    "DAGIntegrityError",
     # Identity
     "Actor",
     "Topic",
@@ -228,9 +260,20 @@ __all__ = [
     "Usage",
     # History
     "HistoryProvider",
+    "HistoryResolver",
+    "CheckpointResolver",
+    "MessageNode",
+    "Branch",
+    "HistoryCheckpoint",
     # Context
     "CompactionStrategy",
+    "CompactionPhase",
+    "CompactionContext",
+    "CompactionResult",
+    "CompactionCoordinator",
     "AgentContextProtocol",
+    "ContextBuilder",
+    "ContextWindow",
     # Middleware
     "MiddlewareStage",
     # Safety
@@ -272,6 +315,11 @@ __all__ = [
     "ExtractedImage",
     "ExtractedPage",
     "ExtractionResult",
+    # Workspace snapshots
+    "WorkspaceFileEntry",
+    "WorkspaceManifest",
+    "WorkspaceSnapshot",
+    "WorkspaceStore",
     # Execution context
     "CancellationToken",
     "RunMeta",

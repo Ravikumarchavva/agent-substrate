@@ -10,8 +10,18 @@ from .document import (
     ExtractedPage,
     ExtractionResult,
 )
+from .snapshots import (
+    WorkspaceFileEntry,
+    WorkspaceManifest,
+    WorkspaceSnapshot,
+    WorkspaceStore,
+)
 
 __all__ = [
+    "WorkspaceFileEntry",
+    "WorkspaceManifest",
+    "WorkspaceSnapshot",
+    "WorkspaceStore",
     "BlobStore",
     "HistoryProvider",
     "Document",

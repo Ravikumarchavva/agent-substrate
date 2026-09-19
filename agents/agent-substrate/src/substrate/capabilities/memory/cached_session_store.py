@@ -1,10 +1,6 @@
 """CachedShortTermMemory — durable-primary + fast-cache for session state.
 
-Unlike ``CachedHistoryProvider`` (which fronts an existing, independently
-written cold store — the EventLogProtocol), ``ShortTermMemory`` has no pre-existing
-durable owner: before this module, ``RedisSessionStore`` was the only
-implementation, standalone, with no durable backing at all. So this class
-composes two real ``ShortTermMemory`` peers — a durable ``primary`` and a
+Composes two real ``ShortTermMemory`` peers — a durable ``primary`` and a
 fast ``cache`` — the way ``CachedModelClient`` composes an ``LLMClient`` and
 a ``SemanticCache``: writes go to ``primary`` first (that's the durability
 guarantee), then best-effort to ``cache``; reads check ``cache`` first and

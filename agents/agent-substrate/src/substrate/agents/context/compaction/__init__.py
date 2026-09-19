@@ -25,10 +25,12 @@ from substrate.agents.context.compaction.token_budget_composed import (
     TokenBudgetComposedStrategy,
 )
 from substrate.agents.context.compaction.pipeline import CompactionPipeline
+from substrate.agents.context.compaction.coordinator import DefaultCompactionCoordinator
 
 __all__ = [
     "CompactionStrategy",
     "CompactionPipeline",
+    "DefaultCompactionCoordinator",
     "SlidingWindowCompaction",
     "SummarizationCompaction",
     "ToolResultCompactionStrategy",

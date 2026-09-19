@@ -133,7 +133,10 @@ class OrchestratorAgent:
         _task_user_id.set(msg.metadata.get("user_id") or None)
         spawn_tracker = SpawnTracker(self._spawn_budget)
 
-        history_messages = await load_history(self._context, self.id, session_id)
+        branch_id = msg.metadata.get("branch_id") or "main"
+        history_messages = await load_history(
+            self._context, self.id, session_id, branch_id=branch_id
+        )
         user_turn = message_to_chat(msg)
         await log_user_message(ctx, msg, user_turn)
         messages: list[ChatMessage] = history_messages + [user_turn]
@@ -258,7 +261,9 @@ class OrchestratorAgent:
             )
 
         new_turns = messages[n_loaded:]
-        await persist_turns(self._context, self.id, session_id, ctx.run_id, new_turns)
+        await persist_turns(
+            self._context, self.id, session_id, ctx.run_id, new_turns, branch_id=branch_id
+        )
 
         ans = final_text(messages)
         await deliver(ctx, msg, {"text": ans}, sender=self.id)

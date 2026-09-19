@@ -391,8 +391,9 @@ class Worker:
             )
             if terminal:
                 if is_guardrail:
+                    guardrail_msg = getattr(exc, "message", None) or str(exc)
                     payload = {
-                        "error": f"Request blocked: {exc.message}",
+                        "error": f"Request blocked: {guardrail_msg}",
                         "status": "guardrail_tripped",
                     }
                 elif is_budget:

@@ -5,7 +5,12 @@ from .supervision import (
     SpawnBudget,
     ExecutionBudget,
 )
-from .context import CompactionStrategy, AgentContextProtocol
+from .context import (
+    AgentContextProtocol,
+    CompactionStrategy,
+    ContextBuilder,
+    ContextWindow,
+)
 from .middleware import MiddlewareStage
 from .runtime_context import CancellationToken, RunMeta
 from .safety import (
@@ -24,6 +29,8 @@ __all__ = [
     "ExecutionBudget",
     "CompactionStrategy",
     "AgentContextProtocol",
+    "ContextBuilder",
+    "ContextWindow",
     "MiddlewareStage",
     "CancellationToken",
     "RunMeta",

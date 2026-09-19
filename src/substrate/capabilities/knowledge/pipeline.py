@@ -233,6 +233,4 @@ class RAGPipeline:
             ),
         )
 
-        # Extract text from response blocks
-        text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
-        return "".join(text_parts)
+        return response.text

@@ -101,10 +101,7 @@ class GraphRAGPipeline:
                     )
                 ),
             )
-            text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
-            text_content = "".join(text_parts)
-
-            data = json.loads(text_content.strip())
+            data = json.loads(response.text.strip())
 
             # Store entities
             entities: list[Entity] = []
@@ -287,6 +284,4 @@ class GraphRAGPipeline:
             ),
         )
 
-        # Extract text from response blocks
-        text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
-        return "".join(text_parts)
+        return response.text

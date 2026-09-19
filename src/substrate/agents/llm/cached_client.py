@@ -66,9 +66,7 @@ class CachedModelClient:
 
         if cacheable and result.content:
             query_text = self._extract_query(messages)
-            response_text = "".join(
-                part.text for part in result.content if isinstance(part, TextBlock)
-            )
+            response_text = result.text
             if query_text and response_text:
                 await self._cache.put(query_text, response_text)
 

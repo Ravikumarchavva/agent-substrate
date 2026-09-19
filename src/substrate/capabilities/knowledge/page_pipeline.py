@@ -298,10 +298,7 @@ class PageIndexRAGPipeline:
                     system_instructions="You are a document indexing system. Always respond with raw valid JSON only."
                 ),
             )
-            text_response = "".join(
-                b.text for b in response.content if isinstance(b, TextBlock)
-            )
-            toc_data = json.loads(text_response.strip())
+            toc_data = json.loads(response.text.strip())
 
             # Recursively build PageNode structures from JSON
             def parse_json_node(data: dict[str, Any], level: int) -> PageNode:
@@ -405,13 +402,7 @@ class PageIndexRAGPipeline:
                         system_instructions="You are a document search navigator. Always respond with the single word index or 'retrieve' only."
                     ),
                 )
-                text_response = (
-                    "".join(
-                        b.text for b in response.content if isinstance(b, TextBlock)
-                    )
-                    .strip()
-                    .lower()
-                )
+                text_response = response.text.strip().lower()
 
                 if "retrieve" in text_response:
                     break
@@ -491,4 +482,4 @@ class PageIndexRAGPipeline:
             messages,
             options=GenerationOptions(system_instructions=system_prompt),
         )
-        return "".join(b.text for b in response.content if isinstance(b, TextBlock))
+        return response.text

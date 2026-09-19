@@ -45,10 +45,14 @@ class HistoryRetention(str, Enum):
 
 
 class Priority(int, Enum):
-    """Budget weight for an agent branch.
+    """Preemption rank for an agent branch.
 
-    Values are integer weights used for proportional pool allocation.
-    A CRITICAL agent gets 8x the default share; BACKGROUND is best-effort.
+    Values are compared ordinally, not used as proportional weights —
+    ``SpawnTracker`` (``agents/supervision/budget.py``) checks
+    ``priority <= NORMAL`` / ``priority >= NORMAL`` to decide whether a
+    branch can preempt another when the spawn budget is full. Higher
+    ranks better survive preemption; BACKGROUND is first to be preempted,
+    CRITICAL is never preempted.
     """
 
     BACKGROUND = 0

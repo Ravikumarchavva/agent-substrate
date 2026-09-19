@@ -117,9 +117,7 @@ class SummarizationCompaction:
                 [prompt],
                 options=GenerationOptions(system_instructions=system),
             )
-            summary = " ".join(
-                b.text for b in resp.content if isinstance(b, TextBlock) and b.text
-            ).strip()
+            summary = resp.text.strip()
         except Exception as exc:
             logger.warning(
                 "SummarizationCompaction: LLM call failed (%s); using placeholder", exc

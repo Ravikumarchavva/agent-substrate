@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from substrate.kernel.core.content import (
-    ContentBlock,
     TextBlock,
     content_blocks_to_str,
     parse_content_block,

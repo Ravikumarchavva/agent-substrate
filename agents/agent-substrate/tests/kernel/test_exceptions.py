@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from substrate.exceptions import (
     AgentError,
@@ -13,15 +12,9 @@ from substrate.exceptions import (
     ToolNotFoundError,
 )
 from substrate.kernel.exceptions import (
-    AgentCrashError,
-    BudgetExhaustedError,
-    CancellationError,
-    ConcurrentAppendError,
     KernelError,
-    MiddlewareTermination,
     PermanentError,
     SuspendInterrupt,
-    ThreadBusyError,
 )
 
 

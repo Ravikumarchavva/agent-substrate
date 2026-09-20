@@ -4,7 +4,6 @@ import pytest
 from substrate.kernel.exceptions import BlockValidationError, KernelError
 from substrate.kernel.core.content import (
     ChatMessage,
-    ContentBlock,
     DataBlock,
     ErrorBlock,
     KernelModel,

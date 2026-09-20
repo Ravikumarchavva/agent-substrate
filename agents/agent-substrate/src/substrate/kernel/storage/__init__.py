@@ -5,7 +5,6 @@ from .graph import Entity, Relationship, SubGraph, GraphStore, CypherCapable
 from .memory import (
     ContextMemoryInjection,
     MemoryCategory,
-    MemoryLifecycle,
     MemoryMatch,
     MemoryNamespace,
     MemoryProvenance,
@@ -13,7 +12,6 @@ from .memory import (
     MemoryRecord,
     MemoryStatus,
     MemoryStore,
-    MemoryValidity,
     ShortTermMemory,
 )
 from .tasks import Task, TaskList, TaskStatus, TaskStore
@@ -45,8 +43,6 @@ __all__ = [
     "MemoryStatus",
     "MemoryNamespace",
     "MemoryProvenance",
-    "MemoryValidity",
-    "MemoryLifecycle",
     "MemoryQuery",
     "ContextMemoryInjection",
     "ShortTermMemory",

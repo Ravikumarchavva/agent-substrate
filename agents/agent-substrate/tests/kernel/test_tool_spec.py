@@ -11,6 +11,7 @@ from substrate.kernel.tools import (
     is_hosted_tool,
     is_provider_defined_tool,
 )
+from substrate.kernel import PayloadBase
 from substrate.kernel.core.content import TextBlock
 
 
@@ -85,3 +86,23 @@ def test_anytool_accepts_all_kinds():
         LocalShellProviderDefined(),
     ]
     assert len(tools) == 3
+
+
+def test_payload_base_is_exported_from_kernel_root():
+    assert PayloadBase.__name__ == "PayloadBase"
+
+
+class _IncompleteHosted:
+    provider_specs = {}
+
+
+class _IncompleteProviderDefined:
+    name = "shell"
+    description = "shell"
+    provider_specs = {}
+    call_types = ("shell_call",)
+
+
+def test_tool_guards_reject_incomplete_structural_objects():
+    assert not is_hosted_tool(_IncompleteHosted())
+    assert not is_provider_defined_tool(_IncompleteProviderDefined())

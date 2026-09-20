@@ -14,6 +14,7 @@ import substrate.kernel as kernel_pkg
 from substrate.agents.storage.graph import InMemoryGraphStore
 from substrate.agents.storage.tasks import TaskStore as InMemoryTaskStore
 from substrate.kernel.core.content import MediaBlock, TextBlock
+from substrate.kernel.exceptions import UnsupportedContentError
 from substrate.kernel.llm.llm import EmbeddingClient, EmbeddingResult
 from substrate.kernel.storage.graph import Entity, GraphStore, Relationship
 from substrate.kernel.storage.tasks import TaskStatus, TaskStore
@@ -85,6 +86,27 @@ async def test_sentence_transformers_and_base_clients_expose_embed_blocks() -> N
 
     assert hasattr(SentenceTransformersEmbeddingClient, "embed_blocks")
     assert hasattr(BaseEmbeddingClient, "embed_blocks")
+
+
+async def test_text_only_embedding_clients_reject_media_content() -> None:
+    from substrate.capabilities.llm.sentence_transformers_embedding_client import (
+        SentenceTransformersEmbeddingClient,
+    )
+    from substrate.integrations.llm.base import BaseEmbeddingClient
+
+    class _TextOnlyClient(BaseEmbeddingClient):
+        async def embed(self, texts: list[str]) -> EmbeddingResult:
+            return EmbeddingResult(embeddings=[[0.0] for _ in texts], model="fake")
+
+    with pytest.raises(UnsupportedContentError):
+        await _TextOnlyClient(model="fake").embed_blocks(
+            [TextBlock(text="hello"), MediaBlock(type="image", data=b"abc")]
+        )
+
+    with pytest.raises(UnsupportedContentError):
+        await SentenceTransformersEmbeddingClient(model="sentence-transformers/all-MiniLM-L6-v2").embed_blocks(
+            [MediaBlock(type="image", data=b"abc")]
+        )
 
 
 # ── Branch-isolated tasks ───────────────────────────────────────────────────

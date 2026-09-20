@@ -12,23 +12,18 @@ Verifies:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-import pytest
 
 from substrate.kernel.core.content import DataBlock, MediaBlock, TextBlock
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.storage.memory import (
     ContextMemoryInjection,
     MemoryCategory,
-    MemoryLifecycle,
     MemoryMatch,
     MemoryNamespace,
     MemoryProvenance,
     MemoryQuery,
     MemoryRecord,
     MemoryStatus,
-    MemoryValidity,
 )
 
 
@@ -107,15 +102,6 @@ def test_memory_namespace_from_actor():
     assert ns_agent.user_id is None
 
 
-def test_memory_validity_temporal_fields():
-    t_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    t_end = datetime(2026, 6, 1, tzinfo=timezone.utc)
-    validity = MemoryValidity(valid_from=t_start, valid_until=t_end)
-    rec = MemoryRecord.from_text("Worked on Q1 Initiative", validity=validity)
-    assert rec.validity.valid_from == t_start
-    assert rec.validity.valid_until == t_end
-
-
 def test_memory_match_forwarding_properties():
     rec = MemoryRecord.from_text(
         "TypeScript with strictNullChecks",
@@ -142,7 +128,6 @@ def test_memory_query_defaults():
     assert query.statuses == (MemoryStatus.ACTIVE,)
     assert query.limit == 10
     assert query.min_score == 0.0
-    assert query.include_pinned is True
 
 
 def test_context_memory_injection_contract():

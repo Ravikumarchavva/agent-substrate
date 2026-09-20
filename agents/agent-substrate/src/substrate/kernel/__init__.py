@@ -31,6 +31,7 @@ from substrate.kernel.exceptions import (
     PermanentError,
     PolicyTermination,
     BlockValidationError,
+    UnsupportedContentError,
     AgentCrashError,
     BudgetExhaustedError,
     MiddlewareTermination,
@@ -56,6 +57,7 @@ from substrate.kernel.agent.supervision import (
     ExecutionBudget,
 )
 from substrate.kernel.tools.tools import (
+    PayloadBase,
     ToolRisk,
     ToolType,
     ToolUI,
@@ -92,12 +94,10 @@ from substrate.kernel.storage.history import (
     MessageNode,
 )
 from substrate.kernel.agent.context import (
-    AgentContextProtocol,
     CompactionStrategy,
     CompactionPhase,
     CompactionContext,
     CompactionResult,
-    CompactionCoordinator,
     ContextBuilder,
     ContextWindow,
 )
@@ -129,7 +129,6 @@ from substrate.kernel.storage.graph import (
 from substrate.kernel.storage.memory import (
     ContextMemoryInjection,
     MemoryCategory,
-    MemoryLifecycle,
     MemoryMatch,
     MemoryNamespace,
     MemoryProvenance,
@@ -137,7 +136,6 @@ from substrate.kernel.storage.memory import (
     MemoryRecord,
     MemoryStatus,
     MemoryStore,
-    MemoryValidity,
     ShortTermMemory,
 )
 from substrate.kernel.storage.tasks import Task, TaskList, TaskStatus, TaskStore
@@ -224,6 +222,7 @@ __all__ = [
     "PermanentError",
     "PolicyTermination",
     "BlockValidationError",
+    "UnsupportedContentError",
     "AgentCrashError",
     "BudgetExhaustedError",
     "MiddlewareTermination",
@@ -247,6 +246,7 @@ __all__ = [
     "ExecutionBudget",
     # Tools
     "ToolRisk",
+    "PayloadBase",
     "ToolType",
     "ToolUI",
     "ToolCallRequest",
@@ -284,8 +284,6 @@ __all__ = [
     "CompactionPhase",
     "CompactionContext",
     "CompactionResult",
-    "CompactionCoordinator",
-    "AgentContextProtocol",
     "ContextBuilder",
     "ContextWindow",
     # Middleware
@@ -322,8 +320,6 @@ __all__ = [
     "MemoryStatus",
     "MemoryNamespace",
     "MemoryProvenance",
-    "MemoryValidity",
-    "MemoryLifecycle",
     "MemoryQuery",
     "ContextMemoryInjection",
     "ShortTermMemory",

@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from substrate.agents.context.builder import DefaultContextBuilder
 from substrate.agents.context.history import DefaultHistoryResolver, InMemoryHistoryProvider
-from substrate.kernel.agent.context import ContextBuilder, ContextWindow
+from substrate.kernel.agent.context import ContextWindow
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.storage.history import MessageNode
 
@@ -107,13 +107,13 @@ async def test_end_to_end_ancestry_to_prompt_window():
 
     # Turn 0
     n0 = MessageNode(id="n0", session_id="s1", parent_id=None, payload=_msg("What is AI?"))
-    b0 = await provider.append_and_advance(n0, "main")
+    await provider.append_and_advance(n0, "main")
 
     # Turn 1
     n1 = MessageNode(
         id="n1", session_id="s1", parent_id="n0", payload=_msg("AI is intelligence demonstrated by machines", role="assistant")
     )
-    b1 = await provider.append_and_advance(n1, "main")
+    await provider.append_and_advance(n1, "main")
 
     # Turn 2
     n2 = MessageNode(

@@ -10,7 +10,6 @@ from pydantic import Field, model_validator
 from typing_extensions import Self
 
 from substrate.kernel.core.content import ChatMessage, ContentBlock, KernelModel
-from substrate.kernel.core.identity import Actor
 from substrate.kernel.storage.history import HistoryCheckpoint, MessageNode
 
 if TYPE_CHECKING:
@@ -109,35 +108,6 @@ class CompactionResult(KernelModel):
         return self
 
 
-@runtime_checkable
-class CompactionCoordinator(Protocol):
-    """Orchestrates phase-appropriate compaction strategies across agent execution lifecycles."""
-
-    async def compact(
-        self,
-        phase: CompactionPhase,
-        context: CompactionContext,
-    ) -> CompactionResult:
-        """Executes phase-appropriate strategies, validates results, and handles failure policies."""
-        ...
-
-
-@runtime_checkable
-class AgentContextProtocol(Protocol):
-    """Structural protocol for the agent's runtime context.
-
-    Exposes only what the agent loop needs: the agent's own id and a
-    way to retrieve the compacted prompt window for a given session.
-    Internal storage details (HistoryProvider, CompactionStrategy) are
-    implementation concerns, not part of the public protocol.
-    """
-
-    @property
-    def agent_id(self) -> Actor: ...
-
-    async def get_prompt_window(self, session_id: str) -> list[ChatMessage]: ...
-
-
 __all__ = [
     "ContextWindow",
     "ContextBuilder",
@@ -145,6 +115,4 @@ __all__ = [
     "CompactionPhase",
     "CompactionContext",
     "CompactionResult",
-    "CompactionCoordinator",
-    "AgentContextProtocol",
 ]

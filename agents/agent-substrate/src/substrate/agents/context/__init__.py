@@ -14,6 +14,7 @@ from .builder import DefaultContextBuilder
 from .compaction import (
     CompactionStrategy,
     CompactionPipeline,
+    CompactionCoordinator,
     DefaultCompactionCoordinator,
     SlidingWindowCompaction,
     SummarizationCompaction,
@@ -22,7 +23,7 @@ from .compaction import (
     TruncationStrategy,
     TokenBudgetComposedStrategy,
 )
-from .context import AgentContext, AgentContextProtocol, ContextConfig
+from .context import AgentContext, ContextConfig
 from .workspace import InMemoryWorkspaceStore, LocalFilesystemWorkspaceStore
 
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "DefaultContextBuilder",
     "CompactionStrategy",
     "CompactionPipeline",
+    "CompactionCoordinator",
     "DefaultCompactionCoordinator",
     "SlidingWindowCompaction",
     "SummarizationCompaction",
@@ -45,6 +47,5 @@ __all__ = [
     "TruncationStrategy",
     "TokenBudgetComposedStrategy",
     "AgentContext",
-    "AgentContextProtocol",
     "ContextConfig",
 ]

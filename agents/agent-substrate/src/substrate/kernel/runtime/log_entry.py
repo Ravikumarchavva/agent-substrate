@@ -93,7 +93,7 @@ class RunLogEntry(BaseModel):
     """
 
     run_id: RunId
-    seq: int
+    seq: int = Field(ge=0)
     kind: str
     v: int = 1
     payload: JsonObject = Field(default_factory=dict)

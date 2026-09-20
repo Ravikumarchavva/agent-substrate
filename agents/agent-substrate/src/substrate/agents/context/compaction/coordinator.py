@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from substrate.kernel.agent.context import (
-    CompactionCoordinator,
     CompactionContext,
     CompactionPhase,
     CompactionResult,
@@ -21,6 +20,18 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CHARS_PER_TOKEN = 4.0
 
 
+@runtime_checkable
+class CompactionCoordinator(Protocol):
+    """Contract for phase-aware context compaction orchestration."""
+
+    async def compact(
+        self,
+        phase: CompactionPhase,
+        context: CompactionContext,
+    ) -> CompactionResult:
+        ...
+
+
 def _estimate_message_tokens(msg: ChatMessage, cpt: float = _DEFAULT_CHARS_PER_TOKEN) -> int:
     chars = len(msg.role) + len(msg.text)
     for block in msg.content:
@@ -32,8 +43,8 @@ def _estimate_total_tokens(messages: Sequence[ChatMessage], cpt: float = _DEFAUL
     return sum(_estimate_message_tokens(m, cpt) for m in messages)
 
 
-class DefaultCompactionCoordinator(CompactionCoordinator):
-    """Reference implementation of CompactionCoordinator.
+class DefaultCompactionCoordinator:
+    """Reference implementation for phase-aware compaction orchestration.
 
     Orchestrates compaction across execution phases with strictly specified failure policies:
     - PRE_LLM:
@@ -175,5 +186,5 @@ class DefaultCompactionCoordinator(CompactionCoordinator):
         )
 
 
-__all__ = ["DefaultCompactionCoordinator"]
+__all__ = ["CompactionCoordinator", "DefaultCompactionCoordinator"]
 

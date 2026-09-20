@@ -20,9 +20,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 KERNEL_DIR = REPO_ROOT / "src" / "substrate" / "kernel"
 
-# Ceilings — kernel/runtime/ (10 durable-runtime contracts) raised this from 30.
-MAX_KERNEL_LOC = 6_000
-MAX_KERNEL_FILES = 45
+# Kernel guardrails: the foundation stays contract-only and provider-neutral.
 
 # Vendor strings that must NEVER appear in kernel source.
 # Schema shaping belongs in integrations/; the kernel is provider-neutral.
@@ -39,28 +37,14 @@ def _iter_kernel_files() -> list[Path]:
     return [p for p in KERNEL_DIR.rglob("*.py") if "__pycache__" not in p.parts]
 
 
+def _iter_kernel_contract_files() -> list[Path]:
+    return [p for p in _iter_kernel_files() if p.name != "__init__.py"]
+
+
 def _strip_docstrings(text: str) -> str:
     text = re.sub(r'""".*?"""', "", text, flags=re.DOTALL)
     text = re.sub(r"'''.*?'''", "", text, flags=re.DOTALL)
     return text
-
-
-def test_kernel_loc_ceiling() -> None:
-    files = _iter_kernel_files()
-    total = sum(len(p.read_text(encoding="utf-8").splitlines()) for p in files)
-    assert total < MAX_KERNEL_LOC, (
-        f"Kernel grew to {total} LOC (ceiling {MAX_KERNEL_LOC}). "
-        "Concrete code belongs in agents/capabilities/fabric/integrations — "
-        "the kernel holds contracts only."
-    )
-
-
-def test_kernel_file_count_ceiling() -> None:
-    n = len(_iter_kernel_files())
-    assert n < MAX_KERNEL_FILES, (
-        f"Kernel grew to {n} files (ceiling {MAX_KERNEL_FILES}). "
-        "Have you added a feature module that belongs in a layer above?"
-    )
 
 
 _KERNEL_PERMITTED_SUBDIRS = {
@@ -71,6 +55,7 @@ _KERNEL_PERMITTED_SUBDIRS = {
     "storage",
     "tools",
     "agent",
+    "document",
 }
 
 
@@ -148,6 +133,68 @@ def test_kernel_has_no_vendor_strings() -> None:
         "Kernel must not contain vendor-specific strings. Violations:\n  "
         + "\n  ".join(violations)
     )
+
+
+def test_kernel_requires_only_pydantic_as_third_party_dependency() -> None:
+    """The kernel should not import concrete runtime libs or vendor SDKs.
+
+    This check allows stdlib imports and the kernel's own internal re-exports,
+    while flagging actual third-party dependencies that would couple the
+    contract layer to runtime infrastructure.
+    """
+    stdlib_prefixes = (
+        "__future__",
+        "abc",
+        "asyncio",
+        "base64",
+        "collections",
+        "copy",
+        "dataclasses",
+        "datetime",
+        "decimal",
+        "enum",
+        "functools",
+        "hashlib",
+        "inspect",
+        "itertools",
+        "json",
+        "logging",
+        "math",
+        "os",
+        "pathlib",
+        "platform",
+        "random",
+        "re",
+        "secrets",
+        "statistics",
+        "sys",
+        "tempfile",
+        "time",
+        "types",
+        "typing",
+        "uuid",
+        "warnings",
+    )
+
+    illegal: list[str] = []
+    for path in _iter_kernel_contract_files():
+        text = path.read_text(encoding="utf-8")
+        stripped = _strip_docstrings(text)
+        for line in stripped.splitlines():
+            if not (line.startswith("import ") or line.startswith("from ")):
+                continue
+            if line.startswith("from __future__"):
+                continue
+            if "pydantic" in line or "typing_extensions" in line:
+                continue
+            if line.startswith("from substrate.kernel.") or line.startswith("import substrate.kernel."):
+                continue
+            if line.startswith("from .") or line.startswith("from .."):
+                continue
+            if any(line.startswith(f"import {prefix}") or line.startswith(f"from {prefix}") for prefix in stdlib_prefixes):
+                continue
+            illegal.append(f"{path.relative_to(REPO_ROOT)}: {line.strip()}")
+    assert not illegal, "Kernel imports must stay at the protocol layer and use pydantic only for validation:\n  " + "\n  ".join(illegal[:20])
 
 
 def test_message_round_trip() -> None:

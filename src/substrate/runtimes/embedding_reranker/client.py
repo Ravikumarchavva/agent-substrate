@@ -14,14 +14,17 @@ no session affinity to route on.
 from __future__ import annotations
 from substrate.logger import setup_logging
 
+import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 import httpx2 as httpx
 from pydantic import BaseModel
 
+from substrate.kernel.core.content import ContentBlock, MediaBlock, TextBlock
+from substrate.kernel.exceptions import UnsupportedContentError
+
 if TYPE_CHECKING:
-    from substrate.kernel.core.content import ContentBlock
     from substrate.kernel.llm import EmbeddingResult
 
 logger = setup_logging()
@@ -102,6 +105,75 @@ class EmbeddingRerankerClient:
             logger.warning("embed_text failed: %s", exc)
             return None
 
+    async def embed_blocks(self, blocks: Sequence[ContentBlock]) -> list[float] | None:
+        """Embed mixed text + image content as a single vector when supported.
+
+        The sidecar accepts text with multimodal payloads in one request, but some
+        versions reject mixed prompts. When that happens, fall back to separately
+        embedding each modality and returning the L2-normalized mean vector.
+        """
+        if not blocks:
+            return []
+
+        text_parts: list[str] = []
+        images: list[bytes] = []
+        for block in blocks:
+            if isinstance(block, TextBlock):
+                text_parts.append(block.text)
+            elif isinstance(block, MediaBlock):
+                if block.url is not None or block.file_id is not None:
+                    raise UnsupportedContentError(
+                        "EmbeddingRerankerClient requires resolved media bytes for multimodal blocks; callers must fetch url/file_id content first."
+                    )
+                if block.data is None:
+                    raise UnsupportedContentError("MediaBlock received without payload bytes.")
+                images.append(block.data)
+            else:
+                text_parts.append(str(block))
+
+        text = "\n".join(text_parts).strip()
+        if not text and not images:
+            return []
+
+        try:
+            if images:
+                payload: dict[str, Any] = {"text": text}
+                if text:
+                    payload["multimodal_data"] = [
+                        __import__("base64").b64encode(image).decode("ascii") for image in images
+                    ]
+                else:
+                    payload["multimodal_data"] = [
+                        __import__("base64").b64encode(image).decode("ascii") for image in images
+                    ]
+                resp = await self._request("POST", "/v1/embed", json=payload)
+                return resp.json()["embedding"]
+            return await self.embed_text(text)
+        except (httpx.HTTPError, KeyError, ValueError):
+            if not images:
+                return await self.embed_text(text)
+            vecs = []
+            if text:
+                text_vec = await self.embed_text(text)
+                if text_vec is not None:
+                    vecs.append(text_vec)
+            for image in images:
+                img_vec = await self.embed_image(image)
+                if img_vec is not None:
+                    vecs.append(img_vec)
+            if not vecs:
+                return None
+            mean = [0.0] * len(vecs[0])
+            for vec in vecs:
+                for i, value in enumerate(vec):
+                    mean[i] += value
+            for i in range(len(mean)):
+                mean[i] /= len(vecs)
+            norm = math.sqrt(sum(v * v for v in mean))
+            if norm == 0:
+                return mean
+            return [v / norm for v in mean]
+
     async def rerank(self, query: str, passages: list[str]) -> list[float] | None:
         """Score each passage's relevance to *query*, same order as input.
         Returns ``None`` on any failure — callers should fall back to the
@@ -171,9 +243,10 @@ class EmbeddingRerankerTextEmbeddingClient:
         return vec
 
     async def embed_blocks(self, blocks: Sequence[ContentBlock]) -> list[float]:
-        from substrate.kernel.core.content import content_blocks_to_str
-
-        return await self.embed_single(content_blocks_to_str(blocks))
+        vec = await self._client.embed_blocks(blocks)
+        if vec is None:
+            raise RuntimeError("embedding-reranker service failed to embed mixed content")
+        return vec
 
 
 __all__ = [

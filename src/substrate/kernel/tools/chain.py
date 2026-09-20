@@ -50,11 +50,11 @@ class ChainPolicy(BaseModel):
     guidance — the sandbox never blocks indefinitely.
     """
 
-    max_tool_calls: int = 50
-    call_timeout_s: float = 60.0
-    approval_timeout_s: float = 55.0
-    total_timeout_s: float = 300.0
-    max_inline_result_bytes: int = 4096
+    max_tool_calls: int = Field(default=50, ge=0)
+    call_timeout_s: float = Field(default=60.0, ge=0)
+    approval_timeout_s: float = Field(default=55.0, ge=0)
+    total_timeout_s: float = Field(default=300.0, ge=0)
+    max_inline_result_bytes: int = Field(default=4096, ge=0)
     max_risk_unapproved: ToolRisk = ToolRisk.SAFE
 
     model_config = {"frozen": True}

@@ -153,6 +153,10 @@ class BlockValidationError(PermanentError, ValueError):
     """
 
 
+class UnsupportedContentError(PermanentError, ValueError):
+    """Raised when a client cannot process a given content block mix."""
+
+
 # ---------------------------------------------------------------------------
 # Policy Terminations (Intentional Governance & Safety Halts)
 # ---------------------------------------------------------------------------
@@ -240,6 +244,7 @@ __all__ = [
     "PermanentError",
     "AgentCrashError",
     "BlockValidationError",
+    "UnsupportedContentError",
     "BranchNotFoundError",
     "BranchAlreadyExistsError",
     "DAGIntegrityError",

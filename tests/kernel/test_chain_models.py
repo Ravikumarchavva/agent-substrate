@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from substrate.kernel.tools.chain import (
     ChainCallRecord,
     ChainFile,
@@ -27,6 +29,21 @@ def test_chain_policy_json_round_trip():
     raw = p.model_dump()
     p2 = ChainPolicy.model_validate(raw)
     assert p2 == p
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_tool_calls": -1},
+        {"call_timeout_s": -1},
+        {"approval_timeout_s": -1},
+        {"total_timeout_s": -1},
+        {"max_inline_result_bytes": -1},
+    ],
+)
+def test_chain_policy_rejects_negative_limits(kwargs):
+    with pytest.raises(ValueError):
+        ChainPolicy(**kwargs)
 
 
 def test_invocation_result_ok():

@@ -36,6 +36,7 @@ from substrate.kernel.runtime.wakeup import Wakeup
 from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
 from substrate.kernel.runtime.supervisor import RunHandle, RunResult
 from substrate.kernel.runtime.agent import AgentRunContext, Agent
+from substrate.kernel.storage.memory import MemoryProvenance
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +450,28 @@ class TestRunRetryPolicy:
         p = RunRetryPolicy()
         with pytest.raises((TypeError, Exception)):
             p.max_retries = 99  # type: ignore[misc]
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"max_retries": -1},
+            {"backoff_s": -1},
+            {"max_backoff_s": -1},
+        ],
+    )
+    def test_rejects_negative_values(self, kwargs: dict) -> None:
+        with pytest.raises(ValueError):
+            RunRetryPolicy(**kwargs)
+
+
+def test_run_log_entry_rejects_negative_sequence() -> None:
+    with pytest.raises(ValueError):
+        RunLogEntry(run_id=new_run_id(), seq=-1, kind="test")
+
+
+def test_memory_provenance_rejects_confidence_outside_range() -> None:
+    with pytest.raises(ValueError):
+        MemoryProvenance(confidence=1.1)
 
 
 class TestLease:

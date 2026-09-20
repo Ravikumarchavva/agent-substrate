@@ -299,7 +299,15 @@ def is_provider_defined_tool(tool: object) -> TypeGuard[ProviderDefinedTool]:
     Check this *before* ``is_hosted_tool`` when you need to distinguish between
     the two, since both have ``provider_specs``.
     """
-    return hasattr(tool, "provider_specs") and hasattr(tool, "handle_call")
+    return (
+        isinstance(getattr(tool, "name", None), str)
+        and bool(tool.name)
+        and isinstance(getattr(tool, "description", None), str)
+        and isinstance(getattr(tool, "provider_specs", None), dict)
+        and isinstance(getattr(tool, "call_types", None), tuple)
+        and all(isinstance(item, str) and item for item in tool.call_types)
+        and callable(getattr(tool, "handle_call", None))
+    )
 
 
 def is_hosted_tool(tool: object) -> TypeGuard[HostedTool]:
@@ -319,7 +327,13 @@ def is_hosted_tool(tool: object) -> TypeGuard[HostedTool]:
         else:
             result = await tool.execute(ctx=ctx, **arguments)
     """
-    return hasattr(tool, "provider_specs") and not hasattr(tool, "handle_call")
+    return (
+        isinstance(getattr(tool, "name", None), str)
+        and bool(tool.name)
+        and isinstance(getattr(tool, "description", None), str)
+        and isinstance(getattr(tool, "provider_specs", None), dict)
+        and not hasattr(tool, "handle_call")
+    )
 
 
 # ---------------------------------------------------------------------------

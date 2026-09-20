@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
@@ -94,25 +93,9 @@ class MemoryProvenance:
     extraction_method: str = "manual"  # e.g., "manual", "llm_reflection", "tool_output"
     supersedes_id: str | None = None   # Points to prior memory ID this record replaced
 
-
-@dataclass(frozen=True)
-class MemoryValidity:
-    """Temporal validity — valid time when the real-world fact holds true."""
-
-    valid_from: datetime | None = None
-    valid_until: datetime | None = None
-
-
-@dataclass(frozen=True)
-class MemoryLifecycle:
-    """Persistence and decay metadata."""
-
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_accessed_at: datetime | None = None
-    access_count: int = 0
-    pinned: bool = False
-    ttl_seconds: int | None = None
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("confidence must be between 0.0 and 1.0")
 
 
 @dataclass(frozen=True)
@@ -129,8 +112,6 @@ class MemoryRecord:
     status: MemoryStatus = MemoryStatus.ACTIVE
     namespace: MemoryNamespace = field(default_factory=lambda: MemoryNamespace(tenant_id="default"))
     provenance: MemoryProvenance = field(default_factory=MemoryProvenance)
-    validity: MemoryValidity = field(default_factory=MemoryValidity)
-    lifecycle: MemoryLifecycle = field(default_factory=MemoryLifecycle)
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -156,8 +137,6 @@ class MemoryRecord:
         session_id: str | None = None,
         namespace: MemoryNamespace | None = None,
         provenance: MemoryProvenance | None = None,
-        validity: MemoryValidity | None = None,
-        lifecycle: MemoryLifecycle | None = None,
         metadata: Mapping[str, Any] | None = None,
         **kwargs: Any,
     ) -> MemoryRecord:
@@ -175,8 +154,6 @@ class MemoryRecord:
             status=status,
             namespace=ns,
             provenance=provenance or MemoryProvenance(),
-            validity=validity or MemoryValidity(),
-            lifecycle=lifecycle or MemoryLifecycle(),
             metadata=metadata or {},
             **kwargs,
         )
@@ -280,7 +257,6 @@ class MemoryQuery:
     statuses: Sequence[MemoryStatus] = (MemoryStatus.ACTIVE,)
     limit: int = 10
     min_score: float = 0.0
-    include_pinned: bool = True
     metadata_filter: Mapping[str, Any] | None = None
 
 
@@ -373,8 +349,6 @@ __all__ = [
     "MemoryStatus",
     "MemoryNamespace",
     "MemoryProvenance",
-    "MemoryValidity",
-    "MemoryLifecycle",
     "MemoryRecord",
     "MemoryMatch",
     "MemoryQuery",

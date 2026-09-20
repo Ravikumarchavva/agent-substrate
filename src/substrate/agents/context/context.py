@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from substrate.agents.context.builder import DefaultContextBuilder
-from substrate.agents.context.compaction import CompactionPipeline, SlidingWindowCompaction
-from substrate.agents.context.history import project_messages
-from substrate.kernel.agent.context import (
-    AgentContextProtocol,
+from substrate.agents.context.compaction import (
     CompactionCoordinator,
-    ContextBuilder,
+    CompactionPipeline,
+    SlidingWindowCompaction,
 )
+from substrate.agents.context.history import project_messages
+from substrate.kernel.agent.context import ContextBuilder
 from substrate.kernel.agent.supervision import HistoryRetention
 from substrate.kernel.core.content import ChatMessage
 from substrate.kernel.core.identity import Actor
@@ -123,4 +123,4 @@ class AgentContext:
         )
 
 
-__all__ = ["AgentContextProtocol", "AgentContext", "ContextConfig"]
+__all__ = ["AgentContext", "ContextConfig"]

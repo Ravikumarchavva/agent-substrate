@@ -28,7 +28,8 @@ import asyncio
 import logging
 from collections.abc import Sequence
 
-from substrate.kernel.core.content import ContentBlock
+from substrate.kernel.core.content import ContentBlock, MediaBlock, TextBlock
+from substrate.kernel.exceptions import UnsupportedContentError
 from substrate.kernel.llm import EmbeddingResult
 
 logger = logging.getLogger(__name__)
@@ -86,7 +87,14 @@ class SentenceTransformersEmbeddingClient:
         return result.embeddings[0]
 
     async def embed_blocks(self, blocks: Sequence[ContentBlock]) -> list[float]:
-        from substrate.kernel.core.content import content_blocks_to_str
-
-        text = content_blocks_to_str(blocks)
+        for block in blocks:
+            if isinstance(block, MediaBlock):
+                raise UnsupportedContentError(
+                    "SentenceTransformersEmbeddingClient only supports text blocks; media must be resolved before embedding."
+                )
+            if not isinstance(block, TextBlock):
+                raise UnsupportedContentError(
+                    f"Unsupported content type for text-only embedding: {type(block).__name__}"
+                )
+        text = "".join(block.text for block in blocks if isinstance(block, TextBlock))
         return await self.embed_single(text)

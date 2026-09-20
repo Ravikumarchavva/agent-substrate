@@ -39,7 +39,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import AsyncIterator, Protocol, runtime_checkable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.ids import RunId, RunStatus
@@ -62,9 +62,9 @@ class RunRetryPolicy(BaseModel):
                              dead-run storage; default ``False``.
     """
 
-    max_retries: int = 3
-    backoff_s: float = 5.0
-    max_backoff_s: float = 300.0
+    max_retries: int = Field(default=3, ge=0)
+    backoff_s: float = Field(default=5.0, ge=0)
+    max_backoff_s: float = Field(default=300.0, ge=0)
     dead_run_on_cancel: bool = False
 
     model_config = {"frozen": True}

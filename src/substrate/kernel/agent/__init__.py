@@ -6,7 +6,6 @@ from .supervision import (
     ExecutionBudget,
 )
 from .context import (
-    AgentContextProtocol,
     CompactionStrategy,
     ContextBuilder,
     ContextWindow,
@@ -28,7 +27,6 @@ __all__ = [
     "SpawnBudget",
     "ExecutionBudget",
     "CompactionStrategy",
-    "AgentContextProtocol",
     "ContextBuilder",
     "ContextWindow",
     "MiddlewareStage",

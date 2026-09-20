@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import Enum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import Field, model_validator
 from typing_extensions import Self
@@ -12,6 +12,9 @@ from typing_extensions import Self
 from substrate.kernel.core.content import ChatMessage, ContentBlock, KernelModel
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.storage.history import HistoryCheckpoint, MessageNode
+
+if TYPE_CHECKING:
+    from substrate.kernel.storage.memory import ContextMemoryInjection
 
 
 class ContextWindow(KernelModel):
@@ -33,6 +36,7 @@ class ContextBuilder(Protocol):
         checkpoint: HistoryCheckpoint | None = None,
         token_budget: int | None = None,
         system_instruction: str | None = None,
+        memory_injection: ContextMemoryInjection | None = None,
     ) -> ContextWindow:
         """Combine nodes into a prompt window respecting token budget and turn invariants."""
         ...

@@ -22,6 +22,11 @@ from substrate.capabilities.memory.factory import (
     build_memory_store,
     build_long_term_memory,
 )
+from substrate.capabilities.memory.policy import (
+    MemoryExposurePolicy,
+    DefaultMemoryExposurePolicy,
+)
+from substrate.capabilities.memory.manager import MemoryManager
 
 __all__ = [
     "RedisSessionStore",
@@ -33,4 +38,7 @@ __all__ = [
     "build_short_term_memory",
     "build_memory_store",
     "build_long_term_memory",
+    "MemoryExposurePolicy",
+    "DefaultMemoryExposurePolicy",
+    "MemoryManager",
 ]

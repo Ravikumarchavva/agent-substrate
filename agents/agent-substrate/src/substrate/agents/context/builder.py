@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from substrate.kernel.agent.context import ContextBuilder, ContextWindow
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.storage.history import HistoryCheckpoint, MessageNode
+from substrate.kernel.storage.memory import ContextMemoryInjection
 
 _DEFAULT_CHARS_PER_TOKEN = 4.0
 
@@ -29,7 +30,8 @@ class DefaultContextBuilder(ContextBuilder):
     Features:
     - Extracts ChatMessage payloads from MessageNode sequence in chronological order.
     - Splices checkpoint summaries and delta nodes when a checkpoint is provided.
-    - Prepends system_instruction (if provided and not already present).
+    - Prepends system_instruction (and injects memory directives if provided).
+    - Injects relevant memory context blocks before conversation turns.
     - Preserves tool call invariants: never severs a tool_use from its tool_result.
     - Applies deterministic sliding-window reduction when token_budget is exceeded.
     """
@@ -44,6 +46,7 @@ class DefaultContextBuilder(ContextBuilder):
         checkpoint: HistoryCheckpoint | None = None,
         token_budget: int | None = None,
         system_instruction: str | None = None,
+        memory_injection: ContextMemoryInjection | None = None,
     ) -> ContextWindow:
         checkpoint_id: str | None = None
         working_nodes = list(nodes)
@@ -76,15 +79,35 @@ class DefaultContextBuilder(ContextBuilder):
             )
             messages.insert(0, summary_msg)
 
-        # Prepend system instruction if provided
-        if system_instruction:
+        # Inject relevant memories block if provided
+        if memory_injection is not None and memory_injection.relevant_memories:
+            mem_msg = ChatMessage(
+                role=Role.USER,
+                content=list(memory_injection.relevant_memories),
+                metadata={"is_memory_context": True},
+            )
+            messages.insert(0, mem_msg)
+
+        # Prepare system instruction including directives if provided
+        effective_sys = system_instruction
+        if memory_injection is not None and memory_injection.directives:
+            directives_text = "\n\n".join(
+                b.text if isinstance(b, TextBlock) else str(b)
+                for b in memory_injection.directives
+            )
+            if effective_sys:
+                effective_sys = f"{effective_sys}\n\n{directives_text}"
+            else:
+                effective_sys = directives_text
+
+        if effective_sys:
             has_system = bool(messages and messages[0].role == Role.SYSTEM)
             if not has_system:
                 messages.insert(
                     0,
                     ChatMessage(
                         role=Role.SYSTEM,
-                        content=[TextBlock(text=system_instruction)],
+                        content=[TextBlock(text=effective_sys)],
                     ),
                 )
 
@@ -106,12 +129,14 @@ class DefaultContextBuilder(ContextBuilder):
                 estimated_tokens=current_tokens,
             )
 
-        # Truncation: preserve system prompt and checkpoint summary if present, and retain most recent turns
+        # Truncation: preserve system prompt, checkpoint summary, and memory context
         prefix_msgs: list[ChatMessage] = []
         working_msgs = list(messages)
         if working_msgs and working_msgs[0].role == Role.SYSTEM:
             prefix_msgs.append(working_msgs.pop(0))
         if working_msgs and working_msgs[0].metadata.get("is_checkpoint_summary"):
+            prefix_msgs.append(working_msgs.pop(0))
+        if working_msgs and working_msgs[0].metadata.get("is_memory_context"):
             prefix_msgs.append(working_msgs.pop(0))
 
         # Iteratively drop oldest delta messages until within budget

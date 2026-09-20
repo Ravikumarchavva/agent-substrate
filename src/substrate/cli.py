@@ -349,6 +349,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
         InMemoryHistoryProvider,
         SlidingWindowCompaction,
     )
+    from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
 
     # Build tools
     tools = []
@@ -364,6 +365,8 @@ def cmd_chat(args: argparse.Namespace) -> None:
             toolbox = Toolbox()
             for t in tools:
                 toolbox.add(t)
+        history = LocalFilesystemHistoryProvider(root="./data/history")
+        await history.connect()
         async with Runtime() as rt:
             agent = ReActAgent(
                 args.name,
@@ -371,6 +374,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
                 tools=toolbox,
                 context=ContextConfig(
                     InMemoryHistoryProvider(),
+                    history,
                     CompactionPipeline([SlidingWindowCompaction(max_messages=1000)]),
                 ),
                 max_iterations=args.max_iterations,

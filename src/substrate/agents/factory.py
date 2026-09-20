@@ -7,9 +7,11 @@ from substrate.logger import setup_logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from substrate.capabilities.history.local_history import (
+    LocalFilesystemHistoryProvider,
+)
 from substrate.agents.context import (
     HistoryProvider,
-    InMemoryHistoryProvider,
     SlidingWindowCompaction,
     CompactionPipeline,
 )
@@ -334,7 +336,7 @@ def rebuild_agent(
     system_instructions = spec.get("system_instructions", "")
 
     ctx = ContextConfig(
-        InMemoryHistoryProvider(),
+        LocalFilesystemHistoryProvider(),
         pipeline=CompactionPipeline(
             [SlidingWindowCompaction(max_messages=model_context_window)]
         ),
@@ -436,7 +438,7 @@ def create_assistant_agent(
     )
 
     ctx = ContextConfig(
-        memory if memory is not None else InMemoryHistoryProvider(),
+        memory if memory is not None else LocalFilesystemHistoryProvider(),
         pipeline=pipeline,
     )
 
@@ -577,7 +579,7 @@ def build_research_orchestrator(
         ],
         max_iterations=15,
         context=ContextConfig(
-            InMemoryHistoryProvider(), pipeline=build_token_budget_pipeline()
+            LocalFilesystemHistoryProvider(), pipeline=build_token_budget_pipeline()
         ),
     )
     # Display names only — Actor routing keys stay lowercase (unchanged

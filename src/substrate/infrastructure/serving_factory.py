@@ -187,11 +187,6 @@ def _init_file_store(cfg: SubstrateConfig) -> Any:
             region=cfg.FILE_STORE_REGION,
             user_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES,
         )
-    if cfg.FILE_STORE_BACKEND == "memory":
-        from substrate.agents.storage.memory import InMemoryFileStore
-
-        return InMemoryFileStore()
-
     # Default: "local" — a per-user directory tree on server-side storage
     # (local dir in dev, docker volume in compose, RWX PVC in k8s).
     from substrate.capabilities.storage.workspace import WorkspaceFileStore
@@ -235,19 +230,22 @@ async def init_infrastructure(
     from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
     history = await build_history_provider(
-        database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL
+        database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
+        local_path=cfg.HISTORY_STORAGE_PATH,
     )
 
     short_term_memory = await build_short_term_memory(
         redis_url=cfg.REDIS_URL,
         database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
         ttl=cfg.REDIS_SESSION_TTL,
+        local_path=f"{cfg.MEMORY_STORAGE_PATH}/short_term",
     )
     # User-scoped standing facts/preferences ("always answer in French") —
     # separate from short_term_memory's per-session scratch state. See
     # build_memory_tool() below for how this gets keyed by user, not thread.
     long_term_memory = await build_long_term_memory(
-        cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL
+        cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
+        local_path=f"{cfg.MEMORY_STORAGE_PATH}/long_term",
     )
 
     # Blocking I/O (HF Hub model download on first run + onnxruntime
@@ -825,6 +823,10 @@ async def build_agent_for_thread(
 
     if history is None:
         history = InMemoryHistoryProvider()
+        from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
+
+        history = LocalFilesystemHistoryProvider()
+        await history.connect()
     memory = history
 
     memory_tool = build_memory_tool(
@@ -960,10 +962,14 @@ async def build_history_provider(
     redis_url: str = "",
     ttl: int = 3600,
     max_messages: int = 200,
+    local_path: str = "./data/db/sessions",
 ) -> Any:
     """Build the shared HistoryProvider.
 
-    Uses DurableHistoryProvider when database_url is provided, else InMemoryHistoryProvider.
+    Uses DurableHistoryProvider when database_url is provided, else
+    LocalFilesystemHistoryProvider (JSON files in ``local_path``).
+    The filesystem backend survives process restarts without requiring
+    a running Postgres instance — 100% durable by default.
     """
     if database_url:
         from substrate.capabilities.history.durable_history import DurableHistoryProvider
@@ -972,38 +978,48 @@ async def build_history_provider(
         await provider.connect()
         return provider
 
-    from substrate.agents.context import InMemoryHistoryProvider
+    from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
 
-    return InMemoryHistoryProvider()
+    provider = LocalFilesystemHistoryProvider(root=local_path)
+    await provider.connect()
+    logger.info("History backend: local filesystem at %s", local_path)
+    return provider
 
 
 async def build_short_term_memory(
-    *, redis_url: str, database_url: str, ttl: int = 3600
+    *,
+    redis_url: str,
+    database_url: str,
+    ttl: int = 3600,
+    local_path: str = "./data/db/memory/short_term",
 ) -> Any:
-    """Build and connect a durable-primary + fast-cache ShortTermMemory.
+    """Build and connect a durable ShortTermMemory.
 
-    Thin pass-through to ``capabilities.memory.factory`` (the real
-    implementation, reusable outside serving/) — this module is only the
-    legal meeting point serving/ is allowed to import agents/capabilities
-    types through, per its own module docstring.
+    Uses Postgres + Redis when available, otherwise LocalFileSessionStore in local_path.
     """
     from substrate.capabilities.memory.factory import (
         build_short_term_memory as _build,
     )
 
-    return await _build(database_url, redis_url=redis_url, ttl=ttl)
+    return await _build(
+        database_url,
+        redis_url=redis_url or None,
+        ttl=ttl,
+        local_path=local_path,
+    )
 
 
-async def build_long_term_memory(database_url: str) -> Any:
-    """Build and connect a durable LongTermMemory (Postgres full-text) —
-    standing facts/preferences that persist across every thread for a user,
-    not just one session. Same thin-pass-through convention as
-    ``build_short_term_memory`` above."""
+async def build_long_term_memory(
+    database_url: str,
+    *,
+    local_path: str = "./data/db/memory/long_term",
+) -> Any:
+    """Build and connect a durable LongTermMemory (Postgres full-text or Lance)."""
     from substrate.capabilities.memory.factory import (
         build_long_term_memory as _build,
     )
 
-    return await _build(database_url)
+    return await _build(database_url, local_path=local_path)
 
 
 def build_session_index_vector_store(
@@ -1276,8 +1292,14 @@ async def build_cached_history_for_thread(
 ) -> Any:
     """Return the history provider for this thread."""
     from substrate.agents.context import InMemoryHistoryProvider
+    if history is not None:
+        return history
+    from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
 
     return history if history is not None else InMemoryHistoryProvider()
+    provider = LocalFilesystemHistoryProvider()
+    await provider.connect()
+    return provider
 
 
 def build_memory_tool(

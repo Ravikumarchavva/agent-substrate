@@ -15,7 +15,9 @@ export type GoogleTTSVoice =
   | "Sulafat"
   | "Achernar";
 
-export type TTSVoice = OpenAITTSVoice | GoogleTTSVoice;
+export type LocalTTSVoice = "af_heart";
+
+export type TTSVoice = OpenAITTSVoice | GoogleTTSVoice | LocalTTSVoice;
 
 /** Supported playback-speed presets for generated assistant speech. */
 export type TTSPlaybackRate = 0.75 | 1 | 1.25 | 1.5 | 1.75 | 2;

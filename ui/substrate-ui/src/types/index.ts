@@ -12,7 +12,7 @@ export type {
   AdminStorageUser,
   AdminStorageSession,
 } from "./admin";
-export type { OpenAITTSVoice, GoogleTTSVoice, TTSVoice, TTSPlaybackRate, TranscribeResult, RealtimeToken } from "./audio";
+export type { OpenAITTSVoice, GoogleTTSVoice, LocalTTSVoice, TTSVoice, TTSPlaybackRate, TranscribeResult, RealtimeToken } from "./audio";
 export type { TaskStatus, Task, TaskList } from "./tasks";
 export type { ModelProvider, ModelOption, VoiceOption } from "./models";
 export type { User, AuthUser, Element, InstructionValidationResult } from "./user";

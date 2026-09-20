@@ -18,8 +18,8 @@ export const MODEL_PREFERENCES_UPDATED_EVENT = "substrate:model-preferences-upda
 
 export const DEFAULT_CHAT_MODEL = "google/gemini-3.1-flash-lite";
 export const DEFAULT_STT_MODEL = "openai/gpt-4o-mini-transcribe";
-export const DEFAULT_TTS_MODEL = "google/gemini-3.1-flash-tts-preview";
-export const DEFAULT_TTS_VOICE: TTSVoice = "Kore";
+export const DEFAULT_TTS_MODEL = "local/kokoro-82m";
+export const DEFAULT_TTS_VOICE: TTSVoice = "af_heart";
 export const DEFAULT_TTS_PLAYBACK_RATE: TTSPlaybackRate = 2;
 export const DEFAULT_REALTIME_MODEL = "openai/gpt-4o-realtime-preview-2024-12-17";
 export const DEFAULT_REALTIME_VOICE: OpenAITTSVoice = "coral";
@@ -30,6 +30,7 @@ const PROVIDER_LABELS: Record<ModelProvider, string> = {
   openai: "OpenAI",
   groq: "Groq",
   google: "Google",
+  local: "Local",
   openrouter: "OpenRouter Free",
   nvidia: "NVIDIA NIM",
 };
@@ -102,16 +103,22 @@ export const STT_MODEL_OPTIONS: ModelOption[] = [
 
 export const TTS_MODEL_OPTIONS: ModelOption[] = [
   {
-    id: "google/gemini-3.1-flash-tts-preview",
-    label: "Gemini 3.1 Flash TTS",
-    provider: "google",
-    description: "Best low-latency Google TTS option and the default speech model.",
+    id: "local/kokoro-82m",
+    label: "Kokoro 82M (Local)",
+    provider: "local",
+    description: "Small local model; runs on this server without a speech API.",
   },
   {
     id: "google/gemini-2.5-flash-preview-tts",
     label: "Gemini 2.5 Flash TTS",
     provider: "google",
-    description: "Fast preview TTS model for cost-efficient speech playback.",
+    description: "Fast, cost-efficient Google TTS option and the default speech model.",
+  },
+  {
+    id: "google/gemini-3.1-flash-tts-preview",
+    label: "Gemini 3.1 Flash TTS",
+    provider: "google",
+    description: "Higher-quality Google TTS preview model.",
   },
   {
     id: "google/gemini-2.5-pro-preview-tts",
@@ -149,6 +156,7 @@ export const REALTIME_MODEL_OPTIONS: ModelOption[] = [
 ];
 
 export const TTS_VOICE_OPTIONS: VoiceOption[] = [
+  { id: "af_heart", label: "Heart", provider: "local", description: "Natural local Kokoro voice." },
   { id: "alloy", label: "Alloy", provider: "openai", description: "Neutral synthetic voice." },
   { id: "ash", label: "Ash", provider: "openai", description: "Calm, grounded delivery." },
   { id: "ballad", label: "Ballad", provider: "openai", description: "Softer, warmer speech." },

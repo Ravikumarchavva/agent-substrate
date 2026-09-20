@@ -1,6 +1,6 @@
 import type { TTSVoice } from "./audio";
 
-export type ModelProvider = "openai" | "google" | "openrouter" | "groq" | "nvidia";
+export type ModelProvider = "openai" | "google" | "local" | "openrouter" | "groq" | "nvidia";
 
 export type ModelOption = {
   id: string;
@@ -14,6 +14,6 @@ export type ModelOption = {
 export type VoiceOption = {
   id: TTSVoice;
   label: string;
-  provider: "openai" | "google";
+  provider: "openai" | "google" | "local";
   description: string;
 };

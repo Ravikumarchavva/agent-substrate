@@ -8,11 +8,13 @@ Schema (auto-created via setup())::
         agent_id        TEXT        NOT NULL DEFAULT '',
         agent_label     TEXT        NOT NULL DEFAULT '',
         parent_agent_id TEXT        NULL,
+        branch_id       TEXT        NOT NULL DEFAULT 'main',
         max_retries     INTEGER     NOT NULL DEFAULT 3,
         tasks           JSONB       NOT NULL DEFAULT '[]',
-        updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-        UNIQUE (conversation_id, agent_id)
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    CREATE UNIQUE INDEX task_lists_conv_agent_branch_key
+        ON task_lists (conversation_id, agent_id, branch_id);
 
 NOTE: if you have an existing task_lists table it must be dropped
 before starting — there is no migration framework; schema is declarative.
@@ -38,27 +40,27 @@ CREATE TABLE IF NOT EXISTS task_lists (
     agent_id        TEXT        NOT NULL DEFAULT '',
     agent_label     TEXT        NOT NULL DEFAULT '',
     parent_agent_id TEXT        NULL,
+    branch_id       TEXT        NOT NULL DEFAULT 'main',
     max_retries     INTEGER     NOT NULL DEFAULT 3,
     tasks           JSONB       NOT NULL DEFAULT '[]',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (conversation_id, agent_id)
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 )
 """
 
 _SELECT_BY_ID = """
-SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks, created_at
+SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, branch_id, max_retries, tasks, created_at
 FROM task_lists WHERE id = :id
 """
 
 _SELECT_BY_CONV_AGENT = """
-SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks, created_at
-FROM task_lists WHERE conversation_id = :cid AND agent_id = :aid
+SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, branch_id, max_retries, tasks, created_at
+FROM task_lists WHERE conversation_id = :cid AND agent_id = :aid AND branch_id = :bid
 """
 
 _SELECT_ALL_BY_CONV = """
-SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks, created_at
-FROM task_lists WHERE conversation_id = :cid
+SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, branch_id, max_retries, tasks, created_at
+FROM task_lists WHERE conversation_id = :cid AND branch_id = :bid
 """
 
 _UPDATE_TASKS = """
@@ -82,6 +84,7 @@ class PgTaskStore:
                 ("agent_id", "TEXT NOT NULL DEFAULT ''"),
                 ("agent_label", "TEXT NOT NULL DEFAULT ''"),
                 ("parent_agent_id", "TEXT NULL"),
+                ("branch_id", "TEXT NOT NULL DEFAULT 'main'"),
                 ("created_at", "TIMESTAMPTZ NOT NULL DEFAULT now()"),
             ]:
                 await session.execute(
@@ -89,13 +92,18 @@ class PgTaskStore:
                         f"ALTER TABLE task_lists ADD COLUMN IF NOT EXISTS {col} {defn}"
                     )
                 )
-            # Add unique constraint if missing (safe to run repeatedly via DO block).
+            # Uniqueness is per (conversation, agent, branch). Drop the pre-branch
+            # constraint if an older table still has it, then ensure the index.
             await session.execute(
                 text(
-                    "DO $$ BEGIN "
-                    "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'task_lists_conversation_id_agent_id_key') THEN "
-                    "ALTER TABLE task_lists ADD CONSTRAINT task_lists_conversation_id_agent_id_key UNIQUE (conversation_id, agent_id); "
-                    "END IF; END $$"
+                    "ALTER TABLE task_lists "
+                    "DROP CONSTRAINT IF EXISTS task_lists_conversation_id_agent_id_key"
+                )
+            )
+            await session.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS task_lists_conv_agent_branch_key "
+                    "ON task_lists (conversation_id, agent_id, branch_id)"
                 )
             )
             await session.commit()
@@ -113,6 +121,7 @@ class PgTaskStore:
         agent_label: str = "",
         parent_agent_id: Optional[str] = None,
         max_retries: int = 3,
+        branch_id: str = "main",
     ) -> TaskList:
         from sqlalchemy import text
 
@@ -123,6 +132,7 @@ class PgTaskStore:
             agent_id=agent_id,
             agent_label=agent_label,
             parent_agent_id=parent_agent_id,
+            branch_id=branch_id,
             created_at=datetime.now(timezone.utc).isoformat(),
             tasks=[
                 Task(
@@ -140,9 +150,9 @@ class PgTaskStore:
                 text(
                     """
                     INSERT INTO task_lists
-                        (id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks)
-                    VALUES (:id, :cid, :aid, :alabel, :paid, :max_retries, CAST(:tasks AS jsonb))
-                    ON CONFLICT (conversation_id, agent_id) DO UPDATE
+                        (id, conversation_id, agent_id, agent_label, parent_agent_id, branch_id, max_retries, tasks)
+                    VALUES (:id, :cid, :aid, :alabel, :paid, :bid, :max_retries, CAST(:tasks AS jsonb))
+                    ON CONFLICT (conversation_id, agent_id, branch_id) DO UPDATE
                         SET id = EXCLUDED.id,
                             agent_label = EXCLUDED.agent_label,
                             parent_agent_id = EXCLUDED.parent_agent_id,
@@ -158,6 +168,7 @@ class PgTaskStore:
                     "aid": agent_id,
                     "alabel": agent_label,
                     "paid": parent_agent_id,
+                    "bid": branch_id,
                     "max_retries": max_retries,
                     "tasks": tasks_json,
                 },
@@ -186,30 +197,35 @@ class PgTaskStore:
             row = result.first()
         return _row_to_task_list(row) if row else None
 
-    async def get_by_conversation(self, conversation_id: str) -> Optional[TaskList]:
-        """Return the root (agent_id='') board, or the first board found."""
+    async def get_by_conversation(
+        self, conversation_id: str, branch_id: str = "main"
+    ) -> Optional[TaskList]:
+        """Return the root (agent_id='') board on ``branch_id``, or the first found."""
         from sqlalchemy import text
 
         async with self._factory() as session:
             result = await session.execute(
-                text(_SELECT_BY_CONV_AGENT), {"cid": conversation_id, "aid": ""}
+                text(_SELECT_BY_CONV_AGENT),
+                {"cid": conversation_id, "aid": "", "bid": branch_id},
             )
             row = result.first()
             if row:
                 return _row_to_task_list(row)
             # fallback: any board
             result2 = await session.execute(
-                text(_SELECT_ALL_BY_CONV), {"cid": conversation_id}
+                text(_SELECT_ALL_BY_CONV), {"cid": conversation_id, "bid": branch_id}
             )
             row2 = result2.first()
         return _row_to_task_list(row2) if row2 else None
 
-    async def get_boards_by_conversation(self, conversation_id: str) -> List[TaskList]:
+    async def get_boards_by_conversation(
+        self, conversation_id: str, branch_id: str = "main"
+    ) -> List[TaskList]:
         from sqlalchemy import text
 
         async with self._factory() as session:
             result = await session.execute(
-                text(_SELECT_ALL_BY_CONV), {"cid": conversation_id}
+                text(_SELECT_ALL_BY_CONV), {"cid": conversation_id, "bid": branch_id}
             )
             rows = result.fetchall()
         return [_row_to_task_list(r) for r in rows]
@@ -415,6 +431,7 @@ def _row_to_task_list(row: object) -> TaskList:
         agent_id=m.get("agent_id", ""),
         agent_label=m.get("agent_label", ""),
         parent_agent_id=m.get("parent_agent_id"),
+        branch_id=m.get("branch_id", "main"),
         created_at=(
             created.isoformat() if hasattr(created, "isoformat") else (created or "")
         ),

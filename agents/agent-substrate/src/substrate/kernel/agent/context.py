@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import Enum
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import Field, model_validator
 from typing_extensions import Self
@@ -26,6 +26,7 @@ class ContextWindow(KernelModel):
     estimated_tokens: int = 0
 
 
+@runtime_checkable
 class ContextBuilder(Protocol):
     """Assembles final LLM-ready prompt windows from resolved DAG nodes."""
 
@@ -42,6 +43,7 @@ class ContextBuilder(Protocol):
         ...
 
 
+@runtime_checkable
 class CompactionStrategy(Protocol):
     """Converts raw message history into a manageable LLM context window.
 
@@ -107,6 +109,7 @@ class CompactionResult(KernelModel):
         return self
 
 
+@runtime_checkable
 class CompactionCoordinator(Protocol):
     """Orchestrates phase-appropriate compaction strategies across agent execution lifecycles."""
 
@@ -119,6 +122,7 @@ class CompactionCoordinator(Protocol):
         ...
 
 
+@runtime_checkable
 class AgentContextProtocol(Protocol):
     """Structural protocol for the agent's runtime context.
 

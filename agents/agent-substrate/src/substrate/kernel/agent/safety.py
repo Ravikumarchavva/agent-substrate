@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Mapping, Protocol
+from typing import Mapping, Protocol, runtime_checkable
 
 
 class Severity(str, Enum):
@@ -66,6 +66,7 @@ class SafetyVerdict:
         return self.severity != Severity.NONE
 
 
+@runtime_checkable
 class TextSafetyClassifier(Protocol):
     """Implemented by capabilities/safety/text_classifier.py concrete
     classes. Sync, not async — CPU-bound ONNX inference, not I/O; callers
@@ -74,6 +75,7 @@ class TextSafetyClassifier(Protocol):
     def classify(self, text: str) -> SafetyVerdict: ...
 
 
+@runtime_checkable
 class ImageSafetyClassifier(Protocol):
     """Implemented by capabilities/safety/image_classifier.py."""
 

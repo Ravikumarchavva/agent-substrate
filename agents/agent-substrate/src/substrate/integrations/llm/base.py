@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
+from substrate.kernel.core.content import ContentBlock
 from substrate.kernel.llm import EmbeddingResult
 
 
@@ -36,6 +38,12 @@ class BaseEmbeddingClient:
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         res = await self.embed(texts)
         return res.embeddings
+
+    async def embed_blocks(self, blocks: Sequence[ContentBlock]) -> list[float]:
+        from substrate.kernel.core.content import content_blocks_to_str
+
+        text = content_blocks_to_str(blocks)
+        return await self.embed_single(text)
 
 
 __all__ = ["EmbeddingResult", "BaseEmbeddingClient"]

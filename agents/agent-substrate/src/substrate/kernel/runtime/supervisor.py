@@ -62,7 +62,7 @@ so the decision is replayable and auditable.
 
 from __future__ import annotations
 
-from typing import AsyncIterator, Protocol
+from typing import AsyncIterator, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -117,6 +117,7 @@ class RunResult(BaseModel):
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
 
+@runtime_checkable
 class SupervisorProtocol(Protocol):
     """Contract for agents to spawn, join, and cancel subagents.
 

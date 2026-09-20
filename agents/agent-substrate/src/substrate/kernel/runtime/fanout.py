@@ -25,7 +25,7 @@ The threshold and pull store are implementation concerns, not kernel concerns.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from substrate.kernel.core.identity import Topic
 from substrate.kernel.messaging.message import Message
@@ -33,6 +33,7 @@ from substrate.kernel.runtime.follow_graph import FollowGraph
 from substrate.kernel.runtime.inbox import InboxProtocol
 
 
+@runtime_checkable
 class FanoutStrategy(Protocol):
     """Contract for delivering an emitted message to all topic followers.
 

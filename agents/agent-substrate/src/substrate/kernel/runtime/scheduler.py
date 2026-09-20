@@ -37,7 +37,7 @@ and backpressure live here, not in the Gateway or Workers.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import AsyncIterator, Protocol
+from typing import AsyncIterator, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -88,6 +88,7 @@ class Lease(BaseModel):
     model_config = {"frozen": True}
 
 
+@runtime_checkable
 class SchedulerProtocol(Protocol):
     """Work-queue, leasing, and admission control for durable runs.
 

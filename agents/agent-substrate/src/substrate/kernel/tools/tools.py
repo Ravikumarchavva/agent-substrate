@@ -47,6 +47,7 @@ from typing import (
     Literal,
     Protocol,
     TypeGuard,
+    runtime_checkable,
 )
 
 from pydantic import BaseModel, Field
@@ -190,6 +191,7 @@ class ToolExecutionResult(PayloadBase):
 # ---------------------------------------------------------------------------
 
 
+@runtime_checkable
 class Tool(Protocol):
     """Contract every locally-executed tool must satisfy.
 
@@ -216,6 +218,7 @@ class Tool(Protocol):
 # ---------------------------------------------------------------------------
 
 
+@runtime_checkable
 class HostedTool(Protocol):
     """Contract for tools executed natively by the LLM provider.
 
@@ -252,6 +255,7 @@ class HostedTool(Protocol):
 # ---------------------------------------------------------------------------
 
 
+@runtime_checkable
 class ProviderDefinedTool(Protocol):
     """Contract for tools with provider-declared call shapes, locally executed.
 
@@ -323,6 +327,7 @@ def is_hosted_tool(tool: object) -> TypeGuard[HostedTool]:
 # ---------------------------------------------------------------------------
 
 
+@runtime_checkable
 class ToolRegistry(Protocol):
     """Contract for a name-keyed collection of AnyTool instances.
 

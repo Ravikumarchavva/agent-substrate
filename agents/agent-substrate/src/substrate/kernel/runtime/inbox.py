@@ -33,7 +33,7 @@ on failure ``nack(msg_id, error=...)`` → SchedulerProtocol re-enqueues wakeup.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -65,6 +65,7 @@ class DeadLetterEntry(BaseModel):
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
 
+@runtime_checkable
 class InboxProtocol(Protocol):
     """Durable per-agent mailbox.
 

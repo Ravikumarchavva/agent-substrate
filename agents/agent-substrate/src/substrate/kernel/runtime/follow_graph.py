@@ -27,12 +27,13 @@ that keeps the graph alive across restarts and provides the fan-out query
 
 from __future__ import annotations
 
-from typing import AsyncIterator, Protocol
+from typing import AsyncIterator, Protocol, runtime_checkable
 
 from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import Subscription
 
 
+@runtime_checkable
 class FollowGraph(Protocol):
     """Durable, queryable follow-graph between agents and topics.
 

@@ -209,6 +209,17 @@ class DataRefStore:
             effective_ttl = ttl if ttl is not None else ref.ttl_seconds
             await self._redis.expire(ref.key, effective_ttl)
 
+    async def exists(self, ref: DataRef) -> bool:
+        """Whether the ref's data is still present.
+
+        Redis-backed refs are checked against the key (TTL expiry removes it).
+        S3-backed refs have no per-object TTL here (``cleanup_expired`` sweeps
+        them), so they count as present while an S3 store is configured.
+        """
+        if ref.storage == "redis":
+            return self._redis is not None and bool(await self._redis.exists(ref.key))
+        return self._s3 is not None
+
     async def delete(self, ref: DataRef) -> None:
         """Manually remove data for a ref."""
         if ref.storage == "redis":
@@ -338,3 +349,14 @@ class DataRefArtifactStore:
         data_ref = self._refs.get(ref)
         if data_ref is not None:
             await self._store.unpin(data_ref)
+
+    async def exists(self, ref: str) -> bool:
+        data_ref = self._refs.get(ref)
+        return data_ref is not None and await self._store.exists(data_ref)
+
+    async def delete(self, ref: str) -> bool:
+        data_ref = self._refs.pop(ref, None)
+        if data_ref is None:
+            return False
+        await self._store.delete(data_ref)
+        return True

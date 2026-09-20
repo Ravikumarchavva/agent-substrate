@@ -14,12 +14,14 @@ no session affinity to route on.
 from __future__ import annotations
 from substrate.logger import setup_logging
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 import httpx2 as httpx
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
+    from substrate.kernel.core.content import ContentBlock
     from substrate.kernel.llm import EmbeddingResult
 
 logger = setup_logging()
@@ -167,6 +169,11 @@ class EmbeddingRerankerTextEmbeddingClient:
         if vec is None:
             raise RuntimeError("embedding-reranker service failed to embed text")
         return vec
+
+    async def embed_blocks(self, blocks: Sequence[ContentBlock]) -> list[float]:
+        from substrate.kernel.core.content import content_blocks_to_str
+
+        return await self.embed_single(content_blocks_to_str(blocks))
 
 
 __all__ = [

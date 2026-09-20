@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
 from pydantic import Field
@@ -54,6 +54,7 @@ class HistoryCheckpoint(KernelModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+@runtime_checkable
 class HistoryProvider(Protocol):
     """Durable DAG-based storage for an agent's conversation tree and branch heads."""
 
@@ -197,6 +198,7 @@ class HistoryProvider(Protocol):
         ...
 
 
+@runtime_checkable
 class HistoryResolver(Protocol):
     """Encapsulates graph traversal over a HistoryProvider."""
 
@@ -210,6 +212,7 @@ class HistoryResolver(Protocol):
         ...
 
 
+@runtime_checkable
 class CheckpointResolver(Protocol):
     """Locates checkpoints valid for a specific branch lineage."""
 

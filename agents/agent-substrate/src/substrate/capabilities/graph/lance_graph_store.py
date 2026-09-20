@@ -61,6 +61,15 @@ def _entities_schema():
     )
 
 
+def _sql_escape(value: str) -> str:
+    return value.replace("'", "''")
+
+
+def _scoped_id_filter(row_id: str, scope: str | None) -> str:
+    clause = f"id = '{_sql_escape(row_id)}'"
+    return f"{clause} AND {scope}" if scope else clause
+
+
 def _relationships_schema():
     import pyarrow as pa
 
@@ -160,7 +169,13 @@ class LanceGraphStore:
 
     # ── GraphStore Protocol ──────────────────────────────────────────────
 
-    async def add_entities(self, entities: list[Entity]) -> list[str]:
+    def _scope_filter(self, namespace: str) -> str | None:
+        """SQL filter for a per-call namespace; ``None`` = unscoped."""
+        return f"session_id = '{_sql_escape(namespace)}'" if namespace else None
+
+    async def add_entities(
+        self, entities: list[Entity], *, namespace: str = ""
+    ) -> list[str]:
         if not entities:
             return []
         table = await self._entities_table()
@@ -170,14 +185,16 @@ class LanceGraphStore:
                     "id": e.id,
                     "label": e.label,
                     "properties_json": json.dumps(e.properties),
-                    "session_id": self._session_id,
+                    "session_id": namespace or self._session_id,
                 }
                 for e in entities
             ]
         )
         return [e.id for e in entities]
 
-    async def add_relationships(self, relationships: list[Relationship]) -> list[str]:
+    async def add_relationships(
+        self, relationships: list[Relationship], *, namespace: str = ""
+    ) -> list[str]:
         if not relationships:
             return []
         table = await self._relationships_table()
@@ -190,7 +207,7 @@ class LanceGraphStore:
                     "target_id": r.target_id,
                     "type": r.type,
                     "properties_json": json.dumps(r.properties),
-                    "session_id": self._session_id,
+                    "session_id": namespace or self._session_id,
                 }
             )
         await table.add(rows)
@@ -202,13 +219,18 @@ class LanceGraphStore:
         *,
         depth: int = 1,
         relationship_types: list[str] | None = None,
+        namespace: str = "",
     ) -> SubGraph:
         import networkx as nx
 
         ent_table = await self._entities_table()
         rel_table = await self._relationships_table()
-        entity_rows = await ent_table.query().to_list()
-        rel_rows = await rel_table.query().to_list()
+        scope = self._scope_filter(namespace)
+        ent_query, rel_query = ent_table.query(), rel_table.query()
+        if scope:
+            ent_query, rel_query = ent_query.where(scope), rel_query.where(scope)
+        entity_rows = await ent_query.to_list()
+        rel_rows = await rel_query.to_list()
         if relationship_types:
             rel_rows = [r for r in rel_rows if r["type"] in relationship_types]
 
@@ -251,17 +273,21 @@ class LanceGraphStore:
             entities=tuple(found_entities), relationships=tuple(found_relationships)
         )
 
-    async def delete_entity(self, entity_id: str) -> bool:
+    async def delete_entity(self, entity_id: str, *, namespace: str = "") -> bool:
         table = await self._entities_table()
         before = await table.count_rows()
-        await table.delete(f"id = '{entity_id}'")
+        await table.delete(_scoped_id_filter(entity_id, self._scope_filter(namespace)))
         after = await table.count_rows()
         return after < before
 
-    async def delete_relationship(self, relationship_id: str) -> bool:
+    async def delete_relationship(
+        self, relationship_id: str, *, namespace: str = ""
+    ) -> bool:
         table = await self._relationships_table()
         before = await table.count_rows()
-        await table.delete(f"id = '{relationship_id}'")
+        await table.delete(
+            _scoped_id_filter(relationship_id, self._scope_filter(namespace))
+        )
         after = await table.count_rows()
         return after < before
 

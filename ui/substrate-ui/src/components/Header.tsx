@@ -172,14 +172,14 @@ export function Header({
                               <button
                                 type="button"
                                 onClick={handleCancelRename}
-                                className="px-2 py-0.5 rounded-md text-[11px] text-(--muted) hover:text-foreground hover:bg-background transition-colors cursor-pointer"
+                                className="inline-flex h-6 items-center justify-center px-2 rounded-md text-[11px] text-(--muted) hover:text-foreground hover:bg-background transition-colors cursor-pointer"
                               >
                                 Cancel
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleSaveRename(b.id)}
-                                className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-foreground text-background hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+                                className="inline-flex h-6 items-center justify-center px-2.5 rounded-md text-[11px] font-semibold bg-foreground text-background hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
                               >
                                 Save
                               </button>
@@ -235,14 +235,14 @@ export function Header({
                           <button
                             type="button"
                             onClick={(e) => handleStartRename(e, b)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-background text-(--muted) hover:text-foreground cursor-pointer"
+                            className="flex h-6 w-6 items-center justify-center rounded-md hover:bg-background text-(--muted) hover:text-foreground transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
                             title="Rename branch"
                           >
-                            <Pencil className="h-3 w-3" />
+                            <Pencil className="h-3.5 w-3.5 shrink-0" />
                           </button>
                           {isSelected && (
-                            <div className="w-5 h-5 flex items-center justify-center text-foreground shrink-0">
-                              <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                            <div className="flex h-6 w-6 items-center justify-center text-foreground shrink-0">
+                              <Check className="h-3.5 w-3.5 stroke-[2.5] shrink-0" />
                             </div>
                           )}
                         </div>

@@ -28,12 +28,12 @@ _FIXTURE = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
 
 
 def test_session_relative_path_extracts_the_rest_of_a_conversation_key():
-    key = "tenants/t1/users/u1/conversations/thread-abc/workspace/shared/invoice.pdf"
+    key = "tenants/t1/users/u1/conversations/thread-abc/branches/main/workspace/shared/invoice.pdf"
     assert _session_relative_path(key) == "invoice.pdf"
 
 
 def test_session_relative_path_handles_nested_rest():
-    key = "tenants/t1/users/u1/conversations/thread-abc/workspace/shared/sub/dir/invoice.pdf"
+    key = "tenants/t1/users/u1/conversations/thread-abc/branches/main/workspace/shared/sub/dir/invoice.pdf"
     assert _session_relative_path(key) == "sub/dir/invoice.pdf"
 
 
@@ -49,7 +49,7 @@ def test_session_relative_path_none_outside_the_shared_workspace():
     """Only `.../workspace/shared/` is bind-mounted into the sandbox (see
     code_interpreter/tool.py); version snapshots must not be handed out as
     workspace paths."""
-    key = "tenants/t1/users/u1/conversations/c1/workspace/versions/invoice.pdf/1.pdf"
+    key = "tenants/t1/users/u1/conversations/c1/branches/main/workspace/versions/invoice.pdf/1.pdf"
     assert _session_relative_path(key) is None
 
 
@@ -231,7 +231,7 @@ async def test_file_context_includes_thread_files_with_no_file_ids_this_turn(mon
     meta = _xlsx_meta(
         file_id,
         "data.xlsx",
-        f"tenants/t1/users/u1/conversations/{thread_id}/workspace/shared/uploads/data.xlsx",
+        f"tenants/t1/users/u1/conversations/{thread_id}/branches/main/workspace/shared/uploads/data.xlsx",
         1234,
     )
 
@@ -280,13 +280,13 @@ async def test_new_attachments_stays_narrow_while_model_context_stays_broad():
     old_meta = _xlsx_meta(
         old_file_id,
         "data.xlsx",
-        f"tenants/t1/users/u1/conversations/{thread_id}/workspace/shared/uploads/data.xlsx",
+        f"tenants/t1/users/u1/conversations/{thread_id}/branches/main/workspace/shared/uploads/data.xlsx",
         1234,
     )
     new_meta = _xlsx_meta(
         new_file_id,
         "second.xlsx",
-        f"tenants/t1/users/u1/conversations/{thread_id}/workspace/shared/uploads/second.xlsx",
+        f"tenants/t1/users/u1/conversations/{thread_id}/branches/main/workspace/shared/uploads/second.xlsx",
         1234,
     )
 
@@ -363,7 +363,7 @@ async def test_workspace_path_strips_conversation_prefix_for_nsjail_mode(monkeyp
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
 
     attachment = await _run_build_file_context_for_workspace_path(
-        "tenants/t1/users/u1/conversations/c1/workspace/shared/uploads/data.xlsx"
+        "tenants/t1/users/u1/conversations/c1/branches/main/workspace/shared/uploads/data.xlsx"
     )
     assert attachment["workspace_path"] == "/workspace/uploads/data.xlsx"
 
@@ -383,7 +383,7 @@ async def test_attachment_dict_includes_session_path_for_ui_to_open_the_file(
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
 
     attachment = await _run_build_file_context_for_workspace_path(
-        "tenants/t1/users/u1/conversations/c1/workspace/shared/uploads/data.xlsx"
+        "tenants/t1/users/u1/conversations/c1/branches/main/workspace/shared/uploads/data.xlsx"
     )
     assert attachment["session_path"] == "uploads/data.xlsx"
 
@@ -400,7 +400,7 @@ async def test_attachment_dict_omits_workspace_path_for_extractable_types():
     meta = _pdf_meta(
         file_id,
         "corrupt.pdf",
-        "tenants/t1/users/u1/conversations/c1/workspace/shared/uploads/corrupt.pdf",
+        "tenants/t1/users/u1/conversations/c1/branches/main/workspace/shared/uploads/corrupt.pdf",
         12,
     )
 
@@ -440,7 +440,7 @@ async def test_attachment_dict_still_sets_session_path_for_extractable_types():
     meta = _pdf_meta(
         file_id,
         "AAPL_2002.pdf",
-        "tenants/t1/users/u1/conversations/c1/workspace/shared/uploads/AAPL_2002.pdf",
+        "tenants/t1/users/u1/conversations/c1/branches/main/workspace/shared/uploads/AAPL_2002.pdf",
         12,
     )
 
@@ -485,10 +485,10 @@ async def test_workspace_path_strips_tenant_and_user_prefix_for_k8s_pvc_mode(
     )
 
     attachment = await _run_build_file_context_for_workspace_path(
-        "tenants/tenant-a/users/u1/conversations/t1/workspace/shared/data.xlsx"
+        "tenants/tenant-a/users/u1/conversations/t1/branches/main/workspace/shared/data.xlsx"
     )
     assert attachment["workspace_path"] == (
-        "/app/workspace/conversations/t1/workspace/shared/data.xlsx"
+        "/app/workspace/conversations/t1/branches/main/workspace/shared/data.xlsx"
     )
 
 
@@ -658,7 +658,7 @@ async def test_build_file_context_ingest_metadata_uses_real_session_path():
         file_id,
         "invoice.pdf",
         # uniquified basename
-        f"tenants/t1/users/u1/conversations/{thread_id}/workspace/shared/uploads/invoice-1.pdf",
+        f"tenants/t1/users/u1/conversations/{thread_id}/branches/main/workspace/shared/uploads/invoice-1.pdf",
         1234,
     )
 

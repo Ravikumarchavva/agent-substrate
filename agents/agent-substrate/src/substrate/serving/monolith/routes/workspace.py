@@ -4,7 +4,7 @@ tenant-scoped filesystem backing uploads and code-interpreter artifacts.
 Works against any file store that can enumerate a prefix — both
 ``WorkspaceFileStore`` (``FILE_STORE_BACKEND=local``, a filesystem tree) and
 ``S3FileStore`` (``=s3``, object storage keyed on the same
-``tenants/{tenant_id}/...`` layout, see ``capabilities/storage/layout.py``)
+``tenants/{tenant_id}/...`` layout, see ``agents/workspace/layout.py``)
 qualify. Stores that can't, like ``InMemoryFileStore``, 501 here.
 
 Routes:
@@ -27,7 +27,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.capabilities.storage.workspace import WorkspacePathError
-from substrate.capabilities.storage.layout import (
+from substrate.agents.workspace.layout import (
     conversation_shared_key,
     conversation_workspace_prefix,
     user_prefix,
@@ -110,16 +110,17 @@ def _require_workspace_store(ctx: ServerDependencies) -> _WorkspaceCapableStore:
 
 def _is_conversation_shared_key(key: str) -> bool:
     """True only for an actual conversation file under
-    ``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/shared/...``.
+    ``tenants/{tid}/users/{uid}/conversations/{cid}/branches/{bid}/workspace/shared/...``.
     """
     parts = key.split("/")
     return (
-        len(parts) >= 9
+        len(parts) >= 11
         and parts[0] == "tenants"
         and parts[2] == "users"
         and parts[4] == "conversations"
-        and parts[6] == "workspace"
-        and parts[7] == "shared"
+        and parts[6] == "branches"
+        and parts[8] == "workspace"
+        and parts[9] == "shared"
     )
 
 
@@ -151,7 +152,7 @@ def _is_listable_workspace_key(key: str) -> bool:
 
 def _is_version_key(key: str) -> bool:
     """True for a snapshot under
-    ``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/versions/...``.
+    ``tenants/{tid}/users/{uid}/conversations/{cid}/branches/{bid}/workspace/versions/...``.
 
     Anchored at that fixed position rather than matching ``/versions/``
     anywhere: a conversation could otherwise have its own real ``versions``
@@ -159,18 +160,19 @@ def _is_version_key(key: str) -> bool:
     """
     parts = key.split("/")
     return (
-        len(parts) >= 8
+        len(parts) >= 10
         and parts[0] == "tenants"
         and parts[2] == "users"
         and parts[4] == "conversations"
-        and parts[6] == "workspace"
-        and parts[7] == VERSIONS_DIR
+        and parts[6] == "branches"
+        and parts[8] == "workspace"
+        and parts[9] == VERSIONS_DIR
     )
 
 
 def _session_id_from_key(key: str) -> str | None:
     parts = key.split("/")
-    # tenants/{tid}/users/{uid}/conversations/{thread_id}/workspace/...
+    # tenants/{tid}/users/{uid}/conversations/{thread_id}/branches/{bid}/...
     if len(parts) >= 6 and parts[0] == "tenants" and parts[2] == "users" and parts[4] == "conversations":
         return parts[5]
     return None

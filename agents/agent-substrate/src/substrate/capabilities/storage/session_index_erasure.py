@@ -32,7 +32,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from substrate.capabilities.storage.layout import user_index_prefix
+from substrate.agents.workspace.layout import user_index_prefix
 
 
 async def _drop_lance_namespace(db: Any, namespace_path: list[str]) -> int:

@@ -52,7 +52,7 @@ class SandboxSpec:
     Exactly one of ``code`` (Python source) or ``argv`` (a shell command, already
     split) is set — the tool enforces that. ``session_dir`` is the *store-relative*
     key (``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/shared`` —
-    see ``capabilities/storage/layout.py``'s ``conversation_workspace_prefix``);
+    see ``agents/workspace/layout.py``'s ``conversation_workspace_prefix``);
     runtimes resolve it against their own root, so a runtime is never handed
     a host path it must trust.
     """

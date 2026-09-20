@@ -11,11 +11,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from substrate.agents.storage.tasks import (
-    current_tenant_id,
-    current_thread_id,
-    current_user_id,
-)
+from substrate.agents.storage.tasks import current_thread_id
+from substrate.agents.workspace.scope import current_tenant_id, current_user_id
 from substrate.capabilities.knowledge.backends.local import LocalRagBackend
 from substrate.capabilities.knowledge.pipeline import RAGPipeline
 from substrate.capabilities.knowledge.session_ingest import ingest_session_document

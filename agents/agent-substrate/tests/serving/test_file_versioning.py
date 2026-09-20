@@ -61,10 +61,13 @@ async def db(database_url: str):
 
 def _key() -> str:
     # Unique canonical key per test so rows never collide across runs —
-    # the real tenants/{t}/users/{u}/conversations/{c}/workspace/shared/...
-    # shape, so these lineage tests exercise the same _version_key branch
-    # production traffic does.
-    return f"tenants/tenant-a/users/u1/conversations/{uuid.uuid4().hex}/workspace/shared/report.xlsx"
+    # the real tenants/{t}/users/{u}/conversations/{c}/branches/{b}/workspace/
+    # shared/... shape, so these lineage tests exercise the same
+    # _version_key branch production traffic does.
+    return (
+        f"tenants/tenant-a/users/u1/conversations/{uuid.uuid4().hex}"
+        "/branches/main/workspace/shared/report.xlsx"
+    )
 
 
 async def _cleanup(db: AsyncSession, key: str) -> None:
@@ -78,9 +81,10 @@ async def _cleanup(db: AsyncSession, key: str) -> None:
 
 
 def test_version_key_layout():
-    key = "tenants/tenant-a/users/u1/conversations/t1/workspace/shared/report.xlsx"
+    key = "tenants/tenant-a/users/u1/conversations/t1/branches/main/workspace/shared/report.xlsx"
     assert _version_key(key, 3) == (
-        "tenants/tenant-a/users/u1/conversations/t1/workspace/versions/report.xlsx/3.xlsx"
+        "tenants/tenant-a/users/u1/conversations/t1/branches/main/workspace"
+        "/versions/report.xlsx/3.xlsx"
     )
 
 
@@ -89,34 +93,42 @@ def test_version_key_is_a_sibling_of_shared_not_nested_inside_it():
     enumerated as the user's files (routes/workspace.py::list_files) — a
     snapshot living inside it would be sandbox-reachable and show up as a
     "file". `versions/` must be a sibling of `shared/`, never nested under it."""
-    key = "tenants/tenant-a/users/u1/conversations/t1/workspace/shared/report.xlsx"
+    key = "tenants/tenant-a/users/u1/conversations/t1/branches/main/workspace/shared/report.xlsx"
     version_key = _version_key(key, 1)
     assert "/workspace/shared/" not in version_key
-    assert version_key.startswith("tenants/tenant-a/users/u1/conversations/t1/workspace/versions/")
+    assert version_key.startswith(
+        "tenants/tenant-a/users/u1/conversations/t1/branches/main/workspace/versions/"
+    )
 
 
 def test_version_key_has_no_hidden_path_segment():
     """A dot-prefixed segment is invisible to SeaweedFS's S3 LIST, which
     silently excluded snapshots from per-user usage totals."""
-    key = "tenants/tenant-a/users/u1/conversations/t1/workspace/shared/report.xlsx"
+    key = "tenants/tenant-a/users/u1/conversations/t1/branches/main/workspace/shared/report.xlsx"
     assert not any(part.startswith(".") for part in _version_key(key, 1).split("/"))
 
 
 def test_version_key_handles_nested_relative_paths():
     """The whole relative path below workspace/shared/ is preserved, so the
     mapping is total rather than flattening subfolders."""
-    key = "tenants/tenant-a/users/u1/conversations/t1/workspace/shared/notes/draft.md"
+    key = (
+        "tenants/tenant-a/users/u1/conversations/t1/branches/main/workspace"
+        "/shared/notes/draft.md"
+    )
     assert _version_key(key, 2) == (
-        "tenants/tenant-a/users/u1/conversations/t1/workspace/versions/notes/draft.md/2.md"
+        "tenants/tenant-a/users/u1/conversations/t1/branches/main/workspace"
+        "/versions/notes/draft.md/2.md"
     )
 
 
 def test_version_keys_of_same_name_in_different_threads_do_not_collide():
     a = _version_key(
-        "tenants/tenant-a/users/u1/conversations/t1/workspace/shared/report.xlsx", 1
+        "tenants/tenant-a/users/u1/conversations/t1/branches/main/workspace/shared/report.xlsx",
+        1,
     )
     b = _version_key(
-        "tenants/tenant-a/users/u1/conversations/t2/workspace/shared/report.xlsx", 1
+        "tenants/tenant-a/users/u1/conversations/t2/branches/main/workspace/shared/report.xlsx",
+        1,
     )
     assert a != b
 

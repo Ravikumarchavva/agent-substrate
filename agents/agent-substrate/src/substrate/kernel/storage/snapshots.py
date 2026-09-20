@@ -1,9 +1,18 @@
-"""Workspace snapshots and manifest authority protocols."""
+"""Workspace snapshots and manifest authority protocols.
+
+Content addressing follows the git/restic/Xet lineage: whole-file sha256
+today, with a tagged ``ContentRef.kind`` as the one deliberate seam for
+content-defined chunking later. Everything else CDC needs (a chunk list
+type, a size threshold) can be added without touching any already-stored
+manifest, because readers dispatch on ``kind`` — but only if no caller ever
+assumes ``hash`` is a whole-file digest. It is, today; that assumption must
+stay confined to the ``kind == "blob"`` branch.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
 from pydantic import Field, model_validator
@@ -12,17 +21,42 @@ from typing_extensions import Self
 from substrate.kernel.core.content import JsonObject, KernelModel
 
 
+class ContentRef(KernelModel):
+    """A reference to content in a blob CAS.
+
+    ``kind`` is the content-defined-chunking escape hatch: v1 only ever
+    produces ``"blob"`` (``hash`` = sha256 of the whole file). A future
+    ``"chunked"`` kind would point ``hash`` at a chunk-list object instead —
+    a new variant, not a format break, because every reader already
+    dispatches on ``kind`` rather than assuming what ``hash`` addresses.
+    """
+
+    kind: Literal["blob", "chunked"] = "blob"
+    hash: str
+    size_bytes: int
+
+
 class WorkspaceFileEntry(KernelModel):
     """File metadata stored in a workspace manifest."""
 
     path: str
-    content_hash: str
-    size_bytes: int
+    content: ContentRef
+    mode: int = 0o644
     metadata: JsonObject = Field(default_factory=dict)
 
 
 class WorkspaceManifest(KernelModel):
-    """Manifest mapping paths to file records in an isolated workspace snapshot."""
+    """Manifest mapping paths to file records in an isolated workspace snapshot.
+
+    ``files`` must be canonically ordered — insertion order sorted by path —
+    whenever a manifest is constructed for hashing or diffing. This is what
+    keeps two manifests with the same content producing the same
+    serialization (dedup) and what keeps a future diff O(changed files)
+    instead of O(all files): a linear merge of two sorted lists. Nothing
+    enforces this at the type level today (a plain ``dict`` preserves
+    insertion order, not sort order) — callers that build a manifest must
+    sort ``files`` by key before constructing one.
+    """
 
     files: dict[str, WorkspaceFileEntry] = Field(default_factory=dict)
     metadata: JsonObject = Field(default_factory=dict)
@@ -97,6 +131,7 @@ class WorkspaceStore(Protocol):
 
 
 __all__ = [
+    "ContentRef",
     "WorkspaceFileEntry",
     "WorkspaceManifest",
     "WorkspaceSnapshot",

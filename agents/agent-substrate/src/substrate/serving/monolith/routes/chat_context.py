@@ -56,12 +56,12 @@ EXTRACTABLE_CONTENT_TYPES = (
 
 
 def _session_relative_path(object_key: str) -> str | None:
-    """``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/shared/{rest}``
+    """``tenants/{tid}/users/{uid}/conversations/{cid}/branches/{bid}/workspace/shared/{rest}``
     → ``rest``, or ``None`` if *object_key* isn't a conversation-scoped
     upload (e.g. a bare user-scoped ``tenants/{tid}/users/{uid}/artifacts/...``
     key with no ``conversations/`` segment).
 
-    Must stay in step with ``capabilities/storage/layout.py`` —
+    Must stay in step with ``agents/workspace/layout.py`` —
     ``conversation_shared_key`` builds exactly the keys parsed here, and
     ``code_interpreter/tool.py`` mounts that same ``.../workspace/shared``
     prefix at the sandbox's ``/workspace``, so ``rest`` is the path the
@@ -75,16 +75,17 @@ def _session_relative_path(object_key: str) -> str | None:
     ``_unique_object_key`` (``routes/files.py``) appended a uniquifying
     suffix.
     """
-    parts = object_key.split("/", 8)
+    parts = object_key.split("/", 10)
     if (
-        len(parts) == 9
+        len(parts) == 11
         and parts[0] == "tenants"
         and parts[2] == "users"
         and parts[4] == "conversations"
-        and parts[6] == "workspace"
-        and parts[7] == "shared"
+        and parts[6] == "branches"
+        and parts[8] == "workspace"
+        and parts[9] == "shared"
     ):
-        return parts[8]
+        return parts[10]
     return None
 
 
@@ -235,9 +236,9 @@ async def _build_file_context(
                 # The k8s pod's PVC subPath is `tenants/{tid}/users/{uid}`
                 # (sandbox_service.py::_ensure_user_template), so a path inside
                 # the pod is whatever follows that prefix in the object key —
-                # `conversations/{cid}/workspace/shared/{name}` for a real
-                # conversation file. Anchored at fixed positions, matching
-                # every other new-shape parser in this codebase (see
+                # `conversations/{cid}/branches/{bid}/workspace/shared/{name}`
+                # for a real conversation file. Anchored at fixed positions,
+                # matching every other new-shape parser in this codebase (see
                 # routes/workspace.py's _is_version_key/_session_id_from_key).
                 parts = meta.object_key.split("/")
                 if len(parts) >= 5 and parts[0] == "tenants" and parts[2] == "users":

@@ -32,7 +32,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.capabilities.storage.layout import conversation_version_key
+from substrate.agents.workspace.layout import conversation_version_key
 from substrate.serving.monolith.models import FileVersion
 
 # Per-user snapshot prefix, a sibling of `sessions/` and `uploads/` rather than
@@ -46,9 +46,9 @@ def sha256_hex(data: bytes) -> str:
 
 
 def _version_key(object_key: str, seq: int) -> str:
-    """``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/shared/{path}``
-    → ``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/versions/{path}/{seq}.ext``
-    — a sibling of ``shared/`` (see ``capabilities/storage/layout.py``'s
+    """``tenants/{tid}/users/{uid}/conversations/{cid}/branches/{bid}/workspace/shared/{path}``
+    → ``.../branches/{bid}/workspace/versions/{path}/{seq}.ext``
+    — a sibling of ``shared/`` (see ``agents/workspace/layout.py``'s
     ``conversation_version_key``), never nested inside it: ``shared/`` is
     bind-mounted into the code-interpreter sandbox and enumerated as the
     user's files (``routes/workspace.py::list_files``), so a snapshot
@@ -63,25 +63,27 @@ def _version_key(object_key: str, seq: int) -> str:
     """
     p = PurePosixPath(object_key)
     parts = p.parts
-    # tenants/<tenant>/users/<user>/conversations/<thread>/workspace/shared/<path>
+    # tenants/<tenant>/users/<user>/conversations/<thread>/branches/<branch>/workspace/shared/<path>
     if (
-        len(parts) >= 9
+        len(parts) >= 11
         and parts[0] == "tenants"
         and parts[2] == "users"
         and parts[4] == "conversations"
-        and parts[6] == "workspace"
-        and parts[7] == "shared"
+        and parts[6] == "branches"
+        and parts[8] == "workspace"
+        and parts[9] == "shared"
     ):
-        tenant_id, user_id, conversation_id = parts[1], parts[3], parts[5]
-        rel_path = str(PurePosixPath(*parts[8:]))
-        base = conversation_version_key(tenant_id, user_id, conversation_id, rel_path)
-        return f"{base}/{seq}{p.suffix}"
-    if len(parts) >= 3 and parts[0] == "users":
-        owner = parts[1]
-        rest = PurePosixPath(*parts[2:])
-        return str(
-            PurePosixPath("users") / owner / VERSIONS_DIR / rest / f"{seq}{p.suffix}"
+        tenant_id, user_id, conversation_id, branch_id = (
+            parts[1],
+            parts[3],
+            parts[5],
+            parts[7],
         )
+        rel_path = str(PurePosixPath(*parts[10:]))
+        base = conversation_version_key(
+            tenant_id, user_id, conversation_id, rel_path, branch_id
+        )
+        return f"{base}/{seq}{p.suffix}"
     return str(p.parent / VERSIONS_DIR / p.name / f"{seq}{p.suffix}")
 
 

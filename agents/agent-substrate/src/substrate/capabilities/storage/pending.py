@@ -28,7 +28,7 @@ class PendingFileStore:
 
     *key* is the same value used for the eventual ``object_key`` — a
     server-constructed ``tenants/{tid}/...`` path (see
-    ``capabilities/storage/layout.py``), never client-supplied, so it's
+    ``agents/workspace/layout.py``), never client-supplied, so it's
     safe to use directly as a relative filesystem path.
     """
 

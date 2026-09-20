@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from substrate.capabilities.storage.layout import user_index_prefix
+from substrate.agents.workspace.layout import user_index_prefix
 from substrate.capabilities.storage.session_index_erasure import (
     erase_session_index,
     erase_session_index_for_tenant,

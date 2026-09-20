@@ -32,6 +32,9 @@ from substrate.agents.storage.tasks import (
     current_agent_id as _task_agent_id,
     current_agent_label as _task_agent_label,
     current_parent_agent_id as _task_parent_agent_id,
+)
+from substrate.agents.workspace.scope import (
+    current_branch_id as _workspace_branch_id,
     current_user_id as _task_user_id,
 )
 from substrate.agents.core._loop import (
@@ -135,6 +138,7 @@ class OrchestratorAgent:
         spawn_tracker = SpawnTracker(self._spawn_budget)
 
         branch_id = msg.metadata.get("branch_id") or "main"
+        _workspace_branch_id.set(branch_id)
         history_messages = await load_history(
             self._context, session_id, branch_id=branch_id
         )

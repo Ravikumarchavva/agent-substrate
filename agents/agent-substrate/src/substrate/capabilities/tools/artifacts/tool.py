@@ -15,11 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from substrate.agents.storage.tasks import (
-    current_tenant_id,
-    current_thread_id,
-    current_user_id,
-)
+from substrate.agents.storage.tasks import current_thread_id
+from substrate.agents.workspace.scope import current_tenant_id, current_user_id
 from substrate.capabilities.artifacts.store import ArtifactStore
 from substrate.kernel import TextBlock
 from substrate.kernel.tools import ToolExecutionResult, ToolType

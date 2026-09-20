@@ -79,7 +79,7 @@ async def test_list_storage_tenants_and_conversations(tmp_path) -> None:
 
         # c1 and c2 belong to different users under the same tenant —
         # conversations nest under their owning user, not the tenant
-        # directly (capabilities/storage/layout.py), so the drill-down must
+        # directly (agents/workspace/layout.py), so the drill-down must
         # walk every user directory, not a single tenant-level
         # "conversations/" that no longer exists.
         await store.upload(

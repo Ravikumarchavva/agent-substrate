@@ -31,7 +31,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.capabilities.storage.layout import conversation_shared_key, user_prefix
+from substrate.agents.workspace.layout import conversation_shared_key, user_upload_key
 from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
 from substrate.integrations.llm.endpoint import InferenceEndpoint
 from substrate.logger import setup_logging
@@ -579,7 +579,7 @@ async def upload_file(
     Object keys are scoped by tenant, user, and thread (when given):
     ``tenants/{tid}/users/{uid}/conversations/{thread_id}/workspace/shared/
     uploads/{name}`` or, with no thread, ``tenants/{tid}/users/{uid}/
-    uploads/{name}`` — see ``capabilities/storage/layout.py``. This is the
+    uploads/{name}`` — see ``agents/workspace/layout.py``. This is the
     same prefix the code interpreter's sandbox mounts for that thread, so a
     thread-scoped upload lands exactly where that thread's sandbox session
     can see it.
@@ -675,9 +675,7 @@ async def upload_file(
             claims.tenant_id, claims.sub, str(thread_id), f"uploads/{original_name}"
         )
     else:
-        base_key = (
-            f"{user_prefix(claims.tenant_id, claims.sub)}/uploads/{original_name}"
-        )
+        base_key = user_upload_key(claims.tenant_id, claims.sub, original_name)
     object_key = await _unique_object_key(db, base_key)
 
     if thread_id is not None:

@@ -127,7 +127,7 @@ def test_ensure_user_template_subpath_matches_the_real_object_key_prefix(
     """Regression test: the subPath used to omit the tenant segment
     (`users/{uid}` instead of `tenants/{tid}/users/{uid}`), which doesn't
     match any real object key — every key built by
-    capabilities/storage/layout.py starts with `tenants/{tid}/`."""
+    agents/workspace/layout.py starts with `tenants/{tid}/`."""
     svc, fake_api = service
     svc._ensure_user_template("user-42", "tenant-a")
     body = fake_api.created[0]

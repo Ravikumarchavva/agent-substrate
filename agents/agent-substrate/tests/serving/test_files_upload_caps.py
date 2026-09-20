@@ -343,7 +343,10 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
         call
         for call in ctx.pending_file_store.upload.call_args_list
         if call.args[0]
-        == f"tenants/test-tenant/users/test-user/conversations/{_THREAD_ID}/workspace/shared/uploads/doc.pdf.extracted.md"
+        == (
+            f"tenants/test-tenant/users/test-user/conversations/{_THREAD_ID}"
+            "/branches/main/workspace/shared/uploads/doc.pdf.extracted.md"
+        )
     ]
     assert len(sidecar_calls) == 1
     sidecar_text = sidecar_calls[0].args[1].decode("utf-8")

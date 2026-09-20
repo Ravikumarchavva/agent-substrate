@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol, Sequence
+from typing import Protocol, Sequence, runtime_checkable
 
 
 class TaskStatus(StrEnum):
@@ -49,6 +49,9 @@ class TaskList:
     agent_id: str = ""
     agent_label: str = ""
     parent_agent_id: str | None = None
+    # Which conversation branch this board belongs to. A speculative branch
+    # gets its own boards, so abandoning it never touches the "main" board.
+    branch_id: str = "main"
     # ISO-8601 creation time — lets a UI anchor the board to the turn that
     # created it (stable, unlike updated_at which moves on every status change).
     created_at: str = ""
@@ -61,6 +64,7 @@ class TaskList:
             "agent_id": self.agent_id,
             "agent_label": self.agent_label,
             "parent_agent_id": self.parent_agent_id,
+            "branch_id": self.branch_id,
             "created_at": self.created_at,
             "tasks": [
                 {
@@ -77,6 +81,7 @@ class TaskList:
         }
 
 
+@runtime_checkable
 class TaskStore(Protocol):
     """Durable storage for per-agent Kanban boards, scoped by conversation."""
 
@@ -89,20 +94,25 @@ class TaskStore(Protocol):
         agent_label: str = "",
         parent_agent_id: str | None = None,
         max_retries: int = 3,
+        branch_id: str = "main",
     ) -> TaskList:
-        """Create (or replace) the board for (conversation_id, agent_id)."""
+        """Create (or replace) the board for (conversation_id, agent_id, branch_id)."""
         ...
 
     async def get_task_list(self, task_list_id: str) -> TaskList | None:
         """Fetch a board by its own id."""
         ...
 
-    async def get_by_conversation(self, conversation_id: str) -> TaskList | None:
-        """Return the first/primary board for a conversation (backwards compat)."""
+    async def get_by_conversation(
+        self, conversation_id: str, branch_id: str = "main"
+    ) -> TaskList | None:
+        """Return the primary board for a conversation's ``branch_id``."""
         ...
 
-    async def get_boards_by_conversation(self, conversation_id: str) -> list[TaskList]:
-        """Return all agent boards for a conversation (including subagents)."""
+    async def get_boards_by_conversation(
+        self, conversation_id: str, branch_id: str = "main"
+    ) -> list[TaskList]:
+        """Return all agent boards (including subagents) on one branch."""
         ...
 
     async def update_status(

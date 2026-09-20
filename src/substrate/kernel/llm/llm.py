@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, AsyncIterator, Protocol
+from typing import TYPE_CHECKING, AsyncIterator, Protocol, runtime_checkable
 
 from substrate.kernel.core.content import ChatMessage, ContentBlock, TextBlock
 from substrate.kernel.messaging.stream import CompletionEvent, ReasoningDelta, TextDelta
@@ -57,6 +58,7 @@ class GenerationOptions:
     extra: dict = field(default_factory=dict)
 
 
+@runtime_checkable
 class LLMClient(Protocol):
     """Contract every LLM provider adapter must satisfy."""
 
@@ -102,12 +104,15 @@ class EmbeddingResult:
     usage_tokens: int = 0
 
 
+@runtime_checkable
 class EmbeddingClient(Protocol):
     """Contract every embedding provider adapter must satisfy."""
 
     async def embed(self, texts: list[str]) -> EmbeddingResult: ...
 
     async def embed_single(self, text: str) -> list[float]: ...
+
+    async def embed_blocks(self, blocks: Sequence[ContentBlock]) -> list[float]: ...
 
 
 __all__ = [

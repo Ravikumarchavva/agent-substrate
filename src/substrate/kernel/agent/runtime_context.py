@@ -19,12 +19,13 @@ from __future__ import annotations
 import uuid as _uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Awaitable, Callable, Protocol
+from typing import Awaitable, Callable, Protocol, runtime_checkable
 
 from substrate.kernel.exceptions import CancellationError
 from substrate.kernel.agent.supervision import Supervision
 
 
+@runtime_checkable
 class CancellationToken(Protocol):
     """Cooperative cancellation signal for agent operations.
 

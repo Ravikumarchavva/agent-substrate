@@ -48,6 +48,7 @@ from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 
 
+@runtime_checkable
 class AgentRunContext(Protocol):
     """Kernel-visible slice of RunContext (L1).
 

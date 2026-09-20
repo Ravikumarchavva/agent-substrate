@@ -22,7 +22,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
 from substrate.kernel.core.content import (
     ContentBlock,
@@ -298,6 +298,7 @@ class ContextMemoryInjection:
 # ---------------------------------------------------------------------------
 
 
+@runtime_checkable
 class ShortTermMemory(Protocol):
     """Key-value state that persists across runs within one session.
 
@@ -333,6 +334,7 @@ class ShortTermMemory(Protocol):
 # ---------------------------------------------------------------------------
 
 
+@runtime_checkable
 class MemoryStore(Protocol):
     """The canonical durable memory storage contract.
 

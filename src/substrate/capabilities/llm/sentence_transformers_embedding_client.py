@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Sequence
 
+from substrate.kernel.core.content import ContentBlock
 from substrate.kernel.llm import EmbeddingResult
 
 logger = logging.getLogger(__name__)
@@ -82,3 +84,9 @@ class SentenceTransformersEmbeddingClient:
     async def embed_single(self, text: str) -> list[float]:
         result = await self.embed([text])
         return result.embeddings[0]
+
+    async def embed_blocks(self, blocks: Sequence[ContentBlock]) -> list[float]:
+        from substrate.kernel.core.content import content_blocks_to_str
+
+        text = content_blocks_to_str(blocks)
+        return await self.embed_single(text)

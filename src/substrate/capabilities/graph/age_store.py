@@ -44,6 +44,21 @@ def _escape_props(props: dict[str, Any]) -> str:
     return "{" + ", ".join(parts) + "}" if parts else "{}"
 
 
+def _ns_prop(namespace: str) -> dict[str, str]:
+    """The tag a namespaced write carries; nothing for the unscoped default."""
+    return {"_ns": namespace} if namespace else {}
+
+
+def _ns_match(namespace: str) -> str:
+    return _escape_props(_ns_prop(namespace)) if namespace else ""
+
+
+def _match_props(row_id: str, namespace: str) -> str:
+    """Cypher property map matching ``_id`` and, when scoped, ``_ns``."""
+    props = {"_id": row_id, **_ns_prop(namespace)}
+    return _escape_props(props)
+
+
 class AGEGraphStore:
     """Apache AGE (PostgreSQL graph extension) store.
 
@@ -120,21 +135,26 @@ class AGEGraphStore:
             rows = await conn.fetch(sql)
             return [dict(row) for row in rows]
 
-    async def add_entities(self, entities: list[Entity]) -> list[str]:
+    async def add_entities(
+        self, entities: list[Entity], *, namespace: str = ""
+    ) -> list[str]:
         ids: list[str] = []
         for entity in entities:
-            props = {**entity.properties, "_id": entity.id}
+            props = {**entity.properties, "_id": entity.id, **_ns_prop(namespace)}
             cypher = f"CREATE (n:{entity.label} {_escape_props(props)}) RETURN n"
             await self._execute_cypher(cypher)
             ids.append(entity.id)
         return ids
 
-    async def add_relationships(self, relationships: list[Relationship]) -> list[str]:
+    async def add_relationships(
+        self, relationships: list[Relationship], *, namespace: str = ""
+    ) -> list[str]:
         ids: list[str] = []
         for rel in relationships:
-            props = {**rel.properties, "_id": rel.id}
+            props = {**rel.properties, "_id": rel.id, **_ns_prop(namespace)}
             cypher = (
-                f"MATCH (a {{_id: '{rel.source_id}'}}), (b {{_id: '{rel.target_id}'}}) "
+                f"MATCH (a {_match_props(rel.source_id, namespace)}), "
+                f"(b {_match_props(rel.target_id, namespace)}) "
                 f"CREATE (a)-[r:{rel.type} {_escape_props(props)}]->(b) "
                 f"RETURN r"
             )
@@ -170,13 +190,15 @@ class AGEGraphStore:
         *,
         depth: int = 1,
         relationship_types: Optional[list[str]] = None,
+        namespace: str = "",
     ) -> SubGraph:
         rel_filter = ""
         if relationship_types:
             rel_filter = ":" + "|".join(relationship_types)
 
         cypher = (
-            f"MATCH (a {{_id: '{entity_id}'}})-[r{rel_filter}*1..{depth}]-(b) "
+            f"MATCH (a {_match_props(entity_id, namespace)})"
+            f"-[r{rel_filter}*1..{depth}]-(b {_ns_match(namespace)}) "
             f"RETURN a, r, b"
         )
 
@@ -217,8 +239,11 @@ class AGEGraphStore:
             relationships=tuple(relationships),
         )
 
-    async def delete_entity(self, entity_id: str) -> bool:
-        cypher = f"MATCH (n {{_id: '{entity_id}'}}) DETACH DELETE n RETURN count(n)"
+    async def delete_entity(self, entity_id: str, *, namespace: str = "") -> bool:
+        cypher = (
+            f"MATCH (n {_match_props(entity_id, namespace)}) "
+            f"DETACH DELETE n RETURN count(n)"
+        )
         try:
             result = await self._execute_cypher(cypher)
             return bool(result)
@@ -226,9 +251,12 @@ class AGEGraphStore:
             logger.warning("Delete entity failed for %s", entity_id, exc_info=True)
             return False
 
-    async def delete_relationship(self, relationship_id: str) -> bool:
+    async def delete_relationship(
+        self, relationship_id: str, *, namespace: str = ""
+    ) -> bool:
         cypher = (
-            f"MATCH ()-[r {{_id: '{relationship_id}'}}]-() DELETE r RETURN count(r)"
+            f"MATCH ()-[r {_match_props(relationship_id, namespace)}]-() "
+            f"DELETE r RETURN count(r)"
         )
         try:
             result = await self._execute_cypher(cypher)

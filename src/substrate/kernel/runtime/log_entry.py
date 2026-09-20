@@ -37,7 +37,7 @@ Standard ``kind`` values
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import AsyncIterator, Protocol
+from typing import AsyncIterator, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -62,6 +62,7 @@ class RunLogEntry(BaseModel):
     model_config = {"frozen": True}
 
 
+@runtime_checkable
 class EventLogProtocol(Protocol):
     """Append-only, ordered log of ``RunLogEntry`` objects per run.
 

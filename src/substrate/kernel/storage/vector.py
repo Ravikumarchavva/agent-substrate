@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
 from substrate.kernel.core.content import ContentBlock, TextBlock, content_blocks_to_str
 
@@ -86,6 +86,7 @@ class SearchResult:
         return content_blocks_to_str(self.content)
 
 
+@runtime_checkable
 class VectorStore(Protocol):
     """Contract every vector store adapter must satisfy."""
 

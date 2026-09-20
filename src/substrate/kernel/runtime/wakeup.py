@@ -25,7 +25,7 @@ Implementations must honour this coalescing guarantee.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Protocol
+from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -61,6 +61,7 @@ class Wakeup(BaseModel):
     model_config = {"frozen": True}
 
 
+@runtime_checkable
 class SignalBusProtocol(Protocol):
     """Contract for sending named signals and timers to suspended runs.
 

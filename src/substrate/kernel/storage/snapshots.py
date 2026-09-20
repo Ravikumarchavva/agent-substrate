@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
 from pydantic import Field, model_validator
@@ -52,6 +52,7 @@ class WorkspaceSnapshot(KernelModel):
         return self
 
 
+@runtime_checkable
 class WorkspaceStore(Protocol):
     """Storage protocol for branch-isolated workspace snapshot trees."""
 

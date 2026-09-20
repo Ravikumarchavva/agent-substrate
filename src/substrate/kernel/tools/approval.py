@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from substrate.kernel.core.content import JsonObject
 from substrate.kernel.core.identity import Actor
@@ -71,6 +71,7 @@ class ApprovalResult:
     modified_args: JsonObject | None = None
 
 
+@runtime_checkable
 class ApprovalHandler(Protocol):
     """Protocol for approval backends.
 

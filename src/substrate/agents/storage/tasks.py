@@ -1,4 +1,4 @@
-"""In-memory task store — per-agent Kanban boards, keyed by (conversation_id, agent_id).
+"""In-memory task store — per-agent Kanban boards, keyed by (conversation_id, agent_id, branch_id).
 
 The GlobalTaskStore singleton is swapped to PgTaskStore at startup when
 RUNTIME_BACKEND=postgres (see infrastructure/serving_factory.py).
@@ -48,8 +48,8 @@ class TaskStore:
         self._lock = asyncio.Lock()
         # task_list_id -> TaskList
         self._lists: Dict[str, TaskList] = {}
-        # (conversation_id, agent_id) -> task_list_id
-        self._by_key: Dict[tuple[str, str], str] = {}
+        # (conversation_id, agent_id, branch_id) -> task_list_id
+        self._by_key: Dict[tuple[str, str, str], str] = {}
 
     async def create_task_list(
         self,
@@ -60,6 +60,7 @@ class TaskStore:
         agent_label: str = "",
         parent_agent_id: Optional[str] = None,
         max_retries: int = 3,
+        branch_id: str = "main",
     ) -> TaskList:
         async with self._lock:
             task_list = TaskList(
@@ -69,6 +70,7 @@ class TaskStore:
                 agent_id=agent_id,
                 agent_label=agent_label,
                 parent_agent_id=parent_agent_id,
+                branch_id=branch_id,
                 created_at=datetime.now(timezone.utc).isoformat(),
                 tasks=[
                     Task(
@@ -82,27 +84,32 @@ class TaskStore:
                 ],
             )
             self._lists[task_list.id] = task_list
-            self._by_key[(conversation_id, agent_id)] = task_list.id
+            self._by_key[(conversation_id, agent_id, branch_id)] = task_list.id
             return task_list
 
     async def get_task_list(self, task_list_id: str) -> Optional[TaskList]:
         return self._lists.get(task_list_id)
 
-    async def get_by_conversation(self, conversation_id: str) -> Optional[TaskList]:
-        # Return the "root" board (agent_id="") or the first one found
-        tl_id = self._by_key.get((conversation_id, ""))
+    async def get_by_conversation(
+        self, conversation_id: str, branch_id: str = "main"
+    ) -> Optional[TaskList]:
+        # Return the "root" board (agent_id="") or the first one found,
+        # within this branch only.
+        tl_id = self._by_key.get((conversation_id, "", branch_id))
         if tl_id:
             return self._lists.get(tl_id)
-        # Fallback: any board for this conversation
-        for (cid, _), tl_id in self._by_key.items():
-            if cid == conversation_id:
+        # Fallback: any board for this conversation on this branch
+        for (cid, _, bid), tl_id in self._by_key.items():
+            if cid == conversation_id and bid == branch_id:
                 return self._lists.get(tl_id)
         return None
 
-    async def get_boards_by_conversation(self, conversation_id: str) -> List[TaskList]:
+    async def get_boards_by_conversation(
+        self, conversation_id: str, branch_id: str = "main"
+    ) -> List[TaskList]:
         results = []
-        for (cid, _), tl_id in self._by_key.items():
-            if cid == conversation_id:
+        for (cid, _, bid), tl_id in self._by_key.items():
+            if cid == conversation_id and bid == branch_id:
                 tl = self._lists.get(tl_id)
                 if tl:
                     results.append(tl)
@@ -118,8 +125,8 @@ class TaskStore:
         """
         async with self._lock:
             changed: List[TaskList] = []
-            for (cid, _), tl_id in self._by_key.items():
-                if cid != conversation_id:
+            for (cid, _, bid), tl_id in self._by_key.items():
+                if cid != conversation_id or bid != "main":
                     continue
                 task_list = self._lists.get(tl_id)
                 if not task_list:

@@ -43,12 +43,20 @@ class GraphStore(Protocol):
     Stores that support Cypher implement the ``CypherCapable`` protocol
     below as an additional capability — callers can check with
     ``isinstance(store, CypherCapable)`` before issuing Cypher queries.
+
+    ``namespace`` scopes every operation to one tenant/agent's slice of the
+    graph. ``""`` (the default) means unscoped — the whole graph, exactly the
+    pre-namespace behaviour. A non-empty namespace tags what it writes and
+    only sees/deletes what carries the same tag, so two tenants using the same
+    store cannot read or delete each other's entities.
     """
 
-    async def add_entities(self, entities: list[Entity]) -> list[str]: ...
+    async def add_entities(
+        self, entities: list[Entity], *, namespace: str = ""
+    ) -> list[str]: ...
 
     async def add_relationships(
-        self, relationships: list[Relationship]
+        self, relationships: list[Relationship], *, namespace: str = ""
     ) -> list[str]: ...
 
     async def get_neighbors(
@@ -57,11 +65,14 @@ class GraphStore(Protocol):
         *,
         depth: int = 1,
         relationship_types: list[str] | None = None,
+        namespace: str = "",
     ) -> SubGraph: ...
 
-    async def delete_entity(self, entity_id: str) -> bool: ...
+    async def delete_entity(self, entity_id: str, *, namespace: str = "") -> bool: ...
 
-    async def delete_relationship(self, relationship_id: str) -> bool: ...
+    async def delete_relationship(
+        self, relationship_id: str, *, namespace: str = ""
+    ) -> bool: ...
 
 
 @runtime_checkable

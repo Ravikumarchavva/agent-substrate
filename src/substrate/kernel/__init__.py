@@ -123,6 +123,7 @@ from substrate.kernel.messaging.stream import (
     AgentStep,
 )
 from substrate.kernel.storage.blob import BlobStore
+from substrate.kernel.storage.objects import ObjectStore
 from substrate.kernel.storage.vector import Document, SearchResult, VectorStore
 from substrate.kernel.storage.graph import (
     Entity,
@@ -157,6 +158,7 @@ from substrate.kernel.document import (
     ExtractionResult,
 )
 from substrate.kernel.storage.snapshots import (
+    ContentRef,
     WorkspaceFileEntry,
     WorkspaceManifest,
     WorkspaceSnapshot,
@@ -317,6 +319,7 @@ __all__ = [
     "AgentStep",
     # Object / blob store
     "BlobStore",
+    "ObjectStore",
     # Retrieval / RAG knowledge stores
     "Document",
     "SearchResult",
@@ -354,6 +357,7 @@ __all__ = [
     "ExtractedPage",
     "ExtractionResult",
     # Workspace snapshots
+    "ContentRef",
     "WorkspaceFileEntry",
     "WorkspaceManifest",
     "WorkspaceSnapshot",

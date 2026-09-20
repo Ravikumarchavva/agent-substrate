@@ -23,11 +23,10 @@ from typing import Any
 from substrate.agents.storage.tasks import (
     current_agent_id,
     current_parent_agent_id,
-    current_tenant_id,
     current_thread_id,
-    current_user_id,
 )
-from substrate.capabilities.storage.layout import conversation_workspace_prefix
+from substrate.agents.workspace.scope import current_tenant_id, current_user_id
+from substrate.agents.workspace.layout import conversation_workspace_prefix
 from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.tools import ToolExecutionResult
 from substrate.kernel.tools.tools import ToolRisk

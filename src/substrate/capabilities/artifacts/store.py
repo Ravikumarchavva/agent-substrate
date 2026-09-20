@@ -1,6 +1,6 @@
 """ArtifactStore — OKF bundles in object storage, at two scopes.
 
-Layout (see ``capabilities/storage/layout.py`` for the key builders)::
+Layout (see ``agents/workspace/layout.py`` for the key builders)::
 
     tenants/{tid}/conversations/{cid}/artifacts/   ← session scope
     tenants/{tid}/users/{uid}/artifacts/           ← global scope
@@ -41,7 +41,7 @@ from substrate.capabilities.artifacts.okf import (
     utc_now_iso,
 )
 from substrate.capabilities.artifacts.okf import human_actor as okf_human_actor
-from substrate.capabilities.storage.layout import (
+from substrate.agents.workspace.layout import (
     conversation_artifacts_prefix,
     user_artifacts_prefix,
 )

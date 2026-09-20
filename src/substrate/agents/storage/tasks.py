@@ -18,6 +18,10 @@ from substrate.kernel.storage.tasks import Task, TaskList, TaskStatus
 # Per-request/agent identity ContextVars (set by agent run() entry).
 # Placed here (L1) so both agents/core/* and capabilities/tools/* can import them
 # without violating the layer contracts (capabilities may import agents).
+#
+# Workspace-ownership ContextVars (current_user_id, current_tenant_id,
+# current_branch_id) live in agents/workspace/scope.py — a different concern
+# (whose files these are), not task-list identity.
 # ---------------------------------------------------------------------------
 
 current_thread_id: contextvars.ContextVar[str] = contextvars.ContextVar(
@@ -31,12 +35,6 @@ current_agent_label: contextvars.ContextVar[str] = contextvars.ContextVar(
 )
 current_parent_agent_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "task_manager_parent_agent_id", default=None
-)
-current_user_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "workspace_user_id", default=None
-)
-current_tenant_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "workspace_tenant_id", default=None
 )
 
 

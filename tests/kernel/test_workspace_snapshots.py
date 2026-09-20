@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from substrate.agents.context.workspace import InMemoryWorkspaceStore
 from substrate.kernel.exceptions import SnapshotConflictError
 from substrate.kernel.storage.snapshots import (
+    ContentRef,
     WorkspaceFileEntry,
     WorkspaceManifest,
     WorkspaceSnapshot,
@@ -18,8 +19,7 @@ class TestWorkspaceSnapshotValidation:
             files={
                 "main.py": WorkspaceFileEntry(
                     path="main.py",
-                    content_hash="sha256-abc",
-                    size_bytes=42,
+                    content=ContentRef(hash="sha256-abc", size_bytes=42),
                 )
             }
         )

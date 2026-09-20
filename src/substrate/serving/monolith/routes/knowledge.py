@@ -7,7 +7,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from substrate.capabilities.storage.layout import knowledge_document_prefix
+from substrate.agents.workspace.layout import knowledge_document_prefix
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims

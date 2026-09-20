@@ -316,7 +316,7 @@ class CodeInterpreterService:
         ``self.config.workspace_pvc_claim`` mounted at
         ``self.config.workspace_mount_path`` with ``subPath:
         tenants/{tenant_id}/users/{user_id}`` — the same prefix every
-        object key carries (``capabilities/storage/layout.py``'s
+        object key carries (``agents/workspace/layout.py``'s
         ``user_prefix``), so a path *inside* the pod (what
         ``routes/chat_context.py``'s PVC branch computes) is exactly the
         object key with that prefix stripped. The subPath itself is what

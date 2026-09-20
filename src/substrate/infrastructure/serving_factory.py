@@ -1028,7 +1028,7 @@ def build_session_index_vector_store(
 ) -> Any:
     """Build the per-user session-document vector store (Lance) — the
     vector half of the per-user index bundle at
-    ``capabilities/storage/layout.py::user_index_prefix``.
+    ``agents/workspace/layout.py::user_index_prefix``.
 
     Deliberately a per-(tenant, user) *factory*, not a single shared
     instance built once in ``init_infrastructure()`` the way
@@ -1045,7 +1045,7 @@ def build_session_index_vector_store(
     — mirrors the namespace-mode path's tenant/user split, just as
     directory nesting instead of a namespace path.
     """
-    from substrate.capabilities.storage.layout import user_index_prefix
+    from substrate.agents.workspace.layout import user_index_prefix
     from substrate.capabilities.vector.lancedb_store import LanceDBVectorStore
 
     # user_index_prefix() validates tenant_id/user_id (rejects path
@@ -1175,7 +1175,7 @@ def build_page_index_memory(cfg: SubstrateConfig, tenant_id: str, user_id: str) 
     does.
     """
     from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore
-    from substrate.capabilities.storage.layout import user_index_prefix
+    from substrate.agents.workspace.layout import user_index_prefix
 
     key = user_index_prefix(tenant_id, user_id)
     if cfg.SESSION_INDEX_NAMESPACE_URI:
@@ -1210,7 +1210,7 @@ def build_session_graph_store(
     user has ever uploaded.
     """
     from substrate.capabilities.graph.lance_graph_store import LanceGraphStore
-    from substrate.capabilities.storage.layout import user_index_prefix
+    from substrate.agents.workspace.layout import user_index_prefix
 
     key = user_index_prefix(tenant_id, user_id)
     if cfg.SESSION_INDEX_NAMESPACE_URI:

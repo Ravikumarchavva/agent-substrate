@@ -32,6 +32,7 @@ from sqlalchemy import (
     delete,
     func,
     select,
+    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -188,6 +189,9 @@ class HistoryNode(HistoryBase):
     session_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     run_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     payload: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    workspace_snapshot_id: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -251,6 +255,7 @@ def _node_from_row(row: HistoryNode) -> MessageNode:
         session_id=row.session_id,
         run_id=row.run_id,
         payload=deserialize_message(row.payload),
+        workspace_snapshot_id=row.workspace_snapshot_id,
         created_at=created,
     )
 
@@ -324,6 +329,12 @@ class DurableHistoryProvider:
         )
         async with self._engine.begin() as conn:
             await conn.run_sync(HistoryBase.metadata.create_all)
+            await conn.execute(
+                text(
+                    "ALTER TABLE history_nodes "
+                    "ADD COLUMN IF NOT EXISTS workspace_snapshot_id VARCHAR(128)"
+                )
+            )
         migrated = await self._migrate_legacy_messages()
         if migrated:
             logger.info("Migrated %d legacy linear session(s) into the DAG", migrated)
@@ -382,6 +393,7 @@ class DurableHistoryProvider:
             session_id=node.session_id,
             run_id=node.run_id,
             payload=serialize_message(node.payload),
+            workspace_snapshot_id=node.workspace_snapshot_id,
             created_at=node.created_at,
         )
         db.add(record)

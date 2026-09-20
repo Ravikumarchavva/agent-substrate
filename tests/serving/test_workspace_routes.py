@@ -10,7 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from substrate.capabilities.storage.layout import conversation_shared_key
+from substrate.agents.workspace.layout import conversation_shared_key
 from substrate.capabilities.storage.workspace import WorkspaceFileStore
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.models import Thread, User

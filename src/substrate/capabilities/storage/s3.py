@@ -1,7 +1,7 @@
 """S3-compatible file store backed by S3Connector (L2).
 
 Keys use the same ``tenants/{tenant_id}/...`` layout as ``WorkspaceFileStore``
-(see its module docstring and ``capabilities/storage/layout.py``), so the two
+(see its module docstring and ``agents/workspace/layout.py``), so the two
 are interchangeable behind ``ctx.file_store`` and the workspace management
 API works against either. The store is addressed purely through the S3 API,
 which is what makes the backend swappable — SeaweedFS locally (this stack's
@@ -120,6 +120,27 @@ class S3FileStore:
         deleted = await self._connector.delete_prefix(prefix, bucket=self._bucket)
         self._usage_cache.clear()
         return deleted
+
+    async def copy_prefix(self, source_prefix: str, dest_prefix: str) -> int:
+        """Copy every object under *source_prefix* to the same relative path
+        under *dest_prefix* (for branch workspace forking).
+
+        No native server-side copy on ``S3Connector`` yet, so this reads
+        each object and re-uploads it through ``self.upload`` — which keeps
+        quota accounting correct on the destination — rather than bypassing
+        it via the raw connector. Mirrors ``WorkspaceFileStore.copy_prefix``.
+        """
+        entries = await self.list_prefix(source_prefix)
+        src_root = source_prefix.rstrip("/")
+        dest_root = dest_prefix.rstrip("/")
+        copied = 0
+        for key, _size, _mtime in entries:
+            rel = key[len(src_root) :].lstrip("/")
+            dest_key = f"{dest_root}/{rel}" if rel else dest_root
+            data = await self.download(key)
+            await self.upload(dest_key, data)
+            copied += 1
+        return copied
 
     async def presign_url(self, key: str, *, expires_in: int = 3600) -> str:
         return await self._connector.presign_url(

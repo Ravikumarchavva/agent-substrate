@@ -18,11 +18,8 @@ documented Worker-isolation gotcha), so no new request-plumbing is needed.
 
 from __future__ import annotations
 
-from substrate.agents.storage.tasks import (
-    current_tenant_id,
-    current_thread_id,
-    current_user_id,
-)
+from substrate.agents.storage.tasks import current_thread_id
+from substrate.agents.workspace.scope import current_tenant_id, current_user_id
 from substrate.capabilities.knowledge.citations import CitationLedgerStore
 from substrate.capabilities.knowledge.result_rendering import render_search_results
 from substrate.kernel import TextBlock

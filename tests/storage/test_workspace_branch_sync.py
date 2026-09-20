@@ -3,10 +3,7 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from substrate.capabilities.storage.layout import (
-    conversation_branch_workspace_prefix,
-    conversation_workspace_prefix,
-)
+from substrate.agents.workspace.layout import conversation_workspace_prefix
 from substrate.capabilities.storage.workspace import (
     WorkspaceFileStore,
     WorkspaceQuotaExceededError,
@@ -15,6 +12,10 @@ from substrate.capabilities.storage.workspace import (
 
 @pytest.mark.asyncio
 async def test_workspace_branch_file_synchronization_and_isolation(tmp_path: Path):
+    """copy_prefix as a generic ObjectStore primitive, still used for cases
+    outside conversation-branch forking (e.g. duplicating a workspace) even
+    after Phase 3 switches branch forking itself to the O(1) CAS-manifest
+    fork instead of copying bytes."""
     store = WorkspaceFileStore(tmp_path, user_quota_bytes=100_000)
     await store.connect()
 
@@ -22,9 +23,7 @@ async def test_workspace_branch_file_synchronization_and_isolation(tmp_path: Pat
     user_id = "user-1"
     conversation_id = "conv-1"
 
-    main_prefix = conversation_branch_workspace_prefix(tenant_id, user_id, conversation_id, "main")
-    legacy_prefix = conversation_workspace_prefix(tenant_id, user_id, conversation_id)
-    assert main_prefix == legacy_prefix
+    main_prefix = conversation_workspace_prefix(tenant_id, user_id, conversation_id, "main")
 
     # Upload files to main
     await store.upload(f"{main_prefix}/shared/script.py", b"print('main branch')")
@@ -34,7 +33,7 @@ async def test_workspace_branch_file_synchronization_and_isolation(tmp_path: Pat
     assert await store.exists(f"{main_prefix}/shared/notes.txt")
 
     # Fork to experiment branch
-    exp_prefix = conversation_branch_workspace_prefix(tenant_id, user_id, conversation_id, "experiment")
+    exp_prefix = conversation_workspace_prefix(tenant_id, user_id, conversation_id, "experiment")
     assert exp_prefix != main_prefix
 
     copied = await store.copy_prefix(main_prefix, exp_prefix)
@@ -63,8 +62,8 @@ async def test_workspace_copy_prefix_quota_enforcement(tmp_path: Path):
     user_id = "user-quota"
     conv_id = "conv-quota"
 
-    main_p = conversation_branch_workspace_prefix(tenant_id, user_id, conv_id, "main")
-    exp_p = conversation_branch_workspace_prefix(tenant_id, user_id, conv_id, "exp")
+    main_p = conversation_workspace_prefix(tenant_id, user_id, conv_id, "main")
+    exp_p = conversation_workspace_prefix(tenant_id, user_id, conv_id, "exp")
 
     await store.upload(f"{main_p}/file1.txt", b"x" * 30)
 

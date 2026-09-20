@@ -1,4 +1,5 @@
 from .blob import BlobStore
+from .objects import ObjectStore
 from .history import HistoryProvider
 from .vector import Document, SearchResult, VectorStore
 from .graph import Entity, Relationship, SubGraph, GraphStore, CypherCapable
@@ -17,6 +18,7 @@ from .memory import (
 )
 from .tasks import Task, TaskList, TaskStatus, TaskStore
 from .snapshots import (
+    ContentRef,
     WorkspaceFileEntry,
     WorkspaceManifest,
     WorkspaceSnapshot,
@@ -24,11 +26,13 @@ from .snapshots import (
 )
 
 __all__ = [
+    "ContentRef",
     "WorkspaceFileEntry",
     "WorkspaceManifest",
     "WorkspaceSnapshot",
     "WorkspaceStore",
     "BlobStore",
+    "ObjectStore",
     "HistoryProvider",
     "Document",
     "SearchResult",

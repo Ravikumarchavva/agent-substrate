@@ -23,6 +23,13 @@ class MessageNode(KernelModel):
 
     Carries full execution provenance (session_id, run_id) alongside parent edges.
     ChatMessage payload contains purely message content and turn metadata.
+
+    ``workspace_snapshot_id`` ties this node to the workspace state as of the
+    turn that produced it (``kernel/storage/snapshots.py::WorkspaceSnapshot``)
+    — one snapshot per turn, so forking the conversation at this node and
+    forking its workspace are the same operation: read this field, call
+    ``WorkspaceStore.fork_branch_snapshot``. ``None`` for nodes that predate
+    workspace snapshotting or never touched a workspace (e.g. a root node).
     """
 
     id: str = Field(default_factory=lambda: uuid4().hex)
@@ -30,6 +37,7 @@ class MessageNode(KernelModel):
     session_id: str
     run_id: str = ""
     payload: ChatMessage
+    workspace_snapshot_id: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

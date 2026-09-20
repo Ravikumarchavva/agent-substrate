@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.capabilities.storage.layout import tenant_prefix, user_prefix
+from substrate.agents.workspace.layout import tenant_prefix, user_prefix
 from substrate.capabilities.storage.session_index_erasure import (
     erase_session_index,
     erase_session_index_for_tenant,
@@ -98,7 +98,7 @@ async def erase_user(
         await db.execute(delete(User).where(User.id == user_uuid))
     await db.commit()
     # Conversations now nest under the owning user's own prefix (see
-    # capabilities/storage/layout.py::conversation_workspace_prefix), so a
+    # agents/workspace/layout.py::conversation_workspace_prefix), so a
     # single prefix delete removes every conversation this user ever had
     # along with it — no separate per-conversation sweep needed, and
     # nothing to miss if a thread's ownership record were ever wrong.

@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.agents.context.history import DefaultHistoryResolver
-from substrate.capabilities.storage.layout import conversation_branch_workspace_prefix
+from substrate.agents.workspace.layout import conversation_workspace_prefix
 from substrate.kernel.exceptions import (
     BranchAlreadyExistsError,
     BranchHeadConflictError,
@@ -131,10 +131,10 @@ async def fork_branch_endpoint(
 
     # Synchronize physical workspace files for the new branch
     if ctx.file_store is not None and hasattr(ctx.file_store, "copy_prefix"):
-        src_prefix = conversation_branch_workspace_prefix(
+        src_prefix = conversation_workspace_prefix(
             user.tenant_id, user.sub, session_id, body.source_branch_id
         )
-        dst_prefix = conversation_branch_workspace_prefix(
+        dst_prefix = conversation_workspace_prefix(
             user.tenant_id, user.sub, session_id, body.new_branch_id
         )
         try:

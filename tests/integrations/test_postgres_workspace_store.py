@@ -7,6 +7,7 @@ from sqlalchemy.exc import OperationalError
 from substrate.capabilities.storage.workspace_store import PostgresWorkspaceStore
 from substrate.kernel.exceptions import SnapshotConflictError
 from substrate.kernel.storage.snapshots import (
+    ContentRef,
     WorkspaceFileEntry,
     WorkspaceManifest,
     WorkspaceSnapshot,
@@ -38,7 +39,9 @@ async def test_postgres_workspace_store_lifecycle_and_cas():
             parent_snapshot_id=None,
             manifest=WorkspaceManifest(
                 files={
-                    "README.md": WorkspaceFileEntry(path="README.md", size_bytes=100, content_hash="hash1"),
+                    "README.md": WorkspaceFileEntry(
+                        path="README.md", content=ContentRef(hash="hash1", size_bytes=100)
+                    ),
                 }
             ),
         )
@@ -53,7 +56,7 @@ async def test_postgres_workspace_store_lifecycle_and_cas():
         assert head1.id == "snap-1"
         assert head1.manifest is not None
         assert "README.md" in head1.manifest.files
-        assert head1.manifest.files["README.md"].content_hash == "hash1"
+        assert head1.manifest.files["README.md"].content.hash == "hash1"
 
         # 3. Conflict on wrong expected parent
         snap2_bad = WorkspaceSnapshot(

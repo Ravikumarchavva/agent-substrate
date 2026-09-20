@@ -3,7 +3,7 @@
 Server-side only: the tree lives at ``root`` (a local dir in monolith dev, a
 docker-compose volume, or a k8s RWX PVC mount in production — never on the
 end user's machine). Keys are POSIX-relative paths under
-``tenants/{tenant_id}/`` — see ``capabilities/storage/layout.py`` for the
+``tenants/{tenant_id}/`` — see ``agents/workspace/layout.py`` for the
 canonical builders (``tenants/{tid}/users/{uid}/...`` for a user's own
 uploads not tied to a conversation, ``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/...``
 for a conversation's shared/version files — nested under its owning user,
@@ -178,7 +178,7 @@ class WorkspaceFileStore:
         conversations/`` — the admin storage drill-down.
 
         Conversations nest under their owning user, not directly under the
-        tenant (see ``capabilities/storage/layout.py``'s
+        tenant (see ``agents/workspace/layout.py``'s
         ``conversation_workspace_prefix``), so every user directory under
         the tenant must be walked, not just a single ``conversations/``
         that no longer exists at the tenant's top level. Conversation ids

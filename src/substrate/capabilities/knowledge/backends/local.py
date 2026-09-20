@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from substrate.capabilities.storage.layout import user_prefix
+from substrate.agents.workspace.layout import user_prefix
 from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.storage.vector import Document, SearchResult
 from substrate.logger import setup_logging

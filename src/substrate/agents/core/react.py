@@ -35,6 +35,9 @@ from substrate.agents.storage.tasks import (
     current_agent_label as _task_agent_label,
     current_parent_agent_id as _task_parent_agent_id,
     current_thread_id as _task_thread_id,
+)
+from substrate.agents.workspace.scope import (
+    current_branch_id as _workspace_branch_id,
     current_tenant_id as _task_tenant_id,
     current_user_id as _task_user_id,
 )
@@ -46,6 +49,9 @@ from substrate.agents.core._loop import (
     message_to_chat,
     persist_turns,
 )
+from substrate.logger import setup_logging
+
+logger = setup_logging()
 
 if TYPE_CHECKING:
     from substrate.agents.runtime.context import RunContext
@@ -145,6 +151,7 @@ class ReActAgent:
         _task_tenant_id.set(msg.metadata.get("tenant_id") or None)
 
         branch_id = msg.metadata.get("branch_id") or "main"
+        _workspace_branch_id.set(branch_id)
         history_messages = await load_history(
             self._context, session_id, branch_id=branch_id
         )

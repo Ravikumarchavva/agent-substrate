@@ -1,48 +1,71 @@
+"""The conversation DAG is the only history model: a linear transcript is a
+projection of one branch, and a session can be deleted as a unit."""
+
 from __future__ import annotations
 
 import pytest
+
 from substrate.agents.context import InMemoryHistoryProvider
-from substrate.kernel import Actor
+from substrate.agents.context.history import project_messages
 from substrate.kernel.core.content import ChatMessage, TextBlock
+from substrate.kernel.storage.history import HistoryProvider, MessageNode
+
+
+def _msg(text: str) -> ChatMessage:
+    return ChatMessage(role="user", content=[TextBlock(text=text)])
+
+
+async def _append(provider, session_id: str, text: str, *, run_id: str = "", branch: str = "main"):
+    b = await provider.get_branch(session_id, branch)
+    node = MessageNode(
+        parent_id=b.head_message_id if b else None,
+        session_id=session_id,
+        run_id=run_id,
+        payload=_msg(text),
+    )
+    await provider.append_and_advance(node, branch)
+    return node
 
 
 @pytest.mark.asyncio
 async def test_history_provider_contract():
     provider = InMemoryHistoryProvider()
-    agent_id = Actor(type="agent", key="agent_123")
-    session_id = "session-abc"
+    assert isinstance(provider, HistoryProvider)
 
-    msgs = await provider.get_messages(agent_id, session_id=session_id)
-    assert msgs == []
+    assert await project_messages(provider, "session-abc") == []
 
-    chat_msg = ChatMessage(role="user", content=[TextBlock(text="hello")])
-    await provider.append(agent_id, chat_msg, session_id=session_id, run_id="run-1")
+    await _append(provider, "session-abc", "hello", run_id="run-1")
 
-    msgs = await provider.get_messages(agent_id, session_id=session_id)
-    assert len(msgs) == 1
+    msgs = await project_messages(provider, "session-abc")
+    assert [m.content[0].text for m in msgs] == ["hello"]
     assert msgs[0].role == "user"
-    assert msgs[0].metadata["run_id"] == "run-1"
-
-    msgs_other = await provider.get_messages(agent_id, session_id="session-other")
-    assert msgs_other == []
-
-    await provider.clear(agent_id, session_id=session_id)
-    msgs = await provider.get_messages(agent_id, session_id=session_id)
-    assert msgs == []
+    assert await project_messages(provider, "session-other") == []
 
 
 @pytest.mark.asyncio
-async def test_clear_run_scope():
+async def test_branches_project_independently():
     provider = InMemoryHistoryProvider()
-    agent_id = Actor(type="agent", key="agent_run")
-    session_id = "sess"
+    first = await _append(provider, "s", "one")
+    await _append(provider, "s", "two")
+    await provider.fork_branch("s", "main", "alt", fork_from_message_id=first.id)
+    await _append(provider, "s", "alt-two", branch="alt")
 
-    m1 = ChatMessage(role="user", content=[TextBlock(text="run1")])
-    m2 = ChatMessage(role="user", content=[TextBlock(text="run2")])
-    await provider.append(agent_id, m1, session_id=session_id, run_id="run-a")
-    await provider.append(agent_id, m2, session_id=session_id, run_id="run-b")
+    assert [m.content[0].text for m in await project_messages(provider, "s")] == ["one", "two"]
+    assert [m.content[0].text for m in await project_messages(provider, "s", branch_id="alt")] == [
+        "one",
+        "alt-two",
+    ]
 
-    await provider.clear_run(agent_id, session_id=session_id, run_id="run-a")
-    remaining = await provider.get_messages(agent_id, session_id=session_id)
-    assert len(remaining) == 1
-    assert remaining[0].content[0].text == "run2"
+
+@pytest.mark.asyncio
+async def test_delete_session_removes_only_that_session():
+    provider = InMemoryHistoryProvider()
+    await _append(provider, "keep", "stay")
+    doomed = await _append(provider, "gone", "bye")
+
+    await provider.delete_session("gone")
+
+    assert await project_messages(provider, "gone") == []
+    assert await provider.get_node(doomed.id) is None
+    assert [m.content[0].text for m in await project_messages(provider, "keep")] == ["stay"]
+    await provider.delete_session("never-existed")  # idempotent

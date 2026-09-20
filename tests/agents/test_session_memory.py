@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
+from substrate.agents.context.history import project_messages
 from substrate.agents.context import (
     ContextConfig,
     InMemoryHistoryProvider,
@@ -101,7 +102,7 @@ async def run_agent(
             break
 
     output = ""
-    history_msgs = await agent.history.get_messages(agent.id, session_id=sid)
+    history_msgs = await project_messages(agent.history, sid)
     for m in reversed(history_msgs):
         if m.role == Role.ASSISTANT:
             output = " ".join(
@@ -146,7 +147,7 @@ async def test_standalone_session_accumulates_across_runs():
         assert r2["output"] == "You said hi earlier."
 
         # 2 user + 2 assistant = 4 messages in the session
-        msgs = await shared_history.get_messages(agent.id, session_id=agent.id.type)
+        msgs = await project_messages(shared_history, agent.id.type)
         assert len(msgs) == 4
 
 
@@ -175,8 +176,8 @@ async def test_session_isolation_across_different_sessions():
         r_b = await run_agent(rt, agent, "Hello B.", session_id="session-B")
         assert r_b["status"] == "success"
 
-        msgs_a = await shared_history.get_messages(agent.id, session_id="session-A")
-        msgs_b = await shared_history.get_messages(agent.id, session_id="session-B")
+        msgs_a = await project_messages(shared_history, "session-A")
+        msgs_b = await project_messages(shared_history, "session-B")
         assert len(msgs_a) == 2
         assert len(msgs_b) == 2
 
@@ -208,5 +209,5 @@ async def test_cross_run_memory_same_session():
         assert r2["status"] == "success"
         assert "42" in r2["output"]
 
-        all_msgs = await shared_history.get_messages(agent.id, session_id=sid)
+        all_msgs = await project_messages(shared_history, sid)
         assert len(all_msgs) == 4  # 2 user + 2 assistant

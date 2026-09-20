@@ -12,6 +12,7 @@ import base64
 import uuid
 from typing import TYPE_CHECKING, Any, Literal, cast
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.content import JsonObject, MediaBlock
 from substrate.kernel.runtime.effects import Effect, EffectResult
 from substrate.kernel.tools.chain import InvocationResult
@@ -151,7 +152,7 @@ class _ToolMixin:
             # duplicate the tool.call entry — and the UI card built from
             # it — once per suspend/resume cycle.
             await self.log_once(
-                "tool.call",
+                RunLogKind.TOOL_CALL,
                 {"call_id": effect_id, "tool_name": name, "args": args},
             )
 
@@ -209,7 +210,7 @@ class _ToolMixin:
                 for i, img in enumerate(result.media)
             ]
             await self._log(
-                "tool.result",
+                RunLogKind.TOOL_RESULT,
                 {
                     "call_id": effect_id,
                     "tool_name": name,

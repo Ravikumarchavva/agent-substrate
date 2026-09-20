@@ -26,6 +26,7 @@ Usage::
 """
 
 from __future__ import annotations
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 
 import asyncio
@@ -469,7 +470,7 @@ class AskHumanTool:
                 # docstring), so a plain _log here would append a duplicate
                 # input.requested entry — and a duplicate question card in
                 # the UI — every time this run suspends and resumes.
-                await ctx.log_once("input.requested", log_payload)
+                await ctx.log_once(RunLogKind.INPUT_REQUESTED, log_payload)
             except Exception:
                 pass
             signal_payload = await ctx.sleep_until_signal(f"hitl:{request.request_id}")
@@ -482,7 +483,7 @@ class AskHumanTool:
         if ctx is not None and getattr(self.handler, "supports_event_log", False):
             try:
                 await ctx._log(
-                    "input.requested",
+                    RunLogKind.INPUT_REQUESTED,
                     {
                         "request_id": request.request_id,
                         "question": request.question,

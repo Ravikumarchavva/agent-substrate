@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Literal
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.content import JsonObject
 from substrate.kernel.exceptions import SuspendInterrupt
 from substrate.kernel.core.identity import Actor, Topic
@@ -197,7 +198,7 @@ class _MessagingMixin:
         # whose release() below already sets it from the Wakeup) and suspend.
         await self._signal_bus.timer(self.run_id, deadline)
         await self._log(
-            "run.suspended",
+            RunLogKind.RUN_SUSPENDED,
             {"waiting_for": wait_names, "deadline": deadline.isoformat()},
         )
         raise SuspendInterrupt(

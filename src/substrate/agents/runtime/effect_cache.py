@@ -24,6 +24,7 @@ affects what a *fresh* fold (a new lease, i.e. every retry) rehydrates.
 
 from __future__ import annotations
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.runtime.effects import EffectResult
 from substrate.kernel.runtime.ids import RunId
 from substrate.kernel.runtime.log_entry import EventLogProtocol
@@ -66,7 +67,7 @@ class EffectCache:
         last_seq = -1
         async for entry in event_log.read(run_id):
             last_seq = entry.seq
-            if entry.kind == "effect.result":
+            if entry.kind == RunLogKind.EFFECT_RESULT:
                 p = entry.payload
                 if p["status"] == "error":
                     effects.pop(p["effect_id"], None)

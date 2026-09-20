@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from .history import (
     AncestryCheckpointResolver,
-    CheckpointResolver,
     DefaultHistoryResolver,
     HistoryProvider,
-    HistoryResolver,
     InMemoryHistoryProvider,
+    project_messages,
 )
 from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
 from .builder import DefaultContextBuilder
@@ -28,8 +27,7 @@ from .workspace import InMemoryWorkspaceStore, LocalFilesystemWorkspaceStore
 
 __all__ = [
     "HistoryProvider",
-    "HistoryResolver",
-    "CheckpointResolver",
+    "project_messages",
     "InMemoryHistoryProvider",
     "LocalFilesystemHistoryProvider",
     "DefaultHistoryResolver",

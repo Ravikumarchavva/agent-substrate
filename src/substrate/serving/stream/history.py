@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.exceptions import ConcurrentAppendError
 from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.serving.protocol.events import WireEvent
@@ -98,7 +99,7 @@ async def append_mcp_app_context(
     See ``_append_to_thread`` for attach/retry semantics. No-ops if the
     thread has no runs at all yet.
     """
-    await _append_to_thread(event_log, scheduler, thread_id, "mcp_app_context", payload)
+    await _append_to_thread(event_log, scheduler, thread_id, RunLogKind.MCP_APP_CONTEXT, payload)
 
 
 async def append_user_message(
@@ -118,7 +119,7 @@ async def append_user_message(
         event_log,
         scheduler,
         thread_id,
-        "user.message",
+        RunLogKind.USER_MESSAGE,
         {"text": text, "attachments": []},
     )
 

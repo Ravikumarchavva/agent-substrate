@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import ChatPayload, Message
@@ -65,15 +66,15 @@ async def stream_events(
         p = entry.payload or {}
         seq = int(getattr(entry, "seq", 0) or 0)
 
-        if kind == "text.delta":
+        if kind == RunLogKind.TEXT_DELTA:
             delta = p.get("text", "")
             final_text += delta
             yield TextDelta(text=delta)
 
-        elif kind == "reasoning.delta":
+        elif kind == RunLogKind.REASONING_DELTA:
             yield ReasoningDelta(text=p.get("text", ""))
 
-        elif kind == "tool.call":
+        elif kind == RunLogKind.TOOL_CALL:
             yield AgentProgress(
                 agent_id=agent.id,
                 step=AgentStep.TOOL_CALL,
@@ -82,7 +83,7 @@ async def stream_events(
                 seq=seq,
             )
 
-        elif kind == "tool.result":
+        elif kind == RunLogKind.TOOL_RESULT:
             name = p.get("tool_name", "tool")
             content = name if p.get("ok", True) else f"{name} error"
             yield AgentProgress(
@@ -97,14 +98,14 @@ async def stream_events(
                 if boards:
                     yield _TaskBoardUpdate(boards=boards)
 
-        elif kind == "subagent.start":
+        elif kind == RunLogKind.SUBAGENT_START:
             yield _subagent_progress(p, run_id, seq, AgentStep.THINKING)
 
-        elif kind == "subagent.done":
+        elif kind == RunLogKind.SUBAGENT_DONE:
             step = AgentStep.DONE if p.get("ok", True) else AgentStep.ERROR
             yield _subagent_progress(p, run_id, seq, step)
 
-        elif kind == "run.completed":
+        elif kind == RunLogKind.RUN_COMPLETED:
             yield CompletionEvent(
                 content=[TextBlock(text=final_text)],
                 metadata={"finish_reason": "stop"},
@@ -112,7 +113,7 @@ async def stream_events(
             yield StreamDone(reason="success")
             return
 
-        elif kind == "run.failed":
+        elif kind == RunLogKind.RUN_FAILED:
             yield _RunFailed(
                 message=str(p.get("error", "The run failed.")),
                 status=str(p.get("status", "agent_crashed")),
@@ -120,7 +121,7 @@ async def stream_events(
             yield StreamDone(reason="error")
             return
 
-        elif kind == "input.requested":
+        elif kind == RunLogKind.INPUT_REQUESTED:
             opts = [
                 InputOption(
                     key=str(o.get("key", "")),
@@ -139,7 +140,7 @@ async def stream_events(
                 run_id=str(p.get("run_id", "")),
             )
 
-        elif kind == "run.cancelled":
+        elif kind == RunLogKind.RUN_CANCELLED:
             yield _RunFailed(message="The run was cancelled.", status="cancelled")
             yield StreamDone(reason="cancelled")
             return

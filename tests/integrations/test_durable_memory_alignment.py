@@ -6,14 +6,16 @@ from sqlalchemy.exc import OperationalError
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from substrate.kernel import Actor, ChatMessage
+from substrate.kernel import ChatMessage
 from substrate.kernel.core.content import TextBlock
 from substrate.kernel.storage.vector import Document
 from substrate.kernel.storage.memory import MemoryNamespace, MemoryQuery, MemoryRecord
 from substrate.kernel.tools import ToolExecutionResult, ToolCallRequest
 
 from substrate.capabilities.memory import DurableMemoryStore
+from substrate.agents.context.history import project_messages
 from substrate.capabilities.history import DurableHistoryProvider
+from substrate.kernel.storage.history import MessageNode
 from substrate.capabilities.vector import PgVectorStore
 from substrate.capabilities.graph import AGEGraphStore
 
@@ -215,45 +217,34 @@ async def test_postgres_history_provider_conformance():
     provider = DurableHistoryProvider(db_url)
     await provider.connect()
 
-    agent_id = Actor(type="agent", key="agent-history-test")
     session_id = "sess-history-test"
 
     try:
-        await provider.clear(agent_id, session_id=session_id)
+        await provider.delete_session(session_id)
 
-        # Test append via protocol
-        msg1 = ChatMessage(role="user", content=[TextBlock(text="message 1")])
-        await provider.append(agent_id, msg1, session_id=session_id, run_id="run-x")
+        parent = None
+        for role, text, run in [
+            ("user", "message 1", "run-x"),
+            ("assistant", "message 2", "run-y"),
+            ("user", "message 3", "run-y"),
+        ]:
+            node = MessageNode(
+                parent_id=parent,
+                session_id=session_id,
+                run_id=run,
+                payload=ChatMessage(role=role, content=[TextBlock(text=text)]),
+            )
+            await provider.append_and_advance(node, "main")
+            parent = node.id
 
-        # Test append_many
-        msg2 = ChatMessage(role="assistant", content=[TextBlock(text="message 2")])
-        msg3 = ChatMessage(role="user", content=[TextBlock(text="message 3")])
-        await provider.append_many(
-            agent_id, [msg2, msg3], session_id=session_id, run_id="run-y"
-        )
+        loaded = await project_messages(provider, session_id)
+        assert [m.content[0].text for m in loaded] == ["message 1", "message 2", "message 3"]
+        assert all(isinstance(m, ChatMessage) for m in loaded)
 
-        # Retrieve messages
-        loaded = await provider.get_messages(agent_id, session_id=session_id)
-        assert len(loaded) == 3
-        assert isinstance(loaded[0], ChatMessage)
-        assert loaded[0].content[0].text == "message 1"
-        assert loaded[1].content[0].text == "message 2"
-        assert loaded[2].content[0].text == "message 3"
-
-        # Verify offset and limit
-        subset = await provider.get_messages(
-            agent_id, session_id=session_id, limit=1, offset=1
-        )
-        assert len(subset) == 1
-        assert subset[0].content[0].text == "message 2"
-
-        # Test clear_run (delete only run-x)
-        await provider.clear_run(agent_id, session_id=session_id, run_id="run-x")
-        remaining = await provider.get_messages(agent_id, session_id=session_id)
-        assert len(remaining) == 2
-        assert remaining[0].content[0].text == "message 2"
-        assert remaining[1].content[0].text == "message 3"
+        await provider.delete_session(session_id)
+        assert await project_messages(provider, session_id) == []
     finally:
+        await provider.delete_session(session_id)
         await provider.disconnect()
 
 

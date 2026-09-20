@@ -5,63 +5,76 @@ import pytest
 from sqlalchemy.exc import OperationalError
 
 from substrate.capabilities.history import DurableHistoryProvider
-from substrate.kernel import Actor, ChatMessage
+from substrate.kernel import ChatMessage
 from substrate.kernel.core.content import TextBlock
 
 pytestmark = [pytest.mark.requires_postgres]
 
 
-def test_postgres_history_internal_key_fits_legacy_column() -> None:
-    """A conversation actor's key is its session_id (see identity.py's
-    ``Actor`` docstring) -- realistic overflow is a long ``type:key`` pair,
-    not a separate session_id the key already made redundant."""
-    provider = DurableHistoryProvider("postgresql+asyncpg://user:pass@localhost/db")
-    agent_id = Actor(type="conversation", key="session-" + ("y" * 120))
-
-    storage_key = provider._session_key(agent_id, agent_id.key)
-
-    assert len(storage_key) <= 128
-    assert storage_key.startswith("h:")
-
-
 @pytest.mark.asyncio
-async def test_postgres_history_provider():
-    # Fallback to local dev postgres db url if environment is not set
+async def test_legacy_linear_sessions_are_chained_into_the_dag_on_connect():
+    """Pre-DAG chats lived in history_messages; connect() must not strand them."""
+    from sqlalchemy import delete
+
+    from substrate.agents.context.history import project_messages
+    from substrate.capabilities.history.durable_history import (
+        HistoryMessage,
+        HistorySession,
+        serialize_message,
+    )
+
     db_url = os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
     )
     provider = DurableHistoryProvider(db_url, echo=False)
-
     try:
         await provider.connect()
     except (OperationalError, Exception) as e:
         pytest.skip(f"PostgreSQL database not available: {e}")
 
-    agent_id = Actor(type="agent", key="test-agent")
-    session_id = "test-session-456"
-
+    session_id = "legacy-migrate-test"
+    storage_key = f"assistant:{session_id}"  # legacy "<agent.type>:<agent.key>"
+    factory = provider._get_session()
     try:
-        # Write clean state using protocol methods
-        await provider.clear(agent_id, session_id=session_id)
-        assert await provider.count_messages(agent_id, session_id=session_id) == 0
+        await provider.delete_session(session_id)
+        async with factory() as db:
+            db.add(HistorySession(id=storage_key, message_count=2))
+            for seq, (role, text) in enumerate([("user", "old q"), ("assistant", "old a")], 1):
+                db.add(
+                    HistoryMessage(
+                        session_id=storage_key,
+                        sequence=seq,
+                        message_type=role,
+                        payload=serialize_message(
+                            ChatMessage(role=role, content=[TextBlock(text=text)])
+                        ),
+                        run_id="r0",
+                    )
+                )
+            await db.commit()
 
-        # Save a message via the protocol
-        msg = ChatMessage(role="user", content=[TextBlock(text="postgres message")])
-        await provider.append(agent_id, msg, session_id=session_id, run_id="r1")
+        assert await provider._migrate_legacy_messages() >= 1
 
-        # Load via the protocol
-        loaded = await provider.get_messages(agent_id, session_id=session_id)
-        assert len(loaded) == 1
-        assert loaded[0].role == "user"
-        assert loaded[0].content[0].text == "postgres message"  # type: ignore[union-attr]
-
-        # Count via the protocol
-        assert await provider.count_messages(agent_id, session_id=session_id) == 1
-
-        # Cleanup via the protocol
-        await provider.clear(agent_id, session_id=session_id)
-        assert await provider.count_messages(agent_id, session_id=session_id) == 0
+        msgs = await project_messages(provider, session_id)
+        assert [m.content[0].text for m in msgs] == ["old q", "old a"]  # type: ignore[union-attr]
+        # Idempotent: the legacy rows are gone, a second pass migrates nothing new.
+        async with factory() as db:
+            left = (
+                await db.execute(
+                    HistoryMessage.__table__.select().where(
+                        HistoryMessage.session_id == storage_key
+                    )
+                )
+            ).all()
+        assert left == []
     finally:
+        await provider.delete_session(session_id)
+        async with factory() as db:
+            await db.execute(
+                delete(HistoryMessage).where(HistoryMessage.session_id == storage_key)
+            )
+            await db.execute(delete(HistorySession).where(HistorySession.id == storage_key))
+            await db.commit()
         await provider.disconnect()
 
 
@@ -78,7 +91,7 @@ async def test_postgres_history_dag_node_append_and_retrieval():
 
     session_id = "test-dag-sess-1"
     try:
-        await provider.clear_session_dag(session_id)
+        await provider.delete_session(session_id)
 
         from substrate.kernel.exceptions import DAGIntegrityError
         from substrate.kernel.storage.history import MessageNode
@@ -145,7 +158,7 @@ async def test_postgres_history_dag_node_append_and_retrieval():
         await provider.append_node(child)
         assert await provider.get_node("node-pg-child") is not None
     finally:
-        await provider.clear_session_dag(session_id)
+        await provider.delete_session(session_id)
         await provider.disconnect()
 
 
@@ -162,7 +175,7 @@ async def test_postgres_history_dag_append_and_advance_and_cas():
 
     session_id = "test-dag-sess-cas"
     try:
-        await provider.clear_session_dag(session_id)
+        await provider.delete_session(session_id)
 
         from substrate.kernel.exceptions import BranchHeadConflictError
         from substrate.kernel.storage.history import MessageNode
@@ -207,7 +220,7 @@ async def test_postgres_history_dag_append_and_advance_and_cas():
         assert b2.head_message_id == "n2"
         assert b2.version == 2
     finally:
-        await provider.clear_session_dag(session_id)
+        await provider.delete_session(session_id)
         await provider.disconnect()
 
 
@@ -224,7 +237,7 @@ async def test_postgres_history_dag_forking_and_checkpoints():
 
     session_id = "test-dag-sess-fork"
     try:
-        await provider.clear_session_dag(session_id)
+        await provider.delete_session(session_id)
 
         from substrate.agents.context.history import AncestryCheckpointResolver, DefaultHistoryResolver
         from substrate.kernel.exceptions import BranchAlreadyExistsError, DAGIntegrityError
@@ -293,6 +306,6 @@ async def test_postgres_history_dag_forking_and_checkpoints():
         assert applicable is not None
         assert applicable.id == "cp-1"
     finally:
-        await provider.clear_session_dag(session_id)
+        await provider.delete_session(session_id)
         await provider.disconnect()
 

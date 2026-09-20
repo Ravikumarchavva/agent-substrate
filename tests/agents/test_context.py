@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from substrate.kernel.storage.history import MessageNode
 from substrate.agents.context import (
     AgentContext,
     ContextConfig,
@@ -54,7 +55,9 @@ async def test_agent_context():
     session_id = "test-session"
 
     chat_msg = ChatMessage(role="user", content=[TextBlock(text="hi")])
-    await history.append(agent_id, chat_msg, session_id=session_id)
+    await history.append_and_advance(
+        MessageNode(session_id=session_id, payload=chat_msg), "main"
+    )
 
     ctx = AgentContext(agent_id, history, pipeline)
     assert ctx.agent_id == agent_id

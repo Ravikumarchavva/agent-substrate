@@ -20,6 +20,7 @@ from typing import Any, List, Optional, cast
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from substrate.config import SubstrateConfig
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.llm import EmbeddingClient, LLMClient
 from substrate.kernel.storage.history import HistoryProvider
@@ -704,7 +705,7 @@ async def resume_pending_runs(runtime: Any, *, registry: Any, model_client: Any)
                 RunLogEntry(
                     run_id=run_id,
                     seq=final_seq + 1,
-                    kind="run.failed",
+                    kind=RunLogKind.RUN_FAILED,
                     payload={"error": error, "status": "version_mismatch"},
                 ),
                 expected_seq=final_seq,

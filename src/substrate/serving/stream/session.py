@@ -43,6 +43,7 @@ import contextlib
 import json
 from typing import Any, AsyncIterator, Awaitable, Callable
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 from substrate.serving.monolith.sse.bridge import (
     BRIDGE_DONE,
@@ -151,13 +152,13 @@ class AgentStreamSession:
 
             async for entry in self._runtime.event_log.tail(run_id):
                 kind = entry.kind
-                if kind == "run.completed":
+                if kind == RunLogKind.RUN_COMPLETED:
                     await self._settle_task_boards()
                     return "success"
-                if kind == "run.failed":
+                if kind == RunLogKind.RUN_FAILED:
                     self._error = (entry.payload or {}).get("error", "agent run failed")
                     return "error"
-                if kind == "run.cancelled":
+                if kind == RunLogKind.RUN_CANCELLED:
                     return "cancelled"
 
                 wire = wire_from_log(kind, entry.payload or {})
@@ -424,15 +425,15 @@ async def tail_wire_events(
     """
     async for entry in event_log.tail(run_id, from_seq=from_seq):
         kind = entry.kind
-        if kind == "run.completed":
+        if kind == RunLogKind.RUN_COMPLETED:
             yield RunCompletedEvent()
             return
-        if kind == "run.failed":
+        if kind == RunLogKind.RUN_FAILED:
             yield RunFailedEvent(
                 error=(entry.payload or {}).get("error", "agent run failed")
             )
             return
-        if kind == "run.cancelled":
+        if kind == RunLogKind.RUN_CANCELLED:
             yield RunCancelledEvent()
             return
 

@@ -6,7 +6,7 @@ No I/O, no concrete implementations, no external dependencies beyond pydantic.
 File map
 --------
 ids.py            RunId, RunStatus, new_run_id
-log_entry.py      RunLogEntry, EventLogProtocol  (the append-only durable spine)
+log_entry.py      RunLogKind, RunLogEntry, EventLogProtocol  (the append-only durable spine)
 effects.py        Effect, EffectResult  (at-most-once external effects)
 inbox.py          InboxProtocol, DeadLetterEntry, DeadLetterReason  (durable mailbox)
 follow_graph.py   FollowGraph  (social follow-graph — NOT the RAG knowledge graph)
@@ -21,7 +21,7 @@ communication.py  AskOutcome, RunStatusSummary  (ask/reply value types)
 from __future__ import annotations
 
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
-from substrate.kernel.runtime.log_entry import EventLogProtocol, RunLogEntry
+from substrate.kernel.runtime.log_entry import EventLogProtocol, RunLogEntry, RunLogKind
 from substrate.kernel.runtime.effects import Effect, EffectResult
 from substrate.kernel.runtime.inbox import (
     DeadLetterEntry,
@@ -43,6 +43,7 @@ __all__ = [
     "new_run_id",
     # log
     "RunLogEntry",
+    "RunLogKind",
     "EventLogProtocol",
     # effects
     "Effect",

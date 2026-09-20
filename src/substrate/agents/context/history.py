@@ -1,11 +1,10 @@
-"""HistoryProvider re-export + InMemoryHistoryProvider and DefaultHistoryResolver."""
+"""InMemoryHistoryProvider, the DAG resolvers, and the linear ``project_messages`` view."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from substrate.kernel.core.content import ChatMessage
-from substrate.kernel.core.identity import Actor
 from substrate.kernel.exceptions import (
     BranchAlreadyExistsError,
     BranchHeadConflictError,
@@ -14,10 +13,8 @@ from substrate.kernel.exceptions import (
 )
 from substrate.kernel.storage.history import (
     Branch,
-    CheckpointResolver,
     HistoryCheckpoint,
     HistoryProvider,
-    HistoryResolver,
     MessageNode,
 )
 
@@ -29,8 +26,6 @@ class InMemoryHistoryProvider:
     """In-memory DAG-based HistoryProvider supporting branching and optimistic concurrency."""
 
     def __init__(self) -> None:
-        # Legacy store: (agent_id, session_id) -> [(run_id, ChatMessage)]
-        self._store: dict[tuple[Actor, str], list[tuple[str, ChatMessage]]] = {}
         # DAG store: node_id -> MessageNode
         self._nodes: dict[str, MessageNode] = {}
         # Branch store: (session_id, branch_id) -> Branch
@@ -356,72 +351,17 @@ class InMemoryHistoryProvider:
     async def list_checkpoints(self, session_id: str) -> list[HistoryCheckpoint]:
         return list(self._session_checkpoints.get(session_id, []))
 
-    # ── Legacy / Linear Compatibility Methods ───────────────────────────────
+    # ── Session lifecycle ────────────────────────────────────────────────────
 
-    @staticmethod
-    def _tag(message: ChatMessage, run_id: str) -> ChatMessage:
-        if not run_id or message.metadata.get("run_id") == run_id:
-            return message
-        return message.model_copy(
-            update={"metadata": {**message.metadata, "run_id": run_id}}
-        )
-
-    async def append(
-        self,
-        agent_id: Actor,
-        message: ChatMessage,
-        *,
-        session_id: str,
-        run_id: str = "",
-    ) -> None:
-        tagged = self._tag(message, run_id)
-        self._store.setdefault((agent_id, session_id), []).append((run_id, tagged))
-
-    async def append_many(
-        self,
-        agent_id: Actor,
-        messages: list[ChatMessage],
-        *,
-        session_id: str,
-        run_id: str = "",
-    ) -> None:
-        bucket = self._store.setdefault((agent_id, session_id), [])
-        bucket.extend((run_id, self._tag(m, run_id)) for m in messages)
-
-    async def get_messages(
-        self,
-        agent_id: Actor,
-        *,
-        session_id: str,
-        limit: int | None = None,
-        offset: int | None = None,
-    ) -> list[ChatMessage]:
-        pairs = self._store.get((agent_id, session_id), [])
-        msgs = [m for _, m in pairs]
-        if offset is not None:
-            msgs = msgs[offset:]
-        if limit is not None:
-            msgs = msgs[:limit]
-        return msgs
-
-    async def clear(self, agent_id: Actor, *, session_id: str) -> None:
-        self._store.pop((agent_id, session_id), None)
-
-    async def clear_run(
-        self, agent_id: Actor, *, session_id: str, run_id: str
-    ) -> None:
-        key = (agent_id, session_id)
-        if key in self._store:
-            self._store[key] = [
-                (rid, m) for rid, m in self._store[key] if rid != run_id
-            ]
-
-    async def count_messages(self, agent_id: Actor, *, session_id: str) -> int:
-        return len(self._store.get((agent_id, session_id), []))
+    async def delete_session(self, session_id: str) -> None:
+        self._nodes = {i: n for i, n in self._nodes.items() if n.session_id != session_id}
+        self._branches = {k: b for k, b in self._branches.items() if k[0] != session_id}
+        for cp in self._session_checkpoints.pop(session_id, []):
+            self._checkpoints.pop(cp.id, None)
 
 
 class DefaultHistoryResolver:
-    """Encapsulates parent-pointer walking over a HistoryProvider."""
+    """Walks parent pointers over a HistoryProvider."""
 
     def __init__(self, provider: HistoryProvider) -> None:
         self._provider = provider
@@ -474,7 +414,7 @@ class AncestryCheckpointResolver:
     def __init__(
         self,
         provider: HistoryProvider,
-        history_resolver: HistoryResolver | None = None,
+        history_resolver: DefaultHistoryResolver | None = None,
     ) -> None:
         self._provider = provider
         self._resolver = history_resolver or DefaultHistoryResolver(provider)
@@ -511,11 +451,40 @@ class AncestryCheckpointResolver:
         return None
 
 
+async def project_messages(
+    history: HistoryProvider,
+    session_id: str,
+    *,
+    branch_id: str = "main",
+    builder: Any = None,
+) -> list[ChatMessage]:
+    """Linear, LLM-ready view of one branch: ancestry, latest applicable
+    checkpoint, then the context builder. ``[]`` for an unknown or empty branch.
+
+    The single read path for conversation history — the linear transcript is
+    derived from the DAG, never stored separately.
+    """
+    branch = await history.get_branch(session_id, branch_id)
+    if branch is None or branch.head_message_id is None:
+        return []
+    nodes = await DefaultHistoryResolver(history).resolve_ancestry(
+        branch.head_message_id
+    )
+    checkpoint = await AncestryCheckpointResolver(history).find_applicable_checkpoint(
+        branch.head_message_id
+    )
+    if builder is None:
+        from substrate.agents.context.builder import DefaultContextBuilder
+
+        builder = DefaultContextBuilder()
+    window = await builder.build(nodes, checkpoint=checkpoint)
+    return list(window.messages)
+
+
 __all__ = [
     "HistoryProvider",
-    "HistoryResolver",
-    "CheckpointResolver",
     "InMemoryHistoryProvider",
     "DefaultHistoryResolver",
     "AncestryCheckpointResolver",
+    "project_messages",
 ]

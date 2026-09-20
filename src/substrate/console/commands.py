@@ -62,7 +62,7 @@ async def _cmd_quit(app: "Console", args: str) -> bool:
 async def _cmd_reset(app: "Console", args: str) -> bool:
     agent = app.agent
     if hasattr(agent, "_context") and hasattr(agent._context, "history"):
-        await agent._context.history.clear(agent.id, session_id=app._correlation_id)
+        await agent._context.history.delete_session(app._correlation_id)
     app.console.print("🔄 Agent memory cleared.", style="info")
     return False
 

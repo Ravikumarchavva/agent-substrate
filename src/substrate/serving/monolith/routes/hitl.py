@@ -8,6 +8,7 @@ GET /hitl/status/{thread_id} – check for pending HITL requests
 """
 
 from __future__ import annotations
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 
 import uuid
@@ -104,14 +105,14 @@ async def _durable_pending_hitl(ctx: ServerDependencies, thread_id: str) -> list
     last_kind: str | None = None
     last_request: dict | None = None
     async for entry in runtime.event_log.read(run_id):
-        if entry.kind in ("input.requested", "approval.requested"):
+        if entry.kind in (RunLogKind.INPUT_REQUESTED, RunLogKind.APPROVAL_REQUESTED):
             last_kind = entry.kind
             last_request = entry.payload
     if last_request is None or last_kind is None:
         return []
 
     request_id = last_request.get("request_id", "")
-    if last_kind == "input.requested":
+    if last_kind == RunLogKind.INPUT_REQUESTED:
         card = {
             "request_id": request_id,
             "run_id": run_id,

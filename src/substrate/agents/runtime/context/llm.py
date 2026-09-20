@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.content import ChatMessage, ContentBlock, JsonObject
 from substrate.kernel.core.usage import Usage
 from substrate.kernel.llm.llm import GenerationOptions, LLMResponse
@@ -114,10 +115,10 @@ class _LLMMixin:
             async for chunk in stream:
                 if isinstance(chunk, TextDelta):
                     text_chunks.append(chunk.text)
-                    await self._log("text.delta", {"text": chunk.text})
+                    await self._log(RunLogKind.TEXT_DELTA, {"text": chunk.text})
                 elif isinstance(chunk, ReasoningDelta):
                     reasoning_chunks.append(chunk.text)
-                    await self._log("reasoning.delta", {"text": chunk.text})
+                    await self._log(RunLogKind.REASONING_DELTA, {"text": chunk.text})
                 elif isinstance(chunk, CompletionEvent):
                     final_content = chunk.content
                     final_usage = chunk.usage
@@ -159,7 +160,7 @@ class _LLMMixin:
 
             await self._record_effect(effect_id, "ok", _serialize(resp))
             await self._log(
-                "llm.call",
+                RunLogKind.LLM_CALL,
                 {"model": llm_client.model, "tokens": resp.usage.total_tokens},
             )
             return resp

@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from substrate.agents.core.orchestrator import SubAgentConfig
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.agents.runtime.context import Agent
@@ -295,23 +296,23 @@ class Runtime:
         async for entry in self._event_log.tail(run_id):
             kind = entry.kind
             payload = entry.payload or {}
-            if kind == "tool.result":
+            if kind == RunLogKind.TOOL_RESULT:
                 # New turn boundary — the final answer is the text produced
                 # after the last tool result.
                 text_acc = ""
-            elif kind == "text.delta":
+            elif kind == RunLogKind.TEXT_DELTA:
                 text_acc += payload.get("text", "")
-            elif kind == "run.completed":
+            elif kind == RunLogKind.RUN_COMPLETED:
                 return RunOutcome(
                     run_id=run_id, status=RunStatus.COMPLETED, output=text_acc or None
                 )
-            elif kind == "run.failed":
+            elif kind == RunLogKind.RUN_FAILED:
                 return RunOutcome(
                     run_id=run_id,
                     status=RunStatus.FAILED,
                     error=payload.get("error", "agent run failed"),
                 )
-            elif kind == "run.cancelled":
+            elif kind == RunLogKind.RUN_CANCELLED:
                 return RunOutcome(run_id=run_id, status=RunStatus.CANCELLED)
         return RunOutcome(
             run_id=run_id, status=RunStatus.COMPLETED, output=text_acc or None

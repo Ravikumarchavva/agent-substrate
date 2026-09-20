@@ -15,6 +15,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.agents.runtime.runtime import Runtime
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.core.identity import Actor
@@ -211,10 +212,10 @@ class EvalRunner:
         trace = _Trace()
         async for entry in rt.event_log.read(run_id):
             payload = entry.payload or {}
-            if entry.kind == "llm.call":
+            if entry.kind == RunLogKind.LLM_CALL:
                 trace.steps += 1
                 trace.tokens += int(payload.get("tokens", 0) or 0)
-            elif entry.kind == "tool.call":
+            elif entry.kind == RunLogKind.TOOL_CALL:
                 name = str(payload.get("tool_name", "tool"))
                 trace.tool_total += 1
                 trace.tool_by_name[name] = trace.tool_by_name.get(name, 0) + 1

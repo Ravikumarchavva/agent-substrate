@@ -10,6 +10,7 @@ sessions and speculative execution branches:
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from typing import Sequence
 
@@ -76,18 +77,10 @@ class MemoryManager:
         if record is None:
             return None
 
-        # Re-create as ACTIVE
-        active_record = MemoryRecord(
-            id=record.id,
-            content=record.content,
-            category=record.category,
-            status=MemoryStatus.ACTIVE,
-            namespace=record.namespace,
-            provenance=record.provenance,
-            validity=record.validity,
-            lifecycle=record.lifecycle,
-            metadata=record.metadata,
-        )
+        # dataclasses.replace (not manual field-by-field reconstruction) so
+        # this doesn't go stale — and silently break — every time
+        # MemoryRecord's field set changes.
+        active_record = dataclasses.replace(record, status=MemoryStatus.ACTIVE)
         await self._store.save(active_record)
         return active_record
 
@@ -105,16 +98,8 @@ class MemoryManager:
         if supersedes_id:
             old_record = await self._store.get(supersedes_id)
             if old_record is not None:
-                superseded = MemoryRecord(
-                    id=old_record.id,
-                    content=old_record.content,
-                    category=old_record.category,
-                    status=MemoryStatus.SUPERSEDED,
-                    namespace=old_record.namespace,
-                    provenance=old_record.provenance,
-                    validity=old_record.validity,
-                    lifecycle=old_record.lifecycle,
-                    metadata=old_record.metadata,
+                superseded = dataclasses.replace(
+                    old_record, status=MemoryStatus.SUPERSEDED
                 )
                 await self._store.save(superseded)
 
@@ -129,16 +114,8 @@ class MemoryManager:
                     extraction_method=new_record.provenance.extraction_method,
                     supersedes_id=supersedes_id,
                 )
-                new_record = MemoryRecord(
-                    id=new_record.id,
-                    content=new_record.content,
-                    category=new_record.category,
-                    status=new_record.status,
-                    namespace=new_record.namespace,
-                    provenance=updated_provenance,
-                    validity=new_record.validity,
-                    lifecycle=new_record.lifecycle,
-                    metadata=new_record.metadata,
+                new_record = dataclasses.replace(
+                    new_record, provenance=updated_provenance
                 )
 
         return await self._store.save(new_record)

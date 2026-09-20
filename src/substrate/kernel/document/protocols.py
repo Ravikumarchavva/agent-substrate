@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from typing import Protocol, Sequence, runtime_checkable
 
 from substrate.kernel.document.models import (
     DocumentChunk,
@@ -11,12 +11,14 @@ from substrate.kernel.document.models import (
 )
 
 
+@runtime_checkable
 class DocumentExtractor(Protocol):
     """Contract every document extraction backend satisfies."""
 
     async def extract(self, data: bytes, filename: str) -> ExtractionResult: ...
 
 
+@runtime_checkable
 class DocumentChunker(Protocol):
     """Contract for splitting extracted document pages into retrieval-ready chunks."""
 
@@ -29,6 +31,7 @@ class DocumentChunker(Protocol):
     ) -> Sequence[DocumentChunk]: ...
 
 
+@runtime_checkable
 class DocumentStore(Protocol):
     """Durable catalog and chunk store for ingested documents."""
 

@@ -22,6 +22,7 @@ from substrate.capabilities.knowledge.segmentation import (
     SentenceSegmenter,
 )
 from substrate.kernel.core.content import TextBlock
+from substrate.kernel.document.models import DocumentChunk, ExtractionResult
 from substrate.kernel.storage.vector import Document
 
 
@@ -542,19 +543,115 @@ class StructureAwareChunker:
         return expanded
 
 
+class ExtractionDocumentChunker:
+    """DocumentChunker implementation that splits an ExtractionResult into DocumentChunks.
+
+    Processes pages or raw markdown, applying the selected chunking strategy
+    (structure, sentence, or text), while retaining page numbers, section headers,
+    and metadata.
+    """
+
+    def __init__(
+        self,
+        strategy: str = "structure",
+        *,
+        segmenter: SentenceSegmenter | None = None,
+    ) -> None:
+        self.strategy = strategy
+        self.segmenter = segmenter
+
+    def chunk(
+        self,
+        result: ExtractionResult,
+        *,
+        chunk_size: int = 500,
+        chunk_overlap: int = 50,
+    ) -> list[DocumentChunk]:
+        chunks: list[DocumentChunk] = []
+        global_idx = 0
+
+        if result.pages:
+            for page in result.pages:
+                page_text = (page.markdown or page.text).strip()
+                if not page_text:
+                    continue
+
+                inner_docs = self._chunk_text(
+                    page_text,
+                    chunk_size=chunk_size,
+                    overlap=chunk_overlap,
+                    metadata={"page_number": page.page_number, **dict(page.metadata)},
+                )
+                for doc in inner_docs:
+                    txt = doc.to_text() if hasattr(doc, "to_text") else (doc.content[0].text if doc.content else "")
+                    chunks.append(
+                        DocumentChunk(
+                            id=doc.id,
+                            text=txt,
+                            content=list(doc.content),
+                            page_number=page.page_number,
+                            chunk_index=global_idx,
+                            token_count=len(txt) // 4,
+                            metadata=dict(doc.metadata),
+                        )
+                    )
+                    global_idx += 1
+        elif result.markdown and result.markdown.strip():
+            inner_docs = self._chunk_text(
+                result.markdown.strip(),
+                chunk_size=chunk_size,
+                overlap=chunk_overlap,
+                metadata={},
+            )
+            for doc in inner_docs:
+                txt = doc.to_text() if hasattr(doc, "to_text") else (doc.content[0].text if doc.content else "")
+                chunks.append(
+                    DocumentChunk(
+                        id=doc.id,
+                        text=txt,
+                        content=list(doc.content),
+                        page_number=None,
+                        chunk_index=global_idx,
+                        token_count=len(txt) // 4,
+                        metadata=dict(doc.metadata),
+                    )
+                )
+                global_idx += 1
+
+        return chunks
+
+    def _chunk_text(
+        self,
+        text: str,
+        chunk_size: int,
+        overlap: int,
+        metadata: dict[str, Any],
+    ) -> list[Document]:
+        if self.strategy == "structure":
+            chunker = StructureAwareChunker(
+                chunk_size=chunk_size, overlap=overlap, segmenter=self.segmenter
+            )
+        elif self.strategy == "sentence":
+            chunker = SentenceChunker(max_chunk_size=chunk_size)
+        else:
+            chunker = TextChunker(chunk_size=chunk_size, overlap=overlap)
+        return chunker.chunk(text, metadata=metadata)
+
+
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 _CHUNKERS = {
     "text": TextChunker,
     "sentence": SentenceChunker,
     "structure": StructureAwareChunker,
+    "extraction": ExtractionDocumentChunker,
 }
 
 
 def get_chunker(
     name: str = "text",
     **kwargs: Any,
-) -> TextChunker | SentenceChunker | StructureAwareChunker:
+) -> TextChunker | SentenceChunker | StructureAwareChunker | ExtractionDocumentChunker:
     """Get a chunker by name."""
     cls = _CHUNKERS.get(name)
     if cls is None:

@@ -365,8 +365,11 @@ class LocalFilesystemHistoryProvider:
         async with lock:
             branch = self._load_branch(node.session_id, branch_id)
             if branch is None:
-                raise BranchNotFoundError(
-                    f"Branch '{branch_id}' not found in session '{node.session_id}'"
+                branch = Branch(
+                    id=branch_id,
+                    session_id=node.session_id,
+                    head_message_id=None,
+                    version=0,
                 )
 
             current_head = branch.head_message_id

@@ -14,8 +14,10 @@ from substrate.capabilities.knowledge.chunking import (
     TextChunker,
     SentenceChunker,
     PageChunker,
+    ExtractionDocumentChunker,
     get_chunker,
 )
+from substrate.capabilities.knowledge.document_store import InMemoryDocumentStore
 from substrate.capabilities.knowledge.reranker import LLMReranker
 from substrate.capabilities.knowledge.ask import ask, AskResult, Citation, list_catalog
 
@@ -43,7 +45,9 @@ __all__ = [
     "TextChunker",
     "SentenceChunker",
     "PageChunker",
+    "ExtractionDocumentChunker",
     "get_chunker",
+    "InMemoryDocumentStore",
     "LLMReranker",
     "ask",
     "AskResult",

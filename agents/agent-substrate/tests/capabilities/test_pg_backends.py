@@ -302,6 +302,7 @@ async def test_pg_task_store_persist_and_reload() -> None:
         pytest.skip("Postgres not reachable")
 
     from substrate.infrastructure.storage.pg_task_store import PgTaskStore
+    from substrate.kernel.storage.tasks import TaskStatus
 
     conv_id = f"conv-{id(object())}"
 
@@ -309,8 +310,8 @@ async def test_pg_task_store_persist_and_reload() -> None:
     await store1.setup()
 
     tl = await store1.create_task_list(conv_id, ["plan", "code", "test"], max_retries=2)
-    await store1.update_status(tl.id, tl.tasks[0].id, "in_progress")
-    await store1.update_status(tl.id, tl.tasks[0].id, "done")
+    await store1.update_status(tl.id, tl.tasks[0].id, TaskStatus.IN_PROGRESS)
+    await store1.update_status(tl.id, tl.tasks[0].id, TaskStatus.SUCCEEDED)
 
     # Fresh store — simulates restart
     store2 = PgTaskStore(factory)
@@ -318,7 +319,7 @@ async def test_pg_task_store_persist_and_reload() -> None:
     assert reloaded is not None
     assert reloaded.conversation_id == conv_id
     assert len(reloaded.tasks) == 3
-    done_tasks = [t for t in reloaded.tasks if t.status == "done"]
+    done_tasks = [t for t in reloaded.tasks if t.status == TaskStatus.SUCCEEDED]
     assert len(done_tasks) == 1
     assert done_tasks[0].title == "plan"
 

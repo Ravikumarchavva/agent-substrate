@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import TYPE_CHECKING, AsyncIterator, Protocol, runtime_checkable
 
-from substrate.kernel.core.content import ChatMessage, ContentBlock, TextBlock
+from pydantic import Field
+
+from substrate.kernel.core.content import ChatMessage, ContentBlock, KernelModel, TextBlock
 from substrate.kernel.messaging.stream import CompletionEvent, ReasoningDelta, TextDelta
 from substrate.kernel.core.usage import Usage
 
@@ -14,6 +17,39 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
     from substrate.kernel.agent.runtime_context import RunMeta
     from substrate.kernel.tools import AnyTool
+
+
+class Modality(StrEnum):
+    """A kind of content an LLM can accept as input or produce as output."""
+
+    TEXT = "text"
+    IMAGE = "image"
+    AUDIO = "audio"
+    VIDEO = "video"
+    DOCUMENT = "document"
+
+
+class ModelCapabilities(KernelModel):
+    """What a specific model supports — for routing, not for calling it.
+
+    A shared type so a router (once ``fabric/`` has one) can pick between
+    models generically instead of every call site hardcoding per-provider
+    knowledge — mirrors the ad-hoc modality/audio-support flags that
+    already exist per-provider in ``agents/llm/models.py``, promoted here
+    since routing on capability is a genuinely cross-layer concern. No
+    consumer builds a router against this yet; this is the contract for
+    when one does.
+    """
+
+    model_id: str
+    context_window: int
+    max_output_tokens: int | None = None
+    input_modalities: list[Modality] = Field(default_factory=list)
+    output_modalities: list[Modality] = Field(default_factory=list)
+    supports_tool_calling: bool = False
+    supports_streaming: bool = False
+    cost_per_input_token_usd: float | None = None
+    cost_per_output_token_usd: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +96,15 @@ class GenerationOptions:
 
 @runtime_checkable
 class LLMClient(Protocol):
-    """Contract every LLM provider adapter must satisfy."""
+    """Contract every LLM provider adapter must satisfy.
+
+    A client MAY additionally expose a ``capabilities: ModelCapabilities |
+    None`` attribute for callers that want to introspect context window,
+    modality support, or cost — deliberately not part of this Protocol's
+    required structural surface (so existing clients aren't forced to add
+    it, and ``isinstance(x, LLMClient)`` keeps working for every current
+    implementation); no router in this codebase consults it yet.
+    """
 
     model: str
 
@@ -122,4 +166,6 @@ __all__ = [
     "EmbeddingClient",
     "EmbeddingResult",
     "Usage",
+    "Modality",
+    "ModelCapabilities",
 ]

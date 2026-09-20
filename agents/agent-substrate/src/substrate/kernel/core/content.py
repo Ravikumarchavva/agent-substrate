@@ -313,7 +313,7 @@ def content_blocks_to_str(blocks: Sequence[ContentBlock]) -> str:
 class ChatMessage(KernelModel):
     """A role-tagged conversation turn containing multimodal blocks."""
 
-    role: str
+    role: Role
     content: BlockList = Field(default_factory=list)
     name: str | None = None
     metadata: JsonObject = Field(default_factory=dict)

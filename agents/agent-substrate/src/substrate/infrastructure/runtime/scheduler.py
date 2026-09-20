@@ -36,6 +36,7 @@ from substrate.infrastructure.observability.runtime_metrics import (
     retry_counter,
     suspension_counter,
 )
+from substrate.kernel.agent.supervision import Priority
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
@@ -341,7 +342,7 @@ class Scheduler:
             )
         return [RunId(row["run_id"]) for row in rows]
 
-    async def wake_agent(self, agent_id: Actor, *, priority: int = 5) -> None:
+    async def wake_agent(self, agent_id: Actor, *, priority: Priority = Priority.NORMAL) -> None:
         """Re-enqueue the active suspended run for agent_id, if any."""
         async with self._pool.acquire() as conn:
             await conn.execute(
@@ -356,7 +357,7 @@ class Scheduler:
                 str(agent_id),
             )
 
-    async def wake_suspended(self, run_id: RunId, *, priority: int = 5) -> None:
+    async def wake_suspended(self, run_id: RunId, *, priority: Priority = Priority.NORMAL) -> None:
         """Re-enqueue a suspended run."""
         async with self._pool.acquire() as conn:
             await conn.execute(
@@ -374,7 +375,7 @@ class Scheduler:
         self,
         run_id: RunId,
         *,
-        priority: int,
+        priority: Priority = Priority.NORMAL,
         tenant: str,
         wake: Wakeup | None = None,
         retry_policy: RunRetryPolicy | None = None,

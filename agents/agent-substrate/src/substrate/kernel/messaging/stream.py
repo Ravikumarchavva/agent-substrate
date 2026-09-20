@@ -2,9 +2,15 @@
 
 Two independent event channels:
 
-1. **Token stream** (``TextDelta``, ``ReasoningDelta``, ``CompletionEvent``,
-   ``StreamDone``) — LLM token-by-token output from the agent currently
-   speaking to the user.
+1. **Token stream** (``TextDelta``, ``ReasoningDelta``, ``AudioDelta``,
+   ``ImageDelta``, ``CompletionEvent``, ``StreamDone``) — LLM token-by-token
+   (or chunk-by-chunk, for audio/image) output from the agent currently
+   speaking to the user. ``AudioDelta``/``ImageDelta`` have no producer or
+   consumer in this codebase yet — added ahead of a real streaming
+   multimodal use case since the content model (``MediaBlock`` et al.) is
+   already multimodal end-to-end and this was the one piece still
+   text-only by omission. Not part of replay state, same as
+   ``RunLogKind.TEXT_DELTA``/``REASONING_DELTA``.
 
 2. **Progress stream** (``AgentProgress``) — structured step events emitted
    by every agent in the supervision tree throughout execution. All agents in
@@ -65,6 +71,42 @@ class ReasoningDelta(BaseModel):
     seq: int = 0
 
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
+
+
+class AudioDelta(BaseModel):
+    """Incremental audio output — emitted chunk-by-chunk for a voice agent."""
+
+    audio: bytes
+    mime_type: str = "audio/pcm16"
+    sample_rate: int | None = None
+    agent_id: Actor | None = None
+    run_id: str = ""
+    seq: int = 0
+
+    model_config = {
+        "frozen": True,
+        "arbitrary_types_allowed": True,
+        "ser_json_bytes": "base64",
+        "val_json_bytes": "base64",
+    }
+
+
+class ImageDelta(BaseModel):
+    """Incremental image output — emitted as a generated image progressively fills in."""
+
+    data: bytes
+    mime_type: str = "image/png"
+    is_final: bool = False
+    agent_id: Actor | None = None
+    run_id: str = ""
+    seq: int = 0
+
+    model_config = {
+        "frozen": True,
+        "arbitrary_types_allowed": True,
+        "ser_json_bytes": "base64",
+        "val_json_bytes": "base64",
+    }
 
 
 class CompletionEvent(BaseModel):
@@ -141,6 +183,8 @@ class AgentProgress(BaseModel):
 __all__ = [
     "TextDelta",
     "ReasoningDelta",
+    "AudioDelta",
+    "ImageDelta",
     "CompletionEvent",
     "StreamDone",
     "AgentProgress",

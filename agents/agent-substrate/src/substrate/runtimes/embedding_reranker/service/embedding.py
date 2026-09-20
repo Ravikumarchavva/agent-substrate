@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import base64
 import logging
+from typing import Sequence
 
 import httpx2 as httpx
 
@@ -118,6 +119,31 @@ class EmbeddingReranker:
         fitted = _downscale_to_pixel_budget(data, self._max_image_pixels)
         b64 = base64.b64encode(fitted).decode("ascii")
         payload = {"input": {"prompt_string": marker, "multimodal_data": [b64]}}
+        return await self._embed(payload)
+
+    async def embed_mixed(self, parts: Sequence[str | bytes]) -> list[float]:
+        """Embed one prompt of interleaved text and image parts as a single vector.
+
+        Generalizes ``embed_image``'s verified mechanism (a ``prompt_string``
+        with the dynamic ``media_marker`` in place of each image, plus
+        ``multimodal_data`` carrying the actual image bytes) to also carry
+        text: a ``str`` item in ``parts`` is literal prompt text, a ``bytes``
+        item is image data inserted as the marker, in the order given.
+        """
+        marker = await self._media_marker()
+        prompt_segments: list[str] = []
+        images_b64: list[str] = []
+        for part in parts:
+            if isinstance(part, (bytes, bytearray)):
+                fitted = _downscale_to_pixel_budget(bytes(part), self._max_image_pixels)
+                images_b64.append(base64.b64encode(fitted).decode("ascii"))
+                prompt_segments.append(marker)
+            else:
+                prompt_segments.append(str(part))
+        prompt_string = " ".join(seg for seg in prompt_segments if seg)
+        payload = {
+            "input": {"prompt_string": prompt_string, "multimodal_data": images_b64}
+        }
         return await self._embed(payload)
 
     async def embed_images(self, images: list[bytes]) -> list[list[float]]:

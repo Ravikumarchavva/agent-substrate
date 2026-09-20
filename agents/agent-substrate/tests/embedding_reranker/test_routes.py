@@ -25,6 +25,7 @@ class _FakeEmbeddingReranker:
     def __init__(self):
         self.embed_image_calls: list[bytes] = []
         self.embed_text_calls: list[str] = []
+        self.embed_mixed_calls: list[list] = []
 
     async def embed_image(self, data: bytes) -> list[float]:
         self.embed_image_calls.append(data)
@@ -33,6 +34,10 @@ class _FakeEmbeddingReranker:
     async def embed_text(self, text: str) -> list[float]:
         self.embed_text_calls.append(text)
         return [0.4, 0.5, 0.6]
+
+    async def embed_mixed(self, parts: list) -> list[float]:
+        self.embed_mixed_calls.append(list(parts))
+        return [0.7, 0.8, 0.9]
 
     async def rerank(self, query: str, passages: list[str]) -> list[float]:
         return [1.0 - i * 0.1 for i in range(len(passages))]
@@ -83,6 +88,37 @@ def test_embed_both_set_returns_400():
 def test_embed_neither_set_returns_400():
     client = _client()
     resp = client.post("/v1/embed", json={})
+    assert resp.status_code == 400
+
+
+def test_embed_text_plus_images_calls_embed_mixed():
+    reranker = _FakeEmbeddingReranker()
+    client = _client(embedding_reranker=reranker)
+    resp = client.post(
+        "/v1/embed",
+        json={"text": "a chart", "images_base64": [_b64(b"img1"), _b64(b"img2")]},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["embedding"] == [0.7, 0.8, 0.9]
+    assert reranker.embed_mixed_calls == [["a chart", b"img1", b"img2"]]
+
+
+def test_embed_images_only_calls_embed_mixed_with_no_text():
+    reranker = _FakeEmbeddingReranker()
+    client = _client(embedding_reranker=reranker)
+    resp = client.post("/v1/embed", json={"images_base64": [_b64(b"img1")]})
+
+    assert resp.status_code == 200
+    assert reranker.embed_mixed_calls == [[b"img1"]]
+
+
+def test_embed_image_base64_with_images_base64_returns_400():
+    client = _client()
+    resp = client.post(
+        "/v1/embed",
+        json={"image_base64": _b64(b"x"), "images_base64": [_b64(b"y")]},
+    )
     assert resp.status_code == 400
 
 

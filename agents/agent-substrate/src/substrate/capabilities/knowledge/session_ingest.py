@@ -24,7 +24,6 @@ storage, so this function works regardless of ``RAG_BACKEND``.
 
 from __future__ import annotations
 
-import dataclasses
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -104,16 +103,17 @@ async def ingest_session_document(
     # is the whole mechanism that replaces the old staging/promote dance:
     # rows are already correctly scoped for SessionDocumentSearchTool's
     # `filter={"session_id": ...}` queries the moment they're written.
-    # Document is frozen — dataclasses.replace(), not attribute assignment.
+    # Document is frozen — model_copy(update=...), not attribute assignment.
     text_documents = [
-        dataclasses.replace(
-            doc,
-            metadata={
-                **doc.metadata,
-                "session_id": session_id,
-                "document_id": document_id,
-                "filename": filename,
-            },
+        doc.model_copy(
+            update={
+                "metadata": {
+                    **doc.metadata,
+                    "session_id": session_id,
+                    "document_id": document_id,
+                    "filename": filename,
+                }
+            }
         )
         for doc in text_documents
     ]

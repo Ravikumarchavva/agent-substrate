@@ -22,7 +22,6 @@ before starting — there is no migration framework; schema is declarative.
 
 from __future__ import annotations
 
-import dataclasses
 import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
@@ -177,11 +176,12 @@ class PgTaskStore:
             await session.commit()
         if row is not None and row[0] is not None:
             created = row[0]
-            task_list = dataclasses.replace(
-                task_list,
-                created_at=created.isoformat()
-                if hasattr(created, "isoformat")
-                else str(created),
+            task_list = task_list.model_copy(
+                update={
+                    "created_at": created.isoformat()
+                    if hasattr(created, "isoformat")
+                    else str(created)
+                }
             )
         return task_list
 
@@ -246,13 +246,13 @@ class PgTaskStore:
             for task in task_list.tasks:
                 if task.status == TaskStatus.IN_PROGRESS:
                     new_tasks.append(
-                        dataclasses.replace(task, status=TaskStatus.SUCCEEDED)
+                        task.model_copy(update={"status": TaskStatus.SUCCEEDED})
                     )
                     mutated = True
                 else:
                     new_tasks.append(task)
             if mutated:
-                updated = dataclasses.replace(task_list, tasks=new_tasks)
+                updated = task_list.model_copy(update={"tasks": new_tasks})
                 await self._save_tasks(updated)
                 changed.append(updated)
         return changed
@@ -262,7 +262,7 @@ class PgTaskStore:
     # ------------------------------------------------------------------
 
     async def update_status(
-        self, task_list_id: str, task_id: str, status: str, note: str = ""
+        self, task_list_id: str, task_id: str, status: TaskStatus, note: str = ""
     ) -> Optional[Task]:
         task_list = await self.get_task_list(task_list_id)
         if not task_list:
@@ -270,15 +270,14 @@ class PgTaskStore:
         new_task: Task | None = None
         for task in task_list.tasks:
             if task.id == task_id:
-                new_task = dataclasses.replace(
-                    task, status=status, note=note if note else task.note
+                new_task = task.model_copy(
+                    update={"status": status, "note": note if note else task.note}
                 )
                 break
         if new_task is None:
             return None
-        updated_list = dataclasses.replace(
-            task_list,
-            tasks=[new_task if t.id == task_id else t for t in task_list.tasks],
+        updated_list = task_list.model_copy(
+            update={"tasks": [new_task if t.id == task_id else t for t in task_list.tasks]}
         )
         await self._save_tasks(updated_list)
         return new_task
@@ -302,8 +301,8 @@ class PgTaskStore:
             for i, t in enumerate(titles)
             if t.strip()
         ]
-        updated_list = dataclasses.replace(
-            task_list, tasks=[*task_list.tasks, *new_tasks]
+        updated_list = task_list.model_copy(
+            update={"tasks": [*task_list.tasks, *new_tasks]}
         )
         await self._save_tasks(updated_list)
         return new_tasks
@@ -316,7 +315,7 @@ class PgTaskStore:
         new_tasks = [t for t in task_list.tasks if t.id != task_id]
         if len(new_tasks) == before:
             return False
-        await self._save_tasks(dataclasses.replace(task_list, tasks=new_tasks))
+        await self._save_tasks(task_list.model_copy(update={"tasks": new_tasks}))
         return True
 
     async def increment_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
@@ -329,17 +328,17 @@ class PgTaskStore:
             if task.id == task_id:
                 if task.retry_count >= task_list.max_retries:
                     return None
-                updated = dataclasses.replace(
-                    task,
-                    retry_count=task.retry_count + 1,
-                    status=TaskStatus.IN_PROGRESS,
+                updated = task.model_copy(
+                    update={
+                        "retry_count": task.retry_count + 1,
+                        "status": TaskStatus.IN_PROGRESS,
+                    }
                 )
                 break
         if updated is None:
             return None
-        new_list = dataclasses.replace(
-            task_list,
-            tasks=[updated if t.id == task_id else t for t in task_list.tasks],
+        new_list = task_list.model_copy(
+            update={"tasks": [updated if t.id == task_id else t for t in task_list.tasks]}
         )
         await self._save_tasks(new_list)
         return updated
@@ -352,15 +351,14 @@ class PgTaskStore:
         updated: Task | None = None
         for task in task_list.tasks:
             if task.id == task_id:
-                updated = dataclasses.replace(
-                    task, retry_count=0, status=TaskStatus.IN_PROGRESS, note=""
+                updated = task.model_copy(
+                    update={"retry_count": 0, "status": TaskStatus.IN_PROGRESS, "note": ""}
                 )
                 break
         if updated is None:
             return None
-        new_list = dataclasses.replace(
-            task_list,
-            tasks=[updated if t.id == task_id else t for t in task_list.tasks],
+        new_list = task_list.model_copy(
+            update={"tasks": [updated if t.id == task_id else t for t in task_list.tasks]}
         )
         await self._save_tasks(new_list)
         return updated
@@ -374,13 +372,12 @@ class PgTaskStore:
         updated: Task | None = None
         for task in task_list.tasks:
             if task.id == task_id:
-                updated = dataclasses.replace(task, title=title.strip())
+                updated = task.model_copy(update={"title": title.strip()})
                 break
         if updated is None:
             return None
-        new_list = dataclasses.replace(
-            task_list,
-            tasks=[updated if t.id == task_id else t for t in task_list.tasks],
+        new_list = task_list.model_copy(
+            update={"tasks": [updated if t.id == task_id else t for t in task_list.tasks]}
         )
         await self._save_tasks(new_list)
         return updated

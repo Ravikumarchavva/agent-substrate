@@ -52,7 +52,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -174,7 +174,7 @@ class DocumentIngestPipeline:
 
         try:
             vecs = await self._embedder.embed_texts([c.content[0].text for c in chunks])
-            return [replace(c, embedding=v) for c, v in zip(chunks, vecs)]
+            return [c.model_copy(update={"embedding": v}) for c, v in zip(chunks, vecs)]
         except EmbeddingServiceError as exc:
             logger.warning(
                 "Batch embed failed for %s (%s) — falling back to per-chunk",
@@ -194,7 +194,7 @@ class DocumentIngestPipeline:
                     exc,
                 )
                 continue
-            text_docs.append(replace(c, embedding=vec))
+            text_docs.append(c.model_copy(update={"embedding": vec}))
         return text_docs
 
     _EXT_BY_MEDIA_TYPE = {

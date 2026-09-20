@@ -20,6 +20,7 @@ from substrate.infrastructure.observability.runtime_metrics import (
     retry_counter,
     suspension_counter,
 )
+from substrate.kernel.agent.supervision import Priority
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
@@ -70,7 +71,7 @@ class InMemoryScheduler:
         self,
         run_id: RunId,
         *,
-        priority: int,
+        priority: Priority = Priority.NORMAL,
         tenant: str,
         wake: Wakeup | None = None,
         retry_policy: RunRetryPolicy | None = None,
@@ -205,7 +206,7 @@ class InMemoryScheduler:
         if self._status.get(run_id) == RunStatus.SUSPENDED:
             await self.enqueue(
                 run_id,
-                priority=5,
+                priority=Priority.NORMAL,
                 tenant=self._tenants.get(run_id, "default"),
                 wake=wake_on,
             )
@@ -226,7 +227,7 @@ class InMemoryScheduler:
         self._status[run_id] = RunStatus.CANCELLED
         return True
 
-    async def wake_suspended(self, run_id: RunId, *, priority: int = 5) -> None:
+    async def wake_suspended(self, run_id: RunId, *, priority: Priority = Priority.NORMAL) -> None:
         """Re-enqueue a suspended run (called by SignalBusProtocol/InboxProtocol when a wakeup fires)."""
         if self._status.get(run_id) == RunStatus.SUSPENDED:
             await self.enqueue(run_id, priority=priority, tenant="default")
@@ -255,7 +256,7 @@ class InMemoryScheduler:
                     return (run_id, status)
         return None
 
-    async def wake_agent(self, agent_id: Actor, *, priority: int = 5) -> None:
+    async def wake_agent(self, agent_id: Actor, *, priority: Priority = Priority.NORMAL) -> None:
         """Wake the active run for agent_id, if any."""
         for run_id, aid in list(self._agents.items()):
             if aid == agent_id:

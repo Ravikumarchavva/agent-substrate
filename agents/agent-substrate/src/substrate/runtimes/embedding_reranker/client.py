@@ -14,6 +14,7 @@ no session affinity to route on.
 from __future__ import annotations
 from substrate.logger import setup_logging
 
+import base64
 import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
@@ -106,11 +107,13 @@ class EmbeddingRerankerClient:
             return None
 
     async def embed_blocks(self, blocks: Sequence[ContentBlock]) -> list[float] | None:
-        """Embed mixed text + image content as a single vector when supported.
-
-        The sidecar accepts text with multimodal payloads in one request, but some
-        versions reject mixed prompts. When that happens, fall back to separately
-        embedding each modality and returning the L2-normalized mean vector.
+        """Embed mixed text + image content as a single vector via the
+        service's real ``/v1/embed`` mixed-input shape (``text`` +
+        ``images_base64`` together — see ``EmbedRequest``), which embeds one
+        prompt with each image's dynamic media_marker interleaved
+        server-side. Falls back to per-modality embed + L2-normalized mean
+        only if that request genuinely fails (not on every call, since the
+        mixed shape is a real, working endpoint, not a guess).
         """
         if not blocks:
             return []
@@ -137,15 +140,11 @@ class EmbeddingRerankerClient:
 
         try:
             if images:
-                payload: dict[str, Any] = {"text": text}
+                payload: dict[str, Any] = {
+                    "images_base64": [base64.b64encode(image).decode("ascii") for image in images]
+                }
                 if text:
-                    payload["multimodal_data"] = [
-                        __import__("base64").b64encode(image).decode("ascii") for image in images
-                    ]
-                else:
-                    payload["multimodal_data"] = [
-                        __import__("base64").b64encode(image).decode("ascii") for image in images
-                    ]
+                    payload["text"] = text
                 resp = await self._request("POST", "/v1/embed", json=payload)
                 return resp.json()["embedding"]
             return await self.embed_text(text)

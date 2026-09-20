@@ -14,17 +14,31 @@ Write Semantics:
     MemoryStore.save(record) performs an explicit upsert by record.id:
       - If record.id does not exist: INSERT.
       - If record.id exists: REPLACE.
+
+Lifecycle signal (not enforced here):
+    ``MemoryRecord.importance``/``last_accessed_at``/``access_count`` carry the
+    recency/frequency/importance signal a future capabilities-layer memory
+    consolidator needs to exist at all. Kernel only carries the fields —
+    no decay or consolidation algorithm lives here (that belongs in
+    ``capabilities/memory/``, same boundary as everything else memory-related).
+    Nothing reads them yet; this is a deliberate, flagged trade-off, not an
+    oversight — see the plan that introduced them.
 """
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
-from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, Sequence, runtime_checkable
+
+from pydantic import Field
 
 from substrate.kernel.core.content import (
+    BlockList,
     ContentBlock,
+    JsonObject,
+    KernelModel,
     TextBlock,
     content_blocks_to_str,
 )
@@ -49,8 +63,17 @@ class MemoryStatus(StrEnum):
     REJECTED = "rejected"      # Evaluated and discarded
 
 
-@dataclass(frozen=True)
-class MemoryNamespace:
+class ExtractionMethod(StrEnum):
+    """How a memory record's content was produced."""
+
+    MANUAL = "manual"                    # Directly authored (e.g. a stated user preference)
+    LLM_REFLECTION = "llm_reflection"    # Distilled by an LLM reflecting on a conversation
+    TOOL_OUTPUT = "tool_output"          # Captured verbatim from a tool execution result
+    RULE_HEURISTIC = "rule_heuristic"    # Extracted by a deterministic rule, not an LLM
+    USER_CORRECTION = "user_correction"  # A user explicitly corrected/superseded a memory
+
+
+class MemoryNamespace(KernelModel):
     """Multi-tenant isolation and authority boundary.
 
     Query matching semantics:
@@ -81,47 +104,39 @@ class MemoryNamespace:
         return cls(tenant_id=tenant_id, agent_id=f"{actor.type}:{actor.key}", session_id=session_id)
 
 
-@dataclass(frozen=True)
-class MemoryProvenance:
+class MemoryProvenance(KernelModel):
     """Auditability, extraction attribution, and DAG branch awareness."""
 
     source_session_id: str | None = None
     source_node_id: str | None = None
     source_branch_id: str | None = None
     source_run_id: str | None = None
-    confidence: float = 1.0
-    extraction_method: str = "manual"  # e.g., "manual", "llm_reflection", "tool_output"
-    supersedes_id: str | None = None   # Points to prior memory ID this record replaced
-
-    def __post_init__(self) -> None:
-        if not 0.0 <= self.confidence <= 1.0:
-            raise ValueError("confidence must be between 0.0 and 1.0")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    extraction_method: ExtractionMethod = ExtractionMethod.MANUAL
+    supersedes_id: str | None = None  # Points to prior memory ID this record replaced
 
 
-@dataclass(frozen=True)
-class MemoryRecord:
+class MemoryRecord(KernelModel):
     """Canonical immutable memory currency across Substrate.
 
     Score is intentionally excluded from this record because ranking is
     a property of a query, not the record's intrinsic identity.
+
+    ``v`` is the entry schema version — bump only for a change old readers
+    cannot handle (same rule as ``RunLogEntry.v``).
     """
 
-    id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    content: Sequence[ContentBlock] = field(default_factory=tuple)
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    content: BlockList = Field(default_factory=list)
     category: MemoryCategory = MemoryCategory.SEMANTIC
     status: MemoryStatus = MemoryStatus.ACTIVE
-    namespace: MemoryNamespace = field(default_factory=lambda: MemoryNamespace(tenant_id="default"))
-    provenance: MemoryProvenance = field(default_factory=MemoryProvenance)
-    metadata: Mapping[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        # Normalize content to an immutable tuple of ContentBlocks
-        if isinstance(self.content, str):
-            object.__setattr__(self, "content", (TextBlock(text=self.content),))
-        elif hasattr(self.content, "type"):  # Single ContentBlock instance
-            object.__setattr__(self, "content", (self.content,))
-        elif isinstance(self.content, (list, tuple)):
-            object.__setattr__(self, "content", tuple(self.content))
+    namespace: MemoryNamespace = Field(default_factory=lambda: MemoryNamespace(tenant_id="default"))
+    provenance: MemoryProvenance = Field(default_factory=MemoryProvenance)
+    metadata: JsonObject = Field(default_factory=dict)
+    v: int = 1
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    last_accessed_at: datetime | None = None
+    access_count: int = Field(default=0, ge=0)
 
     @classmethod
     def from_text(
@@ -137,7 +152,7 @@ class MemoryRecord:
         session_id: str | None = None,
         namespace: MemoryNamespace | None = None,
         provenance: MemoryProvenance | None = None,
-        metadata: Mapping[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> MemoryRecord:
         """Create a verified active text memory."""
@@ -148,7 +163,7 @@ class MemoryRecord:
             session_id=session_id,
         )
         return cls(
-            content=(TextBlock(text=text),),
+            content=[TextBlock(text=text)],
             id=id or uuid.uuid4().hex,
             category=category,
             status=status,
@@ -170,7 +185,7 @@ class MemoryRecord:
         session_id: str | None = None,
         namespace: MemoryNamespace | None = None,
         provenance: MemoryProvenance | None = None,
-        metadata: Mapping[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> MemoryRecord:
         """Create a candidate memory record awaiting promotion/verification."""
         ns = namespace or MemoryNamespace(
@@ -201,8 +216,7 @@ class MemoryRecord:
         return self.to_text()
 
 
-@dataclass(frozen=True)
-class MemoryMatch:
+class MemoryMatch(KernelModel):
     """Query result pairing a MemoryRecord with ephemeral query metrics."""
 
     record: MemoryRecord
@@ -232,7 +246,7 @@ class MemoryMatch:
         return self.record.namespace
 
     @property
-    def metadata(self) -> Mapping[str, Any]:
+    def metadata(self) -> JsonObject:
         return self.record.metadata
 
     def to_text(self) -> str:
@@ -246,26 +260,24 @@ class MemoryMatch:
         return self.record.to_text()
 
 
-@dataclass(frozen=True)
-class MemoryQuery:
+class MemoryQuery(KernelModel):
     """Composable specification for searching memory stores."""
 
     namespace: MemoryNamespace
     text_query: str | None = None
     embedding: Sequence[float] | None = None
     categories: Sequence[MemoryCategory] | None = None
-    statuses: Sequence[MemoryStatus] = (MemoryStatus.ACTIVE,)
+    statuses: Sequence[MemoryStatus] = Field(default_factory=lambda: (MemoryStatus.ACTIVE,))
     limit: int = 10
     min_score: float = 0.0
-    metadata_filter: Mapping[str, Any] | None = None
+    metadata_filter: JsonObject | None = None
 
 
-@dataclass(frozen=True)
-class ContextMemoryInjection:
+class ContextMemoryInjection(KernelModel):
     """Assembled memory context blocks ready for LLM context exposure."""
 
-    directives: Sequence[ContentBlock] = field(default_factory=tuple)
-    relevant_memories: Sequence[ContentBlock] = field(default_factory=tuple)
+    directives: Sequence[ContentBlock] = Field(default_factory=tuple)
+    relevant_memories: Sequence[ContentBlock] = Field(default_factory=tuple)
     estimated_tokens: int = 0
 
 
@@ -347,6 +359,7 @@ class MemoryStore(Protocol):
 __all__ = [
     "MemoryCategory",
     "MemoryStatus",
+    "ExtractionMethod",
     "MemoryNamespace",
     "MemoryProvenance",
     "MemoryRecord",

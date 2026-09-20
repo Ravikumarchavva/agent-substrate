@@ -4,9 +4,13 @@ unreranked order or skip indexing one bad image."""
 
 from __future__ import annotations
 
+import json
+
 import httpx2 as httpx
 import pytest
 
+from substrate.kernel.core.content import MediaBlock, TextBlock
+from substrate.kernel.exceptions import UnsupportedContentError
 from substrate.runtimes.embedding_reranker.client import (
     EmbeddingRerankerClient,
     EmbeddingRerankerTextEmbeddingClient,
@@ -161,6 +165,83 @@ async def test_adapter_embed_single_returns_the_raw_vector():
     adapter = EmbeddingRerankerTextEmbeddingClient(client)
 
     assert await adapter.embed_single("query") == [0.7, 0.8]
+
+
+async def test_embed_blocks_mixed_text_and_image_hits_real_endpoint_shape():
+    """Mixed text+image must go through the real /v1/embed shape
+    (text + images_base64 together) — not the old nonexistent
+    multimodal_data key that silently dropped images server-side."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"embedding": [0.1, 0.2]})
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    blocks = [TextBlock(text="a chart"), MediaBlock.image(data=b"pngbytes")]
+
+    result = await client.embed_blocks(blocks)
+
+    assert result == [0.1, 0.2]
+    assert seen["text"] == "a chart"
+    assert seen["images_base64"] == ["cG5nYnl0ZXM="]  # base64("pngbytes")
+    assert "multimodal_data" not in seen
+
+
+async def test_embed_blocks_image_only_succeeds_via_real_endpoint():
+    """Images with no text must not 400 by accident — they hit the real
+    images_base64-only shape, not a guessed field the server ignores."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert "text" not in body
+        assert body["images_base64"] == ["cG5nYnl0ZXM="]
+        return httpx.Response(200, json={"embedding": [0.3, 0.4]})
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    result = await client.embed_blocks([MediaBlock.image(data=b"pngbytes")])
+
+    assert result == [0.3, 0.4]
+
+
+async def test_embed_blocks_text_only_uses_plain_embed_text_path():
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body == {"text": "just text"}
+        return httpx.Response(200, json={"embedding": [0.5]})
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    result = await client.embed_blocks([TextBlock(text="just text")])
+
+    assert result == [0.5]
+
+
+async def test_embed_blocks_falls_back_to_mean_pool_on_real_endpoint_failure():
+    """Fallback is only for a genuine failure of the mixed endpoint, not the
+    accidental-400 path the old broken implementation relied on."""
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        body = json.loads(request.content)
+        if "images_base64" in body:
+            return httpx.Response(500, text="mixed embed unavailable")
+        return httpx.Response(200, json={"embedding": [1.0, 0.0]})
+
+    client = _client_with_transport(httpx.MockTransport(handler))
+    result = await client.embed_blocks(
+        [TextBlock(text="q"), MediaBlock.image(data=b"pngbytes")]
+    )
+
+    assert result is not None
+    assert len(calls) == 3  # 1 failed mixed attempt + 2 per-modality fallback calls
+
+
+async def test_embed_blocks_raises_on_unresolved_media_url():
+    with pytest.raises(UnsupportedContentError):
+        await EmbeddingRerankerClient().embed_blocks(
+            [MediaBlock.image(url="https://example.com/a.png")]
+        )
 
 
 async def test_adapter_embed_raises_on_underlying_failure_not_silent_none():

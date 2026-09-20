@@ -4,6 +4,7 @@ from .vector import Document, SearchResult, VectorStore
 from .graph import Entity, Relationship, SubGraph, GraphStore, CypherCapable
 from .memory import (
     ContextMemoryInjection,
+    ExtractionMethod,
     MemoryCategory,
     MemoryMatch,
     MemoryNamespace,
@@ -43,6 +44,7 @@ __all__ = [
     "MemoryStatus",
     "MemoryNamespace",
     "MemoryProvenance",
+    "ExtractionMethod",
     "MemoryQuery",
     "ContextMemoryInjection",
     "ShortTermMemory",

@@ -22,8 +22,6 @@ class ContextWindow(KernelModel):
     checkpoint_id: str | None = None
     estimated_tokens: int = 0
 
-    model_config = {"frozen": True}
-
 
 class ContextBuilder(Protocol):
     """Assembles final LLM-ready prompt windows from resolved DAG nodes."""
@@ -78,8 +76,6 @@ class CompactionContext(KernelModel):
     leaf_node_id: str | None = None
     existing_checkpoint: HistoryCheckpoint | None = None
 
-    model_config = {"frozen": True}
-
 
 class CompactionResult(KernelModel):
     """Result of a compaction phase execution, strictly validated against its phase."""
@@ -88,8 +84,6 @@ class CompactionResult(KernelModel):
     prompt_messages: list[ChatMessage] | None = None
     compacted_content: ContentBlock | None = None
     checkpoint_proposal: HistoryCheckpoint | None = None
-
-    model_config = {"frozen": True}
 
     @model_validator(mode="after")
     def _validate_phase_payload(self) -> Self:

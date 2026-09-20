@@ -26,8 +26,6 @@ class MessageNode(KernelModel):
     payload: ChatMessage
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    model_config = {"frozen": True}
-
 
 class Branch(KernelModel):
     """A named, movable pointer to a head node in the conversation DAG."""
@@ -39,8 +37,6 @@ class Branch(KernelModel):
     forked_from_message_id: str | None = None  # Ancestor node where this branch diverged
     version: int = 0              # Monotonically increasing version for optimistic concurrency
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-    model_config = {"frozen": True}
 
 
 class HistoryCheckpoint(KernelModel):
@@ -56,8 +52,6 @@ class HistoryCheckpoint(KernelModel):
     state: JsonObject = Field(default_factory=dict)
     parent_checkpoint_id: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-    model_config = {"frozen": True}
 
 
 class HistoryProvider(Protocol):

@@ -2,14 +2,21 @@ from .blob import BlobStore
 from .history import HistoryProvider
 from .vector import Document, SearchResult, VectorStore
 from .graph import Entity, Relationship, SubGraph, GraphStore, CypherCapable
-from .memory import Memory, ShortTermMemory, LongTermMemory
-from .tasks import Task, TaskList, TaskStatus, TaskStore
-from .document import (
-    DocumentExtractor,
-    ExtractedImage,
-    ExtractedPage,
-    ExtractionResult,
+from .memory import (
+    ContextMemoryInjection,
+    MemoryCategory,
+    MemoryLifecycle,
+    MemoryMatch,
+    MemoryNamespace,
+    MemoryProvenance,
+    MemoryQuery,
+    MemoryRecord,
+    MemoryStatus,
+    MemoryStore,
+    MemoryValidity,
+    ShortTermMemory,
 )
+from .tasks import Task, TaskList, TaskStatus, TaskStore
 from .snapshots import (
     WorkspaceFileEntry,
     WorkspaceManifest,
@@ -32,15 +39,20 @@ __all__ = [
     "SubGraph",
     "GraphStore",
     "CypherCapable",
-    "Memory",
+    "MemoryRecord",
+    "MemoryMatch",
+    "MemoryCategory",
+    "MemoryStatus",
+    "MemoryNamespace",
+    "MemoryProvenance",
+    "MemoryValidity",
+    "MemoryLifecycle",
+    "MemoryQuery",
+    "ContextMemoryInjection",
     "ShortTermMemory",
-    "LongTermMemory",
+    "MemoryStore",
     "Task",
     "TaskList",
     "TaskStatus",
     "TaskStore",
-    "DocumentExtractor",
-    "ExtractedImage",
-    "ExtractedPage",
-    "ExtractionResult",
 ]

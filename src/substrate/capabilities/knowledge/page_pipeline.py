@@ -16,7 +16,13 @@ from typing import Any, Optional
 from substrate.kernel import ChatMessage, TextBlock
 from substrate.kernel.llm import LLMClient, GenerationOptions
 from substrate.kernel.storage.vector import SearchResult
-from substrate.kernel.storage.memory import LongTermMemory
+from substrate.kernel.storage.memory import (
+    MemoryCategory,
+    MemoryNamespace,
+    MemoryQuery,
+    MemoryRecord,
+    MemoryStore,
+)
 from substrate.kernel.core.identity import Actor
 
 logger = logging.getLogger(__name__)
@@ -78,7 +84,7 @@ class PageIndexRAGPipeline:
     def __init__(
         self,
         model_client: LLMClient,
-        memory_store: Optional[LongTermMemory] = None,
+        memory_store: Optional[MemoryStore] = None,
         agent_id: str | Actor = "system",
     ) -> None:
         self._model = model_client
@@ -95,16 +101,17 @@ class PageIndexRAGPipeline:
     async def _get_collection_tree(self, collection: str) -> PageNode:
         """Load or initialize the root tree node for a collection."""
         if self._memory:
-            memories = await self._memory.search(
-                self._agent_id,
-                query=collection,
-                namespace="page_index_trees",
+            spec = MemoryQuery(
+                namespace=MemoryNamespace(tenant_id="page_index_trees", agent_id=self._agent_id.key),
+                text_query=collection,
                 limit=100,
             )
-            for m in memories:
+            matches = await self._memory.query(spec)
+            for match in matches:
+                m = match.record
                 if m.metadata.get("collection") == collection:
                     try:
-                        data = json.loads(m.content)
+                        data = json.loads(m.to_text())
                         return dict_to_node(data)
                     except Exception:
                         logger.warning(
@@ -129,26 +136,24 @@ class PageIndexRAGPipeline:
     async def _save_collection_tree(self, collection: str, root: PageNode) -> None:
         """Persist the collection root node tree."""
         if self._memory:
-            # Delete existing tree first
-            memories = await self._memory.search(
-                self._agent_id,
-                query=collection,
-                namespace="page_index_trees",
+            spec = MemoryQuery(
+                namespace=MemoryNamespace(tenant_id="page_index_trees", agent_id=self._agent_id.key),
+                text_query=collection,
                 limit=100,
             )
-            for m in memories:
-                if m.metadata.get("collection") == collection:
-                    await self._memory.delete(
-                        self._agent_id, m.id, namespace="page_index_trees"
-                    )
+            matches = await self._memory.query(spec)
+            for match in matches:
+                if match.record.metadata.get("collection") == collection:
+                    await self._memory.delete(match.record.id)
 
             # Save new tree
-            await self._memory.save(
-                self._agent_id,
-                content=json.dumps(node_to_dict(root)),
-                namespace="page_index_trees",
+            rec = MemoryRecord.from_text(
+                json.dumps(node_to_dict(root)),
+                category=MemoryCategory.PROCEDURAL,
+                namespace=MemoryNamespace(tenant_id="page_index_trees", agent_id=self._agent_id.key),
                 metadata={"collection": collection},
             )
+            await self._memory.save(rec)
         else:
             self._local_trees[collection] = root
 

@@ -1,8 +1,8 @@
 """BlobStore — general-purpose object/binary store contract.
 
 Concrete implementations:
-  Stage 0 — in-memory dict (agents/runtime/local/)
-  Stage 1 — S3-compatible adapter (adapters/storage/)
+  Local / Standalone — Local filesystem blob store (WorkspaceFileStore in ./data/blobs/)
+  Production / Cloud — S3-compatible object storage (SeaweedFS, MinIO, AWS S3)
 
 ``store`` writes bytes or text and returns an opaque ref string.
 ``resolve`` fetches the original bytes by ref.

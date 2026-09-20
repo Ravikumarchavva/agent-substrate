@@ -12,7 +12,14 @@ from __future__ import annotations
 
 
 from substrate.kernel.core.identity import Actor
-from substrate.kernel.storage.memory import LongTermMemory, ShortTermMemory
+from substrate.kernel.storage.memory import (
+    MemoryCategory,
+    MemoryNamespace,
+    MemoryQuery,
+    MemoryRecord,
+    MemoryStore,
+    ShortTermMemory,
+)
 from substrate.kernel.tools import ToolExecutionResult
 from substrate.kernel import TextBlock
 from substrate.logger import setup_logging
@@ -21,7 +28,7 @@ logger = setup_logging()
 
 
 class MemoryTool:
-    """Read/write agent memories via ShortTermMemory and LongTermMemory protocols."""
+    """Read/write agent memories via ShortTermMemory and MemoryStore protocols."""
 
     name = "memory"
     description = (
@@ -71,7 +78,7 @@ class MemoryTool:
         session_id: str,
         *,
         short_term: ShortTermMemory | None = None,
-        long_term: LongTermMemory | None = None,
+        long_term: MemoryStore | None = None,
     ) -> None:
         self._agent_id = agent_id
         self._session_id = session_id
@@ -155,7 +162,9 @@ class MemoryTool:
                     content=[TextBlock(text="'value' is required for remember.")],
                     is_error=True,
                 )
-            mem_id = await self._long_term.save(self._agent_id, value)
+            ns = MemoryNamespace.from_actor(self._agent_id, session_id=self._session_id)
+            rec = MemoryRecord.from_text(value, namespace=ns, category=MemoryCategory.SEMANTIC)
+            mem_id = await self._long_term.save(rec)
             return ToolExecutionResult(
                 content=[TextBlock(text=f"Stored memory (id={mem_id}).")],
                 structured_content={"memory_id": mem_id},
@@ -167,12 +176,14 @@ class MemoryTool:
                     content=[TextBlock(text="'query' is required for recall.")],
                     is_error=True,
                 )
-            memories = await self._long_term.search(self._agent_id, query)
-            if not memories:
+            ns = MemoryNamespace.from_actor(self._agent_id)
+            spec = MemoryQuery(namespace=ns, text_query=query, limit=10)
+            matches = await self._long_term.query(spec)
+            if not matches:
                 return ToolExecutionResult(
                     content=[TextBlock(text="No relevant memories found.")]
                 )
-            lines = [f"[{m.id[:8]}] {m.content}" for m in memories]
+            lines = [f"[{m.record.id[:8]}] {m.record.to_text()}" for m in matches]
             return ToolExecutionResult(content=[TextBlock(text="\n".join(lines))])
 
         # forget
@@ -181,7 +192,7 @@ class MemoryTool:
                 content=[TextBlock(text="'memory_id' is required for forget.")],
                 is_error=True,
             )
-        deleted = await self._long_term.delete(self._agent_id, memory_id)
+        deleted = await self._long_term.delete(memory_id)
         if deleted:
             return ToolExecutionResult(
                 content=[TextBlock(text=f"Deleted memory {memory_id}.")]

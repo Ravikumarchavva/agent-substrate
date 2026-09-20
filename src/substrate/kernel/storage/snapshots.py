@@ -20,16 +20,12 @@ class WorkspaceFileEntry(KernelModel):
     size_bytes: int
     metadata: JsonObject = Field(default_factory=dict)
 
-    model_config = {"frozen": True}
-
 
 class WorkspaceManifest(KernelModel):
     """Manifest mapping paths to file records in an isolated workspace snapshot."""
 
     files: dict[str, WorkspaceFileEntry] = Field(default_factory=dict)
     metadata: JsonObject = Field(default_factory=dict)
-
-    model_config = {"frozen": True}
 
 
 class WorkspaceSnapshot(KernelModel):
@@ -46,8 +42,6 @@ class WorkspaceSnapshot(KernelModel):
     manifest: WorkspaceManifest | None = None
     manifest_ref: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-    model_config = {"frozen": True}
 
     @model_validator(mode="after")
     def _validate_manifest_authority(self) -> Self:

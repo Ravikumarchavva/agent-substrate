@@ -1173,19 +1173,19 @@ def build_page_index_memory(cfg: SubstrateConfig, tenant_id: str, user_id: str) 
     namespace/path needs both ids, which aren't known until a real request
     does.
     """
-    from substrate.capabilities.memory.lance_memory_store import LanceLongTermMemory
+    from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore
     from substrate.capabilities.storage.layout import user_index_prefix
 
     key = user_index_prefix(tenant_id, user_id)
     if cfg.SESSION_INDEX_NAMESPACE_URI:
-        return LanceLongTermMemory(
+        return LanceMemoryStore(
             namespace_uri=cfg.SESSION_INDEX_NAMESPACE_URI,
             namespace_path=[cfg.SESSION_INDEX_BUCKET, tenant_id, user_id],
             table_name="pageindex_trees",
         )
     from pathlib import Path
 
-    return LanceLongTermMemory(
+    return LanceMemoryStore(
         path=Path(cfg.SESSION_INDEX_LOCAL_PATH) / key, table_name="pageindex_trees"
     )
 
@@ -1376,9 +1376,19 @@ async def build_user_memory_context_block(
     # namespace="default": MemoryTool.remember() never passes a namespace,
     # so every fact it saves lands in DurableMemoryStore's default one —
     # this must read from the same place things are actually written to.
-    memories = await long_term_memory.list_all(
-        Actor(type="user", key=user_id), limit=limit
-    )
+    if hasattr(long_term_memory, "list_all"):
+        memories = await long_term_memory.list_all(
+            Actor(type="user", key=user_id), limit=limit
+        )
+    elif hasattr(long_term_memory, "query"):
+        from substrate.kernel.storage.memory import MemoryNamespace, MemoryQuery
+
+        matches = await long_term_memory.query(
+            MemoryQuery(namespace=MemoryNamespace(user_id=user_id), limit=limit)
+        )
+        memories = [m.record for m in matches]
+    else:
+        memories = []
     if not memories:
         return ""
 
@@ -1389,7 +1399,8 @@ async def build_user_memory_context_block(
         "stale or wrong. -->"
     )
     for memory in memories:
-        lines.append(f"  <fact>{_xml_escape(memory.content)}</fact>")
+        content_str = memory.to_text() if hasattr(memory, "to_text") else str(memory.content)
+        lines.append(f"  <fact>{_xml_escape(content_str)}</fact>")
     lines.append("</user_context>")
     return "\n".join(lines)
 

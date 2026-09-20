@@ -33,7 +33,9 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 
 from substrate.serving.shared.settings import settings
+from substrate.integrations.llm.gemini.gemini_client import GeminiClient
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.integrations.tts.kokoro_client import KokoroTTSClient, get_kokoro_client
 from substrate.integrations.llm.factory import (
     create_model_client,
     detect_provider,
@@ -66,18 +68,19 @@ def _resolve_model_client(
     app_state: Any,
     requested_model: str | None,
     fallback_model: str,
-) -> tuple[OpenAIClient, str, str]:
+) -> tuple[Any, str, str]:
     """Resolve the correct provider client for an incoming audio request.
 
-    Audio (STT/TTS/Realtime) is only implemented on ``OpenAIClient`` today —
-    raises 501 rather than crashing with ``AttributeError`` if the resolved
-    provider for *requested_model*/*fallback_model* isn't OpenAI.
+    Resolve the provider client without imposing an audio capability here.
+    Individual endpoints validate the capabilities they support.
     """
     effective_model = (
         requested_model.strip()
         if requested_model and requested_model.strip()
         else fallback_model
     )
+    if effective_model.startswith("local/kokoro"):
+        return get_kokoro_client(), "local", effective_model
     default_client: Any = app_state.model_client
     effective_provider = detect_provider(effective_model)
     bare_model = strip_provider_prefix(effective_model)
@@ -94,11 +97,6 @@ def _resolve_model_client(
             **getattr(app_state, "model_client_kwargs", {}),
         )
 
-    if not isinstance(client, OpenAIClient):
-        raise HTTPException(
-            status_code=501,
-            detail=f"Audio features are only supported for OpenAI models, not '{effective_provider}'",
-        )
     return client, effective_provider, bare_model
 
 
@@ -132,6 +130,12 @@ async def transcribe_audio(
         model,
         settings.STT_MODEL,
     )
+
+    if not isinstance(model_client, OpenAIClient):
+        raise HTTPException(
+            status_code=501,
+            detail=f"Transcription is only supported for OpenAI models, not '{provider}'",
+        )
 
     if provider == "openrouter":
         raise HTTPException(
@@ -183,6 +187,12 @@ async def text_to_speech(request: Request, body: TTSRequest):
         body.model,
         settings.TTS_MODEL,
     )
+
+    if not isinstance(model_client, (OpenAIClient, GeminiClient, KokoroTTSClient)):
+        raise HTTPException(
+            status_code=501,
+            detail=f"Text-to-speech is not supported for provider '{provider}'",
+        )
 
     if provider == "openrouter":
         raise HTTPException(

@@ -60,6 +60,8 @@ dependencies = [
     "fastapi>=0.128.0",
     "opentelemetry-exporter-otlp",
     "opentelemetry-instrumentation-fastapi<0.60b1",
+    "kokoro>=0.9.4",
+    "soundfile>=0.12.1",
 ]
 
 # Full rationale for every extra below — size costs, version-pin reasoning,

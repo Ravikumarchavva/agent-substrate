@@ -24,6 +24,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.agents.runtime.cancellation import CancellationToken
 from substrate.kernel.runtime.ids import RunStatus
@@ -125,7 +126,7 @@ class Worker:
                 if seq < 0:
                     await self._event_log.append(
                         run_id,
-                        RunLogEntry(run_id=run_id, seq=0, kind="run.started"),
+                        RunLogEntry(run_id=run_id, seq=0, kind=RunLogKind.RUN_STARTED),
                         expected_seq=-1,
                     )
                     seq = 0
@@ -134,7 +135,7 @@ class Worker:
                     RunLogEntry(
                         run_id=run_id,
                         seq=seq + 1,
-                        kind="run.cancelled",
+                        kind=RunLogKind.RUN_CANCELLED,
                         payload={"reason": "cancelled-externally"},
                     ),
                     expected_seq=seq,
@@ -273,7 +274,7 @@ class Worker:
 
         # Log initial run start via ctx._log to preserve seq cursor
         if effect_cache.last_seq < 0:
-            await ctx._log("run.started", {})
+            await ctx._log(RunLogKind.RUN_STARTED, {})
 
         # Journaled inbox drain: preserve exact drained message IDs across replays
         from substrate.kernel.runtime.effects import Effect
@@ -335,7 +336,7 @@ class Worker:
             final_seq = await self._event_log.last_seq(run_id)
             await self._event_log.append(
                 run_id,
-                RunLogEntry(run_id=run_id, seq=final_seq + 1, kind="run.completed"),
+                RunLogEntry(run_id=run_id, seq=final_seq + 1, kind=RunLogKind.RUN_COMPLETED),
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.COMPLETED)
@@ -352,7 +353,7 @@ class Worker:
             final_seq = await self._event_log.last_seq(run_id)
             await self._event_log.append(
                 run_id,
-                RunLogEntry(run_id=run_id, seq=final_seq + 1, kind="run.cancelled"),
+                RunLogEntry(run_id=run_id, seq=final_seq + 1, kind=RunLogKind.RUN_CANCELLED),
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.CANCELLED)
@@ -410,7 +411,7 @@ class Worker:
                     RunLogEntry(
                         run_id=run_id,
                         seq=final_seq + 1,
-                        kind="run.failed",
+                        kind=RunLogKind.RUN_FAILED,
                         payload=payload,
                     ),
                     expected_seq=final_seq,
@@ -436,7 +437,7 @@ class Worker:
     async def _maybe_clear_run_history(
         self, agent: object, run_id: str, *, session_ids: set[str]
     ) -> None:
-        """Call clear_run for each session touched in this run if retention is RUN."""
+        """Delete each session touched in this run if retention is RUN (run-scoped history)."""
         from substrate.kernel.agent.supervision import HistoryRetention
 
         context_cfg = getattr(agent, "_context", None)
@@ -453,10 +454,10 @@ class Worker:
         agent_id = getattr(agent, "id", None)
         for session_id in session_ids:
             try:
-                await history.clear_run(agent_id, session_id=session_id, run_id=run_id)
+                await history.delete_session(session_id)
             except Exception:
                 logger.warning(
-                    "clear_run failed for agent %s run %s session %s",
+                    "delete_session failed for agent %s run %s session %s",
                     agent_id,
                     run_id,
                     session_id,

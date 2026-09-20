@@ -24,6 +24,7 @@ import json
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.tools.approval import (
     ApprovalDecision,
     ApprovalHandler,
@@ -251,7 +252,7 @@ class ToolInvoker:
                     "summary": risk_summary or "",
                 }
                 try:
-                    await ctx.log_once("approval.requested", log_payload)
+                    await ctx.log_once(RunLogKind.APPROVAL_REQUESTED, log_payload)
                 except Exception:
                     pass
                 signal_payload = await ctx.sleep_until_signal(f"hitl:{request_id}")

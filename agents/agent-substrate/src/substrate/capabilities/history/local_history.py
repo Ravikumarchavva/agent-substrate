@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -460,57 +461,23 @@ class LocalFilesystemHistoryProvider:
     async def disconnect(self) -> None:
         """No-op for filesystem store."""
 
-    # ── Legacy / Linear Compatibility Methods ─────────────────────────────────
+    # ── Session lifecycle ─────────────────────────────────────────────────────
 
-    @staticmethod
-    def _tag(message: Any, run_id: str) -> Any:
-        if not run_id or message.metadata.get("run_id") == run_id:
-            return message
-        return message.model_copy(
-            update={"metadata": {**message.metadata, "run_id": run_id}}
-        )
-
-    async def append(
-        self,
-        agent_id: Any,
-        message: Any,
-        *,
-        session_id: str,
-        run_id: str = "",
-    ) -> None:
-        # Legacy linear interface — not used by DAG paths; kept for compatibility
-        pass
-
-    async def append_many(
-        self,
-        agent_id: Any,
-        messages: list,
-        *,
-        session_id: str,
-        run_id: str = "",
-    ) -> None:
-        pass
-
-    async def get_messages(
-        self,
-        agent_id: Any,
-        *,
-        session_id: str,
-        limit: int | None = None,
-        offset: int | None = None,
-    ) -> list:
-        return []
-
-    async def clear(self, agent_id: Any, *, session_id: str) -> None:
-        pass
-
-    async def clear_run(
-        self, agent_id: Any, *, session_id: str, run_id: str
-    ) -> None:
-        pass
-
-    async def count_messages(self, agent_id: Any, *, session_id: str) -> int:
-        return 0
+    async def delete_session(self, session_id: str) -> None:
+        # Nodes live in one shared directory, so find this session's by content.
+        nodes_dir = self._root / "nodes"
+        if nodes_dir.exists():
+            for p in nodes_dir.glob("*.json"):
+                try:
+                    node = MessageNode.model_validate_json(p.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if node.session_id == session_id:
+                    p.unlink(missing_ok=True)
+        shutil.rmtree(self._root / "sessions" / session_id, ignore_errors=True)
+        async with self._lock_map_lock:
+            for key in [k for k in self._branch_locks if k[0] == session_id]:
+                del self._branch_locks[key]
 
 
 __all__ = ["LocalFilesystemHistoryProvider"]

@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from substrate.agents.context.builder import DefaultContextBuilder
 from substrate.agents.context.compaction import CompactionPipeline, SlidingWindowCompaction
-from substrate.agents.context.history import (
-    AncestryCheckpointResolver,
-    DefaultHistoryResolver,
-)
+from substrate.agents.context.history import project_messages
 from substrate.kernel.agent.context import (
     AgentContextProtocol,
     CompactionCoordinator,
@@ -120,21 +117,10 @@ class AgentContext:
     async def get_prompt_window(
         self, session_id: str, *, branch_id: str = "main"
     ) -> list[ChatMessage]:
-        """Return the compacted history as ChatMessages for LLM generation."""
-        if hasattr(self._history, "get_branch"):
-            branch = await self._history.get_branch(session_id, branch_id)
-            if branch is not None and branch.head_message_id is not None:
-                resolver = DefaultHistoryResolver(self._history)
-                nodes = await resolver.resolve_ancestry(branch.head_message_id)
-                cp_resolver = AncestryCheckpointResolver(self._history)
-                cp = await cp_resolver.find_applicable_checkpoint(
-                    branch.head_message_id
-                )
-                window = await self._builder.build(nodes, checkpoint=cp)
-                return list(window.messages)
-
-        raw = await self._history.get_messages(self._agent_id, session_id=session_id)
-        return await self._pipeline.compact(raw)
+        """The branch's history as LLM-ready ChatMessages."""
+        return await project_messages(
+            self._history, session_id, branch_id=branch_id, builder=self._builder
+        )
 
 
 __all__ = ["AgentContextProtocol", "AgentContext", "ContextConfig"]

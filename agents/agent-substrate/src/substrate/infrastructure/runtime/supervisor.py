@@ -31,6 +31,7 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING, AsyncIterator
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.runtime.effects import Effect
@@ -213,7 +214,7 @@ class Supervisor:
                     RunLogEntry(
                         run_id=parent,
                         seq=seq + 1,
-                        kind="child.spawned",
+                        kind=RunLogKind.CHILD_SPAWNED,
                         payload={
                             "child_run_id": child_run_id,
                             "child_agent": str(child_agent),

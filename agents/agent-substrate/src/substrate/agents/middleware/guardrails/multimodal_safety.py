@@ -43,6 +43,7 @@ from __future__ import annotations
 import asyncio
 from typing import Callable, Awaitable, ClassVar
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.agents.middleware.guardrails.prompt_injection import (
     _INJECTION_PATTERNS,
@@ -171,7 +172,7 @@ class MultimodalSafetyMiddleware:
         if worst.flagged:
             if context.run_context is not None and context.user_message_seq is not None:
                 await context.run_context.log_once(
-                    "user.message.flagged",
+                    RunLogKind.USER_MESSAGE_FLAGGED,
                     {
                         "seq": context.user_message_seq,
                         "detector": worst.detector,

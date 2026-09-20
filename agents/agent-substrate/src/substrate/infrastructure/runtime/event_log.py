@@ -7,6 +7,7 @@ Schema (created on setup())::
         seq     INTEGER     NOT NULL,
         kind    TEXT        NOT NULL,
         payload JSONB       NOT NULL DEFAULT '{}',
+        v       SMALLINT    NOT NULL DEFAULT 1,   -- RunLogEntry schema version
         ts      TIMESTAMPTZ NOT NULL DEFAULT now(),
         PRIMARY KEY (run_id, seq)
     );
@@ -43,11 +44,14 @@ CREATE TABLE IF NOT EXISTS event_log (
     seq     INTEGER     NOT NULL,
     kind    TEXT        NOT NULL,
     payload JSONB       NOT NULL DEFAULT '{}',
+    v       SMALLINT    NOT NULL DEFAULT 1,
     ts      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (run_id, seq)
 );
 CREATE INDEX IF NOT EXISTS event_log_run_seq
     ON event_log (run_id, seq);
+-- Tables created before entries were versioned lack the column.
+ALTER TABLE event_log ADD COLUMN IF NOT EXISTS v SMALLINT NOT NULL DEFAULT 1;
 """
 
 # Safety backstop: even with LISTEN/NOTIFY, re-poll this often in case a
@@ -136,13 +140,14 @@ class EventLog:
                 new_seq = current + 1
                 await conn.execute(
                     """
-                    INSERT INTO event_log (run_id, seq, kind, payload, ts)
-                    VALUES ($1, $2, $3, $4::jsonb, $5)
+                    INSERT INTO event_log (run_id, seq, kind, payload, v, ts)
+                    VALUES ($1, $2, $3, $4::jsonb, $5, $6)
                     """,
                     run_id,
                     new_seq,
                     entry.kind,
                     json.dumps(entry.payload),
+                    entry.v,
                     entry.ts,
                 )
                 # Wake any tailers once the row is committed (NOTIFY is
@@ -159,7 +164,7 @@ class EventLog:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT seq, kind, payload, ts
+                SELECT seq, kind, payload, v, ts
                 FROM event_log
                 WHERE run_id = $1 AND seq >= $2
                 ORDER BY seq
@@ -188,7 +193,7 @@ class EventLog:
                 async with self._pool.acquire() as conn:
                     rows = await conn.fetch(
                         """
-                        SELECT seq, kind, payload, ts
+                        SELECT seq, kind, payload, v, ts
                         FROM event_log
                         WHERE run_id = $1 AND seq >= $2
                         ORDER BY seq
@@ -249,6 +254,7 @@ def _row_to_entry(run_id: RunId, row: object) -> RunLogEntry:
         seq=row["seq"],  # type: ignore[index]
         kind=row["kind"],  # type: ignore[index]
         payload=payload,
+        v=row["v"],  # type: ignore[index]
         ts=ts_val,
     )
 

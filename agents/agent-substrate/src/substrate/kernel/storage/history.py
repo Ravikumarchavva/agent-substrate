@@ -1,4 +1,11 @@
-"""History storage contract — DAG-based MessageNode, Branch head pointers, and HistoryProvider protocol."""
+"""History storage contract — the conversation DAG.
+
+A session's history is a DAG of immutable ``MessageNode``s; a ``Branch`` is a
+movable head pointer into it, and ``HistoryCheckpoint`` summarises ancestry up
+to an anchor node. This is the *only* history model: a linear transcript is a
+projection of one branch (``agents/context/history.py::project_messages``), not
+a second store.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +16,6 @@ from uuid import uuid4
 from pydantic import Field
 
 from substrate.kernel.core.content import ChatMessage, JsonObject, KernelModel
-from substrate.kernel.core.identity import Actor
 
 
 class MessageNode(KernelModel):
@@ -56,7 +62,7 @@ class HistoryCheckpoint(KernelModel):
 
 @runtime_checkable
 class HistoryProvider(Protocol):
-    """Durable DAG-based storage for an agent's conversation tree and branch heads."""
+    """Durable storage for a session's conversation DAG, branch heads and checkpoints."""
 
     # ── DAG Node & Branch Operations ──────────────────────────────────────────
 
@@ -83,6 +89,17 @@ class HistoryProvider(Protocol):
         """List all branches stored for a session."""
         ...
 
+    async def ensure_branch(
+        self, session_id: str, branch_id: str, *, head_message_id: str | None = None
+    ) -> Branch:
+        """Fetch the branch, creating it (optionally at ``head_message_id``) if absent."""
+        ...
+
+    async def rename_branch(
+        self, session_id: str, branch_id: str, new_name: str
+    ) -> Branch:
+        """Change a branch's display name. Raises BranchNotFoundError if absent."""
+        ...
 
     async def fork_branch(
         self,
@@ -148,79 +165,14 @@ class HistoryProvider(Protocol):
         """List all checkpoints stored for a session."""
         ...
 
-    # ── Legacy / Linear Compatibility Methods ───────────────────────────────
+    # ── Session lifecycle ────────────────────────────────────────────────────
 
-    async def append(
-        self,
-        agent_id: Actor,
-        message: ChatMessage,
-        *,
-        session_id: str,
-        run_id: str = "",
-    ) -> None:
-        """Append message to agent's history for session_id."""
-        ...
+    async def delete_session(self, session_id: str) -> None:
+        """Delete every node, branch and checkpoint of ``session_id``.
 
-    async def append_many(
-        self,
-        agent_id: Actor,
-        messages: list[ChatMessage],
-        *,
-        session_id: str,
-        run_id: str = "",
-    ) -> None:
-        """Append multiple messages in one write."""
-        ...
-
-    async def get_messages(
-        self,
-        agent_id: Actor,
-        *,
-        session_id: str,
-        limit: int | None = None,
-        offset: int | None = None,
-    ) -> list[ChatMessage]:
-        """Return the chronological message history."""
-        ...
-
-    async def clear(self, agent_id: Actor, *, session_id: str) -> None:
-        """Delete all history for agent_id in session_id."""
-        ...
-
-    async def clear_run(
-        self, agent_id: Actor, *, session_id: str, run_id: str
-    ) -> None:
-        """Delete messages belonging to run_id within session_id."""
-        ...
-
-    async def count_messages(self, agent_id: Actor, *, session_id: str) -> int:
-        """Return the number of messages stored."""
-        ...
-
-
-@runtime_checkable
-class HistoryResolver(Protocol):
-    """Encapsulates graph traversal over a HistoryProvider."""
-
-    async def resolve_ancestry(
-        self,
-        leaf_message_id: str,
-        *,
-        stop_at_node_id: str | None = None,
-    ) -> list[MessageNode]:
-        """Walk parent_id edges from leaf back to root (or stop_at_node_id), returning chronological order."""
-        ...
-
-
-@runtime_checkable
-class CheckpointResolver(Protocol):
-    """Locates checkpoints valid for a specific branch lineage."""
-
-    async def find_applicable_checkpoint(
-        self,
-        leaf_message_id: str,
-    ) -> HistoryCheckpoint | None:
-        """Find nearest checkpoint whose anchor_message_id is an ancestor of leaf_message_id."""
+        Used for run-scoped history (``HistoryRetention.RUN``) and explicit
+        resets. Idempotent: deleting an unknown session is a no-op.
+        """
         ...
 
 
@@ -229,6 +181,4 @@ __all__ = [
     "Branch",
     "HistoryCheckpoint",
     "HistoryProvider",
-    "HistoryResolver",
-    "CheckpointResolver",
 ]

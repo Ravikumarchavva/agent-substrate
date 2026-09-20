@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
+from substrate.agents.context.history import project_messages
 from substrate.agents.context import (
     ContextConfig,
     InMemoryHistoryProvider,
@@ -140,7 +141,7 @@ async def run_agent(
             break
 
     output = ""
-    history_msgs = await agent.history.get_messages(agent.id, session_id=sid)
+    history_msgs = await project_messages(agent.history, sid)
     for m in reversed(history_msgs):
         if m.role == Role.ASSISTANT:
             output = " ".join(
@@ -231,7 +232,7 @@ async def test_multi_turn_history():
         assert r2["status"] == "success"
         assert r2["output"] == "You said hi earlier."
 
-        msgs = await agent.history.get_messages(agent.id, session_id=agent.id.type)
+        msgs = await project_messages(agent.history, agent.id.type)
         assert len(msgs) == 4  # 2 user + 2 assistant
 
 

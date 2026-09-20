@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 
 from dataclasses import dataclass
@@ -143,7 +144,7 @@ async def rebuild_messages_from_steps(
         if step_type == "tool_call":
             continue
 
-        if step_type == "mcp_app_context" and include_mcp_app_context:
+        if step_type == RunLogKind.MCP_APP_CONTEXT and include_mcp_app_context:
             tool_name = row.get("name", "mcp_app")
             context_data = row.get("output") or ""
             context_msg = (
@@ -210,7 +211,7 @@ async def step_rows_from_log(
             kind = entry.kind
             payload = entry.payload or {}
 
-            if kind == "user.message":
+            if kind == RunLogKind.USER_MESSAGE:
                 _flush()
                 rows.append(
                     {
@@ -221,7 +222,7 @@ async def step_rows_from_log(
                 )
                 continue
 
-            if kind == "user.message.flagged":
+            if kind == RunLogKind.USER_MESSAGE_FLAGGED:
                 # Not a message in the conversation itself — a marker
                 # referencing one. No row of its own; redacted below.
                 seq = payload.get("seq")
@@ -229,7 +230,7 @@ async def step_rows_from_log(
                     flagged_seqs.add(seq)
                 continue
 
-            if kind == "text.delta":
+            if kind == RunLogKind.TEXT_DELTA:
                 if saw_tool_result:
                     _flush()
                 if current is None:
@@ -243,7 +244,7 @@ async def step_rows_from_log(
                 )
                 continue
 
-            if kind == "tool.call":
+            if kind == RunLogKind.TOOL_CALL:
                 if saw_tool_result:
                     _flush()
                 if current is None:
@@ -264,7 +265,7 @@ async def step_rows_from_log(
                 )
                 continue
 
-            if kind == "tool.result":
+            if kind == RunLogKind.TOOL_RESULT:
                 rows.append(
                     {
                         "type": "tool_result",
@@ -277,11 +278,11 @@ async def step_rows_from_log(
                 saw_tool_result = True
                 continue
 
-            if kind == "mcp_app_context":
+            if kind == RunLogKind.MCP_APP_CONTEXT:
                 _flush()
                 rows.append(
                     {
-                        "type": "mcp_app_context",
+                        "type": RunLogKind.MCP_APP_CONTEXT,
                         "name": payload.get("tool_name", "mcp_app"),
                         "output": payload.get("context", ""),
                     }

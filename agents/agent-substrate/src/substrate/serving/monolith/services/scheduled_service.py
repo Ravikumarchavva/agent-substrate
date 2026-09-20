@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 from substrate.serving.shared.settings import settings
 from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
@@ -177,11 +178,11 @@ async def execute_scheduled_task(
             async for entry in app_state.runtime.event_log.tail(run_id):
                 kind = entry.kind
                 p = entry.payload or {}
-                if kind == "text.delta":
+                if kind == RunLogKind.TEXT_DELTA:
                     output_text += p.get("text", "")
-                elif kind == "run.completed":
+                elif kind == RunLogKind.RUN_COMPLETED:
                     break
-                elif kind == "run.failed":
+                elif kind == RunLogKind.RUN_FAILED:
                     error = p.get("error", "Agent run failed")
                     raise RuntimeError(error)
 

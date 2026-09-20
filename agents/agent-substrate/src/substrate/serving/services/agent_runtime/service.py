@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 
 from substrate.infrastructure.serving_factory import (
@@ -84,7 +85,7 @@ async def execute_agent_run(
         kind = entry.kind
         p = entry.payload or {}
 
-        if kind == "text.delta":
+        if kind == RunLogKind.TEXT_DELTA:
             await event_bus.publish(
                 EventEnvelope(
                     event_type="agent.text_delta",
@@ -98,7 +99,7 @@ async def execute_agent_run(
                 )
             )
 
-        elif kind == "reasoning.delta":
+        elif kind == RunLogKind.REASONING_DELTA:
             await event_bus.publish(
                 EventEnvelope(
                     event_type="agent.reasoning_delta",
@@ -112,7 +113,7 @@ async def execute_agent_run(
                 )
             )
 
-        elif kind == "tool.call":
+        elif kind == RunLogKind.TOOL_CALL:
             await event_bus.publish(
                 EventEnvelope(
                     event_type="agent.tool_call",
@@ -125,7 +126,7 @@ async def execute_agent_run(
                 )
             )
 
-        elif kind == "tool.result":
+        elif kind == RunLogKind.TOOL_RESULT:
             await event_bus.publish(
                 EventEnvelope(
                     event_type="agent.tool_result",
@@ -139,7 +140,7 @@ async def execute_agent_run(
                 )
             )
 
-        elif kind == "run.completed":
+        elif kind == RunLogKind.RUN_COMPLETED:
             await event_bus.publish(
                 EventEnvelope(
                     event_type="agent.run_completed",
@@ -152,7 +153,7 @@ async def execute_agent_run(
             )
             return
 
-        elif kind == "run.failed":
+        elif kind == RunLogKind.RUN_FAILED:
             error = p.get("error", "Agent run failed")
             logger.error("Agent run %s failed: %s", run_id, error)
             await event_bus.publish(
@@ -168,5 +169,5 @@ async def execute_agent_run(
             )
             return
 
-        elif kind == "run.cancelled":
+        elif kind == RunLogKind.RUN_CANCELLED:
             return

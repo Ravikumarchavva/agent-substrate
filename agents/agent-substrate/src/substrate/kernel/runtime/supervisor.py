@@ -24,9 +24,9 @@ The four hard properties realized on the durable substrate
    A child is its own run with its own EventLogProtocol — any worker can pick it up.
    ``join`` is a suspend point: the parent suspends with
    ``Wakeup(kind="child_done", child_run=handle.run_id)``.  When the child
-   reaches a terminal state, its worker calls ``SupervisorProtocol._complete`` which
-   appends ``child.completed`` to the parent's log, stores the ``RunResult`` in
-   ArtifactStore, and delivers a wakeup to the parent's SchedulerProtocol queue.
+   reaches a terminal state, its worker calls ``finish_run``, which marks the
+   child terminal in the run tree and fires a ``child:{run_id}`` signal that
+   wakes the parent through the SignalBusProtocol.
 
 3. **Budget, not depth.**
    ``spawn`` consults a ``SpawnBudget`` bound to the root ``run_id``.  Over
@@ -47,17 +47,13 @@ The four hard properties realized on the durable substrate
    directly. Either way the at-most-once effect guarantee still holds; see
    ``Supervisor.cancel()`` for the concrete implementation.
 
-Orphan handling on permanent parent failure
--------------------------------------------
-See ``scalable-runtime-plan.md`` for the full policy.  Summary keyed on
-``HistoryRetention`` of each child:
-
-    RUN       → cascade-cancel  (a run-scoped worker is meaningless without parent)
-    PERMANENT → detach, re-parent to root  (a durable citizen survives its creator)
-    NONE      → cancel + compact log  (stateless worker, nothing to keep)
-
-The disposition is logged in the parent's terminal entry as ``orphans_resolved``
-so the decision is replayable and auditable.
+Orphan handling on permanent parent failure (not yet implemented)
+-------------------------------------------------------------------
+Today ``cancel`` cascades to the whole subtree, and nothing else reacts to a
+parent failing. The intended policy, keyed on each child's ``HistoryRetention``,
+is: RUN → cascade-cancel, PERMANENT → detach and re-parent to the root,
+NONE → cancel and compact the log; the disposition would be journaled in the
+parent's terminal entry so it is replayable. Design it before relying on it.
 """
 
 from __future__ import annotations
@@ -132,8 +128,8 @@ class SupervisorProtocol(Protocol):
       and resumes it when the child reaches a terminal state.
     - ``cancel`` cascades recursively to the entire subtree rooted at ``handle``.
     - ``children_of`` reflects the current state of the child registry; it is
-      used for crash reconciliation (parent folds log, finds ``child.spawned``
-      without ``child.completed``, and re-joins via this method).
+      used for crash reconciliation (parent folds its log, finds ``child.spawned``
+      entries, and re-joins the still-live ones via this method).
     """
 
     async def spawn(
@@ -208,10 +204,9 @@ class SupervisorProtocol(Protocol):
         """Yield all ``RunHandle``s for runs spawned by ``parent``.
 
         Used for crash reconciliation: a resumed parent folds its log, finds
-        ``child.spawned`` entries without matching ``child.completed``, and
-        calls this to re-join live children.  Children that completed while
-        the parent was down are already reflected in the log and are not
-        yielded here.
+        its ``child.spawned`` entries, and calls this to re-join its children.
+        Every child is yielded regardless of status — ``join`` returns the
+        result of one that already finished.
         """
         ...
 

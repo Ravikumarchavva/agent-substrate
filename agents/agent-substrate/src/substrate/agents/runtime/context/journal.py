@@ -13,6 +13,7 @@ import uuid as _uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.content import JsonObject
 from substrate.kernel.runtime.effects import Effect, EffectResult
 from substrate.kernel.runtime.log_entry import RunLogEntry
@@ -193,7 +194,7 @@ class _JournalMixin:
             payload["artifact_ref"] = artifact_ref
         else:
             payload["value"] = value
-        await self._log("effect.result", payload)
+        await self._log(RunLogKind.EFFECT_RESULT, payload)
         # Keep the full value in the in-memory cache regardless of offload —
         # we already have it live; only a fresh fold() ever needs to resolve
         # the blob.

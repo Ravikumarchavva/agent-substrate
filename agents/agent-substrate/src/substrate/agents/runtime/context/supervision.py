@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.content import JsonObject
 from substrate.kernel.exceptions import SuspendInterrupt
 from substrate.kernel.core.identity import Actor
@@ -169,7 +170,7 @@ class _SupervisionMixin:
             return RunResult(
                 run_id=child_run, status=status, error=payload.get("error")
             )
-        await self._log("run.suspended", {"waiting_for": signal_name})
+        await self._log(RunLogKind.RUN_SUSPENDED, {"waiting_for": signal_name})
         raise SuspendInterrupt(
             self.run_id,
             Wakeup(kind="signal", signals=[signal_name]),
@@ -195,9 +196,9 @@ class _SupervisionMixin:
         effect_id = Effect.make_id(self.run_id, path, "signal.wait", {"name": name})
         payload = await self._signal_bus.consume(self.run_id, name, effect_id)
         if payload is not None:
-            await self._log("run.resumed", {"signal": name})
+            await self._log(RunLogKind.RUN_RESUMED, {"signal": name})
             return payload
-        await self._log("run.suspended", {"waiting_for": name})
+        await self._log(RunLogKind.RUN_SUSPENDED, {"waiting_for": name})
         raise SuspendInterrupt(
             self.run_id,
             Wakeup(kind="signal", signals=[name]),
@@ -215,10 +216,10 @@ class _SupervisionMixin:
         """
         self.check()
         if datetime.now(tz=timezone.utc) >= dt:
-            await self._log("run.resumed", {"via": "timer"})
+            await self._log(RunLogKind.RUN_RESUMED, {"via": "timer"})
             return
         await self._signal_bus.timer(self.run_id, dt)
-        await self._log("run.suspended", {"until": dt.isoformat()})
+        await self._log(RunLogKind.RUN_SUSPENDED, {"until": dt.isoformat()})
         raise SuspendInterrupt(
             self.run_id,
             Wakeup(kind="timer", at=dt),

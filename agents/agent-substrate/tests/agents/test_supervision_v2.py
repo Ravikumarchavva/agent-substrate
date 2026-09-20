@@ -4,7 +4,7 @@ Covers:
 1. Unexpected agent crash is recorded as ``agent_crashed`` status (not silently swallowed).
 2. ``HistoryRetention.RUN`` on a ``ContextConfig`` triggers ``clear_run`` after the run
    completes, leaving no run-scoped history behind.
-3. ``HistoryRetention.PERMANENT`` does NOT trigger ``clear_run`` — history survives.
+3. ``HistoryRetention.PERMANENT`` does NOT trigger ``delete_session`` — history survives.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 
 
+from substrate.agents.context.history import project_messages
 from substrate.agents.runtime import Runtime
 from substrate.kernel.agent.supervision import HistoryRetention
 from substrate.kernel.core.identity import Actor
@@ -104,7 +105,7 @@ async def test_budget_exhausted_records_budget_exhausted_status() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. HistoryRetention.RUN → clear_run after completion
+# 2. HistoryRetention.RUN → session deleted after completion
 # ---------------------------------------------------------------------------
 
 
@@ -131,7 +132,7 @@ async def test_history_retention_run_clears_after_completion() -> None:
             written_session.append(session_id)
             written_run.append(run_id)
             turn = ChatMessage(role=Role.USER, content=[TextBlock(text="hello")])
-            await persist_turns(ctx_cfg, self.id, session_id, run_id, [turn])
+            await persist_turns(ctx_cfg, session_id, run_id, [turn])
 
     agent = TransientAgent()
     async with Runtime() as rt:
@@ -149,10 +150,10 @@ async def test_history_retention_run_clears_after_completion() -> None:
 
         await asyncio.wait_for(done.wait(), timeout=3.0)
 
-    # After completion the Worker should have called clear_run.
+    # After completion the Worker should have deleted the session.
     # Verify: fetching history for the session returns nothing.
     session_id = written_session[0] if written_session else run_id
-    remaining = await history.get_messages(agent.id, session_id=session_id)
+    remaining = await project_messages(history, session_id)
     assert remaining == [], (
         f"Expected empty history after RUN retention cleanup, got {remaining}"
     )
@@ -186,7 +187,7 @@ async def test_history_retention_permanent_survives_completion() -> None:
             captured_session.append(session_id)
             captured_run.append(run_id)
             turn = ChatMessage(role=Role.USER, content=[TextBlock(text="remember me")])
-            await persist_turns(ctx_cfg, self.id, session_id, run_id, [turn])
+            await persist_turns(ctx_cfg, session_id, run_id, [turn])
 
     agent = PermanentAgent()
     async with Runtime() as rt:
@@ -199,6 +200,6 @@ async def test_history_retention_permanent_survives_completion() -> None:
                 break
 
     session_id = captured_session[0] if captured_session else run_id
-    remaining = await history.get_messages(agent.id, session_id=session_id)
+    remaining = await project_messages(history, session_id)
     assert len(remaining) == 1
     assert remaining[0].role == Role.USER

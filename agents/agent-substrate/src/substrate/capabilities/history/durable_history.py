@@ -1,23 +1,22 @@
 """DurableHistoryProvider — PostgreSQL-backed durable conversation history.
 
-Durable, queryable persistence for session messages and conversation DAGs using SQLAlchemy 2.0 async ORM.
+Durable, queryable persistence for conversation DAGs using SQLAlchemy 2.0 async ORM.
 
 Tables (created automatically):
-  ``history_sessions``     — legacy session tracking (timestamps, message count).
-  ``history_messages``     — legacy message storage within a session.
+  ``history_sessions`` / ``history_messages`` — the pre-DAG linear transcript.
+      No longer written; read once at ``connect()`` to chain any session that has
+      no DAG yet into ``main`` (see ``_migrate_legacy_messages``).
   ``history_nodes``        — immutable DAG nodes with parent pointers and ChatMessage payloads.
   ``history_branches``     — movable branch head pointers with optimistic concurrency control.
   ``history_checkpoints``  — compaction checkpoint records referencing anchor nodes.
 
 Security:
   - All queries use parameterized ORM operations — no raw SQL interpolation.
-  - Raw session IDs are validated at the public protocol boundary.
 """
 
 from __future__ import annotations
 
 import base64
-import hashlib
 import re
 import uuid
 from datetime import datetime, timezone
@@ -45,7 +44,6 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from substrate.kernel.core.content import ChatMessage
-from substrate.kernel.core.identity import Actor
 from substrate.kernel.exceptions import (
     BranchAlreadyExistsError,
     BranchHeadConflictError,
@@ -55,7 +53,6 @@ from substrate.kernel.exceptions import (
 from substrate.kernel.storage.history import (
     Branch,
     HistoryCheckpoint,
-    HistoryProvider,
     MessageNode,
 )
 from substrate.logger import setup_logging
@@ -101,14 +98,6 @@ def deserialize_message(data: Dict[str, Any]) -> ChatMessage:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
-_MAX_STORAGE_SESSION_KEY_LENGTH = 128
-
-
-def _validate_session_id(session_id: str) -> None:
-    if not _SESSION_ID_PATTERN.match(session_id):
-        raise ValueError(
-            f"Invalid session_id: must match {_SESSION_ID_PATTERN.pattern}"
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +291,7 @@ def _checkpoint_from_row(row: HistoryCheckpointRecord) -> HistoryCheckpoint:
 
 
 class DurableHistoryProvider:
-    """Async PostgreSQL-backed history provider supporting both DAG and legacy modes.
+    """Async PostgreSQL-backed conversation-DAG history provider.
 
     Parameters:
         database_url: PostgreSQL connection string
@@ -335,6 +324,9 @@ class DurableHistoryProvider:
         )
         async with self._engine.begin() as conn:
             await conn.run_sync(HistoryBase.metadata.create_all)
+        migrated = await self._migrate_legacy_messages()
+        if migrated:
+            logger.info("Migrated %d legacy linear session(s) into the DAG", migrated)
         logger.info("DurableHistoryProvider connected and tables ensured")
 
     async def disconnect(self) -> None:
@@ -742,8 +734,7 @@ class DurableHistoryProvider:
             result = await db.execute(stmt)
             return [_checkpoint_from_row(r) for r in result.scalars().all()]
 
-    async def clear_session_dag(self, session_id: str) -> None:
-        """Helper to clear DAG entities for a session."""
+    async def delete_session(self, session_id: str) -> None:
         factory = self._get_session()
         async with factory() as db:
             await db.execute(
@@ -759,188 +750,64 @@ class DurableHistoryProvider:
             )
             await db.commit()
 
-    # -- HistoryProvider legacy protocol (kernel contract) --------------------
+    # -- One-time migration of the pre-DAG linear transcript ------------------
 
-    def _session_key(self, agent_id: Actor, session_id: str) -> str:
-        """Derive the internal storage key for a (agent_id, session_id) pair."""
-        key = f"{agent_id.type}:{agent_id.key or session_id}"
-        if len(key) <= _MAX_STORAGE_SESSION_KEY_LENGTH:
-            return key
-        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
-        return f"h:{digest}"
+    async def _migrate_legacy_messages(self) -> int:
+        """Chain legacy linear rows into the DAG for sessions that have none.
 
-    async def append(
-        self,
-        agent_id: Actor,
-        message: ChatMessage,
-        *,
-        session_id: str,
-        run_id: str = "",
-    ) -> None:
-        _validate_session_id(session_id)
-        storage_key = self._session_key(agent_id, session_id)
-        await self.save_messages(storage_key, [message], run_id=run_id)
-
-    async def append_many(
-        self,
-        agent_id: Actor,
-        messages: list[ChatMessage],
-        *,
-        session_id: str,
-        run_id: str = "",
-    ) -> None:
-        _validate_session_id(session_id)
-        storage_key = self._session_key(agent_id, session_id)
-        await self.save_messages(storage_key, messages, run_id=run_id)
-
-    async def get_messages(
-        self,
-        agent_id: Actor,
-        *,
-        session_id: str,
-        limit: int | None = None,
-        offset: int | None = None,
-    ) -> list[ChatMessage]:
-        _validate_session_id(session_id)
-        storage_key = self._session_key(agent_id, session_id)
-        return await self.load_messages(storage_key, limit=limit, offset=offset)
-
-    async def clear(self, agent_id: Actor, *, session_id: str) -> None:
-        _validate_session_id(session_id)
-        storage_key = self._session_key(agent_id, session_id)
-        await self.clear_session(storage_key)
-
-    async def clear_run(
-        self, agent_id: Actor, *, session_id: str, run_id: str
-    ) -> None:
-        _validate_session_id(session_id)
-        storage_key = self._session_key(agent_id, session_id)
+        Legacy rows were keyed ``"<agent.type>:<agent.key or session_id>"`` (or
+        ``"h:<digest>"`` when too long — unrecoverable, left alone). A session
+        that already has a DAG head is skipped and its legacy rows are kept, not
+        deleted, so nothing is lost when several agents shared one session id.
+        Returns the number of sessions migrated.
+        """
         factory = self._get_session()
         async with factory() as db:
-            await db.execute(
-                delete(HistoryMessage).where(
-                    HistoryMessage.session_id == storage_key,
-                    HistoryMessage.run_id == run_id,
-                )
-            )
-            session_obj = await db.get(
-                HistorySession, storage_key, with_for_update=True
-            )
-            if session_obj is not None:
-                stmt = (
-                    select(func.count())
-                    .select_from(HistoryMessage)
-                    .where(HistoryMessage.session_id == storage_key)
-                )
-                result = await db.execute(stmt)
-                session_obj.message_count = result.scalar_one()
-            await db.commit()
+            keys = (
+                await db.execute(select(HistoryMessage.session_id).distinct())
+            ).scalars().all()
 
-    # -- Internal helpers (used by protocol methods above) --------------------
-
-    async def save_messages(
-        self, session_id: str, messages: List[ChatMessage], run_id: str = ""
-    ) -> int:
-        if not messages:
-            return 0
-
-        factory = self._get_session()
-        async with factory() as db:
-            session_obj = await db.get(HistorySession, session_id, with_for_update=True)
-            if session_obj is None:
-                session_obj = HistorySession(id=session_id, message_count=0)
-                db.add(session_obj)
-                await db.flush()
-
-            stmt = select(func.coalesce(func.max(HistoryMessage.sequence), 0)).where(
-                HistoryMessage.session_id == session_id
-            )
-            result = await db.execute(stmt)
-            max_seq: int = result.scalar_one()
-
-            for i, msg in enumerate(messages, start=max_seq + 1):
-                payload = serialize_message(msg)
-                db.add(
-                    HistoryMessage(
-                        session_id=session_id,
-                        sequence=i,
-                        message_type=payload.get("type", type(msg).__name__),
-                        payload=payload,
-                        run_id=run_id,
+        migrated = 0
+        for storage_key in keys:
+            session_id = _session_id_from_storage_key(storage_key)
+            if session_id is None or not _SESSION_ID_PATTERN.match(session_id):
+                continue
+            branch = await self.get_branch(session_id, "main")
+            if branch is not None and branch.head_message_id is not None:
+                continue
+            async with factory() as db:
+                rows = (
+                    await db.execute(
+                        select(HistoryMessage)
+                        .where(HistoryMessage.session_id == storage_key)
+                        .order_by(HistoryMessage.sequence)
                     )
+                ).scalars().all()
+            head: str | None = None
+            await self.ensure_branch(session_id, "main")
+            for row in rows:
+                node = MessageNode(
+                    parent_id=head,
+                    session_id=session_id,
+                    run_id=row.run_id,
+                    payload=deserialize_message(row.payload),
                 )
-
-            session_obj.message_count = max_seq + len(messages)
-            await db.commit()
-            logger.debug(
-                "Saved %d messages for session %s (run_id=%s)",
-                len(messages),
-                session_id,
-                run_id,
-            )
-            return len(messages)
-
-    async def load_messages(
-        self,
-        session_id: str,
-        *,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[ChatMessage]:
-        factory = self._get_session()
-        async with factory() as db:
-            if limit is not None and limit > 0 and offset is None:
-                stmt = (
-                    select(HistoryMessage)
-                    .where(HistoryMessage.session_id == session_id)
-                    .order_by(HistoryMessage.sequence.desc())
-                    .limit(limit)
+                await self.append_and_advance(node, "main")
+                head = node.id
+            async with factory() as db:
+                await db.execute(
+                    delete(HistoryMessage).where(HistoryMessage.session_id == storage_key)
                 )
-                result = await db.execute(stmt)
-                rows = list(reversed(result.scalars().all()))
-            else:
-                stmt = (
-                    select(HistoryMessage)
-                    .where(HistoryMessage.session_id == session_id)
-                    .order_by(HistoryMessage.sequence)
-                )
-                if offset is not None:
-                    stmt = stmt.offset(offset)
-                if limit is not None:
-                    stmt = stmt.limit(limit)
-                result = await db.execute(stmt)
-                rows = list(result.scalars().all())
+                await db.commit()
+            migrated += 1
+        return migrated
 
-            return [deserialize_message(row.payload) for row in rows]
 
-    async def clear_session(self, session_id: str) -> None:
-        factory = self._get_session()
-        async with factory() as db:
-            await db.execute(
-                delete(HistoryMessage).where(HistoryMessage.session_id == session_id)
-            )
-            session_obj = await db.get(HistorySession, session_id)
-            if session_obj is not None:
-                session_obj.message_count = 0
-            await db.commit()
-
-    async def count_messages(self, agent_id: Actor, *, session_id: str) -> int:
-        """Return the number of messages for *agent_id* in *session_id*."""
-        _validate_session_id(session_id)
-        storage_key = self._session_key(agent_id, session_id)
-        return await self._count_by_storage_key(storage_key)
-
-    async def _count_by_storage_key(self, storage_key: str) -> int:
-        """Count messages by internal storage key (used by internal helpers)."""
-        factory = self._get_session()
-        async with factory() as db:
-            stmt = (
-                select(func.count())
-                .select_from(HistoryMessage)
-                .where(HistoryMessage.session_id == storage_key)
-            )
-            result = await db.execute(stmt)
-            return result.scalar_one()
+def _session_id_from_storage_key(storage_key: str) -> str | None:
+    """Invert the legacy ``"<type>:<key>"`` storage key; ``None`` if hashed."""
+    if storage_key.startswith("h:") or ":" not in storage_key:
+        return None
+    return storage_key.split(":", 1)[1] or None
 
 
 __all__ = [

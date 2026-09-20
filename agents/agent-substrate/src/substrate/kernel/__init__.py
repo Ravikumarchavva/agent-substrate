@@ -87,10 +87,8 @@ from substrate.kernel.llm.llm import (
 )
 from substrate.kernel.storage.history import (
     Branch,
-    CheckpointResolver,
     HistoryCheckpoint,
     HistoryProvider,
-    HistoryResolver,
     MessageNode,
 )
 from substrate.kernel.agent.context import (
@@ -178,6 +176,7 @@ from substrate.kernel.runtime import (
     RunStatus,
     new_run_id,
     RunLogEntry,
+    RunLogKind,
     EventLogProtocol,
     Effect,
     EffectResult,
@@ -277,8 +276,6 @@ __all__ = [
     "Usage",
     # History
     "HistoryProvider",
-    "HistoryResolver",
-    "CheckpointResolver",
     "MessageNode",
     "Branch",
     "HistoryCheckpoint",
@@ -369,6 +366,7 @@ __all__ = [
     "RunStatus",
     "new_run_id",
     "RunLogEntry",
+    "RunLogKind",
     "EventLogProtocol",
     "Effect",
     "EffectResult",

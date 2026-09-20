@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from pydantic import TypeAdapter
 
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.serving.protocol.events import WireEvent
 
 _ADAPTER: TypeAdapter[WireEvent] = TypeAdapter(WireEvent)
@@ -23,14 +24,14 @@ _ADAPTER: TypeAdapter[WireEvent] = TypeAdapter(WireEvent)
 # Log kinds that map 1:1 to a streaming wire event.
 STREAMING_KINDS = frozenset(
     {
-        "user.message",
-        "user.message.flagged",
-        "text.delta",
-        "reasoning.delta",
-        "tool.call",
-        "tool.result",
-        "input.requested",
-        "approval.requested",
+        RunLogKind.USER_MESSAGE,
+        RunLogKind.USER_MESSAGE_FLAGGED,
+        RunLogKind.TEXT_DELTA,
+        RunLogKind.REASONING_DELTA,
+        RunLogKind.TOOL_CALL,
+        RunLogKind.TOOL_RESULT,
+        RunLogKind.INPUT_REQUESTED,
+        RunLogKind.APPROVAL_REQUESTED,
     }
 )
 

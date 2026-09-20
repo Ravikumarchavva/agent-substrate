@@ -146,7 +146,7 @@ class ReActAgent:
 
         branch_id = msg.metadata.get("branch_id") or "main"
         history_messages = await load_history(
-            self._context, self.id, session_id, branch_id=branch_id
+            self._context, session_id, branch_id=branch_id
         )
         user_turn = message_to_chat(msg)
         user_message_seq = await log_user_message(ctx, msg, user_turn)
@@ -321,7 +321,6 @@ class ReActAgent:
         new_turns = messages[n_loaded:]
         await persist_turns(
             self._context,
-            self.id,
             session_id,
             ctx.run_id,
             new_turns,

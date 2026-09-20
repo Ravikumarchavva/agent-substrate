@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { GitBranch, Plus, Check, ChevronDown, Pencil } from "lucide-react";
+import { GitBranch, Check, ChevronDown, Pencil } from "lucide-react";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import type { Branch } from "@/types";
 
@@ -12,7 +12,6 @@ interface HeaderProps {
   branches?: Branch[];
   activeBranchId?: string;
   onSelectBranch?: (branchId: string) => void;
-  onOpenForkModal?: (sourceBranchId: string) => void;
   onRenameBranch?: (branchId: string, newName: string) => void;
 }
 
@@ -23,7 +22,6 @@ export function Header({
   branches = [],
   activeBranchId = "main",
   onSelectBranch,
-  onOpenForkModal,
   onRenameBranch,
 }: HeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -106,7 +104,7 @@ export function Header({
                   ? "bg-(--card-hover) text-foreground border border-(--border)/80 shadow-xs"
                   : "text-foreground/80 hover:text-foreground hover:bg-(--card-hover) border border-(--border)/40 hover:border-(--border)/70"
               }`}
-              title="Switch or fork branch"
+              title="Switch branch"
               aria-expanded={isOpen}
             >
               <GitBranch className="h-3.5 w-3.5 text-(--muted) group-hover:text-foreground transition-colors shrink-0" />
@@ -122,9 +120,9 @@ export function Header({
 
             {/* Dropdown Menu */}
             {isOpen && (
-              <div className="absolute left-0 top-full mt-2 w-76 rounded-2xl border border-(--border)/80 bg-(--card)/95 p-1.5 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in-0 zoom-in-95 duration-150 ring-1 ring-black/5 dark:ring-white/5">
-                {/* Header with Title and Quick Fork */}
-                <div className="flex items-center justify-between px-2.5 py-2 border-b border-(--border)/40 mb-1">
+              <div className="absolute left-0 top-full mt-2 w-72 rounded-2xl border border-(--border)/80 bg-(--card)/95 p-1.5 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in-0 zoom-in-95 duration-150 ring-1 ring-black/5 dark:ring-white/5">
+                {/* Header with Title */}
+                <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-(--border)/40 mb-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px] font-semibold tracking-wider uppercase text-(--muted)">
                       Branches
@@ -133,18 +131,6 @@ export function Header({
                       {branches.length || 1}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsOpen(false);
-                      onOpenForkModal?.(activeBranchId);
-                    }}
-                    className="text-[11px] font-medium text-(--muted) hover:text-foreground flex items-center gap-1 hover:bg-(--card-hover) px-1.5 py-0.5 rounded-md transition-colors cursor-pointer"
-                    title="Fork new branch"
-                  >
-                    <Plus className="h-3 w-3" />
-                    <span>New</span>
-                  </button>
                 </div>
 
                 {/* Branches List */}
@@ -263,23 +249,6 @@ export function Header({
                       </div>
                     );
                   })}
-                </div>
-
-                {/* Footer Action */}
-                <div className="mt-1 pt-1.5 border-t border-(--border)/40 px-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsOpen(false);
-                      onOpenForkModal?.(activeBranchId);
-                    }}
-                    className="flex w-full items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-(--card-hover) transition-colors cursor-pointer group"
-                  >
-                    <div className="w-5 h-5 rounded-md flex items-center justify-center bg-(--border)/20 text-(--muted) group-hover:text-foreground group-hover:bg-(--border)/40 transition-colors">
-                      <Plus className="h-3.5 w-3.5" />
-                    </div>
-                    <span>Fork from current branch...</span>
-                  </button>
                 </div>
               </div>
             )}

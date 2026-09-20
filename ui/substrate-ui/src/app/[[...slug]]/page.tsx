@@ -828,16 +828,6 @@ function ChatPageContent() {
     [currentThreadId, activeBranchId, messages],
   );
 
-  const handleOpenHeaderFork = useCallback(
-    (sourceBranchId: string) => {
-      setForkSourceBranchId(sourceBranchId);
-      setForkSourceMessageId(null);
-      setForkSourceMessageText(null);
-      setForkModalOpen(true);
-    },
-    [],
-  );
-
   const handleModalForkSubmit = useCallback(
     async (newBranchName: string) => {
       if (!currentThreadId) return;
@@ -1799,7 +1789,6 @@ function ChatPageContent() {
             branches={branches}
             activeBranchId={activeBranchId}
             onSelectBranch={handleSelectBranch}
-            onOpenForkModal={handleOpenHeaderFork}
             onRenameBranch={handleRenameBranch}
           />
           <div className="pointer-events-none absolute left-3 top-1.5 z-20 flex gap-2">

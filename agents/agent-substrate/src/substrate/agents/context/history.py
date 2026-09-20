@@ -184,6 +184,29 @@ class InMemoryHistoryProvider:
         self._branches[new_key] = new_branch
         return new_branch
 
+    async def rename_branch(
+        self, session_id: str, branch_id: str, new_name: str
+    ) -> Branch:
+        """Rename an existing branch display name."""
+        key = (session_id, branch_id)
+        old_branch = self._branches.get(key)
+        if old_branch is None:
+            raise BranchNotFoundError(
+                f"Branch '{branch_id}' not found in session '{session_id}'"
+            )
+
+        updated_branch = Branch(
+            id=old_branch.id,
+            session_id=session_id,
+            name=new_name,
+            head_message_id=old_branch.head_message_id,
+            forked_from_message_id=old_branch.forked_from_message_id,
+            version=old_branch.version + 1,
+            created_at=old_branch.created_at,
+        )
+        self._branches[key] = updated_branch
+        return updated_branch
+
     async def set_branch_head(
         self,
         session_id: str,

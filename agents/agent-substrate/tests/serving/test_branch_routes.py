@@ -130,6 +130,17 @@ async def test_list_and_fork_branches():
                         assert detail_res.json()["id"] == "feature-1"
 
                         # 6. Non-existent branch
+                        # 6. Rename branch
+                        rename_res = await client.patch(
+                            f"/threads/{thread_id}/branches/feature-1",
+                            json={"name": "My Great Feature"},
+                        )
+                        assert rename_res.status_code == 200
+                        rename_data = rename_res.json()
+                        assert rename_data["id"] == "feature-1"
+                        assert rename_data["name"] == "My Great Feature"
+
+                        # 7. Non-existent branch
                         missing_res = await client.get(f"/threads/{thread_id}/branches/non-existent")
                         assert missing_res.status_code == 404
                 finally:

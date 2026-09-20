@@ -31,6 +31,7 @@ from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.schemas import (
     BranchForkRequest,
     BranchOut,
+    BranchRenameRequest,
     CheckpointCreateRequest,
     CheckpointOut,
 )
@@ -71,6 +72,7 @@ async def list_branches_endpoint(
         BranchOut(
             id=b.id,
             session_id=b.session_id,
+            name=b.name,
             head_message_id=b.head_message_id,
             forked_from_message_id=b.forked_from_message_id,
             version=b.version,
@@ -143,6 +145,7 @@ async def fork_branch_endpoint(
     return BranchOut(
         id=new_branch.id,
         session_id=new_branch.session_id,
+        name=new_branch.name,
         head_message_id=new_branch.head_message_id,
         forked_from_message_id=new_branch.forked_from_message_id,
         version=new_branch.version,
@@ -177,10 +180,49 @@ async def get_branch_endpoint(
     return BranchOut(
         id=branch.id,
         session_id=branch.session_id,
+        name=branch.name,
         head_message_id=branch.head_message_id,
         forked_from_message_id=branch.forked_from_message_id,
         version=branch.version,
         created_at=branch.created_at,
+    )
+
+
+@router.patch("/{branch_id}", response_model=BranchOut)
+async def rename_branch_endpoint(
+    thread_id: uuid.UUID,
+    branch_id: str,
+    body: BranchRenameRequest,
+    ctx: ServerDependencies = Depends(get_ctx),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+) -> BranchOut:
+    """Rename a branch display name."""
+    thread = await get_owned_thread(db, thread_id, user)
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    new_name = body.name.strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Branch name cannot be empty")
+
+    session_id = str(thread_id)
+    if not hasattr(ctx.history, "rename_branch"):
+        raise HTTPException(status_code=501, detail="History provider does not support branch renaming")
+
+    try:
+        updated = await ctx.history.rename_branch(session_id, branch_id, new_name)
+    except BranchNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return BranchOut(
+        id=updated.id,
+        session_id=updated.session_id,
+        name=updated.name,
+        head_message_id=updated.head_message_id,
+        forked_from_message_id=updated.forked_from_message_id,
+        version=updated.version,
+        created_at=updated.created_at,
     )
 
 

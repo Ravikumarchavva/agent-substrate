@@ -43,6 +43,18 @@ export const branchApi = {
     return requestJson<Branch>(`/threads/${threadId}/branches/${branchId}`);
   },
 
+  async renameBranch(threadId: string, branchId: string, name: string): Promise<Branch> {
+    const res = await fetch(`${API_BASE}/threads/${threadId}/branches/${encodeURIComponent(branchId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      throw new Error(await getErrorMessage(res, "Failed to rename branch"));
+    }
+    return res.json();
+  },
+
   async getBranchMessages(threadId: string, branchId: string): Promise<ResolvedBranchMessage[]> {
     return requestJson<ResolvedBranchMessage[]>(`/threads/${threadId}/branches/${branchId}/messages`);
   },

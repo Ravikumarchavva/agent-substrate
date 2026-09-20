@@ -53,6 +53,7 @@ export type Thread = {
 export type Branch = {
   id: string;
   session_id: string;
+  name?: string | null;
   head_message_id: string | null;
   forked_from_message_id: string | null;
   version: number;

@@ -32,6 +32,7 @@ export async function POST(req: Request) {
       ...(body.system_instructions ? { system_instructions: body.system_instructions } : {}),
       ...(body.file_ids?.length ? { file_ids: body.file_ids } : {}),
       ...(body.model ? { model: body.model } : {}),
+      ...(body.branch_id ? { branch_id: body.branch_id } : {}),
     }),
     // @ts-expect-error — dispatcher is a Node/undici fetch extension, not in the standard fetch() types
     dispatcher: streamingDispatcher,

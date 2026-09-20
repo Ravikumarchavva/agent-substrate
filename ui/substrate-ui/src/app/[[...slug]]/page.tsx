@@ -23,6 +23,7 @@ import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
 import { Message, UploadedFile, TaskList, CitationSource, Branch } from "@/types";
 import { api } from "@/lib/api";
+import type { ResolvedBranchMessage } from "@/lib/api/branches";
 import { ChatConflictError, ChatLockedError } from "@/lib/api/chat";
 import { getMessageAttachments, buildWorkspaceFileUrl } from "@/lib/api/_client";
 import { mergeSources, parseCitations } from "@/lib/citations";
@@ -662,26 +663,31 @@ function ChatPageContent() {
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
   }, [input]);
 
-  async function loadMessages(threadId: string) {
+  async function loadMessages(threadId: string, branchIdToLoad?: string) {
     try {
-      const [fetchedMessages, branchNodes] = await Promise.all([
-        api.getMessages(threadId),
-        api.getBranchMessages(threadId, activeBranchId || "main").catch(() => []),
-      ]);
+      const branchId = branchIdToLoad || activeBranchId || "main";
+      const branchNodes = await api
+        .getBranchMessages(threadId, branchId)
+        .catch(() => [] as ResolvedBranchMessage[]);
 
-      const correlated = fetchedMessages.map((msg, idx) => {
-        const node = branchNodes[idx];
-        if (node) {
-          return {
-            ...msg,
-            metadata: {
-              ...(msg.metadata || {}),
-              historyNodeId: node.id,
-            },
-          };
-        }
-        return msg;
-      });
+      let correlated: Message[];
+
+      if (branchNodes.length > 0) {
+        // Build directly from resolved DAG history nodes. Each node's text
+        // holds the authentic turn content for this branch ancestry.
+        correlated = branchNodes.map((node) => ({
+          id: node.id,
+          role: node.role as Message["role"],
+          content: node.text || "",
+          timestamp: new Date(node.created_at),
+          metadata: {
+            historyNodeId: node.id,
+          },
+        }));
+      } else {
+        // Fallback: use wire-event fold when no history nodes or branch 404
+        correlated = await api.getMessages(threadId).catch(() => [] as Message[]);
+      }
 
       setMessages((current) => {
         // The user already navigated away from this thread while the fetch
@@ -764,21 +770,21 @@ function ChatPageContent() {
     async (branchId: string) => {
       if (!currentThreadId) return;
       setActiveBranchId(branchId);
+      await loadMessages(currentThreadId, branchId);
+    },
+    [currentThreadId],
+  );
+
+  const handleRenameBranch = useCallback(
+    async (branchId: string, newName: string) => {
+      if (!currentThreadId) return;
       try {
-        if (branchId === "main") {
-          await loadMessages(currentThreadId);
-          return;
-        }
-        const branchMsgs = await api.getBranchMessages(currentThreadId, branchId);
-        const mapped: Message[] = branchMsgs.map((m) => ({
-          id: m.id,
-          role: m.role as Message["role"],
-          content: m.text || "",
-          timestamp: new Date(m.created_at),
-        }));
-        setMessages(mapped);
+        const updated = await api.renameBranch(currentThreadId, branchId, newName);
+        setBranches((prev) =>
+          prev.map((b) => (b.id === branchId ? { ...b, name: updated.name } : b)),
+        );
       } catch (err) {
-        console.error("Failed to load branch messages:", err);
+        console.error("Failed to rename branch:", err);
       }
     },
     [currentThreadId],
@@ -1794,6 +1800,7 @@ function ChatPageContent() {
             activeBranchId={activeBranchId}
             onSelectBranch={handleSelectBranch}
             onOpenForkModal={handleOpenHeaderFork}
+            onRenameBranch={handleRenameBranch}
           />
           <div className="pointer-events-none absolute left-3 top-1.5 z-20 flex gap-2">
             <button

@@ -75,8 +75,8 @@ class SubstrateConfig(BaseSettings):
     CHAT_MODEL: str = "google/gemini-3.1-flash-lite"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     STT_MODEL: str = "whisper-1"
-    TTS_MODEL: str = "google/gemini-3.1-flash-tts-preview"
-    TTS_VOICE: str = "Kore"
+    TTS_MODEL: str = "local/kokoro-82m"
+    TTS_VOICE: str = "af_heart"
     REALTIME_MODEL: str = "gpt-4o-realtime-preview-2024-12-17"
     REALTIME_VOICE: str = "coral"
     MODEL_CONTEXT_WINDOW: int = 40

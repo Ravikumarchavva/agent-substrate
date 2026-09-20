@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -392,15 +391,16 @@ class LocalRagBackend:
             logger.warning("Loading RAG image %s failed: %s", key, exc)
             return result
         media_type = str((result.metadata or {}).get("media_type") or "image/png")
-        return replace(
-            result,
-            content=[
-                MediaBlock.image(
-                    data=data,
-                    media_type=media_type,
-                    storage_key=str(key),
-                )
-            ],
+        return result.model_copy(
+            update={
+                "content": [
+                    MediaBlock.image(
+                        data=data,
+                        media_type=media_type,
+                        storage_key=str(key),
+                    )
+                ]
+            }
         )
 
     # ── internals ────────────────────────────────────────────────────────────

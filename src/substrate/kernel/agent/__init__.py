@@ -10,8 +10,9 @@ from .context import (
     ContextBuilder,
     ContextWindow,
 )
+from .manifest import AgentManifest
 from .middleware import MiddlewareStage
-from .runtime_context import CancellationToken, RunMeta
+from .runtime_context import CancellationTokenProtocol, RunMeta
 from .safety import (
     Severity,
     max_severity,
@@ -29,8 +30,9 @@ __all__ = [
     "CompactionStrategy",
     "ContextBuilder",
     "ContextWindow",
+    "AgentManifest",
     "MiddlewareStage",
-    "CancellationToken",
+    "CancellationTokenProtocol",
     "RunMeta",
     "Severity",
     "max_severity",

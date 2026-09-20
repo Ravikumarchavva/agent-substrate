@@ -7,76 +7,89 @@ multimodal document chunks, and document metadata.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping, Sequence
+from enum import StrEnum
+from typing import Any, Sequence
 
-from substrate.kernel.core.content import ContentBlock, TextBlock
+from pydantic import Field
+
+from substrate.kernel.core.content import ContentBlock, JsonObject, KernelModel, TextBlock
 
 
-@dataclass(frozen=True)
-class ExtractedImage:
+class ExtractedImageLabel(StrEnum):
+    """What kind of visual an extracted image crop represents."""
+
+    CHART = "chart"
+    TABLE = "table"
+    FIGURE = "figure"
+    FORMULA = "formula"
+    IMAGE = "image"
+
+
+class ExtractedImage(KernelModel):
     """An image, chart, table, or formula crop extracted from a document page."""
 
     data: bytes
     media_type: str = "image/png"
     page_number: int | None = None
-    label: str = "chart"  # chart | table | figure | formula | image
+    label: ExtractedImageLabel = ExtractedImageLabel.CHART
     confidence: float = 0.0
     caption: str | None = None
     id: str = ""
 
+    model_config = {
+        "frozen": True,
+        "ser_json_bytes": "base64",
+        "val_json_bytes": "base64",
+    }
 
-@dataclass(frozen=True)
-class ExtractedPage:
+
+class ExtractedPage(KernelModel):
     """A single page of extracted content."""
 
     page_number: int
     text: str
     markdown: str = ""
-    images: Sequence[ExtractedImage] = field(default_factory=list)
-    metadata: Mapping[str, Any] = field(default_factory=dict)
+    images: Sequence[ExtractedImage] = Field(default_factory=list)
+    metadata: JsonObject = Field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class ExtractionResult:
+class ExtractionResult(KernelModel):
     """Outcome of a document extraction run."""
 
     success: bool = True
-    pages: Sequence[ExtractedPage] = field(default_factory=list)
+    pages: Sequence[ExtractedPage] = Field(default_factory=list)
     markdown: str = ""
     engine: str = ""
     error: str | None = None
     degraded_from: str | None = None
 
 
-@dataclass(frozen=True)
-class DocumentMetadata:
+class DocumentMetadata(KernelModel):
     """Catalog metadata describing a stored document."""
 
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     filename: str = ""
     content_type: str = "application/octet-stream"
     byte_size: int = 0
     total_pages: int = 0
     sha256: str = ""
     created_at: datetime | None = None
-    metadata: Mapping[str, Any] = field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class DocumentChunk:
+class DocumentChunk(KernelModel):
     """A discrete passage or multimodal section of a document prepared for retrieval."""
 
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     document_id: str = ""
     text: str = ""
-    content: Sequence[ContentBlock] = field(default_factory=list)
+    content: Sequence[ContentBlock] = Field(default_factory=list)
     page_number: int | None = None
     chunk_index: int = 0
     token_count: int = 0
     embedding: Sequence[float] | None = None
-    metadata: Mapping[str, Any] = field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
 
     @classmethod
     def from_text(
@@ -89,7 +102,7 @@ class DocumentChunk:
         token_count: int = 0,
         id: str | None = None,
         embedding: Sequence[float] | None = None,
-        metadata: Mapping[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> "DocumentChunk":
         return cls(
             id=id or str(uuid.uuid4()),
@@ -105,6 +118,7 @@ class DocumentChunk:
 
 
 __all__ = [
+    "ExtractedImageLabel",
     "ExtractedImage",
     "ExtractedPage",
     "ExtractionResult",

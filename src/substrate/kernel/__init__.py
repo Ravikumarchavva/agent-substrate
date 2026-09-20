@@ -86,6 +86,8 @@ from substrate.kernel.llm.llm import (
     LLMResponse,
     EmbeddingClient,
     EmbeddingResult,
+    Modality,
+    ModelCapabilities,
 )
 from substrate.kernel.storage.history import (
     Branch,
@@ -101,6 +103,7 @@ from substrate.kernel.agent.context import (
     ContextBuilder,
     ContextWindow,
 )
+from substrate.kernel.agent.manifest import AgentManifest
 from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.agent.safety import (
     Severity,
@@ -112,6 +115,8 @@ from substrate.kernel.agent.safety import (
 from substrate.kernel.messaging.stream import (
     TextDelta,
     ReasoningDelta,
+    AudioDelta,
+    ImageDelta,
     CompletionEvent,
     StreamDone,
     AgentProgress,
@@ -128,6 +133,7 @@ from substrate.kernel.storage.graph import (
 )
 from substrate.kernel.storage.memory import (
     ContextMemoryInjection,
+    ExtractionMethod,
     MemoryCategory,
     MemoryMatch,
     MemoryNamespace,
@@ -146,6 +152,7 @@ from substrate.kernel.document import (
     DocumentMetadata,
     DocumentStore,
     ExtractedImage,
+    ExtractedImageLabel,
     ExtractedPage,
     ExtractionResult,
 )
@@ -155,7 +162,7 @@ from substrate.kernel.storage.snapshots import (
     WorkspaceSnapshot,
     WorkspaceStore,
 )
-from substrate.kernel.agent.runtime_context import CancellationToken, RunMeta
+from substrate.kernel.agent.runtime_context import CancellationTokenProtocol, RunMeta
 from substrate.kernel.tools.approval import (
     ApprovalDecision,
     ApprovalRequest,
@@ -188,6 +195,7 @@ from substrate.kernel.runtime import (
     RunRetryPolicy,
     Lease,
     SchedulerProtocol,
+    RunRegistryProtocol,
     RunHandle,
     RunResult,
     SupervisorProtocol,
@@ -273,6 +281,8 @@ __all__ = [
     "LLMResponse",
     "EmbeddingClient",
     "EmbeddingResult",
+    "Modality",
+    "ModelCapabilities",
     "Usage",
     # History
     "HistoryProvider",
@@ -286,6 +296,7 @@ __all__ = [
     "CompactionResult",
     "ContextBuilder",
     "ContextWindow",
+    "AgentManifest",
     # Middleware
     "MiddlewareStage",
     # Safety
@@ -297,6 +308,8 @@ __all__ = [
     # Token stream
     "TextDelta",
     "ReasoningDelta",
+    "AudioDelta",
+    "ImageDelta",
     "CompletionEvent",
     "StreamDone",
     # Progress stream
@@ -320,6 +333,7 @@ __all__ = [
     "MemoryStatus",
     "MemoryNamespace",
     "MemoryProvenance",
+    "ExtractionMethod",
     "MemoryQuery",
     "ContextMemoryInjection",
     "ShortTermMemory",
@@ -336,6 +350,7 @@ __all__ = [
     "DocumentMetadata",
     "DocumentChunk",
     "ExtractedImage",
+    "ExtractedImageLabel",
     "ExtractedPage",
     "ExtractionResult",
     # Workspace snapshots
@@ -344,7 +359,7 @@ __all__ = [
     "WorkspaceSnapshot",
     "WorkspaceStore",
     # Execution context
-    "CancellationToken",
+    "CancellationTokenProtocol",
     "RunMeta",
     # HITL
     "ApprovalDecision",
@@ -376,6 +391,7 @@ __all__ = [
     "RunRetryPolicy",
     "Lease",
     "SchedulerProtocol",
+    "RunRegistryProtocol",
     "RunHandle",
     "RunResult",
     "SupervisorProtocol",

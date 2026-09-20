@@ -13,14 +13,20 @@ rich content that was stored.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, Sequence, runtime_checkable
 
-from substrate.kernel.core.content import ContentBlock, TextBlock, content_blocks_to_str
+from pydantic import Field
+
+from substrate.kernel.core.content import (
+    ContentBlock,
+    JsonObject,
+    KernelModel,
+    TextBlock,
+    content_blocks_to_str,
+)
 
 
-@dataclass(frozen=True)
-class Document:
+class Document(KernelModel):
     """A content chunk with optional metadata ready for vector storage.
 
     ``content`` is a sequence of ``ContentBlock`` — text, images, audio,
@@ -32,10 +38,10 @@ class Document:
     supports server-side embedding and the field is ignored).
     """
 
-    content: Sequence[ContentBlock] = field(default_factory=list)
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    content: Sequence[ContentBlock] = Field(default_factory=list)
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     embedding: Sequence[float] | None = None
-    metadata: Mapping[str, Any] = field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
 
     # ── Convenience constructors ───────────────────────────────────────────
 
@@ -46,7 +52,7 @@ class Document:
         *,
         id: str | None = None,
         embedding: Sequence[float] | None = None,
-        metadata: Mapping[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> "Document":
         """Create a text-only document — the common case for plain-text RAG."""
         return cls(
@@ -67,8 +73,7 @@ class Document:
         return content_blocks_to_str(self.content)
 
 
-@dataclass(frozen=True)
-class SearchResult:
+class SearchResult(KernelModel):
     """A single result from a vector similarity search.
 
     ``content`` mirrors ``Document.content`` — the same multimodal blocks
@@ -79,7 +84,7 @@ class SearchResult:
     id: str
     content: Sequence[ContentBlock]
     score: float
-    metadata: Mapping[str, Any] = field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
 
     def to_text(self) -> str:
         """Return a human-readable text representation of the content."""

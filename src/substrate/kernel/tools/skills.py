@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from pydantic import Field
+
+from substrate.kernel.core.content import KernelModel
 
 
-@dataclass(frozen=True)
-class Skill:
+class Skill(KernelModel):
     """A prompt-skill that extends an agent's behaviour via injected instructions.
 
     Skills are loaded from ``capabilities/tools/skills/<name>/SKILL.md`` or
@@ -27,7 +28,7 @@ class Skill:
     name: str
     instructions: str
     description: str = ""
-    allowed_tools: tuple[str, ...] = field(default_factory=tuple)
+    allowed_tools: tuple[str, ...] = Field(default_factory=tuple)
     path: str | None = None
     version: str = "1"
 

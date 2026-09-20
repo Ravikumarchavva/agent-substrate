@@ -22,13 +22,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.agents.runtime.cancellation import CancellationToken
-from substrate.kernel.runtime.ids import RunStatus
+from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.runtime.log_entry import RunLogEntry
+from substrate.kernel.agent.supervision import Supervision
 from substrate.kernel.exceptions import CancellationError, SuspendInterrupt
 
 if TYPE_CHECKING:
@@ -233,6 +235,31 @@ class Worker:
             hooks=hooks,
         )
 
+    async def _resolve_deadline(
+        self, run_id: RunId, supervision: Supervision | None
+    ) -> datetime | None:
+        """Resolve ``supervision.execution_budget.deadline_s`` into an absolute
+        cutoff, enforced by ``RunMeta.check()`` at every ``ctx.check()`` call.
+
+        Anchored to the run's true start (the ``ts`` of its ``run.started``
+        log entry, seq 0), not "now" on this lease — a resumed run must not
+        get its deadline pushed out on every re-lease, or the budget would
+        never actually expire. On the very first lease the log has no
+        entries yet (``run.started`` is logged from inside ``agent.run()``,
+        after this method runs), so "now" genuinely *is* the run's start in
+        that one case.
+        """
+        budget = supervision.execution_budget if supervision else None
+        if budget is None or budget.deadline_s is None:
+            return None
+        started_at = None
+        async for entry in self._event_log.read(run_id, from_seq=0):
+            started_at = entry.ts
+            break
+        if started_at is None:
+            started_at = datetime.now(timezone.utc)
+        return started_at + timedelta(seconds=budget.deadline_s)
+
     async def _run_agent(self, lease, agent: Agent) -> None:
         from substrate.agents.runtime.context import RunContext
         from substrate.agents.runtime.effect_cache import EffectCache
@@ -241,11 +268,13 @@ class Worker:
         token = CancellationToken()
         # Populate tenant and supervision hierarchy (inheriting parent budgets)
         supervision = await self._supervisor.supervision_of(run_id)
+        deadline = await self._resolve_deadline(run_id, supervision)
         meta = RunMeta(
             run_id=run_id,
             cancellation=token,
             tenant_id=lease.tenant,
             supervision=supervision,
+            deadline=deadline,
         )
         self._tokens[run_id] = token
 

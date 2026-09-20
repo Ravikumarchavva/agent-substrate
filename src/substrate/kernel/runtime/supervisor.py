@@ -176,15 +176,23 @@ class SupervisorProtocol(Protocol):
         ...
 
     async def join(self, handle: RunHandle) -> RunResult:
-        """Suspend the parent until ``handle``'s run reaches a terminal state.
+        """Return ``handle``'s run's terminal ``RunResult``, once available.
 
-        The caller's run transitions to SUSPENDED and the SchedulerProtocol releases
-        its lease.  When the child completes, the parent is re-enqueued with a
-        ``child_done`` wakeup, resumes, and this coroutine returns the child's
-        ``RunResult``.
-
-        Note: from the RunContext (L1), this is ``await ctx.join(handle)``
-        — the parent's run() coroutine yields control to the runtime here.
+        The durable suspend-until-terminal guarantee this describes (the
+        caller's run transitions to SUSPENDED, the SchedulerProtocol releases
+        its lease, and the parent is re-enqueued with a ``child_done``
+        wakeup when the child completes) is what ``ctx.join(handle)``
+        achieves at the ``RunContext`` (L1) layer — via
+        ``SignalBusProtocol``, not by calling this method directly. A
+        backend's own ``join()`` is not required to block: a backend with
+        no in-process way to await completion (e.g. a stateless Postgres
+        client) MAY instead do a single point-in-time status read and is
+        Protocol-conformant either way, since no caller in this codebase
+        invokes ``SupervisorProtocol.join()`` directly outside that signal
+        path today. Implementers that genuinely block until terminal (e.g.
+        an in-process ``asyncio.Event``-backed backend) are also conformant
+        — both are valid; check a specific implementation's own docstring
+        for which one it does.
         """
         ...
 

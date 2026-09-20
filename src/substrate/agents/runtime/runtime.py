@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from substrate.agents.core.orchestrator import SubAgentConfig
 
 from substrate.kernel.runtime.log_entry import RunLogKind
+from substrate.kernel.agent.supervision import Priority
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.agents.runtime.context import Agent
@@ -153,7 +154,7 @@ class Runtime:
         """Create a fresh run so a queued inbox message gets processed."""
         run_id = new_run_id()
         self._scheduler.register_run(run_id, agent_id)
-        await self._scheduler.enqueue(run_id, priority=5, tenant="default")
+        await self._scheduler.enqueue(run_id, priority=Priority.NORMAL, tenant="default")
 
     # ------------------------------------------------------------------
     # Public API
@@ -209,7 +210,7 @@ class Runtime:
         agent_id: Actor,
         msg: Message,
         *,
-        priority: int = 5,
+        priority: Priority = Priority.NORMAL,
         tenant: str = "default",
         max_retries: int = 3,
         retry_policy: RunRetryPolicy | None = None,

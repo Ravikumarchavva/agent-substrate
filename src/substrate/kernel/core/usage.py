@@ -1,4 +1,14 @@
-"""Token usage contract — shared by LLM clients and stream events."""
+"""Token usage contract — shared by LLM clients and stream events.
+
+Deliberately a frozen ``dataclass``, not a pydantic model, despite the
+kernel's general rule (pydantic for persisted/wire types, dataclass for
+pure in-process values): ``Usage`` is never independently persisted or
+sent over the wire on its own — it's always nested inside another
+pydantic type (``LLMResponse.usage``, log payload dicts) that handles its
+own (de)serialization, and it's constructed and ``__add__``-accumulated on
+every single LLM call, a genuinely hot path where a slotted dataclass's
+lower construction overhead is the right trade-off.
+"""
 
 from __future__ import annotations
 

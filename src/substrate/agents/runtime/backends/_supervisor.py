@@ -26,7 +26,7 @@ from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from substrate.kernel.runtime.supervisor import RunHandle, RunResult
-from substrate.kernel.agent.supervision import Supervision
+from substrate.kernel.agent.supervision import Priority, Supervision
 
 if TYPE_CHECKING:
     from substrate.agents.runtime.backends._event_log import InMemoryEventLog
@@ -117,7 +117,7 @@ class InMemorySupervisor:
             await self._inbox.deliver(child_agent, boot_with_reply, notify=False)
             # Register and enqueue the child run
             self._scheduler.register_run(child_run_id, child_agent)
-            await self._scheduler.enqueue(child_run_id, priority=5, tenant="default")
+            await self._scheduler.enqueue(child_run_id, priority=Priority.NORMAL, tenant="default")
             # Log spawn in parent's EventLogProtocol — ONLY on a genuine new spawn.
             # Logging this unconditionally (including on a cache hit) would
             # append a duplicate "child.spawned" entry on every replay.

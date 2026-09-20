@@ -91,6 +91,44 @@ async def test_embed_image_sends_prompt_string_and_multimodal_data():
     assert vector == [0.4, 0.5]
 
 
+async def test_embed_mixed_interleaves_text_and_media_marker_per_image():
+    """Generalizes embed_image's verified prompt_string/multimodal_data shape
+    to carry text too — one marker per image, in the order parts are given."""
+    b64_a = base64.b64encode(b"image a").decode("ascii")
+    b64_b = base64.b64encode(b"image b").decode("ascii")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/props":
+            return httpx.Response(200, json={"media_marker": "<__media_test__>"})
+        payload = json.loads(request.content)
+        assert payload == {
+            "input": {
+                "prompt_string": "a chart <__media_test__> <__media_test__>",
+                "multimodal_data": [b64_a, b64_b],
+            }
+        }
+        return httpx.Response(200, json=[{"embedding": [[0.6, 0.7]]}])
+
+    reranker = _reranker(handler)
+    vector = await reranker.embed_mixed(["a chart", b"image a", b"image b"])
+
+    assert vector == [0.6, 0.7]
+
+
+async def test_embed_mixed_with_only_images_omits_text_but_keeps_markers():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/props":
+            return httpx.Response(200, json={"media_marker": "<m>"})
+        payload = json.loads(request.content)
+        assert payload["input"]["prompt_string"] == "<m>"
+        return httpx.Response(200, json=[{"embedding": [[0.1]]}])
+
+    reranker = _reranker(handler)
+    vector = await reranker.embed_mixed([b"only image"])
+
+    assert vector == [0.1]
+
+
 def _png(width: int, height: int) -> bytes:
     import io
 

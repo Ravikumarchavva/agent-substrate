@@ -25,11 +25,11 @@ from substrate.serving.protocol.from_log import wire_from_log
 
 if TYPE_CHECKING:
     from substrate.kernel.runtime.log_entry import EventLogProtocol
-    from substrate.kernel.runtime.scheduler import SchedulerProtocol
+    from substrate.kernel.runtime.scheduler import RunRegistryProtocol
 
 
 async def project_thread(
-    event_log: "EventLogProtocol", scheduler: "SchedulerProtocol", thread_id: str
+    event_log: "EventLogProtocol", scheduler: "RunRegistryProtocol", thread_id: str
 ) -> list[WireEvent]:
     """Return the full conversation for ``thread_id`` as an ordered wire-event
     list — the canonical history read, used by the history endpoint and by
@@ -53,7 +53,7 @@ async def project_thread(
 
 async def _append_to_thread(
     event_log: "EventLogProtocol",
-    scheduler: "SchedulerProtocol",
+    scheduler: "RunRegistryProtocol",
     thread_id: str,
     kind: str,
     payload: dict[str, Any],
@@ -90,7 +90,7 @@ async def _append_to_thread(
 
 async def append_mcp_app_context(
     event_log: "EventLogProtocol",
-    scheduler: "SchedulerProtocol",
+    scheduler: "RunRegistryProtocol",
     thread_id: str,
     payload: dict[str, Any],
 ) -> None:
@@ -104,7 +104,7 @@ async def append_mcp_app_context(
 
 async def append_user_message(
     event_log: "EventLogProtocol",
-    scheduler: "SchedulerProtocol",
+    scheduler: "RunRegistryProtocol",
     thread_id: str,
     text: str,
 ) -> bool:

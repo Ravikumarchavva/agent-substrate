@@ -16,7 +16,6 @@ Usage::
 """
 
 from __future__ import annotations
-import dataclasses
 from substrate.logger import setup_logging
 
 from typing import TYPE_CHECKING, Any
@@ -108,7 +107,7 @@ class RAGPipeline:
 
         # Populate embedding on documents
         docs_with_embeddings = [
-            dataclasses.replace(doc, embedding=emb)
+            doc.model_copy(update={"embedding": emb})
             for doc, emb in zip(all_docs, result.embeddings)
         ]
 
@@ -139,7 +138,7 @@ class RAGPipeline:
         chunk_texts = [doc.to_text() for doc in documents]
         result = await self._embedding.embed(chunk_texts)
         docs_with_embeddings = [
-            dataclasses.replace(doc, embedding=emb)
+            doc.model_copy(update={"embedding": emb})
             for doc, emb in zip(documents, result.embeddings)
         ]
         await self._store.add(docs_with_embeddings, collection=collection)

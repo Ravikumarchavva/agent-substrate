@@ -17,14 +17,15 @@ the concrete web implementation).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
-from substrate.kernel.core.content import JsonObject
+from pydantic import Field
+
+from substrate.kernel.core.content import JsonObject, KernelModel
 from substrate.kernel.core.identity import Actor
-from substrate.kernel.tools import ToolCallRequest, ToolRisk
+from substrate.kernel.tools.tools import ToolCallRequest, ToolRisk
 
 
 class ApprovalDecision(StrEnum):
@@ -36,8 +37,7 @@ class ApprovalDecision(StrEnum):
     MODIFIED = "modified"
 
 
-@dataclass(frozen=True, slots=True)
-class ApprovalRequest:
+class ApprovalRequest(KernelModel):
     """Request for human approval of a pending tool call.
 
     ``call`` — the tool call awaiting approval.
@@ -52,14 +52,11 @@ class ApprovalRequest:
     risk: ToolRisk
     agent_id: Actor
     run_id: str
-    context: JsonObject = field(default_factory=dict)
-    requested_at: datetime = field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
-    )
+    context: JsonObject = Field(default_factory=dict)
+    requested_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
 
-@dataclass(frozen=True, slots=True)
-class ApprovalResult:
+class ApprovalResult(KernelModel):
     """The human's response to an ``ApprovalRequest``.
 
     ``modified_args`` is only meaningful when ``decision == MODIFIED`` — the

@@ -6,6 +6,7 @@ from substrate.kernel.document.models import (
     DocumentChunk,
     DocumentMetadata,
     ExtractedImage,
+    ExtractedImageLabel,
     ExtractedPage,
     ExtractionResult,
 )
@@ -17,6 +18,7 @@ from substrate.kernel.document.protocols import (
 
 __all__ = [
     "ExtractedImage",
+    "ExtractedImageLabel",
     "ExtractedPage",
     "ExtractionResult",
     "DocumentMetadata",

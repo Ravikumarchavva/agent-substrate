@@ -1,4 +1,4 @@
-"""CancellationToken (Protocol) and RunMeta — execution-scoped runtime metadata.
+"""CancellationTokenProtocol and RunMeta — execution-scoped runtime metadata.
 
 Both are threaded through every kernel API call so that:
 
@@ -6,12 +6,14 @@ Both are threaded through every kernel API call so that:
 - Distributed traces, deadlines, and tenant scoping are available
   everywhere without adding individual parameters to each call.
 
-``CancellationToken`` here is a Protocol only — the concrete implementation
-(real asyncio state: an ``Event``, a callback list) lives in
-``agents/runtime/cancellation.py``, since kernel holds contracts, not
-working implementations. ``RunMeta`` is a frozen value object; create one
-per run() call — always with an already-constructed token from that layer,
-never conjured here.
+``CancellationTokenProtocol`` here is a Protocol only — the concrete
+implementation (real asyncio state: an ``Event``, a callback list) lives in
+``agents/runtime/cancellation.py::CancellationToken``, since kernel holds
+contracts, not working implementations. Named distinctly (not
+``CancellationToken``) so the Protocol and its one implementation can never
+collide under the same bare name on a dual import. ``RunMeta`` is a frozen
+value object; create one per run() call — always with an already-constructed
+token from that layer, never conjured here.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from substrate.kernel.agent.supervision import Supervision
 
 
 @runtime_checkable
-class CancellationToken(Protocol):
+class CancellationTokenProtocol(Protocol):
     """Cooperative cancellation signal for agent operations.
 
     Usage::
@@ -60,7 +62,7 @@ class CancellationToken(Protocol):
         """Register a callback invoked synchronously when ``cancel()`` is called."""
         ...
 
-    def child(self) -> "CancellationToken":
+    def child(self) -> "CancellationTokenProtocol":
         """Return a child token that is cancelled when this one is.
 
         Cancelling the child does NOT cancel the parent.
@@ -78,7 +80,12 @@ class RunMeta:
                        ``supervision.run_id`` when supervision is provided.
     ``cancellation`` — cooperative cancellation; call ``check()`` at yield points.
     ``supervision``  — agent position in the execution tree; ``None`` for standalone runs.
-    ``deadline``     — wall-clock expiry; agents and tools should honour it.
+    ``deadline``     — wall-clock expiry; agents and tools should honour it. Resolved
+                       from ``supervision.execution_budget.deadline_s`` at run start
+                       (see ``agents/core/react.py::_resolve_execution_budget``) —
+                       this is the one absolute cutoff every ``check()`` call enforces;
+                       ``SchedulerProtocol.enqueue``'s own ``deadline`` parameter is a
+                       distinct, scheduler-level lease/queueing cutoff, not this one.
     ``trace_id``     — distributed trace identifier for observability.
     ``tenant_id``    — tenant namespace; ``None`` for single-tenant deployments.
 
@@ -88,7 +95,7 @@ class RunMeta:
     """
 
     run_id: str
-    cancellation: CancellationToken
+    cancellation: CancellationTokenProtocol
     supervision: Supervision | None = None
     deadline: datetime | None = None
     trace_id: str = field(default_factory=lambda: _uuid.uuid4().hex)
@@ -107,9 +114,9 @@ class RunMeta:
             return True
         return False
 
-    def child_token(self) -> CancellationToken:
+    def child_token(self) -> CancellationTokenProtocol:
         """Return a child token cancelled when this context is cancelled."""
         return self.cancellation.child()
 
 
-__all__ = ["CancellationToken", "RunMeta"]
+__all__ = ["CancellationTokenProtocol", "RunMeta"]

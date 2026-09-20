@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol, Sequence, runtime_checkable
+
+from pydantic import Field
+
+from substrate.kernel.core.content import KernelModel
 
 
 class TaskStatus(StrEnum):
@@ -28,8 +31,7 @@ class TaskStatus(StrEnum):
     ABANDONED = "abandoned"
 
 
-@dataclass(frozen=True)
-class Task:
+class Task(KernelModel):
     id: str
     title: str
     status: TaskStatus = TaskStatus.PLANNED
@@ -38,13 +40,12 @@ class Task:
     note: str = ""
 
 
-@dataclass(frozen=True)
-class TaskList:
+class TaskList(KernelModel):
     """One agent's Kanban board within a conversation."""
 
     id: str
     conversation_id: str
-    tasks: Sequence[Task] = field(default_factory=list)
+    tasks: Sequence[Task] = Field(default_factory=list)
     max_retries: int = 3
     agent_id: str = ""
     agent_label: str = ""
@@ -116,7 +117,7 @@ class TaskStore(Protocol):
         ...
 
     async def update_status(
-        self, task_list_id: str, task_id: str, status: TaskStatus | str, note: str = ""
+        self, task_list_id: str, task_id: str, status: TaskStatus, note: str = ""
     ) -> Task | None:
         """Update a task's status (and optional note)."""
         ...

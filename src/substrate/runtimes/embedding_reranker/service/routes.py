@@ -44,18 +44,36 @@ Authed = Annotated[None, Depends(_verify_token)]
 
 @router.post("/embed", response_model=EmbedResponse)
 async def embed(body: EmbedRequest, request: Request, _: Authed):
-    """Embed either an image (``image_base64``) or text (``text``) into the
-    shared multimodal space — exactly one must be set."""
-    if bool(body.image_base64) == bool(body.text):
+    """Embed text, a single image, or text+images together into the shared
+    multimodal space — see ``EmbedRequest`` for the three valid shapes."""
+    import base64
+
+    has_text = bool(body.text)
+    has_single_image = bool(body.image_base64)
+    has_multi_images = bool(body.images_base64)
+
+    if has_single_image and (has_text or has_multi_images):
         raise HTTPException(
-            400, "Exactly one of image_base64 or text must be provided."
+            400,
+            "image_base64 is the single-image-only shortcut; use images_base64 "
+            "alongside text for mixed input.",
+        )
+    if not has_text and not has_single_image and not has_multi_images:
+        raise HTTPException(
+            400, "At least one of text, image_base64, or images_base64 must be provided."
         )
 
     embedding_reranker = request.app.state.embedding_reranker
     try:
-        if body.image_base64:
-            import base64
-
+        if has_multi_images:
+            parts: list[str | bytes] = []
+            if body.text:
+                parts.append(body.text)
+            for img_b64 in body.images_base64 or []:
+                parts.append(base64.b64decode(img_b64, validate=True))
+            vector = await embedding_reranker.embed_mixed(parts)
+        elif has_single_image:
+            assert body.image_base64 is not None
             data = base64.b64decode(body.image_base64, validate=True)
             vector = await embedding_reranker.embed_image(data)
         else:

@@ -41,6 +41,7 @@ from typing import AsyncIterator, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from substrate.kernel.agent.supervision import Priority
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.runtime.wakeup import Wakeup
@@ -97,6 +98,15 @@ class SchedulerProtocol(Protocol):
     JetStream work-queue (Stage 2+), distributed consistent-hash scheduler
     (Stage 3).
 
+    Scope: pure queue/lease mechanics — accept, lease, heartbeat, release,
+    cancel-pending. Lookups (which agent owns a run, current status, find-by-
+    thread/signal) and wake control live on ``RunRegistryProtocol`` below —
+    a separate Protocol because they're a different concern (a registry
+    index, not queue mechanics) and some consumers only ever need lookups
+    (e.g. ``serving/stream/history.py``), not the full leasing surface. Every
+    real implementation still implements both — split for the type each
+    caller depends on, not for a second concrete class.
+
     Semantic guarantees
     -------------------
     - ``enqueue`` for an already-pending run_id is a no-op (coalescing):
@@ -114,7 +124,7 @@ class SchedulerProtocol(Protocol):
         self,
         run_id: RunId,
         *,
-        priority: int,
+        priority: Priority = Priority.NORMAL,
         tenant: str,
         wake: Wakeup | None = None,
         retry_policy: RunRetryPolicy | None = None,
@@ -123,7 +133,10 @@ class SchedulerProtocol(Protocol):
     ) -> None:
         """Add ``run_id`` to the work-queue (or coalesce into existing entry).
 
-        ``priority`` is an integer weight (see ``kernel/agent/supervision.py::Priority``).
+        ``priority`` is the same ``kernel/agent/supervision.py::Priority`` rank
+        used for spawn preemption — one priority concept end-to-end, not two
+        unrelated scales sharing a name. Higher ranks are leased first when
+        the queue has more pending runs than capacity.
         ``tenant`` is used for per-tenant fairness and quota enforcement.
         ``wake`` is the trigger that caused this enqueue (informational for
         the worker when it drains the wakeup reason).
@@ -220,6 +233,37 @@ class SchedulerProtocol(Protocol):
         """Yield run_ids currently in the pending queue (for monitoring)."""
         ...
 
+    async def cancel_pending(self, run_id: RunId) -> bool:
+        """Atomically mark ``run_id`` CANCELLED iff it is not currently RUNNING.
+
+        Returns ``True`` if the transition happened (the run was PENDING or
+        SUSPENDED), ``False`` otherwise (RUNNING — some worker, possibly on
+        another replica, owns the lease — or already terminal/unknown).
+
+        This is the gate a Worker's local, best-effort ``cancel()`` needs: a
+        run this worker has no local Task for is not necessarily idle — on a
+        durable multi-replica backend it may be actively leased elsewhere.
+        Forcibly terminalizing it locally in that case would race the owning
+        worker's own eventual completion. Cross-replica cancellation of a
+        genuinely RUNNING run goes through ``SupervisorProtocol.cancel()``'s durable
+        ``cancel_requested`` flag instead (observed by that worker's own
+        heartbeat), not through this method.
+        """
+        ...
+
+
+@runtime_checkable
+class RunRegistryProtocol(Protocol):
+    """Lookup index and wake control for durable runs.
+
+    Split out of ``SchedulerProtocol`` (see that Protocol's docstring) — a
+    registry/lookup concern, not queue mechanics. Every real scheduler
+    backend implements both Protocols on the same class; this split exists
+    for callers (like read-only monitoring/streaming code) that only need
+    lookups and shouldn't have to depend on the full leasing surface to get
+    them.
+    """
+
     def register_run(self, run_id: RunId, agent_id: Actor) -> None:
         """Associate ``run_id`` with ``agent_id`` before enqueuing.
 
@@ -238,24 +282,6 @@ class SchedulerProtocol(Protocol):
 
     async def get_status(self, run_id: RunId) -> RunStatus | None:
         """Return the current status of ``run_id``, or ``None`` if not found."""
-        ...
-
-    async def cancel_pending(self, run_id: RunId) -> bool:
-        """Atomically mark ``run_id`` CANCELLED iff it is not currently RUNNING.
-
-        Returns ``True`` if the transition happened (the run was PENDING or
-        SUSPENDED), ``False`` otherwise (RUNNING — some worker, possibly on
-        another replica, owns the lease — or already terminal/unknown).
-
-        This is the gate a Worker's local, best-effort ``cancel()`` needs: a
-        run this worker has no local Task for is not necessarily idle — on a
-        durable multi-replica backend it may be actively leased elsewhere.
-        Forcibly terminalizing it locally in that case would race the owning
-        worker's own eventual completion. Cross-replica cancellation of a
-        genuinely RUNNING run goes through ``SupervisorProtocol.cancel()``'s durable
-        ``cancel_requested`` flag instead (observed by that worker's own
-        heartbeat), not through this method.
-        """
         ...
 
     async def find_run_for_agent(
@@ -310,13 +336,17 @@ class SchedulerProtocol(Protocol):
         """
         ...
 
-    async def wake_suspended(self, run_id: RunId, *, priority: int = 5) -> None:
+    async def wake_suspended(
+        self, run_id: RunId, *, priority: Priority = Priority.NORMAL
+    ) -> None:
         """Transition a SUSPENDED run back to PENDING so a worker re-leases it."""
         ...
 
-    async def wake_agent(self, agent_id: Actor, *, priority: int = 5) -> None:
+    async def wake_agent(
+        self, agent_id: Actor, *, priority: Priority = Priority.NORMAL
+    ) -> None:
         """Enqueue a wakeup for any suspended run owned by ``agent_id``."""
         ...
 
 
-__all__ = ["RunRetryPolicy", "Lease", "SchedulerProtocol"]
+__all__ = ["RunRetryPolicy", "Lease", "SchedulerProtocol", "RunRegistryProtocol"]

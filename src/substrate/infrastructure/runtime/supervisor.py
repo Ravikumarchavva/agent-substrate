@@ -38,7 +38,7 @@ from substrate.kernel.runtime.effects import Effect
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.kernel.runtime.supervisor import RunHandle, RunResult
-from substrate.kernel.agent.supervision import Supervision
+from substrate.kernel.agent.supervision import Priority, Supervision
 
 if TYPE_CHECKING:
     import asyncpg
@@ -202,7 +202,7 @@ class Supervisor:
                 await self._inbox.deliver(child_agent, boot_with_reply, notify=False)
                 self._scheduler.register_run(child_run_id, child_agent)
                 await self._scheduler.enqueue(
-                    child_run_id, priority=5, tenant="default"
+                    child_run_id, priority=Priority.NORMAL, tenant="default"
                 )
 
                 # Log spawn in the parent's own EventLogProtocol — ONLY on a genuine

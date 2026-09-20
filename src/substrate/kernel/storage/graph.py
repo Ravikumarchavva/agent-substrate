@@ -3,36 +3,36 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
+
+from pydantic import Field
+
+from substrate.kernel.core.content import JsonObject, KernelModel
 
 
-@dataclass(frozen=True)
-class Entity:
+class Entity(KernelModel):
     """A node in the knowledge graph."""
 
     label: str
-    properties: Mapping[str, Any] = field(default_factory=dict)
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    properties: JsonObject = Field(default_factory=dict)
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
-@dataclass(frozen=True)
-class Relationship:
+class Relationship(KernelModel):
     """An edge between two entities in the knowledge graph."""
 
     source_id: str
     target_id: str
     type: str
-    properties: Mapping[str, Any] = field(default_factory=dict)
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    properties: JsonObject = Field(default_factory=dict)
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
-@dataclass(frozen=True)
-class SubGraph:
+class SubGraph(KernelModel):
     """A subgraph result containing entities and relationships."""
 
-    entities: tuple[Entity, ...] = field(default_factory=tuple)
-    relationships: tuple[Relationship, ...] = field(default_factory=tuple)
+    entities: tuple[Entity, ...] = Field(default_factory=tuple)
+    relationships: tuple[Relationship, ...] = Field(default_factory=tuple)
 
 
 @runtime_checkable

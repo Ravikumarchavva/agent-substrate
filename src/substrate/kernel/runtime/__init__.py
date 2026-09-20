@@ -12,7 +12,8 @@ inbox.py          InboxProtocol, DeadLetterEntry, DeadLetterReason  (durable mai
 follow_graph.py   FollowGraph  (social follow-graph — NOT the RAG knowledge graph)
 fanout.py         FanoutStrategy  (how an emit reaches all followers)
 wakeup.py         Wakeup, SignalBusProtocol  (what resumes a dormant run)
-scheduler.py      Lease, RunRetryPolicy, SchedulerProtocol  (work-queue + leasing)
+scheduler.py      Lease, RunRetryPolicy, SchedulerProtocol, RunRegistryProtocol
+                  (work-queue + leasing; registry lookups + wake control)
 supervisor.py     RunHandle, RunResult, SupervisorProtocol  (spawn/join/cancel subagents)
 agent.py          AgentRunContext, Agent  (the agent contract)
 communication.py  AskOutcome, RunStatusSummary  (ask/reply value types)
@@ -31,7 +32,12 @@ from substrate.kernel.runtime.inbox import (
 from substrate.kernel.runtime.follow_graph import FollowGraph
 from substrate.kernel.runtime.fanout import FanoutStrategy
 from substrate.kernel.runtime.wakeup import SignalBusProtocol, Wakeup
-from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy, SchedulerProtocol
+from substrate.kernel.runtime.scheduler import (
+    Lease,
+    RunRegistryProtocol,
+    RunRetryPolicy,
+    SchedulerProtocol,
+)
 from substrate.kernel.runtime.supervisor import RunHandle, RunResult, SupervisorProtocol
 from substrate.kernel.runtime.agent import Agent, AgentRunContext
 from substrate.kernel.runtime.communication import AskOutcome, RunStatusSummary
@@ -63,6 +69,7 @@ __all__ = [
     "RunRetryPolicy",
     "Lease",
     "SchedulerProtocol",
+    "RunRegistryProtocol",
     # supervisor
     "RunHandle",
     "RunResult",

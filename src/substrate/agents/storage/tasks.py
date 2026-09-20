@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
-import dataclasses
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import uuid4
@@ -136,19 +135,19 @@ class TaskStore:
                 for task in task_list.tasks:
                     if task.status == TaskStatus.IN_PROGRESS:
                         new_tasks.append(
-                            dataclasses.replace(task, status=TaskStatus.SUCCEEDED)
+                            task.model_copy(update={"status": TaskStatus.SUCCEEDED})
                         )
                         mutated = True
                     else:
                         new_tasks.append(task)
                 if mutated:
-                    updated = dataclasses.replace(task_list, tasks=new_tasks)
+                    updated = task_list.model_copy(update={"tasks": new_tasks})
                     self._lists[tl_id] = updated
                     changed.append(updated)
             return changed
 
     async def update_status(
-        self, task_list_id: str, task_id: str, status: str, note: str = ""
+        self, task_list_id: str, task_id: str, status: TaskStatus, note: str = ""
     ) -> Optional[Task]:
         async with self._lock:
             task_list = self._lists.get(task_list_id)
@@ -156,14 +155,15 @@ class TaskStore:
                 return None
             for task in task_list.tasks:
                 if task.id == task_id:
-                    new_task = dataclasses.replace(
-                        task, status=status, note=note if note else task.note
+                    new_task = task.model_copy(
+                        update={"status": status, "note": note if note else task.note}
                     )
-                    self._lists[task_list_id] = dataclasses.replace(
-                        task_list,
-                        tasks=[
-                            new_task if t.id == task_id else t for t in task_list.tasks
-                        ],
+                    self._lists[task_list_id] = task_list.model_copy(
+                        update={
+                            "tasks": [
+                                new_task if t.id == task_id else t for t in task_list.tasks
+                            ]
+                        }
                     )
                     return new_task
             return None
@@ -184,8 +184,8 @@ class TaskStore:
                 for i, t in enumerate(titles)
                 if t.strip()
             ]
-            self._lists[task_list_id] = dataclasses.replace(
-                task_list, tasks=[*task_list.tasks, *new_tasks]
+            self._lists[task_list_id] = task_list.model_copy(
+                update={"tasks": [*task_list.tasks, *new_tasks]}
             )
             return new_tasks
 
@@ -196,7 +196,7 @@ class TaskStore:
                 return False
             before = len(task_list.tasks)
             new_tasks = [t for t in task_list.tasks if t.id != task_id]
-            self._lists[task_list_id] = dataclasses.replace(task_list, tasks=new_tasks)
+            self._lists[task_list_id] = task_list.model_copy(update={"tasks": new_tasks})
             return len(new_tasks) < before
 
     async def increment_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
@@ -212,16 +212,18 @@ class TaskStore:
                 if task.id == task_id:
                     if task.retry_count >= task_list.max_retries:
                         return None
-                    new_task = dataclasses.replace(
-                        task,
-                        retry_count=task.retry_count + 1,
-                        status=TaskStatus.IN_PROGRESS,
+                    new_task = task.model_copy(
+                        update={
+                            "retry_count": task.retry_count + 1,
+                            "status": TaskStatus.IN_PROGRESS,
+                        }
                     )
-                    self._lists[task_list_id] = dataclasses.replace(
-                        task_list,
-                        tasks=[
-                            new_task if t.id == task_id else t for t in task_list.tasks
-                        ],
+                    self._lists[task_list_id] = task_list.model_copy(
+                        update={
+                            "tasks": [
+                                new_task if t.id == task_id else t for t in task_list.tasks
+                            ]
+                        }
                     )
                     return new_task
             return None
@@ -234,14 +236,19 @@ class TaskStore:
                 return None
             for task in task_list.tasks:
                 if task.id == task_id:
-                    new_task = dataclasses.replace(
-                        task, retry_count=0, status=TaskStatus.IN_PROGRESS, note=""
+                    new_task = task.model_copy(
+                        update={
+                            "retry_count": 0,
+                            "status": TaskStatus.IN_PROGRESS,
+                            "note": "",
+                        }
                     )
-                    self._lists[task_list_id] = dataclasses.replace(
-                        task_list,
-                        tasks=[
-                            new_task if t.id == task_id else t for t in task_list.tasks
-                        ],
+                    self._lists[task_list_id] = task_list.model_copy(
+                        update={
+                            "tasks": [
+                                new_task if t.id == task_id else t for t in task_list.tasks
+                            ]
+                        }
                     )
                     return new_task
             return None
@@ -255,12 +262,13 @@ class TaskStore:
                 return None
             for task in task_list.tasks:
                 if task.id == task_id:
-                    new_task = dataclasses.replace(task, title=title.strip())
-                    self._lists[task_list_id] = dataclasses.replace(
-                        task_list,
-                        tasks=[
-                            new_task if t.id == task_id else t for t in task_list.tasks
-                        ],
+                    new_task = task.model_copy(update={"title": title.strip()})
+                    self._lists[task_list_id] = task_list.model_copy(
+                        update={
+                            "tasks": [
+                                new_task if t.id == task_id else t for t in task_list.tasks
+                            ]
+                        }
                     )
                     return new_task
             return None

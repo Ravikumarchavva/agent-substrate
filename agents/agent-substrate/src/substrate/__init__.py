@@ -19,7 +19,13 @@ if TYPE_CHECKING:
     from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
     from substrate.agents.core.proxy import UserProxyAgent
     from substrate.agents.core.information_agent import InformationAgent
-    from substrate.agents.core.personal_feed_agent import PersonalFeedAgent
+    from substrate.config import SubstrateConfig
+    from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
+    from substrate.capabilities.storage.local_workspace_store import (
+        LocalFilesystemWorkspaceStore,
+    )
+    from substrate.capabilities.memory.local_session_store import LocalFileSessionStore
+    from substrate.capabilities.storage.workspace import WorkspaceFileStore
     from substrate.agents.context import (
         AgentContext,
         ContextConfig,
@@ -70,6 +76,17 @@ __all__ = [
     # runtime
     "Runtime",
     "RunOutcome",
+    # config
+    "SubstrateConfig",
+    # native durable storage
+    "LocalFilesystemHistoryProvider",
+    "LocalHistoryProvider",
+    "LocalFilesystemWorkspaceStore",
+    "LocalWorkspaceStore",
+    "LocalFileSessionStore",
+    "LocalSessionStore",
+    "WorkspaceFileStore",
+    "LocalFileStore",
     # supporting types
     "AgentRunResult",
     "Skill",
@@ -124,10 +141,48 @@ _LAZY: dict[str, tuple[str, str]] = {
     # runtime
     "Runtime": ("substrate.agents.runtime", "Runtime"),
     "RunOutcome": ("substrate.agents.runtime", "RunOutcome"),
+    # config
+    "SubstrateConfig": ("substrate.config", "SubstrateConfig"),
+    # native durable storage
+    "LocalFilesystemHistoryProvider": (
+        "substrate.capabilities.history.local_history",
+        "LocalFilesystemHistoryProvider",
+    ),
+    "LocalHistoryProvider": (
+        "substrate.capabilities.history.local_history",
+        "LocalFilesystemHistoryProvider",
+    ),
+    "LocalFilesystemWorkspaceStore": (
+        "substrate.capabilities.storage.local_workspace_store",
+        "LocalFilesystemWorkspaceStore",
+    ),
+    "LocalWorkspaceStore": (
+        "substrate.capabilities.storage.local_workspace_store",
+        "LocalFilesystemWorkspaceStore",
+    ),
+    "LocalFileSessionStore": (
+        "substrate.capabilities.memory.local_session_store",
+        "LocalFileSessionStore",
+    ),
+    "LocalSessionStore": (
+        "substrate.capabilities.memory.local_session_store",
+        "LocalFileSessionStore",
+    ),
+    "WorkspaceFileStore": (
+        "substrate.capabilities.storage.workspace",
+        "WorkspaceFileStore",
+    ),
+    "LocalFileStore": (
+        "substrate.capabilities.storage.workspace",
+        "WorkspaceFileStore",
+    ),
     # supporting
     "AgentRunResult": ("substrate.agents.middleware", "AgentRunResult"),
     "Skill": ("substrate.kernel.tools", "Skill"),
-    "InMemoryHistoryProvider": ("substrate.agents.context", "InMemoryHistoryProvider"),
+    "InMemoryHistoryProvider": (
+        "substrate.capabilities.history.local_history",
+        "LocalFilesystemHistoryProvider",
+    ),
     "AgentContext": ("substrate.agents.context", "AgentContext"),
     "ContextConfig": ("substrate.agents.context", "ContextConfig"),
     "SlidingWindowCompaction": ("substrate.agents.context", "SlidingWindowCompaction"),

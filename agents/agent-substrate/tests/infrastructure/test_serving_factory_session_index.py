@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from substrate.capabilities.graph.lance_graph_store import LanceGraphStore
-from substrate.capabilities.memory.lance_memory_store import LanceLongTermMemory
+from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore
 from substrate.capabilities.vector.lancedb_store import LanceDBVectorStore
 from substrate.config import SubstrateConfig
 from substrate.infrastructure.serving_factory import (
@@ -56,7 +56,7 @@ def test_page_index_memory_local_mode_scopes_path(tmp_path) -> None:
     cfg = SubstrateConfig(SESSION_INDEX_LOCAL_PATH=str(tmp_path))
     memory = build_page_index_memory(cfg, "tenant-a", "user-a")
 
-    assert isinstance(memory, LanceLongTermMemory)
+    assert isinstance(memory, LanceMemoryStore)
     assert memory._namespace_uri is None
     assert memory._path == str(tmp_path / "tenants/tenant-a/users/user-a/index")
     assert memory._table_name == "pageindex_trees"

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from substrate.kernel import Actor, ChatMessage
 from substrate.kernel.core.content import TextBlock
 from substrate.kernel.storage.vector import Document
+from substrate.kernel.storage.memory import MemoryNamespace, MemoryQuery, MemoryRecord
 from substrate.kernel.tools import ToolExecutionResult, ToolCallRequest
 
 from substrate.capabilities.memory import DurableMemoryStore
@@ -77,48 +78,49 @@ async def test_postgres_memory_store_tenancy():
     await store.connect()
     await store.create_tables()
 
-    agent_id = Actor(type="agent", key="agent-1")
+    ns_a = MemoryNamespace(tenant_id="tenant-a", agent_id="agent-1")
+    ns_b = MemoryNamespace(tenant_id="tenant-b", agent_id="agent-1")
 
     try:
         # Clear both namespaces
-        await store.clear(agent_id, namespace="tenant-a")
-        await store.clear(agent_id, namespace="tenant-b")
+        await store.clear(ns_a)
+        await store.clear(ns_b)
 
         # Save to tenant-a
-        id_a = await store.save(agent_id, "Memory for A", namespace="tenant-a")
+        rec_a = MemoryRecord.from_text("Memory for A", namespace=ns_a)
+        id_a = await store.save(rec_a)
 
         # Save to tenant-b
-        id_b = await store.save(agent_id, "Memory for B", namespace="tenant-b")
+        rec_b = MemoryRecord.from_text("Memory for B", namespace=ns_b)
+        id_b = await store.save(rec_b)
 
-        # Search tenant-a
-        results_a = await store.search(agent_id, "Memory", namespace="tenant-a")
-        assert len(results_a) == 1
-        assert results_a[0].content == "Memory for A"
+        # Query tenant-a
+        matches_a = await store.query(MemoryQuery(namespace=ns_a, text_query="Memory"))
+        assert len(matches_a) == 1
+        assert matches_a[0].record.to_text() == "Memory for A"
 
-        # Search tenant-b
-        results_b = await store.search(agent_id, "Memory", namespace="tenant-b")
-        assert len(results_b) == 1
-        assert results_b[0].content == "Memory for B"
+        # Query tenant-b
+        matches_b = await store.query(MemoryQuery(namespace=ns_b, text_query="Memory"))
+        assert len(matches_b) == 1
+        assert matches_b[0].record.to_text() == "Memory for B"
 
-        # Verify get filters by namespace
-        assert await store.get(agent_id, id_a, namespace="tenant-a") is not None
-        assert await store.get(agent_id, id_a, namespace="tenant-b") is None
+        # Verify get retrieves record
+        assert await store.get(id_a) is not None
 
         # Delete from tenant-a
-        deleted = await store.delete(agent_id, id_a, namespace="tenant-a")
+        deleted = await store.delete(id_a)
         assert deleted is True
 
-        # Check tenant-a is deleted, tenant-b remains
-        assert await store.get(agent_id, id_a, namespace="tenant-a") is None
-        assert await store.get(agent_id, id_b, namespace="tenant-b") is not None
+        # Check id_a is deleted, id_b remains
+        assert await store.get(id_a) is None
+        assert await store.get(id_b) is not None
     finally:
         await store.disconnect()
 
 
 @pytest.mark.asyncio
-async def test_durable_memory_store_list_all():
-    """list_all() — no query string, unlike search(); the read path a
-    standing-context injection needs at session start."""
+async def test_durable_memory_store_query_paging():
+    """query() — ordering and limit semantics for standing-context injection."""
     if not await check_db_available():
         pytest.skip("PostgreSQL database not available")
 
@@ -127,38 +129,77 @@ async def test_durable_memory_store_list_all():
     await store.connect()
     await store.create_tables()
 
-    agent_id = Actor(type="user", key="list-all-test-user")
-    other_agent_id = Actor(type="user", key="list-all-test-other-user")
+    ns_user = MemoryNamespace(tenant_id="preference", user_id="list-all-test-user")
+    ns_other = MemoryNamespace(tenant_id="preference", user_id="list-all-test-other-user")
 
     try:
-        await store.clear(agent_id, namespace="preference")
-        await store.clear(other_agent_id, namespace="preference")
+        await store.clear(ns_user)
+        await store.clear(ns_other)
 
-        await store.save(agent_id, "Always answer in French", namespace="preference")
-        await store.save(agent_id, "Prefers concise answers", namespace="preference")
+        await store.save(MemoryRecord.from_text("Always answer in French", namespace=ns_user))
+        await store.save(MemoryRecord.from_text("Prefers concise answers", namespace=ns_user))
         await store.save(
-            other_agent_id, "Not this user's memory", namespace="preference"
+            MemoryRecord.from_text("Not this user's memory", namespace=ns_other)
         )
 
-        results = await store.list_all(agent_id, namespace="preference", limit=20)
+        matches = await store.query(MemoryQuery(namespace=ns_user, limit=20))
 
-        assert len(results) == 2
-        contents = {m.content for m in results}
+        assert len(matches) == 2
+        contents = {m.record.to_text() for m in matches}
         assert contents == {"Always answer in French", "Prefers concise answers"}
         # Most-recent-first ordering: the second save() is newer.
-        assert results[0].content == "Prefers concise answers"
+        assert matches[0].record.to_text() == "Prefers concise answers"
 
         # limit is honored.
-        capped = await store.list_all(agent_id, namespace="preference", limit=1)
+        capped = await store.query(MemoryQuery(namespace=ns_user, limit=1))
         assert len(capped) == 1
 
-        # Doesn't leak across agents (users).
-        other_results = await store.list_all(other_agent_id, namespace="preference")
-        assert len(other_results) == 1
-        assert other_results[0].content == "Not this user's memory"
+        # Doesn't leak across users.
+        other_matches = await store.query(MemoryQuery(namespace=ns_other))
+        assert len(other_matches) == 1
+        assert other_matches[0].record.to_text() == "Not this user's memory"
     finally:
-        await store.clear(agent_id, namespace="preference")
-        await store.clear(other_agent_id, namespace="preference")
+        await store.clear(ns_user)
+        await store.clear(ns_other)
+        await store.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_durable_memory_store_multimodal():
+    if not await check_db_available():
+        pytest.skip("PostgreSQL database not available")
+
+    from substrate.kernel.core.content import DataBlock, MediaBlock, TextBlock
+
+    db_url = get_db_url()
+    store = DurableMemoryStore(db_url)
+    await store.connect()
+    await store.create_tables()
+
+    ns = MemoryNamespace(tenant_id="docs", user_id="multimodal-user")
+    try:
+        await store.clear(ns)
+        blocks = [
+            TextBlock(text="Invoice #1234 details"),
+            MediaBlock.image(url="https://example.com/receipt.jpg", media_type="image/jpeg"),
+            DataBlock(data={"amount": 420.50, "currency": "EUR"}),
+        ]
+        rec = MemoryRecord(content=blocks, namespace=ns)
+        mem_id = await store.save(rec)
+
+        # FTS search on the text representation
+        matches = await store.query(MemoryQuery(namespace=ns, text_query="Invoice"))
+        assert len(matches) == 1
+        retrieved = matches[0].record
+        assert retrieved.id == mem_id
+        assert len(retrieved.content) == 3
+        assert isinstance(retrieved.content[0], TextBlock)
+        assert isinstance(retrieved.content[1], MediaBlock)
+        assert retrieved.content[1].type == "image"
+        assert isinstance(retrieved.content[2], DataBlock)
+        assert retrieved.content[2].data["amount"] == 420.50
+    finally:
+        await store.clear(ns)
         await store.disconnect()
 
 

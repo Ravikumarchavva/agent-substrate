@@ -39,7 +39,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from substrate.kernel.storage.document import ExtractedPage, ExtractionResult
+from substrate.kernel.document import ExtractedPage, ExtractionResult
 
 
 def _safe_xy_cut(boxes, indices: list[int], res: list[int], min_gap: int = 1) -> None:

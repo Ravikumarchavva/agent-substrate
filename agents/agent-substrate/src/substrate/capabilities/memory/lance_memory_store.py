@@ -1,47 +1,44 @@
-"""LanceLongTermMemory — Lance-backed LongTermMemory, no embeddings required.
+"""LanceMemoryStore — Lance-backed MemoryStore, no embeddings required.
 
-Sibling to ``DurableMemoryStore`` (Postgres full-text) — same ``LongTermMemory``
+Sibling to ``DurableMemoryStore`` (Postgres full-text) — same ``MemoryStore``
 Protocol, different backend. Exists specifically so
 ``PageIndexRAGPipeline`` (``capabilities/knowledge/page_pipeline.py``) can
 persist its per-collection outline trees as Lance rows under the per-user
 session-document index (``tenants/<tid>/users/<uid>/index/``) instead of
-either an in-memory dict (lost on restart) or the *shared* Postgres
-``LongTermMemory`` used elsewhere for cross-session user-preference facts —
-a genuinely different data lifecycle that shouldn't share a table.
+either an in-memory dict (lost on restart) or the shared Postgres
+``MemoryStore`` used elsewhere for cross-session user-preference facts.
 
-Deliberately no vector column, no embedding step, and no full-text ranking
-of ``query`` either: every real caller today (``PageIndexRAGPipeline``)
-already knows exactly which ``namespace``/``agent_id`` it wants and
-post-filters by its own metadata (see that module's
-``_get_collection_tree``) — ``search()`` here is a namespace/agent filter
-returning the most recent ``limit`` rows, not a claim of relevance ranking.
-If a future caller genuinely needs ``query`` to affect results, that's real
-new work (an FTS index + `nearest_to_text`, same mechanism
-``LanceDBVectorStore.hybrid_search`` already uses), not something to fake
-here.
-
-Same dual connection mode as ``LanceDBVectorStore``
-(``capabilities/vector/lancedb_store.py`` — see its module docstring for
-what was verified about the namespace/remote mode): a local embedded
-directory, or a Lance Namespace REST catalog.
+Dual connection mode: a local embedded directory, or a Lance Namespace REST catalog.
 """
 
 from __future__ import annotations
 
 import json
 import time
-import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.storage.memory import Memory
+from substrate.kernel.core.content import (
+    ContentBlock,
+    TextBlock,
+    content_blocks_to_str,
+    parse_content_block,
+)
+from substrate.kernel.storage.memory import (
+    MemoryCategory,
+    MemoryMatch,
+    MemoryNamespace,
+    MemoryProvenance,
+    MemoryQuery,
+    MemoryRecord,
+    MemoryStatus,
+)
 
 
-class LanceLongTermMemory:
-    """``LongTermMemory`` backed by a Lance table — one table per
-    ``collection`` argument (default ``"memories"``), local file or remote
-    Lance Namespace catalog. See module docstring for the connection modes.
+class LanceMemoryStore:
+    """``MemoryStore`` backed by a Lance table — one table per
+    ``table_name`` argument (default ``"memories"``), local file or remote
+    Lance Namespace catalog.
     """
 
     def __init__(
@@ -55,7 +52,7 @@ class LanceLongTermMemory:
     ) -> None:
         if bool(path) == bool(namespace_uri):
             raise ValueError(
-                "LanceLongTermMemory needs exactly one of `path` or `namespace_uri`"
+                "LanceMemoryStore needs exactly one of `path` or `namespace_uri`"
             )
         if namespace_uri and not namespace_path:
             raise ValueError("namespace_path is required with namespace_uri")
@@ -113,106 +110,130 @@ class LanceLongTermMemory:
             **self._table_kwargs(),
         )
 
-    @staticmethod
-    def _agent_key(agent_id: Actor) -> tuple[str, str]:
-        return (agent_id.type, agent_id.key)
-
-    async def save(
-        self,
-        agent_id: Actor,
-        content: str,
-        *,
-        namespace: str = "default",
-        metadata: dict[str, Any] | None = None,
-        ttl_seconds: int | None = None,
-    ) -> str:
-        # ttl_seconds accepted for Protocol compatibility, not enforced here
-        # — no caller passes it today (PageIndexRAGPipeline never does), and
-        # a real TTL sweep would need a background reaper this store has no
-        # process to run; add one if a real caller needs it.
+    async def save(self, record: MemoryRecord) -> str:
+        """Persist or replace a record by its ID (explicit upsert semantics)."""
         db = await self._connection()
         table = await self._open_or_create_table(db)
-        agent_type, agent_key = self._agent_key(agent_id)
-        memory_id = uuid.uuid4().hex
+
+        memory_id = record.id
+        agent_type = "user" if record.namespace.user_id else "agent"
+        agent_key = record.namespace.user_id or record.namespace.agent_id or "default"
+        ns_str = record.namespace.tenant_id or "default"
+        blocks = list(record.content)
+        meta = dict(record.metadata)
+        meta["_category"] = record.category.value
+        meta["_status"] = record.status.value
+        meta["_namespace"] = {
+            "tenant_id": record.namespace.tenant_id,
+            "user_id": record.namespace.user_id,
+            "agent_id": record.namespace.agent_id,
+            "session_id": record.namespace.session_id,
+        }
+        meta["_provenance"] = {
+            "source_session_id": record.provenance.source_session_id,
+            "source_node_id": record.provenance.source_node_id,
+            "source_branch_id": record.provenance.source_branch_id,
+            "source_run_id": record.provenance.source_run_id,
+            "confidence": record.provenance.confidence,
+            "extraction_method": record.provenance.extraction_method,
+            "supersedes_id": record.provenance.supersedes_id,
+        }
+
+        text_content = content_blocks_to_str(blocks)
+        meta["_blocks"] = [b.model_dump(mode="json") for b in blocks]
+
+        # Explicit replacement semantics on save: delete existing by ID before appending
+        try:
+            await table.delete(f"id = '{memory_id}'")
+        except Exception:
+            pass
+
         await table.add(
             [
                 {
                     "id": memory_id,
                     "agent_type": agent_type,
                     "agent_key": agent_key,
-                    "namespace": namespace,
-                    "content": content,
-                    "metadata_json": json.dumps(metadata or {}),
+                    "namespace": ns_str,
+                    "content": text_content,
+                    "metadata_json": json.dumps(meta),
                     "created_at": time.time(),
                 }
             ]
         )
         return memory_id
 
-    async def search(
-        self,
-        agent_id: Actor,
-        query: str,
-        *,
-        namespace: str = "default",
-        limit: int = 10,
-    ) -> list[Memory]:
-        db = await self._connection()
-        if self._table_name not in await self._table_names(db):
-            return []
-        table = await self._open_or_create_table(db)
-        agent_type, agent_key = self._agent_key(agent_id)
-        rows = (
-            await table.query()
-            .where(
-                f"agent_type = '{agent_type}' AND agent_key = '{agent_key}' "
-                f"AND namespace = '{namespace}'"
-            )
-            .to_list()
-        )
-        rows.sort(key=lambda r: r["created_at"], reverse=True)
-        return [_row_to_memory(r) for r in rows[:limit]]
-
-    async def get(
-        self,
-        agent_id: Actor,
-        memory_id: str,
-        *,
-        namespace: str = "default",
-    ) -> Memory | None:
+    async def get(self, record_id: str) -> MemoryRecord | None:
+        """Retrieve a specific record by ID."""
         db = await self._connection()
         if self._table_name not in await self._table_names(db):
             return None
         table = await self._open_or_create_table(db)
-        rows = await table.query().where(f"id = '{memory_id}'").to_list()
+
+        rows = await table.query().where(f"id = '{record_id}'").to_list()
         return _row_to_memory(rows[0]) if rows else None
 
-    async def delete(
-        self,
-        agent_id: Actor,
-        memory_id: str,
-        *,
-        namespace: str = "default",
-    ) -> bool:
+    async def delete(self, record_id: str) -> bool:
+        """Permanently delete a record by ID. Returns True if deleted."""
         db = await self._connection()
         if self._table_name not in await self._table_names(db):
             return False
         table = await self._open_or_create_table(db)
+
         before = await table.count_rows()
-        await table.delete(f"id = '{memory_id}'")
+        await table.delete(f"id = '{record_id}'")
         after = await table.count_rows()
         return after < before
 
-    async def clear(self, agent_id: Actor, *, namespace: str = "default") -> None:
+    async def query(self, spec: MemoryQuery) -> list[MemoryMatch]:
+        """Execute structured search conforming to MemoryQuery."""
+        db = await self._connection()
+        if self._table_name not in await self._table_names(db):
+            return []
+        table = await self._open_or_create_table(db)
+
+        where_clauses = [f"namespace = '{spec.namespace.tenant_id}'"]
+        if spec.namespace.user_id:
+            where_clauses.append(f"agent_type = 'user' AND agent_key = '{spec.namespace.user_id}'")
+        elif spec.namespace.agent_id:
+            where_clauses.append(f"agent_type = 'agent' AND agent_key = '{spec.namespace.agent_id}'")
+
+        query_builder = table.query().where(" AND ".join(where_clauses))
+        rows = await query_builder.to_list()
+        rows.sort(key=lambda r: r["created_at"], reverse=True)
+
+        matches: list[MemoryMatch] = []
+        for i, r in enumerate(rows):
+            rec = _row_to_memory(r)
+            if spec.categories and rec.category not in spec.categories:
+                continue
+            if spec.statuses and rec.status not in spec.statuses:
+                continue
+            if spec.text_query and spec.text_query.lower() not in rec.to_text().lower():
+                continue
+            matches.append(MemoryMatch(record=rec, score=1.0, rank=i, retrieval_method="lance"))
+            if len(matches) >= spec.limit:
+                break
+        return matches
+
+    async def touch(self, record_ids: Sequence[str]) -> None:
+        """Update last_accessed_at for records."""
+        pass  # In-place partial scalar update not supported by basic Lance format
+
+    async def clear(self, namespace: MemoryNamespace) -> None:
+        """Purge all records matching the given namespace boundary."""
         db = await self._connection()
         if self._table_name not in await self._table_names(db):
             return
         table = await self._open_or_create_table(db)
-        agent_type, agent_key = self._agent_key(agent_id)
-        await table.delete(
-            f"agent_type = '{agent_type}' AND agent_key = '{agent_key}' "
-            f"AND namespace = '{namespace}'"
-        )
+
+        where_sql = f"namespace = '{namespace.tenant_id}'"
+        if namespace.user_id:
+            where_sql += f" AND agent_type = 'user' AND agent_key = '{namespace.user_id}'"
+        elif namespace.agent_id:
+            where_sql += f" AND agent_type = 'agent' AND agent_key = '{namespace.agent_id}'"
+
+        await table.delete(where_sql)
 
 
 def _arrow_schema():
@@ -231,12 +252,34 @@ def _arrow_schema():
     )
 
 
-def _row_to_memory(row: dict[str, Any]) -> Memory:
-    return Memory(
+def _row_to_memory(row: dict[str, Any]) -> MemoryRecord:
+    meta = json.loads(row["metadata_json"]) if isinstance(row["metadata_json"], str) else dict(row["metadata_json"])
+    blocks_raw = meta.pop("_blocks", None) if isinstance(meta, dict) else None
+    if blocks_raw:
+        blocks = [parse_content_block(b) for b in blocks_raw]
+    else:
+        blocks = [TextBlock(text=row["content"])]
+
+    cat_val = meta.pop("_category", MemoryCategory.SEMANTIC.value) if isinstance(meta, dict) else MemoryCategory.SEMANTIC.value
+    status_val = meta.pop("_status", MemoryStatus.ACTIVE.value) if isinstance(meta, dict) else MemoryStatus.ACTIVE.value
+    ns_raw = meta.pop("_namespace", None) if isinstance(meta, dict) else None
+    prov_raw = meta.pop("_provenance", None) if isinstance(meta, dict) else None
+
+    ns = MemoryNamespace(**ns_raw) if ns_raw else MemoryNamespace(tenant_id=row.get("namespace", "default"))
+    prov = MemoryProvenance(**prov_raw) if prov_raw else MemoryProvenance()
+
+    return MemoryRecord(
         id=row["id"],
-        content=row["content"],
-        metadata=json.loads(row["metadata_json"]),
+        content=tuple(blocks),
+        category=MemoryCategory(cat_val),
+        status=MemoryStatus(status_val),
+        namespace=ns,
+        provenance=prov,
+        metadata=meta,
     )
 
 
-__all__ = ["LanceLongTermMemory"]
+# Alias for transition compatibility
+LanceLongTermMemory = LanceMemoryStore
+
+__all__ = ["LanceMemoryStore", "LanceLongTermMemory"]

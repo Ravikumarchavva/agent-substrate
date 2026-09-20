@@ -118,11 +118,16 @@ async def test_ingest_session_document_writes_to_all_three_stores(
 
     # PageIndexRAGPipeline's default agent_id ("system") when
     # ingest_session_document doesn't override it — see its constructor.
+    from substrate.kernel.storage.memory import MemoryNamespace, MemoryQuery
+
     memory = build_page_index_memory(cfg, "tenant-a", "user-a")
-    memories = await memory.search(
-        Actor(type="internal", key="system"), "documents", namespace="page_index_trees"
+    matches = await memory.query(
+        MemoryQuery(
+            namespace=MemoryNamespace(tenant_id="page_index_trees", agent_id="system"),
+            text_query="documents",
+        )
     )
-    assert len(memories) == 1  # one collection root ("documents")
+    assert len(matches) == 1  # one collection root ("documents")
 
     graph_store = build_session_graph_store(cfg, "tenant-a", "user-a")
     # The stub LLM response above names one entity ("Acme") with no id, so

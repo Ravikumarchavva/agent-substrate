@@ -128,10 +128,27 @@ from substrate.kernel.storage.graph import (
     GraphStore,
     CypherCapable,
 )
-from substrate.kernel.storage.memory import Memory, ShortTermMemory, LongTermMemory
+from substrate.kernel.storage.memory import (
+    ContextMemoryInjection,
+    MemoryCategory,
+    MemoryLifecycle,
+    MemoryMatch,
+    MemoryNamespace,
+    MemoryProvenance,
+    MemoryQuery,
+    MemoryRecord,
+    MemoryStatus,
+    MemoryStore,
+    MemoryValidity,
+    ShortTermMemory,
+)
 from substrate.kernel.storage.tasks import Task, TaskList, TaskStatus, TaskStore
-from substrate.kernel.storage.document import (
+from substrate.kernel.document import (
+    DocumentChunk,
+    DocumentChunker,
     DocumentExtractor,
+    DocumentMetadata,
+    DocumentStore,
     ExtractedImage,
     ExtractedPage,
     ExtractionResult,
@@ -302,16 +319,29 @@ __all__ = [
     "GraphStore",
     "CypherCapable",
     # Memory
-    "Memory",
+    "MemoryRecord",
+    "MemoryMatch",
+    "MemoryCategory",
+    "MemoryStatus",
+    "MemoryNamespace",
+    "MemoryProvenance",
+    "MemoryValidity",
+    "MemoryLifecycle",
+    "MemoryQuery",
+    "ContextMemoryInjection",
     "ShortTermMemory",
-    "LongTermMemory",
+    "MemoryStore",
     # Tasks
     "Task",
     "TaskList",
     "TaskStatus",
     "TaskStore",
-    # Document extraction
+    # Document intelligence & storage
     "DocumentExtractor",
+    "DocumentChunker",
+    "DocumentStore",
+    "DocumentMetadata",
+    "DocumentChunk",
     "ExtractedImage",
     "ExtractedPage",
     "ExtractionResult",

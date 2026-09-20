@@ -1,29 +1,10 @@
 """Default memory construction — pick short-term or long-term, get Postgres,
 add a cache only if you want one.
-
-Mirrors ``ContextConfig.default()``'s convention: a batteries-included
-default a caller doesn't have to hand-assemble. Both kinds default to
-Postgres because it's the one backend every deployment already has and
-because both kernel protocols were designed against it (``ShortTermMemory``'s
-docstring names Postgres JSONB; ``LongTermMemory``'s implementation *is*
-Postgres full-text). Retrieval can grow later — swap in a vector- or
-graph-backed ``LongTermMemory`` — without changing the call site, since
-callers only ever depend on the Protocol, never the concrete class.
-
-Usage::
-
-    # Postgres only, no cache
-    stm = await build_short_term_memory(database_url)
-
-    # Postgres + Redis cache in front of it
-    stm = await build_short_term_memory(database_url, redis_url=redis_url)
-
-    ltm = await build_long_term_memory(database_url)
 """
 
 from __future__ import annotations
 
-from substrate.kernel.storage.memory import LongTermMemory, ShortTermMemory
+from substrate.kernel.storage.memory import MemoryStore, ShortTermMemory
 
 
 async def build_short_term_memory(
@@ -65,15 +46,15 @@ async def build_short_term_memory(
     return store
 
 
-async def build_long_term_memory(
+async def build_memory_store(
     database_url: str = "",
     *,
     local_path: str = "./data/db/memory/long_term",
-) -> LongTermMemory:
-    """Durable LongTermMemory.
+) -> MemoryStore:
+    """Durable MemoryStore.
 
     Uses PostgreSQL full-text search when database_url is provided.
-    When database_url is empty, uses embedded LanceLongTermMemory in local_path
+    When database_url is empty, uses embedded LanceMemoryStore in local_path
     so user facts and preferences persist durably without PostgreSQL.
     """
     if database_url:
@@ -86,9 +67,12 @@ async def build_long_term_memory(
         await pg_store.create_tables()
         return pg_store
 
-    from substrate.capabilities.memory.lance_memory_store import LanceLongTermMemory
+    from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore
 
-    return LanceLongTermMemory(path=local_path)
+    return LanceMemoryStore(path=local_path)
 
 
-__all__ = ["build_short_term_memory", "build_long_term_memory"]
+# Compatibility alias
+build_long_term_memory = build_memory_store
+
+__all__ = ["build_short_term_memory", "build_memory_store", "build_long_term_memory"]

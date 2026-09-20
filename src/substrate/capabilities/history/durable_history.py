@@ -33,6 +33,7 @@ from sqlalchemy import (
     delete,
     func,
     select,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import (
@@ -213,6 +214,7 @@ class HistoryBranch(HistoryBase):
 
     session_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     head_message_id: Mapped[Optional[str]] = mapped_column(
         String(128), ForeignKey("history_nodes.id", ondelete="SET NULL"), nullable=True
     )
@@ -271,6 +273,7 @@ def _branch_from_row(row: HistoryBranch) -> Branch:
     return Branch(
         id=row.id,
         session_id=row.session_id,
+        name=row.name,
         head_message_id=row.head_message_id,
         forked_from_message_id=row.forked_from_message_id,
         version=row.version,
@@ -528,6 +531,30 @@ class DurableHistoryProvider:
             db.add(new_branch)
             await db.commit()
             return _branch_from_row(new_branch)
+
+    async def rename_branch(
+        self, session_id: str, branch_id: str, new_name: str
+    ) -> Branch:
+        """Rename an existing branch display name in Postgres."""
+        factory = self._get_session()
+        async with factory() as db:
+            source = await db.get(HistoryBranch, (session_id, branch_id))
+            if source is None:
+                raise BranchNotFoundError(
+                    f"Branch '{branch_id}' not found in session '{session_id}'"
+                )
+
+            await db.execute(
+                update(HistoryBranch)
+                .where(HistoryBranch.session_id == session_id, HistoryBranch.id == branch_id)
+                .values(name=new_name, version=HistoryBranch.version + 1)
+            )
+            await db.commit()
+
+        updated = await self.get_branch(session_id, branch_id)
+        if not updated:
+            raise BranchNotFoundError(f"Failed to fetch updated branch '{branch_id}'")
+        return updated
 
     async def set_branch_head(
         self,

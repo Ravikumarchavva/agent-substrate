@@ -82,6 +82,7 @@ class BranchOut(BaseModel):
 
     id: str
     session_id: str
+    name: Optional[str] = None
     head_message_id: Optional[str] = None
     forked_from_message_id: Optional[str] = None
     version: int = 0
@@ -94,6 +95,12 @@ class BranchForkRequest(BaseModel):
     new_branch_id: str
     source_branch_id: str = "main"
     fork_from_message_id: Optional[str] = None
+
+
+class BranchRenameRequest(BaseModel):
+    """PATCH /threads/{id}/branches/{branch_id} – rename a branch."""
+
+    name: str
 
 
 class CheckpointOut(BaseModel):

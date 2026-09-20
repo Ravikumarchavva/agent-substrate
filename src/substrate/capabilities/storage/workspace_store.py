@@ -13,6 +13,7 @@ from sqlalchemy import (
     delete,
     func,
     select,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import (
@@ -288,6 +289,30 @@ class PostgresWorkspaceStore(WorkspaceStore):
 
             result = await db.execute(stmt)
             return [_snapshot_from_row(r) for r in result.scalars().all()]
+
+    async def rename_branch_snapshot(
+        self, session_id: str, old_branch_id: str, new_branch_id: str
+    ) -> None:
+        """Update branch ID pointers across workspace snapshots."""
+        factory = self._get_session()
+        async with factory() as db:
+            await db.execute(
+                update(SnapshotRecord)
+                .where(
+                    SnapshotRecord.session_id == session_id,
+                    SnapshotRecord.branch_id == old_branch_id,
+                )
+                .values(branch_id=new_branch_id)
+            )
+            await db.execute(
+                update(BranchSnapshotHead)
+                .where(
+                    BranchSnapshotHead.session_id == session_id,
+                    BranchSnapshotHead.branch_id == old_branch_id,
+                )
+                .values(branch_id=new_branch_id)
+            )
+            await db.commit()
 
     async def clear_session(self, session_id: str) -> None:
         """Helper for test cleanup."""

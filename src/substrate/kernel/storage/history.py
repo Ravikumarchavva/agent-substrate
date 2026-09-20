@@ -34,6 +34,7 @@ class Branch(KernelModel):
 
     id: str                       # e.g., "main", "what-if-experiment"
     session_id: str
+    name: str | None = None       # Human-readable display name
     head_message_id: str | None = None  # Current leaf message of this branch
     forked_from_message_id: str | None = None  # Ancestor node where this branch diverged
     version: int = 0              # Monotonically increasing version for optimistic concurrency

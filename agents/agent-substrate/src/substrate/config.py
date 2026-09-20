@@ -17,10 +17,15 @@ For the complete reference of all settings and architecture, see
 
 from __future__ import annotations
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class SubstrateConfig(BaseSettings):
+    # ── Single Data Directory (Unified Root) ──────────────────────────────────
+    DATA_DIR: str = "./data"
+    # "local" (zero-external-service file/LanceDB store) | "postgres" (PostgreSQL + S3) | "hybrid"
+    STORAGE_MODE: str = "local"
     # ── LLM provider keys ────────────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
@@ -93,9 +98,9 @@ class SubstrateConfig(BaseSettings):
     DISABLE_TOOL_APPROVALS: bool = False
 
     # ── File storage ─────────────────────────────────────────────────────────
-    # "local" (WorkspaceFileStore) | "s3" (SeaweedFS/S3) | "memory" (tests)
+    # "local" (WorkspaceFileStore) | "s3" (SeaweedFS/S3)
     FILE_STORE_BACKEND: str = "local"
-    FILE_STORE_ROOT: str = "./data/workspaces"
+    FILE_STORE_ROOT: str = ""
     FILE_STORE_BUCKET: str = "agent-files"
     FILE_STORE_ENDPOINT: str | None = None
     FILE_STORE_REGION: str = "us-east-1"
@@ -157,15 +162,35 @@ class SubstrateConfig(BaseSettings):
     # `weed server -s3.port.lance=9101`) — see
     # capabilities/vector/lancedb_store.py's module docstring for what was
     # verified about that mode (namespace_path shape, credential handling).
-    SESSION_INDEX_LOCAL_PATH: str = "./data/session-index"
+    SESSION_INDEX_LOCAL_PATH: str = ""
     SESSION_INDEX_NAMESPACE_URI: str = ""
-    SESSION_INDEX_BUCKET: str = "substrate-index"
+    SESSION_INDEX_BUCKET: str = "agent-files"
+
+    # ── Local database paths (PostgreSQL & Redis replacements under DATA_DIR) ──
+    HISTORY_STORAGE_PATH: str = ""
+    MEMORY_STORAGE_PATH: str = ""
+    WORKSPACE_SNAPSHOT_STORAGE_PATH: str = ""
 
     model_config = SettingsConfigDict(
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=True,
     )
+
+    @model_validator(mode="after")
+    def _apply_data_dir_defaults(self) -> SubstrateConfig:
+        root = self.DATA_DIR.rstrip("/")
+        if not self.FILE_STORE_ROOT:
+            self.FILE_STORE_ROOT = f"{root}/blobs/{self.FILE_STORE_BUCKET}"
+        if not self.SESSION_INDEX_LOCAL_PATH:
+            self.SESSION_INDEX_LOCAL_PATH = f"{root}/blobs/{self.FILE_STORE_BUCKET}"
+        if not self.HISTORY_STORAGE_PATH:
+            self.HISTORY_STORAGE_PATH = f"{root}/db/sessions"
+        if not self.MEMORY_STORAGE_PATH:
+            self.MEMORY_STORAGE_PATH = f"{root}/db/memory"
+        if not self.WORKSPACE_SNAPSHOT_STORAGE_PATH:
+            self.WORKSPACE_SNAPSHOT_STORAGE_PATH = f"{root}/db/workspaces"
+        return self
 
     @property
     def provider_keys(self) -> dict[str, str]:

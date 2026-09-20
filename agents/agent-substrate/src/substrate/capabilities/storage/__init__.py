@@ -7,6 +7,9 @@ from substrate.capabilities.storage.workspace import (
     WorkspaceQuotaExceededError,
 )
 
+from substrate.capabilities.storage.local_workspace_store import (
+    LocalFilesystemWorkspaceStore,
+)
 from substrate.capabilities.storage.workspace_store import (
     BranchSnapshotHead,
     PostgresWorkspaceStore,
@@ -23,5 +26,6 @@ __all__ = [
     "WorkspaceSnapshotBase",
     "SnapshotRecord",
     "BranchSnapshotHead",
+    "LocalFilesystemWorkspaceStore",
 ]
 

@@ -82,10 +82,10 @@ class ContextConfig:
 
     @classmethod
     def default(cls) -> "ContextConfig":
-        """Return an in-memory context with default sliding-window compaction."""
-        from substrate.agents.context.history import InMemoryHistoryProvider
+        """Return a durable local filesystem context with default sliding-window compaction."""
+        from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
 
-        return cls(InMemoryHistoryProvider())
+        return cls(LocalFilesystemHistoryProvider())
 
 
 class AgentContext:

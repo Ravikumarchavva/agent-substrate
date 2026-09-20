@@ -103,11 +103,16 @@ class InMemoryWorkspaceStore(WorkspaceStore):
         return list(snapshots)
 
 
+from substrate.capabilities.storage.local_workspace_store import (
+    LocalFilesystemWorkspaceStore,
+)
+
 __all__ = [
     "WorkspaceFileEntry",
     "WorkspaceManifest",
     "WorkspaceSnapshot",
     "WorkspaceStore",
     "InMemoryWorkspaceStore",
+    "LocalFilesystemWorkspaceStore",
 ]
 

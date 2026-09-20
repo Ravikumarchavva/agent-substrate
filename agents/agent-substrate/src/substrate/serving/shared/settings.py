@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import List
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from substrate.config import SubstrateConfig
@@ -26,8 +26,15 @@ class ServerSettings(SubstrateConfig):
     # from upload until the message carrying them is actually sent — see
     # capabilities/storage/pending.py. Swept periodically; PENDING_UPLOAD_TTL_HOURS
     # is how long an abandoned (never-sent) attachment survives before removal.
-    PENDING_UPLOAD_LOCAL_PATH: str = "./data/pending-uploads"
+    PENDING_UPLOAD_LOCAL_PATH: str = ""
     PENDING_UPLOAD_TTL_HOURS: float = 24.0
+
+    @model_validator(mode="after")
+    def _apply_server_defaults(self) -> ServerSettings:
+        root = self.DATA_DIR.rstrip("/")
+        if not self.PENDING_UPLOAD_LOCAL_PATH:
+            self.PENDING_UPLOAD_LOCAL_PATH = f"{root}/blobs/pending"
+        return self
     FILE_MAX_UPLOAD_BYTES: int = 200 * 1024 * 1024
     # routes/files.py::sweep_stuck_staging_uploads -- a startup-time
     # reconciliation pass for uploads whose eager staging (extraction +

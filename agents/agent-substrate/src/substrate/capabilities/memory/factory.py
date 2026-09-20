@@ -27,52 +27,68 @@ from substrate.kernel.storage.memory import LongTermMemory, ShortTermMemory
 
 
 async def build_short_term_memory(
-    database_url: str,
+    database_url: str = "",
     *,
     redis_url: str | None = None,
     ttl: int = 3600,
+    local_path: str = "./data/db/memory/short_term",
 ) -> ShortTermMemory:
-    """Durable ShortTermMemory (Postgres), optionally fronted by a Redis cache.
+    """Durable ShortTermMemory.
 
-    Pass ``redis_url`` to get ``CachedShortTermMemory`` — durable-first
-    writes, cache-first reads, self-healing on a cache miss. Omit it for a
-    Postgres-only setup with no cache.
+    Uses PostgreSQL (+ optional Redis cache) when database_url is provided.
+    When database_url is empty, uses LocalFileSessionStore (atomic JSON files
+    in local_path) so session state persists across restarts without external services.
     """
-    from substrate.capabilities.memory.durable_session_store import (
-        DurableSessionStore,
-    )
+    if database_url:
+        from substrate.capabilities.memory.durable_session_store import (
+            DurableSessionStore,
+        )
 
-    primary = DurableSessionStore(database_url)
-    await primary.connect()
-    if redis_url is None:
-        return primary
+        primary = DurableSessionStore(database_url)
+        await primary.connect()
+        if redis_url is None:
+            return primary
 
-    from substrate.capabilities.memory.cached_session_store import (
-        CachedShortTermMemory,
-    )
-    from substrate.capabilities.memory.redis_session_store import RedisSessionStore
+        from substrate.capabilities.memory.cached_session_store import (
+            CachedShortTermMemory,
+        )
+        from substrate.capabilities.memory.redis_session_store import RedisSessionStore
 
-    cache = RedisSessionStore(redis_url=redis_url, ttl=ttl)
-    await cache.connect()
-    return CachedShortTermMemory(primary=primary, cache=cache)
+        cache = RedisSessionStore(redis_url=redis_url, ttl=ttl)
+        await cache.connect()
+        return CachedShortTermMemory(primary=primary, cache=cache)
 
+    from substrate.capabilities.memory.local_session_store import LocalFileSessionStore
 
-async def build_long_term_memory(database_url: str) -> LongTermMemory:
-    """Durable LongTermMemory — Postgres full-text search.
-
-    No cache variant: the read path is arbitrary-query search, which a
-    key-value cache doesn't map onto the way flat session state does. A
-    future semantic-cache-style wrapper would be a different mechanism, not
-    this one with a flag flipped.
-    """
-    from substrate.capabilities.memory.durable_memory_store import (
-        DurableMemoryStore,
-    )
-
-    store = DurableMemoryStore(database_url)
+    store = LocalFileSessionStore(root=local_path)
     await store.connect()
-    await store.create_tables()
     return store
+
+
+async def build_long_term_memory(
+    database_url: str = "",
+    *,
+    local_path: str = "./data/db/memory/long_term",
+) -> LongTermMemory:
+    """Durable LongTermMemory.
+
+    Uses PostgreSQL full-text search when database_url is provided.
+    When database_url is empty, uses embedded LanceLongTermMemory in local_path
+    so user facts and preferences persist durably without PostgreSQL.
+    """
+    if database_url:
+        from substrate.capabilities.memory.durable_memory_store import (
+            DurableMemoryStore,
+        )
+
+        pg_store = DurableMemoryStore(database_url)
+        await pg_store.connect()
+        await pg_store.create_tables()
+        return pg_store
+
+    from substrate.capabilities.memory.lance_memory_store import LanceLongTermMemory
+
+    return LanceLongTermMemory(path=local_path)
 
 
 __all__ = ["build_short_term_memory", "build_long_term_memory"]

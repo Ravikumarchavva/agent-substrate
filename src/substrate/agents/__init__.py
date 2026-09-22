@@ -11,14 +11,16 @@ from substrate.agents.context import (
     AgentContext,
     CompactionStrategy,
     ContextConfig,
-    HistoryProvider,
-    InMemoryHistoryProvider,
     SlidingWindowCompaction,
     SummarizationCompaction,
     ToolResultCompactionStrategy,
     SelectiveToolCallCompactionStrategy,
     TruncationStrategy,
     TokenBudgetComposedStrategy,
+)
+from substrate.agents.storage import (
+    HistoryProvider,
+    InMemoryHistoryProvider,
 )
 from substrate.agents.llm import (
     EmbeddingClient,
@@ -54,8 +56,6 @@ from substrate.agents.core import (
     UserProxyAgent,
     OrchestratorAgent,
     SubAgentConfig,
-    InformationAgent,
-    PersonalFeedAgent,
 )
 from substrate.agents.runtime import Runtime, RunContext, RunOutcome
 
@@ -105,8 +105,6 @@ __all__ = [
     "UserProxyAgent",
     "OrchestratorAgent",
     "SubAgentConfig",
-    "InformationAgent",
-    "PersonalFeedAgent",
     # runtime
     "Runtime",
     "RunOutcome",

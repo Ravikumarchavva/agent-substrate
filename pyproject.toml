@@ -300,7 +300,7 @@ ignore_imports = [
     "substrate.serving.monolith.file_versioning -> substrate.agents.workspace.layout",
     # branches route resolves a fork point's ancestry and performs the O(1)
     # CAS branch fork directly — same shape as the layout.py exceptions above
-    "substrate.serving.monolith.routes.branches -> substrate.agents.context.history",
+    "substrate.serving.monolith.routes.branches -> substrate.agents.storage.history",
     "substrate.serving.monolith.routes.branches -> substrate.agents.workspace.branching",
     # gdpr route needs the erasure orchestrator itself, the same way
     # files/workspace routes need WorkspaceFileStore above

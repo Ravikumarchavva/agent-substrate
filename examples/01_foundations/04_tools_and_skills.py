@@ -29,7 +29,8 @@ settings = SubstrateConfig()
 import asyncio
 import random
 from substrate.agents import ReActAgent, Runtime
-from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.context import ContextConfig, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.storage import LocalFilesystemHistoryProvider
 from substrate.agents.tools.toolbox import Toolbox
 from substrate.integrations.llm import (
     create_model_client,
@@ -171,7 +172,7 @@ async def demo_agent_session() -> None:
         "ToolBot",
         model=model,
         tools=registry.all(),
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
+        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
         system_instructions="You are a helpful assistant. Use the available tools to answer questions.",
         max_iterations=6,
     )

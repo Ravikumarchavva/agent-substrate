@@ -62,7 +62,7 @@ class UserProxyAgent:
 
         # Emit the question to the event log so the serving layer can surface it
         question_text = self._extract_text(msg)
-        await ctx._log(
+        await ctx.log(
             "hitl.question",
             {"correlation_id": cid, "text": question_text},
         )

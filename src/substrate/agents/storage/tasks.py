@@ -1,7 +1,8 @@
 """In-memory task store — per-agent Kanban boards, keyed by (conversation_id, agent_id, branch_id).
 
-The GlobalTaskStore singleton is swapped to PgTaskStore at startup when
-RUNTIME_BACKEND=postgres (see infrastructure/serving_factory.py).
+Constructor-injected everywhere, like every other backend in this codebase —
+see ``infrastructure/serving_factory.py::init_infrastructure`` for where a
+``PgTaskStore`` is built instead when ``RUNTIME_BACKEND=postgres``.
 """
 
 from __future__ import annotations
@@ -270,17 +271,3 @@ class TaskStore:
                     )
                     return new_task
             return None
-
-
-class GlobalTaskStore:
-    _instance: Optional[TaskStore] = None
-
-    @classmethod
-    def get(cls) -> TaskStore:
-        if cls._instance is None:
-            cls._instance = TaskStore()
-        return cls._instance
-
-    @classmethod
-    def set(cls, store: TaskStore) -> None:
-        cls._instance = store  # type: ignore[assignment]

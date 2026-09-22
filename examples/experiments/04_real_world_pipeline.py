@@ -20,7 +20,7 @@ from substrate.agents.core import ReActAgent
 from substrate.agents.tools.builtin_tools import CalculatorTool, WebSearchTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.storage import LocalFilesystemHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable
 
@@ -33,7 +33,7 @@ def build_research_agent(step_name: str, instructions: str) -> ReActAgent:
     """Build a single-purpose agent for one pipeline step."""
     catalog = AgentCatalog()
     catalog.register_model("primary", OpenAIClient(model="gpt-4o-mini"))
-    catalog.register_memory("memory", InMemoryHistoryProvider())
+    catalog.register_memory("memory", LocalFilesystemHistoryProvider())
     catalog.register_tool(WebSearchTool())
     catalog.register_tool(CalculatorTool())
 

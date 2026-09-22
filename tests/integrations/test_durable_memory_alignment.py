@@ -13,7 +13,7 @@ from substrate.kernel.storage.memory import MemoryNamespace, MemoryQuery, Memory
 from substrate.kernel.tools import ToolExecutionResult, ToolCallRequest
 
 from substrate.capabilities.memory import DurableMemoryStore
-from substrate.agents.context.history import project_messages
+from substrate.agents.storage.history import project_messages
 from substrate.capabilities.history import DurableHistoryProvider
 from substrate.kernel.storage.history import MessageNode
 from substrate.capabilities.vector import PgVectorStore

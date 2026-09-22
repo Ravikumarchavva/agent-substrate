@@ -20,9 +20,11 @@ import uuid
 from substrate.agents import ReActAgent, Runtime
 from substrate.agents.context import (
     ContextConfig,
-    InMemoryHistoryProvider,
     SlidingWindowCompaction,
     CompactionPipeline,
+)
+from substrate.agents.storage import (
+    LocalFilesystemHistoryProvider,
 )
 from substrate.integrations.llm import (
     create_model_client,
@@ -78,7 +80,7 @@ async def main() -> None:
         model=model,
         tools=[CalculatorTool(), CurrentTimeTool()],
         context=ContextConfig(
-            InMemoryHistoryProvider(),
+            LocalFilesystemHistoryProvider(),
             pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
         ),
         max_iterations=5,
@@ -146,7 +148,7 @@ async def main() -> None:
             model=model,
             tools=[CelsiusToFahrenheitTool()],
             context=ContextConfig(
-                InMemoryHistoryProvider(),
+                LocalFilesystemHistoryProvider(),
                 pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
             ),
             max_iterations=5,

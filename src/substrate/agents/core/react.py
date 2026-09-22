@@ -21,7 +21,7 @@ from substrate.kernel.tools.approval import ApprovalHandler
 from substrate.kernel.tools.tools import ToolRisk
 
 from substrate.agents.context.context import ContextConfig
-from substrate.agents.resources.budget import ExecutionTracker
+from substrate.agents.limits.execution import ExecutionTracker
 from substrate.agents.hooks.manager import HookEvent, HookManager
 from substrate.agents.middleware._contracts import (
     AgentRunResult,
@@ -41,14 +41,7 @@ from substrate.agents.workspace.scope import (
     current_tenant_id as _task_tenant_id,
     current_user_id as _task_user_id,
 )
-from substrate.agents.core._loop import (
-    deliver,
-    final_text,
-    load_history,
-    log_user_message,
-    message_to_chat,
-    persist_turns,
-)
+from substrate.agents.core.base import BaseAgent
 from substrate.logger import setup_logging
 
 logger = setup_logging()
@@ -58,7 +51,7 @@ if TYPE_CHECKING:
     from substrate.kernel.llm.llm import LLMClient
 
 
-class ReActAgent:
+class ReActAgent(BaseAgent):
     """ReAct loop agent implementing the Agent protocol.
 
     ``model``, ``tools``, ``approval_handler``, and ``approval_required_risk``
@@ -152,11 +145,11 @@ class ReActAgent:
 
         branch_id = msg.metadata.get("branch_id") or "main"
         _workspace_branch_id.set(branch_id)
-        history_messages = await load_history(
+        history_messages = await self._load_history(
             self._context, session_id, branch_id=branch_id
         )
-        user_turn = message_to_chat(msg)
-        user_message_seq = await log_user_message(ctx, msg, user_turn)
+        user_turn = self._message_to_chat(msg)
+        user_message_seq = await self._log_user_message(ctx, msg, user_turn)
         messages: list[ChatMessage] = history_messages + [user_turn]
 
         call_ctx = MiddlewareContext(
@@ -326,7 +319,7 @@ class ReActAgent:
             )
 
         new_turns = messages[n_loaded:]
-        await persist_turns(
+        await self._persist_turns(
             self._context,
             session_id,
             ctx.run_id,
@@ -362,8 +355,8 @@ class ReActAgent:
                     "Post-turn compaction failed (%s); continuing without blocking turn", exc
                 )
 
-        ans = final_text(messages)
-        await deliver(
+        ans = self._final_text(messages)
+        await self._deliver(
             ctx, msg, {"text": ans}, sender=self.id, output_topic=self._output_topic
         )
 

@@ -4,7 +4,7 @@ from typing import AsyncIterator
 import pytest
 
 from substrate.agents.context import ContextConfig
-from substrate.agents.context.history import InMemoryHistoryProvider
+from substrate.agents.storage.history import InMemoryHistoryProvider
 from substrate.agents.core.react import ReActAgent
 from substrate.agents.runtime.runtime import Runtime
 from substrate.kernel.core.content import ChatMessage, ContentBlock, Role, TextBlock

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from substrate.agents.context.history import DefaultHistoryResolver, InMemoryHistoryProvider
+from substrate.agents.storage.history import DefaultHistoryResolver, InMemoryHistoryProvider
 from substrate.kernel.core.content import ChatMessage, TextBlock
 from substrate.kernel.exceptions import (
     BranchAlreadyExistsError,

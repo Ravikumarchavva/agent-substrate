@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Protocol
 
 from substrate.kernel import ChatMessage
 from substrate.kernel.agent.middleware import MiddlewareStage
+from substrate.kernel.core.content import KernelModel
 from substrate.kernel.llm import LLMResponse
 from substrate.kernel.tools.chain import InvocationResult
 from substrate.kernel.tools.tools import AnyTool
@@ -16,12 +17,21 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# Agent run result types (defined here to avoid circular imports with react.py)
+# Agent run result types.
+#
+# Real KernelModel (pydantic, frozen) subclasses, matching the rest of the
+# kernel's own result types (InvocationResult, etc.) — not a hand-rolled
+# dataclass aping pydantic's interface, which is what these used to be (a
+# model_dump() manually re-implementing what pydantic already gives free).
+#
+# Deliberately still defined HERE, not in core/ alongside ReActAgent: core/
+# eagerly imports react.py from its __init__.py, and react.py imports
+# MiddlewareContext from this module — moving these two types to core/
+# reintroduces exactly that cycle (verified: it fails at import time).
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class ToolCallRecord:
+class ToolCallRecord(KernelModel):
     name: str
     call_id: str
     arguments: dict[str, Any]
@@ -30,33 +40,14 @@ class ToolCallRecord:
     duration_ms: float
 
 
-@dataclass
-class AgentRunResult:
+class AgentRunResult(KernelModel):
     """Result of a completed agent run."""
 
     output: str
     status: str  # "success" | "error" | "max_iterations" | "paused"
-    tool_calls: list[ToolCallRecord] = field(default_factory=list)
+    tool_calls: list[ToolCallRecord] = []
     run_id: str = ""
     error: str | None = None
-
-    def model_dump(self, **_kwargs: Any) -> dict[str, Any]:
-        return {
-            "output": self.output,
-            "status": self.status,
-            "run_id": self.run_id,
-            "error": self.error,
-            "tool_calls": [
-                {
-                    "name": r.name,
-                    "call_id": r.call_id,
-                    "result": r.result,
-                    "is_error": r.is_error,
-                    "duration_ms": r.duration_ms,
-                }
-                for r in self.tool_calls
-            ],
-        }
 
 
 # ---------------------------------------------------------------------------

@@ -27,8 +27,7 @@ Design decisions:
 from __future__ import annotations
 
 import asyncio
-import logging
-from collections import defaultdict, deque
+from collections import defaultdict
 from enum import Enum
 from typing import Awaitable, Callable
 
@@ -239,40 +238,3 @@ class CostTracker:
             "total_completion_tokens": self.total_completion_tokens,
             "call_count": self.call_count,
         }
-
-
-class RunLogger:
-    """Hook that logs all lifecycle events for debugging.
-
-    Usage::
-
-        run_logger = RunLogger()
-        hooks = HookManager()
-        for event in HookEvent:
-            hooks.register(event, run_logger.log)
-    """
-
-    def __init__(self, level: int = logging.DEBUG, maxlen: int = 500):
-        self.level = level
-        # Bounded deque prevents unbounded memory growth on long-running agents.
-        self.events: deque[JsonObject] = deque(maxlen=maxlen)
-
-    async def log(self, ctx: JsonObject) -> None:
-        event = ctx.get("event", "unknown")
-        agent = ctx.get("agent_name", "unknown")
-        logger.log(
-            self.level, f"[HOOK] {event} | agent={agent} | {self._summarize(ctx)}"
-        )
-        self.events.append(ctx)
-
-    @staticmethod
-    def _summarize(ctx: JsonObject) -> str:
-        """Create a brief summary of context for logging."""
-        parts = []
-        for key in ("run_id", "step", "tool_name", "duration_ms", "status"):
-            if key in ctx:
-                parts.append(f"{key}={ctx[key]}")
-        return ", ".join(parts) if parts else "no details"
-
-    def clear(self) -> None:
-        self.events.clear()

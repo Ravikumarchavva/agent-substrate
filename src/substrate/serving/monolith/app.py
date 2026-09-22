@@ -144,6 +144,7 @@ async def lifespan(app: FastAPI):
         artifact_store=infra.artifact_store,
         workspace_store=infra.workspace_store,
         skill_manager=infra.skill_manager,
+        task_store=infra.task_store,
     )
     app.state.tools = tools.registry
     app.state.task_tool = tools.task_tool

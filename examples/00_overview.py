@@ -74,7 +74,7 @@ settings = SubstrateConfig()
 #     name="MyAgent",
 #     catalog=catalog,         # AgentCatalog with model + memory + tools
 #     tools=[CalculatorTool()],
-#     memory=InMemoryHistoryProvider(),
+#     memory=LocalFilesystemHistoryProvider(),
 #     model_context=UnboundedContext(),
 # )
 # result = await agent.run("What is 2 ** 10?")

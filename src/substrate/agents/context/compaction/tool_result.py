@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from substrate.kernel.core.content import ChatMessage, TextBlock, ToolResultBlock
+from substrate.kernel.core.content import ChatMessage, Role, TextBlock, ToolResultBlock
 
 
 class ToolResultCompactionStrategy:
@@ -14,7 +14,7 @@ class ToolResultCompactionStrategy:
     async def compact(self, raw_history: list[ChatMessage]) -> list[ChatMessage]:
         result: list[ChatMessage] = []
         for msg in raw_history:
-            if msg.role != "tool":
+            if msg.role != Role.TOOL:
                 result.append(msg)
                 continue
 
@@ -23,7 +23,7 @@ class ToolResultCompactionStrategy:
                 result.append(msg)
             else:
                 result.append(
-                    ChatMessage(role="tool", content=new_content, name=msg.name)
+                    ChatMessage(role=Role.TOOL, content=new_content, name=msg.name)
                 )
         return result
 

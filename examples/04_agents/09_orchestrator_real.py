@@ -34,9 +34,11 @@ import asyncio
 
 from substrate.agents.context import (
     ContextConfig,
-    InMemoryHistoryProvider,
     SlidingWindowCompaction,
     CompactionPipeline,
+)
+from substrate.agents.storage import (
+    LocalFilesystemHistoryProvider,
 )
 from substrate.agents.core.react import ReActAgent
 from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
@@ -63,7 +65,7 @@ def _model():
 
 def _context() -> ContextConfig:
     return ContextConfig(
-        InMemoryHistoryProvider(),
+        LocalFilesystemHistoryProvider(),
         pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)]),
     )
 

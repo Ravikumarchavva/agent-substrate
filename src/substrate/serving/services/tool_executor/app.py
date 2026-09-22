@@ -18,7 +18,7 @@ from substrate.serving.shared.events.factory import get_event_bus
 logger = setup_logging()
 
 
-def _load_default_tools(code_interpreter_tool=None) -> list:
+def _load_default_tools(code_interpreter_tool=None, task_store=None) -> list:
     """Load all available tools for the registry."""
     tools = []
 
@@ -31,9 +31,9 @@ def _load_default_tools(code_interpreter_tool=None) -> list:
 
     try:
         from substrate.capabilities.tools.task_manager.tool import TaskManagerTool
-        from substrate.agents.storage.tasks import GlobalTaskStore
+        from substrate.agents.storage.tasks import TaskStore
 
-        tools.append(TaskManagerTool(store=GlobalTaskStore.get()))
+        tools.append(TaskManagerTool(store=task_store or TaskStore()))
     except Exception:
         logger.debug("TaskManagerTool not available")
 
@@ -97,9 +97,12 @@ async def lifespan(app):
     app.state.artifact_url = artifact_url.rstrip("/")
 
     # Tool Registry
+    from substrate.agents.storage.tasks import TaskStore
+
+    task_store = TaskStore()
     registry = ToolRegistry()
     registry.register_many(
-        _load_default_tools(code_interpreter_tool=code_interpreter_tool)
+        _load_default_tools(code_interpreter_tool=code_interpreter_tool, task_store=task_store)
     )
     app.state.tool_registry = registry
 

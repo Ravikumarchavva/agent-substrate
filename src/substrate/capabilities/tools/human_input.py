@@ -482,7 +482,7 @@ class AskHumanTool:
         # picker card while handler.request_input() blocks in the executor.
         if ctx is not None and getattr(self.handler, "supports_event_log", False):
             try:
-                await ctx._log(
+                await ctx.log(
                     RunLogKind.INPUT_REQUESTED,
                     {
                         "request_id": request.request_id,

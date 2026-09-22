@@ -16,7 +16,7 @@ async def test_legacy_linear_sessions_are_chained_into_the_dag_on_connect():
     """Pre-DAG chats lived in history_messages; connect() must not strand them."""
     from sqlalchemy import delete
 
-    from substrate.agents.context.history import project_messages
+    from substrate.agents.storage.history import project_messages
     from substrate.capabilities.history.durable_history import (
         HistoryMessage,
         HistorySession,
@@ -239,7 +239,7 @@ async def test_postgres_history_dag_forking_and_checkpoints():
     try:
         await provider.delete_session(session_id)
 
-        from substrate.agents.context.history import AncestryCheckpointResolver, DefaultHistoryResolver
+        from substrate.agents.storage.history import AncestryCheckpointResolver, DefaultHistoryResolver
         from substrate.kernel.exceptions import BranchAlreadyExistsError
         from substrate.kernel.storage.history import HistoryCheckpoint, MessageNode
 

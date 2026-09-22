@@ -52,7 +52,7 @@ def _history_is_in_memory(agent: Agent) -> bool:
     if provider is None:
         return False
     try:
-        from substrate.agents.context import InMemoryHistoryProvider
+        from substrate.agents.storage import InMemoryHistoryProvider
 
         if isinstance(provider, InMemoryHistoryProvider):
             return True

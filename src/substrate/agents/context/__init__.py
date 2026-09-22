@@ -1,15 +1,13 @@
-"""substrate.agents.context — agent context management and history providers."""
+"""substrate.agents.context — context window assembly and compaction.
+
+History providers moved to ``agents.storage`` — general-purpose kernel
+``HistoryProvider`` implementations belong beside the other in-memory/local
+kernel-Protocol defaults, not under "context" (context window ASSEMBLY,
+not history STORAGE, is this package's job).
+"""
 
 from __future__ import annotations
 
-from .history import (
-    AncestryCheckpointResolver,
-    DefaultHistoryResolver,
-    HistoryProvider,
-    InMemoryHistoryProvider,
-    project_messages,
-)
-from .local_history import LocalFilesystemHistoryProvider
 from .builder import DefaultContextBuilder
 from .compaction import (
     CompactionStrategy,
@@ -26,12 +24,6 @@ from .compaction import (
 from .context import AgentContext, ContextConfig
 
 __all__ = [
-    "HistoryProvider",
-    "project_messages",
-    "InMemoryHistoryProvider",
-    "LocalFilesystemHistoryProvider",
-    "DefaultHistoryResolver",
-    "AncestryCheckpointResolver",
     "DefaultContextBuilder",
     "CompactionStrategy",
     "CompactionPipeline",

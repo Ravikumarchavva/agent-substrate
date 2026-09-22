@@ -1,4 +1,19 @@
-"""Shared conversation primitives and helper functions for agents."""
+"""Shared conversation primitives for turn-loop agents.
+
+The free functions below (``message_to_chat``, ``log_user_message``,
+``load_history``, ``persist_turns``, ``final_text``, ``deliver``) are kept
+importable on their own for direct unit testing. ``BaseAgent`` wraps them as
+instance methods so ``ReActAgent``/``OrchestratorAgent`` — the two agent
+types that actually share this turn-loop shape (message in, history load,
+LLM/dispatch, history persist, deliver) — inherit one implementation instead
+of each importing the same six functions independently.
+
+``UserProxyAgent`` deliberately does NOT inherit from ``BaseAgent``: it is
+not a turn-loop agent at all (it bridges HITL suspend/resume via
+``ctx.sleep_until_signal``, with no history/LLM turn in its ``run()``), so
+forcing it under a turn-loop base class would be the wrong abstraction — it
+implements the kernel ``Agent`` Protocol directly instead, same as before.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +28,6 @@ from substrate.kernel.core.content import (
 )
 from substrate.kernel.core.identity import Actor, Topic
 from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
-from substrate.kernel.llm.llm import GenerationOptions
 
 if TYPE_CHECKING:
     from substrate.agents.context.context import ContextConfig
@@ -75,7 +89,7 @@ async def load_history(
     branch_id: str = "main",
 ) -> list[ChatMessage]:
     """The session branch's history as LLM-ready messages (see ``project_messages``)."""
-    from substrate.agents.context.history import project_messages
+    from substrate.agents.storage.history import project_messages
 
     return await project_messages(
         ctx_cfg.history,
@@ -152,11 +166,64 @@ async def deliver(
         await ctx.emit(output_topic, out_msg)
 
 
-async def summarize(ctx: RunContext, text: str, *, instructions: str) -> str:
-    """Run a journaled LLM summarization pass."""
-    messages = [
-        ChatMessage(role=Role.USER, content=[TextBlock(text=text)]),
-    ]
-    options = GenerationOptions(system_instructions=instructions)
-    resp = await ctx.llm(messages, options=options)
-    return content_blocks_to_str(resp.content)  # type: ignore[arg-type]
+class BaseAgent:
+    """Shared turn-loop primitives for ``ReActAgent``/``OrchestratorAgent``.
+
+    Not a kernel ``Agent`` Protocol implementation itself — subclasses still
+    define their own ``id``/``run()`` to satisfy that Protocol; this class
+    only factors out the conversation bookkeeping every turn-loop agent
+    repeats identically (see module docstring).
+    """
+
+    @staticmethod
+    def _message_to_chat(msg: Message) -> ChatMessage:
+        return message_to_chat(msg)
+
+    @staticmethod
+    async def _log_user_message(
+        ctx: RunContext, msg: Message, user_turn: ChatMessage
+    ) -> int:
+        return await log_user_message(ctx, msg, user_turn)
+
+    @staticmethod
+    async def _load_history(
+        ctx_cfg: ContextConfig,
+        session_id: str,
+        *,
+        branch_id: str = "main",
+    ) -> list[ChatMessage]:
+        return await load_history(ctx_cfg, session_id, branch_id=branch_id)
+
+    @staticmethod
+    async def _persist_turns(
+        ctx_cfg: ContextConfig,
+        session_id: str,
+        run_id: str,
+        new_turns: list[ChatMessage],
+        *,
+        branch_id: str = "main",
+        workspace_snapshot_id: str | None = None,
+    ) -> None:
+        await persist_turns(
+            ctx_cfg,
+            session_id,
+            run_id,
+            new_turns,
+            branch_id=branch_id,
+            workspace_snapshot_id=workspace_snapshot_id,
+        )
+
+    @staticmethod
+    def _final_text(messages: list[ChatMessage]) -> str:
+        return final_text(messages)
+
+    @staticmethod
+    async def _deliver(
+        ctx: RunContext,
+        src_msg: Message,
+        result: dict[str, Any],
+        *,
+        sender: Actor,
+        output_topic: Topic | None = None,
+    ) -> None:
+        await deliver(ctx, src_msg, result, sender=sender, output_topic=output_topic)

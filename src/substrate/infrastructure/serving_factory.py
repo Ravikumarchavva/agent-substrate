@@ -66,6 +66,7 @@ class Infrastructure:
     long_term_memory: Any = None
     runtime_stack: AsyncExitStack | None = None
     safety_middleware: Any = None
+    task_store: Any = None
 
 
 @dataclass
@@ -166,6 +167,18 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
         logger.info("Agent runtime: durable (Postgres EventLogProtocol)")
         return runtime, stack
 
+    if cfg.RUNTIME_BACKEND.lower() == "local":
+        from substrate.agents.runtime.local_runtime import build_local_runtime
+
+        stack = AsyncExitStack()
+        runtime = await stack.enter_async_context(
+            build_local_runtime(path=cfg.RUNTIME_LOCAL_DB_PATH)
+        )
+        logger.info(
+            "Agent runtime: durable, no infra (SQLite at %s)", cfg.RUNTIME_LOCAL_DB_PATH
+        )
+        return runtime, stack
+
     from substrate.agents.runtime import Runtime
 
     runtime = Runtime()
@@ -264,13 +277,15 @@ async def init_infrastructure(
     runtime, runtime_stack = await init_runtime(cfg)
 
     if cfg.RUNTIME_BACKEND.lower() == "postgres":
-        from substrate.agents.storage.tasks import GlobalTaskStore
         from substrate.infrastructure.storage.pg_task_store import PgTaskStore
 
-        pg_task_store = PgTaskStore(session_factory)
-        await pg_task_store.setup()
-        GlobalTaskStore.set(pg_task_store)  # type: ignore[arg-type]
+        task_store: Any = PgTaskStore(session_factory)
+        await task_store.setup()
         logger.info("Task store: durable (Postgres JSONB)")
+    else:
+        from substrate.agents.storage.tasks import TaskStore
+
+        task_store = TaskStore()
 
     vector_store = PgVectorStore(
         session_factory=session_factory,
@@ -380,6 +395,7 @@ async def init_infrastructure(
         long_term_memory=long_term_memory,
         runtime_stack=runtime_stack,
         safety_middleware=safety_middleware,
+        task_store=task_store,
     )
 
 
@@ -399,6 +415,7 @@ async def init_tool_registry(
     artifact_store: Any = None,
     workspace_store: Any = None,
     skill_manager: Any = None,
+    task_store: Any = None,
 ) -> ToolboxResult:
     """Create all tools and return a registry.
 
@@ -412,7 +429,7 @@ async def init_tool_registry(
     no way to discover or read a skill's instructions, so a skill existing on
     disk does nothing.
     """
-    from substrate.agents.storage.tasks import GlobalTaskStore
+    from substrate.agents.storage.tasks import TaskStore
     from substrate.agents.tools.toolbox import Toolbox
     from substrate.capabilities.tools import (
         CalculatorTool,
@@ -445,7 +462,7 @@ async def init_tool_registry(
         )
 
     task_tool = TaskManagerTool(
-        store=GlobalTaskStore.get(), event_sink=_board_event_sink
+        store=task_store or TaskStore(), event_sink=_board_event_sink
     )
     ask_tool = AskHumanTool(handler=None, max_requests_per_run=5)  # type: ignore[arg-type]
 
@@ -829,14 +846,10 @@ async def build_agent_for_thread(
     this is the one real implementation of kernel's ``ApprovalHandler``
     Protocol; see ``serving/monolith/sse/approval.py``.
     """
-    from substrate.agents.context import InMemoryHistoryProvider
-    from substrate.agents.factory import (
-        build_research_orchestrator,
-        build_token_budget_pipeline,
-        create_assistant_agent,
-        rebuild_messages_from_steps,
-        step_rows_from_log,
-    )
+    from substrate.agents.storage import InMemoryHistoryProvider
+    from substrate.agents.context.compaction.presets import build_token_budget_pipeline
+    from substrate.agents.factory import create_assistant_agent
+    from substrate.infrastructure.research_orchestrator import build_research_orchestrator
 
     if runtime is None:
         raise ValueError("build_agent_for_thread() requires a runtime.")
@@ -859,7 +872,7 @@ async def build_agent_for_thread(
 
     if history is None:
         history = InMemoryHistoryProvider()
-        from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
+        from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
 
         history = LocalFilesystemHistoryProvider()
         await history.connect()
@@ -1014,7 +1027,7 @@ async def build_history_provider(
         await provider.connect()
         return provider
 
-    from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
+    from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
 
     provider = LocalFilesystemHistoryProvider(root=local_path)
     await provider.connect()
@@ -1356,10 +1369,10 @@ async def build_cached_history_for_thread(
     conversation_service_url: str,
 ) -> Any:
     """Return the history provider for this thread."""
-    from substrate.agents.context import InMemoryHistoryProvider
+    from substrate.agents.storage import InMemoryHistoryProvider
     if history is not None:
         return history
-    from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
+    from substrate.agents.storage import LocalFilesystemHistoryProvider
 
     return history if history is not None else InMemoryHistoryProvider()
     provider = LocalFilesystemHistoryProvider()

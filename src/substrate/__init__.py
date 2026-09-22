@@ -18,9 +18,8 @@ if TYPE_CHECKING:
     from substrate.agents.core.react import ReActAgent
     from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
     from substrate.agents.core.proxy import UserProxyAgent
-    from substrate.agents.core.information_agent import InformationAgent
     from substrate.config import SubstrateConfig
-    from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
+    from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
     from substrate.agents.workspace.local_workspace_store import (
         LocalFilesystemWorkspaceStore,
     )
@@ -29,8 +28,10 @@ if TYPE_CHECKING:
     from substrate.agents.context import (
         AgentContext,
         ContextConfig,
-        InMemoryHistoryProvider,
         SlidingWindowCompaction,
+    )
+    from substrate.agents.storage import (
+        InMemoryHistoryProvider,
     )
     from substrate.agents.middleware import (
         AgentRunResult,
@@ -71,8 +72,6 @@ __all__ = [
     "OrchestratorAgent",
     "SubAgentConfig",
     "UserProxyAgent",
-    "InformationAgent",
-    "PersonalFeedAgent",
     # runtime
     "Runtime",
     "RunOutcome",
@@ -133,11 +132,6 @@ _LAZY: dict[str, tuple[str, str]] = {
     "OrchestratorAgent": ("substrate.agents.core.orchestrator", "OrchestratorAgent"),
     "SubAgentConfig": ("substrate.agents.core.orchestrator", "SubAgentConfig"),
     "UserProxyAgent": ("substrate.agents.core.proxy", "UserProxyAgent"),
-    "InformationAgent": ("substrate.agents.core.information_agent", "InformationAgent"),
-    "PersonalFeedAgent": (
-        "substrate.agents.core.personal_feed_agent",
-        "PersonalFeedAgent",
-    ),
     # runtime
     "Runtime": ("substrate.agents.runtime", "Runtime"),
     "RunOutcome": ("substrate.agents.runtime", "RunOutcome"),
@@ -145,11 +139,11 @@ _LAZY: dict[str, tuple[str, str]] = {
     "SubstrateConfig": ("substrate.config", "SubstrateConfig"),
     # native durable storage
     "LocalFilesystemHistoryProvider": (
-        "substrate.agents.context.local_history",
+        "substrate.agents.storage.local_history",
         "LocalFilesystemHistoryProvider",
     ),
     "LocalHistoryProvider": (
-        "substrate.agents.context.local_history",
+        "substrate.agents.storage.local_history",
         "LocalFilesystemHistoryProvider",
     ),
     "LocalFilesystemWorkspaceStore": (
@@ -180,7 +174,7 @@ _LAZY: dict[str, tuple[str, str]] = {
     "AgentRunResult": ("substrate.agents.middleware", "AgentRunResult"),
     "Skill": ("substrate.kernel.tools", "Skill"),
     "InMemoryHistoryProvider": (
-        "substrate.agents.context.local_history",
+        "substrate.agents.storage.local_history",
         "LocalFilesystemHistoryProvider",
     ),
     "AgentContext": ("substrate.agents.context", "AgentContext"),

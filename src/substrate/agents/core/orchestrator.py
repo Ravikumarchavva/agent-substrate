@@ -27,7 +27,7 @@ from substrate.kernel.tools.tools import ToolExecutionResult
 
 from substrate.kernel.agent.supervision import Priority, SpawnBudget
 from substrate.agents.context.context import ContextConfig
-from substrate.agents.supervision.budget import SpawnTracker
+from substrate.agents.limits.spawn import SpawnTracker
 from substrate.agents.storage.tasks import (
     current_agent_id as _task_agent_id,
     current_agent_label as _task_agent_label,
@@ -37,14 +37,7 @@ from substrate.agents.workspace.scope import (
     current_branch_id as _workspace_branch_id,
     current_user_id as _task_user_id,
 )
-from substrate.agents.core._loop import (
-    deliver,
-    final_text,
-    load_history,
-    log_user_message,
-    message_to_chat,
-    persist_turns,
-)
+from substrate.agents.core.base import BaseAgent
 
 if TYPE_CHECKING:
     from substrate.agents.runtime.context import Agent, RunContext
@@ -89,7 +82,7 @@ class SubAgentConfig:
     priority: Priority = Priority.NORMAL
 
 
-class OrchestratorAgent:
+class OrchestratorAgent(BaseAgent):
     """General-purpose orchestrator that spawns sub-agents via the runtime."""
 
     def __init__(
@@ -139,11 +132,11 @@ class OrchestratorAgent:
 
         branch_id = msg.metadata.get("branch_id") or "main"
         _workspace_branch_id.set(branch_id)
-        history_messages = await load_history(
+        history_messages = await self._load_history(
             self._context, session_id, branch_id=branch_id
         )
-        user_turn = message_to_chat(msg)
-        await log_user_message(ctx, msg, user_turn)
+        user_turn = self._message_to_chat(msg)
+        await self._log_user_message(ctx, msg, user_turn)
         messages: list[ChatMessage] = history_messages + [user_turn]
         n_loaded = len(history_messages)
 
@@ -186,7 +179,7 @@ class OrchestratorAgent:
                 # Surface subagent lifecycle on the orchestrator's own run log so
                 # console / UIs can render a live subagent progress tree. The
                 # subagent itself runs under a separate run_id we don't tail here.
-                await ctx._log(
+                await ctx.log(
                     RunLogKind.SUBAGENT_START,
                     {
                         "agent": cfg.agent.id.type,
@@ -221,7 +214,7 @@ class OrchestratorAgent:
                 finally:
                     spawn_tracker.release(cfg.agent.id)
 
-                await ctx._log(
+                await ctx.log(
                     RunLogKind.SUBAGENT_DONE,
                     {
                         "agent": cfg.agent.id.type,
@@ -266,7 +259,7 @@ class OrchestratorAgent:
             )
 
         new_turns = messages[n_loaded:]
-        await persist_turns(
+        await self._persist_turns(
             self._context,
             session_id,
             ctx.run_id,
@@ -275,8 +268,8 @@ class OrchestratorAgent:
             workspace_snapshot_id=ctx.latest_workspace_snapshot_id,
         )
 
-        ans = final_text(messages)
-        await deliver(ctx, msg, {"text": ans}, sender=self.id)
+        ans = self._final_text(messages)
+        await self._deliver(ctx, msg, {"text": ans}, sender=self.id)
 
     def _build_tools(self) -> list[AnyTool]:
         tools: list[AnyTool] = [

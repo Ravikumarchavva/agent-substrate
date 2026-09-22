@@ -27,7 +27,7 @@ from substrate.serving.shared.observability import (
 from substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from substrate.integrations.llm.factory import create_model_client
 from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.storage import LocalFilesystemHistoryProvider
 from substrate.kernel.observability import (
     EnvelopeSpan,
     KillSwitchRule,
@@ -100,7 +100,7 @@ async def section_2_agent_with_tracing() -> None:
         "primary",
         create_model_client(settings.CHAT_MODEL, api_keys=api_keys),
     )
-    catalog.register_memory("memory", InMemoryHistoryProvider())
+    catalog.register_memory("memory", LocalFilesystemHistoryProvider())
     for tool in [CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(tool)
 

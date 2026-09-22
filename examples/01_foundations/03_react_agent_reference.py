@@ -25,7 +25,8 @@ import asyncio
 import datetime
 import math
 from substrate.agents import ReActAgent, OrchestratorAgent, SubAgentConfig, UserProxyAgent, Runtime
-from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.context import ContextConfig, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.storage import LocalFilesystemHistoryProvider
 from substrate.integrations.llm import (
     create_model_client,
     detect_provider,
@@ -106,7 +107,7 @@ async def demo_basic_run() -> None:
         "Calculator",
         model=model,
         tools=[MathTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
+        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
         system_instructions="You are a maths assistant. Use the math tool for any calculation.",
         max_iterations=6,
     )
@@ -130,7 +131,7 @@ async def demo_multi_turn() -> None:
         "Tutor",
         model=model,
         tools=[MathTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
+        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
         max_iterations=6,
     )
 
@@ -161,7 +162,7 @@ async def demo_proxy() -> None:
         "Backend",
         model=model,
         tools=[MathTool(), ClockTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
+        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
         max_iterations=6,
     )
 
@@ -186,7 +187,7 @@ async def demo_orchestrator() -> None:
         "MathSpecialist",
         model=model,
         tools=[MathTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
+        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
         system_instructions="You are a mathematics specialist. Use the math tool for every calculation.",
         max_iterations=5,
     )
@@ -194,7 +195,7 @@ async def demo_orchestrator() -> None:
         "TimeSpecialist",
         model=model,
         tools=[ClockTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
+        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
         system_instructions="You are a time specialist. Always check the clock tool.",
         max_iterations=4,
     )
@@ -230,14 +231,14 @@ async def demo_interactive() -> None:
         "MathSpecialist",
         model=model,
         tools=[MathTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
+        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
         system_instructions="You are a mathematics specialist. Use the math tool for every calculation.",
     )
     time_agent = ReActAgent(
         "TimeSpecialist",
         model=model,
         tools=[ClockTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
+        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
         system_instructions="You are a time specialist. Always check the clock tool.",
     )
     orchestrator = OrchestratorAgent(

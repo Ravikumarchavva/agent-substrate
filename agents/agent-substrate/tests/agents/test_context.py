@@ -5,11 +5,13 @@ from substrate.kernel.storage.history import MessageNode
 from substrate.agents.context import (
     AgentContext,
     ContextConfig,
-    InMemoryHistoryProvider,
     SlidingWindowCompaction,
     SummarizationCompaction,
     TokenBudgetComposedStrategy,
     CompactionPipeline,
+)
+from substrate.agents.storage import (
+    InMemoryHistoryProvider,
 )
 from substrate.kernel import Actor
 from substrate.kernel.core.content import ChatMessage, TextBlock
@@ -40,7 +42,7 @@ async def test_context_config():
     assert cfg.pipeline is pipeline
 
     default_cfg = ContextConfig.default()
-    from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
+    from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
 
     assert isinstance(default_cfg.history, LocalFilesystemHistoryProvider)
     assert isinstance(default_cfg.pipeline, CompactionPipeline)

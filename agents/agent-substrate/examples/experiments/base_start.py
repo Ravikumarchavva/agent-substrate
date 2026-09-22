@@ -13,7 +13,7 @@ import asyncio
 from substrate.agents.core import ReActAgent
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.storage import LocalFilesystemHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable (read automatically by OpenAIClient)
 
@@ -24,7 +24,7 @@ async def main() -> None:
     # --- 1. Build the catalog (registry of resources the agent can use) ---
     catalog = AgentCatalog()
     catalog.register_model("primary", OpenAIClient(model="gpt-4o-mini"))
-    catalog.register_memory("memory", InMemoryHistoryProvider())
+    catalog.register_memory("memory", LocalFilesystemHistoryProvider())
 
     # --- 2. Create the agent ---
     agent = ReActAgent(

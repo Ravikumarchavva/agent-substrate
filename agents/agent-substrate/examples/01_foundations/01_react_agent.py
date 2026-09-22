@@ -21,7 +21,8 @@ load_dotenv()  # walks up to find the repo-root .env
 settings = SubstrateConfig()
 
 from substrate.agents import ReActAgent, Runtime
-from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.context import ContextConfig, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.storage import LocalFilesystemHistoryProvider
 from substrate.integrations.llm import (
     create_model_client,
     detect_provider,
@@ -44,7 +45,7 @@ async def main() -> None:
         "DemoBot",
         model=model,
         tools=[CalculatorTool(), CurrentTimeTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
+        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
         system_instructions=(
             "You are a helpful assistant with access to tools. "
             "Use a tool when it helps (e.g. calculations or the current time); "

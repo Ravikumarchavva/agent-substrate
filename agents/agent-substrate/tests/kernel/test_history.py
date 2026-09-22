@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.context import InMemoryHistoryProvider
-from substrate.agents.context.history import project_messages
+from substrate.agents.storage import InMemoryHistoryProvider
+from substrate.agents.storage.history import project_messages
 from substrate.kernel.core.content import ChatMessage, TextBlock
 from substrate.kernel.storage.history import HistoryProvider, MessageNode
 

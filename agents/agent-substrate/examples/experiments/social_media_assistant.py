@@ -18,7 +18,7 @@ from substrate.agents.core import ReActAgent
 from substrate.agents.tools.builtin_tools import WebSearchTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.storage import LocalFilesystemHistoryProvider
 from substrate.kernel.messages.content import TextBlock
 from substrate.kernel.messages._types import TextDeltaChunk
 from substrate.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
@@ -134,7 +134,7 @@ async def build_agent() -> ReActAgent:
     """Construct and return the social media assistant agent."""
     catalog = AgentCatalog()
     catalog.register_model("primary", OpenAIClient(model="gpt-4o-mini"))
-    catalog.register_memory("memory", InMemoryHistoryProvider())
+    catalog.register_memory("memory", LocalFilesystemHistoryProvider())
     catalog.register_tool(WebSearchTool())
     catalog.register_tool(AnalyzeHashtagsTool())
     catalog.register_tool(FormatPostTool())

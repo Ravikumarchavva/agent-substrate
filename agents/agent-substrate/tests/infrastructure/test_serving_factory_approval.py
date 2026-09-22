@@ -19,7 +19,7 @@ import asyncio
 import uuid
 from typing import Any
 
-from substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.storage import InMemoryHistoryProvider
 from substrate.agents.runtime import Runtime
 from substrate.config import SubstrateConfig
 from substrate.infrastructure.serving_factory import build_agent_for_thread

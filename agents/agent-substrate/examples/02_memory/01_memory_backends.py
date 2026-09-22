@@ -1,117 +1,102 @@
 """Example 2-1: Memory Backends — raw history operations across all three storage tiers.
 
 DurableHistoryProvider (Postgres) is the real default — conversation history
-that survives a restart. RedisHistoryProvider is a faster, TTL'd cache in
-front of that same durable store, not an alternative to it.
-InMemoryHistoryProvider only exists for tests and local scratch runs; it's
-the one non-durable exception, which is why its name says so.
+that survives a restart. LocalFilesystemHistoryProvider is the no-infra
+durable floor: still survives a restart, no Docker/Postgres required, just a
+folder on disk. InMemoryHistoryProvider is the one non-durable exception —
+gone the moment the process exits — which is why its name says so; use it
+only for tests and throwaway scratch runs.
+
+All three implement the same conversation-DAG HistoryProvider contract
+(``append_node`` / ``append_and_advance`` / ``get_branch`` / ...) — a linear
+transcript is a *projection* of one branch, read via
+``substrate.agents.storage.project_messages``, not stored separately.
 
 Demonstrates using:
-  - InMemoryHistoryProvider (non-durable — tests / local dev only)
-  - RedisHistoryProvider (TTL'd hot-path cache, backed by the durable store)
-  - DurableHistoryProvider (Postgres — the default, durable source of truth)
+  - InMemoryHistoryProvider (non-durable — tests / throwaway scratch only)
+  - LocalFilesystemHistoryProvider (durable, no infra — the default floor)
+  - DurableHistoryProvider (Postgres — the production default, requires DB)
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
+import tempfile
 
-from substrate.agents.context import InMemoryHistoryProvider
-from substrate.capabilities.history import RedisHistoryProvider, DurableHistoryProvider
+from substrate.agents.storage import (
+    InMemoryHistoryProvider,
+    LocalFilesystemHistoryProvider,
+    project_messages,
+)
+from substrate.capabilities.history import DurableHistoryProvider
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.core.identity import AgentId
+from substrate.kernel.storage.history import MessageNode
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 DB_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
 )
 
 
-async def main() -> None:
-    agent_id = AgentId(type="helper", key="session-a")
-    session_id = "demo-session"
-    run_id = "run-123"
+async def _demo(label: str, provider, session_id: str) -> None:
+    """Append a user/assistant turn as two DAG nodes, then read the branch
+    back as a linear transcript — the same round trip every backend supports
+    identically, since all three implement the one HistoryProvider contract."""
+    print(f"\n=== {label} ===")
 
-    # 1. InMemoryHistoryProvider — non-durable, no infra needed. The exception,
-    # not the default: use this only for tests and local scratch runs.
-    print("=== 1. InMemoryHistoryProvider (non-durable, testing only) ===")
-    mem = InMemoryHistoryProvider()
-    await mem.append(
-        agent_id,
-        ChatMessage(role=Role.USER, content=[TextBlock(text="What is the capital of France?")]),
+    user_node = MessageNode(
         session_id=session_id,
-        run_id=run_id,
+        parent_id=None,
+        payload=ChatMessage(role=Role.USER, content=[TextBlock(text="What is the capital of France?")]),
     )
-    await mem.append(
-        agent_id,
-        ChatMessage(role=Role.ASSISTANT, content=[TextBlock(text="Paris.")]),
-        session_id=session_id,
-        run_id=run_id,
-    )
+    await provider.append_and_advance(user_node, "main", expected_head_id=None)
 
-    msgs = await mem.get_messages(agent_id, session_id=session_id)
-    print(f"  Messages stored: {len(msgs)}")
-    for m in msgs:
+    assistant_node = MessageNode(
+        session_id=session_id,
+        parent_id=user_node.id,
+        payload=ChatMessage(role=Role.ASSISTANT, content=[TextBlock(text="Paris.")]),
+    )
+    await provider.append_and_advance(assistant_node, "main", expected_head_id=user_node.id)
+
+    messages = await project_messages(provider, session_id)
+    print(f"  Messages stored: {len(messages)}")
+    for m in messages:
         print(f"    [{m.role}]: {[b.text for b in m.content if isinstance(b, TextBlock)]}")
 
-    # 2. RedisHistoryProvider — TTL'd cache in front of the durable store,
-    # for hot-path reads. Not durable on its own; entries expire.
-    print("\n=== 2. RedisHistoryProvider (TTL cache, requires Redis) ===")
-    try:
-        redis_provider = RedisHistoryProvider(redis_url=REDIS_URL, ttl=3600)
-        await redis_provider.connect()
-        await redis_provider.append(
-            agent_id,
-            ChatMessage(role=Role.USER, content=[TextBlock(text="Hello from Redis!")]),
-            session_id=session_id,
-            run_id=run_id,
+    await provider.delete_session(session_id)
+    print("  Session cleared.")
+
+
+async def main() -> None:
+    # 1. InMemoryHistoryProvider — non-durable, no infra needed. The
+    # exception, not the default: use this only for tests and scratch runs.
+    await _demo(
+        "1. InMemoryHistoryProvider (non-durable, testing only)",
+        InMemoryHistoryProvider(),
+        session_id="demo-session-mem",
+    )
+
+    # 2. LocalFilesystemHistoryProvider — durable across restarts, zero
+    # external infra: "a folder and everything dumps there." The floor
+    # every deployment gets even with no Docker/Postgres available.
+    with tempfile.TemporaryDirectory() as tmp:
+        await _demo(
+            "2. LocalFilesystemHistoryProvider (durable, no infra required)",
+            LocalFilesystemHistoryProvider(root=tmp),
+            session_id="demo-session-local",
         )
-        await redis_provider.append(
-            agent_id,
-            ChatMessage(role=Role.ASSISTANT, content=[TextBlock(text="Hello back!")]),
-            session_id=session_id,
-            run_id=run_id,
-        )
 
-        redis_msgs = await redis_provider.get_messages(agent_id, session_id=session_id)
-        print(f"  Messages in Redis: {len(redis_msgs)}")
-        for m in redis_msgs:
-            print(f"    [{m.role}]: {[b.text for b in m.content if isinstance(b, TextBlock)]}")
-
-        await redis_provider.clear(agent_id, session_id=session_id)
-        print("  Redis session cleared.")
-        await redis_provider.disconnect()
-    except Exception as exc:
-        print(f"  [SKIP] Redis unavailable: {exc}")
-
-    # 3. DurableHistoryProvider — the default in production. Postgres-backed,
-    # survives a restart; this is the source of truth the Redis cache reads through.
-    print("\n=== 3. DurableHistoryProvider (durable default, requires PostgreSQL) ===")
+    # 3. DurableHistoryProvider — the production default. Postgres-backed,
+    # survives a restart, and scales to multiple worker processes.
     try:
-        pg_provider = DurableHistoryProvider(database_url=DB_URL)
+        pg_provider = DurableHistoryProvider(DB_URL)
         await pg_provider.connect()
-        await pg_provider.append(
-            agent_id,
-            ChatMessage(role=Role.USER, content=[TextBlock(text="Hello from Postgres!")]),
-            session_id=session_id,
-            run_id=run_id,
+        await _demo(
+            "3. DurableHistoryProvider (durable default, requires PostgreSQL)",
+            pg_provider,
+            session_id="demo-session-pg",
         )
-        await pg_provider.append(
-            agent_id,
-            ChatMessage(role=Role.ASSISTANT, content=[TextBlock(text="Hello back!")]),
-            session_id=session_id,
-            run_id=run_id,
-        )
-
-        pg_msgs = await pg_provider.get_messages(agent_id, session_id=session_id)
-        print(f"  Messages in Postgres: {len(pg_msgs)}")
-        for m in pg_msgs:
-            print(f"    [{m.role}]: {[b.text for b in m.content if isinstance(b, TextBlock)]}")
-
-        await pg_provider.clear(agent_id, session_id=session_id)
-        print("  Postgres session cleared.")
         await pg_provider.disconnect()
     except Exception as exc:
         print(f"  [SKIP] Postgres unavailable: {exc}")

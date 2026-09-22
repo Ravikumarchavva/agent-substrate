@@ -113,6 +113,17 @@ class _JournalMixin:
         self._seq_cursor = seq
         return seq
 
+    async def log(self, kind: str, payload: JsonObject = {}) -> int:
+        """Public wrapper around ``_log`` for callers outside ``runtime/``.
+
+        ``_log`` is intra-package "friend" access shared among the
+        ``RunContext`` mixins (``journal.py``/``llm.py``/``messaging.py``/
+        ``supervision.py``/``tool.py``) — a different top-level package
+        (e.g. ``agents/core/``) reaching for it directly was a boundary
+        violation with no public alternative. This is that alternative.
+        """
+        return await self._log(kind, payload)
+
     async def log_once(self, kind: str, payload: JsonObject | None = None) -> int:
         """Journaled EventLogProtocol append — happens at most once across all replay
         attempts, unlike plain ``_log`` (which appends unconditionally on

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from substrate.kernel.core.content import ChatMessage, ToolUseBlock
+from substrate.kernel.core.content import ChatMessage, Role, ToolUseBlock
 
 
 class SelectiveToolCallCompactionStrategy:
@@ -39,13 +39,13 @@ class SelectiveToolCallCompactionStrategy:
 
     @staticmethod
     def _is_tool_call_turn(msg: ChatMessage) -> bool:
-        return msg.role == "assistant" and any(
+        return msg.role == Role.ASSISTANT and any(
             isinstance(b, ToolUseBlock) for b in msg.content
         )
 
     @staticmethod
     def _is_tool_result_turn(msg: ChatMessage) -> bool:
-        return msg.role == "tool"
+        return msg.role == Role.TOOL
 
 
 __all__ = ["SelectiveToolCallCompactionStrategy"]

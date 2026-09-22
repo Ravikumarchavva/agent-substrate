@@ -346,10 +346,12 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from substrate.agents.context import (
         CompactionPipeline,
         ContextConfig,
-        InMemoryHistoryProvider,
         SlidingWindowCompaction,
     )
-    from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
+    from substrate.agents.storage import (
+        InMemoryHistoryProvider,
+        LocalFilesystemHistoryProvider,
+    )
 
     # Build tools
     tools = []

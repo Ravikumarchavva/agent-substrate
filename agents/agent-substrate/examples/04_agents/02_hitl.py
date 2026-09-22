@@ -22,9 +22,11 @@ from substrate.capabilities.tools.human_input import AskHumanTool, HumanInputRes
 from substrate.agents import ReActAgent, Runtime
 from substrate.agents.context import (
     ContextConfig,
-    InMemoryHistoryProvider,
     SlidingWindowCompaction,
     CompactionPipeline,
+)
+from substrate.agents.storage import (
+    LocalFilesystemHistoryProvider,
 )
 from substrate.capabilities.tools import CalculatorTool
 from substrate.integrations.llm import (
@@ -93,7 +95,7 @@ async def main() -> None:
         model=model,
         tools=[ask_tool, CalculatorTool()],
         context=ContextConfig(
-            InMemoryHistoryProvider(),
+            LocalFilesystemHistoryProvider(),
             pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
         ),
         system_instructions=(

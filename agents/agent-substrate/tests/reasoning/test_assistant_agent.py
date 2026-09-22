@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
-from substrate.agents.context.history import project_messages
+from substrate.agents.storage.history import project_messages
 from substrate.agents.context import (
     ContextConfig,
-    InMemoryHistoryProvider,
     SlidingWindowCompaction,
     CompactionPipeline,
+)
+from substrate.agents.storage import (
+    InMemoryHistoryProvider,
 )
 from substrate.agents.core import ReActAgent
 from substrate.agents.runtime import Runtime

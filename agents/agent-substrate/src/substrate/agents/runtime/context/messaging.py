@@ -25,10 +25,10 @@ from substrate.kernel.runtime.wakeup import Wakeup
 if TYPE_CHECKING:
     from substrate.kernel.runtime.log_entry import EventLogProtocol
     from substrate.kernel.runtime.inbox import InboxProtocol
-    from substrate.kernel.runtime.scheduler import SchedulerProtocol
     from substrate.kernel.runtime.wakeup import SignalBusProtocol
     from substrate.kernel.runtime.fanout import FanoutStrategy
     from substrate.kernel.runtime.follow_graph import FollowGraph
+    from substrate.agents.runtime._scheduling import SchedulerBackend
 
 
 class _MessagingMixin:
@@ -37,7 +37,7 @@ class _MessagingMixin:
     if TYPE_CHECKING:
         run_id: str
         _inbox: InboxProtocol
-        _scheduler: SchedulerProtocol
+        _scheduler: SchedulerBackend
         _fanout: FanoutStrategy
         _follow_graph: FollowGraph
         _signal_bus: SignalBusProtocol

@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from substrate.agents.context.builder import DefaultContextBuilder
-from substrate.agents.context.history import DefaultHistoryResolver, InMemoryHistoryProvider
+from substrate.agents.storage.history import DefaultHistoryResolver, InMemoryHistoryProvider
 from substrate.kernel.agent.context import ContextWindow
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.storage.history import MessageNode

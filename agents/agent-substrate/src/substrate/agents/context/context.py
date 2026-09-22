@@ -8,7 +8,7 @@ from substrate.agents.context.compaction import (
     CompactionPipeline,
     SlidingWindowCompaction,
 )
-from substrate.agents.context.history import project_messages
+from substrate.agents.storage.history import project_messages
 from substrate.kernel.agent.context import ContextBuilder
 from substrate.kernel.agent.supervision import HistoryRetention
 from substrate.kernel.core.content import ChatMessage
@@ -80,7 +80,7 @@ class ContextConfig:
     @classmethod
     def default(cls) -> "ContextConfig":
         """Return a durable local filesystem context with default sliding-window compaction."""
-        from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
+        from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
 
         return cls(LocalFilesystemHistoryProvider())
 

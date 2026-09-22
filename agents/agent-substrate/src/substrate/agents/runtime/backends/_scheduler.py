@@ -227,6 +227,17 @@ class InMemoryScheduler:
         self._status[run_id] = RunStatus.CANCELLED
         return True
 
+    def force_cancel(self, run_id: RunId) -> None:
+        """Unconditionally mark *run_id* CANCELLED, regardless of status.
+
+        For ``Supervisor.cancel()`` only: cancelling a subtree must cancel
+        a RUNNING child too (its own CancellationToken.check() will observe
+        this on its next check), unlike ``cancel_pending`` which is a
+        queue-admission guard that must refuse to touch a run a worker is
+        actively executing.
+        """
+        self._status[run_id] = RunStatus.CANCELLED
+
     async def wake_suspended(self, run_id: RunId, *, priority: Priority = Priority.NORMAL) -> None:
         """Re-enqueue a suspended run (called by SignalBusProtocol/InboxProtocol when a wakeup fires)."""
         if self._status.get(run_id) == RunStatus.SUSPENDED:

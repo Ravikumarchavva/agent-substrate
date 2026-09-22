@@ -44,7 +44,8 @@ from substrate.kernel.runtime.follow_graph import FollowGraph
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from substrate.kernel.runtime.inbox import InboxProtocol
 from substrate.kernel.runtime.log_entry import EventLogProtocol
-from substrate.kernel.runtime.scheduler import RunRetryPolicy, SchedulerProtocol
+from substrate.kernel.runtime.scheduler import RunRetryPolicy
+from substrate.agents.runtime._scheduling import SchedulerBackend
 from substrate.kernel.runtime.supervisor import SupervisorProtocol
 from substrate.kernel.runtime.wakeup import SignalBusProtocol
 
@@ -92,7 +93,7 @@ class Runtime:
         *,
         event_log: EventLogProtocol | None = None,
         inbox: InboxProtocol | None = None,
-        scheduler: SchedulerProtocol | None = None,
+        scheduler: SchedulerBackend | None = None,
         signal_bus: SignalBusProtocol | None = None,
         supervisor: SupervisorProtocol | None = None,
         follow_graph: FollowGraph | None = None,
@@ -100,7 +101,7 @@ class Runtime:
         resolver: ActorResolver | None = None,
     ) -> None:
         self._event_log: EventLogProtocol = event_log or InMemoryEventLog()
-        self._scheduler: SchedulerProtocol = scheduler or InMemoryScheduler()
+        self._scheduler: SchedulerBackend = scheduler or InMemoryScheduler()
         self._inbox: InboxProtocol = inbox or InMemoryInbox()
         # The inbox→runtime wakeup hook is a runtime concern; wire it on whatever
         # inbox was injected (or the default).
@@ -458,7 +459,7 @@ class Runtime:
         return self._inbox
 
     @property
-    def scheduler(self) -> SchedulerProtocol:
+    def scheduler(self) -> SchedulerBackend:
         # Exposed for find_run_for_thread() — serving code resolves a
         # conversation thread's active run_id durably (works across
         # replicas) instead of keeping its own thread_id → run_id registry.

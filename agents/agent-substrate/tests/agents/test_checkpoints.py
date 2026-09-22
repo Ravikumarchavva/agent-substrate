@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 
 from substrate.agents.context.builder import DefaultContextBuilder
-from substrate.agents.context.history import (
+from substrate.agents.storage.history import (
     AncestryCheckpointResolver,
     InMemoryHistoryProvider,
 )

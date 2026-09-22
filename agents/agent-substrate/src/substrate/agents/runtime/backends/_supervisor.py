@@ -172,7 +172,7 @@ class InMemorySupervisor:
         for child in list(self._children.get(handle.run_id, [])):
             await self.cancel(child, reason=reason)
 
-        self._scheduler._status[handle.run_id] = RunStatus.CANCELLED
+        self._scheduler.force_cancel(handle.run_id)
         seq = await self._event_log.last_seq(handle.run_id)
         await self._event_log.append(
             handle.run_id,

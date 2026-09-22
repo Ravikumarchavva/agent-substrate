@@ -13,8 +13,10 @@ from typing import Any, AsyncIterator
 from substrate.agents.context import (
     CompactionPipeline,
     ContextConfig,
-    InMemoryHistoryProvider,
     SlidingWindowCompaction,
+)
+from substrate.agents.storage import (
+    InMemoryHistoryProvider,
 )
 from substrate.agents.core import ReActAgent
 from substrate.agents.hooks.manager import HookEvent, HookManager

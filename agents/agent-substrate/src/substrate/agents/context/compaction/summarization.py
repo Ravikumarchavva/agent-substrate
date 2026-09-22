@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from substrate.kernel.core.content import ChatMessage, TextBlock
+from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.llm import GenerationOptions
 from substrate.logger import setup_logging
 
@@ -111,7 +111,7 @@ class SummarizationCompaction:
             prompt_text = f"Conversation to summarize:\n\n{text}"
             system = _SYSTEM_PROMPT
 
-        prompt = ChatMessage(role="user", content=[TextBlock(text=prompt_text)])
+        prompt = ChatMessage(role=Role.USER, content=[TextBlock(text=prompt_text)])
         try:
             resp = await self._model.generate(
                 [prompt],
@@ -139,7 +139,7 @@ def _estimate_tokens_list(messages: list[ChatMessage], cpt: float) -> int:
 
 
 def _is_summary(msg: ChatMessage) -> bool:
-    if msg.role != "system":
+    if msg.role != Role.SYSTEM:
         return False
     return any(
         isinstance(b, TextBlock) and b.text.startswith(_SUMMARY_PREFIX)
@@ -157,7 +157,7 @@ def _extract_summary_text(msg: ChatMessage) -> str:
 def _messages_to_text(messages: list[ChatMessage]) -> str:
     lines: list[str] = []
     for msg in messages:
-        if msg.role == "system":
+        if msg.role == Role.SYSTEM:
             for b in msg.content:
                 if isinstance(b, TextBlock) and b.text.startswith(_SUMMARY_PREFIX):
                     lines.append(f"SUMMARY: {b.text[len(_SUMMARY_PREFIX) :].strip()}")
@@ -172,7 +172,7 @@ def _messages_to_text(messages: list[ChatMessage]) -> str:
 
 def _make_summary_message(summary: str) -> ChatMessage:
     return ChatMessage(
-        role="system",
+        role=Role.SYSTEM,
         content=[TextBlock(text=f"{_SUMMARY_PREFIX}\n{summary}")],
     )
 

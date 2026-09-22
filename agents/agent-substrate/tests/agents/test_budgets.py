@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.resources.budget import ExecutionTracker
-from substrate.agents.supervision.budget import SpawnTracker
+from substrate.agents.limits.execution import ExecutionTracker
+from substrate.agents.limits.spawn import SpawnTracker
 from substrate.kernel.agent.supervision import Priority, SpawnBudget
 from substrate.kernel.exceptions import BudgetExhaustedError
 from substrate.kernel.core.identity import Actor
@@ -80,32 +80,13 @@ def test_spawn_tracker_blocks_at_cap() -> None:
         tracker.acquire(_agent("b"), priority=Priority.NORMAL)
 
 
-def test_spawn_tracker_high_priority_preempts() -> None:
-    tracker = SpawnTracker(SpawnBudget(max_agents=2))
-    low = _agent("low")
-    high = _agent("high")
-    tracker.acquire(low, priority=Priority.LOW)  # now at cap
-    tracker.acquire(high, priority=Priority.HIGH)  # preempts low
-    assert tracker.is_paused(low)
-    assert not tracker.is_paused(high)
-
-
-def test_spawn_tracker_cannot_preempt_equal_priority() -> None:
-    tracker = SpawnTracker(SpawnBudget(max_agents=2))
-    tracker.acquire(_agent("a"), priority=Priority.HIGH)  # at cap
-    with pytest.raises(BudgetExhaustedError, match="Cannot preempt"):
-        tracker.acquire(_agent("b"), priority=Priority.HIGH)
-
-
-def test_spawn_tracker_reprioritize_lifts_pause() -> None:
-    tracker = SpawnTracker(SpawnBudget(max_agents=2))
-    low = _agent("low")
-    high = _agent("high")
-    tracker.acquire(low, priority=Priority.LOW)
-    tracker.acquire(high, priority=Priority.HIGH)
-    assert tracker.is_paused(low)
-    tracker.reprioritize(low, Priority.HIGH)
-    assert not tracker.is_paused(low)
+def test_spawn_tracker_priority_of_tracks_active_agents() -> None:
+    tracker = SpawnTracker(SpawnBudget(max_agents=3))
+    a = _agent("a")
+    tracker.acquire(a, priority=Priority.HIGH)
+    assert tracker.priority_of(a) == Priority.HIGH
+    tracker.release(a)
+    assert tracker.priority_of(a) is None
 
 
 # ---------------------------------------------------------------------------

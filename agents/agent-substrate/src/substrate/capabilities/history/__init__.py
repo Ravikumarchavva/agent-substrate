@@ -1,6 +1,6 @@
 """substrate.capabilities.history — Durable HistoryProvider backends.
 
-``LocalFilesystemHistoryProvider`` moved to ``agents.context`` — pure
+``LocalFilesystemHistoryProvider`` lives in ``agents.storage`` — pure
 kernel+stdlib, no durable-infra dependency, so it belongs at L1 beside
 ``InMemoryHistoryProvider``. This package now holds only backends with a
 real L2 dependency (Postgres).

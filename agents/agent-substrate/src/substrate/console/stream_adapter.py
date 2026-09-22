@@ -47,6 +47,7 @@ async def stream_events(
     task: str,
     *,
     correlation_id: str,
+    task_store: Any = None,
 ) -> AsyncIterator[Any]:
     """Submit *task* and yield UI stream events as the run progresses."""
     msg = Message(
@@ -94,7 +95,7 @@ async def stream_events(
                 seq=seq,
             )
             if name == "manage_tasks":
-                boards = await _task_boards(correlation_id)
+                boards = await _task_boards(correlation_id, task_store)
                 if boards:
                     yield _TaskBoardUpdate(boards=boards)
 
@@ -163,7 +164,8 @@ def _subagent_progress(
     )
 
 
-async def _task_boards(correlation_id: str) -> list[Any]:
-    from substrate.agents.storage.tasks import GlobalTaskStore
+async def _task_boards(correlation_id: str, task_store: Any = None) -> list[Any]:
+    from substrate.agents.storage.tasks import TaskStore
 
-    return await GlobalTaskStore.get().get_boards_by_conversation(correlation_id)
+    store = task_store or TaskStore()
+    return await store.get_boards_by_conversation(correlation_id)

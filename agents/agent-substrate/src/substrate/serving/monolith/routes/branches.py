@@ -18,7 +18,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.agents.context.history import DefaultHistoryResolver
+from substrate.agents.storage.history import DefaultHistoryResolver
 from substrate.agents.workspace.branching import fork_branch, resolve_workspace_snapshot_id
 from substrate.kernel.exceptions import (
     BranchAlreadyExistsError,

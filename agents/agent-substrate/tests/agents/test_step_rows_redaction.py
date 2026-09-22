@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.factory import rebuild_messages_from_steps, step_rows_from_log
+from substrate.agents.core.log_projection import (
+    rebuild_messages_from_steps,
+    step_rows_from_log,
+)
 from substrate.agents.runtime.backends._event_log import InMemoryEventLog
 from substrate.kernel.runtime.log_entry import RunLogEntry
 

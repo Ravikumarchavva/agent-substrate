@@ -32,10 +32,10 @@ from substrate.integrations.llm.factory import (
     resolve_vision_model_for_available_credentials,
     strip_provider_prefix,
 )
-from substrate.infrastructure.serving_factory import build_agent_for_thread
+from substrate.serving.factory import build_agent_for_thread
 
 # ContextVar that scopes TaskManagerTool to the active thread
-from substrate.capabilities.tools.task_manager.tool import current_thread_id
+from substrate.integrations.tools.task_manager.tool import current_thread_id
 from substrate.kernel.core.content import (
     ChatMessage as _ChatMessage,
     Role,

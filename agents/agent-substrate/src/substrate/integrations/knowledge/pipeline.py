@@ -5,7 +5,7 @@ single high-level interface.
 
 Usage::
 
-    from substrate.capabilities.knowledge.pipeline import RAGPipeline
+    from substrate.integrations.knowledge.pipeline import RAGPipeline
 
     pipeline = RAGPipeline(
         embedding_client=embed_client,
@@ -20,7 +20,7 @@ from substrate.logger import setup_logging
 
 from typing import TYPE_CHECKING, Any
 
-from substrate.capabilities.knowledge.chunking import get_chunker
+from substrate.integrations.knowledge.chunking import get_chunker
 from substrate.kernel.storage.vector import Document, SearchResult, VectorStore
 
 if TYPE_CHECKING:

@@ -2,7 +2,7 @@
 (``OpenAIEmbeddingClient``, ``text-embedding-3-small`` — same as the app's
 default ``EMBEDDING_MODEL``). Skips if Postgres isn't reachable or
 ``OPENAI_API_KEY`` isn't set — this is a real infra-dependent integration
-test, not a unit test, same convention as ``tests/capabilities/test_pg_backends.py``.
+test, not a unit test, same convention as ``tests/integrations/test_pg_backends.py``.
 
 Per the plan's §Evaluation harness / Verification point 5: **this is a
 baseline measurement, not a target** — the point is confirming every
@@ -65,7 +65,7 @@ async def test_retrieval_eval_starter_dataset(capsys) -> None:
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
     from substrate.integrations.llm.openai.openai_embedding_client import (
         OpenAIEmbeddingClient,
     )

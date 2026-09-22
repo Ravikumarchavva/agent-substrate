@@ -27,7 +27,7 @@ import math
 from substrate.kernel.agent.safety import SafetyVerdict, Severity
 from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.capabilities.safety.text_classifier")
+logger = setup_logging("substrate.integrations.safety.text_classifier")
 
 # Pinned by revision, not "main" — a Hub repo can change underneath us,
 # straight into the security layer (see plan's production-hardening notes).

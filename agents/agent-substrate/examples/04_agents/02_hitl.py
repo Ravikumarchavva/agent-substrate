@@ -18,7 +18,7 @@ settings = SubstrateConfig()
 import asyncio
 import uuid
 
-from substrate.capabilities.tools.human_input import AskHumanTool, HumanInputResponse
+from substrate.integrations.tools.human_input import AskHumanTool, HumanInputResponse
 from substrate.agents import ReActAgent, Runtime
 from substrate.agents.context import (
     ContextConfig,
@@ -28,7 +28,7 @@ from substrate.agents.context import (
 from substrate.agents.storage import (
     LocalFilesystemHistoryProvider,
 )
-from substrate.capabilities.tools import CalculatorTool
+from substrate.integrations.tools import CalculatorTool
 from substrate.integrations.llm import (
     create_model_client,
     detect_provider,

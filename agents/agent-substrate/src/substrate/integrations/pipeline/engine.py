@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, cast
 
-from substrate.capabilities.pipeline.data_ref import DataRefStore
+from substrate.integrations.pipeline.data_ref import DataRefStore
 from substrate.agents.tools.toolbox import Toolbox
 from substrate.kernel.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
 from substrate.logger import setup_logging

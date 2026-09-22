@@ -12,12 +12,12 @@ from substrate.kernel.storage.vector import Document
 from substrate.kernel.storage.memory import MemoryNamespace, MemoryQuery, MemoryRecord
 from substrate.kernel.tools import ToolExecutionResult, ToolCallRequest
 
-from substrate.capabilities.memory import DurableMemoryStore
+from substrate.integrations.memory import DurableMemoryStore
 from substrate.agents.storage.history import project_messages
-from substrate.capabilities.history import DurableHistoryProvider
+from substrate.integrations.history import DurableHistoryProvider
 from substrate.kernel.storage.history import MessageNode
-from substrate.capabilities.vector import PgVectorStore
-from substrate.capabilities.graph import AGEGraphStore
+from substrate.integrations.vector import PgVectorStore
+from substrate.integrations.graph import AGEGraphStore
 
 pytestmark = [pytest.mark.requires_postgres]
 

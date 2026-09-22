@@ -13,7 +13,7 @@ from substrate.agents.workspace.branching import fork_branch
 from substrate.agents.workspace.cas import BlobCAS
 from substrate.agents.workspace.materialize import commit, materialize
 from substrate.agents.workspace.snapshots import checkout_branch, commit_turn
-from substrate.capabilities.storage.workspace import WorkspaceFileStore
+from substrate.agents.storage.local_object_store import WorkspaceFileStore
 from substrate.kernel.exceptions import SnapshotConflictError
 
 TENANT = "tenant-a"

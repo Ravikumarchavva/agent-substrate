@@ -4,7 +4,7 @@ import os
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from substrate.capabilities.storage.workspace_store import PostgresWorkspaceStore
+from substrate.integrations.storage.workspace_store import PostgresWorkspaceStore
 from substrate.kernel.exceptions import SnapshotConflictError
 from substrate.kernel.storage.snapshots import (
     ContentRef,

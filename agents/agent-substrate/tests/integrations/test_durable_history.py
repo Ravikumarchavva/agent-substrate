@@ -4,7 +4,7 @@ import os
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from substrate.capabilities.history import DurableHistoryProvider
+from substrate.integrations.history import DurableHistoryProvider
 from substrate.kernel import ChatMessage
 from substrate.kernel.core.content import TextBlock
 
@@ -17,7 +17,7 @@ async def test_legacy_linear_sessions_are_chained_into_the_dag_on_connect():
     from sqlalchemy import delete
 
     from substrate.agents.storage.history import project_messages
-    from substrate.capabilities.history.durable_history import (
+    from substrate.integrations.history.durable_history import (
         HistoryMessage,
         HistorySession,
         serialize_message,

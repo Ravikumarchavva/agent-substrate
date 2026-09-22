@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 
 from substrate.agents.workspace.layout import conversation_workspace_prefix
-from substrate.capabilities.storage.workspace import (
+from substrate.agents.storage.local_object_store import (
     WorkspaceFileStore,
     WorkspaceQuotaExceededError,
 )

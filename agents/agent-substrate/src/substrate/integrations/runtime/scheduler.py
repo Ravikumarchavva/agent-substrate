@@ -32,7 +32,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, AsyncIterator
 
-from substrate.infrastructure.observability.runtime_metrics import (
+from substrate.agents.runtime.backends._runtime_metrics import (
     retry_counter,
     suspension_counter,
 )

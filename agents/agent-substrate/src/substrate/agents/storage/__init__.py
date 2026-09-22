@@ -25,6 +25,15 @@ from substrate.agents.storage.local_history import LocalFilesystemHistoryProvide
 from substrate.agents.storage.graph import InMemoryGraphStore
 from substrate.agents.storage.local_graph import LocalFilesystemGraphStore
 from substrate.agents.storage.memory import InMemoryFileStore
+from substrate.agents.storage.local_object_store import (
+    WorkspaceFileStore,
+    WorkspacePathError,
+    WorkspaceQuotaExceededError,
+)
+from substrate.agents.storage.local_short_term_memory import (
+    LocalFilesystemShortTermMemory,
+)
+from substrate.agents.storage.local_memory_store import LocalFilesystemMemoryStore
 from substrate.agents.storage.tasks import TaskStore
 from substrate.agents.storage.vector import InMemoryVectorStore, cosine_similarity
 from substrate.agents.storage.local_vector import LocalFilesystemVectorStore
@@ -39,8 +48,13 @@ __all__ = [
     "InMemoryVectorStore",
     "LocalFilesystemGraphStore",
     "LocalFilesystemHistoryProvider",
+    "LocalFilesystemMemoryStore",
+    "LocalFilesystemShortTermMemory",
     "LocalFilesystemVectorStore",
     "TaskStore",
+    "WorkspaceFileStore",
+    "WorkspacePathError",
+    "WorkspaceQuotaExceededError",
     "cosine_similarity",
     "project_messages",
 ]

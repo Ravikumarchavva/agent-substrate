@@ -21,7 +21,7 @@ from substrate.serving.monolith.rls import enable_row_level_security, ensure_app
 # only creates missing tables, never alters existing ones), so a column
 # added to a model here never reaches an already-provisioned dev/staging DB
 # without this. Mirrors the same additive-migration pattern used for
-# run_queue in infrastructure/runtime/scheduler.py.
+# run_queue in integrations/runtime/scheduler.py.
 _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("threads", "tenant_id", "VARCHAR"),
     ("threads", "deleted_at", "TIMESTAMPTZ"),

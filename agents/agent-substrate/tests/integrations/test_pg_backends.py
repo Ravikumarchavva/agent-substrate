@@ -5,7 +5,7 @@ Skip automatically when DATABASE_URL is not reachable.
 
 Run with infra up:
     make infra-up
-    uv run pytest tests/capabilities/test_pg_backends.py -v
+    uv run pytest tests/integrations/test_pg_backends.py -v
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ async def pg_pool():
 
 
 async def test_pg_event_log_append_and_read(pg_pool) -> None:
-    from substrate.infrastructure.runtime import EventLog
+    from substrate.integrations.runtime import EventLog
     from substrate.kernel.runtime.log_entry import RunLogEntry
     from substrate.kernel.runtime.ids import new_run_id
 
@@ -71,7 +71,7 @@ async def test_pg_event_log_append_and_read(pg_pool) -> None:
 
 
 async def test_pg_event_log_occ_raises(pg_pool) -> None:
-    from substrate.infrastructure.runtime import EventLog
+    from substrate.integrations.runtime import EventLog
     from substrate.kernel.runtime.log_entry import RunLogEntry
     from substrate.kernel.exceptions import ConcurrentAppendError
     from substrate.kernel.runtime.ids import new_run_id
@@ -89,7 +89,7 @@ async def test_pg_event_log_occ_raises(pg_pool) -> None:
 
 
 async def test_pg_event_log_last_seq(pg_pool) -> None:
-    from substrate.infrastructure.runtime import EventLog
+    from substrate.integrations.runtime import EventLog
     from substrate.kernel.runtime.log_entry import RunLogEntry
     from substrate.kernel.runtime.ids import new_run_id
 
@@ -105,7 +105,7 @@ async def test_pg_event_log_last_seq(pg_pool) -> None:
 
 
 async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
-    from substrate.infrastructure.runtime import EventLog
+    from substrate.integrations.runtime import EventLog
     from substrate.kernel.runtime.log_entry import RunLogEntry
     from substrate.kernel.runtime.ids import new_run_id
 
@@ -135,7 +135,7 @@ async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
 
 
 async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
-    from substrate.infrastructure.runtime import Inbox
+    from substrate.integrations.runtime import Inbox
     from substrate.kernel.core.identity import Actor
     from substrate.kernel.messaging.message import Message
     from substrate.kernel.core.content import TextBlock
@@ -169,7 +169,7 @@ async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
 
 
 async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
-    from substrate.infrastructure.runtime import Inbox
+    from substrate.integrations.runtime import Inbox
     from substrate.kernel.core.identity import Actor
     from substrate.kernel.messaging.message import Message
     from substrate.kernel.core.content import TextBlock
@@ -205,7 +205,7 @@ async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
 
 
 async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
-    from substrate.infrastructure.runtime import Scheduler
+    from substrate.integrations.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id, RunStatus
     from substrate.kernel.core.identity import Actor
 
@@ -226,7 +226,7 @@ async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
 
 
 async def test_pg_scheduler_coalescing(pg_pool) -> None:
-    from substrate.infrastructure.runtime import Scheduler
+    from substrate.integrations.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id
     from substrate.kernel.core.identity import Actor
 
@@ -245,7 +245,7 @@ async def test_pg_scheduler_coalescing(pg_pool) -> None:
 
 
 async def test_pg_scheduler_release_completed(pg_pool) -> None:
-    from substrate.infrastructure.runtime import Scheduler
+    from substrate.integrations.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id, RunStatus
     from substrate.kernel.core.identity import Actor
 
@@ -301,7 +301,7 @@ async def test_pg_task_store_persist_and_reload() -> None:
     if factory is None:
         pytest.skip("Postgres not reachable")
 
-    from substrate.infrastructure.storage.pg_task_store import PgTaskStore
+    from substrate.integrations.storage.pg_task_store import PgTaskStore
     from substrate.kernel.storage.tasks import TaskStatus
 
     conv_id = f"conv-{id(object())}"
@@ -335,7 +335,7 @@ async def test_pg_task_store_add_and_delete() -> None:
     if factory is None:
         pytest.skip("Postgres not reachable")
 
-    from substrate.infrastructure.storage.pg_task_store import PgTaskStore
+    from substrate.integrations.storage.pg_task_store import PgTaskStore
 
     conv_id = f"conv-add-{id(object())}"
     store = PgTaskStore(factory)
@@ -380,7 +380,7 @@ def test_pg_vector_store_rejects_invalid_table_name() -> None:
     """table_name is interpolated directly into SQL (no ORM/param binding
     for identifiers) — must be validated at construction, not left to fail
     confusingly (or unsafely) at the first query."""
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
 
     with pytest.raises(ValueError):
         PgVectorStore(
@@ -395,7 +395,7 @@ async def test_pg_vector_store_custom_table_name_is_isolated_from_default() -> N
     width, so a second embedding dimensionality needs its own table."""
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
     from substrate.kernel.storage.vector import Document
 
     engine = await _pg_async_engine()
@@ -454,7 +454,7 @@ async def test_pg_vector_store_rename_collection_rekeys_rows() -> None:
     into a thread's real collection without re-embedding."""
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
     from substrate.kernel.storage.vector import Document
 
     engine = await _pg_async_engine()
@@ -495,7 +495,7 @@ async def test_pg_vector_store_rename_collection_rekeys_rows() -> None:
 async def test_pg_vector_store_rename_collection_noop_when_nothing_matches() -> None:
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
 
     engine = await _pg_async_engine()
     if engine is None:
@@ -516,7 +516,7 @@ async def test_pg_vector_store_rename_collection_noop_when_nothing_matches() -> 
 
 
 async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:
-    from substrate.infrastructure.runtime import Scheduler
+    from substrate.integrations.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id, RunStatus
     from substrate.kernel.core.identity import Actor
 
@@ -543,7 +543,7 @@ async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:
 async def _hybrid_test_store():
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
 
     engine = await _pg_async_engine()
     if engine is None:
@@ -668,7 +668,7 @@ async def test_pg_vector_store_add_spans_multiple_insert_batches() -> None:
     VALUES rewrite doesn't drop or corrupt rows across a chunk boundary."""
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
     from substrate.kernel.storage.vector import Document
 
     engine = await _pg_async_engine()
@@ -706,7 +706,7 @@ async def test_pg_vector_store_upsert_dedupes_repeated_id_within_a_chunk() -> No
     trust callers never pass duplicate ids in one call."""
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
     from substrate.kernel.storage.vector import Document
 
     engine = await _pg_async_engine()

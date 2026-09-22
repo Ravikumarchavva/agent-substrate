@@ -20,7 +20,7 @@ takes the multimodal ``EmbeddingReranker`` and mixes text + image results.
 
 Usage::
 
-    from substrate.capabilities.knowledge.ask import ask
+    from substrate.integrations.knowledge.ask import ask
 
     result = await ask(
         "What happened at the opening ceremony?",

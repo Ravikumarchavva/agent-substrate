@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from substrate.capabilities.memory import (
+from substrate.integrations.memory import (
     CachedShortTermMemory,
     DurableSessionStore,
     RedisSessionStore,

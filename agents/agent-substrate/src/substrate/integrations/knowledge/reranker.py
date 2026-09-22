@@ -3,7 +3,7 @@ cross-encoder reranker.
 
 Usage::
 
-    from substrate.capabilities.knowledge.reranker import LLMReranker
+    from substrate.integrations.knowledge.reranker import LLMReranker
 
     reranker = LLMReranker(model_client=client)
     reranked = await reranker.rerank(query, results, top_k=5)
@@ -11,7 +11,7 @@ Usage::
 Or, with a local cross-encoder via the extraction service (no LLM
 tokens/latency spent on reranking)::
 
-    from substrate.capabilities.knowledge.reranker import CrossEncoderReranker
+    from substrate.integrations.knowledge.reranker import CrossEncoderReranker
 
     reranker = CrossEncoderReranker(extraction_client)
     reranked = await reranker.rerank(query, results, top_k=5)
@@ -48,7 +48,7 @@ def prefilter_candidates(
     this only dedups (reusing ``citations.suppress_near_duplicates``'s >90%
     textual-overlap check) and takes the top ``top_n`` by RRF score.
     """
-    from substrate.capabilities.knowledge.citations import suppress_near_duplicates
+    from substrate.integrations.knowledge.citations import suppress_near_duplicates
 
     deduped = suppress_near_duplicates(results, dedup_similarity_threshold)
     ranked = sorted(deduped, key=lambda r: r.score, reverse=True)

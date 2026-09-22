@@ -1,4 +1,4 @@
-"""substrate.capabilities.memory — Concrete memory backends.
+"""substrate.integrations.memory — Concrete memory backends.
 
 Short-term memory (ShortTermMemory protocol):
     RedisSessionStore      — Redis HASH per session, configurable TTL
@@ -12,21 +12,21 @@ Long-term memory (MemoryStore protocol):
 
 from __future__ import annotations
 
-from substrate.capabilities.memory.redis_session_store import RedisSessionStore
-from substrate.capabilities.memory.durable_session_store import DurableSessionStore
-from substrate.capabilities.memory.cached_session_store import CachedShortTermMemory
-from substrate.capabilities.memory.durable_memory_store import DurableMemoryStore
-from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore, LanceLongTermMemory
-from substrate.capabilities.memory.factory import (
+from substrate.integrations.memory.redis_session_store import RedisSessionStore
+from substrate.integrations.memory.durable_session_store import DurableSessionStore
+from substrate.integrations.memory.cached_session_store import CachedShortTermMemory
+from substrate.integrations.memory.durable_memory_store import DurableMemoryStore
+from substrate.integrations.memory.lance_memory_store import LanceMemoryStore, LanceLongTermMemory
+from substrate.integrations.memory.factory import (
     build_short_term_memory,
     build_memory_store,
     build_long_term_memory,
 )
-from substrate.capabilities.memory.policy import (
+from substrate.integrations.memory.policy import (
     MemoryExposurePolicy,
     DefaultMemoryExposurePolicy,
 )
-from substrate.capabilities.memory.manager import MemoryManager
+from substrate.integrations.memory.manager import MemoryManager
 
 __all__ = [
     "RedisSessionStore",

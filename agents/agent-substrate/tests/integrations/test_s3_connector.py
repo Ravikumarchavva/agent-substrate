@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from substrate.infrastructure.storage.s3 import S3Connector
+from substrate.integrations.storage.s3_connector import S3Connector
 
 
 class _FakeS3Client:

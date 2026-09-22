@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock
 
-from substrate.capabilities.knowledge.loaders.pdf_loader import PDFLoader
+from substrate.integrations.knowledge.loaders.pdf_loader import PDFLoader
 from substrate.runtimes.document_intelligence.client import (
     ExtractedPageText,
     ExtractResponse,

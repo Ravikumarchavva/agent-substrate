@@ -59,7 +59,7 @@ async def db_session():
 async def signal_bus():
     import asyncpg
 
-    from substrate.infrastructure.runtime.signal_bus import SignalBus
+    from substrate.integrations.runtime.signal_bus import SignalBus
 
     pool = await asyncpg.create_pool(_PG_URL.replace("+asyncpg", ""))
     bus = SignalBus(pool)

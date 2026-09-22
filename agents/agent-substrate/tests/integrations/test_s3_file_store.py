@@ -11,9 +11,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from substrate.capabilities.storage.s3 import S3FileStore
-from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
-from substrate.infrastructure.storage.s3 import S3Connector
+from substrate.integrations.storage.s3 import S3FileStore
+from substrate.agents.storage.local_object_store import WorkspaceQuotaExceededError
+from substrate.integrations.storage.s3_connector import S3Connector
 
 
 class FakeConnector:

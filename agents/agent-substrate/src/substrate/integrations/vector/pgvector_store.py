@@ -13,7 +13,7 @@ Schema notes
 
 Usage::
 
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
 
     store = PgVectorStore(session_factory=sf, engine=engine, dimensions=384)
     await store.ensure_table()

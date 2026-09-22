@@ -26,7 +26,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from substrate.capabilities.tools.invoice_extractor.tool import InvoiceExtractorTool
+from substrate.integrations.tools.invoice_extractor.tool import InvoiceExtractorTool
 from substrate.agents.core import ReActAgent
 from substrate.integrations.llm.factory import create_model_client
 from substrate.kernel.agent_catalog import AgentCatalog

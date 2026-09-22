@@ -24,7 +24,7 @@ node than wherever this wrapper would materialize local scratch. Wrapping
 it here would be worse than doing nothing: stage-out would commit an
 empty/stale snapshot every run, since the pod never touches the scratch
 dir this class watches. k8s stays per-user-isolated (unchanged from
-before), not yet per-branch — see ``infrastructure/serving_factory.py``'s
+before), not yet per-branch — see ``serving/factory.py``'s
 runtime wiring for where that's enforced.
 
 Scratch is disposable by construction: anything a run needs is checked out

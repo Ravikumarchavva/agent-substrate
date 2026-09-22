@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from substrate.serving.protocol import WireEvent
     from substrate.kernel.runtime.wakeup import SignalBusProtocol
 
-from substrate.capabilities.tools.human_input import (
+from substrate.integrations.tools.human_input import (
     CallbackHumanHandler,
     HumanInputRequest,
     HumanInputResponse,

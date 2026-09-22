@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from substrate.capabilities.knowledge.backends.base import IngestResult
-from substrate.capabilities.tools.ai.knowledge_search import KnowledgeSearchTool
+from substrate.integrations.knowledge.backends.base import IngestResult
+from substrate.integrations.tools.ai.knowledge_search import KnowledgeSearchTool
 from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.storage.vector import SearchResult
 

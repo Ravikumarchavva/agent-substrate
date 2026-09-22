@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.tools.compute.calculator import CalculatorTool, safe_eval
+from substrate.integrations.tools.compute.calculator import CalculatorTool, safe_eval
 
 
 @pytest.mark.parametrize(

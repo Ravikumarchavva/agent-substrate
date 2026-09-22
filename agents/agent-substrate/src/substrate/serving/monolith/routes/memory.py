@@ -1,5 +1,5 @@
 """User long-term memory management — the HTTP surface for viewing/deleting
-the facts ``MemoryTool.remember()`` saves (see ``infrastructure/serving_factory
+the facts ``MemoryTool.remember()`` saves (see ``serving/factory
 .py::build_memory_tool()`` for how those get keyed by user, not thread).
 
 Routes:
@@ -35,7 +35,7 @@ async def list_memories(
     # No namespace override: MemoryTool.remember() never passes one, so
     # every fact lands in DurableMemoryStore's default namespace — read from
     # the same place things are actually written to (see also
-    # infrastructure/serving_factory.py::build_user_memory_context_block()).
+    # serving/factory.py::build_user_memory_context_block()).
     memories = await ctx.long_term_memory.list_all(
         Actor(type="user", key=user.sub), limit=100
     )

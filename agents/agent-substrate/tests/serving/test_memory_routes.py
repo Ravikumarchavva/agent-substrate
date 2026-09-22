@@ -9,7 +9,7 @@ import uuid
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from substrate.capabilities.memory.durable_memory_store import DurableMemoryStore
+from substrate.integrations.memory.durable_memory_store import DurableMemoryStore
 from substrate.kernel.core.identity import Actor
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.security.deps import get_current_user

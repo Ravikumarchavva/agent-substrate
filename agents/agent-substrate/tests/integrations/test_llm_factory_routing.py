@@ -46,7 +46,7 @@ def test_self_hosted_and_openai_compatible_providers_route_to_chat_completions_c
     the client that speaks ``/v1/chat/completions``, not the one that
     speaks OpenAI's newer Responses API, which self-hosted servers do not
     implement."""
-    from substrate.capabilities.llm.chat_client import OpenAIChatCompletionClient
+    from substrate.agents.llm.chat_client import OpenAIChatCompletionClient
 
     factory = LLMFactory(model, "sk-test")
     kwargs = {"base_url": base_url} if base_url else {}

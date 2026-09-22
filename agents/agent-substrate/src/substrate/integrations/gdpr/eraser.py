@@ -10,7 +10,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.agents.workspace.layout import tenant_prefix, user_prefix
-from substrate.capabilities.storage.session_index_erasure import (
+from substrate.integrations.storage.session_index_erasure import (
     erase_session_index,
     erase_session_index_for_tenant,
 )

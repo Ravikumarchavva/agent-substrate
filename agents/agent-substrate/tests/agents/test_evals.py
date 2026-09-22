@@ -7,7 +7,7 @@ import pytest
 from dataclasses import dataclass
 
 from substrate.agents.runtime.context import RunContext
-from substrate.fabric.evals import (
+from substrate.agents.evals import (
     EvalCase,
     EvalDataset,
     EvalRunner,
@@ -15,7 +15,7 @@ from substrate.fabric.evals import (
     CORRECTNESS,
     TOOL_USAGE,
 )
-from substrate.fabric.evals.judge import LLMJudge
+from substrate.agents.evals.judge import LLMJudge
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message
 

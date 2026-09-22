@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.infrastructure.serving_factory import build_chat_tools
+from substrate.serving.factory import build_chat_tools
 from substrate.integrations.llm.endpoint import InferenceEndpoint
 from substrate.runtimes.document_intelligence.extract import extract_document
 from substrate.runtimes.document_intelligence.service.convert import (
@@ -294,7 +294,7 @@ async def _build_file_context(
                         # or referenced from a different thread than it was
                         # uploaded under — either way, index it now, tagged
                         # with *this* message's real thread_id.
-                        from substrate.capabilities.knowledge.session_ingest import (
+                        from substrate.integrations.knowledge.session_ingest import (
                             ingest_session_document,
                         )
 

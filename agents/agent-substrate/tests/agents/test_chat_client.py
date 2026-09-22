@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 import pytest
 
-from substrate.capabilities.llm.chat_client import OpenAIChatCompletionClient
+from substrate.agents.llm.chat_client import OpenAIChatCompletionClient
 from substrate.kernel import ChatMessage, TextBlock
 from substrate.kernel.llm import GenerationOptions
 

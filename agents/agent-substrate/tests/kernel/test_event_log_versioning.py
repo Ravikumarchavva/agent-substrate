@@ -55,7 +55,7 @@ async def test_version_and_unknown_kind_round_trip_through_postgres() -> None:
     except Exception:
         pytest.skip("Postgres not reachable")
 
-    from substrate.infrastructure.runtime.event_log import EventLog
+    from substrate.integrations.runtime.event_log import EventLog
 
     log = EventLog(pool)
     run_id = f"evlog-{uuid.uuid4().hex}"

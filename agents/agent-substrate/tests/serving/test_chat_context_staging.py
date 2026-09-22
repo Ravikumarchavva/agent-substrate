@@ -191,7 +191,7 @@ async def test_send_skips_reingestion_for_file_already_staged_this_thread():
     body.thread_id = "thread-1"
 
     with patch(
-        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(),
     ) as mock_ingest:
         text_block, _images, attachments, _new_attachments = await _build_file_context(
@@ -224,7 +224,7 @@ async def test_send_ingests_a_file_staged_under_a_different_thread():
     body.thread_id = "thread-1"
 
     with patch(
-        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(),
     ) as mock_ingest:
         text_block, _images, attachments, _new_attachments = await _build_file_context(
@@ -283,7 +283,7 @@ async def test_send_ingest_failure_releases_quota():
     redis = _FakeRedis()
     exc = None
     with patch(
-        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(side_effect=RuntimeError("db exploded")),
     ):
         try:

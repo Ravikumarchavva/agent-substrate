@@ -3,7 +3,7 @@ keys long-term ops by user_id, not session_id."""
 
 from __future__ import annotations
 
-from substrate.infrastructure.serving_factory import build_memory_tool
+from substrate.serving.factory import build_memory_tool
 
 
 def test_returns_none_when_neither_backend_configured():

@@ -28,7 +28,7 @@ import io
 from substrate.kernel.agent.safety import SafetyVerdict, Severity
 from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.capabilities.safety.image_classifier")
+logger = setup_logging("substrate.integrations.safety.image_classifier")
 
 _MODEL_REPO = "OwenElliott/image-safety-classifier-xs"
 _MODEL_REVISION = "54f4560bd9c5ee92d45dc30418a8f8680e80de6d"

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-from substrate.capabilities.knowledge.reranker import CrossEncoderReranker
+from substrate.integrations.knowledge.reranker import CrossEncoderReranker
 from substrate.kernel.core.content import TextBlock
 from substrate.kernel.storage.vector import SearchResult
 

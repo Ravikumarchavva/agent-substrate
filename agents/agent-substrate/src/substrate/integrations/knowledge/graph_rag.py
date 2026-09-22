@@ -7,7 +7,7 @@ with graph context.
 
 Usage::
 
-    from substrate.capabilities.knowledge.graph_rag import GraphRAGPipeline
+    from substrate.integrations.knowledge.graph_rag import GraphRAGPipeline
 
     pipeline = GraphRAGPipeline(
         rag_pipeline=rag_pipeline,
@@ -30,7 +30,7 @@ from substrate.kernel.storage.vector import SearchResult
 if TYPE_CHECKING:
     from substrate.kernel.llm import LLMClient
     from substrate.kernel.storage.graph import GraphStore
-    from substrate.capabilities.knowledge.pipeline import RAGPipeline
+    from substrate.integrations.knowledge.pipeline import RAGPipeline
 
 logger = setup_logging()
 

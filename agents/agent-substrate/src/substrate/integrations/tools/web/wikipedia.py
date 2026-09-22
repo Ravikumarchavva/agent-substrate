@@ -18,7 +18,7 @@ class WikipediaTool:
 
     Example::
 
-        from substrate.capabilities.tools import WikipediaTool
+        from substrate.integrations.tools import WikipediaTool
         agent = ReActAgent("bot", runtime, model=llm, tools=[WikipediaTool()])
     """
 

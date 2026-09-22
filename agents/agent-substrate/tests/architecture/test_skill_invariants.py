@@ -19,10 +19,10 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from substrate.capabilities.tools.skills._loader import SkillLoader
+from substrate.integrations.tools.skills._loader import SkillLoader
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SKILLS_DIR = REPO_ROOT / "src" / "substrate" / "capabilities" / "tools" / "skills"
+SKILLS_DIR = REPO_ROOT / "src" / "substrate" / "integrations" / "tools" / "skills"
 
 # excel_report is the most complex skill by design (chart-quality guard
 # functions) and is deliberately split across SKILL.md + references/ to fit

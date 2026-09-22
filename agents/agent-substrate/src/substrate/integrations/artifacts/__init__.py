@@ -9,7 +9,7 @@ See ``okf.py`` for the format and ``store.py`` for the storage layout.
 
 from __future__ import annotations
 
-from substrate.capabilities.artifacts.okf import (
+from substrate.integrations.artifacts.okf import (
     Concept,
     OKFParseError,
     agent_actor,
@@ -18,7 +18,7 @@ from substrate.capabilities.artifacts.okf import (
     serialize,
     utc_now_iso,
 )
-from substrate.capabilities.artifacts.store import ArtifactRef, ArtifactStore, slugify
+from substrate.integrations.artifacts.store import ArtifactRef, ArtifactStore, slugify
 
 __all__ = [
     "ArtifactRef",

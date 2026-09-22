@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.graph.lance_graph_store import LanceGraphStore
+from substrate.integrations.graph.lance_graph_store import LanceGraphStore
 from substrate.kernel.storage.graph import CypherCapable, Entity, Relationship
 
 

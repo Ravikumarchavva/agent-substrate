@@ -3,8 +3,8 @@
 
 Moved out of ``agents/factory.py`` — this is serving configuration wearing
 an agent-construction disguise (a fixed demo topology, sole caller
-``serving_factory.py``), not general-purpose L1 agent-building API.
-``infrastructure/`` is the orthogonal layer that's allowed to know about
+``serving/factory.py``), not general-purpose L1 agent-building API.
+``serving/`` is the orthogonal module that's allowed to know about
 concrete serving-facing shapes like this one.
 """
 
@@ -47,10 +47,10 @@ def build_research_orchestrator(
     when ``AGENT_MODE=orchestrator``.
 
     Tools are passed in rather than constructed here — agents/ must not
-    import capabilities/ (``WebSearchTool``, ``CalculatorTool``, etc. all
-    live in ``capabilities/tools/``), so the caller (``infrastructure/
-    serving_factory.py``, which is allowed to cross both layers) builds the
-    concrete tool instances and hands them to each specialist.
+    import integrations/ (``WebSearchTool``, ``CalculatorTool``, etc. all
+    live in ``integrations/tools/``), so the caller (``serving/factory.py``,
+    which is allowed to cross both layers) builds the concrete tool
+    instances and hands them to each specialist.
 
     Returned unregistered, like ``create_assistant_agent`` — the caller
     (which owns the ``Runtime``) is responsible for registering every agent
@@ -103,7 +103,7 @@ def build_research_orchestrator(
         ),
     )
     # Display names only — Actor routing keys stay lowercase (unchanged
-    # from before this was extracted from infrastructure/serving_factory.py).
+    # from before this was extracted from serving/factory.py).
     researcher.name = "Researcher"
     calculator.name = "Calculator"
     clock.name = "Clock"

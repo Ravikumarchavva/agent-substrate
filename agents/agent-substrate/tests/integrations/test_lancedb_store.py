@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.vector.lancedb_store import LanceDBVectorStore
+from substrate.integrations.vector.lancedb_store import LanceDBVectorStore
 from substrate.kernel.core.content import TextBlock
 from substrate.kernel.storage.vector import Document
 

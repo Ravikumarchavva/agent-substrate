@@ -5,7 +5,7 @@ Mirrors the ``SandboxRuntime`` pattern
 coarse Protocol, a handful of concrete backends, and a ``build_rag_backend``
 factory. Construct-and-pass, exactly like an LLM client::
 
-    from substrate.capabilities.knowledge.backends import build_rag_backend
+    from substrate.integrations.knowledge.backends import build_rag_backend
 
     rag = build_rag_backend("local", embedding_client=..., vector_store=...)
 

@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from substrate.capabilities.tools.web.read_url import ReadUrlTool, _extract_relevant
-from substrate.capabilities.tools.web.wikipedia import WikipediaTool
-from substrate.capabilities.tools.web.search import WebSearchTool
-from substrate.capabilities.tools.web.surfer import WebSurferTool
+from substrate.integrations.tools.web.read_url import ReadUrlTool, _extract_relevant
+from substrate.integrations.tools.web.wikipedia import WikipediaTool
+from substrate.integrations.tools.web.search import WebSearchTool
+from substrate.integrations.tools.web.surfer import WebSurferTool
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ async def test_read_url_tool_exa_path():
 
 
 @pytest.mark.asyncio
-@patch("substrate.capabilities.tools.web.wikipedia.httpx.AsyncClient")
+@patch("substrate.integrations.tools.web.wikipedia.httpx.AsyncClient")
 async def test_wikipedia_tool_capping(mock_client_class):
     mock_client = AsyncMock()
     mock_client_class.return_value.__aenter__.return_value = mock_client
@@ -323,8 +323,8 @@ async def test_web_search_tool_exa_priority_over_tavily():
 @pytest.mark.asyncio
 async def test_web_surfer_tool_capping():
     with (
-        patch("substrate.capabilities.tools.web.surfer.PLAYWRIGHT_AVAILABLE", True),
-        patch("substrate.capabilities.tools.web.surfer.async_playwright"),
+        patch("substrate.integrations.tools.web.surfer.PLAYWRIGHT_AVAILABLE", True),
+        patch("substrate.integrations.tools.web.surfer.async_playwright"),
     ):
         tool = WebSurferTool()
 

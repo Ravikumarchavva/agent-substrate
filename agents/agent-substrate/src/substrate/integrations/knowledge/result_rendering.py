@@ -13,7 +13,7 @@ per-tool.
 
 from __future__ import annotations
 
-from substrate.capabilities.knowledge.citations import CitationLedger, build_citations
+from substrate.integrations.knowledge.citations import CitationLedger, build_citations
 from substrate.kernel import MediaBlock, TextBlock
 from substrate.kernel.storage.vector import SearchResult
 from substrate.kernel.tools import ToolExecutionResult

@@ -102,7 +102,7 @@ settings = SubstrateConfig()
 #
 # ### Persist memory in Redis
 # ```python
-# from substrate.capabilities.history import RedisHistoryProvider  # ← integrations, not core!
+# from substrate.integrations.history import RedisHistoryProvider  # ← integrations, not core!
 #
 # mem = RedisMemory(session_id="my-chat", redis_url="redis://localhost:6379/0")
 # await mem.connect()

@@ -10,7 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from substrate.capabilities.storage.workspace import WorkspaceFileStore
+from substrate.agents.storage.local_object_store import WorkspaceFileStore
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.models import WorkspaceQuota
 from substrate.serving.monolith.security.deps import get_current_user

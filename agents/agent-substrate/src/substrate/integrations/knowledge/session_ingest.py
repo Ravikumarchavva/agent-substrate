@@ -55,10 +55,10 @@ async def ingest_session_document(
     """Extract, chunk, embed, and index one uploaded document into the
     caller's per-user Lance-backed vector/tree/graph stores.
     """
-    from substrate.capabilities.knowledge.graph_rag import GraphRAGPipeline
-    from substrate.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
-    from substrate.capabilities.knowledge.pipeline import RAGPipeline
-    from substrate.infrastructure.serving_factory import (
+    from substrate.integrations.knowledge.graph_rag import GraphRAGPipeline
+    from substrate.integrations.knowledge.page_pipeline import PageIndexRAGPipeline
+    from substrate.integrations.knowledge.pipeline import RAGPipeline
+    from substrate.serving.factory import (
         build_page_index_memory,
         build_session_graph_store,
         build_session_index_vector_store,
@@ -118,7 +118,7 @@ async def ingest_session_document(
         for doc in text_documents
     ]
 
-    from substrate.capabilities.knowledge.chunking import recommend_chunk_params
+    from substrate.integrations.knowledge.chunking import recommend_chunk_params
 
     # None (the default) -> derive from the configured embedding model,
     # same "explicit wins, else model-informed default" resolution

@@ -23,7 +23,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import AsyncIterator
 
-from substrate.infrastructure.observability.runtime_metrics import (
+from substrate.agents.runtime.backends._runtime_metrics import (
     retry_counter,
     suspension_counter,
 )

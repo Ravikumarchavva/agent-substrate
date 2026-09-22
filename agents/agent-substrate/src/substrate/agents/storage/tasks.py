@@ -1,7 +1,7 @@
 """In-memory task store — per-agent Kanban boards, keyed by (conversation_id, agent_id, branch_id).
 
 Constructor-injected everywhere, like every other backend in this codebase —
-see ``infrastructure/serving_factory.py::init_infrastructure`` for where a
+see ``serving/factory.py::init_infrastructure`` for where a
 ``PgTaskStore`` is built instead when ``RUNTIME_BACKEND=postgres``.
 """
 

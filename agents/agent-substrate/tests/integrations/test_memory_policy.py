@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from substrate.agents.context.builder import DefaultContextBuilder
-from substrate.capabilities.memory.policy import DefaultMemoryExposurePolicy
+from substrate.integrations.memory.policy import DefaultMemoryExposurePolicy
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.storage.history import MessageNode
 from substrate.kernel.storage.memory import (

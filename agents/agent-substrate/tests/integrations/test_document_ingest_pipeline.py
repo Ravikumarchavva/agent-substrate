@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from substrate.capabilities.knowledge.document_ingest_pipeline import (
+from substrate.integrations.knowledge.document_ingest_pipeline import (
     DocumentIngestPipeline,
     ExtractedFile,
     ExtractionFailedError,
@@ -234,7 +234,7 @@ def _capture_pipeline_warnings():
     """
     import logging
 
-    from substrate.capabilities.knowledge import document_ingest_pipeline as dip
+    from substrate.integrations.knowledge import document_ingest_pipeline as dip
 
     records: list[logging.LogRecord] = []
 

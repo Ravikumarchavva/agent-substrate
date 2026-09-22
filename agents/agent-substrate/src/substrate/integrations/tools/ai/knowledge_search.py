@@ -12,9 +12,9 @@ clickable, grounded source for it.
 from __future__ import annotations
 
 from substrate.agents.storage.tasks import current_thread_id
-from substrate.capabilities.knowledge.backends import RagBackend
-from substrate.capabilities.knowledge.citations import CitationLedgerStore
-from substrate.capabilities.knowledge.result_rendering import render_search_results
+from substrate.integrations.knowledge.backends import RagBackend
+from substrate.integrations.knowledge.citations import CitationLedgerStore
+from substrate.integrations.knowledge.result_rendering import render_search_results
 from substrate.kernel import TextBlock
 from substrate.kernel.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging

@@ -1,19 +1,18 @@
-"""Durable file storage backends (L2).
+"""Durable storage backends (L2) — S3-compatible object storage + Postgres.
 
-``LocalFilesystemWorkspaceStore`` moved to ``agents.workspace`` — pure
-kernel+stdlib, no durable-infra dependency, so it belongs at L1 beside the
-rest of the workspace package. This package now holds only backends with a
-real L2 dependency (S3-compatible object storage, Postgres).
+``WorkspaceFileStore`` lives in ``agents.storage.local_object_store`` — the
+canonical zero-infra ``ObjectStore`` default. ``LocalFilesystemWorkspaceStore``
+lives in ``agents.workspace``. This package holds backends with a real L2
+dependency: ``S3Connector`` (raw S3-compatible client, SeaweedFS by default)
+and ``S3FileStore`` (the ``ObjectStore`` Protocol implementation built on
+top of it), Postgres-backed ``PgTaskStore`` and ``PostgresWorkspaceStore``.
 """
 
-from substrate.capabilities.storage.s3 import S3FileStore
-from substrate.capabilities.storage.workspace import (
-    WorkspaceFileStore,
-    WorkspacePathError,
-    WorkspaceQuotaExceededError,
-)
+from substrate.integrations.storage.s3_connector import S3Connector
+from substrate.integrations.storage.s3 import S3FileStore
+from substrate.integrations.storage.pg_task_store import PgTaskStore
 
-from substrate.capabilities.storage.workspace_store import (
+from substrate.integrations.storage.workspace_store import (
     BranchSnapshotHead,
     PostgresWorkspaceStore,
     SnapshotRecord,
@@ -21,13 +20,11 @@ from substrate.capabilities.storage.workspace_store import (
 )
 
 __all__ = [
+    "S3Connector",
     "S3FileStore",
-    "WorkspaceFileStore",
-    "WorkspacePathError",
-    "WorkspaceQuotaExceededError",
+    "PgTaskStore",
     "PostgresWorkspaceStore",
     "WorkspaceSnapshotBase",
     "SnapshotRecord",
     "BranchSnapshotHead",
 ]
-

@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from substrate.agents.runtime.resolver import ActorResolver
     from substrate.kernel.runtime.log_entry import EventLogProtocol
     from substrate.kernel.runtime.inbox import InboxProtocol
-    from substrate.kernel.runtime.scheduler import SchedulerProtocol
+    from substrate.agents.runtime._scheduling import SchedulerBackend
     from substrate.kernel.runtime.wakeup import SignalBusProtocol
     from substrate.kernel.runtime.supervisor import SupervisorProtocol
     from substrate.agents.runtime.context import Agent
@@ -59,7 +59,7 @@ class Worker:
         inbox: InboxProtocol,
         follow_graph: FollowGraph,
         fanout: FanoutStrategy,
-        scheduler: SchedulerProtocol,
+        scheduler: SchedulerBackend,
         supervisor: SupervisorProtocol,
         signal_bus: SignalBusProtocol,
         resolver: ActorResolver,

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore
-from substrate.capabilities.tools.memory import MemoryTool
+from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
+from substrate.integrations.tools.memory import MemoryTool
 from substrate.kernel.core.identity import Actor
 
 

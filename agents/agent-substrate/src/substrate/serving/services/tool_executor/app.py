@@ -9,7 +9,7 @@ from substrate.logger import setup_logging
 import os
 from contextlib import asynccontextmanager
 
-from substrate.infrastructure.cache.redis import RedisConnector
+from substrate.integrations.cache.redis import RedisConnector
 from substrate.serving.services.base import create_service_app
 from substrate.serving.services.tool_executor.executor import ToolRegistry
 from substrate.serving.services.tool_executor.routes import router
@@ -23,14 +23,14 @@ def _load_default_tools(code_interpreter_tool=None, task_store=None) -> list:
     tools = []
 
     try:
-        from substrate.capabilities.tools.web.surfer import WebSurferTool
+        from substrate.integrations.tools.web.surfer import WebSurferTool
 
         tools.append(WebSurferTool())
     except Exception:
         logger.debug("WebSurferTool not available")
 
     try:
-        from substrate.capabilities.tools.task_manager.tool import TaskManagerTool
+        from substrate.integrations.tools.task_manager.tool import TaskManagerTool
         from substrate.agents.storage.tasks import TaskStore
 
         tools.append(TaskManagerTool(store=task_store or TaskStore()))
@@ -66,12 +66,12 @@ async def lifespan(app):
     app.state.event_bus = event_bus
 
     # Code interpreter — explicit, fail-closed runtime selection (same switch as
-    # the monolith's infrastructure/serving_factory.py wiring). Defaults to k8s
+    # the monolith's serving/factory.py wiring). Defaults to k8s
     # here since this service only runs in cluster deployments.
     code_interpreter_tool = None
     try:
-        from substrate.capabilities.tools.code_interpreter import CodeInterpreterTool
-        from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.factory import (
+        from substrate.integrations.tools.code_interpreter import CodeInterpreterTool
+        from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.factory import (
             build_runtime,
             network_policy,
         )

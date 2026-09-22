@@ -14,8 +14,8 @@ from substrate.logger import setup_logging
 from pathlib import Path
 from typing import Any, Dict, List
 
-from substrate.capabilities.tools.skills._loader import SkillLoader
-from substrate.capabilities.tools.skills._models import SkillPackage, SkillMetadata
+from substrate.integrations.tools.skills._loader import SkillLoader
+from substrate.integrations.tools.skills._models import SkillPackage, SkillMetadata
 
 logger = setup_logging()
 

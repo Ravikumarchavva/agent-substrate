@@ -1,4 +1,12 @@
-"""Workspace-backed file store — a tenant-scoped directory tree on shared storage (L2).
+"""Workspace-backed file store — a tenant-scoped directory tree on shared storage.
+
+The canonical zero-infra ``ObjectStore`` (``kernel/storage/objects.py``)
+implementation — moved here from ``capabilities/storage/`` because it needs
+nothing beyond the local filesystem, same as every other storage Protocol's
+L1 default (``LocalFilesystemHistoryProvider``, `LocalFilesystemGraphStore`,
+etc.). ``agents/workspace/``'s ``BlobCAS`` composes with this by default;
+``capabilities/storage/s3.py::S3FileStore`` is the L2 production upgrade for
+the same Protocol.
 
 Server-side only: the tree lives at ``root`` (a local dir in monolith dev, a
 docker-compose volume, or a k8s RWX PVC mount in production — never on the

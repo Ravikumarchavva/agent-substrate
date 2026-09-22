@@ -9,7 +9,7 @@
     OpenAI text-embedding models.
 
 For the universal OpenAI-compatible client (Groq, Ollama, vLLM, Together, …)
-see ``substrate.capabilities.llm.OpenAIChatCompletionClient``.
+see ``substrate.agents.llm.OpenAIChatCompletionClient``.
 """
 
 from __future__ import annotations

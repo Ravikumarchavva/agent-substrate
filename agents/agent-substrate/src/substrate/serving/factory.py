@@ -1,11 +1,19 @@
 """Serving factory — constructs agents, tools, and runtime for the HTTP shell.
 
-This is the ONLY place in the codebase where serving/ and agents/capabilities
-meet.  Serving calls these factory functions; it never imports concrete agent
-or capability types directly.
+This is the *primary* place serving/ and agents/integrations meet — most
+routes call these factory functions instead of importing concrete agent or
+integration types directly. It is not the ONLY place: several
+``serving/monolith/routes/*.py`` files (``branches.py``, ``gdpr.py``,
+``admin.py``, ``chat.py``, ``knowledge.py``, ``files.py``, ``workspace.py``)
+import ``substrate.agents``/``substrate.integrations`` directly too, each
+for a narrow, documented reason — see the corresponding
+``ignore_imports`` entries in ``pyproject.toml``'s
+``"serving cannot import agents or integrations-that-were-capabilities"``
+contract.
 
-infrastructure/ is orthogonal to the 4-layer stack so cross-layer imports
-from substrate.agents and substrate.capabilities are permitted here.
+serving/ is orthogonal to the 3-layer stack (kernel -> agents ->
+integrations) so cross-layer imports from substrate.agents and
+substrate.integrations are permitted here.
 """
 
 from __future__ import annotations
@@ -152,7 +160,7 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
     Returns ``(runtime, stack_or_None)`` — caller must close the stack on shutdown.
     """
     if cfg.RUNTIME_BACKEND.lower() == "postgres":
-        from substrate.infrastructure.runtime import build_postgres_runtime
+        from substrate.integrations.runtime import build_postgres_runtime
 
         pg_url = (cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL).replace("+asyncpg", "")
         stack = AsyncExitStack()
@@ -192,7 +200,7 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
 
 def _init_file_store(cfg: SubstrateConfig) -> Any:
     if cfg.FILE_STORE_BACKEND == "s3":
-        from substrate.capabilities.storage.s3 import S3FileStore
+        from substrate.integrations.storage.s3 import S3FileStore
 
         return S3FileStore(
             endpoint_url=cfg.FILE_STORE_ENDPOINT or "",
@@ -204,7 +212,7 @@ def _init_file_store(cfg: SubstrateConfig) -> Any:
         )
     # Default: "local" — a per-user directory tree on server-side storage
     # (local dir in dev, docker volume in compose, RWX PVC in k8s).
-    from substrate.capabilities.storage.workspace import WorkspaceFileStore
+    from substrate.agents.storage.local_object_store import WorkspaceFileStore
 
     return WorkspaceFileStore(
         root=cfg.FILE_STORE_ROOT,
@@ -217,7 +225,7 @@ def _init_pending_file_store(cfg: SubstrateConfig) -> Any:
     file_store — see capabilities/storage/pending.py. Deliberately never
     S3/SeaweedFS-backed, regardless of FILE_STORE_BACKEND: an unsent
     attachment must not touch permanent storage at all."""
-    from substrate.capabilities.storage.pending import PendingFileStore
+    from substrate.integrations.storage.pending import PendingFileStore
 
     return PendingFileStore(cfg.PENDING_UPLOAD_LOCAL_PATH)
 
@@ -238,10 +246,10 @@ async def init_infrastructure(
     """
     import redis.asyncio as aioredis
 
-    from substrate.capabilities.knowledge.backends import build_rag_backend
-    from substrate.capabilities.pipeline.data_ref import DataRefStore
-    from substrate.capabilities.tools.skills._manager import SkillManager
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.knowledge.backends import build_rag_backend
+    from substrate.integrations.pipeline.data_ref import DataRefStore
+    from substrate.integrations.tools.skills._manager import SkillManager
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
     from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
     history = await build_history_provider(
@@ -277,7 +285,7 @@ async def init_infrastructure(
     runtime, runtime_stack = await init_runtime(cfg)
 
     if cfg.RUNTIME_BACKEND.lower() == "postgres":
-        from substrate.infrastructure.storage.pg_task_store import PgTaskStore
+        from substrate.integrations.storage.pg_task_store import PgTaskStore
 
         task_store: Any = PgTaskStore(session_factory)
         await task_store.setup()
@@ -312,7 +320,7 @@ async def init_infrastructure(
     # Curated OKF bundles ride on the same object store as files (one
     # bucket, one erasure path, one quota) but under their own key prefix,
     # which the sandbox never mounts — see capabilities/artifacts/store.py.
-    from substrate.capabilities.artifacts import ArtifactStore
+    from substrate.integrations.artifacts import ArtifactStore
 
     artifact_store = ArtifactStore(file_store)
     if hasattr(file_store, "set_quota_override"):
@@ -431,23 +439,23 @@ async def init_tool_registry(
     """
     from substrate.agents.storage.tasks import TaskStore
     from substrate.agents.tools.toolbox import Toolbox
-    from substrate.capabilities.tools import (
+    from substrate.integrations.tools import (
         CalculatorTool,
         CurrentTimeTool,
     )
-    from substrate.capabilities.tools.ai.knowledge_search import KnowledgeSearchTool
-    from substrate.capabilities.tools.code_interpreter import CodeInterpreterTool
-    from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.factory import (
+    from substrate.integrations.tools.ai.knowledge_search import KnowledgeSearchTool
+    from substrate.integrations.tools.code_interpreter import CodeInterpreterTool
+    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.factory import (
         build_runtime,
         network_policy,
     )
-    from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.staged import (
+    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.staged import (
         StagedSandboxRuntime,
     )
-    from substrate.capabilities.tools.human_input import AskHumanTool
-    from substrate.capabilities.tools.task_manager.tool import TaskManagerTool
-    from substrate.capabilities.tools.web.read_url import ReadUrlTool
-    from substrate.capabilities.tools.web.search import WebSearchTool
+    from substrate.integrations.tools.human_input import AskHumanTool
+    from substrate.integrations.tools.task_manager.tool import TaskManagerTool
+    from substrate.integrations.tools.web.read_url import ReadUrlTool
+    from substrate.integrations.tools.web.search import WebSearchTool
 
     async def _board_event_sink(conversation_id: str, board: dict) -> None:
         # Subagent boards run in a separate run whose events never reach the
@@ -583,7 +591,7 @@ async def init_tool_registry(
             )
         )
     if model_client is not None and embedding_client is not None:
-        from substrate.capabilities.tools.ai.session_document_search import (
+        from substrate.integrations.tools.ai.session_document_search import (
             SessionDocumentSearchTool,
         )
 
@@ -591,15 +599,15 @@ async def init_tool_registry(
             SessionDocumentSearchTool(cfg, embedding_client, model_client)
         )
     if artifact_store is not None:
-        from substrate.capabilities.tools.artifacts import ArtifactsTool
+        from substrate.integrations.tools.artifacts import ArtifactsTool
 
         registry.add(ArtifactsTool(artifact_store, model_name=cfg.CHAT_MODEL))
     if skill_manager is not None:
-        from substrate.capabilities.tools.skills.tool import SkillTool
+        from substrate.integrations.tools.skills.tool import SkillTool
 
         registry.add(SkillTool(skill_manager))
 
-    from substrate.capabilities.tools.utils.tool_search import ToolSearchTool
+    from substrate.integrations.tools.utils.tool_search import ToolSearchTool
 
     local_tools = [
         cast(Tool, t)
@@ -640,15 +648,15 @@ async def init_runtime_services(
 ) -> RuntimeServices:
     """Create ToolChainTool, pipeline engine, triggers."""
     from substrate.agents.tools.invoker import ToolInvoker
-    from substrate.capabilities.pipeline.data_ref import DataRefArtifactStore
-    from substrate.capabilities.pipeline.engine import PipelineEngine
-    from substrate.capabilities.pipeline.store import PipelineStore
-    from substrate.capabilities.tools.chain.bridge import ChainBridgeRegistry
-    from substrate.capabilities.tools.chain.tool import ToolChainTool
-    from substrate.capabilities.tools.pipeline_manager import PipelineManagerTool
-    from substrate.capabilities.triggers.conditions import ConditionMonitor
-    from substrate.capabilities.triggers.scheduler import TriggerScheduler
-    from substrate.capabilities.triggers.webhooks import WebhookRegistry
+    from substrate.integrations.pipeline.data_ref import DataRefArtifactStore
+    from substrate.integrations.pipeline.engine import PipelineEngine
+    from substrate.integrations.pipeline.store import PipelineStore
+    from substrate.integrations.tools.chain.bridge import ChainBridgeRegistry
+    from substrate.integrations.tools.chain.tool import ToolChainTool
+    from substrate.integrations.tools.pipeline_manager import PipelineManagerTool
+    from substrate.integrations.triggers.conditions import ConditionMonitor
+    from substrate.integrations.triggers.scheduler import TriggerScheduler
+    from substrate.integrations.triggers.webhooks import WebhookRegistry
     from substrate.integrations.events.redis_event_bus import EventBus
     from substrate.kernel.tools.chain import ChainPolicy
 
@@ -833,8 +841,9 @@ async def build_agent_for_thread(
     the default single-assistant shape) lives in ``agents/factory.py`` —
     this function only decides which one to build from ``cfg.AGENT_MODE``
     and registers the result(s) with ``runtime``. ``cfg`` is passed in
-    rather than imported from ``substrate.serving.*`` — this module
-    (``infrastructure/``) must not reach into ``serving/``, only the reverse.
+    rather than imported from a submodule of ``substrate.serving`` directly —
+    this factory stays a leaf callers depend on, not a hub that reaches back
+    into the rest of ``serving/``.
 
     ``history`` (the shared HistoryProvider) is provided to the agent
     for session conversation history.
@@ -849,7 +858,7 @@ async def build_agent_for_thread(
     from substrate.agents.storage import InMemoryHistoryProvider
     from substrate.agents.context.compaction.presets import build_token_budget_pipeline
     from substrate.agents.factory import create_assistant_agent
-    from substrate.infrastructure.research_orchestrator import build_research_orchestrator
+    from substrate.serving.research_orchestrator import build_research_orchestrator
 
     if runtime is None:
         raise ValueError("build_agent_for_thread() requires a runtime.")
@@ -885,9 +894,9 @@ async def build_agent_for_thread(
         tools = [*tools, memory_tool]
 
     if cfg.AGENT_MODE.lower() == "orchestrator":
-        from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool
-        from substrate.capabilities.tools.web.read_url import ReadUrlTool
-        from substrate.capabilities.tools.web.search import WebSearchTool
+        from substrate.integrations.tools import CalculatorTool, CurrentTimeTool
+        from substrate.integrations.tools.web.read_url import ReadUrlTool
+        from substrate.integrations.tools.web.search import WebSearchTool
 
         exa_api_key = cfg.EXA_API_KEY or None
         tavily_api_key = cfg.TAVILY_API_KEY or None
@@ -985,9 +994,9 @@ def build_chat_tools(toolbox: Any, bridge: Any) -> list[Any]:
 
     Serving calls this instead of importing AskHumanTool and WebSurferTool directly.
     """
-    from substrate.capabilities.tools.human_input import AskHumanTool
-    from substrate.capabilities.tools.web.search import WebSearchTool
-    from substrate.capabilities.tools.web.surfer import WebSurferTool
+    from substrate.integrations.tools.human_input import AskHumanTool
+    from substrate.integrations.tools.web.search import WebSearchTool
+    from substrate.integrations.tools.web.surfer import WebSurferTool
 
     base_tools = [t for t in toolbox.all() if not isinstance(t, AskHumanTool)]
     ask_tool = AskHumanTool(handler=bridge.human_handler, max_requests_per_run=5)
@@ -1021,7 +1030,7 @@ async def build_history_provider(
     a running Postgres instance — 100% durable by default.
     """
     if database_url:
-        from substrate.capabilities.history.durable_history import DurableHistoryProvider
+        from substrate.integrations.history.durable_history import DurableHistoryProvider
 
         provider = DurableHistoryProvider(database_url=database_url)
         await provider.connect()
@@ -1048,7 +1057,7 @@ async def build_workspace_store(
     exists only for tests (see ``agents/context/workspace.py``).
     """
     if database_url:
-        from substrate.capabilities.storage.workspace_store import PostgresWorkspaceStore
+        from substrate.integrations.storage.workspace_store import PostgresWorkspaceStore
 
         store = PostgresWorkspaceStore(database_url)
         await store.connect()
@@ -1075,7 +1084,7 @@ async def build_short_term_memory(
 
     Uses Postgres + Redis when available, otherwise LocalFileSessionStore in local_path.
     """
-    from substrate.capabilities.memory.factory import (
+    from substrate.integrations.memory.factory import (
         build_short_term_memory as _build,
     )
 
@@ -1093,7 +1102,7 @@ async def build_long_term_memory(
     local_path: str = "./data/db/memory/long_term",
 ) -> Any:
     """Build and connect a durable LongTermMemory (Postgres full-text or Lance)."""
-    from substrate.capabilities.memory.factory import (
+    from substrate.integrations.memory.factory import (
         build_long_term_memory as _build,
     )
 
@@ -1123,7 +1132,7 @@ def build_session_index_vector_store(
     directory nesting instead of a namespace path.
     """
     from substrate.agents.workspace.layout import user_index_prefix
-    from substrate.capabilities.vector.lancedb_store import LanceDBVectorStore
+    from substrate.integrations.vector.lancedb_store import LanceDBVectorStore
 
     # user_index_prefix() validates tenant_id/user_id (rejects path
     # separators/traversal — these ids ultimately come from request-scoped
@@ -1176,9 +1185,9 @@ def build_session_rag_backend(
     a separate path that never calls ``.ingest()``/``.load()`` on the
     ``RagBackend`` this function returns.
     """
-    from substrate.capabilities.knowledge.backends.local import LocalRagBackend
-    from substrate.capabilities.knowledge.chunking import recommend_chunk_params
-    from substrate.capabilities.knowledge.pipeline import RAGPipeline
+    from substrate.integrations.knowledge.backends.local import LocalRagBackend
+    from substrate.integrations.knowledge.chunking import recommend_chunk_params
+    from substrate.integrations.knowledge.pipeline import RAGPipeline
 
     # None (the default) -> derive from the configured embedding model --
     # same resolution backends/factory.py's build_rag_backend and
@@ -1214,11 +1223,11 @@ def build_session_rag_backend(
     reranker = None
     if cfg.EMBEDDING_RERANKER_SERVICE_URL:
         if embedding_reranker_client is not None:
-            from substrate.capabilities.knowledge.reranker import CrossEncoderReranker
+            from substrate.integrations.knowledge.reranker import CrossEncoderReranker
 
             reranker = CrossEncoderReranker(embedding_reranker_client)
         elif model_client is not None:
-            from substrate.capabilities.knowledge.reranker import LLMReranker
+            from substrate.integrations.knowledge.reranker import LLMReranker
 
             reranker = LLMReranker(model_client)
 
@@ -1251,7 +1260,7 @@ def build_page_index_memory(cfg: SubstrateConfig, tenant_id: str, user_id: str) 
     namespace/path needs both ids, which aren't known until a real request
     does.
     """
-    from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore
+    from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
     from substrate.agents.workspace.layout import user_index_prefix
 
     key = user_index_prefix(tenant_id, user_id)
@@ -1286,7 +1295,7 @@ def build_session_graph_store(
     a user-wide read instance, e.g. ``get_neighbors`` across everything a
     user has ever uploaded.
     """
-    from substrate.capabilities.graph.lance_graph_store import LanceGraphStore
+    from substrate.integrations.graph.lance_graph_store import LanceGraphStore
     from substrate.agents.workspace.layout import user_index_prefix
 
     key = user_index_prefix(tenant_id, user_id)
@@ -1330,8 +1339,8 @@ def build_safety_middleware(cfg: SubstrateConfig) -> Any:
     from substrate.agents.middleware.guardrails.multimodal_safety import (
         MultimodalSafetyMiddleware,
     )
-    from substrate.capabilities.safety.image_classifier import ImageSafetyClassifier
-    from substrate.capabilities.safety.text_classifier import PromptGuardClassifier
+    from substrate.integrations.safety.image_classifier import ImageSafetyClassifier
+    from substrate.integrations.safety.text_classifier import PromptGuardClassifier
 
     text_threshold = getattr(cfg, "SAFETY_TEXT_THRESHOLD", 0.9)
     nsfw_threshold = getattr(cfg, "SAFETY_IMAGE_NSFW_THRESHOLD", 0.5)
@@ -1400,7 +1409,7 @@ def build_memory_tool(
     """
     if short_term_memory is None and long_term_memory is None:
         return None
-    from substrate.capabilities.tools.memory import MemoryTool
+    from substrate.integrations.tools.memory import MemoryTool
     from substrate.kernel.core.identity import Actor
 
     return MemoryTool(
@@ -1487,7 +1496,7 @@ def build_runtime_default_tools() -> list[Any]:
     """Build the default tool list for the agent_runtime microservice."""
     tools: list[Any] = []
     try:
-        from substrate.capabilities.tools.web.surfer import WebSurferTool
+        from substrate.integrations.tools.web.surfer import WebSurferTool
 
         tools.append(WebSurferTool())
     except Exception:

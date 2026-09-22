@@ -27,7 +27,7 @@ from substrate.kernel.messaging.stream import (
     ReasoningDelta,
 )
 
-from substrate.capabilities.tools.human_input import InputOption
+from substrate.integrations.tools.human_input import InputOption
 
 from .hitl import _HITLRequest
 from .taskboard import _TaskBoardUpdate

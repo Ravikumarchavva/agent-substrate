@@ -17,12 +17,12 @@ import pytest
 
 from substrate.agents.workspace import LocalFilesystemWorkspaceStore
 from substrate.agents.workspace.scope import WorkspaceScope
-from substrate.capabilities.storage.workspace import WorkspaceFileStore
-from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.base import (
+from substrate.agents.storage.local_object_store import WorkspaceFileStore
+from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
     ExecResult,
     SandboxSpec,
 )
-from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.staged import (
+from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.staged import (
     StagedSandboxRuntime,
 )
 

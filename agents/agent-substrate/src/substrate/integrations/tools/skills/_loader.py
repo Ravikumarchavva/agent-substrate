@@ -28,7 +28,7 @@ from typing import Dict, List
 
 import yaml
 
-from substrate.capabilities.tools.skills._models import SkillPackage, SkillMetadata
+from substrate.integrations.tools.skills._models import SkillPackage, SkillMetadata
 
 logger = setup_logging()
 

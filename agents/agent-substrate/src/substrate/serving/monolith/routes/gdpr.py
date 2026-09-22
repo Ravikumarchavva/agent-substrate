@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.capabilities.gdpr.eraser import erase_tenant, erase_user
+from substrate.integrations.gdpr.eraser import erase_tenant, erase_user
 from substrate.serving.monolith.security.rls_deps import get_service_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.shared.auth.middleware import require_service_identity

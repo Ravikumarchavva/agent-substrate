@@ -29,7 +29,7 @@ from substrate.agents.storage import (
     LocalFilesystemHistoryProvider,
     project_messages,
 )
-from substrate.capabilities.history import DurableHistoryProvider
+from substrate.integrations.history import DurableHistoryProvider
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.storage.history import MessageNode
 

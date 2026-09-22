@@ -72,7 +72,7 @@ class CalculatorTool:
 
     Example::
 
-        from substrate.capabilities.tools import CalculatorTool
+        from substrate.integrations.tools import CalculatorTool
         agent = ReActAgent("bot", runtime, model=llm, tools=[CalculatorTool()])
     """
 

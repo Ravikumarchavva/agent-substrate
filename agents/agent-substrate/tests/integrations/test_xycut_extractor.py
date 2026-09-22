@@ -16,7 +16,7 @@ pytest.importorskip("pdfplumber")
 pytest.importorskip("reportlab")
 pytest.importorskip("paddlex")
 
-from substrate.capabilities.knowledge.loaders.xycut_extractor import (
+from substrate.integrations.knowledge.loaders.xycut_extractor import (
     XYCutPDFExtractor,
 )
 

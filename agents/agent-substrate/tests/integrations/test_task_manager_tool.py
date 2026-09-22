@@ -8,7 +8,7 @@ from substrate.agents.storage.tasks import (
     current_parent_agent_id,
     current_thread_id,
 )
-from substrate.capabilities.tools.task_manager.tool import TaskManagerTool
+from substrate.integrations.tools.task_manager.tool import TaskManagerTool
 from substrate.kernel.storage.tasks import TaskStatus
 
 

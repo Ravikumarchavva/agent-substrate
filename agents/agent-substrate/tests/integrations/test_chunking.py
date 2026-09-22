@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.knowledge.chunking import (
+from substrate.integrations.knowledge.chunking import (
     StructureAwareChunker,
     get_chunker,
     recommend_chunk_params,
 )
-from substrate.capabilities.knowledge.segmentation import (
+from substrate.integrations.knowledge.segmentation import (
     RegexSegmenter,
     SentenceSegmenter,
 )
@@ -266,7 +266,7 @@ def test_sat_segmenter_finds_boundaries_the_regex_cannot() -> None:
     into one unit, SaT must find real boundaries. Skipped unless the
     optional 'chunking' extra is installed."""
     pytest.importorskip("wtpsplit", reason="requires the 'chunking' extra")
-    from substrate.capabilities.knowledge.segmentation import SaTSegmenter
+    from substrate.integrations.knowledge.segmentation import SaTSegmenter
 
     pieces = SaTSegmenter().segment(OCR_SHAPED_TEXT)
 

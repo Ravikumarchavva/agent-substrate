@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.artifacts.okf import (
+from substrate.integrations.artifacts.okf import (
     Concept,
     OKFParseError,
     human_actor,
     parse,
     serialize,
 )
-from substrate.capabilities.artifacts.store import slugify
+from substrate.integrations.artifacts.store import slugify
 
 
 def test_type_is_the_only_required_field():

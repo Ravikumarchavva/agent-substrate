@@ -10,7 +10,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
-from substrate.infrastructure.cache.redis import RedisConnector
+from substrate.integrations.cache.redis import RedisConnector
 from substrate.serving.services.base import create_service_app
 from substrate.serving.services.live_stream.projector import StreamProjector
 from substrate.serving.services.live_stream.routes import router

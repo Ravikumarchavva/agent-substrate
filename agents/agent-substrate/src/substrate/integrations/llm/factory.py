@@ -289,7 +289,7 @@ class LLMFactory:
             )
 
         if self._provider in _CHAT_COMPLETIONS_PROVIDERS:
-            from substrate.capabilities.llm.chat_client import (
+            from substrate.agents.llm.chat_client import (
                 OpenAIChatCompletionClient,
             )
 
@@ -497,7 +497,7 @@ def create_model_client(
         base_url = LLMFactory._BASE_URLS.get(provider)
 
     if provider == "openrouter" and (openrouter_site_url or openrouter_app_name):
-        from substrate.capabilities.llm.chat_client import (
+        from substrate.agents.llm.chat_client import (
             OpenAIChatCompletionClient,
         )
 
@@ -573,7 +573,7 @@ def create_embedding_client(
         )
 
     if provider == "sentence_transformers":
-        from substrate.capabilities.llm.sentence_transformers_embedding_client import (
+        from substrate.agents.llm.embedding_client import (
             SentenceTransformersEmbeddingClient,
         )
 

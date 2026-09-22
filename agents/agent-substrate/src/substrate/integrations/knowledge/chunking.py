@@ -4,7 +4,7 @@ All chunkers produce ``Document`` objects ready for embedding and storage.
 
 Usage::
 
-    from substrate.capabilities.knowledge.chunking import TextChunker, SentenceChunker
+    from substrate.integrations.knowledge.chunking import TextChunker, SentenceChunker
 
     chunker = TextChunker(chunk_size=512, overlap=128)
     docs = chunker.chunk("Long text ...", metadata={"source": "readme.md"})
@@ -17,7 +17,7 @@ import uuid
 from html.parser import HTMLParser
 from typing import Any
 
-from substrate.capabilities.knowledge.segmentation import (
+from substrate.integrations.knowledge.segmentation import (
     RegexSegmenter,
     SentenceSegmenter,
 )
@@ -251,7 +251,7 @@ class StructureAwareChunker:
     carried over between consecutive chunks.
 
     Sentence boundaries come from an injected ``segmenter``
-    (:class:`~substrate.capabilities.knowledge.segmentation.SentenceSegmenter`),
+    (:class:`~substrate.integrations.knowledge.segmentation.SentenceSegmenter`),
     defaulting to the punctuation regex this class has always used. Pass
     ``SaTSegmenter()`` for text where terminal punctuation is unreliable —
     OCR'd PDFs, headings, and list items in particular.

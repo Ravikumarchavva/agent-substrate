@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from substrate.capabilities.pipeline.engine import PipelineDef
+from substrate.integrations.pipeline.engine import PipelineDef
 from substrate.logger import setup_logging
 
 logger = setup_logging()

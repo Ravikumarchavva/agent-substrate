@@ -14,7 +14,7 @@ from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 from substrate.serving.shared.settings import settings
 from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
-from substrate.infrastructure.serving_factory import (
+from substrate.serving.factory import (
     build_agent_for_thread,
     build_chat_tools,
 )

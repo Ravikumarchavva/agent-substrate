@@ -28,7 +28,7 @@ from substrate.integrations.llm import (
     detect_provider,
     has_provider_api_key,
 )
-from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool
+from substrate.integrations.tools import CalculatorTool, CurrentTimeTool
 from substrate.console import Console
 
 

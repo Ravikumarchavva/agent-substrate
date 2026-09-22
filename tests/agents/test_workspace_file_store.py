@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.storage.workspace import (
+from substrate.agents.storage.local_object_store import (
     WorkspaceFileStore,
     WorkspacePathError,
     WorkspaceQuotaExceededError,

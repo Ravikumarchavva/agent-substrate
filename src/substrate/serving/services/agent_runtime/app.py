@@ -11,8 +11,8 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
-from substrate.infrastructure.cache.redis import RedisConnector
-from substrate.infrastructure.serving_factory import (
+from substrate.integrations.cache.redis import RedisConnector
+from substrate.serving.factory import (
     build_history_provider,
     build_runtime_default_tools,
     build_short_term_memory,
@@ -28,7 +28,7 @@ logger = setup_logging()
 @asynccontextmanager
 async def _runtime_cm(backend: str, pg_url: str):
     if backend == "postgres" and pg_url:
-        from substrate.infrastructure.runtime import build_postgres_runtime
+        from substrate.integrations.runtime import build_postgres_runtime
 
         pool_min_size = int(os.environ.get("RUNTIME_PG_POOL_MIN_SIZE", "2"))
         pool_max_size = int(os.environ.get("RUNTIME_PG_POOL_MAX_SIZE", "10"))

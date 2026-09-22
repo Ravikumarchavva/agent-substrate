@@ -22,8 +22,8 @@ Any provider by model name::
 
 Direct client construction::
 
-    # Universal client lives in capabilities
-    from substrate.capabilities.llm import OpenAIChatCompletionClient
+    # Universal client — the L1 default LLMClient — lives in agents/llm
+    from substrate.agents.llm import OpenAIChatCompletionClient
 
     # Points at Ollama running locally
     client = OpenAIChatCompletionClient(
@@ -55,8 +55,9 @@ from substrate.integrations.llm.openai import (
     OpenAIEmbeddingClient,
 )
 
-# Universal clients live in capabilities (no external API dependency)
-from substrate.capabilities.llm import (
+# Universal clients — the L1 defaults, no external API dependency beyond
+# the model endpoint itself — live in agents/llm
+from substrate.agents.llm import (
     OpenAIChatCompletionClient,
     SentenceTransformersEmbeddingClient,
 )

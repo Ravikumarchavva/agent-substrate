@@ -79,7 +79,7 @@ async def test_embed_blocks_accepts_text_and_media() -> None:
 
 
 async def test_sentence_transformers_and_base_clients_expose_embed_blocks() -> None:
-    from substrate.capabilities.llm.sentence_transformers_embedding_client import (
+    from substrate.agents.llm.embedding_client import (
         SentenceTransformersEmbeddingClient,
     )
     from substrate.integrations.llm.base import BaseEmbeddingClient
@@ -89,7 +89,7 @@ async def test_sentence_transformers_and_base_clients_expose_embed_blocks() -> N
 
 
 async def test_text_only_embedding_clients_reject_media_content() -> None:
-    from substrate.capabilities.llm.sentence_transformers_embedding_client import (
+    from substrate.agents.llm.embedding_client import (
         SentenceTransformersEmbeddingClient,
     )
     from substrate.integrations.llm.base import BaseEmbeddingClient

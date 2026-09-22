@@ -59,7 +59,7 @@ async def list_cron_triggers(request: Request) -> list[dict[str, Any]]:
 async def create_cron_trigger(
     body: CreateCronTrigger, request: Request
 ) -> dict[str, str]:
-    from substrate.capabilities.triggers.scheduler import TriggerDef
+    from substrate.integrations.triggers.scheduler import TriggerDef
 
     scheduler = _get_scheduler(request)
     trigger = TriggerDef(
@@ -144,7 +144,7 @@ async def list_conditions(request: Request) -> list[dict[str, Any]]:
 
 @router.post("/conditions")
 async def create_condition(body: CreateCondition, request: Request) -> dict[str, str]:
-    from substrate.capabilities.triggers.conditions import ConditionDef
+    from substrate.integrations.triggers.conditions import ConditionDef
 
     monitor = _get_condition_monitor(request)
     condition = ConditionDef(

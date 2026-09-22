@@ -1,15 +1,15 @@
-"""substrate.capabilities.knowledge.loaders — Document loaders for various file formats."""
+"""substrate.integrations.knowledge.loaders — Document loaders for various file formats."""
 
 from __future__ import annotations
 
-from substrate.capabilities.knowledge.loaders.base import (
+from substrate.integrations.knowledge.loaders.base import (
     BaseDocumentLoader,
     DocumentLoaderRegistry,
 )
-from substrate.capabilities.knowledge.loaders.csv_loader import CSVLoader
-from substrate.capabilities.knowledge.loaders.json_loader import JSONLoader
-from substrate.capabilities.knowledge.loaders.pdf_loader import PDFLoader
-from substrate.capabilities.knowledge.loaders.text_loader import TextLoader
+from substrate.integrations.knowledge.loaders.csv_loader import CSVLoader
+from substrate.integrations.knowledge.loaders.json_loader import JSONLoader
+from substrate.integrations.knowledge.loaders.pdf_loader import PDFLoader
+from substrate.integrations.knowledge.loaders.text_loader import TextLoader
 
 __all__ = [
     "BaseDocumentLoader",

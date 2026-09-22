@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore
-from substrate.capabilities.memory.manager import MemoryManager
+from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
+from substrate.integrations.memory.manager import MemoryManager
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.storage.memory import (
     MemoryCategory,

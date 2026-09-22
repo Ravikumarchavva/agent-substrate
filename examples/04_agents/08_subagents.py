@@ -40,7 +40,7 @@ from substrate.agents.runtime import Runtime
 from substrate.agents.middleware import AgentRunResult
 from substrate.kernel.core.content import Role
 from substrate.kernel.messaging.message import Message, ChatPayload
-from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
+from substrate.integrations.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
 from substrate.kernel import (
     Priority,
     TextBlock,

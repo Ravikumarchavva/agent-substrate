@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pydantic import BaseModel
 
-from substrate.capabilities.storage.workspace import WorkspaceFileStore
+from substrate.agents.storage.local_object_store import WorkspaceFileStore
 from substrate.serving.monolith.security.rls_deps import get_service_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import Thread, WorkspaceQuota

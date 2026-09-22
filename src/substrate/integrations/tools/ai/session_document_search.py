@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from substrate.agents.storage.tasks import current_thread_id
 from substrate.agents.workspace.scope import current_tenant_id, current_user_id
-from substrate.capabilities.knowledge.citations import CitationLedgerStore
-from substrate.capabilities.knowledge.result_rendering import render_search_results
+from substrate.integrations.knowledge.citations import CitationLedgerStore
+from substrate.integrations.knowledge.result_rendering import render_search_results
 from substrate.kernel import TextBlock
 from substrate.kernel.llm import EmbeddingClient, LLMClient
 from substrate.kernel.storage.vector import SearchResult
@@ -173,7 +173,7 @@ class SessionDocumentSearchTool:
     async def _search_vector(
         self, tenant_id: str, user_id: str, query: str, *, limit: int, filter: dict | None
     ) -> list[SearchResult]:
-        from substrate.infrastructure.serving_factory import build_session_rag_backend
+        from substrate.serving.factory import build_session_rag_backend
 
         backend = build_session_rag_backend(
             self._cfg, tenant_id, user_id, self._embedding_client, self._model_client
@@ -185,8 +185,8 @@ class SessionDocumentSearchTool:
     async def _search_tree(
         self, tenant_id: str, user_id: str, query: str, *, limit: int
     ) -> list[SearchResult]:
-        from substrate.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
-        from substrate.infrastructure.serving_factory import build_page_index_memory
+        from substrate.integrations.knowledge.page_pipeline import PageIndexRAGPipeline
+        from substrate.serving.factory import build_page_index_memory
 
         memory = build_page_index_memory(self._cfg, tenant_id, user_id)
         pipeline = PageIndexRAGPipeline(model_client=self._model_client, memory_store=memory)
@@ -195,9 +195,9 @@ class SessionDocumentSearchTool:
     async def _search_graph(
         self, tenant_id: str, user_id: str, query: str, *, limit: int, filter: dict | None
     ) -> list[SearchResult]:
-        from substrate.capabilities.knowledge.graph_rag import GraphRAGPipeline
-        from substrate.capabilities.knowledge.pipeline import RAGPipeline
-        from substrate.infrastructure.serving_factory import (
+        from substrate.integrations.knowledge.graph_rag import GraphRAGPipeline
+        from substrate.integrations.knowledge.pipeline import RAGPipeline
+        from substrate.serving.factory import (
             build_session_graph_store,
             build_session_index_vector_store,
         )

@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from substrate.capabilities.tools.artifacts.tool import ArtifactsTool
+from substrate.integrations.tools.artifacts.tool import ArtifactsTool
 
 __all__ = ["ArtifactsTool"]

@@ -73,7 +73,7 @@ assumed from its docs:
 
 Usage::
 
-    from substrate.capabilities.vector.lancedb_store import LanceDBVectorStore
+    from substrate.integrations.vector.lancedb_store import LanceDBVectorStore
 
     # Local/embedded
     store = LanceDBVectorStore(path="data/lancedb")

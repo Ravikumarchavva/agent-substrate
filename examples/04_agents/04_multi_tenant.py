@@ -123,7 +123,7 @@ async def main() -> None:
     # user/session ID and use RedisMemory for persistence across process
     # restarts:
     #
-    #   from substrate.capabilities.history import RedisHistoryProvider
+    #   from substrate.integrations.history import RedisHistoryProvider
     #
     #   REDIS_URL = "redis://localhost:6379/0"
     #

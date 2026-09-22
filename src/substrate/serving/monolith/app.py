@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from substrate.serving.shared.settings import settings
-from substrate.infrastructure.serving_factory import (
+from substrate.serving.factory import (
     Infrastructure,
     LLMClients,
     RuntimeServices,

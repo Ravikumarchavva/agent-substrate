@@ -1,15 +1,15 @@
 """Input-safety contracts: what a text/image classifier returns, and the
 Protocol shape agents-layer guardrails depend on.
 
-Lives in kernel (not agents/capabilities) because both a TURN-stage
+Lives in kernel (not agents/integrations) because both a TURN-stage
 middleware (agents, L1) and its concrete model-backed implementation
-(capabilities, L2) need the exact same shape — the classic reason kernel
+(integrations, L2) need the exact same shape — the classic reason kernel
 holds a Protocol: multiple layers need it, and it has zero I/O/deps of its
 own. The middleware never imports a concrete classifier; it only ever sees
-these two Protocols, injected from ``infrastructure/serving_factory.py``.
+these two Protocols, injected from ``serving/factory.py``.
 
 Deliberately NOT here: any actual model, tokenizer, or inference code — all
-of that lives in ``capabilities/safety/``.
+of that lives in ``integrations/safety/``.
 """
 
 from __future__ import annotations

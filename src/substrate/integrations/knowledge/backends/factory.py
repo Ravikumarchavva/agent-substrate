@@ -63,7 +63,7 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
     name = kind.strip().lower()
 
     if name == "local":
-        from substrate.capabilities.knowledge.pipeline import RAGPipeline
+        from substrate.integrations.knowledge.pipeline import RAGPipeline
 
         embedding_client: EmbeddingClient | None = kwargs.get("embedding_client")
         vector_store: VectorStore | None = kwargs.get("vector_store")
@@ -102,13 +102,13 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
                 # Local cross-encoder — no LLM tokens/latency spent on
                 # reranking. Preferred whenever the embedding-reranker
                 # service (and therefore its reranker model) is configured.
-                from substrate.capabilities.knowledge.reranker import (
+                from substrate.integrations.knowledge.reranker import (
                     CrossEncoderReranker,
                 )
 
                 reranker = CrossEncoderReranker(embedding_reranker_client)
             elif model_client is not None:
-                from substrate.capabilities.knowledge.reranker import LLMReranker
+                from substrate.integrations.knowledge.reranker import LLMReranker
 
                 reranker = LLMReranker(model_client)
 
@@ -120,7 +120,7 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
             # why this beats one flat default for every provider. An
             # explicit chunk_size/chunk_overlap always wins per-field
             # (same explicit-wins precedence used throughout this codebase).
-            from substrate.capabilities.knowledge.chunking import (
+            from substrate.integrations.knowledge.chunking import (
                 recommend_chunk_params,
             )
 

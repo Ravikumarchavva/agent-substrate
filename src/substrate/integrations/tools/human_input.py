@@ -13,7 +13,7 @@ Architecture:
 
 Usage::
 
-    from substrate.capabilities.tools.human_input import CLIHumanHandler, AskHumanTool
+    from substrate.integrations.tools.human_input import CLIHumanHandler, AskHumanTool
 
     handler = CLIHumanHandler()
     ask_tool = AskHumanTool(handler=handler)

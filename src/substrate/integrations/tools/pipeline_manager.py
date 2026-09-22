@@ -108,7 +108,7 @@ class PipelineManagerTool:
                 ],
                 is_error=True,
             )
-        from substrate.capabilities.pipeline.engine import PipelineDef
+        from substrate.integrations.pipeline.engine import PipelineDef
 
         definition["name"] = name
         pipeline = PipelineDef.from_dict(definition)

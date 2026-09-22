@@ -9,11 +9,11 @@ from typing import Any
 import pytest
 from kubernetes.client.rest import ApiException
 
-from substrate.capabilities.tools.code_interpreter.code_interpreter.sandbox_service import (
+from substrate.integrations.tools.code_interpreter.code_interpreter.sandbox_service import (
     CodeInterpreterConfig,
     CodeInterpreterService,
 )
-from substrate.capabilities.tools.code_interpreter.code_interpreter.session_store import (
+from substrate.integrations.tools.code_interpreter.code_interpreter.session_store import (
     InMemorySessionStore,
 )
 
@@ -59,7 +59,7 @@ class _FakeCustomObjectsApi:
 def service(monkeypatch) -> tuple[CodeInterpreterService, _FakeCustomObjectsApi]:
     fake_api = _FakeCustomObjectsApi()
     monkeypatch.setattr(
-        "substrate.capabilities.tools.code_interpreter.code_interpreter.k8s_helper.get_custom_objects_api",
+        "substrate.integrations.tools.code_interpreter.code_interpreter.k8s_helper.get_custom_objects_api",
         lambda: fake_api,
     )
     config = CodeInterpreterConfig(

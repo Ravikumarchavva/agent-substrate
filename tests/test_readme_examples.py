@@ -7,8 +7,8 @@ are broken and need fixing alongside whatever changed the API.
 from __future__ import annotations
 
 from substrate.agents import OrchestratorAgent, ReActAgent, Runtime, SubAgentConfig
-from substrate.capabilities.tools.compute.calculator import CalculatorTool
-from substrate.fabric.flows import ConditionalFlow, ParallelFlow, SequentialFlow
+from substrate.integrations.tools.compute.calculator import CalculatorTool
+from substrate.agents.flows import ConditionalFlow, ParallelFlow, SequentialFlow
 from substrate.kernel.core.content import TextBlock
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.core.usage import Usage

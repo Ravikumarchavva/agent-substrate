@@ -22,8 +22,8 @@ from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.runtime.ids import RunId, new_run_id
 
-from substrate.fabric.evals.judge import LLMJudge
-from substrate.fabric.evals.models import (
+from substrate.agents.evals.judge import LLMJudge
+from substrate.agents.evals.models import (
     EvalCase,
     EvalCaseResult,
     EvalDataset,

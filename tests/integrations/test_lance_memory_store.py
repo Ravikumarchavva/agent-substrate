@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore
+from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
 from substrate.kernel.storage.memory import (
     MemoryNamespace,
     MemoryQuery,

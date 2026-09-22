@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from substrate.infrastructure.serving_factory import build_user_memory_context_block
+from substrate.serving.factory import build_user_memory_context_block
 
 
 @dataclass

@@ -42,10 +42,10 @@ from substrate.kernel.agent.supervision import Priority, Supervision
 
 if TYPE_CHECKING:
     import asyncpg
-    from substrate.infrastructure.runtime.event_log import EventLog
-    from substrate.infrastructure.runtime.inbox import Inbox
-    from substrate.infrastructure.runtime.scheduler import Scheduler
-    from substrate.infrastructure.runtime.signal_bus import SignalBus
+    from substrate.integrations.runtime.event_log import EventLog
+    from substrate.integrations.runtime.inbox import Inbox
+    from substrate.integrations.runtime.scheduler import Scheduler
+    from substrate.integrations.runtime.signal_bus import SignalBus
 
 _CREATE_TABLES = """
 CREATE TABLE IF NOT EXISTS run_tree (

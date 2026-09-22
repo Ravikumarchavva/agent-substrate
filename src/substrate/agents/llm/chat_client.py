@@ -1,9 +1,15 @@
-"""OpenAI-compatible Chat Completions client.
+"""OpenAI-compatible Chat Completions client — the canonical default LLMClient.
 
 Implements the ``LLMClient`` kernel Protocol using the standard
 ``/v1/chat/completions`` endpoint.  Works with any provider that speaks
 this API — Groq, OpenRouter, Ollama, vLLM, LM Studio, Together,
-Fireworks, Mistral, DeepSeek, and vanilla OpenAI itself.
+Fireworks, Mistral, DeepSeek, and vanilla OpenAI itself — including a
+zero-API-key local Ollama/vLLM/LM Studio server, which is what makes this
+the L1 default: one concrete implementation covers everything from "no
+credentials, fully local" to "a real hosted provider," so ``agents/`` needs
+no separate zero-infra LLM client. Additional vendor-native clients
+(Anthropic, Gemini) and provider auto-detection live in
+``integrations/llm/`` for the L2 case of wanting more than this default.
 
 No inheritance from provider-specific clients.  Only imports:
   - ``openai`` SDK (AsyncOpenAI)

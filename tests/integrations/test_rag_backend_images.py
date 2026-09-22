@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 from unittest.mock import AsyncMock
 
-from substrate.capabilities.knowledge.backends.local import LocalRagBackend
+from substrate.integrations.knowledge.backends.local import LocalRagBackend
 from substrate.runtimes.document_intelligence.client import (
     ExtractedImage,
     ExtractedPageText,

@@ -6,9 +6,9 @@ can launch capabilities, chains, or pipelines.
 
 from __future__ import annotations
 
-from substrate.capabilities.triggers.conditions import ConditionDef, ConditionMonitor
-from substrate.capabilities.triggers.scheduler import TriggerDef, TriggerScheduler
-from substrate.capabilities.triggers.webhooks import WebhookDef, WebhookRegistry
+from substrate.integrations.triggers.conditions import ConditionDef, ConditionMonitor
+from substrate.integrations.triggers.scheduler import TriggerDef, TriggerScheduler
+from substrate.integrations.triggers.webhooks import WebhookDef, WebhookRegistry
 
 __all__ = [
     "ConditionDef",

@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.graph.lance_graph_store import LanceGraphStore
-from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore
-from substrate.capabilities.vector.lancedb_store import LanceDBVectorStore
+from substrate.integrations.graph.lance_graph_store import LanceGraphStore
+from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
+from substrate.integrations.vector.lancedb_store import LanceDBVectorStore
 from substrate.config import SubstrateConfig
-from substrate.infrastructure.serving_factory import (
+from substrate.serving.factory import (
     build_page_index_memory,
     build_session_graph_store,
     build_session_index_vector_store,

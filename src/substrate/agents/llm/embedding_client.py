@@ -1,13 +1,15 @@
-"""sentence-transformers embedding client.
+"""sentence-transformers embedding client — the canonical default EmbeddingClient.
 
 Implements the ``EmbeddingClient`` kernel Protocol using the
 ``sentence-transformers`` library.  Runs entirely on CPU — no API key,
-no external server required.  The model is downloaded from HuggingFace
-on first instantiation and cached in ``~/.cache/huggingface/``.
+no external server required, ever.  The model is downloaded from HuggingFace
+on first instantiation and cached in ``~/.cache/huggingface/``. The L1
+default for the same reason ``LocalFilesystemHistoryProvider`` etc. are:
+needs the least infrastructure the Protocol can possibly need.
 
 Usage::
 
-    from substrate.capabilities.llm import SentenceTransformersEmbeddingClient
+    from substrate.agents.llm import SentenceTransformersEmbeddingClient
 
     # Default: all-MiniLM-L6-v2 (384-dim, fast on CPU)
     client = SentenceTransformersEmbeddingClient()
@@ -15,7 +17,7 @@ Usage::
     # Higher quality (768-dim, slower)
     client = SentenceTransformersEmbeddingClient("all-mpnet-base-v2")
 
-Via factory (recommended)::
+Via factory (for other providers, e.g. a real API-backed embedding model)::
 
     from substrate.integrations.llm import create_embedding_client
 

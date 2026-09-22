@@ -1,11 +1,11 @@
-"""substrate.capabilities.tools.skills — agent skills system."""
+"""substrate.integrations.tools.skills — agent skills system."""
 
 from __future__ import annotations
 
-from substrate.capabilities.tools.skills._loader import SkillLoader
-from substrate.capabilities.tools.skills._manager import SkillManager
-from substrate.capabilities.tools.skills._models import SkillMetadata, SkillPackage
-from substrate.capabilities.tools.skills.tool import SkillTool
+from substrate.integrations.tools.skills._loader import SkillLoader
+from substrate.integrations.tools.skills._manager import SkillManager
+from substrate.integrations.tools.skills._models import SkillMetadata, SkillPackage
+from substrate.integrations.tools.skills.tool import SkillTool
 
 __all__ = [
     "SkillLoader",

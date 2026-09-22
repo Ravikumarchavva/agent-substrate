@@ -33,8 +33,8 @@ Usage::
 
     from substrate.runtimes.document_intelligence.client import ExtractionClient
     from substrate.runtimes.embedding_reranker.service.embedding import EmbeddingReranker
-    from substrate.capabilities.storage.s3 import S3FileStore
-    from substrate.capabilities.knowledge.document_ingest_pipeline import DocumentIngestPipeline
+    from substrate.integrations.storage.s3 import S3FileStore
+    from substrate.integrations.knowledge.document_ingest_pipeline import DocumentIngestPipeline
 
     pipeline = DocumentIngestPipeline(
         ExtractionClient(base_url="http://localhost:8021"),
@@ -138,7 +138,7 @@ class DocumentIngestPipeline:
         chunk_overlap: int = 250,
         segmenter: Any | None = None,
     ) -> None:
-        from substrate.capabilities.knowledge.chunking import StructureAwareChunker
+        from substrate.integrations.knowledge.chunking import StructureAwareChunker
 
         self._extraction = extraction_client
         self._embedder = embedder

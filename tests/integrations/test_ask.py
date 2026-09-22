@@ -4,7 +4,7 @@ this targets the two behaviors this session's storage rewrite changed)."""
 
 from __future__ import annotations
 
-from substrate.capabilities.knowledge.ask import _is_text, ask
+from substrate.integrations.knowledge.ask import _is_text, ask
 from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.core.usage import Usage
 from substrate.kernel.llm.llm import LLMResponse

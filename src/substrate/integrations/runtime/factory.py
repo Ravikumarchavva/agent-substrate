@@ -2,7 +2,7 @@
 
 Usage::
 
-    from substrate.infrastructure.runtime import build_postgres_runtime
+    from substrate.integrations.runtime import build_postgres_runtime
 
     async with build_postgres_runtime(
         postgres_url="postgresql://postgres:postgres@localhost:5432/agentdb",
@@ -29,11 +29,11 @@ from typing import AsyncIterator
 from substrate.agents.runtime import Runtime
 from substrate.logger import setup_logging
 
-from substrate.infrastructure.runtime.event_log import EventLog
-from substrate.infrastructure.runtime.inbox import Inbox
-from substrate.infrastructure.runtime.scheduler import Scheduler
-from substrate.infrastructure.runtime.signal_bus import SignalBus
-from substrate.infrastructure.runtime.supervisor import Supervisor
+from substrate.integrations.runtime.event_log import EventLog
+from substrate.integrations.runtime.inbox import Inbox
+from substrate.integrations.runtime.scheduler import Scheduler
+from substrate.integrations.runtime.signal_bus import SignalBus
+from substrate.integrations.runtime.supervisor import Supervisor
 
 logger = setup_logging()
 

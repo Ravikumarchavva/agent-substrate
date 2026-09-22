@@ -4,7 +4,7 @@ These checks supplement the ``import-linter`` contracts in ``pyproject.toml``
 with cheap heuristics that catch regressions early:
 
 * No upward imports — the kernel (L0) must not import any layer above it
-  (agents, capabilities, fabric) nor orthogonal modules (integrations, serving).
+  (agents, integrations) nor the orthogonal module (serving).
 * LOC and file-count ceilings — catch accidental feature additions.
 * Flat layout — kernel contains no subdirectories.
 * No vendor strings — kernel must not reference any specific LLM provider name
@@ -81,8 +81,6 @@ def test_kernel_is_flat() -> None:
 
 _FORBIDDEN_PREFIXES = (
     "substrate.agents",
-    "substrate.capabilities",
-    "substrate.fabric",
     "substrate.integrations",
     "substrate.serving",
     "substrate.config",

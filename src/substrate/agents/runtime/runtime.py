@@ -13,7 +13,7 @@ Usage (in-memory, Stage 0 — default)::
 Usage (Postgres + Redis, Stage 1) — use the infrastructure-layer factory, which
 constructs the durable backends and injects them::
 
-    from substrate.infrastructure.runtime import build_postgres_runtime
+    from substrate.integrations.runtime import build_postgres_runtime
 
     async with build_postgres_runtime(
         postgres_url="postgresql://...",

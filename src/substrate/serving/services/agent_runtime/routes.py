@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from substrate.infrastructure.serving_factory import build_memory_tool
+from substrate.serving.factory import build_memory_tool
 from substrate.serving.services.agent_runtime.service import (
     create_agent,
     execute_agent_run,

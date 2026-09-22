@@ -5,7 +5,7 @@ Uses ``asyncpg`` raw SQL with AGE extension functions.  Requires the
 
 Usage::
 
-    from substrate.capabilities.graph.age_store import AGEGraphStore
+    from substrate.integrations.graph.age_store import AGEGraphStore
 
     store = AGEGraphStore(dsn="postgresql://...", graph_name="knowledge")
     await store.connect()

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import time
 
-from substrate.capabilities.artifacts.okf import Concept
-from substrate.capabilities.artifacts.store import ArtifactStore
+from substrate.integrations.artifacts.okf import Concept
+from substrate.integrations.artifacts.store import ArtifactStore
 
 TENANT = "t1"
 USER = "u1"

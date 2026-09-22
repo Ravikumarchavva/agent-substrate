@@ -182,7 +182,7 @@ async def test_upload_rejects_when_upload_attempt_quota_exhausted(monkeypatch):
     data = _pdf_bytes(1)
 
     with patch(
-        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(),
     ):
         # First upload consumes the only slot.
@@ -280,7 +280,7 @@ async def test_upload_triggers_eager_staging_for_local_backend(monkeypatch):
     data = _pdf_bytes(1)
 
     with patch(
-        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(),
     ) as mock_ingest:
         await upload_file(
@@ -324,7 +324,7 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
     ctx = _ctx_mock(rag_backend=rag_backend)
 
     with patch(
-        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(),
     ):
         await upload_file(
@@ -387,7 +387,7 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
     ctx.pending_file_store.upload = AsyncMock(side_effect=_upload_side_effect)
 
     with patch(
-        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(),
     ):
         await upload_file(
@@ -547,7 +547,7 @@ async def test_sweep_redispatches_a_genuinely_stuck_upload(monkeypatch):
     )
 
     with patch(
-        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(),
     ) as mock_ingest:
         dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
@@ -575,7 +575,7 @@ async def test_sweep_reads_from_file_store_when_already_promoted(monkeypatch):
     monkeypatch.setattr(files_module.asyncio, "create_task", lambda coro: coro.close())
 
     with patch(
-        "substrate.capabilities.knowledge.session_ingest.ingest_session_document",
+        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
         new=AsyncMock(),
     ):
         dispatched = await files_module.sweep_stuck_staging_uploads(ctx)

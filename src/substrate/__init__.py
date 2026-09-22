@@ -23,8 +23,8 @@ if TYPE_CHECKING:
     from substrate.agents.workspace.local_workspace_store import (
         LocalFilesystemWorkspaceStore,
     )
-    from substrate.capabilities.memory.local_session_store import LocalFileSessionStore
-    from substrate.capabilities.storage.workspace import WorkspaceFileStore
+    from substrate.integrations.memory.local_session_store import LocalFileSessionStore
+    from substrate.agents.storage.local_object_store import WorkspaceFileStore
     from substrate.agents.context import (
         AgentContext,
         ContextConfig,
@@ -155,19 +155,19 @@ _LAZY: dict[str, tuple[str, str]] = {
         "LocalFilesystemWorkspaceStore",
     ),
     "LocalFileSessionStore": (
-        "substrate.capabilities.memory.local_session_store",
+        "substrate.integrations.memory.local_session_store",
         "LocalFileSessionStore",
     ),
     "LocalSessionStore": (
-        "substrate.capabilities.memory.local_session_store",
+        "substrate.integrations.memory.local_session_store",
         "LocalFileSessionStore",
     ),
     "WorkspaceFileStore": (
-        "substrate.capabilities.storage.workspace",
+        "substrate.agents.storage.local_object_store",
         "WorkspaceFileStore",
     ),
     "LocalFileStore": (
-        "substrate.capabilities.storage.workspace",
+        "substrate.agents.storage.local_object_store",
         "WorkspaceFileStore",
     ),
     # supporting

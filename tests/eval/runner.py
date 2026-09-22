@@ -26,7 +26,7 @@ from tests.eval.dataset import EvalDataset
 from tests.eval.metrics import ndcg_at_k, recall_at_k
 
 if TYPE_CHECKING:
-    from substrate.capabilities.vector.pgvector_store import PgVectorStore
+    from substrate.integrations.vector.pgvector_store import PgVectorStore
     from substrate.kernel.llm import EmbeddingClient
 
 
@@ -64,7 +64,7 @@ async def run_retrieval_eval(
     rerank_top_n: int = 10,
     final_k: int = 5,
 ) -> EvalReport:
-    from substrate.capabilities.knowledge.reranker import prefilter_candidates
+    from substrate.integrations.knowledge.reranker import prefilter_candidates
 
     per_query: list[tuple[str, dict[str, float]]] = []
 

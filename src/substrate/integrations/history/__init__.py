@@ -1,4 +1,4 @@
-"""substrate.capabilities.history — Durable HistoryProvider backends.
+"""substrate.integrations.history — Durable HistoryProvider backends.
 
 ``LocalFilesystemHistoryProvider`` lives in ``agents.storage`` — pure
 kernel+stdlib, no durable-infra dependency, so it belongs at L1 beside
@@ -8,7 +8,7 @@ real L2 dependency (Postgres).
 
 from __future__ import annotations
 
-from substrate.capabilities.history.durable_history import (
+from substrate.integrations.history.durable_history import (
     DurableHistoryProvider,
     HistoryMessage,
     HistorySession,

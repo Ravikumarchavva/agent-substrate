@@ -17,12 +17,12 @@ from typing import Any
 
 from substrate.agents.storage.tasks import current_thread_id
 from substrate.agents.workspace.scope import current_tenant_id, current_user_id
-from substrate.capabilities.artifacts.store import ArtifactStore
+from substrate.integrations.artifacts.store import ArtifactStore
 from substrate.kernel import TextBlock
 from substrate.kernel.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.capabilities.tools.artifacts")
+logger = setup_logging("substrate.integrations.tools.artifacts")
 
 _DEFAULT_SESSION = "default"
 

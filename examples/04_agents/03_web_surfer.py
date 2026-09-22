@@ -9,9 +9,9 @@ settings = SubstrateConfig()
 Demonstrates a ReActAgent that uses WebSearchTool for multi-step web research
 and streams partial output tokens to the console in real time.
 
-WebSearchTool (substrate.capabilities.tools.web) is the built-in search
+WebSearchTool (substrate.integrations.tools.web) is the built-in search
 integration. For full browser automation (click, screenshot, JS execution),
-swap it for WebSurferTool from substrate.capabilities.tools.web_surfer.tool — which
+swap it for WebSurferTool from substrate.integrations.tools.web_surfer.tool — which
 requires Playwright: uv run playwright install chromium.
 
 Prerequisites: OPENAI_API_KEY set.

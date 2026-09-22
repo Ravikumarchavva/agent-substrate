@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from substrate.agents.runtime.context import RunContext
 from substrate.agents.runtime.runtime import Runtime
-from substrate.fabric.flows import ConditionalFlow, ParallelFlow, SequentialFlow
+from substrate.agents.flows import ConditionalFlow, ParallelFlow, SequentialFlow
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import ChatPayload, Message

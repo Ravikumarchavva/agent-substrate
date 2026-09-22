@@ -35,7 +35,7 @@ from substrate.kernel.tools.chain import InvocationResult
 from substrate.kernel.tools import ToolCallRequest
 from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.capabilities.tools.chain.bridge")
+logger = setup_logging("substrate.integrations.tools.chain.bridge")
 
 
 class BridgeSession:

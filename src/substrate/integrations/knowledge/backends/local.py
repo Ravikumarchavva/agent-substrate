@@ -16,7 +16,7 @@ logger = setup_logging("substrate.knowledge.local")
 
 if TYPE_CHECKING:
     from substrate.runtimes.embedding_reranker.client import EmbeddingRerankerClient
-    from substrate.capabilities.knowledge.pipeline import RAGPipeline
+    from substrate.integrations.knowledge.pipeline import RAGPipeline
     from substrate.kernel.llm import LLMClient
     from substrate.kernel.storage.vector import VectorStore
 
@@ -134,7 +134,7 @@ class LocalRagBackend:
         if not candidates:
             return []
 
-        from substrate.capabilities.knowledge.reranker import prefilter_candidates
+        from substrate.integrations.knowledge.reranker import prefilter_candidates
 
         prefiltered = prefilter_candidates(candidates, top_n=self._rerank_top_n)
 
@@ -490,7 +490,7 @@ class LocalRagBackend:
         ext: str,
         metadata: dict[str, Any],
     ) -> list[Document]:
-        from substrate.capabilities.knowledge.loaders import (
+        from substrate.integrations.knowledge.loaders import (
             CSVLoader,
             DocumentLoaderRegistry,
             JSONLoader,

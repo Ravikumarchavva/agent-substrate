@@ -1,32 +1,32 @@
-"""substrate.capabilities.knowledge — Retrieval-Augmented Generation primitives."""
+"""substrate.integrations.knowledge — Retrieval-Augmented Generation primitives."""
 
 from __future__ import annotations
 
 
 from substrate.kernel.storage.graph import Entity, GraphStore, Relationship, SubGraph
 from substrate.kernel.storage.vector import Document, SearchResult, VectorStore
-from substrate.capabilities.knowledge.pipeline import RAGPipeline
-from substrate.capabilities.knowledge.graph_rag import GraphRAGPipeline
-from substrate.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
-from substrate.capabilities.knowledge.protocol import RAGProvider
-from substrate.capabilities.knowledge.loaders.pdf_loader import PDFLoader
-from substrate.capabilities.knowledge.chunking import (
+from substrate.integrations.knowledge.pipeline import RAGPipeline
+from substrate.integrations.knowledge.graph_rag import GraphRAGPipeline
+from substrate.integrations.knowledge.page_pipeline import PageIndexRAGPipeline
+from substrate.integrations.knowledge.protocol import RAGProvider
+from substrate.integrations.knowledge.loaders.pdf_loader import PDFLoader
+from substrate.integrations.knowledge.chunking import (
     TextChunker,
     SentenceChunker,
     PageChunker,
     ExtractionDocumentChunker,
     get_chunker,
 )
-from substrate.capabilities.knowledge.document_store import InMemoryDocumentStore
-from substrate.capabilities.knowledge.reranker import LLMReranker
-from substrate.capabilities.knowledge.ask import ask, AskResult, Citation, list_catalog
+from substrate.integrations.knowledge.document_store import InMemoryDocumentStore
+from substrate.integrations.knowledge.reranker import LLMReranker
+from substrate.integrations.knowledge.ask import ask, AskResult, Citation, list_catalog
 
 # document_ingest_pipeline.DocumentIngestPipeline/ExtractionFailedError are
 # deliberately NOT re-exported here: zero production callers (confirmed via
 # repo-wide grep — only its own test file uses it), so nothing should be
 # able to pick it up as the package's "the" ingest pipeline by importing
 # from this top-level namespace. Import directly from
-# substrate.capabilities.knowledge.document_ingest_pipeline if you
+# substrate.integrations.knowledge.document_ingest_pipeline if you
 # specifically want it.
 
 __all__ = [

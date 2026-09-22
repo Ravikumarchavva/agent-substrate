@@ -10,8 +10,8 @@ segmentation model for text where punctuation is not a reliable signal.
 
 Usage::
 
-    from substrate.capabilities.knowledge.segmentation import SaTSegmenter
-    from substrate.capabilities.knowledge.chunking import StructureAwareChunker
+    from substrate.integrations.knowledge.segmentation import SaTSegmenter
+    from substrate.integrations.knowledge.chunking import StructureAwareChunker
 
     chunker = StructureAwareChunker(segmenter=SaTSegmenter())
 """

@@ -5,7 +5,7 @@ from __future__ import annotations
 from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 
-from substrate.infrastructure.serving_factory import (
+from substrate.serving.factory import (
     build_agent_for_run,
     build_cached_history_for_thread,
 )

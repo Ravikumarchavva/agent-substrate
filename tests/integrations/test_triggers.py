@@ -7,9 +7,9 @@ import pytest
 
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.message import Message, DataPayload
-from substrate.capabilities.triggers.scheduler import TriggerScheduler, TriggerDef
-from substrate.capabilities.triggers.webhooks import WebhookRegistry
-from substrate.capabilities.triggers.conditions import ConditionMonitor, ConditionDef
+from substrate.integrations.triggers.scheduler import TriggerScheduler, TriggerDef
+from substrate.integrations.triggers.webhooks import WebhookRegistry
+from substrate.integrations.triggers.conditions import ConditionMonitor, ConditionDef
 from substrate.integrations.events.redis_event_bus import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
 

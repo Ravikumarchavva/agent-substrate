@@ -1,19 +1,19 @@
-"""substrate.capabilities.pipeline — declarative pipeline execution engine."""
+"""substrate.integrations.pipeline — declarative pipeline execution engine."""
 
 from __future__ import annotations
 
-from substrate.capabilities.pipeline.data_ref import (
+from substrate.integrations.pipeline.data_ref import (
     DataRef,
     DataRefStore,
     DataRefArtifactStore,
 )
-from substrate.capabilities.pipeline.engine import (
+from substrate.integrations.pipeline.engine import (
     PipelineDef,
     PipelineEngine,
     PipelineResult,
     PipelineStep,
 )
-from substrate.capabilities.pipeline.store import PipelineStore
+from substrate.integrations.pipeline.store import PipelineStore
 
 __all__ = [
     "DataRef",

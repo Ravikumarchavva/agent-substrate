@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-from substrate.capabilities.tools.code_interpreter.code_interpreter.code_risk import (
+from substrate.integrations.tools.code_interpreter.code_interpreter.code_risk import (
     classify_and_summarize,
     classify_code,
     templated_summary,

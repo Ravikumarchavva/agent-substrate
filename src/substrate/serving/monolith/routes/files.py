@@ -32,7 +32,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.agents.workspace.layout import conversation_shared_key, user_upload_key
-from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
+from substrate.agents.storage.local_object_store import WorkspaceQuotaExceededError
 from substrate.integrations.llm.endpoint import InferenceEndpoint
 from substrate.logger import setup_logging
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
@@ -369,7 +369,7 @@ async def _stage_uploaded_doc(
     assert ctx.rag_backend is not None
     assert ctx.embedding_client is not None
     session_factory = ctx.session_factory
-    from substrate.capabilities.knowledge.session_ingest import ingest_session_document
+    from substrate.integrations.knowledge.session_ingest import ingest_session_document
 
     try:
         await ingest_session_document(

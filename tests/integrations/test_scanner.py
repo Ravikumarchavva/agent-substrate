@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from substrate.capabilities.tools.discovery import CapabilityDiscovery
+from substrate.integrations.tools.discovery import CapabilityDiscovery
 
 
 def test_catalog_scanner_discovery(tmp_path, monkeypatch):

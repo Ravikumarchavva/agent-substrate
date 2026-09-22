@@ -44,7 +44,7 @@ async def pg_runtime():
     """Runtime backed by Postgres only."""
     if not await _pg_reachable():
         pytest.skip("Postgres not reachable")
-    from substrate.infrastructure.runtime import build_postgres_runtime
+    from substrate.integrations.runtime import build_postgres_runtime
 
     async with build_postgres_runtime(postgres_url=_PG_URL) as rt:
         yield rt
@@ -381,7 +381,7 @@ async def test_pg_reclaim_orphans_requeues_an_expired_lease() -> None:
         pytest.skip("Postgres not reachable")
     import asyncpg
 
-    from substrate.infrastructure.runtime.scheduler import Scheduler
+    from substrate.integrations.runtime.scheduler import Scheduler
 
     pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
     try:
@@ -426,7 +426,7 @@ async def test_pg_reclaim_orphans_never_steals_a_still_live_lease() -> None:
         pytest.skip("Postgres not reachable")
     import asyncpg
 
-    from substrate.infrastructure.runtime.scheduler import Scheduler
+    from substrate.integrations.runtime.scheduler import Scheduler
 
     pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
     try:
@@ -474,8 +474,8 @@ async def test_pg_cold_resume() -> None:
     if not await _pg_reachable():
         pytest.skip("Postgres not reachable")
 
-    from substrate.infrastructure.runtime import build_postgres_runtime
-    from substrate.infrastructure.runtime.scheduler import Scheduler
+    from substrate.integrations.runtime import build_postgres_runtime
+    from substrate.integrations.runtime.scheduler import Scheduler
     from substrate.agents.factory import rebuild_agent
 
     done_a = asyncio.Event()
@@ -591,12 +591,12 @@ async def test_pg_cold_resume_refuses_version_mismatch() -> None:
     import asyncpg
 
     import substrate
-    from substrate.infrastructure.runtime.event_log import EventLog
-    from substrate.infrastructure.runtime.inbox import Inbox
-    from substrate.infrastructure.runtime.scheduler import Scheduler
-    from substrate.infrastructure.runtime.signal_bus import SignalBus
-    from substrate.infrastructure.runtime.supervisor import Supervisor
-    from substrate.infrastructure.serving_factory import resume_pending_runs
+    from substrate.integrations.runtime.event_log import EventLog
+    from substrate.integrations.runtime.inbox import Inbox
+    from substrate.integrations.runtime.scheduler import Scheduler
+    from substrate.integrations.runtime.signal_bus import SignalBus
+    from substrate.integrations.runtime.supervisor import Supervisor
+    from substrate.serving.factory import resume_pending_runs
 
     stale_spec = {
         "mode": "react",
@@ -694,11 +694,11 @@ async def test_pg_spawn_denied_once_headcount_cap_reached() -> None:
     to prove the cap applies regardless of caller."""
     import asyncpg
 
-    from substrate.infrastructure.runtime.event_log import EventLog
-    from substrate.infrastructure.runtime.inbox import Inbox
-    from substrate.infrastructure.runtime.scheduler import Scheduler
-    from substrate.infrastructure.runtime.signal_bus import SignalBus
-    from substrate.infrastructure.runtime.supervisor import Supervisor
+    from substrate.integrations.runtime.event_log import EventLog
+    from substrate.integrations.runtime.inbox import Inbox
+    from substrate.integrations.runtime.scheduler import Scheduler
+    from substrate.integrations.runtime.signal_bus import SignalBus
+    from substrate.integrations.runtime.supervisor import Supervisor
     from substrate.kernel.agent.supervision import Supervision, SpawnBudget
     from substrate.kernel.exceptions import BudgetExhaustedError
     from substrate.kernel.runtime.effects import Effect
@@ -795,11 +795,11 @@ async def test_pg_tool_approval_survives_full_pool_close_and_reopen() -> None:
     from substrate.agents.runtime.effect_cache import EffectCache
     from substrate.agents.tools.invoker import ToolInvoker
     from substrate.agents.tools.toolbox import Toolbox
-    from substrate.infrastructure.runtime.event_log import EventLog
-    from substrate.infrastructure.runtime.inbox import Inbox
-    from substrate.infrastructure.runtime.scheduler import Scheduler
-    from substrate.infrastructure.runtime.signal_bus import SignalBus
-    from substrate.infrastructure.runtime.supervisor import Supervisor
+    from substrate.integrations.runtime.event_log import EventLog
+    from substrate.integrations.runtime.inbox import Inbox
+    from substrate.integrations.runtime.scheduler import Scheduler
+    from substrate.integrations.runtime.signal_bus import SignalBus
+    from substrate.integrations.runtime.supervisor import Supervisor
     from substrate.kernel.agent.runtime_context import RunMeta
     from substrate.kernel.exceptions import SuspendInterrupt
     from substrate.kernel.tools import ToolExecutionResult, ToolRisk
@@ -1223,7 +1223,7 @@ async def test_pg_retention_sweep(pg_runtime) -> None:
     and leaves runs terminated more recently than the cutoff untouched."""
     from datetime import timedelta
 
-    from substrate.infrastructure.runtime import sweep_terminal_runs
+    from substrate.integrations.runtime import sweep_terminal_runs
 
     agent_id = _agent_id("pg-sweep")
     agent = RecorderAgent(agent_id)
@@ -1354,7 +1354,7 @@ async def test_pg_tail_reconnect_from_different_pool_and_seq(pg_runtime) -> None
     connection) resumes tailing an in-progress run from a mid-stream
     from_seq and sees only what it asked for, then the rest live — proving
     SSE reconnect doesn't depend on replica affinity."""
-    from substrate.infrastructure.runtime.event_log import EventLog
+    from substrate.integrations.runtime.event_log import EventLog
 
     agent_id = _agent_id("pg-reconnect")
     agent = StreamingAgent(agent_id)
@@ -1422,7 +1422,7 @@ async def test_pg_fair_scheduling_across_tenants() -> None:
         pytest.skip("Postgres not reachable")
     import asyncpg
 
-    from substrate.infrastructure.runtime.scheduler import Scheduler
+    from substrate.integrations.runtime.scheduler import Scheduler
 
     pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
     try:

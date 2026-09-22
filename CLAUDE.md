@@ -101,7 +101,7 @@ src/substrate/
 │   │                     ReasoningDelta, CompletionEvent, StreamDone, AgentProgress)
 │   ├── storage/          blob.py (BlobStore), history.py (HistoryProvider),
 │   │                     vector.py (VectorStore, Document), graph.py (GraphStore),
-│   │                     memory.py (SessionStore)
+│   │                     memory.py (ShortTermMemory, MemoryStore)
 │   ├── tools/            tools.py (Tool/HostedTool/ProviderDefinedTool, AnyTool,
 │   │                     ToolRegistry, ToolRisk, ToolExecutionResult), chain.py (chain
 │   │                     contracts: ChainPolicy, InvocationResult, ChainRunResult),
@@ -115,26 +115,43 @@ src/substrate/
 │   └── runtime/          agent.py (Agent), inbox.py, scheduler.py, supervisor.py,
 │                         effects.py, fanout.py, follow_graph.py, log_entry.py, ids.py, …
 │
-├── agents/       L1 — core intelligence: agent types, middleware, guardrails, context
+├── agents/       L1 — "run a complete chatbot, zero infra". Every kernel Protocol gets
+│   │             exactly one default implementation here, using the least infra that
+│   │             Protocol can possibly need — local filesystem/SQLite for storage/runtime,
+│   │             one OpenAI-compatible chat client + one local embedding client for LLM.
 │   ├── core/             ReActAgent, OrchestratorAgent (+ SubAgentConfig), UserProxyAgent,
-│   │                     InformationAgent, PersonalFeedAgent
-│   ├── context/          AgentContext, InMemoryHistoryProvider, compaction/ strategies
-│   ├── llm/              model registry, SemanticCache, FallbackClient, ModelRouter
+│   │                     BaseAgent, InformationAgent, PersonalFeedAgent
+│   ├── context/          AgentContext, LocalFilesystemHistoryProvider, compaction/ strategies
+│   ├── llm/              client.py/models.py (kernel re-export + ModelProfile registry),
+│   │                     chat_client.py (OpenAIChatCompletionClient — L1 default chat
+│   │                     client), embedding_client.py (SentenceTransformersEmbeddingClient —
+│   │                     L1 default embedding client, local model, no external API)
+│   ├── flows/            SequentialFlow, ParallelFlow, ConditionalFlow
+│   ├── evals/            EvalCase, EvalDataset, LLMJudge, EvalRunner, EvalReport
 │   ├── middleware/       MiddlewarePipeline, guardrails/ (incl. MultimodalSafetyMiddleware),
 │   │                     AuditLogger, RateLimiter, …
 │   ├── safety/           normalize() — NFKC + UTS-39 confusables-skeleton homoglyph
 │   │                     defense, shared by the L1 guardrail and L2 classifiers
-│   ├── runtime/          Runtime facade + Worker + backends/ (in-process asyncio dispatch)
+│   ├── runtime/          Runtime facade + Worker + backends/ (InMemory* + Local* SQLite —
+│   │                     build_local_runtime() wires the 6 SQLite backends together)
 │   ├── tools/            Toolbox (ToolRegistry impl), ToolInvoker (chain dispatch, L1)
-│   ├── storage/          InMemoryFileStore, TaskStore/GlobalTaskStore
+│   ├── storage/          history, graph, vector, tasks + local_object_store.py
+│   │                     (WorkspaceFileStore — L1 default ObjectStore),
+│   │                     local_short_term_memory.py, local_memory_store.py (L1 defaults
+│   │                     for the kernel ShortTermMemory / MemoryStore Protocols)
+│   ├── limits/           ExecutionTracker (per-agent spend), SpawnTracker (headcount +
+│   │                     priority preemption), RetryPolicy
 │   ├── hooks/            lifecycle hooks (RUN_START/END, STEP, LLM, TOOL, HANDOFF)
-│   ├── resources/        ExecutionTracker (per-agent spend, wired into ReActAgent loop)
-│   ├── supervision/      SpawnTracker (headcount + priority preemption), RetryPolicy
+│   ├── workspace/        WorkspaceScope, BlobCAS, branching, snapshots
 │   └── factory.py        create_assistant_agent, load_session_memory, rebuild_messages
 │
-├── capabilities/ L2 — everything agents can use: tools, knowledge, memory, history, …
-│   ├── llm/              OpenAIChatCompletionClient — universal /v1/chat/completions client
-│   ├── tools/            tool implementations + skills + discovery scanner
+├── integrations/ L2 — everything that reaches outside the process: more storage backends,
+│   │             more LLM vendors, tools, RAG, MCP, sandboxed code execution — everything
+│   │             past the one L1 default for a given Protocol.
+│   ├── llm/              LLMFactory (vendor auto-detect), provider clients (openai/,
+│   │                     anthropic/, gemini/), encoders/
+│   ├── tools/            tool implementations + skills + discovery scanner + MCP bridge
+│   │   ├── mcp/          MCPClient, MCPTool — protocol bridge to external MCP servers
 │   │   ├── skills/       SKILL.md prompt-skill packages (SkillTool, SkillManager)
 │   │   ├── chain/        ToolChainTool + bridge + prelude (sandboxed code-mode chaining)
 │   │   ├── web/          WebSearchTool, WebSurferTool, ReadUrlTool, WikipediaTool
@@ -146,39 +163,38 @@ src/substrate/
 │   │   ├── utils/        CurrentTimeTool, ToolSearchTool
 │   │   ├── task_manager/ TaskManagerTool (Kanban board)
 │   │   └── code_interpreter/ CodeInterpreterTool + pluggable SandboxRuntime (nsjail/k8s/inprocess)
+│   ├── events/           EventBus (Redis pub/sub) + EventEnvelope (wire format)
+│   ├── tts/              text-to-speech provider adapters
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore, DurableMemoryStore
 │   ├── history/          RedisHistoryProvider, DurableHistoryProvider
-│   ├── vector/           PgVectorStore  (implements VectorStore Protocol)
+│   ├── vector/           PgVectorStore, LanceDB  (implement VectorStore Protocol)
 │   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
-│   ├── storage/          S3FileStore (wraps infrastructure S3Connector)
-│   ├── pipeline/         PipelineEngine, DataRef/DataRefArtifactStore, PipelineStore
-│   └── triggers/         TriggerScheduler, WebhookRegistry, ConditionMonitor
-│
-├── fabric/       L3 — how agents are orchestrated: flows + evals
-│   ├── flows/            SequentialFlow, ParallelFlow, ConditionalFlow
-│   └── evals/            EvalCase, EvalDataset, LLMJudge, EvalRunner, EvalReport
-│
-├── integrations/ external third-party I/O adapters (orthogonal to layers)
-│   ├── llm/              LLMFactory, provider clients (openai/, anthropic/, gemini/), encoders/
-│   ├── tools/            protocol bridges — MCP (MCPClient, MCPTool), A2A (planned)
-│   ├── events/           EventBus (Redis pub/sub) + EventEnvelope (wire format)
-│   └── connectors/       external service connectors (email, google_calendar)
-│
-├── infrastructure/ built-in standard backends for the engine itself (orthogonal to layers)
+│   ├── storage/          S3Connector (raw client) + S3FileStore (ObjectStore Protocol
+│   │                     impl built on top), PgTaskStore, PostgresWorkspaceStore
 │   ├── database/         PostgresConnector (asyncpg pool — engine's own DB)
 │   ├── cache/            RedisConnector
-│   ├── storage/          S3Connector (S3-compatible object storage)
-│   └── runtime/          EventLog/Inbox/Scheduler, RedisJournal,
-│                         build_postgres_runtime() — durable runtime backends
+│   ├── runtime/          EventLog/Inbox/Scheduler (durable Postgres backends),
+│   │                     build_postgres_runtime()
+│   ├── pipeline/         PipelineEngine, DataRef/DataRefArtifactStore, PipelineStore
+│   ├── triggers/         TriggerScheduler, WebhookRegistry, ConditionMonitor
+│   ├── safety/           TextSafetyClassifier, ImageSafetyClassifier (model-backed)
+│   ├── artifacts/        OKF store
+│   └── gdpr/             cross-store eraser
 │
-├── serving/      deployment shells (orthogonal to layers)
+├── serving/      orthogonal — the one folder outside the 3-layer stack. Owns its own
+│   │             composition root (factory.py/research_orchestrator.py — formerly a
+│   │             separate infrastructure/ concept, eliminated).
 │   ├── monolith/         single FastAPI app (app.py, routes/, sse/, security/, services/)
 │   ├── services/         12 independent microservices (one FastAPI app per folder)
 │   ├── shared/           cross-service infra: auth, database, events, contracts, observability
 │   ├── protocol/         engine↔UI SSE wire protocol (WireEvent union, requests, version);
 │   │                     `from_log.wire_from_log(kind, payload)` converts log entries to WireEvents
-│   └── stream/           AgentStreamSession — tails EventLog, maps entries via wire_from_log
+│   ├── stream/           AgentStreamSession — tails EventLog, maps entries via wire_from_log
+│   ├── factory.py        constructs agents, tools, and runtime for the HTTP shell —
+│   │                     the primary place serving/ and agents/integrations meet
+│   └── research_orchestrator.py  fixed researcher/calculator/clock/coordinator topology
+│                         used when AGENT_MODE=orchestrator
 │
 ├── runtimes/     independently-deployable, heavy-dependency, HTTP-only services (orthogonal to layers)
 │   ├── document_intelligence/  PaddleOCR layout/chart/table extraction + OCR (client.py always importable)
@@ -224,46 +240,51 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 
 ---
 
-## Architecture — four enforced layers
+## Architecture — three enforced layers
 
 ```
-kernel (L0)       Pure contracts: Protocols, dataclasses, enums. No I/O.
+kernel (L0)        Pure contracts: Protocols, dataclasses, enums. No I/O.
     ↑ imported by
-agents (L1)       Core intelligence: LLM loop, guardrails, middleware, agent types.
+agents (L1)        Run a complete chatbot, zero infra: LLM loop, guardrails,
+                    middleware, flows, evals — one default implementation per
+                    kernel Protocol, using the least infra it can need.
     ↑ imported by
-capabilities (L2) What agents can do: tools, skills, knowledge/RAG, memory, stores.
-    ↑ imported by
-fabric (L3)       How agents are orchestrated: flows, evals, durable execution.
+integrations (L2)  Everything that reaches outside the process: more storage
+                    backends (Postgres/S3/Redis), more LLM vendors, tools,
+                    RAG, MCP, sandboxed code execution.
 ```
 
-`integrations/`, `infrastructure/`, and `serving/` are **orthogonal** — they
-implement kernel Protocols and wire all layers together in lifespan. They are not
-part of the stack hierarchy. Distinction: `infrastructure/` holds built-in
-standard backends the engine runs on (Postgres, Redis, SeaweedFS + durable runtime);
-`integrations/` holds external third-party adapters (LLM providers, MCP,
-email/calendar connectors).
+`serving/` is **orthogonal** — it implements kernel Protocols and wires
+kernel/agents/integrations together in lifespan (in its own composition root,
+`serving/factory.py`); it is not part of the stack hierarchy. There used to be
+a separate `infrastructure/` folder for built-in backend connectors — it was
+eliminated: those connectors merged into `integrations/` (same "reaches
+outside the process" shape as everything else there), and its composition
+root (`serving_factory.py`/`research_orchestrator.py`) moved into `serving/`
+itself, since building the DI graph `serving/monolith/app.py` consumes is
+serving's own job, not a layer.
 
 **Dependency rule** (strictly downward; enforced by `uv run lint-imports`):
 
 ```
-fabric        →  capabilities  →  agents  →  kernel
-integrations, infrastructure, serving  =  orthogonal (cross-layer by design)
+integrations  →  agents  →  kernel
+serving  =  orthogonal (cross-layer by design)
 ```
 
 **Import-linter contracts** (`pyproject.toml`, CI fails if violated):
 
 | Contract | Rule |
 |---|---|
-| `four stack layers` | Each layer only imports from the layer(s) below it |
-| `agents cannot import capabilities or fabric` | L1 must not reach up to L2 or L3 |
-| `capabilities cannot import fabric` | L2 must not reach up to L3 |
+| `three stack layers` | Each layer only imports from the layer(s) below it |
+| `agents cannot import integrations` | L1 must not reach up to L2 |
 | `kernel is independent` | L0 imports nothing from the rest of the codebase |
+| `serving cannot import agents or integrations-that-were-capabilities` | serving/'s routes and services don't reach past its own `factory.py`/`research_orchestrator.py` composition root — those two files are exempt by design |
 
 **Kernel invariants** (`tests/architecture/test_kernel_invariants.py`):
 - LOC ceiling (6k) and file-count ceiling (45) — catch accidental feature drift
 - No concrete implementations — only Protocols, ABCs, dataclasses, enums
 
-`src/substrate/kernel/` is **frozen** — new contracts belong there only if they have zero external dependencies and are needed by multiple layers. New capabilities go in `capabilities/`, new agent behaviour in `agents/`, new orchestration in `fabric/`.
+`src/substrate/kernel/` is **frozen** — new contracts belong there only if they have zero external dependencies and are needed by multiple layers. New zero-infra defaults go in `agents/`, new production-infra backends/vendors/tools go in `integrations/`.
 
 ---
 
@@ -276,12 +297,12 @@ integrations, infrastructure, serving  =  orthogonal (cross-layer by design)
 | A new agent type | `agents/core/<name>.py` — follow `ReActAgent` pattern |
 | A new guardrail | `agents/middleware/guardrails/<name>.py` — implement middleware contract |
 | A new LLM provider | `integrations/llm/<provider>/` — implement `LLMClient` Protocol from `kernel/llm/llm.py` |
-| A new memory backend | `capabilities/history/<name>.py` — implement `HistoryProvider` Protocol from `kernel/storage/history.py` |
-| A new vector store | `capabilities/vector/<name>.py` — implement `VectorStore` Protocol from `kernel/storage/vector.py` |
-| A new graph store | `capabilities/graph/<name>.py` — implement `GraphStore` Protocol from `kernel/storage/graph.py` |
-| A new tool | `capabilities/tools/<name>/tool.py` — implement `Tool` Protocol (auto-scanned, no registration needed) |
-| A new skill | `capabilities/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
-| A new agent flow | `fabric/flows/` — write a standalone agent (`id` + `run(ctx, inbox)`) using SequentialFlow / ParallelFlow / ConditionalFlow |
+| A new memory backend | `integrations/history/<name>.py` — implement `HistoryProvider` Protocol from `kernel/storage/history.py` |
+| A new vector store | `integrations/vector/<name>.py` — implement `VectorStore` Protocol from `kernel/storage/vector.py` |
+| A new graph store | `integrations/graph/<name>.py` — implement `GraphStore` Protocol from `kernel/storage/graph.py` |
+| A new tool | `integrations/tools/<name>/tool.py` — implement `Tool` Protocol (auto-scanned, no registration needed) |
+| A new skill | `integrations/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
+| A new agent flow | `agents/flows/` — write a standalone agent (`id` + `run(ctx, inbox)`) using SequentialFlow / ParallelFlow / ConditionalFlow |
 
 ### Tool creation
 
@@ -306,7 +327,7 @@ provider lives in `integrations/llm/<provider>_client.py::_tools_from_options`
 + `integrations/llm/encoders/<provider>.py::encode_tools` — no shared kernel
 encoder type; each provider client builds its own dicts.
 
-Placed at `capabilities/tools/my_tool/tool.py` — `CatalogScanner` discovers it automatically.
+Placed at `integrations/tools/my_tool/tool.py` — `CatalogScanner` discovers it automatically.
 
 ### LLM client
 
@@ -318,8 +339,8 @@ client = LLMFactory("gpt-4o", api_key).build()
 client = LLMFactory("groq/llama-3.3-70b-versatile", api_key).build()
 client = LLMFactory("ollama/llama3.2", "ollama").build()   # local, no key
 
-# Or construct the universal client directly
-from substrate.capabilities.llm import OpenAIChatCompletionClient
+# Or construct the L1-default universal client directly (agents/, zero infra)
+from substrate.agents.llm import OpenAIChatCompletionClient
 client = OpenAIChatCompletionClient(model="llama3.2", api_key="ollama",
                                     base_url="http://localhost:11434/v1")
 ```
@@ -371,21 +392,24 @@ All shared objects (LLM clients, tool registry, event bus, HITL bridge) are wire
 ## Memory / History
 
 ```python
-# In-memory (default, for testing)
-from substrate.agents.context import InMemoryHistoryProvider
+# L1 default — one JSON file per session, zero infra
+from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
+
+# In-memory (testing only)
+from substrate.agents.storage.history import InMemoryHistoryProvider
 
 # Redis-backed
-from substrate.capabilities.history import RedisHistoryProvider
+from substrate.integrations.history import RedisHistoryProvider
 
 # Postgres-backed
-from substrate.capabilities.history import DurableHistoryProvider
+from substrate.integrations.history import DurableHistoryProvider
 ```
 
 All `HistoryProvider` methods are `async def`. Always `await` them.
 
 ## Knowledge / RAG
 
-Vector and graph store contracts live in the kernel. Concrete implementations live in `capabilities/`; `capabilities/knowledge/` wires them into pipelines.
+Vector and graph store contracts live in the kernel. Concrete implementations live in `integrations/`; `integrations/knowledge/` wires them into pipelines.
 
 ```python
 # Contracts (kernel)
@@ -393,11 +417,11 @@ from substrate.kernel.storage.vector import VectorStore, Document, SearchResult
 from substrate.kernel.storage.graph import GraphStore, Entity, Relationship, SubGraph
 
 # Concrete implementations
-from substrate.capabilities.vector import PgVectorStore
-from substrate.capabilities.graph import AGEGraphStore
+from substrate.integrations.vector import PgVectorStore
+from substrate.integrations.graph import AGEGraphStore
 
 # High-level RAG pipeline
-from substrate.capabilities.knowledge import RAGPipeline, GraphRAGPipeline
+from substrate.integrations.knowledge import RAGPipeline, GraphRAGPipeline
 
 pipeline = RAGPipeline(embedding_client=embed_client, vector_store=pg_store)
 await pipeline.ingest("Long document …", collection="kb")
@@ -508,10 +532,10 @@ make ci
 
 ---
 
-## Evaluation Framework (`fabric/evals/`)
+## Evaluation Framework (`agents/evals/`)
 
 ```python
-from substrate.fabric.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
+from substrate.agents.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
 
 runner = EvalRunner(agent=my_agent, judge=LLMJudge(criteria=[CORRECTNESS]))
 report = await runner.run(dataset)
@@ -539,7 +563,7 @@ runner.export_markdown()
 - **`uv` only** — never `pip install` or `pip uninstall`
 - **snake_case** — files, modules, functions, variables
 - New DB models → service-local `models.py` (microservices) or `serving/monolith/` (monolith)
-- New skills → `src/substrate/capabilities/tools/skills/<name>/SKILL.md` with YAML frontmatter
+- New skills → `src/substrate/integrations/tools/skills/<name>/SKILL.md` with YAML frontmatter
 - **DB session dependency** — all microservice routes use `get_db_session` from `serving/shared/database/`. Never define a local `_get_db` helper.
 - **Testing** — `asyncio_mode = "auto"` in `pyproject.toml`: write `async def test_*` directly, no `@pytest.mark.asyncio` needed.
 - **Interactive Console** — `/q` is the sole quit/exit command. Interactive session uses `prompt_toolkit` for async-compatible autocomplete of slash commands (`/tools`, `/skills`, `/reset`, `/help`, `/q`) and input history.
@@ -550,7 +574,7 @@ runner.export_markdown()
 
 | Area | Issue |
 |---|---|
-| Test coverage | `guardrails`/`middleware`/MCP adapter/`fabric/evals` have real (if not exhaustive) coverage as of 2026-07-05 — the genuinely thin area is **microservices business logic** (`identity`, `policy`, `job_controller`, `tool_executor`, `code_interpreter`): only health/smoke tests exist (`tests/server/test_services_health.py`), no per-service behavior tests. See `docs/claude_docs/roadmap.md` "Recently shipped" (v1 remediation) for what else shipped that session and its known gaps. |
+| Test coverage | `guardrails`/`middleware`/MCP adapter/`agents/evals` have real (if not exhaustive) coverage as of 2026-07-05 — the genuinely thin area is **microservices business logic** (`identity`, `policy`, `job_controller`, `tool_executor`, `code_interpreter`): only health/smoke tests exist (`tests/server/test_services_health.py`), no per-service behavior tests. See `docs/claude_docs/roadmap.md` "Recently shipped" (v1 remediation) for what else shipped that session and its known gaps. |
 | Microservices event architecture | Only 3 of ~28 domain-event factories in `serving/shared/events/types.py` have a real producer (`session_started`, `workflow_started`, `workflow_failed`); `live_stream` (the SSE projector) has almost nothing to project in the microservices deployment beyond a run starting/failing. Concretely: `workflow_completed` is never published by any service, so `job_controller::complete_run` is unreachable — a successful run has no code path that marks it `completed`. See `docs/claude_docs/roadmap.md`'s deferred-items list (2026-07-12 entry) for the full finding. |
 
 ---

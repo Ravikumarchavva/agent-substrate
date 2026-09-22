@@ -17,11 +17,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from substrate.capabilities.knowledge.backends.local import LocalRagBackend
-from substrate.capabilities.knowledge.pipeline import RAGPipeline
-from substrate.capabilities.knowledge.session_ingest import ingest_session_document
+from substrate.integrations.knowledge.backends.local import LocalRagBackend
+from substrate.integrations.knowledge.pipeline import RAGPipeline
+from substrate.integrations.knowledge.session_ingest import ingest_session_document
 from substrate.config import SubstrateConfig
-from substrate.infrastructure.serving_factory import (
+from substrate.serving.factory import (
     build_page_index_memory,
     build_session_graph_store,
     build_session_index_vector_store,

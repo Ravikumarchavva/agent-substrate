@@ -58,6 +58,14 @@ from substrate.agents.core import (
     SubAgentConfig,
 )
 from substrate.agents.runtime import Runtime, RunContext, RunOutcome
+from substrate.agents.flows import SequentialFlow, ParallelFlow, ConditionalFlow
+from substrate.agents.evals import (
+    EvalCase,
+    EvalDataset,
+    LLMJudge,
+    EvalReport,
+    EvalRunner,
+)
 
 __all__ = [
     # context
@@ -109,4 +117,14 @@ __all__ = [
     "Runtime",
     "RunOutcome",
     "RunContext",
+    # flows
+    "SequentialFlow",
+    "ParallelFlow",
+    "ConditionalFlow",
+    # evals
+    "EvalCase",
+    "EvalDataset",
+    "LLMJudge",
+    "EvalReport",
+    "EvalRunner",
 ]

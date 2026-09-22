@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.capabilities.knowledge.chunking import (
+from substrate.integrations.knowledge.chunking import (
     ExtractionDocumentChunker,
     get_chunker,
 )
-from substrate.capabilities.knowledge.document_store import InMemoryDocumentStore
+from substrate.integrations.knowledge.document_store import InMemoryDocumentStore
 from substrate.kernel.document.models import (
     DocumentChunk,
     DocumentMetadata,

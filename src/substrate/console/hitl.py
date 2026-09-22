@@ -11,7 +11,7 @@ run.  Zero compute is consumed while the human decides.
 Usage::
 
     from substrate.console.hitl import ConsoleHumanHandler
-    from substrate.capabilities.tools.human_input import AskHumanTool
+    from substrate.integrations.tools.human_input import AskHumanTool
 
     handler = ConsoleHumanHandler()
     ask = AskHumanTool(handler=handler)
@@ -31,7 +31,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 if TYPE_CHECKING:
-    from substrate.capabilities.tools.human_input import InputOption
+    from substrate.integrations.tools.human_input import InputOption
     from .theme import ConsoleTheme
 
 

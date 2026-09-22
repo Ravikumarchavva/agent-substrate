@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Union
 
-from substrate.capabilities.knowledge.loaders.base import BaseDocumentLoader
+from substrate.integrations.knowledge.loaders.base import BaseDocumentLoader
 from substrate.kernel.core.content import TextBlock
 from substrate.kernel.storage.vector import Document
 

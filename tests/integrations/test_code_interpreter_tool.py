@@ -8,11 +8,11 @@ import pytest
 
 from substrate.agents.storage.tasks import current_agent_id, current_thread_id
 from substrate.agents.workspace.scope import current_branch_id, current_tenant_id, current_user_id
-from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.base import (
+from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
     ExecResult,
     NetworkPolicy,
 )
-from substrate.capabilities.tools.code_interpreter.code_interpreter.tool import (
+from substrate.integrations.tools.code_interpreter.code_interpreter.tool import (
     CodeInterpreterTool,
 )
 

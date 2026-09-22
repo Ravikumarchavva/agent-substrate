@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes import (
+from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes import (
     InProcessRuntime,
     NetworkPolicy,
     NsjailRuntime,

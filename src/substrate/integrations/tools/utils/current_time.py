@@ -13,7 +13,7 @@ class CurrentTimeTool:
 
     Example::
 
-        from substrate.capabilities.tools import CurrentTimeTool
+        from substrate.integrations.tools import CurrentTimeTool
         agent = ReActAgent("bot", runtime, model=llm, tools=[CurrentTimeTool()])
     """
 

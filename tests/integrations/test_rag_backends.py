@@ -9,12 +9,12 @@ import pytest
 from substrate.kernel.storage.vector import Document, SearchResult
 from substrate.kernel.llm import EmbeddingResult, LLMResponse
 from substrate.kernel.core.content import TextBlock
-from substrate.capabilities.knowledge.backends import (
+from substrate.integrations.knowledge.backends import (
     RagBackendUnavailableError,
     build_rag_backend,
 )
-from substrate.capabilities.knowledge.backends.local import LocalRagBackend
-from substrate.capabilities.knowledge.reranker import LLMReranker
+from substrate.integrations.knowledge.backends.local import LocalRagBackend
+from substrate.integrations.knowledge.reranker import LLMReranker
 
 
 class StubEmbeddingClient:
@@ -34,7 +34,7 @@ class StubEmbeddingClient:
 
 
 class StubVectorStore:
-    """Same stub shape used in tests/capabilities/test_rag_pipelines.py."""
+    """Same stub shape used in tests/integrations/test_rag_pipelines.py."""
 
     def __init__(self) -> None:
         self.documents: list[Document] = []
@@ -79,7 +79,7 @@ class StubVectorStore:
 
 
 class StubLLMClient:
-    """Same stub shape used in tests/capabilities/test_rag_pipelines.py."""
+    """Same stub shape used in tests/integrations/test_rag_pipelines.py."""
 
     def __init__(self, responses: list[str]) -> None:
         self.responses = responses
@@ -187,7 +187,7 @@ async def test_local_backend_query_reranks_when_configured():
     reranker = LLMReranker(llm)
     backend = LocalRagBackend(
         pipeline=__import__(
-            "substrate.capabilities.knowledge.pipeline", fromlist=["RAGPipeline"]
+            "substrate.integrations.knowledge.pipeline", fromlist=["RAGPipeline"]
         ).RAGPipeline(embed, store),
         vector_store=store,
         reranker=reranker,

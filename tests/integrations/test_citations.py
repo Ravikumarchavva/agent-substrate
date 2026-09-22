@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from substrate.capabilities.knowledge.citations import (
+from substrate.integrations.knowledge.citations import (
     Citation,
     CitationLedger,
     CitationLedgerStore,

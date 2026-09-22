@@ -14,8 +14,8 @@ from __future__ import annotations
 import time
 from pathlib import PurePosixPath
 
-from substrate.capabilities.storage.workspace import WorkspaceQuotaExceededError
-from substrate.infrastructure.storage.s3 import S3Connector
+from substrate.agents.storage.local_object_store import WorkspaceQuotaExceededError
+from substrate.integrations.storage.s3_connector import S3Connector
 
 _USAGE_CACHE_TTL = 30.0  # seconds
 

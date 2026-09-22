@@ -9,7 +9,7 @@ from substrate.logger import setup_logging
 import os
 from contextlib import asynccontextmanager
 
-from substrate.infrastructure.cache.redis import RedisConnector
+from substrate.integrations.cache.redis import RedisConnector
 from substrate.serving.services.base import create_service_app, init_service_db
 from substrate.serving.services.conversation.models import ServiceBase
 from substrate.serving.services.conversation.routes import memory_router, thread_router

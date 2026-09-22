@@ -34,7 +34,7 @@ from .widgets import assistant_panel, error_panel, user_markup
 
 if TYPE_CHECKING:
     from substrate.agents.runtime import Runtime
-    from substrate.capabilities.tools.skills._manager import SkillManager
+    from substrate.integrations.tools.skills._manager import SkillManager
 
 
 class Console:

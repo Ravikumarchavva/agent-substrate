@@ -48,11 +48,11 @@ dependencies = [
     "apscheduler>=4.0.0a5",
     # fastapi itself stays core: substrate.serve.add_routes (the thin,
     # optional "hand your agent object to a server" adapter) type-hints
-    # against it directly, and capabilities/tools/chain/bridge.py already
+    # against it directly, and integrations/tools/chain/bridge.py already
     # lazily imports it for tool-chain execution. uvicorn/python-multipart/
     # pyjwt/cryptography below are a different story -- confirmed via
     # repo-wide grep to have ZERO usage anywhere in kernel/agents/
-    # capabilities/fabric/infrastructure/integrations -- they exist purely
+    # integrations -- they exist purely
     # for the reference `serving/` monolith+microservices (running a real
     # uvicorn process, parsing multipart file uploads, issuing/verifying
     # its own JWTs), so they moved to the `server` extra instead of being
@@ -113,7 +113,7 @@ safety = [
 # everything the reference monolith server needs beyond the base install --
 # uvicorn to actually run it, python-multipart for file-upload routes,
 # pyjwt+cryptography for its own auth. None of these are needed to build
-# and run an agent object with substrate.agents/capabilities alone.
+# and run an agent object with substrate.agents/integrations alone.
 server = [
     "agent-substrate[web,code,rag,s3,safety,sandbox,anthropic,gemini]",
     "uvicorn[standard]>=0.34.0",
@@ -220,33 +220,26 @@ exclude = ["notebooks/", "examples/", ".venv"]
 # ---------------------------------------------------------------------------
 # import-linter — enforce the layered architecture so the kernel stays frozen.
 # Layers (strictly downward dependencies only):
-#   fabric (L3)  ←  capabilities (L2)  ←  agents (L1)  ←  kernel (L0)
+#   integrations (L2)  ←  agents (L1)  ←  kernel (L0)
 # Run with: uv run lint-imports
 # ---------------------------------------------------------------------------
 [tool.importlinter]
 root_packages = ["substrate"]
 
 [[tool.importlinter.contracts]]
-name = "four stack layers"
+name = "three stack layers"
 type = "layers"
 layers = [
-    "substrate.fabric",        # L3 — orchestration programs (flows, evals, durable)
-    "substrate.capabilities",  # L2 — tools, skills, knowledge, connectors
-    "substrate.agents",        # L1 — core intelligence, LLM, guardrails, middleware
+    "substrate.integrations",  # L2 — everything that reaches outside the process: tools, storage swap-ins, LLM vendors, RAG, MCP
+    "substrate.agents",        # L1 — core intelligence, LLM, guardrails, middleware, flows, evals
     "substrate.kernel",        # L0 — pure contracts: Protocols, dataclasses, enums
 ]
 
 [[tool.importlinter.contracts]]
-name = "agents cannot import capabilities or fabric"
+name = "agents cannot import integrations"
 type = "forbidden"
 source_modules = ["substrate.agents"]
-forbidden_modules = ["substrate.capabilities", "substrate.fabric"]
-
-[[tool.importlinter.contracts]]
-name = "capabilities cannot import fabric"
-type = "forbidden"
-source_modules = ["substrate.capabilities"]
-forbidden_modules = ["substrate.fabric"]
+forbidden_modules = ["substrate.integrations"]
 
 [[tool.importlinter.contracts]]
 name = "kernel is independent"
@@ -254,8 +247,6 @@ type = "forbidden"
 source_modules = ["substrate.kernel"]
 forbidden_modules = [
     "substrate.agents",
-    "substrate.capabilities",
-    "substrate.fabric",
     "substrate.integrations",
     "substrate.serving",
     "substrate.config",
@@ -263,34 +254,65 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "serving cannot import agents or capabilities"
+name = "serving cannot import agents or integrations-that-were-capabilities"
 type = "forbidden"
-source_modules = ["substrate.serving"]
-forbidden_modules = ["substrate.agents", "substrate.capabilities", "substrate.fabric"]
-# infrastructure/ is orthogonal — it may cross-cut to agents/capabilities by design.
-# We only want to catch DIRECT imports from serving/ to agents/capabilities.
+# substrate.serving.factory and .research_orchestrator are deliberately NOT
+# listed here — they're serving/'s own composition root (formerly
+# infrastructure/serving_factory.py, an orthogonal module outside the layer
+# stack entirely), whose whole job is building the DI graph across every
+# layer. This contract restricts the rest of serving/ (routes, services)
+# from reaching past that composition root directly.
+source_modules = [
+    "substrate.serving.monolith",
+    "substrate.serving.services",
+    "substrate.serving.shared",
+    "substrate.serving.protocol",
+    "substrate.serving.stream",
+]
+forbidden_modules = [
+    "substrate.agents",
+    # These are the former `capabilities/` submodules, now merged into
+    # `integrations/` (Phase G of the layer-charter pass). serving/ was
+    # always freely allowed to import `integrations.llm`/`.events`/`.tts`/
+    # `.tools.mcp` directly (they were never under the old "capabilities"
+    # restriction) — deliberately NOT listed here, so that stays true.
+    "substrate.integrations.tools",
+    "substrate.integrations.knowledge",
+    "substrate.integrations.memory",
+    "substrate.integrations.history",
+    "substrate.integrations.vector",
+    "substrate.integrations.graph",
+    "substrate.integrations.storage",
+    "substrate.integrations.pipeline",
+    "substrate.integrations.triggers",
+    "substrate.integrations.safety",
+    "substrate.integrations.artifacts",
+    "substrate.integrations.gdpr",
+]
+# serving/'s own factory.py is orthogonal — it may cross-cut to agents/integrations by design.
+# We only want to catch DIRECT imports from serving/'s routes to agents/former-capabilities.
 allow_indirect_imports = "true"
 ignore_imports = [
-    # current_thread_id ContextVar spans both chat.py and capabilities/task_manager
-    "substrate.serving.monolith.routes.chat -> substrate.capabilities.tools.task_manager.tool",
+    # current_thread_id ContextVar spans both chat.py and integrations/task_manager
+    "substrate.serving.monolith.routes.chat -> substrate.integrations.tools.task_manager.tool",
     # WebHITLBridge delivers human-input events; must know the capability type
-    "substrate.serving.monolith.sse.bridge -> substrate.capabilities.tools.human_input",
-    # pipelines/triggers routes need DTOs defined in capabilities (PipelineDef, TriggerDef, ConditionDef)
-    "substrate.serving.monolith.routes.pipelines -> substrate.capabilities.pipeline.engine",
-    "substrate.serving.monolith.routes.triggers -> substrate.capabilities.triggers.conditions",
-    "substrate.serving.monolith.routes.triggers -> substrate.capabilities.triggers.scheduler",
+    "substrate.serving.monolith.sse.bridge -> substrate.integrations.tools.human_input",
+    # pipelines/triggers routes need DTOs defined in integrations (PipelineDef, TriggerDef, ConditionDef)
+    "substrate.serving.monolith.routes.pipelines -> substrate.integrations.pipeline.engine",
+    "substrate.serving.monolith.routes.triggers -> substrate.integrations.triggers.conditions",
+    "substrate.serving.monolith.routes.triggers -> substrate.integrations.triggers.scheduler",
     # agent_runtime: in-memory fallback Runtime (for RUNTIME_BACKEND=memory env)
     "substrate.serving.services.agent_runtime.app -> substrate.agents.runtime",
     # tool_executor IS a capability executor by design
     "substrate.serving.services.tool_executor.app -> substrate.agents.storage.tasks",
-    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.code_interpreter",
-    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.factory",
-    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.task_manager.tool",
-    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.web.surfer",
+    "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.code_interpreter",
+    "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.factory",
+    "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.task_manager.tool",
+    "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.web.surfer",
     # files/workspace routes need WorkspaceFileStore/WorkspaceQuotaExceededError
-    "substrate.serving.monolith.routes.files -> substrate.capabilities.storage.workspace",
-    "substrate.serving.monolith.routes.workspace -> substrate.capabilities.storage.workspace",
-    "substrate.serving.monolith.routes.admin -> substrate.capabilities.storage.workspace",
+    "substrate.serving.monolith.routes.files -> substrate.agents.storage.local_object_store",
+    "substrate.serving.monolith.routes.workspace -> substrate.agents.storage.local_object_store",
+    "substrate.serving.monolith.routes.admin -> substrate.agents.storage.local_object_store",
     "substrate.serving.monolith.routes.workspace -> substrate.agents.workspace.layout",
     "substrate.serving.monolith.routes.files -> substrate.agents.workspace.layout",
     "substrate.serving.monolith.routes.knowledge -> substrate.agents.workspace.layout",
@@ -304,25 +326,24 @@ ignore_imports = [
     "substrate.serving.monolith.routes.branches -> substrate.agents.workspace.branching",
     # gdpr route needs the erasure orchestrator itself, the same way
     # files/workspace routes need WorkspaceFileStore above
-    "substrate.serving.monolith.routes.gdpr -> substrate.capabilities.gdpr.eraser",
+    "substrate.serving.monolith.routes.gdpr -> substrate.integrations.gdpr.eraser",
     # files/chat_context routes call the per-user session-document ingestion
     # orchestrator directly (upload-time eager staging / send-time fallback
     # ingest) — same shape as the PDFLoader exception directly above
-    "substrate.serving.monolith.routes.files -> substrate.capabilities.knowledge.session_ingest",
-    "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.session_ingest",
+    "substrate.serving.monolith.routes.files -> substrate.integrations.knowledge.session_ingest",
+    "substrate.serving.monolith.routes.chat_context -> substrate.integrations.knowledge.session_ingest",
     # Note: chat_context.py/files.py's ExtractionClient import, and
     # runtimes/document_intelligence/service/{schemas,routes}.py's import of
     # client.py/security_scan.py, no longer need an exception here —
-    # runtimes/ is a new orthogonal top-level package (like serving/
-    # integrations/infrastructure), not under capabilities, so this
-    # "serving cannot import agents or capabilities" contract doesn't apply
+    # runtimes/ is a separate orthogonal top-level package (like serving/
+    # itself), not under integrations/, so this
+    # "serving cannot import agents or integrations" contract doesn't apply
     # to those edges.
 ]
 
 # Orthogonal peers (not part of the layer stack):
-# integrations/ — concrete I/O ports (LLM clients, memory backends, vector stores)
-# serving/      — FastAPI monolith + microservices + shared infra
+# serving/      — FastAPI monolith + microservices + its own factory.py wiring
 # runtimes/     — independently-deployable, heavy-dependency, HTTP-only
 #                 services (document_intelligence, embedding_reranker)
-# These carry cross-layer edges by design (e.g. an integration implements a kernel
-# Protocol; serving wires all layers together in lifespan).
+# These carry cross-layer edges by design (e.g. serving/ wires kernel/agents/
+# integrations together in lifespan).

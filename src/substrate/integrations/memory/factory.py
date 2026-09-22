@@ -21,7 +21,7 @@ async def build_short_term_memory(
     in local_path) so session state persists across restarts without external services.
     """
     if database_url:
-        from substrate.capabilities.memory.durable_session_store import (
+        from substrate.integrations.memory.durable_session_store import (
             DurableSessionStore,
         )
 
@@ -30,16 +30,16 @@ async def build_short_term_memory(
         if redis_url is None:
             return primary
 
-        from substrate.capabilities.memory.cached_session_store import (
+        from substrate.integrations.memory.cached_session_store import (
             CachedShortTermMemory,
         )
-        from substrate.capabilities.memory.redis_session_store import RedisSessionStore
+        from substrate.integrations.memory.redis_session_store import RedisSessionStore
 
         cache = RedisSessionStore(redis_url=redis_url, ttl=ttl)
         await cache.connect()
         return CachedShortTermMemory(primary=primary, cache=cache)
 
-    from substrate.capabilities.memory.local_session_store import LocalFileSessionStore
+    from substrate.integrations.memory.local_session_store import LocalFileSessionStore
 
     store = LocalFileSessionStore(root=local_path)
     await store.connect()
@@ -58,7 +58,7 @@ async def build_memory_store(
     so user facts and preferences persist durably without PostgreSQL.
     """
     if database_url:
-        from substrate.capabilities.memory.durable_memory_store import (
+        from substrate.integrations.memory.durable_memory_store import (
             DurableMemoryStore,
         )
 
@@ -67,7 +67,7 @@ async def build_memory_store(
         await pg_store.create_tables()
         return pg_store
 
-    from substrate.capabilities.memory.lance_memory_store import LanceMemoryStore
+    from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
 
     return LanceMemoryStore(path=local_path)
 

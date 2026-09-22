@@ -64,6 +64,10 @@ class ServerDependencies:
     # sandbox never mounts it, so nothing lands here without an explicit
     # save or promotion.
     artifact_store: Optional[Any] = None
+    # Branch-isolated workspace snapshot store (kernel WorkspaceStore) — see
+    # agents/workspace/. Forking a branch's workspace goes through this,
+    # not file_store.copy_prefix.
+    workspace_store: Optional[Any] = None
 
 
 def get_ctx(request: Request) -> ServerDependencies:

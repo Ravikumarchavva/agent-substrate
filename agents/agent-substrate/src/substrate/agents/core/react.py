@@ -332,6 +332,7 @@ class ReActAgent:
             ctx.run_id,
             new_turns,
             branch_id=branch_id,
+            workspace_snapshot_id=ctx.latest_workspace_snapshot_id,
         )
 
         # Post-turn compaction execution (Phase 1D: POST_TURN)

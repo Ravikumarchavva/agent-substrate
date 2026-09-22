@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     from substrate.agents.core.proxy import UserProxyAgent
     from substrate.agents.core.information_agent import InformationAgent
     from substrate.config import SubstrateConfig
-    from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
-    from substrate.capabilities.storage.local_workspace_store import (
+    from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
+    from substrate.agents.workspace.local_workspace_store import (
         LocalFilesystemWorkspaceStore,
     )
     from substrate.capabilities.memory.local_session_store import LocalFileSessionStore
@@ -145,19 +145,19 @@ _LAZY: dict[str, tuple[str, str]] = {
     "SubstrateConfig": ("substrate.config", "SubstrateConfig"),
     # native durable storage
     "LocalFilesystemHistoryProvider": (
-        "substrate.capabilities.history.local_history",
+        "substrate.agents.context.local_history",
         "LocalFilesystemHistoryProvider",
     ),
     "LocalHistoryProvider": (
-        "substrate.capabilities.history.local_history",
+        "substrate.agents.context.local_history",
         "LocalFilesystemHistoryProvider",
     ),
     "LocalFilesystemWorkspaceStore": (
-        "substrate.capabilities.storage.local_workspace_store",
+        "substrate.agents.workspace.local_workspace_store",
         "LocalFilesystemWorkspaceStore",
     ),
     "LocalWorkspaceStore": (
-        "substrate.capabilities.storage.local_workspace_store",
+        "substrate.agents.workspace.local_workspace_store",
         "LocalFilesystemWorkspaceStore",
     ),
     "LocalFileSessionStore": (
@@ -180,7 +180,7 @@ _LAZY: dict[str, tuple[str, str]] = {
     "AgentRunResult": ("substrate.agents.middleware", "AgentRunResult"),
     "Skill": ("substrate.kernel.tools", "Skill"),
     "InMemoryHistoryProvider": (
-        "substrate.capabilities.history.local_history",
+        "substrate.agents.context.local_history",
         "LocalFilesystemHistoryProvider",
     ),
     "AgentContext": ("substrate.agents.context", "AgentContext"),

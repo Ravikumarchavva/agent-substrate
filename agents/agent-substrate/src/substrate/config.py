@@ -113,6 +113,12 @@ class SubstrateConfig(BaseSettings):
     SANDBOX_RUNTIME: str = "nsjail"
     SANDBOX_NETWORK_POLICY: str = "deny"  # "deny" | "pip_only" | "full"
     SANDBOX_TIMEOUT_SECONDS: int = 60
+    # Disposable local scratch StagedSandboxRuntime materializes a branch's
+    # workspace snapshot into before a run and commits back after — never
+    # the durable source of truth (that's the CAS + WorkspaceStore), safe to
+    # wipe on restart. Deliberately separate from FILE_STORE_ROOT: the
+    # object store holds content-addressed blobs now, not a browsable tree.
+    SANDBOX_SCRATCH_ROOT: str = ""
     SANDBOX_MEMORY_BYTES: int = 2 * 1024 * 1024 * 1024
     SANDBOX_SESSION_TTL_SECONDS: int = 3600
     SANDBOX_RUNTIME_CLASS: str = ""
@@ -190,6 +196,8 @@ class SubstrateConfig(BaseSettings):
             self.MEMORY_STORAGE_PATH = f"{root}/db/memory"
         if not self.WORKSPACE_SNAPSHOT_STORAGE_PATH:
             self.WORKSPACE_SNAPSHOT_STORAGE_PATH = f"{root}/db/workspaces"
+        if not self.SANDBOX_SCRATCH_ROOT:
+            self.SANDBOX_SCRATCH_ROOT = f"{root}/scratch/sandbox"
         return self
 
     @property

@@ -12,17 +12,16 @@ Routes:
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.agents.context.history import DefaultHistoryResolver
-from substrate.agents.workspace.layout import conversation_workspace_prefix
+from substrate.agents.workspace.branching import fork_branch, resolve_workspace_snapshot_id
 from substrate.kernel.exceptions import (
     BranchAlreadyExistsError,
-    BranchHeadConflictError,
     BranchNotFoundError,
     DAGIntegrityError,
 )
@@ -104,14 +103,16 @@ async def fork_branch_endpoint(
     if hasattr(ctx.history, "ensure_branch"):
         await ctx.history.ensure_branch(session_id, body.source_branch_id)
 
+    source_branch = await ctx.history.get_branch(session_id, body.source_branch_id)
+    source_head_id = source_branch.head_message_id if source_branch else None
+
     target_fork_node_id = body.fork_from_message_id
     if target_fork_node_id and hasattr(ctx.history, "get_node"):
         try:
             node = await ctx.history.get_node(target_fork_node_id)
             if node is None or node.session_id != session_id:
                 # If target node not found directly (e.g. client ID), fall back to source branch head
-                source_branch = await ctx.history.get_branch(session_id, body.source_branch_id)
-                target_fork_node_id = source_branch.head_message_id if source_branch else None
+                target_fork_node_id = source_head_id
         except Exception:
             target_fork_node_id = None
 
@@ -129,18 +130,30 @@ async def fork_branch_endpoint(
     except DAGIntegrityError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    # Synchronize physical workspace files for the new branch
-    if ctx.file_store is not None and hasattr(ctx.file_store, "copy_prefix"):
-        src_prefix = conversation_workspace_prefix(
-            user.tenant_id, user.sub, session_id, body.source_branch_id
-        )
-        dst_prefix = conversation_workspace_prefix(
-            user.tenant_id, user.sub, session_id, body.new_branch_id
-        )
+    # Point the new branch's workspace at the right snapshot — O(1), zero
+    # bytes copied (see agents/workspace/branching.py). Forking from the
+    # source branch's *current* head uses fork_branch_snapshot directly;
+    # forking from an older message resolves that message's own
+    # workspace_snapshot_id (walking its ancestry if it isn't a turn
+    # boundary) and points the new branch there instead — otherwise a fork
+    # "from the past" would incorrectly start from files that didn't exist
+    # yet at that point in the conversation.
+    if ctx.workspace_store is not None:
         try:
-            await ctx.file_store.copy_prefix(src_prefix, dst_prefix)
-        except Exception:
-            pass  # Non-blocking if workspace has no files yet
+            from_snapshot_id = None
+            if target_fork_node_id and target_fork_node_id != source_head_id:
+                from_snapshot_id = await resolve_workspace_snapshot_id(
+                    ctx.history, target_fork_node_id
+                )
+            await fork_branch(
+                ctx.workspace_store,
+                session_id=session_id,
+                source_branch_id=body.source_branch_id,
+                new_branch_id=body.new_branch_id,
+                from_snapshot_id=from_snapshot_id,
+            )
+        except ValueError:
+            pass  # New branch already has a workspace pointer — nothing to do
 
     return BranchOut(
         id=new_branch.id,
@@ -224,6 +237,50 @@ async def rename_branch_endpoint(
         version=updated.version,
         created_at=updated.created_at,
     )
+
+
+@router.delete("/{branch_id}", status_code=204)
+async def delete_branch_endpoint(
+    thread_id: uuid.UUID,
+    branch_id: str,
+    ctx: ServerDependencies = Depends(get_ctx),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+) -> None:
+    """Delete a branch — the history pointer and its workspace, if any.
+
+    The delete-on-delete half of the workspace GC posture: a deleted
+    branch's object-storage prefix is reclaimed immediately rather than
+    waiting on a blob-level sweep (see agents/workspace/branching.py).
+    Deleting the underlying DAG nodes is deliberately not part of this —
+    see HistoryProvider.delete_branch's own docstring.
+    """
+    thread = await get_owned_thread(db, thread_id, user)
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    if not hasattr(ctx.history, "delete_branch"):
+        raise HTTPException(status_code=501, detail="History provider does not support branch deletion")
+
+    session_id = str(thread_id)
+    try:
+        await ctx.history.delete_branch(session_id, branch_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if ctx.file_store is not None:
+        from substrate.agents.workspace.branching import delete_branch_workspace
+
+        try:
+            await delete_branch_workspace(
+                ctx.file_store,
+                tenant_id=user.tenant_id,
+                user_id=user.sub,
+                conversation_id=session_id,
+                branch_id=branch_id,
+            )
+        except Exception:
+            pass  # Best-effort — the branch pointer is already gone either way
 
 
 @router.get("/{branch_id}/messages")

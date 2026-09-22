@@ -240,7 +240,7 @@ async def test_postgres_history_dag_forking_and_checkpoints():
         await provider.delete_session(session_id)
 
         from substrate.agents.context.history import AncestryCheckpointResolver, DefaultHistoryResolver
-        from substrate.kernel.exceptions import BranchAlreadyExistsError, DAGIntegrityError
+        from substrate.kernel.exceptions import BranchAlreadyExistsError
         from substrate.kernel.storage.history import HistoryCheckpoint, MessageNode
 
         # Setup 3-node chain: root -> middle -> leaf
@@ -305,6 +305,17 @@ async def test_postgres_history_dag_forking_and_checkpoints():
         applicable = await cp_resolver.find_applicable_checkpoint("node-3")
         assert applicable is not None
         assert applicable.id == "cp-1"
+
+        # delete_branch removes only the pointer — shared ancestry (node-1,
+        # node-2) survives since main still references it.
+        await provider.delete_branch(session_id, "experiment")
+        assert await provider.get_branch(session_id, "experiment") is None
+        assert await provider.get_node("node-2") is not None
+        main_branch = await provider.get_branch(session_id, "main")
+        assert main_branch is not None and main_branch.head_message_id == "node-3"
+
+        with pytest.raises(ValueError):
+            await provider.delete_branch(session_id, "main")
     finally:
         await provider.delete_session(session_id)
         await provider.disconnect()

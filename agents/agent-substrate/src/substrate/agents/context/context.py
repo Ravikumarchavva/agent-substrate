@@ -80,7 +80,7 @@ class ContextConfig:
     @classmethod
     def default(cls) -> "ContextConfig":
         """Return a durable local filesystem context with default sliding-window compaction."""
-        from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
+        from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
 
         return cls(LocalFilesystemHistoryProvider())
 

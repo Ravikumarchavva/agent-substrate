@@ -146,11 +146,34 @@ class RunContext(
         self._invoker_session: InvokerSession | None = (
             None  # opened lazily when tool() is first called
         )
+        self._latest_workspace_snapshot_id: str | None = None
 
     @property
     def meta(self) -> RunMeta:
         """Execution-scoped metadata: deadline, trace_id, supervision, cancellation."""
         return self._meta
+
+    @property
+    def latest_workspace_snapshot_id(self) -> str | None:
+        """The most recent workspace snapshot committed during this turn, if any.
+
+        Read by ``agents/core/_loop.py::persist_turns`` at the end of the
+        turn to stamp ``MessageNode.workspace_snapshot_id`` — the field that
+        makes forking a conversation and forking its files the same
+        operation (see ``agents/workspace/``). ``None`` for a turn that
+        never touched the workspace (no code-interpreter call, or one whose
+        runtime doesn't commit — inprocess/tests).
+        """
+        return self._latest_workspace_snapshot_id
+
+    def record_workspace_snapshot(self, snapshot_id: str) -> None:
+        """A tool (the code interpreter) calls this after committing a
+        workspace snapshot for this turn. A side-channel rather than a
+        kernel-typed return value deliberately: ``ctx`` is the one thing
+        every tool already receives regardless of layer, so this needs no
+        new kernel contract for something only one tool produces today.
+        """
+        self._latest_workspace_snapshot_id = snapshot_id
 
     # ------------------------------------------------------------------
     # AgentRunContext surface

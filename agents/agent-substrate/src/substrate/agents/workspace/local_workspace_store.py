@@ -170,21 +170,20 @@ class LocalFilesystemWorkspaceStore(WorkspaceStore):
                 return self._load_snapshot(head_id)
             return None
 
-    async def rename_branch_snapshot(
-        self,
-        session_id: str,
-        branch_id: str,
-        new_name: str,
-    ) -> None:
-        """Update snapshot head pointer when branch is renamed."""
+    async def set_branch_snapshot_head(
+        self, session_id: str, branch_id: str, snapshot_id: str
+    ) -> WorkspaceSnapshot:
         lock = await self._get_branch_lock(session_id, branch_id)
         async with lock:
-            head_id = self._load_head_id(session_id, branch_id)
-            if head_id is not None:
-                # Update snapshot's stored display name if applicable
-                snap = self._load_snapshot(head_id)
-                if snap is not None:
-                    _atomic_write(self._snapshot_path(snap.id), snap.model_dump(mode="json"))
+            if self._load_head_id(session_id, branch_id) is not None:
+                raise ValueError(
+                    f"Branch '{branch_id}' already has a snapshot pointer in session '{session_id}'"
+                )
+            snapshot = self._load_snapshot(snapshot_id)
+            if snapshot is None:
+                raise ValueError(f"Snapshot '{snapshot_id}' does not exist")
+            self._save_head_id(session_id, branch_id, snapshot_id)
+            return snapshot
 
     async def list_snapshots(
         self, session_id: str, branch_id: str | None = None

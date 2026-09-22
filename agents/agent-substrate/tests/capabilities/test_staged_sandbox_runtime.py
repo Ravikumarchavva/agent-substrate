@@ -1,8 +1,10 @@
-"""StagedSandboxRuntime — materialise a session, run, upload what changed.
+"""StagedSandboxRuntime — materialize a branch's workspace snapshot before a
+run, commit a new one after.
 
-The point of the wrapper is that the object store stays the source of truth
-while the sandbox still gets a real directory, so these tests assert on what
-lands in the store and in the scratch tree rather than on call counts.
+Exercises the real CAS/WorkspaceStore machinery (WorkspaceFileStore +
+LocalFilesystemWorkspaceStore), not hand-rolled fakes, so these tests prove
+the actual materialize/commit round trip works, not just that the wrapper
+calls the right methods.
 """
 
 from __future__ import annotations
@@ -13,6 +15,9 @@ from pathlib import Path
 
 import pytest
 
+from substrate.agents.workspace import LocalFilesystemWorkspaceStore
+from substrate.agents.workspace.scope import WorkspaceScope
+from substrate.capabilities.storage.workspace import WorkspaceFileStore
 from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.base import (
     ExecResult,
     SandboxSpec,
@@ -21,33 +26,19 @@ from substrate.capabilities.tools.code_interpreter.code_interpreter.runtimes.sta
     StagedSandboxRuntime,
 )
 
-SESSION = "users/u1/sessions/t1"
+TENANT = "t1"
+USER = "u1"
+CONVERSATION = "conv-1"
+BRANCH = "main"
+SESSION_KEY = f"{CONVERSATION}/{BRANCH}"
 
 
-class FakeStore:
-    def __init__(self) -> None:
-        self.objects: dict[str, bytes] = {}
-        self.uploads: list[str] = []
-        self.downloads: list[str] = []
-        self.fail_upload_for: set[str] = set()
-        self.fail_list = False
-
-    async def list_prefix(self, prefix: str):
-        if self.fail_list:
-            raise RuntimeError("listing is down")
-        return [
-            (k, len(v), 1000.0) for k, v in self.objects.items() if k.startswith(prefix)
-        ]
-
-    async def download(self, key: str) -> bytes:
-        self.downloads.append(key)
-        return self.objects[key]
-
-    async def upload(self, key, data, *, content_type="") -> None:
-        if key in self.fail_upload_for:
-            raise RuntimeError("upload rejected")
-        self.objects[key] = data
-        self.uploads.append(key)
+def _scope(**overrides) -> WorkspaceScope:
+    defaults = dict(
+        tenant_id=TENANT, user_id=USER, conversation_id=CONVERSATION, branch_id=BRANCH
+    )
+    defaults.update(overrides)
+    return WorkspaceScope(**defaults)
 
 
 class FakeInner:
@@ -85,173 +76,129 @@ def _inline(name: str, data: bytes, mime: str = "text/plain") -> dict:
     }
 
 
+async def _seed_branch(object_store, ws_store, files: dict[str, bytes]) -> None:
+    """Commit a snapshot to main directly, bypassing the runtime — chains
+    onto the branch's current head (if any), same as a real prior turn."""
+    from substrate.agents.workspace.cas import BlobCAS
+    from substrate.agents.workspace.materialize import commit
+
+    cas = BlobCAS(object_store, tenant_id=TENANT, user_id=USER)
+    tmp_seed = Path(object_store._root) / ".seed"  # type: ignore[attr-defined]
+    tmp_seed.mkdir(parents=True, exist_ok=True)
+    for name, data in files.items():
+        (tmp_seed / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_seed / name).write_bytes(data)
+    parent = await ws_store.get_branch_snapshot_head(CONVERSATION, BRANCH)
+    snap = await commit(cas, tmp_seed, session_id=CONVERSATION, branch_id=BRANCH, parent=parent)
+    await ws_store.commit_snapshot(
+        CONVERSATION, BRANCH, snap, expected_parent_snapshot_id=parent.id if parent else None
+    )
+
+
 @pytest.fixture
 def spec() -> SandboxSpec:
-    return SandboxSpec(user_id="u1", thread_id="t1", session_dir=SESSION, code="x=1")
+    return SandboxSpec(
+        user_id=USER,
+        thread_id=CONVERSATION,
+        session_dir=SESSION_KEY,
+        code="x=1",
+        extra={"workspace_scope": _scope()},
+    )
 
 
-async def test_stage_in_materialises_stored_objects_before_the_run(tmp_path, spec):
-    store = FakeStore()
-    store.objects[f"{SESSION}/data.csv"] = b"a,b\n1,2\n"
-    store.objects[f"{SESSION}/sub/notes.txt"] = b"hello"
-    inner = FakeInner(tmp_path)
-    runtime = StagedSandboxRuntime(inner, file_store=store, workspace_root=tmp_path)
-
-    await runtime.execute(spec)
-
-    # The sandbox saw the user's files, nested paths included.
-    assert inner.seen_at_run == {"data.csv": b"a,b\n1,2\n", "sub/notes.txt": b"hello"}
-
-
-async def test_stage_in_ignores_other_sessions_and_other_users(tmp_path, spec):
-    store = FakeStore()
-    store.objects[f"{SESSION}/mine.txt"] = b"mine"
-    store.objects["users/u1/sessions/OTHER/theirs.txt"] = b"other session"
-    store.objects["users/u2/sessions/t1/theirs.txt"] = b"other user"
-    inner = FakeInner(tmp_path)
-    runtime = StagedSandboxRuntime(inner, file_store=store, workspace_root=tmp_path)
-
-    await runtime.execute(spec)
-
-    assert list(inner.seen_at_run) == ["mine.txt"]
+async def _runtime(tmp_path: Path, inner) -> tuple[StagedSandboxRuntime, WorkspaceFileStore, LocalFilesystemWorkspaceStore]:
+    store = WorkspaceFileStore(tmp_path / "objects", user_quota_bytes=10_000_000)
+    await store.connect()
+    ws_store = LocalFilesystemWorkspaceStore(root=tmp_path / "ws_store")
+    runtime = StagedSandboxRuntime(
+        inner,
+        object_store=store,
+        workspace_store=ws_store,
+        scratch_root=tmp_path / "scratch",
+    )
+    return runtime, store, ws_store
 
 
-async def test_stage_out_uploads_only_what_the_run_changed(tmp_path, spec):
-    store = FakeStore()
-    store.objects[f"{SESSION}/input.csv"] = b"untouched"
-    inner = FakeInner(tmp_path, outputs=[_inline("chart.png", b"PNG", "image/png")])
-    runtime = StagedSandboxRuntime(inner, file_store=store, workspace_root=tmp_path)
+async def test_stage_in_materialises_the_branchs_committed_files(tmp_path, spec):
+    runtime, store, ws_store = await _runtime(tmp_path, FakeInner(tmp_path / "scratch"))
+    await _seed_branch(store, ws_store, {"data.csv": b"a,b\n1,2\n", "sub/notes.txt": b"hello"})
 
     await runtime.execute(spec)
 
-    # A file the run merely read must not be re-uploaded.
-    assert store.uploads == [f"{SESSION}/chart.png"]
-    assert store.objects[f"{SESSION}/chart.png"] == b"PNG"
+    assert runtime._inner.seen_at_run == {  # type: ignore[attr-defined]
+        "data.csv": b"a,b\n1,2\n",
+        "sub/notes.txt": b"hello",
+    }
 
 
-async def test_stage_in_skips_download_when_scratch_copy_matches(tmp_path, spec):
-    store = FakeStore()
-    store.objects[f"{SESSION}/data.csv"] = b"12345"
-    local = tmp_path / SESSION / "data.csv"
-    local.parent.mkdir(parents=True)
-    local.write_bytes(b"12345")  # same size ⇒ already warm
-    inner = FakeInner(tmp_path)
-    runtime = StagedSandboxRuntime(inner, file_store=store, workspace_root=tmp_path)
-
-    await runtime.execute(spec)
-
-    assert store.downloads == []
-
-
-async def test_stage_in_redownloads_when_size_differs(tmp_path, spec):
-    store = FakeStore()
-    store.objects[f"{SESSION}/data.csv"] = b"newer and longer"
-    local = tmp_path / SESSION / "data.csv"
-    local.parent.mkdir(parents=True)
-    local.write_bytes(b"old")
-    inner = FakeInner(tmp_path)
-    runtime = StagedSandboxRuntime(inner, file_store=store, workspace_root=tmp_path)
-
-    await runtime.execute(spec)
-
-    assert store.downloads == [f"{SESSION}/data.csv"]
-    assert inner.seen_at_run == {"data.csv": b"newer and longer"}
-
-
-async def test_upload_failure_does_not_fail_the_run(tmp_path, spec):
-    """The user still gets stdout and inline artifacts; the file stays in
-    scratch so the next stage-out retries it."""
-    store = FakeStore()
-    store.fail_upload_for = {f"{SESSION}/chart.png"}
-    inner = FakeInner(tmp_path, outputs=[_inline("chart.png", b"PNG", "image/png")])
-    runtime = StagedSandboxRuntime(inner, file_store=store, workspace_root=tmp_path)
+async def test_fresh_branch_with_no_snapshot_gets_an_empty_scratch_dir(tmp_path, spec):
+    inner = FakeInner(tmp_path / "scratch")
+    runtime, _store, _ws_store = await _runtime(tmp_path, inner)
 
     result = await runtime.execute(spec)
 
-    assert result.stdout == "ran"
+    assert inner.seen_at_run == {}
     assert result.ok
 
 
-async def test_listing_failure_does_not_fail_the_run(tmp_path, spec):
-    store = FakeStore()
-    store.fail_list = True
-    inner = FakeInner(tmp_path)
-    runtime = StagedSandboxRuntime(inner, file_store=store, workspace_root=tmp_path)
+async def test_stage_out_commits_a_new_snapshot_with_only_the_changed_files(tmp_path, spec):
+    inner = FakeInner(tmp_path / "scratch", outputs=[_inline("chart.png", b"PNG", "image/png")])
+    runtime, store, ws_store = await _runtime(tmp_path, inner)
+    await _seed_branch(store, ws_store, {"input.csv": b"untouched"})
+
+    # The fake inner runtime doesn't actually write chart.png to disk, so
+    # simulate what a real runtime would: the output file lands in scratch.
+    async def _execute_and_write(spec):
+        (tmp_path / "scratch" / SESSION_KEY / "chart.png").write_bytes(b"PNG")
+        return ExecResult(stdout="ran", output_files=[_inline("chart.png", b"PNG", "image/png")])
+
+    inner.execute = _execute_and_write  # type: ignore[method-assign]
 
     result = await runtime.execute(spec)
 
-    assert result.ok
-    assert inner.calls == 1
+    assert result.workspace_snapshot_id is not None
+    head = await ws_store.get_branch_snapshot_head(CONVERSATION, BRANCH)
+    assert head is not None and head.id == result.workspace_snapshot_id
+    assert head.manifest is not None
+    assert set(head.manifest.files) == {"input.csv", "chart.png"}
 
 
-async def test_stage_out_reads_from_disk_when_content_is_not_inlined(tmp_path, spec):
-    """A file over the inline cap carries no content_base64 — only a path."""
-    store = FakeStore()
-    big = tmp_path / SESSION / "big.bin"
-    big.parent.mkdir(parents=True)
-    big.write_bytes(b"L" * 32)
-    inner = FakeInner(
-        tmp_path,
-        outputs=[
-            {
-                "name": "big.bin",
-                "mime_type": "application/octet-stream",
-                "content_base64": None,
-                "too_large": True,
-                "path": str(big),
-            }
-        ],
-    )
-    runtime = StagedSandboxRuntime(inner, file_store=store, workspace_root=tmp_path)
+async def test_commit_conflict_does_not_fail_the_run(tmp_path, spec):
+    """A racing writer on the same branch must not surface as a tool failure
+    — the user still gets stdout; the file change is just not durably saved.
 
-    await runtime.execute(spec)
+    Simulated directly at the _stage_out level: this run's stage-in
+    observed snapshot A as the parent, but by the time it commits, another
+    writer has already advanced the real head to snapshot B — exactly the
+    check-then-act race expected_parent_id exists to catch (see
+    snapshots.py::commit_turn's docstring)."""
+    inner = FakeInner(tmp_path / "scratch")
+    runtime, store, ws_store = await _runtime(tmp_path, inner)
+    await _seed_branch(store, ws_store, {"a.txt": b"v1"})
+    snap_a = await ws_store.get_branch_snapshot_head(CONVERSATION, BRANCH)
+    assert snap_a is not None
 
-    assert store.objects[f"{SESSION}/big.bin"] == b"L" * 32
+    # Another writer commits to main, advancing the real head past snap_a.
+    await _seed_branch(store, ws_store, {"a.txt": b"v1", "b.txt": b"from another writer"})
+    snap_b = await ws_store.get_branch_snapshot_head(CONVERSATION, BRANCH)
+    assert snap_b is not None and snap_b.id != snap_a.id
 
+    from substrate.agents.workspace.cas import BlobCAS
 
-async def test_stage_out_refuses_a_path_outside_the_workspace_root(tmp_path, spec):
-    """`path` comes from a runtime response, so it is not automatically
-    trustworthy — a traversal must not exfiltrate a host file into the store."""
-    outside = tmp_path.parent / "secret.txt"
-    outside.write_bytes(b"host secret")
-    store = FakeStore()
-    inner = FakeInner(
-        tmp_path,
-        outputs=[
-            {
-                "name": "secret.txt",
-                "mime_type": "text/plain",
-                "content_base64": None,
-                "path": str(outside),
-            }
-        ],
-    )
-    runtime = StagedSandboxRuntime(inner, file_store=store, workspace_root=tmp_path)
+    cas = BlobCAS(store, tenant_id=TENANT, user_id=USER)
+    scratch_dir = tmp_path / "scratch" / SESSION_KEY
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    (scratch_dir / "a.txt").write_bytes(b"modified locally")
 
-    await runtime.execute(spec)
+    new_id = await runtime._stage_out(cas, _scope(), scratch_dir, snap_a.id)
 
-    assert store.uploads == []
-
-
-async def test_stage_in_works_without_a_user_id(tmp_path):
-    """Staging lists directly by ``session_dir`` prefix — it needs no
-    ``user_id`` at all (unlike the old per-user-listing approach), so an
-    unset ``user_id`` must not skip staging."""
-    store = FakeStore()
-    store.objects[f"{SESSION}/data.csv"] = b"x"
-    inner = FakeInner(tmp_path)
-    runtime = StagedSandboxRuntime(inner, file_store=store, workspace_root=tmp_path)
-
-    await runtime.execute(
-        SandboxSpec(user_id=None, thread_id="t1", session_dir=SESSION, code="x=1")
-    )
-
-    assert inner.seen_at_run == {"data.csv": b"x"}
+    assert new_id is None  # conflict — not committed
+    # The real head is still snap_b, untouched by the raced attempt.
+    head = await ws_store.get_branch_snapshot_head(CONVERSATION, BRANCH)
+    assert head is not None and head.id == snap_b.id
 
 
 async def test_concurrent_runs_on_one_session_are_serialised(tmp_path, spec):
-    """Interleaved stage-in/stage-out could upload a half-written tree."""
-    store = FakeStore()
     order: list[str] = []
 
     class SlowInner(FakeInner):
@@ -261,9 +208,7 @@ async def test_concurrent_runs_on_one_session_are_serialised(tmp_path, spec):
             order.append("end")
             return ExecResult(stdout="ran")
 
-    runtime = StagedSandboxRuntime(
-        SlowInner(tmp_path), file_store=store, workspace_root=tmp_path
-    )
+    runtime, _store, _ws_store = await _runtime(tmp_path, SlowInner(tmp_path / "scratch"))
 
     await asyncio.gather(runtime.execute(spec), runtime.execute(spec))
 
@@ -271,11 +216,55 @@ async def test_concurrent_runs_on_one_session_are_serialised(tmp_path, spec):
 
 
 async def test_stop_is_delegated_to_the_inner_runtime(tmp_path):
-    inner = FakeInner(tmp_path)
-    runtime = StagedSandboxRuntime(
-        inner, file_store=FakeStore(), workspace_root=tmp_path
-    )
+    inner = FakeInner(tmp_path / "scratch")
+    runtime, _store, _ws_store = await _runtime(tmp_path, inner)
 
     await runtime.stop()
 
     assert inner.stopped
+
+
+async def test_execute_requires_a_workspace_scope(tmp_path):
+    inner = FakeInner(tmp_path / "scratch")
+    runtime, _store, _ws_store = await _runtime(tmp_path, inner)
+    bad_spec = SandboxSpec(
+        user_id=USER, thread_id=CONVERSATION, session_dir=SESSION_KEY, code="x=1"
+    )
+
+    with pytest.raises(ValueError):
+        await runtime.execute(bad_spec)
+
+
+async def test_private_dir_is_never_committed_into_the_shared_manifest(tmp_path):
+    """Regression guard: private_dir must not be a subpath of session_dir on
+    the host, or materialize.py's commit() would sweep it into the branch's
+    shared manifest — visible to every other agent on the branch, the
+    opposite of "private"."""
+    private_key = f".private/{CONVERSATION}/{BRANCH}/agent-1"
+    spec_with_private = SandboxSpec(
+        user_id=USER,
+        thread_id=CONVERSATION,
+        session_dir=SESSION_KEY,
+        code="x=1",
+        extra={"workspace_scope": _scope(), "private_dir": private_key},
+    )
+
+    class PrivateWritingInner(FakeInner):
+        async def execute(self, spec):
+            private_path = self.root / spec.extra["private_dir"]
+            private_path.mkdir(parents=True, exist_ok=True)
+            (private_path / "secret.txt").write_bytes(b"agent-only")
+            (self.root / spec.session_dir).mkdir(parents=True, exist_ok=True)
+            (self.root / spec.session_dir / "shared.txt").write_bytes(b"visible to all")
+            return ExecResult(stdout="ran")
+
+    inner = PrivateWritingInner(tmp_path / "scratch")
+    runtime, store, ws_store = await _runtime(tmp_path, inner)
+
+    result = await runtime.execute(spec_with_private)
+
+    head = await ws_store.get_branch_snapshot_head(CONVERSATION, BRANCH)
+    assert head is not None and head.manifest is not None
+    assert set(head.manifest.files) == {"shared.txt"}
+    assert "secret.txt" not in head.manifest.files
+    assert result.ok

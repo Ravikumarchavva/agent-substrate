@@ -92,17 +92,32 @@ async def persist_turns(
     new_turns: list[ChatMessage],
     *,
     branch_id: str = "main",
+    workspace_snapshot_id: str | None = None,
 ) -> None:
-    """Append ``new_turns`` to the session branch, one DAG node per turn."""
+    """Append ``new_turns`` to the session branch, one DAG node per turn.
+
+    ``workspace_snapshot_id``, if given, is stamped only on the *last* node
+    of this turn — the one that becomes the new branch head. This is what
+    makes ``MessageNode.workspace_snapshot_id`` line up 1:1 with turns
+    rather than with every individual DAG node: "the workspace as of this
+    point in the conversation" is a per-turn fact (the code interpreter, if
+    it ran, ran once for the whole turn and committed once), not a
+    per-message one. The caller (currently no caller does this yet — it
+    requires the code-interpreter rewrite that materializes/commits a
+    branch's workspace per turn) is responsible for actually producing the
+    snapshot id; this function only threads it onto the right node.
+    """
     from substrate.kernel.storage.history import MessageNode
 
-    for turn in new_turns:
+    for i, turn in enumerate(new_turns):
         branch = await ctx_cfg.history.get_branch(session_id, branch_id)
+        is_last = i == len(new_turns) - 1
         node = MessageNode(
             parent_id=branch.head_message_id if branch else None,
             session_id=session_id,
             run_id=run_id,
             payload=turn,
+            workspace_snapshot_id=workspace_snapshot_id if is_last else None,
         )
         await ctx_cfg.history.append_and_advance(node, branch_id=branch_id)
 

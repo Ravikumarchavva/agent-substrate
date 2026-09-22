@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from sqlalchemy import (
     DateTime,
@@ -13,7 +13,6 @@ from sqlalchemy import (
     delete,
     func,
     select,
-    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import (
@@ -26,7 +25,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from substrate.kernel.exceptions import SnapshotConflictError
 from substrate.kernel.storage.snapshots import (
-    WorkspaceFileEntry,
     WorkspaceManifest,
     WorkspaceSnapshot,
     WorkspaceStore,
@@ -277,6 +275,28 @@ class PostgresWorkspaceStore(WorkspaceStore):
                 return None
             return _snapshot_from_row(snapshot_row)
 
+    async def set_branch_snapshot_head(
+        self, session_id: str, branch_id: str, snapshot_id: str
+    ) -> WorkspaceSnapshot:
+        factory = self._get_session()
+        async with factory() as db:
+            existing = await db.get(BranchSnapshotHead, (session_id, branch_id))
+            if existing is not None:
+                raise ValueError(
+                    f"Branch '{branch_id}' already has a snapshot pointer in session '{session_id}'"
+                )
+            snapshot_row = await db.get(SnapshotRecord, snapshot_id)
+            if snapshot_row is None:
+                raise ValueError(f"Snapshot '{snapshot_id}' does not exist")
+
+            db.add(
+                BranchSnapshotHead(
+                    session_id=session_id, branch_id=branch_id, snapshot_id=snapshot_id
+                )
+            )
+            await db.commit()
+            return _snapshot_from_row(snapshot_row)
+
     async def list_snapshots(
         self, session_id: str, branch_id: str | None = None
     ) -> list[WorkspaceSnapshot]:
@@ -289,30 +309,6 @@ class PostgresWorkspaceStore(WorkspaceStore):
 
             result = await db.execute(stmt)
             return [_snapshot_from_row(r) for r in result.scalars().all()]
-
-    async def rename_branch_snapshot(
-        self, session_id: str, old_branch_id: str, new_branch_id: str
-    ) -> None:
-        """Update branch ID pointers across workspace snapshots."""
-        factory = self._get_session()
-        async with factory() as db:
-            await db.execute(
-                update(SnapshotRecord)
-                .where(
-                    SnapshotRecord.session_id == session_id,
-                    SnapshotRecord.branch_id == old_branch_id,
-                )
-                .values(branch_id=new_branch_id)
-            )
-            await db.execute(
-                update(BranchSnapshotHead)
-                .where(
-                    BranchSnapshotHead.session_id == session_id,
-                    BranchSnapshotHead.branch_id == old_branch_id,
-                )
-                .values(branch_id=new_branch_id)
-            )
-            await db.commit()
 
     async def clear_session(self, session_id: str) -> None:
         """Helper for test cleanup."""

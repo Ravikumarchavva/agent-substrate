@@ -351,6 +351,11 @@ class InMemoryHistoryProvider:
     async def list_checkpoints(self, session_id: str) -> list[HistoryCheckpoint]:
         return list(self._session_checkpoints.get(session_id, []))
 
+    async def delete_branch(self, session_id: str, branch_id: str) -> None:
+        if branch_id == "main":
+            raise ValueError("cannot delete the main branch")
+        self._branches.pop((session_id, branch_id), None)
+
     # ── Session lifecycle ────────────────────────────────────────────────────
 
     async def delete_session(self, session_id: str) -> None:

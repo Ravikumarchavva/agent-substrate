@@ -1,9 +1,9 @@
-"""Tests for WorkspaceSnapshot, WorkspaceManifest, and InMemoryWorkspaceStore."""
+"""Tests for WorkspaceSnapshot, WorkspaceManifest, and LocalFilesystemWorkspaceStore."""
 
 import pytest
 from pydantic import ValidationError
 
-from substrate.agents.context.workspace import InMemoryWorkspaceStore
+from substrate.agents.workspace import LocalFilesystemWorkspaceStore
 from substrate.kernel.exceptions import SnapshotConflictError
 from substrate.kernel.storage.snapshots import (
     ContentRef,
@@ -60,8 +60,8 @@ class TestWorkspaceSnapshotValidation:
 
 class TestWorkspaceStore:
     @pytest.mark.asyncio
-    async def test_initial_commit_and_advance(self) -> None:
-        store = InMemoryWorkspaceStore()
+    async def test_initial_commit_and_advance(self, tmp_path) -> None:
+        store = LocalFilesystemWorkspaceStore(root=tmp_path)
 
         # Branch initially has no head
         assert await store.get_branch_snapshot_head("s1", "main") is None
@@ -95,8 +95,8 @@ class TestWorkspaceStore:
         assert head2.id == snap2.id
 
     @pytest.mark.asyncio
-    async def test_commit_conflict_raises_snapshot_conflict_error(self) -> None:
-        store = InMemoryWorkspaceStore()
+    async def test_commit_conflict_raises_snapshot_conflict_error(self, tmp_path) -> None:
+        store = LocalFilesystemWorkspaceStore(root=tmp_path)
 
         snap1 = WorkspaceSnapshot(
             session_id="s1",
@@ -123,8 +123,8 @@ class TestWorkspaceStore:
         assert exc_info.value.actual_parent_id == snap1.id
 
     @pytest.mark.asyncio
-    async def test_branch_workspace_isolation(self) -> None:
-        store = InMemoryWorkspaceStore()
+    async def test_branch_workspace_isolation(self, tmp_path) -> None:
+        store = LocalFilesystemWorkspaceStore(root=tmp_path)
 
         # Commit initial snapshot on main
         snap_base = WorkspaceSnapshot(
@@ -176,8 +176,8 @@ class TestWorkspaceStore:
         assert (await store.get_branch_snapshot_head("s1", "main")).id == snap_base.id
 
     @pytest.mark.asyncio
-    async def test_list_snapshots_filtering(self) -> None:
-        store = InMemoryWorkspaceStore()
+    async def test_list_snapshots_filtering(self, tmp_path) -> None:
+        store = LocalFilesystemWorkspaceStore(root=tmp_path)
 
         snap_m = WorkspaceSnapshot(
             session_id="s1",

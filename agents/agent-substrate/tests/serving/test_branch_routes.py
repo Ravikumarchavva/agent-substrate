@@ -14,7 +14,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from substrate.kernel.core.content import ChatMessage, TextBlock
-from substrate.kernel.storage.history import HistoryCheckpoint, MessageNode
+from substrate.kernel.storage.history import MessageNode
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.models import Thread, User
 from substrate.serving.monolith.security.deps import get_current_user
@@ -149,6 +149,85 @@ async def test_list_and_fork_branches():
 
 @pytest.mark.requires_postgres
 @pytest.mark.asyncio
+async def test_fork_points_new_branch_at_the_same_workspace_snapshot():
+    """The headline fix, exercised through the real route: forking must
+    move a workspace-snapshot pointer, not copy any bytes — replacing the
+    old dead-end copy_prefix mechanism (see agents/workspace/branching.py)."""
+    from substrate.kernel.storage.snapshots import WorkspaceManifest, WorkspaceSnapshot
+
+    async with app.router.lifespan_context(app):
+        async with _registered_user() as user_id:
+            claims = _claims_for(user_id)
+            thread_id = str(uuid.uuid4())
+            async with _registered_thread(thread_id, owner=user_id):
+                app.dependency_overrides[get_current_user] = lambda: claims
+                workspace_store = app.state.ctx.workspace_store
+                assert workspace_store is not None
+                try:
+                    # Simulate a turn-boundary commit on "main" (what
+                    # agents/workspace/snapshots.py::commit_turn does once
+                    # the code interpreter is wired to call it).
+                    snap = WorkspaceSnapshot(
+                        session_id=thread_id,
+                        branch_id="main",
+                        manifest=WorkspaceManifest(),
+                    )
+                    await workspace_store.commit_snapshot(
+                        thread_id, "main", snap, expected_parent_snapshot_id=None
+                    )
+
+                    transport = ASGITransport(app=app)
+                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                        fork_res = await client.post(
+                            f"/threads/{thread_id}/branches/fork",
+                            json={"source_branch_id": "main", "new_branch_id": "exp-1"},
+                        )
+                        assert fork_res.status_code == 201, fork_res.text
+
+                    main_head = await workspace_store.get_branch_snapshot_head(
+                        thread_id, "main"
+                    )
+                    exp_head = await workspace_store.get_branch_snapshot_head(
+                        thread_id, "exp-1"
+                    )
+                    assert main_head is not None and exp_head is not None
+                    assert main_head.id == exp_head.id == snap.id
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.asyncio
+async def test_delete_branch_removes_it_and_rejects_main():
+    async with app.router.lifespan_context(app):
+        async with _registered_user() as user_id:
+            claims = _claims_for(user_id)
+            thread_id = str(uuid.uuid4())
+            async with _registered_thread(thread_id, owner=user_id):
+                app.dependency_overrides[get_current_user] = lambda: claims
+                try:
+                    transport = ASGITransport(app=app)
+                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                        fork_res = await client.post(
+                            f"/threads/{thread_id}/branches/fork",
+                            json={"source_branch_id": "main", "new_branch_id": "exp-1"},
+                        )
+                        assert fork_res.status_code == 201, fork_res.text
+
+                        del_res = await client.delete(f"/threads/{thread_id}/branches/exp-1")
+                        assert del_res.status_code == 204
+
+                        get_res = await client.get(f"/threads/{thread_id}/branches/exp-1")
+                        assert get_res.status_code == 404
+
+                        main_del_res = await client.delete(f"/threads/{thread_id}/branches/main")
+                        assert main_del_res.status_code == 400
+                finally:
+                    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.asyncio
 async def test_branch_messages_ancestry():
     async with app.router.lifespan_context(app):
         async with _registered_user() as user_id:
@@ -268,7 +347,6 @@ async def test_checkpoints_endpoints():
 async def test_tenant_and_owner_isolation():
     async with app.router.lifespan_context(app):
         async with _registered_user() as owner_id, _registered_user() as stranger_id:
-            owner_claims = _claims_for(owner_id, tenant_id=TENANT)
             stranger_claims = _claims_for(stranger_id, tenant_id=TENANT)
             cross_tenant_claims = _claims_for(owner_id, tenant_id=OTHER_TENANT)
 

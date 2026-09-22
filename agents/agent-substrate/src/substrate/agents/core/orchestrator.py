@@ -267,7 +267,12 @@ class OrchestratorAgent:
 
         new_turns = messages[n_loaded:]
         await persist_turns(
-            self._context, session_id, ctx.run_id, new_turns, branch_id=branch_id
+            self._context,
+            session_id,
+            ctx.run_id,
+            new_turns,
+            branch_id=branch_id,
+            workspace_snapshot_id=ctx.latest_workspace_snapshot_id,
         )
 
         ans = final_text(messages)

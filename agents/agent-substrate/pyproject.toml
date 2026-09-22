@@ -298,6 +298,10 @@ ignore_imports = [
     # layout helper routes/workspace.py uses for the working file's key —
     # otherwise it has to hand-roll (and keep in sync) the same key shape.
     "substrate.serving.monolith.file_versioning -> substrate.agents.workspace.layout",
+    # branches route resolves a fork point's ancestry and performs the O(1)
+    # CAS branch fork directly — same shape as the layout.py exceptions above
+    "substrate.serving.monolith.routes.branches -> substrate.agents.context.history",
+    "substrate.serving.monolith.routes.branches -> substrate.agents.workspace.branching",
     # gdpr route needs the erasure orchestrator itself, the same way
     # files/workspace routes need WorkspaceFileStore above
     "substrate.serving.monolith.routes.gdpr -> substrate.capabilities.gdpr.eraser",

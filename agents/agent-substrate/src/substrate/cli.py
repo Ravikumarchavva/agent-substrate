@@ -349,7 +349,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
         InMemoryHistoryProvider,
         SlidingWindowCompaction,
     )
-    from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
+    from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
 
     # Build tools
     tools = []

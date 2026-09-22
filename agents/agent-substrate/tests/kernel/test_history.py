@@ -58,6 +58,37 @@ async def test_branches_project_independently():
 
 
 @pytest.mark.asyncio
+async def test_delete_branch_removes_pointer_but_not_shared_ancestry():
+    provider = InMemoryHistoryProvider()
+    first = await _append(provider, "s", "one")
+    await _append(provider, "s", "two")
+    await provider.fork_branch("s", "main", "alt", fork_from_message_id=first.id)
+    await _append(provider, "s", "alt-two", branch="alt")
+
+    await provider.delete_branch("s", "alt")
+
+    assert await provider.get_branch("s", "alt") is None
+    # main is untouched, and the shared ancestor node ("one") still exists —
+    # deleting a branch never deletes history, only the pointer.
+    assert [m.content[0].text for m in await project_messages(provider, "s")] == ["one", "two"]
+    assert await provider.get_node(first.id) is not None
+
+
+@pytest.mark.asyncio
+async def test_delete_branch_rejects_main():
+    provider = InMemoryHistoryProvider()
+    await _append(provider, "s", "one")
+    with pytest.raises(ValueError):
+        await provider.delete_branch("s", "main")
+
+
+@pytest.mark.asyncio
+async def test_delete_branch_is_idempotent():
+    provider = InMemoryHistoryProvider()
+    await provider.delete_branch("never-existed", "some-branch")  # no error
+
+
+@pytest.mark.asyncio
 async def test_delete_session_removes_only_that_session():
     provider = InMemoryHistoryProvider()
     await _append(provider, "keep", "stay")

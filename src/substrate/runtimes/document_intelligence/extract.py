@@ -31,16 +31,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import mimetypes
 
 from substrate.integrations.llm.endpoint import InferenceEndpoint
+from substrate.kernel.document import ExtractedImage, ExtractedPage, ExtractionResult
 from substrate.logger import setup_logging
 from substrate.runtimes.document_intelligence.client import ExtractionClient, ExtractResponse
 from substrate.runtimes.document_intelligence.service.engines.raw_text import RawTextEngine
-from substrate.runtimes.document_intelligence.service.types import (
-    ExtractedImage,
-    ExtractedPage,
-    ExtractionResult,
-)
 
 logger = setup_logging("substrate.document_intelligence.extract")
 
@@ -119,4 +116,25 @@ async def extract_document(
     return await asyncio.to_thread(_local_engine.extract, data, filename)
 
 
-__all__ = ["extract_document"]
+class ServiceBackedDocumentExtractor:
+    """Kernel ``DocumentExtractor`` adapter over ``extract_document()`` —
+    the document-intelligence service (PaddleOCR/PPStructureV3) when
+    *endpoint* is configured, falling back to local raw-text extraction
+    otherwise. Construct one of these and hand it anywhere a
+    ``DocumentExtractor`` is expected (e.g. ``PDFLoader(extractor=...)``) —
+    a drop-in, stronger alternative to ``agents.document.LocalDocumentExtractor``,
+    the same role an MCP tool adapter plays for the kernel ``Tool`` Protocol.
+    """
+
+    def __init__(self, *, endpoint: InferenceEndpoint | None = None) -> None:
+        self._endpoint = endpoint
+
+    async def extract(self, data: bytes, filename: str) -> ExtractionResult:
+        content_type, _ = mimetypes.guess_type(filename)
+        return await extract_document(
+            data, filename, content_type or "application/octet-stream",
+            endpoint=self._endpoint,
+        )
+
+
+__all__ = ["extract_document", "ServiceBackedDocumentExtractor"]

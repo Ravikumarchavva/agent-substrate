@@ -20,12 +20,9 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from substrate.kernel.document import ExtractedPage, ExtractionResult
 from substrate.logger import setup_logging
 from substrate.runtimes.document_intelligence.service import convert
-from substrate.runtimes.document_intelligence.service.types import (
-    ExtractedPage,
-    ExtractionResult,
-)
 
 logger = setup_logging("substrate.document_intelligence.raw_text")
 

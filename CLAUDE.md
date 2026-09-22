@@ -300,6 +300,7 @@ serving  =  orthogonal (cross-layer by design)
 | A new memory backend | `integrations/history/<name>.py` — implement `HistoryProvider` Protocol from `kernel/storage/history.py` |
 | A new vector store | `integrations/vector/<name>.py` — implement `VectorStore` Protocol from `kernel/storage/vector.py` |
 | A new graph store | `integrations/graph/<name>.py` — implement `GraphStore` Protocol from `kernel/storage/graph.py` |
+| A new document extractor | `agents/document/<name>.py` if zero/near-zero-infra, else `integrations/<name>.py` — implement `DocumentExtractor` Protocol from `kernel/document/protocols.py` |
 | A new tool | `integrations/tools/<name>/tool.py` — implement `Tool` Protocol (auto-scanned, no registration needed) |
 | A new skill | `integrations/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
 | A new agent flow | `agents/flows/` — write a standalone agent (`id` + `run(ctx, inbox)`) using SequentialFlow / ParallelFlow / ConditionalFlow |

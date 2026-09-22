@@ -55,8 +55,8 @@ from substrate.serving.shared.doc_quota import (
     seconds_until_reset,
 )
 from substrate.serving.shared.settings import settings
+from substrate.kernel.document import ExtractionResult
 from substrate.runtimes.document_intelligence.extract import extract_document
-from substrate.runtimes.document_intelligence.service.types import ExtractionResult
 
 logger = setup_logging()
 

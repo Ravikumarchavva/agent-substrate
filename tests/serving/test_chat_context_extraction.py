@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from substrate.runtimes.document_intelligence.service.types import ExtractionResult
+from substrate.kernel.document import ExtractionResult
 from substrate.serving.monolith.routes.chat_context import _build_file_context
 
 

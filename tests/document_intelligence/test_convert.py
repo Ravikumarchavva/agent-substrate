@@ -12,11 +12,8 @@ import asyncio
 
 import pytest
 
+from substrate.kernel.document import ExtractedPage, ExtractionResult
 from substrate.runtimes.document_intelligence.service import convert
-from substrate.runtimes.document_intelligence.service.types import (
-    ExtractedPage,
-    ExtractionResult,
-)
 
 
 def test_convertible_content_types_cover_real_office_formats() -> None:

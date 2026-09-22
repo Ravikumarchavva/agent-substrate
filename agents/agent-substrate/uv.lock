@@ -89,6 +89,10 @@ document-intelligence-gpu = [
 gemini = [
     { name = "google-genai" },
 ]
+ocr = [
+    { name = "pypdfium2" },
+    { name = "pytesseract" },
+]
 rag = [
     { name = "lancedb" },
     { name = "networkx" },
@@ -231,6 +235,8 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.12.0" },
     { name = "pyjwt", marker = "extra == 'server'", specifier = ">=2.12.0" },
     { name = "pypdf", marker = "extra == 'rag'", specifier = ">=6.13.0" },
+    { name = "pypdfium2", marker = "extra == 'ocr'", specifier = ">=4.30.0" },
+    { name = "pytesseract", marker = "extra == 'ocr'", specifier = ">=0.3.10" },
     { name = "python-docx", marker = "extra == 'sandbox'", specifier = ">=1.1.0" },
     { name = "python-json-logger", specifier = ">=2.0.7" },
     { name = "python-multipart", marker = "extra == 'server'", specifier = ">=0.0.9" },
@@ -250,7 +256,7 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.34.0" },
     { name = "wtpsplit", extras = ["onnx-cpu"], marker = "extra == 'chunking'", specifier = ">=2.1.0" },
 ]
-provides-extras = ["web", "code", "sandbox", "rag", "chunking", "anthropic", "gemini", "s3", "safety", "server", "document-intelligence", "document-intelligence-gpu", "sentence-transformers"]
+provides-extras = ["web", "code", "sandbox", "rag", "chunking", "ocr", "anthropic", "gemini", "s3", "safety", "server", "document-intelligence", "document-intelligence-gpu", "sentence-transformers"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -6172,6 +6178,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9e/41/7d5187e9527eae81890a3b13193442112ef788d61ddaa68a6d59ac447bec/pypdfium2-5.10.1-py3-none-win32.whl", hash = "sha256:8702bb4f01ddfc8e7757b41b4c2c8392ac17c9f0234476e1e69672ea7c6d6aa0", size = 3680056, upload-time = "2026-06-15T10:09:10.95Z" },
     { url = "https://files.pythonhosted.org/packages/16/1d/c62bd59dd8345cc4b640f942f465633f6b07b859d01ddb648610a7bf5c7c/pypdfium2-5.10.1-py3-none-win_amd64.whl", hash = "sha256:58da5b51fb7884c7d21a05062ab13edb011d1a08dfd9694f3d5d685df62796b9", size = 3812105, upload-time = "2026-06-15T10:09:12.684Z" },
     { url = "https://files.pythonhosted.org/packages/10/d5/21bac39125df8a93e99c04583486b58a62b5997d6b3541e3ad0f69053392/pypdfium2-5.10.1-py3-none-win_arm64.whl", hash = "sha256:e3301c2f7a66fb8cb57dba857d0c9e90215e178f6602a87c5a306cd98513dab8", size = 3600043, upload-time = "2026-06-15T10:09:14.606Z" },
+]
+
+[[package]]
+name = "pytesseract"
+version = "0.3.13"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9f/a6/7d679b83c285974a7cb94d739b461fa7e7a9b17a3abfd7bf6cbc5c2394b0/pytesseract-0.3.13.tar.gz", hash = "sha256:4bf5f880c99406f52a3cfc2633e42d9dc67615e69d8a509d74867d3baddb5db9", size = 17689, upload-time = "2024-08-16T02:33:56.762Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/33/8312d7ce74670c9d39a532b2c246a853861120486be9443eebf048043637/pytesseract-0.3.13-py3-none-any.whl", hash = "sha256:7a99c6c2ac598360693d83a416e36e0b33a67638bb9d77fdcac094a3589d4b34", size = 14705, upload-time = "2024-08-16T02:36:10.09Z" },
 ]
 
 [[package]]

@@ -612,7 +612,7 @@ manifest, CI workflow, and Makefile targets renamed to match
 Makefile target added.
 
 **Also added in the same pass:** a `DocumentExtractor` kernel Protocol
-(`kernel/storage/document.py`, mirroring `VectorStore`/`GraphStore`/
+(`kernel/document/protocols.py`, mirroring `VectorStore`/`GraphStore`/
 `HistoryProvider`'s shape) with `ExtractionPipeline`
 (`PPStructureV3`-backed, `runtimes/document_intelligence`) as one real
 implementation and a new `capabilities/knowledge/loaders/
@@ -623,3 +623,22 @@ a second, lightweight, no-OCR-needed implementation for digital PDFs. Also
 wired `ExtractionClient` into `PDFLoader` itself (previously only
 `LocalRagBackend` called it directly, not `PDFLoader` when constructed
 bare).
+
+**Superseded in a later pass:** the Protocol never got an `agents/` (L1)
+default under the layer-charter rule ("every kernel Protocol gets exactly
+one zero-infra default"), and `xycut_extractor.py` turned out to secretly
+require `paddlex` (for two geometry helper functions) despite its own
+docstring claiming otherwise — so it was never actually the lightweight
+option it was meant to be, and nothing in the repo ended up calling it.
+Replaced with `agents/document/local_extractor.py::LocalDocumentExtractor`
+(pdfplumber/pypdf text layer + a bare-minimum Tesseract OCR fallback for
+scanned pages, the `ocr` extra) as the real L1 default;
+`runtimes/document_intelligence/extract.py::ServiceBackedDocumentExtractor`
+is now the L2 adapter over the PaddleOCR service, both implementing the
+same kernel `DocumentExtractor` Protocol so either is a drop-in for
+`PDFLoader(extractor=...)`. `xycut_extractor.py` was deleted outright (dead
+code, no callers). The service-internal duplicate `ExtractionResult`
+dataclass (`runtimes/document_intelligence/service/types.py`) was also
+deleted — every engine and `extract_document()` now speak kernel's
+`ExtractionResult`/`ExtractedPage`/`ExtractedImage` directly, no converter
+hop.

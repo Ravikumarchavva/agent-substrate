@@ -34,13 +34,28 @@ keep them out of the engine.
 
 `PDFLoader` (the local, no-extraction-service fallback path) plus
 `LanceDBVectorStore` (embedded, file-based vector store —
-`capabilities/vector/lancedb_store.py`). ~110MB combined (`lancedb` +
+`integrations/vector/lancedb_store.py`). ~110MB combined (`lancedb` +
 `pyarrow`) — not needed unless you actually use either.
+
+## `ocr`
+
+`LocalDocumentExtractor`'s (`agents/document/local_extractor.py`) bare-
+minimum OCR fallback for scanned/image-only pages — `pytesseract` (thin
+Python wrapper) + `pypdfium2` (page rasterization, pure-wheel, no system
+deps of its own). This is the *only* extra in this file that also needs a
+**system binary**: `tesseract-ocr` (`apt install tesseract-ocr` / `brew
+install tesseract`), not pip-installable. Both imports are lazy inside
+`LocalDocumentExtractor`, so a normal digital-text PDF never touches this
+extra or the binary at all — it only matters if you feed the extractor a
+scanned page. For real OCR/layout quality (multi-column reading order,
+chart/table detection), use the PaddleOCR-backed
+`document-intelligence`/`document-intelligence-gpu` extras instead — this
+tier is deliberately the bare minimum.
 
 ## `chunking`
 
 Model-based sentence segmentation for the chunkers (`SaTSegmenter`, in
-`capabilities/knowledge/segmentation.py`). `wtpsplit` pulls `transformers` +
+`integrations/knowledge/segmentation.py`). `wtpsplit` pulls `transformers` +
 `huggingface-hub` + `scikit-learn` + `pandas`, and needs a backend to
 actually run a model — `torch` if present, otherwise `wtpsplit[onnx-cpu]`
 (what's pinned here). The default `RegexSegmenter` needs none of it, so

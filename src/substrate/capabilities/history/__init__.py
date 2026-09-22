@@ -1,4 +1,10 @@
-"""substrate.capabilities.history — Concrete HistoryProvider backends."""
+"""substrate.capabilities.history — Durable HistoryProvider backends.
+
+``LocalFilesystemHistoryProvider`` moved to ``agents.context`` — pure
+kernel+stdlib, no durable-infra dependency, so it belongs at L1 beside
+``InMemoryHistoryProvider``. This package now holds only backends with a
+real L2 dependency (Postgres).
+"""
 
 from __future__ import annotations
 
@@ -7,11 +13,9 @@ from substrate.capabilities.history.durable_history import (
     HistoryMessage,
     HistorySession,
 )
-from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
 
 __all__ = [
     "DurableHistoryProvider",
     "HistorySession",
     "HistoryMessage",
-    "LocalFilesystemHistoryProvider",
 ]

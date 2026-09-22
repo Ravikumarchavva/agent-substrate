@@ -1,30 +1,50 @@
-"""StagedSandboxRuntime — run a sandbox against a store that has no filesystem.
+"""StagedSandboxRuntime — materialize a branch's workspace before a run, commit it after.
 
-Every local runtime (nsjail, inprocess) executes with ``cwd`` inside a real
-directory tree, and the k8s runtime mounts one. Object storage offers ``GET``/
-``PUT`` on keys, not ``open()``/``write()``/``seek()``, so when
-``FILE_STORE_BACKEND=s3`` there is no tree for them to run in.
+Every runtime — nsjail bind-mounting a directory, an in-pod k8s server writing
+to its own local disk, the inprocess test runtime — executes against a real
+local filesystem tree. But the durable source of truth is no longer a
+filesystem at all: it's a content-addressed manifest (``agents/workspace/``).
+This wrapper is the one place that bridges the two: before a run it
+materializes the branch's current snapshot into local scratch (hardlinking
+from the CAS's local cache where possible — see
+``agents/workspace/materialize.py``), and after a run it hashes whatever
+changed and commits a new snapshot, advancing the branch head.
 
-This wrapper closes that gap by *materialising* the session before a run and
-uploading what the run changed afterwards — the store stays the single source of
-truth, while the sandbox still gets full POSIX semantics on a local scratch
-tree. The alternative, FUSE-mounting the bucket (s3fs, mountpoint-s3), was
-rejected deliberately: those clients have no random writes, no rename and no
-append, so ordinary things like editing a file in place or ``pip install``ing
-into the workspace fail in ways that are hard to explain to a user.
+This wraps every *local-process* runtime now (nsjail, inprocess) — there is
+no more filesystem shortcut for the "local" ``FILE_STORE_BACKEND``: the
+object store holds content-addressed blobs
+(``tenants/{t}/users/{u}/blobs/{hash}``), not a browsable tree, so even
+nsjail (same host as the object store) needs a materialized scratch copy to
+bind-mount.
 
-Scratch is disposable by construction: anything the run needs is pulled from the
-store, and anything worth keeping is pushed back. That makes it safe for the
-local tree to be a container's ephemeral disk.
+Deliberately NOT used for ``K8sRuntime``: that runtime never reads
+``spec.session_dir`` at all — pod/PVC selection happens inside
+``CodeInterpreterService`` by ``(tenant_id, user_id)`` alone, on a different
+node than wherever this wrapper would materialize local scratch. Wrapping
+it here would be worse than doing nothing: stage-out would commit an
+empty/stale snapshot every run, since the pod never touches the scratch
+dir this class watches. k8s stays per-user-isolated (unchanged from
+before), not yet per-branch — see ``infrastructure/serving_factory.py``'s
+runtime wiring for where that's enforced.
+
+Scratch is disposable by construction: anything a run needs is checked out
+from the workspace store, and anything worth keeping is committed back. That
+makes it safe for the local tree to be a container's ephemeral disk.
 """
 
 from __future__ import annotations
 
 import asyncio
-import base64
 from pathlib import Path
 from typing import Any
 
+from substrate.agents.workspace.cas import BlobCAS
+from substrate.agents.workspace.materialize import materialize as materialize_manifest
+from substrate.agents.workspace.scope import WorkspaceScope
+from substrate.agents.workspace.snapshots import commit_turn
+from substrate.kernel.exceptions import SnapshotConflictError
+from substrate.kernel.storage.objects import ObjectStore
+from substrate.kernel.storage.snapshots import WorkspaceStore
 from substrate.logger import setup_logging
 
 from .base import ExecResult, SandboxSpec
@@ -33,26 +53,32 @@ logger = setup_logging("substrate.code_interpreter.staged")
 
 
 class StagedSandboxRuntime:
-    """Stage a session in from the file store, run *inner*, stage changes back.
+    """Materialize a branch's workspace in, run *inner*, commit it back out.
 
-    Delegates isolation entirely to *inner* — this class only moves bytes, and
-    deliberately does not touch ``spec``, so the wrapped runtime enforces the
-    same boundary it always did.
+    Delegates isolation entirely to *inner* — this class only moves bytes
+    between the durable CAS/snapshot store and a local scratch tree, and
+    deliberately does not touch how ``spec`` is otherwise enforced, so the
+    wrapped runtime still enforces the same boundary it always did.
     """
 
     def __init__(
         self,
         inner: Any,
         *,
-        file_store: Any,
-        workspace_root: str | Path,
+        object_store: ObjectStore,
+        workspace_store: WorkspaceStore,
+        scratch_root: str | Path,
     ) -> None:
         self._inner = inner
-        self._store = file_store
-        self._root = Path(workspace_root).resolve()
-        # One lock per session: two concurrent runs in the same thread would
-        # otherwise interleave stage-in and stage-out and could upload a
-        # half-written tree.
+        self._object_store = object_store
+        self._workspace_store = workspace_store
+        self._root = Path(scratch_root).resolve()
+        self._cache_root = self._root / ".cas-cache"
+        # One lock per session_dir: two concurrent runs on the same branch
+        # in this process would otherwise interleave checkout and commit and
+        # could commit a half-written tree. Cross-process races are still
+        # possible (multiple workers) — that's what expected_parent_id on
+        # commit_turn is for; see _stage_out.
         self._locks: dict[str, asyncio.Lock] = {}
 
     @property
@@ -66,11 +92,29 @@ class StagedSandboxRuntime:
             self._locks[session_dir] = lock
         return lock
 
+    def _cas_for(self, scope: WorkspaceScope) -> BlobCAS:
+        return BlobCAS(
+            self._object_store,
+            tenant_id=scope.tenant_id,
+            user_id=scope.user_id,
+            local_cache_dir=self._cache_root / scope.tenant_id / scope.user_id,
+        )
+
     async def execute(self, spec: SandboxSpec) -> ExecResult:
+        scope = spec.extra.get("workspace_scope")
+        if not isinstance(scope, WorkspaceScope):
+            raise ValueError(
+                "StagedSandboxRuntime requires spec.extra['workspace_scope'] "
+                "(a WorkspaceScope) — see tool.py"
+            )
         async with self._lock_for(spec.session_dir):
-            await self._stage_in(spec)
+            cas = self._cas_for(scope)
+            scratch_dir = self._root / spec.session_dir
+            observed_parent_id = await self._stage_in(cas, scope, scratch_dir)
             result = await self._inner.execute(spec)
-            await self._stage_out(spec, result)
+            result.workspace_snapshot_id = await self._stage_out(
+                cas, scope, scratch_dir, observed_parent_id
+            )
             return result
 
     async def stop(self) -> None:
@@ -78,93 +122,86 @@ class StagedSandboxRuntime:
 
     # ── staging ──────────────────────────────────────────────────────────────
 
-    async def _stage_in(self, spec: SandboxSpec) -> None:
-        """Download the session's objects into the local scratch tree.
+    async def _stage_in(
+        self, cas: BlobCAS, scope: WorkspaceScope, scratch_dir: Path
+    ) -> str | None:
+        """Materialize the branch's current head snapshot into *scratch_dir*.
 
-        Skips a key whose local copy already has the same size, so a warm
-        scratch dir costs one LIST rather than a full re-download. Files present
-        locally but absent from the store are left alone: they are almost always
-        a previous run's output whose upload failed, and keeping them means the
-        next stage-out retries rather than silently dropping the user's data.
+        Returns the checked-out snapshot's id (``None`` for a branch with no
+        snapshot yet — a brand-new conversation/branch, left with an empty
+        scratch dir, not an error) — this is what ``_stage_out`` uses as the
+        real CAS parent, not a fresh re-read. Files already correctly
+        materialized are hardlinked from the CAS's local cache, not
+        re-downloaded — see ``materialize.py``.
         """
-        prefix = spec.session_dir.strip("/") + "/"
         try:
-            entries = await self._store.list_prefix(prefix)
+            head = await self._workspace_store.get_branch_snapshot_head(
+                scope.conversation_id, scope.branch_id
+            )
         except Exception as exc:
-            logger.warning("Stage-in listing failed for %s: %s", prefix, exc)
-            return
+            logger.warning(
+                "Stage-in: could not read branch head for %s/%s: %s",
+                scope.conversation_id,
+                scope.branch_id,
+                exc,
+            )
+            head = None
+        if head is None:
+            scratch_dir.mkdir(parents=True, exist_ok=True)
+            return None
+        if head.manifest is None:
+            logger.warning(
+                "Stage-in: snapshot %s uses manifest_ref, unsupported — "
+                "leaving scratch empty",
+                head.id,
+            )
+            scratch_dir.mkdir(parents=True, exist_ok=True)
+            return None
+        await materialize_manifest(cas, head.manifest, scratch_dir)
+        return head.id
 
-        for key, size, _mtime in entries:
-            local = self._root / key
-            if local.is_file() and local.stat().st_size == size:
-                continue
-            try:
-                data = await self._store.download(key)
-            except Exception as exc:
-                logger.warning("Stage-in download failed for %s: %s", key, exc)
-                continue
-            local.parent.mkdir(parents=True, exist_ok=True)
-            local.write_bytes(data)
+    async def _stage_out(
+        self,
+        cas: BlobCAS,
+        scope: WorkspaceScope,
+        scratch_dir: Path,
+        observed_parent_id: str | None,
+    ) -> str | None:
+        """Hash whatever's in *scratch_dir* now and commit a new snapshot.
 
-    async def _stage_out(self, spec: SandboxSpec, result: ExecResult) -> None:
-        """Upload every file the run created or modified.
-
-        ``output_files`` is already exactly that set — the local runtimes diff
-        the tree (``_files.collect_changed``) and the k8s runtime's in-pod server
-        reports the same shape — so there is no second walk here, and files the
-        run only *read* are never re-uploaded.
+        Returns the new snapshot's id, or ``None`` if the commit failed or
+        raced another writer on the same branch (``SnapshotConflictError``)
+        — the run's stdout/output files are still returned to the user
+        either way (never fail the tool call over this), but a raced
+        commit's file changes are not durably recorded; retry is out of
+        scope for v1 (no merge story — see the workspace plan).
         """
-        for entry in result.output_files:
-            name = str(entry.get("name") or "")
-            if not name:
-                continue
-            key = f"{spec.session_dir.strip('/')}/{name}"
-            data = self._entry_bytes(entry)
-            if data is None:
-                logger.warning("Stage-out: no content available for %s", key)
-                continue
-            try:
-                await self._store.upload(
-                    key,
-                    data,
-                    content_type=str(
-                        entry.get("mime_type") or "application/octet-stream"
-                    ),
-                )
-            except Exception as exc:
-                # Never fail the tool call over this: the user still gets the
-                # run's stdout and inline artifacts, and the file survives in
-                # scratch for the next stage-out to retry.
-                logger.warning("Stage-out upload failed for %s: %s", key, exc)
-
-    def _entry_bytes(self, entry: dict[str, Any]) -> bytes | None:
-        """Bytes for one output entry.
-
-        Prefers the inline copy the runtime already produced; falls back to the
-        host path, which is the only source for a file too large to inline
-        (``too_large``) and is absent for the k8s runtime.
-        """
-        encoded = entry.get("content_base64")
-        if isinstance(encoded, str):
-            try:
-                return base64.b64decode(encoded)
-            except ValueError:
-                return None
-        raw_path = entry.get("path")
-        if isinstance(raw_path, str) and raw_path:
-            path = Path(raw_path)
-            try:
-                # Confine reads to the scratch root: `path` originates from a
-                # runtime response, so it is not automatically trustworthy.
-                path.resolve().relative_to(self._root)
-            except ValueError:
-                logger.warning("Stage-out: path outside workspace root: %s", raw_path)
-                return None
-            try:
-                return path.read_bytes()
-            except OSError:
-                return None
-        return None
+        try:
+            new_snapshot = await commit_turn(
+                self._workspace_store,
+                cas,
+                scratch_dir,
+                session_id=scope.conversation_id,
+                branch_id=scope.branch_id,
+                expected_parent_id=observed_parent_id,
+            )
+            return new_snapshot.id
+        except SnapshotConflictError as exc:
+            logger.warning(
+                "Stage-out: commit conflict on %s/%s: %s — run's file changes not saved",
+                scope.conversation_id,
+                scope.branch_id,
+                exc,
+            )
+            return None
+        except Exception as exc:
+            logger.warning(
+                "Stage-out: commit failed for %s/%s: %s",
+                scope.conversation_id,
+                scope.branch_id,
+                exc,
+            )
+            return None
 
 
 __all__ = ["StagedSandboxRuntime"]

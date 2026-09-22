@@ -9,7 +9,7 @@ from .history import (
     InMemoryHistoryProvider,
     project_messages,
 )
-from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
+from .local_history import LocalFilesystemHistoryProvider
 from .builder import DefaultContextBuilder
 from .compaction import (
     CompactionStrategy,
@@ -24,7 +24,6 @@ from .compaction import (
     TokenBudgetComposedStrategy,
 )
 from .context import AgentContext, ContextConfig
-from .workspace import InMemoryWorkspaceStore, LocalFilesystemWorkspaceStore
 
 __all__ = [
     "HistoryProvider",
@@ -33,8 +32,6 @@ __all__ = [
     "LocalFilesystemHistoryProvider",
     "DefaultHistoryResolver",
     "AncestryCheckpointResolver",
-    "InMemoryWorkspaceStore",
-    "LocalFilesystemWorkspaceStore",
     "DefaultContextBuilder",
     "CompactionStrategy",
     "CompactionPipeline",

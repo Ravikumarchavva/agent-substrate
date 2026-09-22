@@ -61,6 +61,7 @@ class Infrastructure:
     file_store: Any
     pending_file_store: Any = None
     artifact_store: Any = None
+    workspace_store: Any = None
     short_term_memory: Any = None
     long_term_memory: Any = None
     runtime_stack: AsyncExitStack | None = None
@@ -234,6 +235,10 @@ async def init_infrastructure(
         database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
         local_path=cfg.HISTORY_STORAGE_PATH,
     )
+    workspace_store = await build_workspace_store(
+        database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
+        local_path=cfg.WORKSPACE_SNAPSHOT_STORAGE_PATH,
+    )
 
     short_term_memory = await build_short_term_memory(
         redis_url=cfg.REDIS_URL,
@@ -370,6 +375,7 @@ async def init_infrastructure(
         file_store=file_store,
         pending_file_store=pending_file_store,
         artifact_store=artifact_store,
+        workspace_store=workspace_store,
         short_term_memory=short_term_memory,
         long_term_memory=long_term_memory,
         runtime_stack=runtime_stack,
@@ -391,12 +397,16 @@ async def init_tool_registry(
     rag_backend: Any = None,
     file_store: Any = None,
     artifact_store: Any = None,
+    workspace_store: Any = None,
     skill_manager: Any = None,
 ) -> ToolboxResult:
     """Create all tools and return a registry.
 
-    ``file_store`` is only needed to stage the code interpreter's workspace when
-    the store is object storage (see ``StagedSandboxRuntime``).
+    ``file_store`` (an ``ObjectStore``) and ``workspace_store`` (a kernel
+    ``WorkspaceStore``) are both needed to stage the code interpreter's
+    branch workspace around every run — see ``StagedSandboxRuntime``, which
+    now always wraps the sandbox runtime, not just for object-storage
+    backends.
     ``skill_manager`` registers the ``skills`` tool (list/activate SKILL.md
     packages under ``capabilities/tools/skills/``) — without it the model has
     no way to discover or read a skill's instructions, so a skill existing on
@@ -448,21 +458,46 @@ async def init_tool_registry(
     try:
         sandbox_runtime: Any = build_runtime(
             cfg.SANDBOX_RUNTIME,
-            workspace_root=cfg.FILE_STORE_ROOT,
+            workspace_root=cfg.SANDBOX_SCRATCH_ROOT,
             runtime_class_name=cfg.SANDBOX_RUNTIME_CLASS,
             workspace_pvc_claim=cfg.CI_WORKSPACE_PVC_CLAIM or None,
             python_bin=cfg.SANDBOX_PYTHON,
         )
-        # Object storage has no filesystem for a sandbox to run in, so stage the
-        # session in and the run's changes back out around each execution, with
-        # FILE_STORE_ROOT demoted to disposable scratch. Unnecessary for the
-        # "local" backend, where that root *is* the store — wrapping it there
-        # would copy every file onto itself.
-        if cfg.FILE_STORE_BACKEND == "s3" and file_store is not None:
+        # Stage for any *local-process* runtime (nsjail, inprocess): the
+        # object store holds content-addressed blobs now (agents/workspace/),
+        # not a browsable file tree, so even nsjail — same host as the
+        # store — needs its branch workspace materialized into scratch
+        # before a run and committed back after. No more
+        # FILE_STORE_BACKEND-conditional wrapping.
+        #
+        # k8s is deliberately NOT wrapped here: K8sRuntime.execute() never
+        # reads spec.session_dir at all — CodeInterpreterService selects the
+        # pod/PVC purely by (tenant_id, user_id) via _ensure_user_template's
+        # subPath. Materializing into local scratch on the API server would
+        # be invisible to the pod (a different node), so stage-out would
+        # commit an empty/stale snapshot every run, silently discarding real
+        # history. k8s still isolates per-user (unchanged from before this
+        # pass — not a regression), just not yet per-branch; making it
+        # branch-aware needs the in-pod server itself to materialize/commit
+        # against the workspace store, a separate, untested-here change.
+        if cfg.SANDBOX_RUNTIME != "k8s" and file_store is not None and workspace_store is not None:
             sandbox_runtime = StagedSandboxRuntime(
                 sandbox_runtime,
-                file_store=file_store,
-                workspace_root=cfg.FILE_STORE_ROOT,
+                object_store=file_store,
+                workspace_store=workspace_store,
+                scratch_root=cfg.SANDBOX_SCRATCH_ROOT,
+            )
+        elif cfg.SANDBOX_RUNTIME == "k8s":
+            logger.warning(
+                "Code interpreter on k8s is not yet branch-aware — sandboxed "
+                "runs see the whole user's workspace, not just the active "
+                "branch. See runtimes/staged.py's module docstring."
+            )
+        else:
+            logger.warning(
+                "Code interpreter running WITHOUT workspace staging "
+                "(file_store or workspace_store not configured) — branches "
+                "will not be isolated from each other."
             )
         code_interpreter_tool = CodeInterpreterTool(
             sandbox_runtime,
@@ -824,7 +859,7 @@ async def build_agent_for_thread(
 
     if history is None:
         history = InMemoryHistoryProvider()
-        from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
+        from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
 
         history = LocalFilesystemHistoryProvider()
         await history.connect()
@@ -979,12 +1014,41 @@ async def build_history_provider(
         await provider.connect()
         return provider
 
-    from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
+    from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
 
     provider = LocalFilesystemHistoryProvider(root=local_path)
     await provider.connect()
     logger.info("History backend: local filesystem at %s", local_path)
     return provider
+
+
+async def build_workspace_store(
+    *,
+    database_url: str = "",
+    local_path: str = "./data/db/workspaces",
+) -> Any:
+    """Build the shared WorkspaceStore (branch-isolated workspace snapshots).
+
+    Same backend-selection rule as ``build_history_provider``: Postgres
+    when ``database_url`` is given, else durable local-filesystem JSON —
+    never the in-memory reference implementation in production, which
+    exists only for tests (see ``agents/context/workspace.py``).
+    """
+    if database_url:
+        from substrate.capabilities.storage.workspace_store import PostgresWorkspaceStore
+
+        store = PostgresWorkspaceStore(database_url)
+        await store.connect()
+        return store
+
+    from substrate.agents.workspace.local_workspace_store import (
+        LocalFilesystemWorkspaceStore,
+    )
+
+    store = LocalFilesystemWorkspaceStore(root=local_path)
+    await store.connect()
+    logger.info("Workspace snapshot backend: local filesystem at %s", local_path)
+    return store
 
 
 async def build_short_term_memory(
@@ -1295,7 +1359,7 @@ async def build_cached_history_for_thread(
     from substrate.agents.context import InMemoryHistoryProvider
     if history is not None:
         return history
-    from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
+    from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
 
     return history if history is not None else InMemoryHistoryProvider()
     provider = LocalFilesystemHistoryProvider()

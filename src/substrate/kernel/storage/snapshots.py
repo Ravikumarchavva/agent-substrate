@@ -120,7 +120,30 @@ class WorkspaceStore(Protocol):
         source_branch_id: str,
         new_branch_id: str,
     ) -> WorkspaceSnapshot | None:
-        """Initialize new branch snapshot head from source branch snapshot head."""
+        """Initialize new branch snapshot head from source branch's *current* head.
+
+        For forking at an arbitrary historical point (not the source
+        branch's current head — e.g. a conversation fork from an older
+        message), use ``set_branch_snapshot_head`` instead with the
+        specific snapshot id that point in history corresponds to.
+        """
+        ...
+
+    async def set_branch_snapshot_head(
+        self,
+        session_id: str,
+        branch_id: str,
+        snapshot_id: str,
+    ) -> WorkspaceSnapshot:
+        """Point ``branch_id``'s head directly at an existing snapshot.
+
+        Unlike ``commit_snapshot``, this creates no new snapshot and has no
+        CAS check — it only ever targets a brand-new branch id (one with no
+        existing head), the same "new branch, once" invariant
+        ``fork_branch_snapshot`` and ``ensure_branch`` share. Raises
+        ``ValueError`` if ``branch_id`` already has a head, or if
+        ``snapshot_id`` doesn't exist.
+        """
         ...
 
     async def list_snapshots(

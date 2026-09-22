@@ -8,7 +8,7 @@ from substrate.logger import setup_logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from substrate.capabilities.history.local_history import (
+from substrate.agents.context.local_history import (
     LocalFilesystemHistoryProvider,
 )
 from substrate.agents.context import (

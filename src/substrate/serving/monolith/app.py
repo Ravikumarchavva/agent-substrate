@@ -115,6 +115,7 @@ async def lifespan(app: FastAPI):
 
     app.state.pending_file_store = infra.pending_file_store
     app.state.artifact_store = infra.artifact_store
+    app.state.workspace_store = infra.workspace_store
     removed_bytes = app.state.pending_file_store.sweep_stale(
         older_than_seconds=settings.PENDING_UPLOAD_TTL_HOURS * 3600
     )
@@ -141,6 +142,7 @@ async def lifespan(app: FastAPI):
         rag_backend=infra.rag_backend,
         file_store=infra.file_store,
         artifact_store=infra.artifact_store,
+        workspace_store=infra.workspace_store,
         skill_manager=infra.skill_manager,
     )
     app.state.tools = tools.registry
@@ -236,6 +238,7 @@ async def lifespan(app: FastAPI):
         file_store=app.state.file_store,
         pending_file_store=app.state.pending_file_store,
         artifact_store=app.state.artifact_store,
+        workspace_store=app.state.workspace_store,
         trigger_scheduler=app.state.trigger_scheduler,
         short_term_memory=app.state.short_term_memory,
         long_term_memory=app.state.long_term_memory,
@@ -304,6 +307,8 @@ async def lifespan(app: FastAPI):
         await app.state.redis_client.aclose()
     if getattr(app.state, "file_store", None):
         await app.state.file_store.disconnect()
+    if getattr(app.state, "workspace_store", None):
+        await app.state.workspace_store.disconnect()
     for tool in app.state.tools.all():
         if hasattr(tool, "stop"):
             try:

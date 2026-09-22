@@ -461,6 +461,13 @@ class LocalFilesystemHistoryProvider:
     async def disconnect(self) -> None:
         """No-op for filesystem store."""
 
+    async def delete_branch(self, session_id: str, branch_id: str) -> None:
+        if branch_id == "main":
+            raise ValueError("cannot delete the main branch")
+        lock = await self._get_branch_lock(session_id, branch_id)
+        async with lock:
+            self._branch_path(session_id, branch_id).unlink(missing_ok=True)
+
     # ── Session lifecycle ─────────────────────────────────────────────────────
 
     async def delete_session(self, session_id: str) -> None:

@@ -40,7 +40,7 @@ async def test_context_config():
     assert cfg.pipeline is pipeline
 
     default_cfg = ContextConfig.default()
-    from substrate.capabilities.history.local_history import LocalFilesystemHistoryProvider
+    from substrate.agents.context.local_history import LocalFilesystemHistoryProvider
 
     assert isinstance(default_cfg.history, LocalFilesystemHistoryProvider)
     assert isinstance(default_cfg.pipeline, CompactionPipeline)

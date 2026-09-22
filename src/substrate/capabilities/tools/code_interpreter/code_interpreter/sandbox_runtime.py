@@ -52,21 +52,13 @@ class RunCodeRequest(BaseModel):
     code: str
     include_artifacts: bool = True
     close_figures: bool = True
-    # Conversation thread this run belongs to. When set (and the pod's
-    # WORKSPACE_DIR is a per-user PVC mount), execution cwd becomes
-    # sessions/{session_id}/ so agent-written files land in that thread's
-    # folder rather than the shared user root. Files elsewhere in the
-    # user's tree (other sessions, uploads/) remain reachable via absolute
-    # workspace-relative paths — this only changes the *default* cwd.
+    # Conversation thread this run belongs to. The pod's WORKSPACE_DIR is a
+    # per-user PVC mount, so execution cwd becomes sessions/{session_id}/,
+    # landing agent files in that thread's folder rather than the shared
+    # user root. Files elsewhere in the user's tree (other sessions,
+    # uploads/) remain reachable via absolute workspace-relative paths —
+    # this only changes the *default* cwd.
     session_id: str | None = None
-    # Explicit workspace-relative run directory. Overrides the session_id →
-    # sessions/{session_id} default. The local (non-k8s) sandbox mounts the
-    # WHOLE workspace at /app/workspace, so it passes the full per-user path
-    # "users/{uid}/sessions/{tid}" here — landing agent files next to the
-    # user's uploads and under an ownership-scoped path the workspace
-    # file-serve endpoint can resolve. K8s subPath-mounts users/{uid}
-    # already, so it keeps using session_id.
-    workspace_dir: str | None = None
 
 
 class UploadRequest(BaseModel):
@@ -112,11 +104,7 @@ async def health_check() -> dict[str, str]:
 def ci_run(request: RunCodeRequest) -> dict[str, Any]:
     """Execute Python in a persistent interpreter and return changed files."""
     try:
-        if request.workspace_dir:
-            run_dir = _resolve_workspace_path(request.workspace_dir)
-            os.makedirs(run_dir, exist_ok=True)
-        else:
-            run_dir = _session_run_dir(request.session_id)
+        run_dir = _session_run_dir(request.session_id)
     except ValueError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 

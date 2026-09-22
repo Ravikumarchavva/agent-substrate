@@ -746,6 +746,19 @@ class DurableHistoryProvider:
             result = await db.execute(stmt)
             return [_checkpoint_from_row(r) for r in result.scalars().all()]
 
+    async def delete_branch(self, session_id: str, branch_id: str) -> None:
+        if branch_id == "main":
+            raise ValueError("cannot delete the main branch")
+        factory = self._get_session()
+        async with factory() as db:
+            await db.execute(
+                delete(HistoryBranch).where(
+                    HistoryBranch.session_id == session_id,
+                    HistoryBranch.id == branch_id,
+                )
+            )
+            await db.commit()
+
     async def delete_session(self, session_id: str) -> None:
         factory = self._get_session()
         async with factory() as db:

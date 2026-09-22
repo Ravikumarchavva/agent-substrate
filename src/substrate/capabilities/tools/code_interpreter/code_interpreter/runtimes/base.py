@@ -50,11 +50,15 @@ class SandboxSpec:
     """One execution request.
 
     Exactly one of ``code`` (Python source) or ``argv`` (a shell command, already
-    split) is set — the tool enforces that. ``session_dir`` is the *store-relative*
-    key (``tenants/{tid}/users/{uid}/conversations/{cid}/workspace/shared`` —
-    see ``agents/workspace/layout.py``'s ``conversation_workspace_prefix``);
-    runtimes resolve it against their own root, so a runtime is never handed
-    a host path it must trust.
+    split) is set — the tool enforces that. ``session_dir`` is a *scratch-relative*
+    key (``{conversation_id}/{branch_id}`` — see ``tool.py``), not an
+    object-store key: ``runtimes/staged.py`` materializes the branch's
+    current workspace snapshot into local scratch under this path before
+    the run and commits it back as a new snapshot after. Runtimes resolve
+    it against their own root, so a runtime is never handed a host path it
+    must trust. ``extra["workspace_scope"]`` carries the full
+    ``agents.workspace.scope.WorkspaceScope`` the staging wrapper needs for
+    the actual CAS/snapshot operations.
     """
 
     user_id: str | None
@@ -84,6 +88,12 @@ class ExecResult:
     stderr: str = ""
     exit_code: int = 0
     output_files: list[dict[str, Any]] = field(default_factory=list)
+    # Set by runtimes/staged.py after committing this run's workspace
+    # changes — the id CodeInterpreterTool hands to
+    # ctx.record_workspace_snapshot() so it ends up on the turn's
+    # MessageNode. None for a runtime with no staging wrapper (tests only —
+    # production always wraps in StagedSandboxRuntime, see the workspace plan).
+    workspace_snapshot_id: str | None = None
 
     @property
     def ok(self) -> bool:

@@ -1,4 +1,10 @@
-"""Durable file storage backends (L2)."""
+"""Durable file storage backends (L2).
+
+``LocalFilesystemWorkspaceStore`` moved to ``agents.workspace`` — pure
+kernel+stdlib, no durable-infra dependency, so it belongs at L1 beside the
+rest of the workspace package. This package now holds only backends with a
+real L2 dependency (S3-compatible object storage, Postgres).
+"""
 
 from substrate.capabilities.storage.s3 import S3FileStore
 from substrate.capabilities.storage.workspace import (
@@ -7,9 +13,6 @@ from substrate.capabilities.storage.workspace import (
     WorkspaceQuotaExceededError,
 )
 
-from substrate.capabilities.storage.local_workspace_store import (
-    LocalFilesystemWorkspaceStore,
-)
 from substrate.capabilities.storage.workspace_store import (
     BranchSnapshotHead,
     PostgresWorkspaceStore,
@@ -26,6 +29,5 @@ __all__ = [
     "WorkspaceSnapshotBase",
     "SnapshotRecord",
     "BranchSnapshotHead",
-    "LocalFilesystemWorkspaceStore",
 ]
 

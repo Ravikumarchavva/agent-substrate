@@ -173,6 +173,24 @@ class HistoryProvider(Protocol):
         """List all checkpoints stored for a session."""
         ...
 
+    async def delete_branch(self, session_id: str, branch_id: str) -> None:
+        """Delete a branch pointer.
+
+        Only the ``Branch`` record — the named head pointer — is removed;
+        the underlying ``MessageNode``s it pointed into are left untouched
+        (same as ``git branch -d``: deleting a branch never deletes
+        commits, only the ref). They may still be reachable from another
+        branch that shares the same ancestry, and reachability-based
+        cleanup of genuinely orphaned nodes is a deliberately deferred GC
+        concern, not this method's job.
+
+        Raises ``ValueError`` for ``branch_id == "main"`` — every session's
+        history assumes a main branch exists (``ensure_branch`` auto-creates
+        it, routes default to it). Idempotent otherwise: deleting an
+        unknown branch is a no-op.
+        """
+        ...
+
     # ── Session lifecycle ────────────────────────────────────────────────────
 
     async def delete_session(self, session_id: str) -> None:

@@ -9,10 +9,13 @@ Two execution modes, both isolated identically by the runtime:
   * ``code``    — Python source (the common path)
   * ``command`` — a shell command line (``ls -la``, ``wc -l data.csv``, …)
 
-The working directory is always the caller's own session directory
-(``users/{uid}/sessions/{tid}``), which the runtime makes the *only* visible
-part of the workspace. Files written there persist and are addressable from
-chat via the ``sandbox:`` scheme.
+The working directory is the caller's *branch's* workspace — materialized
+fresh from the branch's current snapshot before the run and committed back
+as a new snapshot after (see ``runtimes/staged.py``), not a bind-mount of a
+shared filesystem tree. This is what makes the sandbox branch-aware: a run
+on a forked branch never sees or mutates another branch's files, even
+though both branches may share the same underlying blobs. Files written
+there persist and are addressable from chat via the ``sandbox:`` scheme.
 """
 
 from __future__ import annotations
@@ -25,9 +28,7 @@ from substrate.agents.storage.tasks import (
     current_parent_agent_id,
     current_thread_id,
 )
-from substrate.agents.workspace.scope import current_tenant_id, current_user_id
-from substrate.agents.workspace.layout import conversation_workspace_prefix
-from substrate.kernel.agent.runtime_context import RunMeta
+from substrate.agents.workspace.scope import current_scope
 from substrate.kernel.tools import ToolExecutionResult
 from substrate.kernel.tools.tools import ToolRisk
 from substrate.logger import setup_logging
@@ -124,7 +125,7 @@ class CodeInterpreterTool:
     async def execute(
         self,
         *,
-        ctx: RunMeta | None = None,
+        ctx: Any = None,
         code: str | None = None,
         command: str | None = None,
         timeout: int = 60,
@@ -142,28 +143,37 @@ class CodeInterpreterTool:
             if thread_id and thread_id != _DEFAULT_SESSION
             else self.session_id
         )
-        user_id = current_user_id.get()
-        tenant_id = current_tenant_id.get()
+        scope = current_scope(session_id)
         agent_id = current_agent_id.get() or "primary"
         parent_agent_id = current_parent_agent_id.get()
-        if not tenant_id:
-            return sandbox_error_result("Sandbox execution requires a tenant-scoped conversation.")
-        if not user_id:
-            return sandbox_error_result("Sandbox execution requires a signed-in user.")
-        workspace = conversation_workspace_prefix(tenant_id, user_id, session_id)
-        shared_dir = f"{workspace}/shared"
-        private_dir = (
-            f"{workspace}/agents/{parent_agent_id}/subagents/{agent_id}/private"
+        if scope is None:
+            return sandbox_error_result(
+                "Sandbox execution requires a tenant-scoped, signed-in conversation."
+            )
+
+        # Scratch-relative keys, not object-store keys: runtimes/staged.py
+        # materializes the branch's workspace snapshot into local scratch
+        # under session_key before the run and commits it back after.
+        # private_key is deliberately NOT nested under session_key on the
+        # host: materialize.py's commit() walks session_key's whole subtree
+        # into the shared manifest, so a private dir nested inside it would
+        # get committed and become visible to every other agent sharing
+        # this branch — the opposite of what "private" means. nsjail still
+        # bind-mounts it to the *virtual* path /workspace/private inside the
+        # jail; only the real host paths need to stay siblings, not nested.
+        session_key = f"{scope.conversation_id}/{scope.branch_id}"
+        private_key = (
+            f".private/{scope.conversation_id}/{scope.branch_id}/{parent_agent_id}/subagents/{agent_id}"
             if parent_agent_id
-            else f"{workspace}/agents/{agent_id}/private"
+            else f".private/{scope.conversation_id}/{scope.branch_id}/{agent_id}"
         )
 
         spec = SandboxSpec(
-            user_id=user_id,
+            user_id=scope.user_id,
             thread_id=session_id,
-            session_dir=shared_dir,
-            tenant_id=tenant_id,
-            extra={"private_dir": private_dir},
+            session_dir=session_key,
+            tenant_id=scope.tenant_id,
+            extra={"private_dir": private_key, "workspace_scope": scope},
             code=code or None,
             argv=shlex.split(command) if command else None,
             timeout_s=timeout_s,
@@ -173,7 +183,7 @@ class CodeInterpreterTool:
 
         logger.info(
             "code_interpreter[%s/%s]: %s via %s (timeout=%ds)",
-            user_id or "anon",
+            scope.user_id,
             session_id,
             "command" if command else f"{len(code or '')} bytes of python",
             self._runtime.name,
@@ -185,6 +195,11 @@ class CodeInterpreterTool:
         except Exception as exc:  # noqa: BLE001 - report any backend failure
             logger.error("code_interpreter[%s] runtime error: %s", session_id, exc)
             return sandbox_error_result(f"Sandbox error: {exc}")
+
+        if result.workspace_snapshot_id is not None and ctx is not None:
+            record = getattr(ctx, "record_workspace_snapshot", None)
+            if record is not None:
+                record(result.workspace_snapshot_id)
 
         return sandbox_result_to_tool_result(result.to_sandbox_response())
 

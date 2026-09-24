@@ -35,7 +35,6 @@ from substrate.integrations.llm.factory import (
 from substrate.serving.factory import build_agent_for_thread
 
 # ContextVar that scopes TaskManagerTool to the active thread
-from substrate.integrations.tools.task_manager.tool import current_thread_id
 from substrate.kernel.core.content import (
     ChatMessage as _ChatMessage,
     Role,
@@ -407,7 +406,6 @@ async def chat(
         index on run_queue), not by anything this generator owns, so
         there's no per-thread lock left to release here.
         """
-        _thread_id_token = current_thread_id.set(str(body.thread_id))
         try:
             async for line in sse_lines(session, include_done=False):
                 yield line
@@ -415,7 +413,6 @@ async def chat(
             logger.exception("SSE generator error for thread %s", body.thread_id)
             yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
         finally:
-            current_thread_id.reset(_thread_id_token)
             await ctx.bridge_registry.release_if_idle(str(body.thread_id))
             yield "data: [DONE]\n\n"
 
@@ -484,7 +481,6 @@ async def stream_thread(
     from_seq = await event_log.last_seq(run_id) + 1
 
     async def sse_generator() -> AsyncIterator[str]:
-        _thread_id_token = current_thread_id.set(str(thread_id))
         try:
             yield f"data: {json.dumps(HelloEvent().model_dump(mode='json'), default=str)}\n\n"
             async for wire in tail_wire_events(event_log, run_id, from_seq=from_seq):
@@ -493,7 +489,6 @@ async def stream_thread(
             logger.exception("Reconnect stream error for thread %s", thread_id)
             yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
         finally:
-            current_thread_id.reset(_thread_id_token)
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(

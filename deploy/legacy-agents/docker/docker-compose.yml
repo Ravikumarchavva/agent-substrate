@@ -54,7 +54,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       OTLP_ENDPOINT: http://tempo:4318
       # "local" = per-user workspace filesystem (uploads + code-interpreter
-      # workdir, one source of truth — see capabilities/storage/workspace.py).
+      # workdir, one source of truth — see agents/storage/local_object_store.py).
       # Set FILE_STORE_BACKEND=s3 (and the FILE_STORE_* vars below) to use
       # the seaweedfs service instead; both stay defined here for convenience.
       FILE_STORE_BACKEND: ${FILE_STORE_BACKEND:-local}
@@ -262,7 +262,7 @@ services:
   # `weed server` runs master + volume + filer + S3 gateway in one process,
   # which is all a single-machine dev/compose setup needs; a real deployment
   # splits those roles. The engine only ever speaks the S3 API (see
-  # capabilities/storage/s3.py), so swapping this for any S3-compatible
+  # integrations/storage/s3.py), so swapping this for any S3-compatible
   # service — Garage, R2, AWS S3 — is a compose/env change with no code change.
   seaweedfs:
     image: chrislusf/seaweedfs:latest

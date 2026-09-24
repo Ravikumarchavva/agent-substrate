@@ -5,6 +5,7 @@ history, replacing the old steps-table write path)."""
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 from substrate.agents.core.react import ReActAgent
 from substrate.agents.runtime import Runtime
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
@@ -16,6 +17,7 @@ from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
 
 class _StubLLM:
     model = "stub"
+    capabilities = ModelCapabilities(model_id="stub")
 
     async def generate_stream(self, messages, *, options, ctx=None):
         yield TextDelta(text="answer")

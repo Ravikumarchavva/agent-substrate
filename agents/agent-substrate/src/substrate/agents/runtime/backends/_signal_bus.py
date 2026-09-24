@@ -68,7 +68,7 @@ class InMemorySignalBus:
         sleeps then directly wakes the suspended run — no polling needed
         in-process. (The durable Postgres backend instead sets a ``wake_at``
         column and relies on the scheduler's existing lease-poll cadence,
-        since a DB row can't sleep — see infrastructure/runtime/signal_bus.py.)
+        since a DB row can't sleep — see integrations/runtime/signal_bus.py.)
         """
         old = self._timer_tasks.pop(run_id, None)
         if old is not None and not old.done():

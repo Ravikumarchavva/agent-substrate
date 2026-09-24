@@ -13,6 +13,7 @@ Covers:
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 from substrate.agents.runtime.backends._event_log import InMemoryEventLog
 from substrate.agents.runtime.backends._fanout import PushAllFanout
 from substrate.agents.runtime.backends._follow_graph import InMemoryFollowGraph
@@ -187,6 +188,7 @@ async def test_crash_and_replay_llm_effect_does_not_rebill() -> None:
 
     class FakeLLMClient:
         model = "fake-model"
+        capabilities = ModelCapabilities(model_id="fake-model")
 
         async def generate_stream(
             self, messages, *, options=GenerationOptions(), ctx=None

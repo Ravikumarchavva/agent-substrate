@@ -12,15 +12,9 @@ Public API::
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from PIL import Image
-
-from substrate.integrations.llm.encoders._media import (
-    bytes_to_base64,
-    pil_to_base64_png,
-)
+from substrate.integrations.llm.encoders._media import bytes_to_base64
 
 from substrate.kernel import ChatMessage
 from substrate.kernel.core.content import (
@@ -111,69 +105,68 @@ def ensure_strict_tool_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 # ── Content encoding helpers ─────────────────────────────────────────────────
+#
+# What the Responses API can carry, and where:
+#   input_text / input_image / input_file — in user messages AND natively in
+#       a function_call_output's ``output`` list (so a tool's image reaches
+#       the model as part of the tool result itself);
+#   input_audio — user messages only;
+#   video — nowhere.
+# Anything it can't carry becomes a short text note, never silence.
 
 
-def _encode_image(img: Image.Image) -> dict[str, Any]:
-    """PIL Image → OpenAI Responses API ``input_image`` block."""
+def _data_uri(item: MediaBlock) -> str:
+    return f"data:{item.media_type};base64,{bytes_to_base64(item.data or b'')}"
+
+
+def _note(item: MediaBlock) -> dict[str, Any]:
+    ref = item.filename or item.url or item.file_id or item.media_type
+    return {"type": "input_text", "text": f"[{item.type} not sent: {ref}]"}
+
+
+def _encode_image(item: MediaBlock) -> dict[str, Any]:
+    block: dict[str, Any] = {"type": "input_image"}
+    if item.file_id:
+        block["file_id"] = item.file_id
+    else:
+        block["image_url"] = item.url or _data_uri(item)
+    if item.detail != "auto":
+        block["detail"] = item.detail
+    return block
+
+
+def _encode_file(item: MediaBlock) -> dict[str, Any]:
+    block: dict[str, Any] = {"type": "input_file"}
+    if item.file_id:
+        block["file_id"] = item.file_id
+    elif item.url:
+        block["file_url"] = item.url
+    else:
+        block["file_data"] = _data_uri(item)
+        block["filename"] = item.filename or "document"
+    return block
+
+
+def _encode_audio(item: MediaBlock) -> dict[str, Any]:
+    fmt = {"audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "audio/mp3": "mp3"}.get(
+        item.media_type
+    )
+    if item.data is None or fmt is None:
+        return _note(item)
     return {
-        "type": "input_image",
-        "image_url": f"data:image/png;base64,{pil_to_base64_png(img)}",
+        "type": "input_audio",
+        "input_audio": {"data": bytes_to_base64(item.data), "format": fmt},
     }
 
 
-def _encode_media_item(
-    item: str | Image.Image | MediaBlock,
-    role: str,
-) -> dict[str, Any]:
-    """Encode a single media block to OpenAI Responses API format."""
-    from PIL import Image
-
-    if isinstance(item, Image.Image):
+def _encode_media_item(item: MediaBlock, *, in_tool_output: bool = False) -> dict[str, Any]:
+    if item.type == "image":
         return _encode_image(item)
-    if isinstance(item, MediaBlock):
-        if item.type == "image":
-            block: dict[str, Any] = {"type": "input_image"}
-            if item.url:
-                block["image_url"] = item.url
-            elif item.file_id:
-                block["file_id"] = item.file_id
-            else:
-                block["image_url"] = (
-                    f"data:{item.media_type};base64,{bytes_to_base64(item.data or b'')}"
-                )
-            if item.detail != "auto":
-                block["detail"] = item.detail
-            return block
-        if item.type == "audio":
-            audio_type = "input_audio" if role == "user" else "output_audio"
-            return {
-                "type": audio_type,
-                "source": {
-                    "type": "base64",
-                    "media_type": item.media_type,
-                    "data": bytes_to_base64(item.data or b""),
-                },
-            }
-        if item.type == "video":
-            if item.data is None:
-                raise ValueError("Video MediaBlock requires data bytes to encode for OpenAI")
-            video_type = "input_video" if role == "user" else "output_video"
-            return {
-                "type": video_type,
-                "source": {
-                    "type": "base64",
-                    "media_type": item.media_type,
-                    "data": bytes_to_base64(item.data),
-                },
-            }
-        if item.type == "document":
-            text_type = "input_text" if role == "user" else "output_text"
-            ref = item.filename or item.url or "document"
-            return {"type": text_type, "text": f"[Document Attachment: {ref}]"}
-    if isinstance(item, str):
-        text_type = "input_text" if role == "user" else "output_text"
-        return {"type": text_type, "text": item}
-    raise ValueError(f"Unsupported content type: {type(item)}")
+    if item.type == "document":
+        return _encode_file(item)
+    if item.type == "audio" and not in_tool_output:
+        return _encode_audio(item)
+    return _note(item)
 
 
 # ── Message-level encoding ───────────────────────────────────────────────────
@@ -188,22 +181,22 @@ def _encode_system(msg: ChatMessage, parts: list[str]) -> None:
 
 def _encode_user(msg: ChatMessage) -> dict[str, Any]:
     """User ChatMessage → Responses API message item."""
-    content = []
+    content: list[dict[str, Any]] = []
     for block in msg.content:
         if isinstance(block, MediaBlock):
-            content.append(_encode_media_item(block, "user"))
+            content.append(_encode_media_item(block))
         elif isinstance(block, TextBlock):
             content.append({"type": "input_text", "text": block.text})
+        elif isinstance(block, DataBlock):
+            content.append({"type": "input_text", "text": json.dumps(block.data)})
     return {"type": "message", "role": "user", "content": content}
 
 
 def _encode_assistant(msg: ChatMessage, items: list[dict[str, Any]]) -> None:
     """Assistant ChatMessage → Responses API message + function_call items."""
-    content = []
+    content: list[dict[str, Any]] = []
     for block in msg.content:
-        if isinstance(block, MediaBlock):
-            content.append(_encode_media_item(block, "assistant"))
-        elif isinstance(block, TextBlock):
+        if isinstance(block, TextBlock):
             content.append({"type": "output_text", "text": block.text})
         elif isinstance(block, ToolUseBlock):
             tc_args = block.arguments
@@ -221,67 +214,47 @@ def _encode_assistant(msg: ChatMessage, items: list[dict[str, Any]]) -> None:
         items.append({"type": "message", "role": "assistant", "content": content})
 
 
-def _encode_content_block(block: Any) -> str:
-    """Encode a single ContentBlock to a string for OpenAI tool output."""
-    if isinstance(block, TextBlock):
-        return block.text
-    if isinstance(block, MediaBlock):
-        return str(block)
-    if isinstance(block, DataBlock):
-        return json.dumps(block.data)
-    if isinstance(block, ErrorBlock):
-        return f"[{block.error_type}]: {block.message}"
-    # Fallback for unknown block types or legacy dicts
-    max_len = 100
-    if isinstance(block, dict):
-        if "text" in block:
-            text = block["text"]
-            if isinstance(text, str):
-                return text if len(text) <= max_len else text[:max_len] + "..."
-        try:
-            return json.dumps(block)[:max_len] + "..."
-        except Exception:
-            return "[Unserializable content]"
-    return str(block)[:max_len] + "..."
-
-
 def _encode_tool_result(block: ToolResultBlock) -> list[dict[str, Any]]:
-    content_str = ""
-    if block.content:
-        parts = [_encode_content_block(b) for b in block.content]
-        content_str = "\n".join(p for p in parts if p)
+    """A tool result → ``function_call_output``.
+
+    Text-only results go as a plain string. If the tool returned images or
+    documents, ``output`` is a list of ``input_text``/``input_image``/
+    ``input_file`` parts so the model sees them as part of the tool result.
+    Audio can't ride in a tool output, so it follows in a user message.
+    """
+    parts: list[dict[str, Any]] = []
+    follow_up: list[dict[str, Any]] = []
+    has_media = False
+    for b in block.content:
+        if isinstance(b, TextBlock):
+            if b.text:
+                parts.append({"type": "input_text", "text": b.text})
+        elif isinstance(b, DataBlock):
+            parts.append({"type": "input_text", "text": json.dumps(b.data)})
+        elif isinstance(b, ErrorBlock):
+            parts.append({"type": "input_text", "text": f"[{b.error_type}]: {b.message}"})
+        elif isinstance(b, MediaBlock):
+            if b.type == "audio" and b.data is not None:
+                follow_up.append(_encode_media_item(b))
+                parts.append({"type": "input_text", "text": "[audio attached in the next message]"})
+            else:
+                parts.append(_encode_media_item(b, in_tool_output=True))
+                has_media = True
+
+    if block.is_error and parts and parts[0]["type"] == "input_text":
+        parts[0] = {"type": "input_text", "text": f"Error: {parts[0]['text']}"}
+
+    output: str | list[dict[str, Any]]
+    if has_media:
+        output = parts
+    else:
+        output = "\n".join(p["text"] for p in parts)
 
     items: list[dict[str, Any]] = [
-        {
-            "type": "function_call_output",
-            "call_id": block.call_id,
-            "output": content_str,
-        }
+        {"type": "function_call_output", "call_id": block.call_id, "output": output}
     ]
-    # Handle media attached to tool results if they exist (requires inspecting contents)
-    media_blocks = [
-        b
-        for b in block.content
-        if isinstance(b, MediaBlock)
-    ]
-    if media_blocks:
-        media_content = [
-            {
-                "type": "input_text",
-                "text": (
-                    "Tool-generated artifact(s) for the previous step. "
-                    "Use these attachments if they are relevant."
-                ),
-            }
-        ]
-        media_content.extend(_encode_media_item(item, "user") for item in media_blocks)
-        items.append(
-            {
-                "type": "message",
-                "role": "user",
-                "content": media_content,
-            }
-        )
+    if follow_up:
+        items.append({"type": "message", "role": "user", "content": follow_up})
     return items
 
 

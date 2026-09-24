@@ -4,7 +4,7 @@ Satisfies EventLogProtocol exactly, same as InMemoryEventLog — a caller
 cannot tell which backend it's talking to. ``tail()`` polls rather than
 blocking on an in-process asyncio.Event (there is no cross-process event
 primitive over a SQLite file), which is the same tradeoff the Postgres tier
-makes for its own ``tail()`` — see ``infrastructure/runtime/event_log.py``.
+makes for its own ``tail()`` — see ``integrations/runtime/event_log.py``.
 """
 
 from __future__ import annotations

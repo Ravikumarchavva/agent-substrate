@@ -8,6 +8,7 @@ Covers all three dispatch points added in the audit:
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 from typing import Any, AsyncIterator
 
 from substrate.agents.context import (
@@ -77,6 +78,7 @@ class _MinimalAgent:
 
 class _StubLLM:
     model = "stub"
+    capabilities = ModelCapabilities(model_id="stub")
 
     def __init__(self, text: str = "done") -> None:
         self._text = text
@@ -94,6 +96,7 @@ class _StubLLM:
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: object = None,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
         return self._stream()
 

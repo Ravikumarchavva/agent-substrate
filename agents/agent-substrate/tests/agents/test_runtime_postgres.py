@@ -10,6 +10,7 @@ Run with infra up:
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 import asyncio
 import os
 import types
@@ -1642,6 +1643,7 @@ async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
     class ScriptedLLM:
         def __init__(self, answer: str) -> None:
             self.model = "stub"
+            self.capabilities = ModelCapabilities(model_id="stub")
             self._answer = answer
 
         async def generate_stream(self, messages, *, options, ctx=None):

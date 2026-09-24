@@ -4,6 +4,7 @@ this targets the two behaviors this session's storage rewrite changed)."""
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 from substrate.integrations.knowledge.ask import _is_text, ask
 from substrate.kernel.core.content import MediaBlock, TextBlock
 from substrate.kernel.core.usage import Usage
@@ -77,6 +78,7 @@ class _FakeEmbedder:
 
 class _FakeLLMClient:
     model = "fake"
+    capabilities = ModelCapabilities(model_id="fake")
 
     async def generate(self, messages, *, options=None):
         return LLMResponse(content=[TextBlock(text="the answer")], usage=Usage())

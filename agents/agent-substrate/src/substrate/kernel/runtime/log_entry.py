@@ -59,6 +59,8 @@ class RunLogKind(StrEnum):
     RUN_COMPLETED = "run.completed"
     RUN_FAILED = "run.failed"
     RUN_CANCELLED = "run.cancelled"
+    # Completed, but cut short (out of steps): the final answer is best-effort.
+    RUN_TRUNCATED = "run.truncated"
 
     # Journaled effects (replayed from cache, never re-executed)
     EFFECT_RESULT = "effect.result"

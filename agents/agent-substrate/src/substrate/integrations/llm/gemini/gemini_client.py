@@ -9,16 +9,26 @@ from google import genai
 from google.genai import types as genai_types
 
 import uuid
+from substrate.agents.llm.modalities import fit_to_capabilities
+from substrate.agents.llm.models import resolve_capabilities
 from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
+from substrate.kernel.llm import (
+    GenerationOptions,
+    LLMClient,
+    LLMResponse,
+    ModelCapabilities,
+    ReasoningEffort,
+    Usage,
+)
 from substrate.kernel import ChatMessage, ContentBlock
 from substrate.kernel.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
 from substrate.kernel.core.content import (
+    DataBlock,
+    ReasoningBlock,
     TextBlock,
     ToolUseBlock,
-    DataBlock,
 )
-from substrate.kernel.messaging.stream import TextDelta, CompletionEvent
+from substrate.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
 from substrate.integrations.llm.encoders.gemini import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,
@@ -66,13 +76,21 @@ class GeminiClient(LLMClient):
         api_key: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        capabilities: Optional[ModelCapabilities] = None,
         **kwargs: Any,
     ):
         self.model = model
+        self.capabilities = capabilities or resolve_capabilities(model)
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.api_key = api_key
-        self.client = genai.Client(api_key=api_key)
+        # google-genai doesn't retry unless asked; the openai/anthropic SDKs do by default.
+        self.client = genai.Client(
+            api_key=api_key,
+            http_options=genai_types.HttpOptions(
+                retry_options=genai_types.HttpRetryOptions(attempts=3)
+            ),
+        )
 
     @property
     def supports_audio(self) -> bool:
@@ -89,7 +107,25 @@ class GeminiClient(LLMClient):
 
         Delegates to the centralised Gemini encoder.
         """
-        return _encode_messages(messages)
+        return _encode_messages(
+            fit_to_capabilities(messages, self.capabilities),
+            # Gemini 3+ accepts media inside a function response itself.
+            native_tool_media=self.model.startswith("gemini-3"),
+        )
+
+    @staticmethod
+    def _usage(u: Any) -> Usage:
+        """``candidates_token_count`` excludes thought tokens, which are billed
+        as output — fold them in."""
+        if u is None:
+            return Usage()
+        thoughts = getattr(u, "thoughts_token_count", 0) or 0
+        return Usage(
+            input_tokens=getattr(u, "prompt_token_count", 0) or 0,
+            cached_tokens=getattr(u, "cached_content_token_count", 0) or 0,
+            output_tokens=(getattr(u, "candidates_token_count", 0) or 0) + thoughts,
+            reasoning_tokens=thoughts,
+        )
 
     def _serialize_tools(
         self, tools: Optional[list[dict[str, Any]]]
@@ -185,6 +221,70 @@ class GeminiClient(LLMClient):
 
     # ── Text / Vision (required) ─────────────────────────────────────────────
 
+    _EFFORT_BUDGET = {
+        ReasoningEffort.LOW: 1_024,
+        ReasoningEffort.MEDIUM: 8_192,
+        ReasoningEffort.HIGH: 24_576,
+    }
+
+    def _thinking_config(
+        self, options: GenerationOptions, *, has_tools: bool
+    ) -> genai_types.ThinkingConfig | None:
+        """Thinking-enabled Gemini models attach an opaque thought_signature to
+        function_call parts and require it back verbatim when that call is
+        replayed as history; this engine's persisted history doesn't carry it,
+        so a replayed call trips a 400 ("Function call is missing a
+        thought_signature"). Turns that offer tools therefore run with thinking
+        off, whatever ``options.reasoning`` says — see
+        ai.google.dev/gemini-api/docs/thought-signatures."""
+        if has_tools:
+            if options.reasoning not in (None, ReasoningEffort.OFF):
+                logger.info(
+                    "Gemini reasoning=%s ignored on a tool-calling turn "
+                    "(thought signatures are not persisted)",
+                    options.reasoning,
+                )
+            return genai_types.ThinkingConfig(thinking_budget=0)
+        effort = options.reasoning
+        if effort is None or not self.capabilities.supports_reasoning:
+            return None
+        if effort == ReasoningEffort.OFF:
+            return genai_types.ThinkingConfig(thinking_budget=0)
+        return genai_types.ThinkingConfig(
+            thinking_budget=self._EFFORT_BUDGET[effort], include_thoughts=True
+        )
+
+    def _build_request(
+        self, messages: list[ChatMessage], options: GenerationOptions
+    ) -> tuple[list[genai_types.Content], genai_types.GenerateContentConfig]:
+        _, contents = self._serialize_messages(messages)
+        config: dict[str, Any] = {
+            "temperature": (
+                options.temperature if options.temperature is not None else self.temperature
+            )
+        }
+        max_tokens = options.max_tokens or self.max_tokens
+        if max_tokens:
+            config["max_output_tokens"] = max_tokens
+        if options.system_instructions:
+            config["system_instruction"] = options.system_instructions
+
+        tool_dicts = _tools_from_options(options)
+        gemini_tools = self._serialize_tools(tool_dicts)
+        if gemini_tools:
+            config["tools"] = gemini_tools
+            tool_config = self._build_tool_config(options.tool_choice)
+            if tool_config is not None:
+                config["tool_config"] = tool_config
+        thinking = self._thinking_config(options, has_tools=bool(gemini_tools))
+        if thinking is not None:
+            config["thinking_config"] = thinking
+
+        if options.response_format is not None and not tool_dicts:
+            config["response_mime_type"] = "application/json"
+            config["response_schema"] = options.response_format
+        return contents, genai_types.GenerateContentConfig(**config)
+
     async def generate(
         self,
         messages: list[ChatMessage],
@@ -193,49 +293,11 @@ class GeminiClient(LLMClient):
         ctx: RunMeta | None = None,
     ) -> LLMResponse:
         """Generate a single response from Gemini using GenerateContent API."""
-        tool_dicts = _tools_from_options(options)
         response_format = options.response_format
-        _, contents = self._serialize_messages(messages)
-
-        config: dict[str, Any] = {}
-
-        if options.temperature is not None:
-            config["temperature"] = options.temperature
-        else:
-            config["temperature"] = self.temperature
-
-        max_tokens = options.max_tokens or self.max_tokens
-        if max_tokens:
-            config["max_output_tokens"] = max_tokens
-
-        if options.system_instructions:
-            config["system_instruction"] = options.system_instructions
-
-        gemini_tools = self._serialize_tools(tool_dicts)
-        normalized_tool_config = self._build_tool_config(options.tool_choice)
-        if gemini_tools:
-            config["tools"] = gemini_tools
-            if normalized_tool_config is not None:
-                config["tool_config"] = normalized_tool_config
-            # Thinking-enabled Gemini models attach an opaque thought_signature
-            # to function_call parts and require it back verbatim on any
-            # later turn that replays that call as history — this engine's
-            # history round-trips through a persisted step log that doesn't
-            # capture it, so a replayed function_call trips a 400
-            # ("Function call is missing a thought_signature"). Disabling
-            # thinking specifically for tool-calling turns sidesteps the
-            # requirement entirely rather than threading the signature
-            # through persistence. See ai.google.dev/gemini-api/docs/thought-signatures.
-            config["thinking_config"] = genai_types.ThinkingConfig(thinking_budget=0)
-
-        if response_format is not None and not tool_dicts:
-            config["response_mime_type"] = "application/json"
-            config["response_schema"] = response_format
+        contents, config = self._build_request(messages, options)
 
         response = await self.client.aio.models.generate_content(
-            model=self.model,
-            contents=cast(Any, contents),
-            config=genai_types.GenerateContentConfig(**config),
+            model=self.model, contents=cast(Any, contents), config=config
         )
 
         # Extract text and tool calls
@@ -246,7 +308,10 @@ class GeminiClient(LLMClient):
             candidate = response.candidates[0]
             if candidate.content and candidate.content.parts:
                 for part in candidate.content.parts:
-                    if part.text:
+                    if part.text and part.thought:
+                        # Thought summary (include_thoughts): reasoning, not answer.
+                        final_blocks.append(ReasoningBlock(text=part.text))
+                    elif part.text:
                         final_blocks.append(TextBlock(text=part.text))
                     elif part.function_call:
                         has_tool_calls = True
@@ -275,14 +340,7 @@ class GeminiClient(LLMClient):
                         final_text[:200],
                     )
 
-        usage = Usage()
-        if response.usage_metadata:
-            u = response.usage_metadata
-            usage = Usage(
-                input_tokens=u.prompt_token_count or 0,
-                cached_tokens=getattr(u, "cached_content_token_count", 0) or 0,
-                output_tokens=u.candidates_token_count or 0,
-            )
+        usage = self._usage(response.usage_metadata)
 
         return LLMResponse(content=final_blocks, usage=usage)
 
@@ -301,55 +359,28 @@ class GeminiClient(LLMClient):
         *,
         options: GenerationOptions,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
-        tool_dicts = _tools_from_options(options)
         response_format = options.response_format
-        _, contents = self._serialize_messages(messages)
-
-        config: dict[str, Any] = {}
-
-        if options.temperature is not None:
-            config["temperature"] = options.temperature
-        else:
-            config["temperature"] = self.temperature
-
-        max_tokens = options.max_tokens or self.max_tokens
-        if max_tokens:
-            config["max_output_tokens"] = max_tokens
-
-        if options.system_instructions:
-            config["system_instruction"] = options.system_instructions
-
-        gemini_tools = self._serialize_tools(tool_dicts)
-        normalized_tool_config = self._build_tool_config(options.tool_choice)
-        if gemini_tools:
-            config["tools"] = gemini_tools
-            if normalized_tool_config is not None:
-                config["tool_config"] = normalized_tool_config
-            # Thinking-enabled Gemini models attach an opaque thought_signature
-            # to function_call parts and require it back verbatim on any
-            # later turn that replays that call as history — this engine's
-            # history round-trips through a persisted step log that doesn't
-            # capture it, so a replayed function_call trips a 400
-            # ("Function call is missing a thought_signature"). Disabling
-            # thinking specifically for tool-calling turns sidesteps the
-            # requirement entirely rather than threading the signature
-            # through persistence. See ai.google.dev/gemini-api/docs/thought-signatures.
-            config["thinking_config"] = genai_types.ThinkingConfig(thinking_budget=0)
+        contents, config = self._build_request(messages, options)
 
         # Accumulate for final message
         text_parts: list[str] = []
+        reasoning_parts: list[str] = []
         collected_tool_calls: list[ToolUseBlock] = []
+        usage_metadata: Any = None
 
         async for chunk in await self.client.aio.models.generate_content_stream(
-            model=self.model,
-            contents=cast(Any, contents),
-            config=genai_types.GenerateContentConfig(**config),
+            model=self.model, contents=cast(Any, contents), config=config
         ):
+            if chunk.usage_metadata:
+                usage_metadata = chunk.usage_metadata  # cumulative; the last one wins
             if chunk.candidates:
                 candidate = chunk.candidates[0]
                 if candidate.content and candidate.content.parts:
                     for part in candidate.content.parts:
-                        if part.text:
+                        if part.text and part.thought:
+                            reasoning_parts.append(part.text)
+                            yield ReasoningDelta(text=part.text)
+                        elif part.text:
                             text_parts.append(part.text)
                             yield TextDelta(text=part.text)
                         elif part.function_call:
@@ -366,6 +397,8 @@ class GeminiClient(LLMClient):
         final_text = "".join(text_parts) if text_parts else ""
         final_blocks: list[ContentBlock] = []
 
+        if reasoning_parts:
+            final_blocks.append(ReasoningBlock(text="".join(reasoning_parts)))
         if final_text:
             final_blocks.append(TextBlock(text=final_text))
 
@@ -385,7 +418,9 @@ class GeminiClient(LLMClient):
                     final_text[:200],
                 )
 
-        yield CompletionEvent(content=final_blocks)
+        yield CompletionEvent(
+            content=final_blocks, usage=self._usage(usage_metadata)
+        )
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
         """Count tokens using Gemini's CountTokens API."""

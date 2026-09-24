@@ -6,6 +6,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable
 
+from substrate.agents.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
 from substrate.kernel.agent.context import (
     CompactionContext,
     CompactionPhase,
@@ -17,7 +18,6 @@ from substrate.kernel.exceptions import BudgetExhaustedError
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_CHARS_PER_TOKEN = 4.0
 
 
 @runtime_checkable
@@ -30,17 +30,6 @@ class CompactionCoordinator(Protocol):
         context: CompactionContext,
     ) -> CompactionResult:
         ...
-
-
-def _estimate_message_tokens(msg: ChatMessage, cpt: float = _DEFAULT_CHARS_PER_TOKEN) -> int:
-    chars = len(msg.role) + len(msg.text)
-    for block in msg.content:
-        chars += len(str(block))
-    return max(1, int(chars / cpt))
-
-
-def _estimate_total_tokens(messages: Sequence[ChatMessage], cpt: float = _DEFAULT_CHARS_PER_TOKEN) -> int:
-    return sum(_estimate_message_tokens(m, cpt) for m in messages)
 
 
 class DefaultCompactionCoordinator:
@@ -64,7 +53,7 @@ class DefaultCompactionCoordinator:
         pre_llm_strategy: CompactionStrategy | None = None,
         tool_strategy: Any | None = None,
         summarizer: Any | None = None,
-        chars_per_token: float = _DEFAULT_CHARS_PER_TOKEN,
+        chars_per_token: float = DEFAULT_CHARS_PER_TOKEN,
     ) -> None:
         self._pre_llm_strategy = pre_llm_strategy
         self._tool_strategy = tool_strategy
@@ -101,7 +90,7 @@ class DefaultCompactionCoordinator:
 
         # Budget verification
         if context.token_budget is not None:
-            current_tokens = _estimate_total_tokens(messages, self._cpt)
+            current_tokens = estimate_tokens(messages, self._cpt)
             if current_tokens > context.token_budget:
                 messages = self._deterministic_fallback(messages, context.token_budget)
 
@@ -118,7 +107,7 @@ class DefaultCompactionCoordinator:
         if token_budget is None or not messages:
             return list(messages)
 
-        current_tokens = _estimate_total_tokens(messages, self._cpt)
+        current_tokens = estimate_tokens(messages, self._cpt)
         if current_tokens <= token_budget:
             return list(messages)
 
@@ -128,15 +117,15 @@ class DefaultCompactionCoordinator:
             system_msg = working.pop(0)
 
         prefix = [system_msg] if system_msg else []
-        while working and _estimate_total_tokens(prefix + working, self._cpt) > token_budget:
+        while working and estimate_tokens(prefix + working, self._cpt) > token_budget:
             working.pop(0)
             while working and working[0].role == Role.TOOL:
                 working.pop(0)
 
         result = prefix + working
-        if _estimate_total_tokens(result, self._cpt) > token_budget:
+        if estimate_tokens(result, self._cpt) > token_budget:
             raise BudgetExhaustedError(
-                f"Context exceeds token budget ({_estimate_total_tokens(result, self._cpt)} > {token_budget}) "
+                f"Context exceeds token budget ({estimate_tokens(result, self._cpt)} > {token_budget}) "
                 "even after dropping all non-system turns"
             )
 

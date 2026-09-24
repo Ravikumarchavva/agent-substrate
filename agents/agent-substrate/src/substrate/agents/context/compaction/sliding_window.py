@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from substrate.agents.context.compaction._window import drop_orphaned_tool_results
 from substrate.kernel.core.content import ChatMessage
 
 
@@ -14,7 +15,7 @@ class SlidingWindowCompaction:
     async def compact(self, raw_history: list[ChatMessage]) -> list[ChatMessage]:
         if len(raw_history) <= self.max_messages:
             return raw_history
-        return raw_history[-self.max_messages :]
+        return drop_orphaned_tool_results(raw_history[-self.max_messages :])
 
 
 __all__ = ["SlidingWindowCompaction"]

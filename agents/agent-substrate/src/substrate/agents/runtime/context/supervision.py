@@ -7,6 +7,8 @@ suspend/resume/replay contract this all serves). Depends on
 
 from __future__ import annotations
 
+import asyncio
+
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -37,6 +39,7 @@ class _SupervisionMixin:
         _supervisor: SupervisorProtocol
         _event_log: EventLogProtocol
         _seq_cursor: int
+        _log_lock: asyncio.Lock
         _signal_bus: SignalBusProtocol
 
         def check(self) -> None: ...
@@ -124,20 +127,22 @@ class _SupervisionMixin:
         # can never find the reply it's waiting for (see that method's
         # docstring for the full trace).
         correlation_id = f"{self.run_id}.{path}"
-        handle = await self._supervisor.spawn(
-            child_agent,
-            parent=self.run_id,
-            supervision=sup,
-            boot=boot,
-            path=path,
-            correlation_id=correlation_id,
-        )
         # SupervisorProtocol.spawn() appends a "child.spawned" entry directly to this
         # run's own EventLogProtocol (bypassing ctx._log — it has no ctx reference,
         # only the shared event_log), so the local seq cursor must be
         # resynced here or the next ctx._log() call would see a stale
-        # expected_seq and raise ConcurrentAppendError.
-        self._seq_cursor = await self._event_log.last_seq(self.run_id)
+        # expected_seq and raise ConcurrentAppendError. Held under the log
+        # lock so a concurrent tool's _log can't interleave with the append.
+        async with self._log_lock:
+            handle = await self._supervisor.spawn(
+                child_agent,
+                parent=self.run_id,
+                supervision=sup,
+                boot=boot,
+                path=path,
+                correlation_id=correlation_id,
+            )
+            self._seq_cursor = await self._event_log.last_seq(self.run_id)
         return handle
 
     async def cancel(self, handle: RunHandle, *, reason: str = "cancelled") -> None:

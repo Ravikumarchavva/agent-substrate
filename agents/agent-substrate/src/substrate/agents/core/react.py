@@ -12,11 +12,16 @@ from substrate.kernel.core.content import (
     ToolResultBlock,
     ToolUseBlock,
 )
+from substrate.kernel.agent.context import CompactionContext, CompactionPhase
+from substrate.kernel.agent.runtime_context import RunScope
 from substrate.kernel.core.identity import Actor, Topic
-from substrate.kernel.llm.llm import GenerationOptions, LLMResponse
+from substrate.kernel.exceptions import BudgetExhaustedError
+from substrate.kernel.llm.llm import GenerationOptions, LLMResponse, ReasoningEffort
 from substrate.kernel.messaging.message import Message
+from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.storage.history import HistoryProvider
-from substrate.kernel.tools import ToolRegistry
+from substrate.kernel.tools import ToolRegistry, is_concurrency_safe
+from substrate.kernel.tools.chain import ChainPolicy
 from substrate.kernel.tools.approval import ApprovalHandler
 from substrate.kernel.tools.tools import ToolRisk
 
@@ -30,17 +35,6 @@ from substrate.agents.middleware._contracts import (
 )
 from substrate.agents.middleware.pipeline import MiddlewarePipeline
 from substrate.kernel.agent.middleware import MiddlewareStage
-from substrate.agents.storage.tasks import (
-    current_agent_id as _task_agent_id,
-    current_agent_label as _task_agent_label,
-    current_parent_agent_id as _task_parent_agent_id,
-    current_thread_id as _task_thread_id,
-)
-from substrate.agents.workspace.scope import (
-    current_branch_id as _workspace_branch_id,
-    current_tenant_id as _task_tenant_id,
-    current_user_id as _task_user_id,
-)
 from substrate.agents.core.base import BaseAgent
 from substrate.logger import setup_logging
 
@@ -49,6 +43,7 @@ logger = setup_logging()
 if TYPE_CHECKING:
     from substrate.agents.runtime.context import RunContext
     from substrate.kernel.llm.llm import LLMClient
+    from substrate.kernel.tools.chain import InvocationResult
 
 
 class ReActAgent(BaseAgent):
@@ -87,6 +82,8 @@ class ReActAgent(BaseAgent):
         middleware: MiddlewarePipeline | None = None,
         initial_tool_choice: str | None = None,
         session_id: str | None = None,
+        reasoning: ReasoningEffort | None = None,
+        tool_policy: ChainPolicy | None = None,
     ) -> None:
         self.id = Actor(type=name, key=session_id or "")
         self.name = name
@@ -112,39 +109,34 @@ class ReActAgent(BaseAgent):
         self.hooks = hooks
         self.middleware = middleware or MiddlewarePipeline()
         self._initial_tool_choice = initial_tool_choice
+        self._reasoning = reasoning
+        # Read by the Worker when it builds this agent's ToolInvoker.
+        self.tool_policy = tool_policy
 
     @property
     def history(self) -> HistoryProvider:
         return self._context.history
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-        _task_agent_id.set(str(self.id))
-        _task_agent_label.set(self.name)
         for msg in inbox:
             ctx.check()
             await self._handle_message(ctx, msg)
 
     async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
         session_id = msg.correlation_id or ctx.run_id
-        # Stamp thread_id so TaskManagerTool scopes boards to this conversation.
-        # Must be set here (inside the Worker task) because the Worker runs in a
-        # different asyncio context from the SSE generator where the ContextVar
-        # was previously attempted.
-        _task_thread_id.set(session_id)
-        # When spawned as a subagent, the orchestrator passes its own id in the
-        # boot message metadata. Stamp it here (the spawning ContextVar does not
-        # cross into this Worker task) so this agent's board nests under its
-        # parent in the UI. Absent metadata ⇒ root agent.
-        _task_parent_agent_id.set(msg.metadata.get("parent_agent_id") or None)
-        # Same cross-task-boundary reasoning as thread_id/parent_agent_id above:
-        # the chat route stamps user_id into boot metadata, and the
-        # code-interpreter tool reads this ContextVar to pick the caller's
-        # workspace subPath (see agents/storage/tasks.py::current_user_id).
-        _task_user_id.set(msg.metadata.get("user_id") or None)
-        _task_tenant_id.set(msg.metadata.get("tenant_id") or None)
-
-        branch_id = msg.metadata.get("branch_id") or "main"
-        _workspace_branch_id.set(branch_id)
+        # Who this message belongs to — tenant/user/branch come from its
+        # metadata (stamped by the caller, or by a parent agent via
+        # ``RunScope.child_metadata``). Set on ctx, never on ambient globals:
+        # tools read ``ctx.scope``.
+        ctx.set_scope(
+            RunScope.from_metadata(
+                msg.metadata,
+                thread_id=session_id,
+                agent_id=str(self.id),
+                agent_label=self.name,
+            )
+        )
+        branch_id = ctx.scope.branch_id
         history_messages = await self._load_history(
             self._context, session_id, branch_id=branch_id
         )
@@ -223,33 +215,61 @@ class ReActAgent(BaseAgent):
             )
         if tracker is not None:
             tracker.consume(
-                tokens=resp.usage.total_tokens if resp.usage else 0,
-                turns=1,
+                tokens=resp.usage.total_tokens, cost=resp.cost_usd, turns=1
             )
         return resp
+
+    def _batchable(self, tool_calls: list[ToolUseBlock]) -> bool:
+        """Run a turn's calls concurrently only when every one of them is a
+        tool that declared itself concurrency-safe."""
+        if len(tool_calls) < 2 or self.tools is None:
+            return False
+        return all(is_concurrency_safe(self.tools.get(tc.tool_name)) for tc in tool_calls)
 
     async def _execute_tool_calls(
         self, ctx: RunContext, tool_calls: list[ToolUseBlock]
     ) -> tuple[list[ToolResultBlock], list[ToolCallRecord]]:
-        """Invoke each requested tool call in turn, building wire results + records."""
+        """Run the turn's tool calls, returning results in the model's call order.
+
+        A call whose arguments weren't valid JSON is answered with an error
+        (so the model can retry) instead of running the tool.
+        """
+        runnable = [tc for tc in tool_calls if tc.arguments_error is None]
+        outcomes: dict[str, tuple[InvocationResult, float]] = {}
+        if self._batchable(runnable):
+            ctx.check()
+            t0 = time.monotonic()
+            batch = await ctx.tool_batch([(tc.tool_name, tc.arguments) for tc in runnable])
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            outcomes = {tc.call_id: (r, elapsed_ms) for tc, r in zip(runnable, batch)}
+        else:
+            for tc in runnable:
+                ctx.check()
+                t0 = time.monotonic()
+                r = await ctx.tool(tc.tool_name, tc.arguments)
+                outcomes[tc.call_id] = (r, (time.monotonic() - t0) * 1000)
+
         results: list[ToolResultBlock] = []
         records: list[ToolCallRecord] = []
         for tc in tool_calls:
-            ctx.check()
-            t0 = time.monotonic()
-            inv_result = await ctx.tool(tc.tool_name, tc.arguments)
-            duration_ms = (time.monotonic() - t0) * 1000
-            is_error = inv_result.status != "ok"
+            if tc.call_id in outcomes:
+                inv, duration_ms = outcomes[tc.call_id]
+                is_error = inv.status != "ok"
+                text = inv.text or ""
+                # inv.media (e.g. matplotlib charts from code_interpreter)
+                # rides along so the model sees what the tool produced; each
+                # LLM client encodes it for its API and drops it (with a
+                # note) for a model that can't see that modality.
+                content = [TextBlock(text=text), *inv.media]
+            else:
+                is_error, duration_ms = True, 0.0
+                text = f"Tool call not run: {tc.arguments_error}. Retry with valid JSON arguments."
+                content = [TextBlock(text=text)]
             results.append(
                 ToolResultBlock(
                     call_id=tc.call_id,
-                    # inv_result.media (e.g. matplotlib charts from
-                    # code_interpreter) rides along here so the model
-                    # actually sees what the tool produced — the LLM
-                    # encoder splits media out of the tool-result message
-                    # into a synthetic image message (tool-role messages
-                    # can't carry images on their own).
-                    content=[TextBlock(text=inv_result.text or ""), *inv_result.media],
+                    name=tc.tool_name,
+                    content=content,  # type: ignore[arg-type]
                     is_error=is_error,
                 )
             )
@@ -258,12 +278,91 @@ class ReActAgent(BaseAgent):
                     name=tc.tool_name,
                     call_id=tc.call_id,
                     arguments=tc.arguments,
-                    result=inv_result.text or "",
+                    result=text,
                     is_error=is_error,
                     duration_ms=duration_ms,
                 )
             )
         return results, records
+
+    async def _wrap_up(
+        self,
+        ctx: RunContext,
+        messages: list[ChatMessage],
+        tool_list: list,
+        tracker: ExecutionTracker | None,
+    ) -> ChatMessage:
+        """Out of steps: one last call with tools disabled so the user gets an
+        answer from what was gathered instead of nothing. The nudge is sent
+        for this call only and never persisted."""
+        nudge = ChatMessage(
+            role=Role.USER,
+            content=[
+                TextBlock(
+                    text=(
+                        f"You have used all {self._max_iterations} steps for this turn. "
+                        "Do not call any more tools. Reply now with your best answer from "
+                        "what you have so far, and say plainly what is left unfinished."
+                    )
+                )
+            ],
+        )
+        options = GenerationOptions(
+            system_instructions=self._system_instructions,
+            reasoning=self._reasoning,
+            tools=tool_list or None,
+            tool_choice="none" if tool_list else None,
+        )
+        resp = await self._generate_turn(ctx, [*messages, nudge], options, tracker)
+        content = [b for b in resp.content if not isinstance(b, ToolUseBlock)]
+        if not any(isinstance(b, TextBlock) and b.text.strip() for b in content):
+            content.append(
+                TextBlock(text=f"Stopped after {self._max_iterations} steps without a final answer.")
+            )
+        return ChatMessage(role=Role.ASSISTANT, content=content)
+
+    async def _persist(
+        self,
+        ctx: RunContext,
+        session_id: str,
+        messages: list[ChatMessage],
+        n_loaded: int,
+        branch_id: str,
+    ) -> None:
+        await self._persist_turns(
+            self._context,
+            session_id,
+            ctx.run_id,
+            messages[n_loaded:],
+            branch_id=branch_id,
+            workspace_snapshot_id=ctx.latest_workspace_snapshot_id,
+        )
+
+    async def _compact_after_turn(
+        self, session_id: str, branch_id: str, messages: list[ChatMessage]
+    ) -> None:
+        """Run the POST_TURN compaction phase and persist any checkpoint it
+        proposes. Best effort: the turn's answer already exists, so a failure
+        here is logged with its traceback rather than failing the turn."""
+        coordinator = self._context.coordinator
+        if coordinator is None:
+            return
+        history = self._context.history
+        try:
+            branch = await history.get_branch(session_id, branch_id)
+            result = await coordinator.compact(
+                CompactionPhase.POST_TURN,
+                CompactionContext(
+                    session_id=session_id,
+                    branch_id=branch_id,
+                    messages=messages,
+                    leaf_node_id=branch.head_message_id if branch else None,
+                ),
+            )
+            if result.checkpoint_proposal is not None:
+                await history.save_checkpoint(result.checkpoint_proposal)
+        except Exception:
+            logger.exception("Post-turn compaction failed; the turn is unaffected")
 
     async def _react_loop(
         self,
@@ -278,12 +377,14 @@ class ReActAgent(BaseAgent):
         tool_list = self.tools.all() if self.tools else []
         base_options = GenerationOptions(
             system_instructions=self._system_instructions,
+            reasoning=self._reasoning,
             tools=tool_list or None,
         )
         # Apply initial_tool_choice only to the very first LLM call.
         options = (
             GenerationOptions(
                 system_instructions=self._system_instructions,
+                reasoning=self._reasoning,
                 tools=tool_list or None,
                 tool_choice=self._initial_tool_choice,
             )
@@ -293,67 +394,48 @@ class ReActAgent(BaseAgent):
         tracker = self._resolve_execution_budget(ctx)
 
         tool_call_records: list[ToolCallRecord] = []
+        status = "success"
 
-        for _ in range(self._max_iterations):
-            ctx.check()
-            resp = await self._generate_turn(ctx, messages, options, tracker)
-            # Drop the forced tool_choice after the first call so subsequent
-            # iterations can freely choose to respond with text or more tools.
-            options = base_options
+        try:
+            for _ in range(self._max_iterations):
+                ctx.check()
+                resp = await self._generate_turn(ctx, messages, options, tracker)
+                # Drop the forced tool_choice after the first call so subsequent
+                # iterations can freely choose to respond with text or more tools.
+                options = base_options
 
-            assistant_turn = ChatMessage(role=Role.ASSISTANT, content=resp.content)
-            messages.append(assistant_turn)
+                assistant_turn = ChatMessage(role=Role.ASSISTANT, content=resp.content)
+                messages.append(assistant_turn)
 
-            tool_calls = [b for b in resp.content if isinstance(b, ToolUseBlock)]
-            if not tool_calls:
-                break
+                tool_calls = [b for b in resp.content if isinstance(b, ToolUseBlock)]
+                if not tool_calls:
+                    break
 
-            results, records = await self._execute_tool_calls(ctx, tool_calls)
-            tool_call_records.extend(records)
-            messages.append(ChatMessage(role=Role.TOOL, content=results))  # type: ignore[arg-type]
-        else:
-            from substrate.kernel.exceptions import BudgetExhaustedError
-
-            raise BudgetExhaustedError(
-                f"Agent reached max iterations limit ({self._max_iterations})"
+                results, records = await self._execute_tool_calls(ctx, tool_calls)
+                tool_call_records.extend(records)
+                messages.append(ChatMessage(role=Role.TOOL, content=results))  # type: ignore[arg-type]
+            else:
+                messages.append(await self._wrap_up(ctx, messages, tool_list, tracker))
+                status = "max_iterations"
+                await ctx.log_once(
+                    RunLogKind.RUN_TRUNCATED,
+                    {"reason": "max_iterations", "max_iterations": self._max_iterations},
+                )
+        except BudgetExhaustedError as exc:
+            # The run still fails, but the conversation isn't erased: keep what
+            # was said and done this turn so the next message has its context.
+            messages.append(
+                ChatMessage(
+                    role=Role.ASSISTANT,
+                    content=[TextBlock(text=f"[Stopped before finishing: {exc}]")],
+                )
             )
+            await self._persist(ctx, session_id, messages, n_loaded, branch_id)
+            raise
 
-        new_turns = messages[n_loaded:]
-        await self._persist_turns(
-            self._context,
-            session_id,
-            ctx.run_id,
-            new_turns,
-            branch_id=branch_id,
-            workspace_snapshot_id=ctx.latest_workspace_snapshot_id,
-        )
+        await self._persist(ctx, session_id, messages, n_loaded, branch_id)
 
-        # Post-turn compaction execution (Phase 1D: POST_TURN)
-        if getattr(self._context, "coordinator", None) is not None and hasattr(
-            self._context.history, "save_checkpoint"
-        ):
-            try:
-                from substrate.kernel.agent.context import CompactionContext, CompactionPhase
-
-                branch = None
-                if hasattr(self._context.history, "get_branch"):
-                    branch = await self._context.history.get_branch(session_id, branch_id)
-
-                compaction_ctx = CompactionContext(
-                    session_id=session_id,
-                    branch_id=branch_id,
-                    messages=messages,
-                    leaf_node_id=branch.head_message_id if branch else None,
-                )
-                compaction_res = await self._context.coordinator.compact(
-                    CompactionPhase.POST_TURN, compaction_ctx
-                )
-                if compaction_res.checkpoint_proposal is not None:
-                    await self._context.history.save_checkpoint(compaction_res.checkpoint_proposal)
-            except Exception as exc:
-                logger.warning(
-                    "Post-turn compaction failed (%s); continuing without blocking turn", exc
-                )
+        await self._compact_after_turn(session_id, branch_id, messages)
 
         ans = self._final_text(messages)
         await self._deliver(
@@ -362,7 +444,7 @@ class ReActAgent(BaseAgent):
 
         return AgentRunResult(
             output=ans,
-            status="success",
+            status=status,
             tool_calls=tool_call_records,
             run_id=ctx.run_id,
         )

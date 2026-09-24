@@ -1,6 +1,6 @@
 """SessionDocumentSearchTool — search documents uploaded in the current chat
 session, across the user's own per-user Lance index (vector/tree/graph —
-see ``capabilities/knowledge/session_ingest.py`` for the write side).
+see ``integrations/knowledge/session_ingest.py`` for the write side).
 
 Sibling to ``KnowledgeSearchTool``, not a replacement: that tool addresses
 the tenant's *standing* knowledge base (``tenants/<tid>/knowledge/<kb_id>/``,
@@ -18,11 +18,10 @@ documented Worker-isolation gotcha), so no new request-plumbing is needed.
 
 from __future__ import annotations
 
-from substrate.agents.storage.tasks import current_thread_id
-from substrate.agents.workspace.scope import current_tenant_id, current_user_id
 from substrate.integrations.knowledge.citations import CitationLedgerStore
 from substrate.integrations.knowledge.result_rendering import render_search_results
 from substrate.kernel import TextBlock
+from substrate.kernel.agent.runtime_context import scope_of
 from substrate.kernel.llm import EmbeddingClient, LLMClient
 from substrate.kernel.storage.vector import SearchResult
 from substrate.kernel.tools import ToolExecutionResult, ToolType
@@ -94,20 +93,18 @@ class SessionDocumentSearchTool:
         # this tool and KnowledgeSearchTool were ever made to share a store.
         self._ledgers = CitationLedgerStore()
 
-    def _scope(self) -> tuple[str, str, str] | None:
-        """(tenant_id, user_id, session_id) from the active chat context, or
-        None if called outside one (e.g. a test harness with no agent run
-        in flight) — the tool has nothing to scope to in that case."""
-        tenant_id = current_tenant_id.get()
-        user_id = current_user_id.get()
-        session_id = current_thread_id.get() or ""
-        if not tenant_id or not user_id:
+    def _scope(self, ctx: object | None) -> tuple[str, str, str] | None:
+        """(tenant_id, user_id, session_id) from ``ctx.scope``, or None if
+        there's no signed-in chat context — the tool has nothing to scope to."""
+        scope = scope_of(ctx)
+        if not scope.tenant_id or not scope.user_id:
             return None
-        return tenant_id, user_id, session_id
+        return scope.tenant_id, scope.user_id, scope.thread_id
 
     async def execute(
         self,
         *,
+        ctx: object | None = None,
         query: str,
         mode: str = "vector",
         limit: int | None = None,
@@ -118,7 +115,7 @@ class SessionDocumentSearchTool:
             return ToolExecutionResult(
                 content=[TextBlock(text="'query' is required.")], is_error=True
             )
-        scope = self._scope()
+        scope = self._scope(ctx)
         if scope is None:
             return ToolExecutionResult(
                 content=[TextBlock(text="No active session to search.")],

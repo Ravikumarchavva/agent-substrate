@@ -4,7 +4,7 @@ Composes existing agent-substrate pieces without reimplementing any of them:
   - document-intelligence (PaddleOCR layout extraction) via ``ExtractionClient``
     (HTTP) — see runtimes/document_intelligence/client.py
   - ``StructureAwareChunker`` — markdown-heading-aware text chunking, see
-    capabilities/knowledge/chunking.py
+    integrations/knowledge/chunking.py
   - llama-embed/llama-rerank sidecars via ``EmbeddingReranker`` (HTTP) — text
     and image embedding into the same vector space, see
     runtimes/embedding_reranker/service/embedding.py

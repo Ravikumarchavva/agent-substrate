@@ -153,7 +153,7 @@ class PgVectorStore:
             # (idempotent) so this also migrates a table created before this
             # column existed, not just fresh ones. Mirrors the exact GENERATED
             # ... STORED + GIN pattern already proven in this codebase for
-            # long-term memory (capabilities/memory/durable_memory_store.py).
+            # long-term memory (integrations/memory/durable_memory_store.py).
             await conn.execute(
                 text(f"""
                 ALTER TABLE {self._table} ADD COLUMN IF NOT EXISTS search_vec tsvector

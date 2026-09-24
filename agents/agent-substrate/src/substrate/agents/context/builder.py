@@ -4,25 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from substrate.agents.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
 from substrate.kernel.agent.context import ContextBuilder, ContextWindow
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.storage.history import HistoryCheckpoint, MessageNode
 from substrate.kernel.storage.memory import ContextMemoryInjection
-
-_DEFAULT_CHARS_PER_TOKEN = 4.0
-
-
-def _estimate_message_tokens(msg: ChatMessage, cpt: float = _DEFAULT_CHARS_PER_TOKEN) -> int:
-    """Estimate token count for a single message."""
-    chars = len(msg.role) + len(msg.text)
-    for block in msg.content:
-        chars += len(str(block))
-    return max(1, int(chars / cpt))
-
-
-def _estimate_total_tokens(messages: Sequence[ChatMessage], cpt: float = _DEFAULT_CHARS_PER_TOKEN) -> int:
-    return sum(_estimate_message_tokens(m, cpt) for m in messages)
-
 
 class DefaultContextBuilder(ContextBuilder):
     """Reference implementation of ContextBuilder.
@@ -36,7 +22,7 @@ class DefaultContextBuilder(ContextBuilder):
     - Applies deterministic sliding-window reduction when token_budget is exceeded.
     """
 
-    def __init__(self, chars_per_token: float = _DEFAULT_CHARS_PER_TOKEN) -> None:
+    def __init__(self, chars_per_token: float = DEFAULT_CHARS_PER_TOKEN) -> None:
         self._cpt = chars_per_token
 
     async def build(
@@ -116,11 +102,11 @@ class DefaultContextBuilder(ContextBuilder):
                 messages=messages,
                 leaf_node_id=leaf_id,
                 checkpoint_id=checkpoint_id,
-                estimated_tokens=_estimate_total_tokens(messages, self._cpt),
+                estimated_tokens=estimate_tokens(messages, self._cpt),
             )
 
         # Budget enforcement
-        current_tokens = _estimate_total_tokens(messages, self._cpt)
+        current_tokens = estimate_tokens(messages, self._cpt)
         if current_tokens <= token_budget:
             return ContextWindow(
                 messages=messages,
@@ -140,7 +126,7 @@ class DefaultContextBuilder(ContextBuilder):
             prefix_msgs.append(working_msgs.pop(0))
 
         # Iteratively drop oldest delta messages until within budget
-        while working_msgs and _estimate_total_tokens(
+        while working_msgs and estimate_tokens(
             prefix_msgs + working_msgs, self._cpt
         ) > token_budget:
             working_msgs.pop(0)
@@ -153,7 +139,7 @@ class DefaultContextBuilder(ContextBuilder):
             messages=final_messages,
             leaf_node_id=leaf_id,
             checkpoint_id=checkpoint_id,
-            estimated_tokens=_estimate_total_tokens(final_messages, self._cpt),
+            estimated_tokens=estimate_tokens(final_messages, self._cpt),
         )
 
 

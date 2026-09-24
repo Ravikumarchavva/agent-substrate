@@ -17,7 +17,7 @@ class PostgresConnector:
 
     This is the infrastructure connector for the engine's own Postgres instance
     (agent runtime tables, history, vector store, etc.), not for querying
-    arbitrary user databases (see capabilities/tools/database/ for that).
+    arbitrary user databases (see integrations/tools/database/ for that).
 
     Parameters
     ----------

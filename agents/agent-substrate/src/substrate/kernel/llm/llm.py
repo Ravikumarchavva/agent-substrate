@@ -7,8 +7,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, AsyncIterator, Protocol, runtime_checkable
 
-from pydantic import Field
-
 from substrate.kernel.core.content import ChatMessage, ContentBlock, KernelModel, TextBlock
 from substrate.kernel.messaging.stream import CompletionEvent, ReasoningDelta, TextDelta
 from substrate.kernel.core.usage import Usage
@@ -29,27 +27,60 @@ class Modality(StrEnum):
     DOCUMENT = "document"
 
 
-class ModelCapabilities(KernelModel):
-    """What a specific model supports — for routing, not for calling it.
+class ReasoningEffort(StrEnum):
+    """How hard a reasoning-capable model should think before answering.
 
-    A shared type so a router (once ``fabric/`` has one) can pick between
-    models generically instead of every call site hardcoding per-provider
-    knowledge — mirrors the ad-hoc modality/audio-support flags that
-    already exist per-provider in ``agents/llm/models.py``, promoted here
-    since routing on capability is a genuinely cross-layer concern. No
-    consumer builds a router against this yet; this is the contract for
-    when one does.
+    ``None`` on ``GenerationOptions.reasoning`` means "provider default".
+    Each client maps a level onto its vendor's own control (OpenAI
+    ``reasoning.effort``, Anthropic ``thinking.budget_tokens``, Gemini
+    ``thinking_budget``) and ignores it for models that don't reason.
+    """
+
+    OFF = "off"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class ModelCapabilities(KernelModel):
+    """What a model can accept and what it costs — exposed by every
+    ``LLMClient`` as ``client.capabilities``.
+
+    ``input_modalities`` is what the model can actually *see*. Clients drop
+    content outside it (replacing it with a text note) before encoding, so
+    a text-only model is never sent an image it would reject or silently
+    ignore. How a provider transports a modality — e.g. an image inside a
+    tool result natively vs. in a follow-up user message — is an encoder
+    detail, not a capability.
     """
 
     model_id: str
-    context_window: int
+    context_window: int | None = None
     max_output_tokens: int | None = None
-    input_modalities: list[Modality] = Field(default_factory=list)
-    output_modalities: list[Modality] = Field(default_factory=list)
-    supports_tool_calling: bool = False
-    supports_streaming: bool = False
-    cost_per_input_token_usd: float | None = None
-    cost_per_output_token_usd: float | None = None
+    input_modalities: frozenset[Modality] = frozenset({Modality.TEXT})
+    supports_tool_calling: bool = True
+    supports_reasoning: bool = False
+    input_cost_per_mtok: float = 0.0
+    # None -> cached input is billed at the full input rate (an overestimate,
+    # which is the safe direction for a budget).
+    cached_input_cost_per_mtok: float | None = None
+    output_cost_per_mtok: float = 0.0
+
+    def accepts(self, modality: Modality) -> bool:
+        return modality in self.input_modalities
+
+    def cost_usd(self, usage: Usage) -> float:
+        cached_rate = (
+            self.cached_input_cost_per_mtok
+            if self.cached_input_cost_per_mtok is not None
+            else self.input_cost_per_mtok
+        )
+        uncached = max(usage.input_tokens - usage.cached_tokens, 0)
+        return (
+            uncached * self.input_cost_per_mtok
+            + usage.cached_tokens * cached_rate
+            + usage.output_tokens * self.output_cost_per_mtok
+        ) / 1_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +89,8 @@ class LLMResponse:
 
     content: list[ContentBlock]
     usage: Usage
+    # Priced by the harness from ``LLMClient.capabilities`` — clients leave it 0.
+    cost_usd: float = 0.0
 
     @property
     def text(self) -> str:
@@ -91,6 +124,7 @@ class GenerationOptions:
     tool_choice: str | dict | None = None
     response_format: "type[BaseModel] | None" = None
     stop: list[str] | None = None
+    reasoning: ReasoningEffort | None = None
     extra: dict = field(default_factory=dict)
 
 
@@ -98,15 +132,13 @@ class GenerationOptions:
 class LLMClient(Protocol):
     """Contract every LLM provider adapter must satisfy.
 
-    A client MAY additionally expose a ``capabilities: ModelCapabilities |
-    None`` attribute for callers that want to introspect context window,
-    modality support, or cost — deliberately not part of this Protocol's
-    required structural surface (so existing clients aren't forced to add
-    it, and ``isinstance(x, LLMClient)`` keeps working for every current
-    implementation); no router in this codebase consults it yet.
+    ``capabilities`` describes what the model can see and what it costs. A
+    client must never send content outside ``capabilities.input_modalities``
+    to its provider.
     """
 
     model: str
+    capabilities: ModelCapabilities
 
     async def generate(
         self,
@@ -167,5 +199,6 @@ __all__ = [
     "EmbeddingResult",
     "Usage",
     "Modality",
+    "ReasoningEffort",
     "ModelCapabilities",
 ]

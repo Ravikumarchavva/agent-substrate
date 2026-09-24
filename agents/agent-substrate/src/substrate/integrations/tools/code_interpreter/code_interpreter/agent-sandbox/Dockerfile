@@ -40,8 +40,8 @@ RUN pip install --no-cache-dir \
 RUN mkdir -p /app/workspace /tmp/matplotlib
 
 # Build with the repository root as context so this path resolves correctly:
-# docker build -f src/substrate/capabilities/tools/code_interpreter/code_interpreter/agent-sandbox/Dockerfile -t code-interpreter:latest .
-COPY src/substrate/capabilities/tools/code_interpreter/code_interpreter/sandbox_runtime.py /app/sandbox_runtime.py
+# docker build -f src/substrate/integrations/tools/code_interpreter/code_interpreter/agent-sandbox/Dockerfile -t code-interpreter:latest .
+COPY src/substrate/integrations/tools/code_interpreter/code_interpreter/sandbox_runtime.py /app/sandbox_runtime.py
 
 EXPOSE 8888
 

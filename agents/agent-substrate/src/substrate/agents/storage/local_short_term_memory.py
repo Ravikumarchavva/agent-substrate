@@ -22,26 +22,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
-
-def _atomic_write(path: Path, data: dict) -> None:
-    """Write JSON to a file atomically (tmp -> rename) to avoid corruption."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=".tmp_")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f)
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+from substrate.agents.storage.fs import atomic_write_json, safe_name
 
 
 class LocalFilesystemShortTermMemory:
@@ -61,7 +45,7 @@ class LocalFilesystemShortTermMemory:
             return lock
 
     def _path(self, session_id: str) -> Path:
-        return self._root / "sessions" / f"{session_id}.json"
+        return self._root / "sessions" / f"{safe_name(session_id)}.json"
 
     def _read(self, session_id: str) -> dict[str, Any]:
         path = self._path(session_id)
@@ -76,14 +60,14 @@ class LocalFilesystemShortTermMemory:
     async def set_state(self, session_id: str, state: dict[str, Any]) -> None:
         lock = await self._lock_for(session_id)
         async with lock:
-            _atomic_write(self._path(session_id), state)
+            atomic_write_json(self._path(session_id), state)
 
     async def update_state(self, session_id: str, patch: dict[str, Any]) -> None:
         lock = await self._lock_for(session_id)
         async with lock:
             state = self._read(session_id)
             state.update(patch)
-            _atomic_write(self._path(session_id), state)
+            atomic_write_json(self._path(session_id), state)
 
     async def clear(self, session_id: str) -> None:
         lock = await self._lock_for(session_id)

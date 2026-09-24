@@ -78,7 +78,7 @@ from documentation):
   here; ``seccomp_policy_path`` exists for when that policy is built and
   tested against this deployment's actual workloads.
 
-All seven of this module's own tests (``tests/capabilities/
+All seven of this module's own tests (``tests/integrations/
 test_sandbox_runtimes.py``, ``-k nsjail``) pass for real against this exact
 built binary on a bare, unprivileged Ubuntu host — none of them skip.
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 import pytest
 
 from substrate.agents.limits.execution import ExecutionTracker
@@ -105,6 +106,7 @@ async def test_react_agent_respects_execution_budget() -> None:
 
     class MockLLMClient:
         model = "mock-model"
+        capabilities = ModelCapabilities(model_id="mock-model")
 
         async def generate_stream(
             self,
@@ -165,6 +167,7 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
 
     class MockLLMClient:
         model = "mock-model"
+        capabilities = ModelCapabilities(model_id="mock-model")
 
         async def generate_stream(
             self,

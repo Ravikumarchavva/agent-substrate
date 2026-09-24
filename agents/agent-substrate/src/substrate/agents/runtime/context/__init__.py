@@ -52,9 +52,11 @@ without a second, hand-maintained Protocol declaration.
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import replace
 from typing import TYPE_CHECKING, TypeAlias
 
-from substrate.kernel.agent.runtime_context import RunMeta
+from substrate.kernel.agent.runtime_context import RunMeta, RunScope
 from substrate.kernel.runtime.agent import Agent as _KernelAgent
 
 from substrate.agents.runtime.effect_cache import EffectCache
@@ -133,6 +135,7 @@ class RunContext(
         self._supervisor = supervisor
         self._signal_bus = signal_bus
         self._path_stack: list[int] = [0]
+        self._log_lock = asyncio.Lock()
         # Local seq cursor, seeded from the fold — removes the per-append
         # last_seq() query this used to require, and doubles as zombie-worker
         # fencing: a stale RunContext from a reclaimed lease has a cursor that
@@ -152,6 +155,15 @@ class RunContext(
     def meta(self) -> RunMeta:
         """Execution-scoped metadata: deadline, trace_id, supervision, cancellation."""
         return self._meta
+
+    @property
+    def scope(self) -> RunScope:
+        """Who/where the message currently being handled belongs to."""
+        return self._meta.scope
+
+    def set_scope(self, scope: RunScope) -> None:
+        """Called by the agent as it starts handling each inbound message."""
+        self._meta = replace(self._meta, scope=scope)
 
     @property
     def latest_workspace_snapshot_id(self) -> str | None:

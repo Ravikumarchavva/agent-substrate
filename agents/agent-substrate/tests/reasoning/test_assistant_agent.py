@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 from typing import AsyncIterator
 
 from substrate.agents.storage.history import project_messages
@@ -41,6 +42,7 @@ class MockLLMClient:
     def __init__(self, responses: list[list[ContentBlock]]) -> None:
         self._queue = list(responses)
         self.model = "mock-model"
+        self.capabilities = ModelCapabilities(model_id="mock-model")
 
     async def generate(
         self,
@@ -56,6 +58,7 @@ class MockLLMClient:
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: object = None,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
         return self._do_stream(messages, options=options)
 
@@ -131,8 +134,11 @@ async def run_agent(
 
     status = "success"
     error = None
+    truncated = False
     async for entry in rt.event_log.tail(run_id):
-        if entry.kind == "run.completed":
+        if entry.kind == "run.truncated":
+            truncated = True
+        elif entry.kind == "run.completed":
             break
         elif entry.kind == "run.failed":
             status = entry.payload.get("status", "error")
@@ -153,7 +159,7 @@ async def run_agent(
     if error and not output:
         output = error
 
-    return {"status": status, "output": output, "run_id": run_id}
+    return {"status": status, "output": output, "run_id": run_id, "truncated": truncated}
 
 
 def make_agent(
@@ -238,16 +244,28 @@ async def test_multi_turn_history():
         assert len(msgs) == 4  # 2 user + 2 assistant
 
 
-async def test_max_iterations():
-    """Agent fails with max_iterations when the ReAct loop never terminates."""
+async def test_max_iterations_wraps_up_instead_of_failing():
+    """Out of steps, the agent makes one last tool-free call and the turn is
+    saved and flagged ``run.truncated`` rather than crashing and losing it."""
     async with Runtime() as rt:
         tool_use = ToolUseBlock(call_id="c1", tool_name="echo", arguments={"text": "x"})
         agent = make_agent(
-            [[tool_use]] * 6,
+            [[tool_use]] * 5 + [[TextBlock(text="Here is what I found so far.")]],
             tools=[EchoTool()],
         )
         result = await run_agent(rt, agent, "loop forever")
-        assert result["status"] == "budget_exhausted"
+        assert result["status"] == "success"
+        assert result["truncated"] is True
+        assert result["output"] == "Here is what I found so far."
+
+
+async def test_max_iterations_falls_back_when_wrap_up_still_calls_tools():
+    async with Runtime() as rt:
+        tool_use = ToolUseBlock(call_id="c1", tool_name="echo", arguments={"text": "x"})
+        agent = make_agent([[tool_use]] * 6, tools=[EchoTool()])
+        result = await run_agent(rt, agent, "loop forever")
+        assert result["truncated"] is True
+        assert "Stopped after 5 steps" in result["output"]
 
 
 async def test_multiple_tool_calls_in_one_turn():

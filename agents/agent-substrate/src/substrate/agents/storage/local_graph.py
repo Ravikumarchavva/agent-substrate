@@ -21,28 +21,11 @@ for local dev / experimentation — it does NOT require Postgres/AGE.
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from collections import deque
 from pathlib import Path
 
+from substrate.agents.storage.fs import atomic_write_json, safe_name
 from substrate.kernel.storage.graph import Entity, Relationship, SubGraph
-
-
-def _atomic_write(path: Path, data: dict) -> None:
-    """Write JSON to a file atomically (tmp → rename) to avoid corruption."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=".tmp_")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, default=str)
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
 
 
 class LocalFilesystemGraphStore:
@@ -65,20 +48,20 @@ class LocalFilesystemGraphStore:
     # ── Internal helpers ─────────────────────────────────────────────────
 
     def _entity_path(self, entity_id: str) -> Path:
-        return self._root / "entities" / f"{entity_id}.json"
+        return self._root / "entities" / f"{safe_name(entity_id)}.json"
 
     def _relationship_path(self, relationship_id: str) -> Path:
-        return self._root / "relationships" / f"{relationship_id}.json"
+        return self._root / "relationships" / f"{safe_name(relationship_id)}.json"
 
     def _save_entity(self, entity: Entity, namespace: str) -> None:
         data = entity.model_dump(mode="json")
         data["namespace"] = namespace
-        _atomic_write(self._entity_path(entity.id), data)
+        atomic_write_json(self._entity_path(entity.id), data)
 
     def _save_relationship(self, rel: Relationship, namespace: str) -> None:
         data = rel.model_dump(mode="json")
         data["namespace"] = namespace
-        _atomic_write(self._relationship_path(rel.id), data)
+        atomic_write_json(self._relationship_path(rel.id), data)
 
     def _load_all_entities(self) -> dict[str, tuple[Entity, str]]:
         entities_dir = self._root / "entities"

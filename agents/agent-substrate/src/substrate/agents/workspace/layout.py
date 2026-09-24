@@ -4,7 +4,7 @@ Object keys are an authorization boundary. Keep their construction here so
 routes, sandboxes and ingestion cannot silently grow incompatible layouts —
 nothing outside this module should build a workspace object-storage key.
 
-Moved down from ``capabilities/storage/layout.py`` (pure stdlib; it was L2
+Moved down from ``integrations/storage/layout.py`` (pure stdlib; it was L2
 only by filing accident) as part of making branching real. The one
 substantive change from the old module: the branch dimension is now
 **uniform** — every workspace key includes ``/branches/{branch_id}/``,

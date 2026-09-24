@@ -68,6 +68,7 @@ from substrate.kernel.tools.tools import (
     ProviderDefinedTool,
     AnyTool,
     is_hosted_tool,
+    is_concurrency_safe,
     is_provider_defined_tool,
     ToolRegistry,
 )
@@ -87,6 +88,7 @@ from substrate.kernel.llm.llm import (
     EmbeddingClient,
     EmbeddingResult,
     Modality,
+    ReasoningEffort,
     ModelCapabilities,
 )
 from substrate.kernel.storage.history import (
@@ -164,7 +166,12 @@ from substrate.kernel.storage.snapshots import (
     WorkspaceSnapshot,
     WorkspaceStore,
 )
-from substrate.kernel.agent.runtime_context import CancellationTokenProtocol, RunMeta
+from substrate.kernel.agent.runtime_context import (
+    CancellationTokenProtocol,
+    RunMeta,
+    RunScope,
+    scope_of,
+)
 from substrate.kernel.tools.approval import (
     ApprovalDecision,
     ApprovalRequest,
@@ -266,6 +273,7 @@ __all__ = [
     "ProviderDefinedTool",
     "AnyTool",
     "is_hosted_tool",
+    "is_concurrency_safe",
     "is_provider_defined_tool",
     "ToolRegistry",
     # Payload types
@@ -284,6 +292,7 @@ __all__ = [
     "EmbeddingClient",
     "EmbeddingResult",
     "Modality",
+    "ReasoningEffort",
     "ModelCapabilities",
     "Usage",
     # History
@@ -365,6 +374,8 @@ __all__ = [
     # Execution context
     "CancellationTokenProtocol",
     "RunMeta",
+    "RunScope",
+    "scope_of",
     # HITL
     "ApprovalDecision",
     "ApprovalRequest",

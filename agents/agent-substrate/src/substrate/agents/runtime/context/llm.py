@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
+from substrate.agents.llm.errors import classify_llm_error
 from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.content import ChatMessage, ContentBlock, JsonObject
 from substrate.kernel.core.usage import Usage
@@ -62,6 +63,7 @@ class _LLMMixin:
                     "output_tokens": resp.usage.output_tokens,
                     "reasoning_tokens": resp.usage.reasoning_tokens,
                 },
+                "cost_usd": resp.cost_usd,
             }
 
         def _deserialize(v: JsonObject) -> LLMResponse:
@@ -80,7 +82,7 @@ class _LLMMixin:
                 output_tokens=u["output_tokens"],
                 reasoning_tokens=u["reasoning_tokens"],
             )
-            return LLMResponse(content=blocks, usage=usage)
+            return LLMResponse(content=blocks, usage=usage, cost_usd=v.get("cost_usd", 0.0))  # type: ignore[arg-type]
 
         args: JsonObject = {"model": llm_client.model, "msg_count": len(messages)}
         path = self._alloc_path()
@@ -105,13 +107,7 @@ class _LLMMixin:
             final_content: list[ContentBlock] | None = None
             final_usage: Usage | None = None
 
-            try:
-                stream = llm_client.generate_stream(
-                    msgs, options=options, ctx=self._meta
-                )
-            except TypeError:
-                stream = llm_client.generate_stream(msgs, options=options)
-
+            stream = llm_client.generate_stream(msgs, options=options, ctx=self._meta)
             async for chunk in stream:
                 if isinstance(chunk, TextDelta):
                     text_chunks.append(chunk.text)
@@ -129,7 +125,11 @@ class _LLMMixin:
             if final_usage is None:
                 final_usage = Usage()
 
-            return LLMResponse(content=final_content, usage=final_usage)
+            return LLMResponse(
+                content=final_content,
+                usage=final_usage,
+                cost_usd=llm_client.capabilities.cost_usd(final_usage),
+            )
 
         try:
             middleware = getattr(self.agent, "middleware", None)
@@ -161,12 +161,19 @@ class _LLMMixin:
             await self._record_effect(effect_id, "ok", _serialize(resp))
             await self._log(
                 RunLogKind.LLM_CALL,
-                {"model": llm_client.model, "tokens": resp.usage.total_tokens},
+                {
+                    "model": llm_client.model,
+                    "tokens": resp.usage.total_tokens,
+                    "cost_usd": resp.cost_usd,
+                },
             )
             return resp
         except Exception as exc:
             await self._record_effect(effect_id, "error", {"error": str(exc)})
-            raise
+            classified = classify_llm_error(exc)
+            if classified is exc:
+                raise
+            raise classified from exc
 
 
 __all__ = ["_LLMMixin"]

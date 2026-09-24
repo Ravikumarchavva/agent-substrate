@@ -25,18 +25,10 @@ from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
 from substrate.kernel.tools import AnyTool
 from substrate.kernel.tools.tools import ToolExecutionResult
 
+from substrate.kernel.agent.runtime_context import RunScope
 from substrate.kernel.agent.supervision import Priority, SpawnBudget
 from substrate.agents.context.context import ContextConfig
 from substrate.agents.limits.spawn import SpawnTracker
-from substrate.agents.storage.tasks import (
-    current_agent_id as _task_agent_id,
-    current_agent_label as _task_agent_label,
-    current_parent_agent_id as _task_parent_agent_id,
-)
-from substrate.agents.workspace.scope import (
-    current_branch_id as _workspace_branch_id,
-    current_user_id as _task_user_id,
-)
 from substrate.agents.core.base import BaseAgent
 
 if TYPE_CHECKING:
@@ -116,22 +108,24 @@ class OrchestratorAgent(BaseAgent):
         return self._context.history
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-        _task_agent_id.set(str(self.id))
-        _task_agent_label.set(self.name)
-        _task_parent_agent_id.set(None)  # orchestrator is the root
         for msg in inbox:
             ctx.check()
             await self._handle_message(ctx, msg)
 
     async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
         session_id = msg.correlation_id or ctx.run_id
-        # See ReActAgent._handle_message for why this must be stamped here
-        # (inside the Worker task) rather than upstream.
-        _task_user_id.set(msg.metadata.get("user_id") or None)
+        # See ReActAgent._handle_message.
+        ctx.set_scope(
+            RunScope.from_metadata(
+                msg.metadata,
+                thread_id=session_id,
+                agent_id=str(self.id),
+                agent_label=self.name,
+            )
+        )
         spawn_tracker = SpawnTracker(self._spawn_budget)
 
-        branch_id = msg.metadata.get("branch_id") or "main"
-        _workspace_branch_id.set(branch_id)
+        branch_id = ctx.scope.branch_id
         history_messages = await self._load_history(
             self._context, session_id, branch_id=branch_id
         )
@@ -197,16 +191,10 @@ class OrchestratorAgent(BaseAgent):
                         )
                     ),
                     correlation_id=session_id,
-                    # The subagent Worker runs in its own ContextVar context, so
-                    # pass the parent id explicitly; the subagent stamps it as
-                    # current_parent_agent_id so its board nests under this one.
-                    # user_id rides along the same way so a spawned subagent's
-                    # code-interpreter calls still resolve to the caller's
-                    # workspace subPath.
-                    metadata={
-                        "parent_agent_id": str(self.id),
-                        "user_id": _task_user_id.get(),
-                    },
+                    # The child is its own run: it inherits tenant, user and
+                    # branch (so its files resolve to the caller's workspace and
+                    # branch) and nests its board under this agent's.
+                    metadata=ctx.scope.child_metadata(),
                 )
                 try:
                     handle = await ctx.spawn(cfg.agent.id, boot=boot_msg)

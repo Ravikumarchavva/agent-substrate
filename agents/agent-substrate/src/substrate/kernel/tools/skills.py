@@ -10,7 +10,7 @@ from substrate.kernel.core.content import KernelModel
 class Skill(KernelModel):
     """A prompt-skill that extends an agent's behaviour via injected instructions.
 
-    Skills are loaded from ``capabilities/tools/skills/<name>/SKILL.md`` or
+    Skills are loaded from ``integrations/tools/skills/<name>/SKILL.md`` or
     constructed inline.  When attached to an agent, ``instructions`` are
     appended to the effective system prompt and ``allowed_tools`` names are
     cross-referenced against the agent's tool registry at runtime.

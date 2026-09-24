@@ -7,11 +7,13 @@ self-contained: no calls into the other ``RunContext`` mixins.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random as _random
 import uuid as _uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, TypeVar
 
 from substrate.kernel.runtime.log_entry import RunLogKind
 from substrate.kernel.core.content import JsonObject
@@ -28,6 +30,15 @@ if TYPE_CHECKING:
 # entry — keeps large tool/LLM payloads out of the hot append-only log.
 _ARTIFACT_OFFLOAD_BYTES = 64 * 1024
 
+# Concurrently-running journaled calls (``ctx.tool_batch``) each get their own
+# path stack, keyed by the RunContext it belongs to so an unrelated context in
+# a task spawned from here never picks it up.
+_scope_override: ContextVar[tuple[int, list[int]] | None] = ContextVar(
+    "_scope_override", default=None
+)
+
+_T = TypeVar("_T")
+
 
 class _JournalMixin:
     """Hierarchical effect-path allocation + EventLogProtocol/EffectCache journaling."""
@@ -35,6 +46,7 @@ class _JournalMixin:
     if TYPE_CHECKING:
         run_id: str
         _path_stack: list[int]
+        _log_lock: asyncio.Lock
         _effect_cache: EffectCache
         _blob_store: BlobStore | None
         _event_log: EventLogProtocol
@@ -52,9 +64,35 @@ class _JournalMixin:
         to be a journal hit or miss. That symmetry is what keeps sibling
         calls after this one aligned between live execution and replay.
         """
-        path = ".".join(str(i) for i in self._path_stack)
-        self._path_stack[-1] += 1
+        stack = self._stack()
+        path = ".".join(str(i) for i in stack)
+        stack[-1] += 1
         return path
+
+    def _stack(self) -> list[int]:
+        override = _scope_override.get()
+        if override is not None and override[0] == id(self):
+            return override[1]
+        return self._path_stack
+
+    def _fork_scopes(self, n: int) -> list[list[int]]:
+        """Stacks for *n* journaled calls about to run concurrently.
+
+        Call ``i`` gets exactly the path it would have had if the *n* calls
+        ran one after another (each call consumes one index), so live runs,
+        replays, and journals written by sequential execution all agree.
+        """
+        base = self._stack()
+        stacks = [[*base[:-1], base[-1] + i] for i in range(n)]
+        base[-1] += n
+        return stacks
+
+    async def _in_scope(self, stack: list[int], fn: Callable[[], Awaitable[_T]]) -> _T:
+        token = _scope_override.set((id(self), stack))
+        try:
+            return await fn()
+        finally:
+            _scope_override.reset(token)
 
     def _enter_scope(self) -> None:
         """Open a child scope for calls made inside a journaled call's body.
@@ -63,10 +101,10 @@ class _JournalMixin:
         cache-hit call must never enter its scope, since its body (and
         anything it would have journaled) does not run.
         """
-        self._path_stack.append(0)
+        self._stack().append(0)
 
     def _exit_scope(self) -> None:
-        self._path_stack.pop()
+        self._stack().pop()
 
     # ------------------------------------------------------------------
     # Journaled generic effect helper
@@ -104,14 +142,17 @@ class _JournalMixin:
             self._exit_scope()
 
     async def _log(self, kind: str, payload: JsonObject = {}) -> int:
-        seq = self._seq_cursor + 1
-        await self._event_log.append(
-            self.run_id,
-            RunLogEntry(run_id=self.run_id, seq=seq, kind=kind, payload=payload),
-            expected_seq=self._seq_cursor,
-        )
-        self._seq_cursor = seq
-        return seq
+        # Serialized: concurrent tool calls would otherwise read the same
+        # cursor and race on expected_seq.
+        async with self._log_lock:
+            seq = self._seq_cursor + 1
+            await self._event_log.append(
+                self.run_id,
+                RunLogEntry(run_id=self.run_id, seq=seq, kind=kind, payload=payload),
+                expected_seq=self._seq_cursor,
+            )
+            self._seq_cursor = seq
+            return seq
 
     async def log(self, kind: str, payload: JsonObject = {}) -> int:
         """Public wrapper around ``_log`` for callers outside ``runtime/``.

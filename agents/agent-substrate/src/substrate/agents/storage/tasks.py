@@ -8,36 +8,11 @@ see ``serving/factory.py::init_infrastructure`` for where a
 from __future__ import annotations
 
 import asyncio
-import contextvars
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import uuid4
 
 from substrate.kernel.storage.tasks import Task, TaskList, TaskStatus
-
-# ---------------------------------------------------------------------------
-# Per-request/agent identity ContextVars (set by agent run() entry).
-# Placed here (L1) so both agents/core/* and capabilities/tools/* can import them
-# without violating the layer contracts (capabilities may import agents).
-#
-# Workspace-ownership ContextVars (current_user_id, current_tenant_id,
-# current_branch_id) live in agents/workspace/scope.py — a different concern
-# (whose files these are), not task-list identity.
-# ---------------------------------------------------------------------------
-
-current_thread_id: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "task_manager_thread_id", default="default"
-)
-current_agent_id: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "task_manager_agent_id", default=""
-)
-current_agent_label: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "task_manager_agent_label", default=""
-)
-current_parent_agent_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "task_manager_parent_agent_id", default=None
-)
-
 
 class TaskStore:
     """Thread-safe in-memory task store."""

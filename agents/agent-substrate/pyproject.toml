@@ -296,8 +296,6 @@ forbidden_modules = [
 # We only want to catch DIRECT imports from serving/'s routes to agents/former-capabilities.
 allow_indirect_imports = "true"
 ignore_imports = [
-    # current_thread_id ContextVar spans both chat.py and integrations/task_manager
-    "substrate.serving.monolith.routes.chat -> substrate.integrations.tools.task_manager.tool",
     # WebHITLBridge delivers human-input events; must know the capability type
     "substrate.serving.monolith.sse.bridge -> substrate.integrations.tools.human_input",
     # pipelines/triggers routes need DTOs defined in integrations (PipelineDef, TriggerDef, ConditionDef)

@@ -1,8 +1,8 @@
 """Non-ML input-safety utilities shared by both an L1 guardrail middleware
-and L2 concrete classifiers — lives here (not capabilities/safety/) because
+and L2 concrete classifiers — lives here (not integrations/safety/) because
 import-linter's layer contract only allows upward-to-downward imports
 (fabric -> capabilities -> agents -> kernel): agents/middleware/guardrails/
-multimodal_safety.py (L1) needs normalize(), and capabilities/safety/ (L2)
+multimodal_safety.py (L1) needs normalize(), and integrations/safety/ (L2)
 needs it too for document-text scanning — L2 importing L1 is allowed, the
 reverse is not, so this is the one layer both sides can reach.
 

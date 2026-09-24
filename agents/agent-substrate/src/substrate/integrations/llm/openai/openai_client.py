@@ -3,7 +3,6 @@
 from __future__ import annotations
 from substrate.logger import setup_logging
 
-import hashlib
 import io
 import json
 from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional, cast
@@ -16,16 +15,24 @@ from openai.types.responses.response_reasoning_summary_text_delta_event import (
     ResponseReasoningSummaryTextDeltaEvent,
 )
 
+from substrate.agents.llm.chat_client import parse_tool_arguments
+from substrate.agents.llm.modalities import fit_to_capabilities
+from substrate.agents.llm.models import resolve_capabilities
 from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
+from substrate.kernel.llm import (
+    GenerationOptions,
+    LLMClient,
+    LLMResponse,
+    ModelCapabilities,
+    ReasoningEffort,
+    Usage,
+)
 from substrate.kernel import ChatMessage, ContentBlock
 from substrate.kernel.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
 from substrate.kernel.core.content import (
     TextBlock,
-    MediaBlock,
     ToolUseBlock,
     DataBlock,
-    ToolResultBlock,
     ReasoningBlock,
 )
 from substrate.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
@@ -161,9 +168,11 @@ class OpenAIClient(LLMClient):
         default_voice: str = "coral",
         default_tts_format: str = "mp3",
         realtime_model: str = "gpt-4o-realtime-preview-2024-12-17",
+        capabilities: Optional[ModelCapabilities] = None,
         **kwargs,
     ):
         self.model = model
+        self.capabilities = capabilities or resolve_capabilities(model)
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.api_key = api_key  # stored so WorkflowRunner can build sibling clients
@@ -190,7 +199,6 @@ class OpenAIClient(LLMClient):
         self._default_tts_format = default_tts_format
         self._realtime_model = realtime_model
         self._encoding = None
-        self._uploaded_image_file_ids: dict[str, str] = {}
 
     # ── Audio capability flags ────────────────────────────────────────────────
 
@@ -215,92 +223,15 @@ class OpenAIClient(LLMClient):
     # Private helpers — delegates to ``core.messages.encoders.openai``
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _image_extension(media_type: str) -> str:
-        return {
-            "image/png": "png",
-            "image/jpeg": "jpg",
-            "image/webp": "webp",
-            "image/gif": "gif",
-        }.get(media_type, "bin")
-
-    async def _upload_image_input(
-        self,
-        *,
-        image_bytes: bytes,
-        media_type: str,
-        filename: str,
-    ) -> str:
-        cache_key = hashlib.sha256(
-            media_type.encode("utf-8") + b"\0" + image_bytes
-        ).hexdigest()
-        cached = self._uploaded_image_file_ids.get(cache_key)
-        if cached:
-            return cached
-
-        uploaded = await self.client.files.create(
-            file=(filename, image_bytes, media_type),
-            purpose="user_data",
-        )
-        self._uploaded_image_file_ids[cache_key] = uploaded.id
-        return uploaded.id
-
-    async def _materialize_tool_result_media(
-        self,
-        messages: list[ChatMessage],
-    ) -> list[ChatMessage]:
-        prepared: list[ChatMessage] = []
-        for msg in messages:
-            if msg.role not in ("user", "tool"):
-                prepared.append(msg)
-                continue
-
-            changed = False
-            new_content = []
-            for block in msg.content:
-                if isinstance(block, ToolResultBlock) and block.content:
-                    new_tool_content = []
-                    for item in block.content:
-                        if isinstance(item, MediaBlock) and item.is_image and item.data is not None:
-                            media_type = item.media_type or "image/png"
-                            file_id = await self._upload_image_input(
-                                image_bytes=item.data,
-                                media_type=media_type,
-                                filename=(
-                                    f"tool-artifact.{self._image_extension(media_type)}"
-                                ),
-                            )
-                            new_tool_content.append(
-                                MediaBlock.image(file_id=file_id, detail=item.detail)
-                            )
-                            changed = True
-                        else:
-                            new_tool_content.append(item)
-                    if changed:
-                        new_content.append(
-                            block.model_copy(update={"content": new_tool_content})
-                        )
-                    else:
-                        new_content.append(block)
-                else:
-                    new_content.append(block)
-
-            if changed:
-                prepared.append(msg.model_copy(update={"content": new_content}))
-            else:
-                prepared.append(msg)
-        return prepared
-
-    async def _serialize_messages(
+    def _serialize_messages(
         self, messages: list[ChatMessage]
     ) -> tuple[str, list[dict[str, Any]]]:
         """Serialise framework messages into (instructions, conversation_input).
 
-        Delegates to the centralised OpenAI encoder so that message
-        serialisation logic lives in one place.
+        Pure: images (including tool-returned ones) are sent inline as data
+        URLs — nothing is uploaded to the provider as a side effect.
         """
-        prepared = await self._materialize_tool_result_media(messages)
-        return _encode_messages(prepared)
+        return _encode_messages(fit_to_capabilities(messages, self.capabilities))
 
     def _serialize_tools(
         self, tools: Optional[list[dict[str, Any]]]
@@ -329,15 +260,103 @@ class OpenAIClient(LLMClient):
         u = getattr(response, "usage", None)
         if u is None:
             return Usage()
-        cached = 0
-        details = getattr(u, "input_token_details", None)
-        if details:
-            cached = getattr(details, "cached_tokens", 0) or 0
+        input_details = getattr(u, "input_tokens_details", None)
+        output_details = getattr(u, "output_tokens_details", None)
         return Usage(
             input_tokens=getattr(u, "input_tokens", 0) or 0,
-            cached_tokens=cached,
+            cached_tokens=getattr(input_details, "cached_tokens", 0) or 0,
             output_tokens=getattr(u, "output_tokens", 0) or 0,
+            reasoning_tokens=getattr(output_details, "reasoning_tokens", 0) or 0,
         )
+
+    @staticmethod
+    def _tool_use_block(item: Any) -> ToolUseBlock:
+        arguments, error = parse_tool_arguments(item.arguments)
+        return ToolUseBlock(
+            call_id=getattr(item, "call_id", "") or getattr(item, "id", ""),
+            tool_name=item.name,
+            arguments=arguments,
+            arguments_error=error,
+        )
+
+    def _reasoning_param(self, effort: ReasoningEffort | None) -> dict[str, Any] | None:
+        """``reasoning`` request field, or None. Only sent when the caller set
+        ``options.reasoning`` and the model reasons: it also turns on reasoning
+        *summaries*, which some organizations must be verified to receive, so
+        it stays opt-in."""
+        if effort is None or not self.capabilities.supports_reasoning:
+            return None
+        if effort == ReasoningEffort.OFF:
+            return {"effort": "minimal" if self.model.startswith("gpt-5") else "low"}
+        return {"effort": effort.value, "summary": "auto"}
+
+    def _build_params(
+        self, messages: list[ChatMessage], options: GenerationOptions, *, stream: bool
+    ) -> dict[str, Any]:
+        _, conversation_input = self._serialize_messages(messages)
+        params: dict[str, Any] = {"model": self.model, "input": conversation_input}
+        if stream:
+            params["stream"] = True
+
+        # Reasoning models reject a custom temperature
+        if options.temperature is not None:
+            params["temperature"] = options.temperature
+        elif not self.capabilities.supports_reasoning:
+            params["temperature"] = self.temperature
+
+        if options.system_instructions:
+            params["instructions"] = options.system_instructions
+        max_tokens = options.max_tokens or self.max_tokens
+        if max_tokens:
+            params["max_output_tokens"] = max_tokens
+
+        tools = self._serialize_tools(_tools_from_options(options))
+        if tools:
+            params["tools"] = tools
+            choice = self._normalize_tool_choice(options.tool_choice)
+            if choice:
+                params["tool_choice"] = choice
+        # Tools and a response schema can be combined: the model calls tools
+        # as needed and its final text answer is schema-conformant.
+        if options.response_format is not None:
+            params["text"] = _build_openai_text_format(options.response_format)
+
+        reasoning = self._reasoning_param(options.reasoning)
+        if reasoning:
+            params["reasoning"] = reasoning
+        return params
+
+    def _parse_output(
+        self, response: Any, response_format: type[BaseModel] | None
+    ) -> list[ContentBlock]:
+        """Responses API output → content blocks (reasoning summary, text, tool
+        calls, structured data), in that order."""
+        blocks: list[ContentBlock] = []
+        tool_calls: list[ContentBlock] = []
+        summaries: list[str] = []
+        for item in response.output or []:
+            if item.type == "function_call":
+                tool_calls.append(self._tool_use_block(item))
+            elif item.type == "reasoning":
+                summaries.extend(
+                    part.text for part in (getattr(item, "summary", None) or []) if part.text
+                )
+            # tool_search_call / tool_search_output are metadata items produced
+            # by OpenAI hosted tool search (gpt-5.4+) — skipped; the actual
+            # function_call follows in the same output list.
+        if summaries:
+            blocks.append(ReasoningBlock(text="\n\n".join(summaries)))
+        text = getattr(response, "output_text", "") or ""
+        if text:
+            blocks.append(TextBlock(text=text))
+        blocks.extend(tool_calls)
+        if response_format is not None and text and not tool_calls:
+            try:
+                parsed = response_format.model_validate_json(text)
+                blocks.append(DataBlock(data=parsed.model_dump(mode="json")))
+            except Exception:
+                logger.debug("Failed to parse structured output: %s", text[:200])
+        return blocks
 
     async def generate(
         self,
@@ -347,143 +366,12 @@ class OpenAIClient(LLMClient):
         ctx: RunMeta | None = None,
     ) -> LLMResponse:
         """Generate a single response from OpenAI using Responses API."""
-        tool_dicts = _tools_from_options(options)
-        response_format = options.response_format
-        tool_choice = options.tool_choice
-        _, conversation_input = await self._serialize_messages(messages)
-        instructions = options.system_instructions
-
-        # ── Unified path: tools + response_format together ────────────────
-        # OpenAI Responses API supports both `tools` and `text.format`
-        # in the same `responses.create()` call.  The model uses tools
-        # when needed and produces schema-conformant text in its final
-        # answer.  When a tool-call step is returned, `parsed` stays
-        # None; the agent loop continues until the model answers with
-        # text, which is then validated against the schema.
-        transformed_tools = self._serialize_tools(tool_dicts)
-        normalized_tool_choice = self._normalize_tool_choice(tool_choice)
-
-        if response_format is not None and transformed_tools:
-            text_format = _build_openai_text_format(response_format)
-
-            params: dict[str, Any] = {
-                "model": self.model,
-                "input": conversation_input,
-                "tools": transformed_tools,
-                "text": text_format,
-            }
-
-            if options.temperature is not None:
-                params["temperature"] = options.temperature
-            elif not self.model.startswith("gpt-5"):
-                params["temperature"] = self.temperature
-
-            if instructions:
-                params["instructions"] = instructions
-            max_tok = options.max_tokens or self.max_tokens
-            if max_tok:
-                params["max_output_tokens"] = max_tok
-            if normalized_tool_choice:
-                params["tool_choice"] = normalized_tool_choice
-
-            response = await self.client.responses.create(**params)
-
-            final_blocks: list[ContentBlock] = []
-            final_content_text = getattr(response, "output_text", "") or ""
-            if final_content_text:
-                final_blocks.append(TextBlock(text=final_content_text))
-
-            has_tool_calls = False
-            if response.output:
-                for item in response.output:
-                    if item.type == "function_call":
-                        has_tool_calls = True
-                        args = (
-                            json.loads(item.arguments)
-                            if isinstance(item.arguments, str)
-                            else item.arguments
-                        )
-                        final_blocks.append(
-                            ToolUseBlock(
-                                call_id=getattr(item, "call_id", "")
-                                or getattr(item, "id", ""),
-                                tool_name=item.name,
-                                arguments=args,
-                            )
-                        )
-                    # tool_search_call / tool_search_output are metadata items
-                    # produced by OpenAI hosted tool search (gpt-5.4+) — skip them;
-                    # the actual function_call follows in the same output list.
-
-            if final_content_text and not has_tool_calls and response_format:
-                try:
-                    parsed_obj = response_format.model_validate_json(final_content_text)
-                    final_blocks.append(
-                        DataBlock(data=parsed_obj.model_dump(mode="json"))
-                    )
-                except Exception:
-                    logger.debug(
-                        f"Failed to parse structured output from text: "
-                        f"{final_content_text[:200]}"
-                    )
-
-            return LLMResponse(
-                content=final_blocks, usage=self._extract_usage(response)
-            )
-
-        params: dict[str, Any] = {
-            "model": self.model,
-            "input": conversation_input,
-        }
-
-        # GPT-5 models don't support the temperature parameter
-        if options.temperature is not None:
-            params["temperature"] = options.temperature
-        elif not self.model.startswith("gpt-5"):
-            params["temperature"] = self.temperature
-
-        if instructions:
-            params["instructions"] = instructions
-
-        max_tok = options.max_tokens or self.max_tokens
-        if max_tok:
-            params["max_output_tokens"] = max_tok
-
-        if transformed_tools:
-            params["tools"] = transformed_tools
-            if normalized_tool_choice:
-                params["tool_choice"] = normalized_tool_choice
-
-        # Enforce structured output schema when requested without tools
-        if response_format is not None:
-            params["text"] = _build_openai_text_format(response_format)
-
+        params = self._build_params(messages, options, stream=False)
         response = await self.client.responses.create(**params)
-
-        final_content_text = getattr(response, "output_text", "") or ""
-        final_blocks: list[ContentBlock] = []
-        if final_content_text:
-            final_blocks.append(TextBlock(text=final_content_text))
-
-        if response.output:
-            for item in response.output:
-                if item.type == "function_call":
-                    args = (
-                        json.loads(item.arguments)
-                        if isinstance(item.arguments, str)
-                        else item.arguments
-                    )
-                    final_blocks.append(
-                        ToolUseBlock(
-                            call_id=getattr(item, "call_id", "")
-                            or getattr(item, "id", ""),
-                            tool_name=item.name,
-                            arguments=args,
-                        )
-                    )
-                # tool_search_call / tool_search_output — skip hosted-search metadata
-
-        return LLMResponse(content=final_blocks, usage=self._extract_usage(response))
+        return LLMResponse(
+            content=self._parse_output(response, options.response_format),
+            usage=self._extract_usage(response),
+        )
 
     def generate_stream(
         self,
@@ -500,67 +388,24 @@ class OpenAIClient(LLMClient):
         *,
         options: GenerationOptions,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
-        tool_dicts = _tools_from_options(options)
-        response_format = options.response_format
-        _, conversation_input = await self._serialize_messages(messages)
-        instructions = options.system_instructions
-
-        params: dict[str, Any] = {
-            "model": self.model,
-            "input": conversation_input,
-            "stream": True,
-        }
-
-        if options.temperature is not None:
-            params["temperature"] = options.temperature
-        elif not self.model.startswith("gpt-5"):
-            params["temperature"] = self.temperature
-
-        if instructions:
-            params["instructions"] = instructions
-        max_tok = options.max_tokens or self.max_tokens
-        if max_tok:
-            params["max_output_tokens"] = max_tok
-        transformed_tools = self._serialize_tools(tool_dicts)
-        normalized_tool_choice = self._normalize_tool_choice(options.tool_choice)
-        if transformed_tools:
-            params["tools"] = transformed_tools
-            if normalized_tool_choice:
-                params["tool_choice"] = normalized_tool_choice
-
-        if response_format is not None and transformed_tools:
-            params["text"] = _build_openai_text_format(response_format)
-
-        # Stream and yield deltas, collect final Response object
+        params = self._build_params(messages, options, stream=True)
         final_response = None
-        reasoning_parts: list[str] = []
 
         stream = await self.client.responses.create(**params)
         async for event in stream:
-            # Yield incremental text deltas
             if isinstance(event, ResponseTextDeltaEvent):
-                text = event.delta if hasattr(event, "delta") else ""
-                if text:
-                    yield TextDelta(text=text)
-
-            # Yield incremental reasoning deltas (o1/o3 models)
+                if event.delta:
+                    yield TextDelta(text=event.delta)
             elif isinstance(event, ResponseReasoningSummaryTextDeltaEvent):
-                reasoning = event.delta if hasattr(event, "delta") else ""
-                if reasoning:
-                    reasoning_parts.append(reasoning)
-                    yield ReasoningDelta(text=reasoning)
-
-            # Capture final Response object
+                if event.delta:
+                    yield ReasoningDelta(text=event.delta)
             elif isinstance(event, ResponseCompletedEvent):
-                if hasattr(event, "response"):
-                    final_response = event.response
+                final_response = event.response
 
-        # Use the Response object to build final message (same as generate())
         if final_response is None:
             logger.error(
                 "No ResponseCompletedEvent received from model %s — "
-                "the provider may not support the Responses API. "
-                "Set use_responses_api=False for this provider.",
+                "the provider may not support the Responses API.",
                 self.model,
             )
             raise RuntimeError(
@@ -568,51 +413,10 @@ class OpenAIClient(LLMClient):
                 f"a completion. The provider may not support the OpenAI "
                 f"Responses API. Check server logs for details."
             )
-        final_content_text = (
-            final_response.output_text if hasattr(final_response, "output_text") else ""
+        yield CompletionEvent(
+            content=self._parse_output(final_response, options.response_format),
+            usage=self._extract_usage(final_response),
         )
-        final_blocks: list[ContentBlock] = []
-        # Persist the reasoning summary (unsigned — OpenAI continuation uses the
-        # Responses API's own reasoning-item mechanism, not message content) so
-        # it survives history replay. Reasoning precedes the answer.
-        if reasoning_parts:
-            final_blocks.append(ReasoningBlock(text="".join(reasoning_parts)))
-        if final_content_text:
-            final_blocks.append(TextBlock(text=final_content_text))
-
-        has_tool_calls = False
-        if final_response.output:
-            for item in final_response.output:
-                if item.type == "function_call":
-                    has_tool_calls = True
-                    args = (
-                        json.loads(item.arguments)
-                        if isinstance(item.arguments, str)
-                        else item.arguments
-                    )
-                    final_blocks.append(
-                        ToolUseBlock(
-                            call_id=getattr(item, "call_id", "")
-                            or getattr(item, "id", ""),
-                            tool_name=item.name,
-                            arguments=args,
-                        )
-                    )
-                # tool_search_call / tool_search_output — skip hosted-search metadata
-
-        # Parse structured output from final text when schema is set
-        if response_format is not None and final_content_text and not has_tool_calls:
-            try:
-                parsed_obj = response_format.model_validate_json(final_content_text)
-                final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
-            except Exception:
-                logger.debug(
-                    f"Stream: failed to parse structured output: "
-                    f"{final_content_text[:200]}"
-                )
-
-        # Yield final completion
-        yield CompletionEvent(content=final_blocks)
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
         """Count tokens using tiktoken."""

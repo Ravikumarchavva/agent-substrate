@@ -9,6 +9,7 @@ a fresh one against the same file.
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 from pathlib import Path
 
 import pytest
@@ -316,6 +317,7 @@ async def test_react_agent_runs_end_to_end_on_local_runtime(tmp_path: Path) -> N
 
     class MockLLMClient:
         model = "mock-model"
+        capabilities = ModelCapabilities(model_id="mock-model")
 
         async def generate_stream(self, messages, *, options=None, ctx=None):
             yield CompletionEvent(

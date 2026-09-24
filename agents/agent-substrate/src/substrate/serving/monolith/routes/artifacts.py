@@ -63,7 +63,7 @@ class ArtifactPatch(BaseModel):
 
 def _to_out(slug: str, scope: str, concept: Any) -> ArtifactOut:
     # `concept` is a capabilities-layer OKF Concept, read structurally: the
-    # import-linter contract forbids serving/ importing capabilities/, and
+    # import-linter contract forbids serving/ importing integrations/, and
     # this module deliberately adds no exception to that list.
     return ArtifactOut(
         slug=slug,
@@ -235,7 +235,7 @@ async def delete_artifact(
     """Deprecate by default; ``?hard=true`` erases the document.
 
     Soft is the default because an invalidated fact still carries history
-    worth keeping (see capabilities/artifacts/okf.py) — a hard delete is
+    worth keeping (see integrations/artifacts/okf.py) — a hard delete is
     for genuinely unwanted content, not for superseded content.
     """
     store = _require_store(ctx)

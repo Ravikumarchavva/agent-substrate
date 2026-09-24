@@ -56,7 +56,7 @@ async def main() -> None:
     agent = ReActAgent(
         "StandaloneBot",
         model=model,
-        # No tools, no capabilities/ import — a toolless agent is still a
+        # No tools, no integrations/ import — a toolless agent is still a
         # complete, runnable chatbot; see the L1 charter for why.
         context=ContextConfig.default(),  # LocalFilesystemHistoryProvider — one JSON file
         system_instructions="You are a helpful assistant.",

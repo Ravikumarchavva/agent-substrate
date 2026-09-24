@@ -40,7 +40,7 @@ class CatalogPackage:
 
 def _default_capability_dirs() -> List[Path]:
     """Return the built-in capability type subdirectories."""
-    tools_root = Path(__file__).resolve().parent  # capabilities/tools/
+    tools_root = Path(__file__).resolve().parent  # integrations/tools/
     return [
         tools_root,  # tool packages (task_manager, code_interpreter, …)
         tools_root / "skills",  # SKILL.md packages
@@ -54,7 +54,7 @@ class CapabilityDiscovery:
     Parameters
     ----------
     capability_dirs
-        Directories to scan. Defaults to capabilities/tools, skills, connectors.
+        Directories to scan. Defaults to integrations/tools, skills, connectors.
     """
 
     def __init__(

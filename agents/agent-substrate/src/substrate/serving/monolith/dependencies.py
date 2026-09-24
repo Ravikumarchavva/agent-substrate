@@ -51,15 +51,15 @@ class ServerDependencies:
     safety_middleware: Optional[Any] = None
     # Shared with rag_backend's own internal RAGPipeline — reused (not
     # duplicated) by the per-user session-document index
-    # (capabilities/knowledge/session_ingest.py) so both the tenant-KB flow
+    # (integrations/knowledge/session_ingest.py) so both the tenant-KB flow
     # and the per-user flow embed through the same configured model.
     embedding_client: Optional[Any] = None
     # Local disk store for not-yet-sent attachments — see
-    # capabilities/storage/pending.py. Never SeaweedFS/S3 directly; routes
+    # integrations/storage/pending.py. Never SeaweedFS/S3 directly; routes
     # promote a file from here into `file_store` only once the message
     # carrying it is actually sent (routes/chat_context.py).
     pending_file_store: Optional[Any] = None
-    # Curated OKF bundles (capabilities/artifacts/) at session and global
+    # Curated OKF bundles (integrations/artifacts/) at session and global
     # scope. Shares `file_store`'s bucket but a different key prefix — the
     # sandbox never mounts it, so nothing lands here without an explicit
     # save or promotion.

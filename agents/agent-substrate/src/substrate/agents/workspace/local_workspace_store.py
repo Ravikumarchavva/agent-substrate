@@ -10,10 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
-import tempfile
 from pathlib import Path
 
+from substrate.agents.storage.fs import atomic_write_json, safe_name
 from substrate.kernel.exceptions import SnapshotConflictError
 from substrate.kernel.storage.snapshots import (
     WorkspaceFileEntry,
@@ -23,21 +22,6 @@ from substrate.kernel.storage.snapshots import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _atomic_write(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=".tmp_")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, default=str)
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
 
 
 class LocalFilesystemWorkspaceStore(WorkspaceStore):
@@ -55,10 +39,10 @@ class LocalFilesystemWorkspaceStore(WorkspaceStore):
         self._lock_map_lock = asyncio.Lock()
 
     def _snapshot_path(self, snapshot_id: str) -> Path:
-        return self._root / "snapshots" / f"{snapshot_id}.json"
+        return self._root / "snapshots" / f"{safe_name(snapshot_id)}.json"
 
     def _head_path(self, session_id: str, branch_id: str) -> Path:
-        return self._root / "sessions" / session_id / "heads" / f"{branch_id}.json"
+        return self._root / "sessions" / safe_name(session_id) / "heads" / f"{safe_name(branch_id)}.json"
 
     async def _get_branch_lock(self, session_id: str, branch_id: str) -> asyncio.Lock:
         key = (session_id, branch_id)
@@ -96,7 +80,7 @@ class LocalFilesystemWorkspaceStore(WorkspaceStore):
 
     def _save_head_id(self, session_id: str, branch_id: str, snapshot_id: str) -> None:
         p = self._head_path(session_id, branch_id)
-        _atomic_write(p, {"session_id": session_id, "branch_id": branch_id, "snapshot_id": snapshot_id})
+        atomic_write_json(p, {"session_id": session_id, "branch_id": branch_id, "snapshot_id": snapshot_id})
 
     async def get_snapshot(self, snapshot_id: str) -> WorkspaceSnapshot | None:
         return self._load_snapshot(snapshot_id)
@@ -145,7 +129,7 @@ class LocalFilesystemWorkspaceStore(WorkspaceStore):
 
             # Persist snapshot file
             snap_path = self._snapshot_path(new_snapshot.id)
-            _atomic_write(snap_path, new_snapshot.model_dump(mode="json"))
+            atomic_write_json(snap_path, new_snapshot.model_dump(mode="json"))
 
             # Advance branch head
             self._save_head_id(session_id, branch_id, new_snapshot.id)

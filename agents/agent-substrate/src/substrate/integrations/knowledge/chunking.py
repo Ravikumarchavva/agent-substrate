@@ -159,7 +159,7 @@ _TABLE_RE = re.compile(r"<table\b.*?</table>", re.IGNORECASE | re.DOTALL)
 class _TableRowParser(HTMLParser):
     """Minimal ``<table>`` row/cell extractor — same technique as
     document_intelligence's own ``_TableHTMLToMarkdown`` (not imported
-    directly: that lives in the ``runtimes/`` layer, which ``capabilities/``
+    directly: that lives in the ``runtimes/`` layer, which ``integrations/``
     must not depend on — see this repo's layered-architecture rules).
     Stdlib-only, no new dependency; spans/nested tables are not
     reconstructed, matching that same precedent's documented limitation."""

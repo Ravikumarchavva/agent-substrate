@@ -20,7 +20,7 @@ Consequences of MemoryDataStore for real deployments:
 
 If this ever needs to be genuinely durable/multi-replica-safe, the CVE
 needs a real fix (or a from-scratch trusted-deserializer patch) first —
-see ``tests/capabilities/test_triggers.py``'s guardrail test, which fails
+see ``tests/integrations/test_triggers.py``'s guardrail test, which fails
 loudly if this module's data store ever stops being ``MemoryDataStore``,
 since that would silently invalidate the CVE-ignore justification above.
 """

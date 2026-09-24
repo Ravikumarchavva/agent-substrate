@@ -11,8 +11,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from substrate.agents.storage.tasks import current_thread_id
-from substrate.agents.workspace.scope import current_tenant_id, current_user_id
 from substrate.integrations.knowledge.backends.local import LocalRagBackend
 from substrate.integrations.knowledge.pipeline import RAGPipeline
 from substrate.integrations.knowledge.session_ingest import ingest_session_document
@@ -24,6 +22,7 @@ from substrate.integrations.llm.openai.openai_embedding_client import (
     OpenAIEmbeddingClient,
 )
 from substrate.kernel import ChatMessage, TextBlock
+from substrate.kernel.agent.runtime_context import RunMeta, RunScope
 from substrate.kernel.core.usage import Usage
 from substrate.kernel.llm import EmbeddingResult, GenerationOptions, LLMResponse
 
@@ -59,18 +58,15 @@ def embedding_client() -> OpenAIEmbeddingClient:
     return client
 
 
-@pytest.fixture(autouse=True)
-def scoped_context():
-    """Stamp the same ContextVars ReActAgent._handle_message() would, for
-    the life of one test, then reset — matches this project's own documented
-    pattern for where these must be set (agents/storage/tasks.py)."""
-    t1 = current_tenant_id.set("tenant-a")
-    t2 = current_user_id.set("user-a")
-    t3 = current_thread_id.set("session-1")
-    yield
-    current_tenant_id.reset(t1)
-    current_user_id.reset(t2)
-    current_thread_id.reset(t3)
+def _ctx(scope: RunScope | None = None) -> RunMeta:
+    """The run context ReActAgent._handle_message() would have built."""
+    from substrate.agents.runtime.cancellation import CancellationToken
+
+    return RunMeta(
+        run_id="run-1",
+        cancellation=CancellationToken(),
+        scope=scope or RunScope(tenant_id="tenant-a", user_id="user-a", thread_id="session-1"),
+    )
 
 
 async def _ingest_fixture(cfg, embedding_client) -> None:
@@ -100,7 +96,7 @@ async def test_vector_mode_finds_ingested_document(cfg, embedding_client) -> Non
     await _ingest_fixture(cfg, embedding_client)
     tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
 
-    result = await tool.execute(query="invoice", mode="vector")
+    result = await tool.execute(ctx=_ctx(), query="invoice", mode="vector")
 
     assert not result.is_error
     text = result.content[0].text
@@ -111,7 +107,7 @@ async def test_tree_mode_finds_document_outline(cfg, embedding_client) -> None:
     await _ingest_fixture(cfg, embedding_client)
     tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
 
-    result = await tool.execute(query="invoice", mode="tree")
+    result = await tool.execute(ctx=_ctx(), query="invoice", mode="tree")
 
     assert not result.is_error
     assert "No matching" not in result.content[0].text
@@ -121,7 +117,7 @@ async def test_graph_mode_returns_vector_results_at_minimum(cfg, embedding_clien
     await _ingest_fixture(cfg, embedding_client)
     tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
 
-    result = await tool.execute(query="invoice", mode="graph")
+    result = await tool.execute(ctx=_ctx(), query="invoice", mode="graph")
 
     assert not result.is_error
     assert "invoice.pdf" in result.content[0].text
@@ -129,15 +125,13 @@ async def test_graph_mode_returns_vector_results_at_minimum(cfg, embedding_clien
 
 async def test_missing_query_is_an_error(cfg, embedding_client) -> None:
     tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
-    result = await tool.execute(query="")
+    result = await tool.execute(ctx=_ctx(), query="")
     assert result.is_error
 
 
-async def test_no_scope_without_context_vars(cfg, embedding_client) -> None:
-    current_tenant_id.set(None)
-    current_user_id.set(None)
+async def test_no_scope_without_a_signed_in_context(cfg, embedding_client) -> None:
     tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
-    result = await tool.execute(query="anything")
+    result = await tool.execute(ctx=_ctx(RunScope()), query="anything")
     assert result.is_error
 
 
@@ -153,6 +147,6 @@ async def test_omitted_limit_uses_cfg_rag_final_k(cfg, embedding_client) -> None
         return []
 
     tool._search_vector = _fake_search_vector
-    await tool.execute(query="anything")
+    await tool.execute(ctx=_ctx(), query="anything")
 
     assert captured["limit"] == 17

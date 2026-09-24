@@ -205,6 +205,9 @@ class ToolUseBlock(KernelModel):
     call_id: str
     tool_name: str
     arguments: JsonObject = Field(default_factory=dict)
+    # Set by an LLM client when the model's arguments weren't valid JSON —
+    # the harness reports it back to the model instead of running the tool.
+    arguments_error: str | None = None
 
     def __str__(self) -> str:
         return f"[ToolCall: {self.tool_name}({self.call_id})]"

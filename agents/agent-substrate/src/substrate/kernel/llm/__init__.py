@@ -4,6 +4,9 @@ from .llm import (
     LLMResponse,
     EmbeddingClient,
     EmbeddingResult,
+    ModelCapabilities,
+    Modality,
+    ReasoningEffort,
 )
 from substrate.kernel.core.usage import Usage
 
@@ -13,5 +16,8 @@ __all__ = [
     "LLMResponse",
     "EmbeddingClient",
     "EmbeddingResult",
+    "ModelCapabilities",
+    "Modality",
+    "ReasoningEffort",
     "Usage",
 ]

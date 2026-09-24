@@ -4,7 +4,7 @@ staging failed, is still in progress, or would exceed the daily commit
 quota is blocked entirely (not a silent per-file degrade — see the plan's
 explicit "block the whole send" decision). A file already staged *for this
 exact thread* (session_id already correct in the per-user index — see
-capabilities/knowledge/session_ingest.py) needs no further work; one staged
+integrations/knowledge/session_ingest.py) needs no further work; one staged
 under a different thread, or never staged at all, gets ingested now,
 tagged with this message's real thread_id."""
 

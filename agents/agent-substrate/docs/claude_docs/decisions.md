@@ -642,3 +642,48 @@ dataclass (`runtimes/document_intelligence/service/types.py`) was also
 deleted — every engine and `extract_document()` now speak kernel's
 `ExtractionResult`/`ExtractedPage`/`ExtractedImage` directly, no converter
 hop.
+
+---
+
+## Harness pass (2026-09-24): capabilities, RunScope, reasoning, and what a tool result may lose
+
+**Decisions** (each is a fix for something verified broken, not a preference):
+
+- **`LLMClient.capabilities: ModelCapabilities` is required** (kernel). A client never sends content
+  outside `capabilities.input_modalities`; it calls `agents.llm.modalities.fit_to_capabilities`,
+  which swaps unsupported media for a text note. `ModelProfile` derives `supports_vision`/audio from
+  `modalities` (one source of truth) and exposes `.capabilities`. Unlisted models resolve to
+  text-only, unpriced.
+- **Tool media reaches the model natively**, per vendor (OpenAI Responses `function_call_output.output`
+  list; Anthropic `tool_result` content; Gemini 3 `function_response.parts`, older Gemini as trailing
+  parts of the same turn; Chat Completions has no other way, so a follow-up user message after the
+  whole tool-message run). Nothing is uploaded as a side effect of encoding — the OpenAI client used to
+  push every tool image to the Files API and never delete it.
+- **Usage/cost is real.** All four clients now report usage on the *streaming* path (the only path
+  `ctx.llm` uses — it was zero, so no budget ever tripped). `Usage.input_tokens` includes cached
+  tokens for every vendor (Anthropic's excludes them natively; normalized). `LLMResponse.cost_usd`
+  is priced from `capabilities` and fed to `ExecutionTracker`.
+- **`RunScope` replaces six ContextVars** (see the run-scope entry in project memory / layers.md).
+  Sub-agents inherit tenant, user, conversation and branch.
+- **`GenerationOptions.reasoning: ReasoningEffort`** is the one typed control; nothing in the repo could
+  turn reasoning on before. Gemini ignores it on tool-calling turns (thought signatures aren't
+  persisted) and says so in the log.
+- **Direct tool calls get `DIRECT_CALL_POLICY`**, not the sandbox-chain defaults (50 calls, 60 s) that
+  capped every run at 50 tool calls and killed the code interpreter at 60 s of its advertised 300.
+  `ReActAgent(tool_policy=...)` overrides it.
+- **Hitting `max_iterations` wraps up** (one last tool-free call, persisted, `run.truncated` logged)
+  and a budget stop persists the partial turn — both used to discard the whole turn.
+- **`concurrency_safe = True`** on a tool opts it into concurrent execution within a turn
+  (`ctx.tool_batch`, journal paths forked per call so replay is exact). Default is sequential.
+- **Every `Local*` store builds paths through `safe_name`** (percent-encoding, injective, ordinary ids
+  unchanged). Ids come from request bodies; `delete_session("../..")` used to `rmtree` outside the store.
+- **One token estimator** (`agents/context/tokens.py`) counting tool args, tool results and media;
+  five drifting copies removed. Compaction never drops a tool result's images/data, and window slicing
+  never starts on an orphaned tool result.
+
+**Found and NOT fixed (listed for a decision):** a run whose only input message is dead-lettered after
+its retries replays with an empty inbox and ends `run.completed` having done nothing (worker.py);
+history persistence has no idempotency key, so a crash between persist and `run.completed` can
+duplicate a turn on replay (not reproduced — reasoned from the code); `TaskStore` (L1 default) is
+in-memory; `CompactionCoordinator`'s PRE_LLM/POST_TOOL phases are not used by the agent loop;
+`RunMeta.tenant_id` (lease) and `scope.tenant_id` (message metadata) are two sources of tenant identity.

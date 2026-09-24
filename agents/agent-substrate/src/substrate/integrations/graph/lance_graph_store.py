@@ -21,7 +21,7 @@ building the graph fresh per call is sub-millisecond.
 
 ``query_cypher`` (the ``CypherCapable`` capability) is deliberately narrow,
 not a general Cypher interpreter: ``GraphRAGPipeline.query()``
-(``capabilities/knowledge/graph_rag.py``) is the only caller in this
+(``integrations/knowledge/graph_rag.py``) is the only caller in this
 codebase, and it only ever issues one exact query shape —
 ``"MATCH (n) RETURN n LIMIT <N>"`` — to fetch every entity for its own
 Python-side keyword matching (there is no non-Cypher fallback path for

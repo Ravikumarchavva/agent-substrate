@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-from substrate.agents.storage.tasks import (
-    TaskStore,
-    current_agent_id,
-    current_parent_agent_id,
-    current_thread_id,
-)
+from substrate.agents.runtime.cancellation import CancellationToken
+from substrate.agents.storage.tasks import TaskStore
 from substrate.integrations.tools.task_manager.tool import TaskManagerTool
+from substrate.kernel.agent.runtime_context import RunMeta, RunScope
 from substrate.kernel.storage.tasks import TaskStatus
+
+
+def _ctx(thread_id: str, agent_id: str, parent: str | None = None) -> RunMeta:
+    return RunMeta(
+        run_id="run-1",
+        cancellation=CancellationToken(),
+        scope=RunScope(thread_id=thread_id, agent_id=agent_id, parent_agent_id=parent),
+    )
 
 
 def _board(result):
@@ -19,15 +24,14 @@ def _board(result):
 async def test_start_task_auto_completes_prior_in_progress() -> None:
     """start_task closes any task left in_progress so the board always advances
     even when the model skips complete_task."""
-    current_thread_id.set("conv-1")
-    current_agent_id.set("root")
+    ctx = _ctx("conv-1", "root")
     tool = TaskManagerTool(store=TaskStore())
 
-    await tool.execute(action="create_list", tasks=["one", "two", "three"])
-    await tool.execute(action="start_task")  # one -> in_progress
+    await tool.execute(ctx=ctx, action="create_list", tasks=["one", "two", "three"])
+    await tool.execute(ctx=ctx, action="start_task")  # one -> in_progress
 
     # Skip complete_task; start the next task directly.
-    result = await tool.execute(action="start_task")  # auto-completes one, starts two
+    result = await tool.execute(ctx=ctx, action="start_task")  # auto-completes one, starts two
     tasks = {t["title"]: t["status"] for t in _board(result)["tasks"]}
 
     assert tasks["one"] == TaskStatus.SUCCEEDED
@@ -37,24 +41,23 @@ async def test_start_task_auto_completes_prior_in_progress() -> None:
 
 async def test_add_task_skips_existing_titles() -> None:
     """Repeated/confused add_task calls can't pile up phantom duplicate steps."""
-    current_thread_id.set("conv-dup")
-    current_agent_id.set("root")
+    ctx = _ctx("conv-dup", "root")
     tool = TaskManagerTool(store=TaskStore())
 
-    await tool.execute(action="create_list", tasks=["Research", "Compare", "Recommend"])
+    await tool.execute(ctx=ctx, action="create_list", tasks=["Research", "Compare", "Recommend"])
     # Model re-adds two titles that already exist (different case / whitespace).
-    result = await tool.execute(action="add_task", tasks=["  compare ", "RECOMMEND"])
+    result = await tool.execute(ctx=ctx, action="add_task", tasks=["  compare ", "RECOMMEND"])
 
     titles = [t["title"] for t in _board(result)["tasks"]]
     assert titles == ["Research", "Compare", "Recommend"]  # nothing appended
 
 
 async def test_create_list_dedupes_input() -> None:
-    current_thread_id.set("conv-dup2")
-    current_agent_id.set("root")
+    ctx = _ctx("conv-dup2", "root")
     tool = TaskManagerTool(store=TaskStore())
 
     result = await tool.execute(
+        ctx=ctx,
         action="create_list",
         tasks=["Research", "Compare", "Recommend", "compare", "Recommend"],
     )
@@ -71,19 +74,15 @@ async def test_event_sink_fires_for_subagent_boards_only() -> None:
         calls.append((conv_id, board))
 
     # Root agent (no parent) — sink must NOT fire.
-    current_thread_id.set("conv-root")
-    current_agent_id.set("root")
-    current_parent_agent_id.set(None)
+    ctx = _ctx("conv-root", "root")
     root_tool = TaskManagerTool(store=TaskStore(), event_sink=sink)
-    await root_tool.execute(action="create_list", tasks=["a"])
+    await root_tool.execute(ctx=ctx, action="create_list", tasks=["a"])
     assert calls == []
 
     # Subagent (parent set) — sink fires with the nested board.
-    current_thread_id.set("conv-sub")
-    current_agent_id.set("child")
-    current_parent_agent_id.set("root")
+    ctx = _ctx("conv-sub", "child", parent="root")
     sub_tool = TaskManagerTool(store=TaskStore(), event_sink=sink)
-    await sub_tool.execute(action="create_list", tasks=["x", "y"])
+    await sub_tool.execute(ctx=ctx, action="create_list", tasks=["x", "y"])
 
     assert len(calls) == 1
     conv_id, board = calls[0]
@@ -91,19 +90,16 @@ async def test_event_sink_fires_for_subagent_boards_only() -> None:
     assert board["parent_agent_id"] == "root"
     assert [t["title"] for t in board["tasks"]] == ["x", "y"]
 
-    current_parent_agent_id.set(None)  # reset for other tests
-
 
 async def test_start_task_does_not_touch_failed_or_blocked() -> None:
-    current_thread_id.set("conv-2")
-    current_agent_id.set("root")
+    ctx = _ctx("conv-2", "root")
     tool = TaskManagerTool(store=TaskStore())
 
-    await tool.execute(action="create_list", tasks=["a", "b"])
-    await tool.execute(action="start_task")  # a -> in_progress
-    await tool.execute(action="fail_task", note="nope")  # a -> failed
+    await tool.execute(ctx=ctx, action="create_list", tasks=["a", "b"])
+    await tool.execute(ctx=ctx, action="start_task")  # a -> in_progress
+    await tool.execute(ctx=ctx, action="fail_task", note="nope")  # a -> failed
 
-    result = await tool.execute(action="start_task")  # b -> in_progress
+    result = await tool.execute(ctx=ctx, action="start_task")  # b -> in_progress
     tasks = {t["title"]: t["status"] for t in _board(result)["tasks"]}
 
     assert tasks["a"] == TaskStatus.FAILED  # untouched

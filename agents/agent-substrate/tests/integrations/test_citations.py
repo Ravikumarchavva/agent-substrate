@@ -1,4 +1,4 @@
-"""Tests for the grounded-citation layer (capabilities/knowledge/citations.py)."""
+"""Tests for the grounded-citation layer (integrations/knowledge/citations.py)."""
 
 from __future__ import annotations
 

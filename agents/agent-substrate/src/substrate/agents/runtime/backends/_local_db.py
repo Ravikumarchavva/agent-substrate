@@ -4,7 +4,7 @@ Why SQLite, and what it actually promises
 ------------------------------------------
 The in-memory backends (``_event_log.py``, ``_scheduler.py``, etc.) are
 Stage 0: correct, but gone on process restart. The Postgres backends
-(``infrastructure/runtime/``) are Stage 1: durable, and safe for many worker
+(``integrations/runtime/``) are Stage 1: durable, and safe for many worker
 *processes* across *machines* via row-level locking (``SELECT ... FOR UPDATE
 SKIP LOCKED``). This module is a third tier — durable with zero external
 infrastructure — for the case the user explicitly asked for: "even without

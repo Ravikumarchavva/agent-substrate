@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from substrate.kernel.core.content import ChatMessage, TextBlock, ToolResultBlock
+from substrate.agents.context.tokens import estimate_tokens
+from substrate.kernel.core.content import ChatMessage
 from substrate.kernel.agent.context import CompactionStrategy
 from substrate.logger import setup_logging
 
@@ -70,34 +71,22 @@ class TokenBudgetComposedStrategy:
     async def compact(self, raw_history: list[ChatMessage]) -> list[ChatMessage]:
         current = raw_history
 
-        if self._estimate_tokens(current) <= self._budget:
+        if estimate_tokens(current, self._cpt) <= self._budget:
             return current
 
         for strategy in self._strategies:
             current = await strategy.compact(current)
-            tokens = self._estimate_tokens(current)
+            tokens = estimate_tokens(current, self._cpt)
             if tokens <= self._budget:
                 return current
 
         logger.warning(
             "TokenBudgetComposedStrategy: all strategies exhausted; "
             "estimated %d tokens still exceeds budget %d",
-            self._estimate_tokens(current),
+            estimate_tokens(current, self._cpt),
             self._budget,
         )
         return current
-
-    def _estimate_tokens(self, history: list[ChatMessage]) -> int:
-        total_chars = 0
-        for msg in history:
-            for block in msg.content:
-                if isinstance(block, TextBlock):
-                    total_chars += len(block.text)
-                elif isinstance(block, ToolResultBlock):
-                    for inner in block.content:
-                        if isinstance(inner, TextBlock):
-                            total_chars += len(inner.text)
-        return max(1, int(total_chars / self._cpt))
 
 
 __all__ = ["TokenBudgetComposedStrategy"]

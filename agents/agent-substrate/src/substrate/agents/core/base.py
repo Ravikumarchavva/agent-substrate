@@ -137,10 +137,12 @@ async def persist_turns(
 
 
 def final_text(messages: list[ChatMessage]) -> str:
-    """Return the text of the last assistant turn."""
+    """The answer text of the last assistant turn — its text blocks only, so
+    the model's reasoning trace and tool-call markers never leak into a reply
+    or into what a sub-agent hands back to its parent."""
     for msg in reversed(messages):
         if msg.role == Role.ASSISTANT:
-            return content_blocks_to_str(msg.content)  # type: ignore[arg-type]
+            return msg.text
     return ""
 
 

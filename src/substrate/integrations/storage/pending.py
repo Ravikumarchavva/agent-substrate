@@ -66,7 +66,7 @@ class PendingFileStore:
         """Delete every pending (not-yet-sent) attachment under *prefix*.
 
         Mirrors the real file store's ``delete_prefix`` (see
-        ``capabilities/gdpr/eraser.py::erase_user``) — without this, an
+        ``integrations/gdpr/eraser.py::erase_user``) — without this, an
         attachment staged in the composer but never sent survived a GDPR
         erasure request entirely, since it never touches ``ctx.file_store``
         until promotion. Same rooted-directory-walk approach as

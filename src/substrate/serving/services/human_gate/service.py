@@ -100,7 +100,7 @@ async def resolve_request(
     ``HITL_RESPONSE_CHANNEL``) and ``signal_bus`` (the durable Phase-1
     ``SignalBusProtocol`` — same ``hitl:{request_id}`` signal name
     ``AskHumanTool``'s signal-suspend path waits on via
-    ``ctx.sleep_until_signal``, see ``capabilities/tools/human_input.py``).
+    ``ctx.sleep_until_signal``, see ``integrations/tools/human_input.py``).
     Both are optional and independent; pass whichever your deployment needs.
     Requires ``req.run_id`` to be set (only true for requests created for a
     signal-suspended run — a bare Future-based approval request has no
@@ -141,7 +141,7 @@ async def resolve_request(
 
     # Durable signal — the mechanism AskHumanTool's signal-suspend path
     # actually waits on. "action" is what _shape_result() branches on
-    # (capabilities/tools/human_input.py); map from this service's own
+    # (integrations/tools/human_input.py); map from this service's own
     # status vocabulary ("answered"/"approved"/"rejected"/"cancelled") since
     # the two were built independently and don't share a payload shape.
     if signal_bus is not None and req.run_id:

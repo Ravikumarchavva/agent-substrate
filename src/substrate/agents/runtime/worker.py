@@ -184,8 +184,7 @@ class Worker:
             from substrate.agents.tools.toolbox import Toolbox
 
             registry = Toolbox()
-        from substrate.agents.tools.invoker import ToolInvoker
-        from substrate.kernel.tools.chain import ChainPolicy
+        from substrate.agents.tools.invoker import DIRECT_CALL_POLICY, ToolInvoker
         from substrate.kernel.tools import ToolRisk
 
         approval = getattr(agent, "approval_handler", None)
@@ -214,7 +213,7 @@ class Worker:
             approval = CallbackApprovalHandlerAdapter(approval)
 
         blob_store = getattr(agent, "blob_store", None)
-        policy = getattr(agent, "tool_policy", None) or ChainPolicy()
+        policy = getattr(agent, "tool_policy", None) or DIRECT_CALL_POLICY
         hooks = getattr(agent, "hooks", None)
 
         req_risk = getattr(agent, "approval_required_risk", None)

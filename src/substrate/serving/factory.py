@@ -222,7 +222,7 @@ def _init_file_store(cfg: SubstrateConfig) -> Any:
 
 def _init_pending_file_store(cfg: SubstrateConfig) -> Any:
     """Local-disk store for attachments not yet promoted into the real
-    file_store — see capabilities/storage/pending.py. Deliberately never
+    file_store — see integrations/storage/pending.py. Deliberately never
     S3/SeaweedFS-backed, regardless of FILE_STORE_BACKEND: an unsent
     attachment must not touch permanent storage at all."""
     from substrate.integrations.storage.pending import PendingFileStore
@@ -319,7 +319,7 @@ async def init_infrastructure(
     pending_file_store = _init_pending_file_store(cfg)
     # Curated OKF bundles ride on the same object store as files (one
     # bucket, one erasure path, one quota) but under their own key prefix,
-    # which the sandbox never mounts — see capabilities/artifacts/store.py.
+    # which the sandbox never mounts — see integrations/artifacts/store.py.
     from substrate.integrations.artifacts import ArtifactStore
 
     artifact_store = ArtifactStore(file_store)
@@ -433,7 +433,7 @@ async def init_tool_registry(
     now always wraps the sandbox runtime, not just for object-storage
     backends.
     ``skill_manager`` registers the ``skills`` tool (list/activate SKILL.md
-    packages under ``capabilities/tools/skills/``) — without it the model has
+    packages under ``integrations/tools/skills/``) — without it the model has
     no way to discover or read a skill's instructions, so a skill existing on
     disk does nothing.
     """
@@ -1082,7 +1082,7 @@ async def build_short_term_memory(
 ) -> Any:
     """Build and connect a durable ShortTermMemory.
 
-    Uses Postgres + Redis when available, otherwise LocalFileSessionStore in local_path.
+    Uses Postgres + Redis when available, otherwise LocalFilesystemShortTermMemory in local_path.
     """
     from substrate.integrations.memory.factory import (
         build_short_term_memory as _build,
@@ -1285,7 +1285,7 @@ def build_session_graph_store(
     alongside ``build_session_index_vector_store``/``build_page_index_memory``
     above. Same per-(tenant, user) factory shape and same reason (the
     namespace/path needs both ids). Deliberately separate from the shared
-    tenant-level ``AGEGraphStore`` (``capabilities/graph/age_store.py``)
+    tenant-level ``AGEGraphStore`` (``integrations/graph/age_store.py``)
     used for any standing, cross-user knowledge graph — different scale,
     different lifecycle.
 
@@ -1422,8 +1422,8 @@ def build_memory_tool(
 
 def _xml_escape(text: str) -> str:
     """Minimal XML escaping — same helper shape as
-    ``capabilities/tools/skills/_manager.py``'s (not imported: this module
-    lives orthogonally so it *could* reach into capabilities/, but there's
+    ``integrations/tools/skills/_manager.py``'s (not imported: this module
+    lives orthogonally so it *could* reach into integrations/, but there's
     no reason to couple to a tools/ internal for four lines of escaping)."""
     return (
         text.replace("&", "&amp;")
@@ -1439,7 +1439,7 @@ async def build_user_memory_context_block(
     """``<user_context>`` block appended to the system prompt — same
     labeled-block-appended-to-system-prompt pattern as
     ``SkillManager.available_skills_xml()``/``system_prompt_suffix()``
-    (``capabilities/tools/skills/_manager.py``), not an inline merge into
+    (``integrations/tools/skills/_manager.py``), not an inline merge into
     the base instructions.
 
     Deliberately framed as background, not instruction: this content
@@ -1452,7 +1452,7 @@ async def build_user_memory_context_block(
     Lives here (not ``agents/factory.py``) because it calls
     ``DurableMemoryStore.list_all()`` — a concrete method, not part of the
     ``LongTermMemory`` kernel Protocol — and agents/ (L1) cannot import
-    capabilities/ (L2) concrete classes; this module is the sanctioned
+    integrations/ (L2) concrete classes; this module is the sanctioned
     meeting point for exactly that kind of glue (see its own module
     docstring). Returns "" when there's no user or no standing memories.
     """

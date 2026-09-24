@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 from substrate.agents.core.react import ReActAgent
 from substrate.agents.runtime import Runtime
 from substrate.kernel.core.content import TextBlock
@@ -14,6 +15,7 @@ class _StubLLM:
     """Streams a fixed assistant answer (deltas + completion), no tool calls."""
 
     model = "stub"
+    capabilities = ModelCapabilities(model_id="stub")
 
     def __init__(self, answer: str) -> None:
         self._answer = answer
@@ -35,6 +37,7 @@ async def test_run_returns_final_text() -> None:
 async def test_run_reports_failure() -> None:
     class _BoomLLM:
         model = "boom"
+        capabilities = ModelCapabilities(model_id="boom")
 
         async def generate_stream(self, messages, *, options, ctx=None):
             raise RuntimeError("model exploded")

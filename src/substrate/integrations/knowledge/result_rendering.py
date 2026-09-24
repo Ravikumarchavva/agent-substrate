@@ -3,7 +3,7 @@
 Both ``KnowledgeSearchTool`` (project knowledge base) and
 ``SessionDocumentSearchTool`` (a user's chat-uploaded documents) need the
 same thing done to a list of ``SearchResult``s: number them with stable,
-clickable citations (``capabilities/knowledge/citations.py``), attach
+clickable citations (``integrations/knowledge/citations.py``), attach
 chart/table images without re-sending ones already shown earlier in the
 conversation, and format the passages into one text block the model can
 reason over and cite ``[n]`` from. ``render_search_results`` is that shared
@@ -63,7 +63,7 @@ def render_search_results(
         label = f"[{index}] {citation.label()}" if citation else "(unlabelled)"
         # A chart/table hit's content IS the image — forward the real
         # MediaBlock into the tool result (same path
-        # capabilities/tools/ai/image_generator.py already uses) so a
+        # integrations/tools/ai/image_generator.py already uses) so a
         # vision-capable model sees the actual pixels, not just OCR
         # text of it.
         #

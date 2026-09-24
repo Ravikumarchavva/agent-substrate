@@ -18,7 +18,7 @@ depending on the narrower Protocol instead of this one.
 
 It also declares three sync methods — ``register_run``/``agent_for``/
 ``wakeup_for`` — that every real backend (``InMemoryScheduler``,
-``LocalScheduler``, ``infrastructure/runtime/scheduler.py::Scheduler``)
+``LocalScheduler``, ``integrations/runtime/scheduler.py::Scheduler``)
 implements identically, but that live on neither kernel Protocol. They're
 an in-process convenience (cheap synchronous registry reads/writes used by
 ``Runtime``/``Supervisor``/``SignalBus`` internals, not part of the

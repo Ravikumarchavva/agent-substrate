@@ -120,9 +120,13 @@ src/substrate/
 │   │             Protocol can possibly need — local filesystem/SQLite for storage/runtime,
 │   │             one OpenAI-compatible chat client + one local embedding client for LLM.
 │   ├── core/             ReActAgent, OrchestratorAgent (+ SubAgentConfig), UserProxyAgent,
-│   │                     BaseAgent, InformationAgent, PersonalFeedAgent
-│   ├── context/          AgentContext, LocalFilesystemHistoryProvider, compaction/ strategies
-│   ├── llm/              client.py/models.py (kernel re-export + ModelProfile registry),
+│   │                     BaseAgent
+│   ├── context/          AgentContext, ContextConfig, tokens.py (the one token estimator —
+│   │                     counts tool args, tool results and media), compaction/ strategies
+│   ├── document/         LocalDocumentExtractor (pdfplumber/pypdf + Tesseract fallback),
+│   │                     LocalFilesystemDocumentStore — L1 defaults for the kernel document Protocols
+│   ├── llm/              client.py/models.py (kernel re-export + ModelProfile registry,
+│   │                     resolve_capabilities), modalities.py (fit_to_capabilities),
 │   │                     chat_client.py (OpenAIChatCompletionClient — L1 default chat
 │   │                     client), embedding_client.py (SentenceTransformersEmbeddingClient —
 │   │                     L1 default embedding client, local model, no external API)
@@ -135,7 +139,9 @@ src/substrate/
 │   ├── runtime/          Runtime facade + Worker + backends/ (InMemory* + Local* SQLite —
 │   │                     build_local_runtime() wires the 6 SQLite backends together)
 │   ├── tools/            Toolbox (ToolRegistry impl), ToolInvoker (chain dispatch, L1)
-│   ├── storage/          history, graph, vector, tasks + local_object_store.py
+│   ├── storage/          history, graph, vector, tasks + local_object_store.py, fs.py
+│   │                     (atomic_write_json + safe_name — every Local* store builds paths
+│   │                     through safe_name, ids are untrusted)
 │   │                     (WorkspaceFileStore — L1 default ObjectStore),
 │   │                     local_short_term_memory.py, local_memory_store.py (L1 defaults
 │   │                     for the kernel ShortTermMemory / MemoryStore Protocols)
@@ -281,8 +287,9 @@ serving  =  orthogonal (cross-layer by design)
 | `serving cannot import agents or integrations-that-were-capabilities` | serving/'s routes and services don't reach past its own `factory.py`/`research_orchestrator.py` composition root — those two files are exempt by design |
 
 **Kernel invariants** (`tests/architecture/test_kernel_invariants.py`):
-- LOC ceiling (6k) and file-count ceiling (45) — catch accidental feature drift
-- No concrete implementations — only Protocols, ABCs, dataclasses, enums
+- Flat layout (only the permitted subpackages), no upward imports, no vendor strings
+  (`gpt-`, `claude-`, …), pydantic as the only third-party dependency, wire types round-trip
+- Contracts only — no working implementations (there is no LOC/file-count ceiling; nothing enforces one)
 
 `src/substrate/kernel/` is **frozen** — new contracts belong there only if they have zero external dependencies and are needed by multiple layers. New zero-infra defaults go in `agents/`, new production-infra backends/vendors/tools go in `integrations/`.
 
@@ -320,6 +327,12 @@ class MyTool:
         return ToolExecutionResult(content=[TextBlock(text="result")])
 ```
 
+A tool declares `concurrency_safe = True` when several calls to it can run at the same
+time (pure reads); a turn's tool calls then run concurrently and are journaled replay-safely
+(`ctx.tool_batch`). Anything that doesn't declare it runs one call at a time. A tool that
+needs to know whose work it is reads `scope_of(ctx)` (tenant/user/thread/branch/agent —
+`kernel.agent.runtime_context.RunScope`), never a global and never a model-supplied argument.
+
 `substrate.kernel.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
 `HostedTool` (provider-executed, `provider_specs`), `ProviderDefinedTool`
 (provider call-shape + local `handle_call()`). Use `is_hosted_tool` /
@@ -331,6 +344,12 @@ encoder type; each provider client builds its own dicts.
 Placed at `integrations/tools/my_tool/tool.py` — `CatalogScanner` discovers it automatically.
 
 ### LLM client
+
+Every `LLMClient` exposes `capabilities: ModelCapabilities` (input modalities, context window,
+prices; resolved from the model registry, or pass `capabilities=` for an unlisted local model).
+It never sends content outside `capabilities.input_modalities` — unsupported media becomes a
+short text note. `GenerationOptions.reasoning` (`ReasoningEffort`) is the one typed control
+for reasoning/thinking; each vendor client maps it onto its own parameter.
 
 ```python
 from substrate.integrations.llm import LLMFactory

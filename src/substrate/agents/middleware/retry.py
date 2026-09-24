@@ -4,11 +4,19 @@ import asyncio
 import random
 from typing import Callable, Awaitable, ClassVar
 
+from substrate.agents.llm.errors import classify_llm_error
+from substrate.kernel.exceptions import KernelError, PermanentError, TransientError
 from substrate.logger import setup_logging
 from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.kernel.agent.middleware import MiddlewareStage
 
 logger = setup_logging()
+
+
+def _worth_retrying(exc: Exception) -> bool:
+    if isinstance(exc, KernelError):
+        return isinstance(exc, TransientError)
+    return not isinstance(classify_llm_error(exc), PermanentError)
 
 
 def _backoff(attempt: int, base: float, max_delay: float, jitter: float) -> float:
@@ -17,7 +25,12 @@ def _backoff(attempt: int, base: float, max_delay: float, jitter: float) -> floa
 
 
 class RetryMiddleware:
-    """Retries LLM execution on transient errors using exponential backoff."""
+    """Retries LLM execution on transient errors using exponential backoff.
+
+    Never retries what can't succeed on a second try: a kernel error that is
+    not transient (a guardrail or budget stop) or a request the provider will
+    always reject (bad key, malformed request, context too long).
+    """
 
     stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.CHAT})
 
@@ -45,6 +58,8 @@ class RetryMiddleware:
                 await call_next()
                 return
             except self.retryable_exceptions as exc:
+                if not _worth_retrying(exc):
+                    raise
                 if attempt >= self.max_retries:
                     logger.warning(
                         "RetryMiddleware: max retries (%d) exhausted", self.max_retries

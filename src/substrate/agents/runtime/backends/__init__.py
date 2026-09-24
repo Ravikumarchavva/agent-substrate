@@ -4,7 +4,7 @@
 Stage 0 (``InMemory*``): pure asyncio data structures, gone on restart.
 No-infra-durable (``Local*``): the same kernel Protocols, backed by one
 SQLite file — see ``_local_db.py``'s module docstring. The network-
-distributed durable tier (Postgres) lives in ``infrastructure/runtime/``
+distributed durable tier (Postgres) lives in ``integrations/runtime/``
 instead, since it needs infra-level pool management ``local``'s zero-
 dependency file doesn't.
 """

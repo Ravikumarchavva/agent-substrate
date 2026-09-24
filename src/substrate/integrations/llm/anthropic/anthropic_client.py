@@ -8,8 +8,18 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, cast
 
 from anthropic import AsyncAnthropic
 
+from substrate.agents.llm.chat_client import parse_tool_arguments
+from substrate.agents.llm.modalities import fit_to_capabilities
+from substrate.agents.llm.models import resolve_capabilities
 from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
+from substrate.kernel.llm import (
+    GenerationOptions,
+    LLMClient,
+    LLMResponse,
+    ModelCapabilities,
+    ReasoningEffort,
+    Usage,
+)
 from substrate.kernel import ChatMessage, ContentBlock
 from substrate.kernel.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
 from substrate.kernel.core.content import (
@@ -65,9 +75,11 @@ class AnthropicClient(LLMClient):
         api_key: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        capabilities: Optional[ModelCapabilities] = None,
         **kwargs: Any,
     ):
         self.model = model
+        self.capabilities = capabilities or resolve_capabilities(model)
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.api_key = api_key
@@ -82,7 +94,7 @@ class AnthropicClient(LLMClient):
 
         Delegates to the centralised Anthropic encoder.
         """
-        return _encode_messages(messages)
+        return _encode_messages(fit_to_capabilities(messages, self.capabilities))
 
     def _serialize_tools(
         self, tools: Optional[list[dict[str, Any]]]
@@ -92,6 +104,84 @@ class AnthropicClient(LLMClient):
         Delegates to the centralised Anthropic encoder.
         """
         return _encode_tools(tools)
+
+    @staticmethod
+    def _usage(
+        input_tokens: int, cache_read: int, cache_creation: int, output_tokens: int
+    ) -> Usage:
+        """Anthropic's ``input_tokens`` excludes cached tokens; the kernel's
+        ``Usage.input_tokens`` includes them (``cached_tokens`` is a subset)."""
+        return Usage(
+            input_tokens=input_tokens + cache_read + cache_creation,
+            cached_tokens=cache_read,
+            output_tokens=output_tokens,
+        )
+
+    @staticmethod
+    def _fit_max_tokens(params: dict[str, Any]) -> None:
+        """The API rejects ``max_tokens`` <= the thinking budget."""
+        thinking = params.get("thinking") or {}
+        budget = thinking.get("budget_tokens")
+        if budget and params["max_tokens"] <= budget:
+            params["max_tokens"] = budget + 4096
+
+    _EFFORT_BUDGET = {
+        ReasoningEffort.LOW: 2_048,
+        ReasoningEffort.MEDIUM: 8_192,
+        ReasoningEffort.HIGH: 24_000,
+    }
+
+    def _thinking_for(
+        self, options: GenerationOptions, kwargs: dict[str, Any]
+    ) -> Optional[dict[str, Any]]:
+        """Extended-thinking config: an explicit ``options.extra`` value wins
+        over the typed ``options.reasoning`` level."""
+        explicit = self._build_thinking_param(kwargs)
+        if explicit:
+            return explicit
+        effort = options.reasoning
+        if effort is None or effort == ReasoningEffort.OFF:
+            return None
+        if not self.capabilities.supports_reasoning:
+            return None
+        return {"type": "enabled", "budget_tokens": self._EFFORT_BUDGET[effort]}
+
+    def _build_params(
+        self, messages: list[ChatMessage], options: GenerationOptions
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = dict(options.extra)
+        _, conversation = self._serialize_messages(messages)
+        params: dict[str, Any] = {
+            "model": self.model,
+            "messages": conversation,
+            "max_tokens": options.max_tokens or self.max_tokens or 8192,
+        }
+        if options.system_instructions:
+            params["system"] = [
+                {
+                    "type": "text",
+                    "text": options.system_instructions,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+
+        thinking = self._thinking_for(options, kwargs)
+        if thinking:
+            params["thinking"] = thinking
+            self._fit_max_tokens(params)
+        else:
+            params["temperature"] = (
+                options.temperature if options.temperature is not None else self.temperature
+            )
+
+        tools = self._serialize_tools(_tools_from_options(options))
+        if tools:
+            params["tools"] = tools
+            choice = self._normalize_tool_choice(options.tool_choice)
+            # The API rejects a forced tool (any/tool) while thinking is on.
+            if choice and not (thinking and choice.get("type") in ("any", "tool")):
+                params["tool_choice"] = choice
+        return params
 
     def _build_thinking_param(self, kwargs: dict[str, Any]) -> Optional[dict[str, Any]]:
         """Build the ``thinking`` parameter from kwargs.
@@ -145,44 +235,8 @@ class AnthropicClient(LLMClient):
         ctx: RunMeta | None = None,
     ) -> LLMResponse:
         """Generate a single response from Anthropic using Messages API."""
-        tool_dicts = _tools_from_options(options)
         response_format = options.response_format
-        tool_choice = options.tool_choice
-        kwargs: dict[str, Any] = dict(options.extra)
-        _, conversation = self._serialize_messages(messages)
-        system = options.system_instructions
-
-        thinking_param = self._build_thinking_param(kwargs)
-
-        params: dict[str, Any] = {
-            "model": self.model,
-            "messages": conversation,
-            "max_tokens": options.max_tokens or self.max_tokens or 8192,
-        }
-
-        if system:
-            params["system"] = [
-                {
-                    "type": "text",
-                    "text": system,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ]
-
-        if thinking_param:
-            params["thinking"] = thinking_param
-        else:
-            if options.temperature is not None:
-                params["temperature"] = options.temperature
-            else:
-                params["temperature"] = self.temperature
-
-        anthropic_tools = self._serialize_tools(tool_dicts)
-        normalized_tool_choice = self._normalize_tool_choice(tool_choice)
-        if anthropic_tools:
-            params["tools"] = anthropic_tools
-            if normalized_tool_choice:
-                params["tool_choice"] = normalized_tool_choice
+        params = self._build_params(messages, options)
 
         response = await self.client.messages.create(**params)
 
@@ -205,15 +259,13 @@ class AnthropicClient(LLMClient):
                 final_blocks.append(TextBlock(text=block.text))
             elif block.type == "tool_use":
                 has_tool_calls = True
+                arguments, error = parse_tool_arguments(block.input)
                 final_blocks.append(
                     ToolUseBlock(
                         call_id=block.id,
                         tool_name=block.name,
-                        arguments=(
-                            block.input
-                            if isinstance(block.input, dict)
-                            else json.loads(block.input)
-                        ),
+                        arguments=arguments,
+                        arguments_error=error,
                     )
                 )
 
@@ -235,10 +287,11 @@ class AnthropicClient(LLMClient):
 
         u = getattr(response, "usage", None)
         usage = (
-            Usage(
-                input_tokens=getattr(u, "input_tokens", 0) or 0,
-                cached_tokens=getattr(u, "cache_read_input_tokens", 0) or 0,
-                output_tokens=getattr(u, "output_tokens", 0) or 0,
+            self._usage(
+                getattr(u, "input_tokens", 0) or 0,
+                getattr(u, "cache_read_input_tokens", 0) or 0,
+                getattr(u, "cache_creation_input_tokens", 0) or 0,
+                getattr(u, "output_tokens", 0) or 0,
             )
             if u
             else Usage()
@@ -260,44 +313,8 @@ class AnthropicClient(LLMClient):
         *,
         options: GenerationOptions,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
-        tool_dicts = _tools_from_options(options)
-        tool_choice = options.tool_choice
         response_format = options.response_format
-        kwargs: dict[str, Any] = dict(options.extra)
-        _, conversation = self._serialize_messages(messages)
-        system = options.system_instructions
-
-        thinking_param = self._build_thinking_param(kwargs)
-
-        params: dict[str, Any] = {
-            "model": self.model,
-            "messages": conversation,
-            "max_tokens": options.max_tokens or self.max_tokens or 8192,
-        }
-
-        if system:
-            params["system"] = [
-                {
-                    "type": "text",
-                    "text": system,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ]
-
-        if thinking_param:
-            params["thinking"] = thinking_param
-        else:
-            if options.temperature is not None:
-                params["temperature"] = options.temperature
-            else:
-                params["temperature"] = self.temperature
-
-        anthropic_tools = self._serialize_tools(tool_dicts)
-        normalized_tool_choice = self._normalize_tool_choice(tool_choice)
-        if anthropic_tools:
-            params["tools"] = anthropic_tools
-            if normalized_tool_choice:
-                params["tool_choice"] = normalized_tool_choice
+        params = self._build_params(messages, options)
 
         # Accumulate for final message
         text_parts: list[str] = []
@@ -312,9 +329,7 @@ class AnthropicClient(LLMClient):
         current_thinking_parts: list[str] = []
         current_thinking_signature: Optional[str] = None
         in_thinking_block = False
-        _input_tokens = 0
-        _output_tokens = 0
-        stop_reason: Optional[str] = None
+        input_tokens = cache_read = cache_creation = output_tokens = 0
 
         async with self.client.messages.stream(**params) as stream:
             async for event in stream:
@@ -322,12 +337,11 @@ class AnthropicClient(LLMClient):
                 event_type = event_any.type
 
                 if event_type == "message_start":
-                    if hasattr(event_any, "message") and hasattr(
-                        event_any.message, "usage"
-                    ):
-                        _input_tokens = getattr(
-                            event_any.message.usage, "input_tokens", 0
-                        )
+                    u = getattr(getattr(event_any, "message", None), "usage", None)
+                    if u is not None:
+                        input_tokens = getattr(u, "input_tokens", 0) or 0
+                        cache_read = getattr(u, "cache_read_input_tokens", 0) or 0
+                        cache_creation = getattr(u, "cache_creation_input_tokens", 0) or 0
 
                 elif event_type == "content_block_start":
                     block = event_any.content_block
@@ -377,19 +391,13 @@ class AnthropicClient(LLMClient):
                         current_thinking_parts = []
                         current_thinking_signature = None
                     elif current_tool_id and current_tool_name:
-                        try:
-                            args = (
-                                json.loads(current_tool_json)
-                                if current_tool_json
-                                else {}
-                            )
-                        except json.JSONDecodeError:
-                            args = {}
+                        args, args_error = parse_tool_arguments(current_tool_json)
                         collected_tool_calls.append(
                             ToolUseBlock(
                                 call_id=current_tool_id,
                                 tool_name=current_tool_name,
                                 arguments=args,
+                                arguments_error=args_error,
                             )
                         )
                         current_tool_id = None
@@ -398,13 +406,7 @@ class AnthropicClient(LLMClient):
 
                 elif event_type == "message_delta":
                     if hasattr(event_any, "usage"):
-                        _output_tokens = getattr(event_any.usage, "output_tokens", 0)
-                    stop_reason = getattr(event_any, "delta", None)
-                    if stop_reason and hasattr(stop_reason, "stop_reason"):
-                        stop_reason = stop_reason.stop_reason  # type: ignore[attr-defined]
-
-                elif event_type == "message_stop":
-                    pass  # Handled below
+                        output_tokens = getattr(event_any.usage, "output_tokens", 0) or 0
 
         # Build final message. Anthropic requires thinking blocks to appear
         # first in the assistant turn (before text/tool_use) when continuing a
@@ -433,7 +435,10 @@ class AnthropicClient(LLMClient):
                     final_text[:200],
                 )
 
-        yield CompletionEvent(content=final_blocks)
+        yield CompletionEvent(
+            content=final_blocks,
+            usage=self._usage(input_tokens, cache_read, cache_creation, output_tokens),
+        )
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
         """Count tokens using Anthropic's token counting API."""

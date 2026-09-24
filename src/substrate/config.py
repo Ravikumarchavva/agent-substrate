@@ -142,13 +142,13 @@ class SubstrateConfig(BaseSettings):
     # Pinecone support was removed as dead weight (never the standard
     # path); the per-user session-document index already uses LanceDB as
     # this project's own self-hosted alternative where a second backend
-    # was actually needed (capabilities/vector/lancedb_store.py).
+    # was actually needed (integrations/vector/lancedb_store.py).
     RAG_BACKEND: str = "local"
     RAG_TEXT_EMBEDDING_DIM: int = 1536
     RAG_IMAGE_EMBEDDING_DIM: int = 2048
     RAG_MAX_DOC_PAGES: int = 300
     RAG_MAX_DOC_MB: int = 5
-    # None (default) means "let capabilities/knowledge/chunking.py's
+    # None (default) means "let integrations/knowledge/chunking.py's
     # recommend_chunk_params(EMBEDDING_MODEL) pick a size informed by the
     # configured embedding model's real max input token limit" -- an
     # explicit value here always wins over that (same explicit-always-wins
@@ -168,7 +168,7 @@ class SubstrateConfig(BaseSettings):
     # Set SESSION_INDEX_NAMESPACE_URI to point at a Lance Namespace REST
     # catalog instead (e.g. SeaweedFS's Lance Catalog,
     # `weed server -s3.port.lance=9101`) — see
-    # capabilities/vector/lancedb_store.py's module docstring for what was
+    # integrations/vector/lancedb_store.py's module docstring for what was
     # verified about that mode (namespace_path shape, credential handling).
     SESSION_INDEX_LOCAL_PATH: str = ""
     SESSION_INDEX_NAMESPACE_URI: str = ""

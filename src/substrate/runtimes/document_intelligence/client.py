@@ -45,7 +45,7 @@ class ExtractedImage(BaseModel):
 class ExtractedPageText(BaseModel):
     """One page's plain text — kept page-separated (not pre-joined) so
     callers like LocalRagBackend can build one Document per page, which is
-    what capabilities/knowledge/citations.py needs for page-accurate
+    what integrations/knowledge/citations.py needs for page-accurate
     citations."""
 
     page_number: int

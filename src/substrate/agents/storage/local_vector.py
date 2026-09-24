@@ -19,33 +19,18 @@ for local dev / experimentation — it does NOT require Postgres/pgvector.
 
 from __future__ import annotations
 
-import json
 import os
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from urllib.parse import unquote
+
+from substrate.agents.storage.fs import atomic_write_json, safe_name
 from substrate.agents.storage.vector import cosine_similarity
 from substrate.kernel.storage.vector import Document, SearchResult
 
 if TYPE_CHECKING:
     from substrate.kernel.llm import EmbeddingClient
-
-
-def _atomic_write(path: Path, data: dict) -> None:
-    """Write JSON to a file atomically (tmp → rename) to avoid corruption."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=".tmp_")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, default=str)
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
 
 
 class LocalFilesystemVectorStore:
@@ -74,13 +59,13 @@ class LocalFilesystemVectorStore:
     # ── Internal helpers ─────────────────────────────────────────────────
 
     def _doc_path(self, collection: str, doc_id: str) -> Path:
-        return self._root / "documents" / collection / f"{doc_id}.json"
+        return self._collection_dir(collection) / f"{safe_name(doc_id)}.json"
 
     def _collection_dir(self, collection: str) -> Path:
-        return self._root / "documents" / collection
+        return self._root / "documents" / safe_name(collection)
 
     def _save_doc(self, collection: str, doc: Document) -> None:
-        _atomic_write(self._doc_path(collection, doc.id), doc.model_dump(mode="json"))
+        atomic_write_json(self._doc_path(collection, doc.id), doc.model_dump(mode="json"))
 
     def _load_doc(self, collection: str, doc_id: str) -> Document | None:
         p = self._doc_path(collection, doc_id)
@@ -211,7 +196,7 @@ class LocalFilesystemVectorStore:
         docs_dir = self._root / "documents"
         if not docs_dir.exists():
             return []
-        return [p.name for p in docs_dir.iterdir() if p.is_dir()]
+        return [unquote(p.name) for p in docs_dir.iterdir() if p.is_dir()]
 
     async def delete_collection(self, collection: str) -> int:
         coll_dir = self._collection_dir(collection)

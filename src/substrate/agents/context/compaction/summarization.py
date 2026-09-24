@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from substrate.agents.context.tokens import (
+    DEFAULT_CHARS_PER_TOKEN,
+    estimate_message_tokens,
+    estimate_tokens,
+)
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.llm import GenerationOptions
 from substrate.logger import setup_logging
@@ -30,8 +35,6 @@ _UPDATE_SYSTEM_PROMPT = (
 
 _SUMMARY_PREFIX = "[Earlier conversation summary]"
 
-_DEFAULT_CPT = 4.0
-
 
 class SummarizationCompaction:
     """Summarizes old messages with an LLM, keeping recent turns verbatim.
@@ -55,7 +58,7 @@ class SummarizationCompaction:
         model: LLMClient,
         recent_token_budget: int = 32_000,
         min_old_tokens: int = 1_000,
-        chars_per_token: float = _DEFAULT_CPT,
+        chars_per_token: float = DEFAULT_CHARS_PER_TOKEN,
     ) -> None:
         self._model = model
         self._recent_token_budget = recent_token_budget
@@ -65,7 +68,7 @@ class SummarizationCompaction:
     async def compact(self, raw_history: list[ChatMessage]) -> list[ChatMessage]:
         old, recent = self._split(raw_history)
 
-        if _estimate_tokens_list(old, self._cpt) < self._min_old_tokens:
+        if estimate_tokens(old, self._cpt) < self._min_old_tokens:
             return raw_history
 
         leading_summary: str | None = None
@@ -85,7 +88,7 @@ class SummarizationCompaction:
         recent: list[ChatMessage] = []
         tokens = 0
         for msg in reversed(history):
-            t = _estimate_tokens(msg, self._cpt)
+            t = estimate_message_tokens(msg, self._cpt)
             if tokens + t > self._recent_token_budget:
                 break
             recent.insert(0, msg)
@@ -127,15 +130,6 @@ class SummarizationCompaction:
             )
 
         return summary
-
-
-def _estimate_tokens(msg: ChatMessage, cpt: float) -> int:
-    chars = sum(len(b.text) for b in msg.content if isinstance(b, TextBlock))
-    return max(1, int(chars / cpt))
-
-
-def _estimate_tokens_list(messages: list[ChatMessage], cpt: float) -> int:
-    return sum(_estimate_tokens(m, cpt) for m in messages)
 
 
 def _is_summary(msg: ChatMessage) -> bool:

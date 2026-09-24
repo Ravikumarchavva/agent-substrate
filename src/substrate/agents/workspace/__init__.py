@@ -21,19 +21,13 @@ from substrate.agents.workspace.cas import BlobCAS
 from substrate.agents.workspace.local_workspace_store import LocalFilesystemWorkspaceStore
 from substrate.agents.workspace.scope import (
     WorkspaceScope,
-    current_branch_id,
-    current_scope,
-    current_tenant_id,
-    current_user_id,
+    workspace_scope,
 )
 from substrate.agents.workspace.snapshots import checkout_branch, commit_turn
 
 __all__ = [
     "WorkspaceScope",
-    "current_user_id",
-    "current_tenant_id",
-    "current_branch_id",
-    "current_scope",
+    "workspace_scope",
     "BlobCAS",
     "checkout_branch",
     "commit_turn",

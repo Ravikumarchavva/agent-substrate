@@ -1,11 +1,11 @@
 """Workspace-backed file store — a tenant-scoped directory tree on shared storage.
 
 The canonical zero-infra ``ObjectStore`` (``kernel/storage/objects.py``)
-implementation — moved here from ``capabilities/storage/`` because it needs
+implementation — moved here from ``integrations/storage/`` because it needs
 nothing beyond the local filesystem, same as every other storage Protocol's
 L1 default (``LocalFilesystemHistoryProvider``, `LocalFilesystemGraphStore`,
 etc.). ``agents/workspace/``'s ``BlobCAS`` composes with this by default;
-``capabilities/storage/s3.py::S3FileStore`` is the L2 production upgrade for
+``integrations/storage/s3.py::S3FileStore`` is the L2 production upgrade for
 the same Protocol.
 
 Server-side only: the tree lives at ``root`` (a local dir in monolith dev, a
@@ -29,7 +29,7 @@ prefers over a raw user id. This check protects against accidental runaway
 usage, not a hostile actor with another path onto the same volume. The hard
 isolation boundary against other tenants is the k8s ``subPath`` mount into
 each sandbox pod (see
-``capabilities/tools/code_interpreter/code_interpreter/sandbox_service.py``),
+``integrations/tools/code_interpreter/code_interpreter/sandbox_service.py``),
 not this quota check.
 """
 

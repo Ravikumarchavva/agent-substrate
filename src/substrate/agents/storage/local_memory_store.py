@@ -3,7 +3,7 @@
 Stores data in a local directory tree (default: ``./data/db/memory``), the
 same "create a folder on first use" convention as every other ``Local*``
 store in this package. The canonical zero-infra ``MemoryStore``
-(``kernel/storage/memory.py``) default — ``capabilities/memory/durable_memory_store.py``
+(``kernel/storage/memory.py``) default — ``integrations/memory/durable_memory_store.py``
 (Postgres) is the L2 production upgrade for the same Protocol.
 
 Layout::
@@ -17,7 +17,7 @@ rest (``user_id``/``agent_id``/``session_id``/``categories``/``statuses``/
 ``metadata_filter``) in memory, same "brute force is correct at local
 scale" reasoning as ``local_vector.py``'s ``search()``.
 
-Scoring matches ``capabilities/memory/durable_memory_store.py`` (the
+Scoring matches ``integrations/memory/durable_memory_store.py`` (the
 Postgres reference implementation) exactly: substring/keyword match against
 ``spec.text_query`` when given (its full-text-search equivalent), else a
 uniform score ordered by recency. ``MemoryRecord`` carries no ``embedding``
@@ -28,34 +28,19 @@ store either, so this store doesn't invent a different contract.
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
+from urllib.parse import unquote
+
+from substrate.agents.storage.fs import atomic_write_json, safe_name
 from substrate.kernel.storage.memory import (
     MemoryMatch,
     MemoryNamespace,
     MemoryQuery,
     MemoryRecord,
 )
-
-
-def _atomic_write(path: Path, data: dict) -> None:
-    """Write JSON to a file atomically (tmp -> rename) to avoid corruption."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=".tmp_")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, default=str)
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
 
 
 class LocalFilesystemMemoryStore:
@@ -67,10 +52,10 @@ class LocalFilesystemMemoryStore:
     # ── Internal helpers ─────────────────────────────────────────────────
 
     def _tenant_dir(self, tenant_id: str) -> Path:
-        return self._root / "records" / tenant_id
+        return self._root / "records" / safe_name(tenant_id)
 
     def _record_path(self, tenant_id: str, record_id: str) -> Path:
-        return self._tenant_dir(tenant_id) / f"{record_id}.json"
+        return self._tenant_dir(tenant_id) / f"{safe_name(record_id)}.json"
 
     def _find_record(self, record_id: str) -> tuple[str, Path] | None:
         """Locate a record by id without knowing its tenant up front —
@@ -83,9 +68,9 @@ class LocalFilesystemMemoryStore:
         for tenant_dir in records_dir.iterdir():
             if not tenant_dir.is_dir():
                 continue
-            p = tenant_dir / f"{record_id}.json"
+            p = tenant_dir / f"{safe_name(record_id)}.json"
             if p.exists():
-                return tenant_dir.name, p
+                return unquote(tenant_dir.name), p
         return None
 
     def _load(self, path: Path) -> MemoryRecord:
@@ -93,7 +78,7 @@ class LocalFilesystemMemoryStore:
 
     def _save(self, record: MemoryRecord) -> None:
         path = self._record_path(record.namespace.tenant_id, record.id)
-        _atomic_write(path, json.loads(record.model_dump_json()))
+        atomic_write_json(path, json.loads(record.model_dump_json()))
 
     def _load_tenant_records(self, tenant_id: str) -> list[tuple[MemoryRecord, float]]:
         """Return ``(record, mtime)`` pairs — file mtime stands in for

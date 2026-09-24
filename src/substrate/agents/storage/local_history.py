@@ -23,13 +23,11 @@ for local dev / experimentation — it does NOT require Postgres or Redis.
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Any
 
+from substrate.agents.storage.fs import atomic_write_json, safe_name
 from substrate.kernel.exceptions import (
     BranchAlreadyExistsError,
     BranchHeadConflictError,
@@ -43,22 +41,6 @@ from substrate.kernel.storage.history import (
 )
 
 _UNSET: Any = object()
-
-
-def _atomic_write(path: Path, data: dict) -> None:
-    """Write JSON to a file atomically (tmp → rename) to avoid corruption."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=".tmp_")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, default=str)
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
 
 
 class LocalFilesystemHistoryProvider:
@@ -81,14 +63,17 @@ class LocalFilesystemHistoryProvider:
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
+    def _session_dir(self, session_id: str) -> Path:
+        return self._root / "sessions" / safe_name(session_id)
+
     def _node_path(self, node_id: str) -> Path:
-        return self._root / "nodes" / f"{node_id}.json"
+        return self._root / "nodes" / f"{safe_name(node_id)}.json"
 
     def _branch_path(self, session_id: str, branch_id: str) -> Path:
-        return self._root / "sessions" / session_id / "branches" / f"{branch_id}.json"
+        return self._session_dir(session_id) / "branches" / f"{safe_name(branch_id)}.json"
 
     def _checkpoint_path(self, session_id: str, checkpoint_id: str) -> Path:
-        return self._root / "sessions" / session_id / "checkpoints" / f"{checkpoint_id}.json"
+        return self._session_dir(session_id) / "checkpoints" / f"{safe_name(checkpoint_id)}.json"
 
     def _load_node(self, node_id: str) -> MessageNode | None:
         p = self._node_path(node_id)
@@ -104,11 +89,11 @@ class LocalFilesystemHistoryProvider:
 
     def _save_branch(self, branch: Branch) -> None:
         p = self._branch_path(branch.session_id, branch.id)
-        _atomic_write(p, branch.model_dump(mode="json"))
+        atomic_write_json(p, branch.model_dump(mode="json"))
 
     def _save_node(self, node: MessageNode) -> None:
         p = self._node_path(node.id)
-        _atomic_write(p, node.model_dump(mode="json"))
+        atomic_write_json(p, node.model_dump(mode="json"))
 
     async def _get_branch_lock(self, session_id: str, branch_id: str) -> asyncio.Lock:
         key = (session_id, branch_id)
@@ -162,7 +147,7 @@ class LocalFilesystemHistoryProvider:
         return self._load_branch(session_id, branch_id)
 
     async def list_branches(self, session_id: str) -> list[Branch]:
-        branch_dir = self._root / "sessions" / session_id / "branches"
+        branch_dir = self._session_dir(session_id) / "branches"
         if not branch_dir.exists():
             return []
         branches = []
@@ -424,7 +409,7 @@ class LocalFilesystemHistoryProvider:
                 f"Checkpoint anchor belongs to session '{anchor.session_id}', expected '{checkpoint.session_id}'"
             )
         p = self._checkpoint_path(checkpoint.session_id, checkpoint.id)
-        _atomic_write(p, checkpoint.model_dump(mode="json"))
+        atomic_write_json(p, checkpoint.model_dump(mode="json"))
 
     async def get_checkpoint(self, checkpoint_id: str) -> HistoryCheckpoint | None:
         # Checkpoints are keyed by id but scoped to session — search all sessions
@@ -433,13 +418,13 @@ class LocalFilesystemHistoryProvider:
         if not sessions_dir.exists():
             return None
         for session_dir in sessions_dir.iterdir():
-            p = self._checkpoint_path(session_dir.name, checkpoint_id)
+            p = session_dir / "checkpoints" / f"{safe_name(checkpoint_id)}.json"
             if p.exists():
                 return HistoryCheckpoint.model_validate_json(p.read_text(encoding="utf-8"))
         return None
 
     async def list_checkpoints(self, session_id: str) -> list[HistoryCheckpoint]:
-        cp_dir = self._root / "sessions" / session_id / "checkpoints"
+        cp_dir = self._session_dir(session_id) / "checkpoints"
         if not cp_dir.exists():
             return []
         checkpoints = []
@@ -481,7 +466,7 @@ class LocalFilesystemHistoryProvider:
                     continue
                 if node.session_id == session_id:
                     p.unlink(missing_ok=True)
-        shutil.rmtree(self._root / "sessions" / session_id, ignore_errors=True)
+        shutil.rmtree(self._session_dir(session_id), ignore_errors=True)
         async with self._lock_map_lock:
             for key in [k for k in self._branch_locks if k[0] == session_id]:
                 del self._branch_locks[key]

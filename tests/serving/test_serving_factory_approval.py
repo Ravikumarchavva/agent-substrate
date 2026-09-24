@@ -15,6 +15,7 @@ through ``build_agent_for_thread()`` itself.
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 import asyncio
 import uuid
 from typing import Any
@@ -46,6 +47,7 @@ class _ScriptedLLMClient:
     """Emits a tool call once, then a plain text reply."""
 
     model = "mock-model"
+    capabilities = ModelCapabilities(model_id="mock-model")
 
     def __init__(self) -> None:
         self._calls = 0

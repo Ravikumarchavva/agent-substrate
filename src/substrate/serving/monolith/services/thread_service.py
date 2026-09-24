@@ -212,7 +212,7 @@ async def delete_thread(db: AsyncSession, thread_id: uuid.UUID) -> bool:
     a hard delete, a policy-violating request could be permanently wiped
     from existence by the same person who made it, taking any trust &
     safety review trail with it. Permanent erasure stays exclusively
-    ``capabilities/gdpr/eraser.py``'s job — a distinct, deliberate action,
+    ``integrations/gdpr/eraser.py``'s job — a distinct, deliberate action,
     not a side effect of tidying up the sidebar.
     """
     thread = await get_thread(db, thread_id)

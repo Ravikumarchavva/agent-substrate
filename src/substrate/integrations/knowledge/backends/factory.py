@@ -15,7 +15,7 @@ One explicit switch, mirroring
 backend today. A managed-service backend (Pinecone Assistant) existed
 briefly but was removed as dead weight — never the standard path, and this
 project's own per-user session-document index already uses LanceDB
-(``capabilities/vector/lancedb_store.py``) where a second, self-hosted
+(``integrations/vector/lancedb_store.py``) where a second, self-hosted
 backend was actually needed.
 """
 

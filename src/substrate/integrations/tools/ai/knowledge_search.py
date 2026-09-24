@@ -1,17 +1,17 @@
 """KnowledgeSearchTool — semantic search over a real knowledge base.
 
-Thin wrapper around a ``RagBackend`` (``capabilities/knowledge/backends/``) —
+Thin wrapper around a ``RagBackend`` (``integrations/knowledge/backends/``) —
 all ingestion/retrieval logic lives there (``LocalRagBackend``'s pgvector
 pipeline today). This tool only adapts the agent
 tool-call shape to ``backend.ingest``/``backend.query``, and labels each
-retrieved passage with a stable citation number (``capabilities/knowledge/
+retrieved passage with a stable citation number (``integrations/knowledge/
 citations.py``) so the model can cite ``[n]`` and the UI can render a
 clickable, grounded source for it.
 """
 
 from __future__ import annotations
 
-from substrate.agents.storage.tasks import current_thread_id
+from substrate.kernel.agent.runtime_context import scope_of
 from substrate.integrations.knowledge.backends import RagBackend
 from substrate.integrations.knowledge.citations import CitationLedgerStore
 from substrate.integrations.knowledge.result_rendering import render_search_results
@@ -103,17 +103,17 @@ class KnowledgeSearchTool:
         # every knowledge_search call in a conversation. See citations.py.
         self._ledgers = CitationLedgerStore()
 
-    def _collection(self) -> str:
-        # Scope to the active chat thread when running inside a ReActAgent
-        # (stamped by agents/core/react.py::ReActAgent._handle_message, same
-        # ContextVar TaskManagerTool uses) — one user's uploaded docs stay
-        # invisible to every other thread's knowledge_search calls. Falls
-        # back to the constructor default outside a chat context.
-        return current_thread_id.get() or self._default_collection
+    def _collection(self, ctx: object | None) -> str:
+        # Scope to the active chat thread (``ctx.scope.thread_id``) — one
+        # user's uploaded docs stay invisible to every other thread's
+        # knowledge_search calls. Falls back to the constructor default
+        # outside a chat context.
+        return scope_of(ctx).thread_id or self._default_collection
 
     async def execute(
         self,
         *,
+        ctx: object | None = None,
         action: str,
         text: str = "",
         limit: int | None = None,
@@ -129,7 +129,7 @@ class KnowledgeSearchTool:
                 is_error=True,
             )
 
-        collection = self._collection()
+        collection = self._collection(ctx)
 
         if action == "ingest":
             result = await self._backend.ingest(text, collection=collection)

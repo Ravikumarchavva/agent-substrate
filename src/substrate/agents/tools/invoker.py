@@ -38,7 +38,7 @@ from substrate.kernel.tools.chain import (
     ChainPolicy,
     InvocationResult,
 )
-from substrate.kernel.core.content import JsonObject, MediaBlock
+from substrate.kernel.core.content import JsonObject, MediaBlock, content_blocks_to_str
 from substrate.kernel.core.identity import Actor
 from substrate.kernel.messaging.stream import AgentProgress, AgentStep
 from substrate.kernel.tools import (
@@ -65,6 +65,19 @@ _RISK_ORDER: dict[ToolRisk, int] = {
 }
 
 _CHAIN_TOOL_NAME = "tool_chain"
+
+# Policy for tools an agent calls directly (``ctx.tool()``). ``ChainPolicy``'s
+# own defaults — 50 calls, 60 s per call — are sized for a sandbox *script*
+# chaining tools; applied to the agent loop they capped every run at 50 tool
+# calls and killed any tool slower than a minute, including the code
+# interpreter, which advertises up to 300 s. The loop is already bounded by
+# the agent's ``max_iterations``, so the call cap here is only a runaway guard.
+DIRECT_CALL_POLICY = ChainPolicy(
+    max_tool_calls=10_000,
+    call_timeout_s=600.0,
+    approval_timeout_s=300.0,
+    total_timeout_s=3_600.0,
+)
 
 
 class ToolInvoker:
@@ -364,16 +377,24 @@ class ToolInvoker:
         tool_name: str,
         session: InvokerSession,
     ) -> InvocationResult:
-        text = exec_result.text if hasattr(exec_result, "text") else str(exec_result)
         structured = dict(getattr(exec_result, "structured_content", {}) or {})
         is_error = getattr(exec_result, "is_error", False)
         content = getattr(exec_result, "content", [])
         policy = self._policy
 
-        # Keep media blocks inline on InvocationResult.media (bytes preserved)
+        # Every media block rides on InvocationResult.media — bytes, URL and
+        # file_id references alike — so the model sees exactly what the tool
+        # returned. The text omits them: each reaches the model natively, and a
+        # "[Image: image/png]" placeholder next to the real image is just noise.
         media_blocks = [b for b in content if isinstance(b, MediaBlock)]
         files: list[ChainFile] = []
-        media = [b for b in media_blocks if b.data is not None]
+        media = media_blocks
+        if content:
+            text = content_blocks_to_str(
+                [b for b in content if not isinstance(b, MediaBlock)]
+            )
+        else:
+            text = exec_result.text if hasattr(exec_result, "text") else str(exec_result)
 
         # Offload to artifact store for chain runs when configured
         if media_blocks and self._store is not None:

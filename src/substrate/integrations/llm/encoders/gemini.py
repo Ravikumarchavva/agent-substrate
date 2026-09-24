@@ -13,14 +13,9 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import TYPE_CHECKING, Any, cast
-
-if TYPE_CHECKING:
-    from PIL import Image
+from typing import Any, cast
 
 from google.genai import types as genai_types
-
-from substrate.integrations.llm.encoders._media import pil_to_png_bytes
 
 from substrate.kernel import ChatMessage
 from substrate.kernel.core.content import (
@@ -40,75 +35,43 @@ def _encode_text(text: str) -> genai_types.Part:
     return genai_types.Part(text=text)
 
 
-def _encode_image(img: Image.Image) -> genai_types.Part:
-    """PIL Image → Gemini inline_data Part."""
-    return genai_types.Part(
-        inline_data=genai_types.Blob(mime_type="image/png", data=pil_to_png_bytes(img))
-    )
-
-
-def _encode_media_item(
-    item: str
-    | Image.Image
-    | MediaBlock
-    | TextBlock,
-) -> genai_types.Part:
+def _encode_media_item(item: MediaBlock | TextBlock) -> genai_types.Part:
     """Encode a single block item to a Gemini Part."""
-    from PIL import Image
-
     if isinstance(item, TextBlock):
         return _encode_text(item.text)
-    if isinstance(item, Image.Image):
-        return _encode_image(item)
-    if isinstance(item, MediaBlock):
-        if item.type == "image":
-            if item.url:
-                if item.url.startswith("data:"):
-                    parts = item.url.split(",", 1)
-                    media_type = (
-                        parts[0].split(":")[1].split(";")[0]
-                        if ":" in parts[0]
-                        else "image/png"
-                    )
-                    data = base64.b64decode(parts[1]) if len(parts) > 1 else b""
-                    return genai_types.Part(
-                        inline_data=genai_types.Blob(mime_type=media_type, data=data)
-                    )
-                return genai_types.Part(
-                    file_data=genai_types.FileData(
-                        file_uri=item.url, mime_type="image/jpeg"
-                    )
-                )
-            if item.file_id:
-                return _encode_text(f"[Image file: {item.file_id}]")
-            return genai_types.Part(
-                inline_data=genai_types.Blob(
-                    mime_type=item.media_type, data=item.data or b""
-                )
-            )
-        if item.type in ("audio", "video"):
-            return genai_types.Part(
-                inline_data=genai_types.Blob(
-                    mime_type=item.media_type, data=item.data or b""
-                )
-            )
-        if item.type == "document":
-            if item.data:
+    if item.type == "image":
+        if item.url:
+            if item.url.startswith("data:"):
+                head, _, payload = item.url.partition(",")
+                media_type = head[5:].split(";")[0] or item.media_type
                 return genai_types.Part(
                     inline_data=genai_types.Blob(
-                        mime_type=item.media_type, data=item.data
+                        mime_type=media_type, data=base64.b64decode(payload)
                     )
                 )
-            if item.url:
-                return genai_types.Part(
-                    file_data=genai_types.FileData(
-                        file_uri=item.url, mime_type=item.media_type
-                    )
+            return genai_types.Part(
+                file_data=genai_types.FileData(
+                    file_uri=item.url, mime_type=item.media_type
                 )
-            return _encode_text(f"[Document Attachment: {item.filename or 'document'}]")
-    if isinstance(item, str):
-        return _encode_text(item)
-    raise ValueError(f"Unsupported content type: {type(item)}")
+            )
+        if item.file_id:
+            return _encode_text(f"[Image file not sent: {item.file_id}]")
+        return genai_types.Part(
+            inline_data=genai_types.Blob(mime_type=item.media_type, data=item.data or b"")
+        )
+    if item.type in ("audio", "video", "document"):
+        if item.data:
+            return genai_types.Part(
+                inline_data=genai_types.Blob(mime_type=item.media_type, data=item.data)
+            )
+        if item.url:
+            return genai_types.Part(
+                file_data=genai_types.FileData(
+                    file_uri=item.url, mime_type=item.media_type
+                )
+            )
+        return _encode_text(f"[{item.type} not sent: {item.filename or item.media_type}]")
+    return _encode_text(f"[{item.type} not sent]")
 
 
 # ── Message-level encoding ───────────────────────────────────────────────────
@@ -192,54 +155,80 @@ def _get_block_text(block: Any) -> str:
     return ""
 
 
-def _encode_tool_result(block: ToolResultBlock) -> genai_types.Content:
-    """ToolResultBlock → Gemini function_response Content."""
-    parts_text = []
-    media_parts = []
+def _response_part(item: MediaBlock) -> genai_types.FunctionResponsePart | None:
+    """A media block as a native part of a function response (Gemini 3+)."""
+    if item.data:
+        return genai_types.FunctionResponsePart(
+            inline_data=genai_types.FunctionResponseBlob(
+                mime_type=item.media_type, data=item.data, display_name=item.filename
+            )
+        )
+    if item.url:
+        return genai_types.FunctionResponsePart(
+            file_data=genai_types.FileData(file_uri=item.url, mime_type=item.media_type)
+        )
+    return None
 
-    if block.content:
+
+def _encode_tool_results(
+    blocks: list[ToolResultBlock], *, native_media: bool
+) -> genai_types.Content:
+    """All tool results of one turn → ONE user Content.
+
+    Gemini requires the responses to a turn's function calls to arrive
+    together, one ``function_response`` part per call, in call order.
+
+    Media a tool returned goes inside its ``function_response`` when
+    ``native_media`` (Gemini 3+ multimodal function responses); older models
+    don't accept that, so the media follows as ordinary parts of the same
+    turn, after all the function responses.
+    """
+    response_parts: list[genai_types.Part] = []
+    trailing_media: list[genai_types.Part] = []
+
+    for block in blocks:
+        texts: list[str] = []
+        native: list[genai_types.FunctionResponsePart] = []
         for item in block.content:
             if isinstance(item, TextBlock):
-                parts_text.append(item.text)
+                texts.append(item.text)
             elif isinstance(item, (DataBlock, ErrorBlock)):
                 text = _get_block_text(item)
                 if text:
-                    parts_text.append(text)
+                    texts.append(text)
             elif isinstance(item, MediaBlock):
-                try:
-                    media_parts.append(_encode_media_item(item))
-                except Exception as e:
-                    import logging
+                part = _response_part(item) if native_media else None
+                if part is not None:
+                    native.append(part)
+                else:
+                    trailing_media.append(_encode_media_item(item))
 
-                    logging.getLogger(
-                        "substrate.kernel.messages.encoders.gemini"
-                    ).warning(
-                        "Failed to encode media item for Gemini function response: %s",
-                        e,
-                    )
-
-    content_str = "\n".join(parts_text)
-    tool_name = block.name or "unknown_tool"
-
-    parts = [
-        genai_types.Part(
-            function_response=genai_types.FunctionResponse(
-                name=tool_name, response={"result": content_str}
+        text = "\n".join(texts)
+        # "output"/"error" are the keys Gemini documents for a function response.
+        payload = {"error": text} if block.is_error else {"output": text}
+        response_parts.append(
+            genai_types.Part(
+                function_response=genai_types.FunctionResponse(
+                    name=block.name or "unknown_tool",
+                    response=payload,
+                    parts=native or None,
+                )
             )
         )
-    ]
-    parts.extend(media_parts)
 
-    return genai_types.Content(role="user", parts=parts)
+    return genai_types.Content(role="user", parts=[*response_parts, *trailing_media])
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
 
 def encode_messages(
-    messages: list[ChatMessage],
+    messages: list[ChatMessage], *, native_tool_media: bool = False
 ) -> tuple[str, list[genai_types.Content]]:
     """Encode framework messages to Gemini GenerateContent format.
+
+    ``native_tool_media``: put tool-returned media inside the function
+    response (Gemini 3+) instead of as trailing parts of the same turn.
 
     Returns:
         system_instruction: Concatenated system prompt text.
@@ -258,9 +247,11 @@ def encode_messages(
             if encoded:
                 contents.append(encoded)
         elif msg.role == "tool":
-            for block in msg.content:
-                if isinstance(block, ToolResultBlock):
-                    contents.append(_encode_tool_result(block))
+            results = [b for b in msg.content if isinstance(b, ToolResultBlock)]
+            if results:
+                contents.append(
+                    _encode_tool_results(results, native_media=native_tool_media)
+                )
 
     return "\n".join(system_parts).strip(), contents
 

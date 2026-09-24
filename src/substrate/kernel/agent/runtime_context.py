@@ -21,7 +21,7 @@ from __future__ import annotations
 import uuid as _uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Awaitable, Callable, Protocol, runtime_checkable
+from typing import Awaitable, Callable, Mapping, Protocol, runtime_checkable
 
 from substrate.kernel.exceptions import CancellationError
 from substrate.kernel.agent.supervision import Supervision
@@ -71,6 +71,78 @@ class CancellationTokenProtocol(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class RunScope:
+    """Whose work this is, for the inbound message being handled.
+
+    One run can handle several inbound messages, so this is per-message
+    state: ``RunContext.scope`` holds the current one. Tools read it from
+    ``ctx`` (see ``scope_of``) — never from ambient globals, and never from
+    model-supplied arguments: the model can be steered by the documents it
+    reads, so an identity it supplies is an authorization hole.
+
+    ``thread_id`` is the conversation that owns files, documents and task
+    boards; empty when there isn't one. A sub-agent inherits its parent's (it
+    works inside the same conversation), even though its own message history
+    lives under a separate, run-scoped session id.
+    """
+
+    tenant_id: str | None = None
+    user_id: str | None = None
+    thread_id: str = ""
+    branch_id: str = "main"
+    agent_id: str = ""
+    agent_label: str = ""
+    parent_agent_id: str | None = None
+
+    @classmethod
+    def from_metadata(
+        cls,
+        metadata: Mapping[str, object],
+        *,
+        thread_id: str,
+        agent_id: str,
+        agent_label: str,
+    ) -> "RunScope":
+        """Scope for a message: identity and conversation from its metadata
+        (stamped by the caller, or by a parent via ``child_metadata``), the rest
+        from the agent. *thread_id* is the fallback conversation — the
+        message's own session — when metadata doesn't name one."""
+
+        def _str(key: str) -> str | None:
+            value = metadata.get(key)
+            return str(value) if value else None
+
+        return cls(
+            tenant_id=_str("tenant_id"),
+            user_id=_str("user_id"),
+            thread_id=_str("thread_id") or thread_id,
+            branch_id=_str("branch_id") or "main",
+            agent_id=agent_id,
+            agent_label=agent_label,
+            parent_agent_id=_str("parent_agent_id"),
+        )
+
+    def child_metadata(self) -> dict[str, str]:
+        """Message metadata that makes a spawned child inherit this scope —
+        same tenant, user, conversation and branch — with this agent as its parent."""
+        inherited = {
+            "tenant_id": self.tenant_id,
+            "user_id": self.user_id,
+            "thread_id": self.thread_id,
+            "branch_id": self.branch_id,
+            "parent_agent_id": self.agent_id or None,
+        }
+        return {k: v for k, v in inherited.items() if v}
+
+
+def scope_of(ctx: object | None) -> RunScope:
+    """The scope carried by *ctx* (a ``RunMeta`` or a ``RunContext``), or an
+    empty one when there is no run context (a bare tool call in a test)."""
+    scope = getattr(ctx, "scope", None)
+    return scope if isinstance(scope, RunScope) else RunScope()
+
+
+@dataclass(frozen=True, slots=True)
 class RunMeta:
     """Execution-scoped metadata threaded through every kernel call.
 
@@ -88,6 +160,7 @@ class RunMeta:
                        distinct, scheduler-level lease/queueing cutoff, not this one.
     ``trace_id``     — distributed trace identifier for observability.
     ``tenant_id``    — tenant namespace; ``None`` for single-tenant deployments.
+    ``scope``        — who/where the message being handled belongs to; see ``RunScope``.
 
     ``RunMeta`` is immutable.  Thread it down call stacks instead of
     mutating it.  For child spans create a new ``RunMeta`` with a child
@@ -100,6 +173,7 @@ class RunMeta:
     deadline: datetime | None = None
     trace_id: str = field(default_factory=lambda: _uuid.uuid4().hex)
     tenant_id: str | None = None
+    scope: RunScope = field(default_factory=RunScope)
 
     def check(self) -> None:
         """Raise CancellationError if cancelled or deadline expired."""

@@ -24,7 +24,7 @@ class ServerSettings(SubstrateConfig):
     FILE_KEK_HEX: str = ""
     # Attachments live here (local disk, never the real FILE_STORE_BACKEND)
     # from upload until the message carrying them is actually sent — see
-    # capabilities/storage/pending.py. Swept periodically; PENDING_UPLOAD_TTL_HOURS
+    # integrations/storage/pending.py. Swept periodically; PENDING_UPLOAD_TTL_HOURS
     # is how long an abandoned (never-sent) attachment survives before removal.
     PENDING_UPLOAD_LOCAL_PATH: str = ""
     PENDING_UPLOAD_TTL_HOURS: float = 24.0

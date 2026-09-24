@@ -86,7 +86,7 @@ async def create_request_endpoint(
     ``agent_runtime``, running an ``AskHumanTool`` in signal-suspend mode)
     use to make a request visible/answerable, with the SAME ``request_id``
     the run itself suspended on (``ctx.uuid()``-derived — see
-    ``capabilities/tools/human_input.py``) so ``resolve_request()``'s signal
+    ``integrations/tools/human_input.py``) so ``resolve_request()``'s signal
     reaches the right suspended run."""
     req = await create_request(
         db,

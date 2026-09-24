@@ -7,7 +7,7 @@ outlives us — so ``start()`` is a no-op for runtimes without
 ``terminate_session``.
 
 Follows the established background-task shape in this codebase
-(``agents/runtime/worker.py``, ``capabilities/triggers/conditions.py``): an
+(``agents/runtime/worker.py``, ``integrations/triggers/conditions.py``): an
 ``asyncio`` loop guarded by a ``_running`` flag, cancelled on ``stop()``. It is
 deliberately *not* built on ``TriggerScheduler``, whose ``add_trigger`` API is
 for user-defined triggers, not internal housekeeping.

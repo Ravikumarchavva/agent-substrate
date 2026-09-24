@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from substrate.agents.workspace.local_workspace_store import (
         LocalFilesystemWorkspaceStore,
     )
-    from substrate.integrations.memory.local_session_store import LocalFileSessionStore
+    from substrate.agents.storage.local_short_term_memory import LocalFilesystemShortTermMemory
     from substrate.agents.storage.local_object_store import WorkspaceFileStore
     from substrate.agents.context import (
         AgentContext,
@@ -82,8 +82,7 @@ __all__ = [
     "LocalHistoryProvider",
     "LocalFilesystemWorkspaceStore",
     "LocalWorkspaceStore",
-    "LocalFileSessionStore",
-    "LocalSessionStore",
+    "LocalFilesystemShortTermMemory",
     "WorkspaceFileStore",
     "LocalFileStore",
     # supporting types
@@ -154,13 +153,9 @@ _LAZY: dict[str, tuple[str, str]] = {
         "substrate.agents.workspace.local_workspace_store",
         "LocalFilesystemWorkspaceStore",
     ),
-    "LocalFileSessionStore": (
-        "substrate.integrations.memory.local_session_store",
-        "LocalFileSessionStore",
-    ),
-    "LocalSessionStore": (
-        "substrate.integrations.memory.local_session_store",
-        "LocalFileSessionStore",
+    "LocalFilesystemShortTermMemory": (
+        "substrate.agents.storage.local_short_term_memory",
+        "LocalFilesystemShortTermMemory",
     ),
     "WorkspaceFileStore": (
         "substrate.agents.storage.local_object_store",

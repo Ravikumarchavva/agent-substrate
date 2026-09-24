@@ -169,7 +169,7 @@ async def _may_access_key(key: str, claims: AuthClaims, db: AsyncSession) -> boo
     """Ownership check for an object key with no ``FileMetadata`` row at
     all — RAG-extracted images and other capability-written artifacts are
     uploaded straight to the store with no metadata row (see
-    ``capabilities/knowledge/backends/local.py::_store_image_bytes``), so
+    ``integrations/knowledge/backends/local.py::_store_image_bytes``), so
     ``serve_object`` cannot rely on ``_may_access`` for them. Structural,
     not a raw prefix trust: every key starts ``tenants/{tenant_id}/...``,
     where ``tenant_id`` came from the server's own JWT-minted keys, never
@@ -303,7 +303,7 @@ async def _write_extracted_sidecar(
     """Write a ``{original_name}.extracted.md`` sidecar next to the uploaded
     file, in the same *store* the raw file itself currently lives in — the
     pending store pre-promotion, ``ctx.file_store`` after (see
-    ``capabilities/storage/pending.py``) — so ``code_interpreter`` (which
+    ``integrations/storage/pending.py``) — so ``code_interpreter`` (which
     mounts that same directory once promoted) can read pipeline-quality
     extracted text instead of pypdf-ing the raw PDF bytes itself.
     Best-effort: never raises, never affects staging success/failure."""
@@ -357,7 +357,7 @@ async def _stage_uploaded_doc(
 ) -> None:
     """Fire-and-forget eager extraction+embedding into the caller's own
     per-user session-document index (vector + PageIndex tree + knowledge
-    graph — see ``capabilities/knowledge/session_ingest.py``), already
+    graph — see ``integrations/knowledge/session_ingest.py``), already
     tagged with the real ``session_id`` — unlike the old Postgres
     staging-collection flow this replaced, there's no separate "promote"
     data-movement step needed later: every row is written already scoped
@@ -682,7 +682,7 @@ async def upload_file(
         # A chat-composer attachment — stays local-disk-only, never
         # touching SeaweedFS/S3, until the message carrying it is actually
         # sent (routes/chat_context.py promotes it then; see
-        # capabilities/storage/pending.py's module docstring for why).
+        # integrations/storage/pending.py's module docstring for why).
         if ctx.pending_file_store is None:
             raise HTTPException(
                 status_code=503, detail="Pending upload storage not configured"
@@ -797,7 +797,7 @@ async def serve_object(
     """Serve a stored object by key — the target of the ``/files/object?key=``
     links in tool-result attachments (see ``agents/runtime/context/tool.py``)
     and of ``ask()``'s ``Citation.image_key``/``pdf_key`` (see
-    ``capabilities/knowledge/ask.py``).
+    ``integrations/knowledge/ask.py``).
 
     Deliberately a stable, authenticated app URL rather than a presigned one:
     the wire-event log is replayed months later, and a presigned link would

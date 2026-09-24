@@ -50,10 +50,13 @@ class ToolResultCompactionStrategy:
         truncated = (
             full_text[: self._max] + f"\n… [{total - self._max} chars truncated]"
         )
+        # Only the text is shortened: images, data and any other block the tool
+        # returned are kept exactly as they were.
+        others = [b for b in block.content if not isinstance(b, TextBlock)]
         return ToolResultBlock(
             call_id=block.call_id,
             name=block.name,
-            content=[TextBlock(text=truncated)],
+            content=[TextBlock(text=truncated), *others],
             is_error=False,
         )
 

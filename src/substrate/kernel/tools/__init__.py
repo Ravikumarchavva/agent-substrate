@@ -10,6 +10,7 @@ from .tools import (
     ProviderDefinedTool,
     AnyTool,
     is_hosted_tool,
+    is_concurrency_safe,
     is_provider_defined_tool,
     ToolRegistry,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "ProviderDefinedTool",
     "AnyTool",
     "is_hosted_tool",
+    "is_concurrency_safe",
     "is_provider_defined_tool",
     "ToolRegistry",
     "Skill",

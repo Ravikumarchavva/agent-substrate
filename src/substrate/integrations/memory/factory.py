@@ -17,7 +17,7 @@ async def build_short_term_memory(
     """Durable ShortTermMemory.
 
     Uses PostgreSQL (+ optional Redis cache) when database_url is provided.
-    When database_url is empty, uses LocalFileSessionStore (atomic JSON files
+    When database_url is empty, uses the L1 LocalFilesystemShortTermMemory (atomic JSON files
     in local_path) so session state persists across restarts without external services.
     """
     if database_url:
@@ -39,11 +39,11 @@ async def build_short_term_memory(
         await cache.connect()
         return CachedShortTermMemory(primary=primary, cache=cache)
 
-    from substrate.integrations.memory.local_session_store import LocalFileSessionStore
+    from substrate.agents.storage.local_short_term_memory import (
+        LocalFilesystemShortTermMemory,
+    )
 
-    store = LocalFileSessionStore(root=local_path)
-    await store.connect()
-    return store
+    return LocalFilesystemShortTermMemory(root=local_path)
 
 
 async def build_memory_store(

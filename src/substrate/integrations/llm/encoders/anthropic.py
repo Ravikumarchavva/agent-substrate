@@ -12,15 +12,9 @@ Public API::
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from PIL import Image
-
-from substrate.integrations.llm.encoders._media import (
-    bytes_to_base64,
-    pil_to_base64_png,
-)
+from substrate.integrations.llm.encoders._media import bytes_to_base64
 
 from substrate.kernel import ChatMessage
 from substrate.kernel.core.content import (
@@ -41,18 +35,6 @@ def _encode_text(text: str) -> dict[str, Any]:
     return {"type": "text", "text": text}
 
 
-def _encode_image(img: Image.Image) -> dict[str, Any]:
-    """PIL Image → Anthropic base64 image block."""
-    return {
-        "type": "image",
-        "source": {
-            "type": "base64",
-            "media_type": "image/png",
-            "data": pil_to_base64_png(img),
-        },
-    }
-
-
 def _encode_image_content(ic: MediaBlock) -> dict[str, Any]:
     """MediaBlock(type="image") → Anthropic image block."""
     if ic.url:
@@ -71,41 +53,27 @@ def _encode_image_content(ic: MediaBlock) -> dict[str, Any]:
     }
 
 
-def _encode_media_item(
-    item: str
-    | Image.Image
-    | MediaBlock
-    | TextBlock,
-) -> dict[str, Any]:
-    """Encode a single block to Anthropic content block."""
-    from PIL import Image
-
+def _encode_media_item(item: MediaBlock | TextBlock) -> dict[str, Any]:
+    """Encode a single block to an Anthropic content block."""
     if isinstance(item, TextBlock):
         return _encode_text(item.text)
-    if isinstance(item, Image.Image):
-        return _encode_image(item)
-    if isinstance(item, MediaBlock):
-        if item.type == "image":
-            return _encode_image_content(item)
-        if item.type == "audio":
-            return _encode_text("[Audio content]")
-        if item.type == "video":
-            return _encode_text("[Video content]")
-        if item.type == "document":
-            if item.media_type == "application/pdf" and item.data:
-                return {
-                    "type": "document",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "application/pdf",
-                        "data": bytes_to_base64(item.data),
-                    },
-                }
-            ref = item.filename or item.url or "document"
-            return _encode_text(f"[Document Attachment: {ref}]")
-    if isinstance(item, str):
-        return _encode_text(item)
-    raise ValueError(f"Unsupported content type: {type(item)}")
+    if item.type == "image":
+        return _encode_image_content(item)
+    if item.type == "document":
+        if item.media_type == "application/pdf" and item.data:
+            return {
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": bytes_to_base64(item.data),
+                },
+            }
+        if item.media_type == "application/pdf" and item.url:
+            return {"type": "document", "source": {"type": "url", "url": item.url}}
+        ref = item.filename or item.url or "document"
+        return _encode_text(f"[Document not sent: {ref}]")
+    return _encode_text(f"[{item.type} not sent: {item.filename or item.media_type}]")
 
 
 # ── Message-level encoding ───────────────────────────────────────────────────
@@ -236,16 +204,14 @@ def _encode_tool_result(block: ToolResultBlock) -> dict[str, Any]:
     if not content_blocks:
         content_blocks.append(_encode_text(""))
 
-    return {
-        "role": "user",
-        "content": [
-            {
-                "type": "tool_result",
-                "tool_use_id": block.call_id,
-                "content": content_blocks,
-            }
-        ],
+    result: dict[str, Any] = {
+        "type": "tool_result",
+        "tool_use_id": block.call_id,
+        "content": content_blocks,
     }
+    if block.is_error:
+        result["is_error"] = True
+    return {"role": "user", "content": [result]}
 
 
 # ── Public API ───────────────────────────────────────────────────────────────

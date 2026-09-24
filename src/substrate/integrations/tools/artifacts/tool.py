@@ -1,7 +1,7 @@
 """ArtifactsTool — lets the agent read, save and promote curated artifacts.
 
-Scoping is taken from the ambient run context (``current_tenant_id`` /
-``current_user_id`` / ``current_thread_id``), never from tool arguments:
+Scoping is taken from the run's ``ctx.scope`` (tenant / user / thread), never
+from tool arguments:
 a model-supplied user or tenant id would be an authorization hole, since
 the model can be steered by the documents it reads.
 
@@ -15,10 +15,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from substrate.agents.storage.tasks import current_thread_id
-from substrate.agents.workspace.scope import current_tenant_id, current_user_id
 from substrate.integrations.artifacts.store import ArtifactStore
 from substrate.kernel import TextBlock
+from substrate.kernel.agent.runtime_context import RunScope, scope_of
 from substrate.kernel.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
 
@@ -93,17 +92,17 @@ class ArtifactsTool:
         # Machine-confirmed until a human verifies it.
         self._actor = f"substrate/{model_name}"
 
-    def _prefix(self, scope: str) -> tuple[str | None, str | None]:
+    def _prefix(self, scope: str, run: RunScope) -> tuple[str | None, str | None]:
         """Resolve (prefix, error). Identity comes from the run context only."""
-        tenant_id = current_tenant_id.get()
+        tenant_id = run.tenant_id
         if not tenant_id:
             return None, "Artifacts need a tenant-scoped conversation."
-        user_id = current_user_id.get()
+        user_id = run.user_id
         if not user_id:
             return None, "Artifacts need a signed-in user."
         if scope == "global":
             return self._store.scope_prefix(tenant_id, user_id), None
-        thread_id = current_thread_id.get()
+        thread_id = run.thread_id
         if not thread_id or thread_id == _DEFAULT_SESSION:
             return None, "Session artifacts need an active conversation."
         return self._store.scope_prefix(tenant_id, user_id, conversation_id=thread_id), None
@@ -114,7 +113,7 @@ class ArtifactsTool:
         if scope not in {"session", "global"}:
             return _error("scope must be 'session' or 'global'.")
 
-        prefix, err = self._prefix(scope)
+        prefix, err = self._prefix(scope, scope_of(ctx))
         if err or prefix is None:
             return _error(err or "Artifact scope unavailable.")
 

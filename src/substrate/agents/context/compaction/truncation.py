@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from substrate.kernel.core.content import ChatMessage, TextBlock, ToolResultBlock
+from substrate.agents.context.compaction._window import drop_orphaned_tool_results
+from substrate.agents.context.tokens import estimate_message_chars
+from substrate.kernel.core.content import ChatMessage
 
 
 class TruncationStrategy:
@@ -22,7 +24,7 @@ class TruncationStrategy:
         history = raw_history
 
         if self._max_messages is not None and len(history) > self._max_messages:
-            history = history[-self._max_messages :]
+            history = drop_orphaned_tool_results(history[-self._max_messages :])
 
         if self._max_chars is not None:
             history = self._truncate_by_chars(history)
@@ -33,24 +35,12 @@ class TruncationStrategy:
         kept: list[ChatMessage] = []
         total = 0
         for msg in reversed(history):
-            chars = _estimate_chars(msg)
+            chars = estimate_message_chars(msg)
             if total + chars > self._max_chars:  # type: ignore[operator]
                 break
             kept.append(msg)
             total += chars
-        return list(reversed(kept))
-
-
-def _estimate_chars(msg: ChatMessage) -> int:
-    total = 0
-    for block in msg.content:
-        if isinstance(block, TextBlock):
-            total += len(block.text)
-        elif isinstance(block, ToolResultBlock):
-            for inner in block.content:
-                if isinstance(inner, TextBlock):
-                    total += len(inner.text)
-    return total
+        return drop_orphaned_tool_results(list(reversed(kept)))
 
 
 __all__ = ["TruncationStrategy"]

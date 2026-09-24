@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 from typing import AsyncIterator
 import pytest
 
@@ -23,6 +24,7 @@ class MockLLMClient:
     def __init__(self, responses: list[list[ContentBlock]]) -> None:
         self._queue = list(responses)
         self.model = "mock-model"
+        self.capabilities = ModelCapabilities(model_id="mock-model")
 
     async def generate(
         self,
@@ -52,6 +54,7 @@ class MockLLMClient:
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: object = None,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
         return self._do_stream(messages, options=options)
 

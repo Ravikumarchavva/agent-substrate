@@ -257,7 +257,7 @@ async def _build_file_context(
     for meta in rows:
         if meta.promoted_at is None:
             # Attachments live only in the local pending store (see
-            # capabilities/storage/pending.py) until the message
+            # integrations/storage/pending.py) until the message
             # referencing them is actually sent — this is that moment.
             # Must happen before any of the ctx.file_store.download(...)
             # calls below, for both extractable and non-extractable
@@ -337,7 +337,7 @@ async def _build_file_context(
                                 # DB id for /files/{id}/download, and the
                                 # thread-relative path /workspace/file expects
                                 # (session_path falls back to original_name in
-                                # capabilities/knowledge/citations.py when this
+                                # integrations/knowledge/citations.py when this
                                 # is None — e.g. an "uploads/" scoped file with
                                 # no thread session).
                                 "file_id": str(meta.id),

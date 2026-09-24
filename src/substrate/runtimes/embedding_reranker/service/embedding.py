@@ -32,7 +32,7 @@ class EmbeddingServiceError(RuntimeError):
     returns a response in an unexpected shape."""
 
 
-# Image-to-token ratio (~1024 px per patch token; see docs/capabilities/08-document-intelligence.md)
+# Image-to-token ratio (~1024 px per patch token; see docs/integrations/08-document-intelligence.md)
 _PIXELS_PER_IMAGE_TOKEN = 1024
 
 # Default pixel budget sized for 1024 token slot ceiling (~977 image tokens)

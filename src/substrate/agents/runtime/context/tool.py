@@ -8,6 +8,7 @@ stubs below.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import uuid
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -37,14 +38,19 @@ from substrate.kernel.tools.chain import InvocationResult
 _OBJECT_URL_TEMPLATE = "object:{key}"
 
 
-def _attachment_url(img: MediaBlock) -> str:
-    """Durable reference when the image is backed by the file store, else the
-    bytes inline."""
+def _attachment_url(img: MediaBlock) -> str | None:
+    """Durable reference for the UI: the file-store key if the image has one,
+    its own URL if it is URL-referenced, else the bytes inline. ``None`` for an
+    image the UI can't resolve (a provider ``file_id`` with no bytes)."""
     if img.storage_key:
         return _OBJECT_URL_TEMPLATE.format(key=img.storage_key)
+    if img.url:
+        return img.url
+    if img.data is None:
+        return None
     return (
         f"data:{img.media_type or 'image/png'};base64,"
-        f"{base64.b64encode(img.data or b'').decode()}"
+        f"{base64.b64encode(img.data).decode()}"
     )
 
 
@@ -63,6 +69,8 @@ class _ToolMixin:
         _invoker_session: InvokerSession | None
 
         def _alloc_path(self) -> str: ...
+        def _fork_scopes(self, n: int) -> list[list[int]]: ...
+        async def _in_scope(self, stack: list[int], fn: Any) -> Any: ...
         def _enter_scope(self) -> None: ...
         def _exit_scope(self) -> None: ...
         def _lookup_effect(self, effect_id: str) -> EffectResult | None: ...
@@ -205,9 +213,10 @@ class _ToolMixin:
                     "name": f"{name}-{i}.{(img.media_type or 'image/png').split('/')[-1]}",
                     "mime": img.media_type or "image/png",
                     "size": len(img.data or b""),
-                    "url": _attachment_url(img),
+                    "url": url,
                 }
                 for i, img in enumerate(result.media)
+                if (url := _attachment_url(img)) is not None
             ]
             await self._log(
                 RunLogKind.TOOL_RESULT,
@@ -227,6 +236,34 @@ class _ToolMixin:
             raise
         finally:
             self._exit_scope()
+
+    async def tool_batch(
+        self, calls: list[tuple[str, dict[str, Any]]]
+    ) -> list[InvocationResult]:
+        """Run several ``ctx.tool()`` calls concurrently, results in call order.
+
+        Replay-safe: each call is journaled under exactly the path it would
+        have had run sequentially. Every call runs to completion even if
+        another raises or suspends — a finished sibling is journaled, so a
+        resume replays it instead of executing it again — and only then is
+        the first error (or, failing that, the first suspension) re-raised.
+        Only batch tools that are safe to run concurrently.
+        """
+        if len(calls) <= 1:
+            return [await self.tool(name, args) for name, args in calls]
+
+        stacks = self._fork_scopes(len(calls))
+        outcomes = await asyncio.gather(
+            *(
+                self._in_scope(stack, lambda n=name, a=args: self.tool(n, a))
+                for stack, (name, args) in zip(stacks, calls)
+            ),
+            return_exceptions=True,
+        )
+        errors = [o for o in outcomes if isinstance(o, BaseException)]
+        if errors:
+            raise next((e for e in errors if isinstance(e, Exception)), errors[0])
+        return cast("list[InvocationResult]", outcomes)
 
 
 __all__ = ["_ToolMixin"]

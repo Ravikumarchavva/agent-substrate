@@ -68,7 +68,7 @@ class SafetyVerdict:
 
 @runtime_checkable
 class TextSafetyClassifier(Protocol):
-    """Implemented by capabilities/safety/text_classifier.py concrete
+    """Implemented by integrations/safety/text_classifier.py concrete
     classes. Sync, not async — CPU-bound ONNX inference, not I/O; callers
     run it via ``asyncio.to_thread``."""
 
@@ -77,7 +77,7 @@ class TextSafetyClassifier(Protocol):
 
 @runtime_checkable
 class ImageSafetyClassifier(Protocol):
-    """Implemented by capabilities/safety/image_classifier.py."""
+    """Implemented by integrations/safety/image_classifier.py."""
 
     def classify(self, image_bytes: bytes) -> SafetyVerdict: ...
 

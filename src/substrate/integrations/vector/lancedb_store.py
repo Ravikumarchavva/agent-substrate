@@ -39,7 +39,7 @@ from docs): LanceDB's own ``search(query, query_type="hybrid")`` entry point
 requires a *registered embedding function* on the table, because it expects
 to auto-embed a text query for the vector half itself — that doesn't fit
 here (embeddings are computed externally, e.g. via
-``capabilities/llm``/the embedding-reranker service). The fix, confirmed
+``integrations/llm``/the embedding-reranker service). The fix, confirmed
 working: build the query via ``table.query().nearest_to(vector).nearest_to_text(text)``
 instead of ``table.search(...)`` — chaining those two directly returns an
 ``AsyncHybridQuery`` without ever consulting the embedding-function

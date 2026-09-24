@@ -64,7 +64,7 @@ class SaTSegmenter:
     ``sat-3l-sm`` is upstream's recommended speed/accuracy balance.
 
     The errors it does make are the harmless kind. Measured on the OCR-shaped
-    fixture in ``tests/capabilities/test_chunking.py``, SaT splits a heading
+    fixture in ``tests/integrations/test_chunking.py``, SaT splits a heading
     one phrase early ("Scope 1 and Scope 2" / "Emissions Summary") while the
     regex returns the heading and all four following lines fused into one
     unit. Over-segmentation costs nothing here because the chunker packs

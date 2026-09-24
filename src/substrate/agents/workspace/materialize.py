@@ -5,8 +5,8 @@ The two halves of "check out a branch, run code, commit the result" — used
 by the code interpreter (one materialize + one commit per turn) and by
 anything else that needs a real directory view of a branch's files.
 
-Deliberately does not import ``capabilities/tools/code_interpreter/...`` —
-``agents/`` (L1) cannot import ``capabilities/`` (L2). The file-diffing here
+Deliberately does not import ``integrations/tools/code_interpreter/...`` —
+``agents/`` (L1) cannot import ``integrations/`` (L2). The file-diffing here
 is a small, independent, pure-stdlib equivalent of that package's
 ``runtimes/_files.py::snapshot()`` (same idea — mtime+size fingerprint — not
 shared code, since neither side has a reason to depend on the other).

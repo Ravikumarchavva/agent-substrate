@@ -2,7 +2,7 @@
 
 Sibling to ``DurableMemoryStore`` (Postgres full-text) — same ``MemoryStore``
 Protocol, different backend. Exists specifically so
-``PageIndexRAGPipeline`` (``capabilities/knowledge/page_pipeline.py``) can
+``PageIndexRAGPipeline`` (``integrations/knowledge/page_pipeline.py``) can
 persist its per-collection outline trees as Lance rows under the per-user
 session-document index (``tenants/<tid>/users/<uid>/index/``) instead of
 either an in-memory dict (lost on restart) or the shared Postgres

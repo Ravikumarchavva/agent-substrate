@@ -23,12 +23,8 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
-from substrate.agents.storage.tasks import (
-    current_agent_id,
-    current_parent_agent_id,
-    current_thread_id,
-)
-from substrate.agents.workspace.scope import current_scope
+from substrate.agents.workspace.scope import workspace_scope
+from substrate.kernel.agent.runtime_context import scope_of
 from substrate.kernel.tools import ToolExecutionResult
 from substrate.kernel.tools.tools import ToolRisk
 from substrate.logger import setup_logging
@@ -137,15 +133,16 @@ class CodeInterpreterTool:
             )
 
         timeout_s = max(1, min(int(timeout or self._default_timeout_s), _MAX_TIMEOUT))
-        thread_id = current_thread_id.get()
+        run_scope = scope_of(ctx)
+        thread_id = run_scope.thread_id
         session_id = (
             thread_id
             if thread_id and thread_id != _DEFAULT_SESSION
             else self.session_id
         )
-        scope = current_scope(session_id)
-        agent_id = current_agent_id.get() or "primary"
-        parent_agent_id = current_parent_agent_id.get()
+        scope = workspace_scope(run_scope, session_id)
+        agent_id = run_scope.agent_id or "primary"
+        parent_agent_id = run_scope.parent_agent_id
         if scope is None:
             return sandbox_error_result(
                 "Sandbox execution requires a tenant-scoped, signed-in conversation."

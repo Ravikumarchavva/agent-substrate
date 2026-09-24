@@ -59,7 +59,7 @@ def _ctx_mock(*, rag_backend=None, redis=None) -> MagicMock:
     ctx.file_store = MagicMock()
     ctx.file_store.upload = AsyncMock()
     # Uploads write here first, not ctx.file_store directly — see
-    # capabilities/storage/pending.py; promotion into ctx.file_store only
+    # integrations/storage/pending.py; promotion into ctx.file_store only
     # happens at send time (routes/chat_context.py).
     ctx.pending_file_store = MagicMock()
     ctx.pending_file_store.upload = AsyncMock()
@@ -264,7 +264,7 @@ async def test_upload_triggers_eager_staging_for_local_backend(monkeypatch):
     """A thread_id is known at upload time -> eager staging fires,
     indexing straight into the caller's per-user session-document index,
     tagged with that real thread_id (no temporary collection — see
-    capabilities/knowledge/session_ingest.py)."""
+    integrations/knowledge/session_ingest.py)."""
     from substrate.serving.monolith.routes import files as files_module
 
     monkeypatch.setattr(

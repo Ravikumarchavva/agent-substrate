@@ -6,6 +6,7 @@ are broken and need fixing alongside whatever changed the API.
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 from substrate.agents import OrchestratorAgent, ReActAgent, Runtime, SubAgentConfig
 from substrate.integrations.tools.compute.calculator import CalculatorTool
 from substrate.agents.flows import ConditionalFlow, ParallelFlow, SequentialFlow
@@ -19,6 +20,7 @@ class _StubLLM:
     """Streams a fixed assistant answer with no tool calls."""
 
     model = "stub"
+    capabilities = ModelCapabilities(model_id="stub")
 
     def __init__(self, answer: str = "42") -> None:
         self._answer = answer
@@ -32,6 +34,7 @@ class _ToolCallingStubLLM:
     """First call requests the calculator tool; second call returns the answer."""
 
     model = "stub-tools"
+    capabilities = ModelCapabilities(model_id="stub-tools")
 
     def __init__(self) -> None:
         self._calls = 0

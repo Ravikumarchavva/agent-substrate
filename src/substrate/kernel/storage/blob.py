@@ -5,7 +5,7 @@ deliberately different shapes over the same S3-compatible substrate:
 
 - ``BlobStore`` is *content-addressed* — you hand it bytes, it hands back an
   opaque ``ref`` (the caller never picks the ref). Concrete implementation:
-  ``DataRefArtifactStore`` (``capabilities/pipeline/data_ref.py``), backed by
+  ``DataRefArtifactStore`` (``integrations/pipeline/data_ref.py``), backed by
   Redis/S3 with TTL-based expiry.
 - ``ObjectStore`` is *keyed* — the caller picks the key (a path-shaped
   string), and can list/copy/delete by prefix. Concrete implementations:

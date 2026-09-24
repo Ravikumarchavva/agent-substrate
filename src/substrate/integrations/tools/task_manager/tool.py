@@ -20,17 +20,11 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, Dict
 
-from substrate.kernel.agent.runtime_context import RunMeta
+from substrate.kernel.agent.runtime_context import RunMeta, scope_of
 from substrate.kernel.storage.tasks import TaskStatus
 from substrate.kernel.tools import ToolExecutionResult, ToolUI
 from substrate.kernel import TextBlock
 from substrate.logger import setup_logging
-from substrate.agents.storage.tasks import (
-    current_thread_id,
-    current_agent_id,
-    current_agent_label,
-    current_parent_agent_id,
-)
 
 logger = setup_logging()
 
@@ -135,11 +129,10 @@ class TaskManagerTool:
     def store(self) -> Any:
         return self._store
 
-    def reset(self) -> None:
-        """Reset the board pointer for the current thread/agent."""
-        tid = current_thread_id.get()
-        aid = current_agent_id.get()
-        self._task_lists.pop((tid, aid), None)
+    def reset(self, ctx: RunMeta | None = None) -> None:
+        """Reset the board pointer for the thread/agent *ctx* belongs to."""
+        scope = scope_of(ctx)
+        self._task_lists.pop((scope.thread_id, scope.agent_id), None)
 
     # ------------------------------------------------------------------
     # Execute
@@ -160,10 +153,11 @@ class TaskManagerTool:
     ) -> ToolExecutionResult:
 
         store = self._store
-        conv_id = current_thread_id.get() or thread_id or "default"
-        agent_id = current_agent_id.get()
-        agent_label = current_agent_label.get()
-        parent_agent_id = current_parent_agent_id.get()
+        scope = scope_of(ctx)
+        conv_id = scope.thread_id or thread_id or "default"
+        agent_id = scope.agent_id
+        agent_label = scope.agent_label
+        parent_agent_id = scope.parent_agent_id
 
         cache_key = (conv_id, agent_id)
         task_list_id = self._task_lists.get(cache_key)

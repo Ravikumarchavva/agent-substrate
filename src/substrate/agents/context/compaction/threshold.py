@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from substrate.kernel.agent.context import CompactionContext
 from substrate.kernel.storage.history import HistoryCheckpoint
-from substrate.agents.context.builder import _estimate_total_tokens
+from substrate.agents.context.tokens import estimate_tokens
 
 
 class ThresholdCheckpointStrategy:
@@ -43,7 +43,7 @@ class ThresholdCheckpointStrategy:
             should_compact = True
 
         if not should_compact and self.token_threshold is not None:
-            total_tokens = _estimate_total_tokens(context.messages)
+            total_tokens = estimate_tokens(context.messages)
             if total_tokens >= self.token_threshold:
                 should_compact = True
 

@@ -12,7 +12,7 @@ from .context import (
 )
 from .manifest import AgentManifest
 from .middleware import MiddlewareStage
-from .runtime_context import CancellationTokenProtocol, RunMeta
+from .runtime_context import CancellationTokenProtocol, RunMeta, RunScope, scope_of
 from .safety import (
     Severity,
     max_severity,
@@ -34,6 +34,8 @@ __all__ = [
     "MiddlewareStage",
     "CancellationTokenProtocol",
     "RunMeta",
+    "RunScope",
+    "scope_of",
     "Severity",
     "max_severity",
     "SafetyVerdict",

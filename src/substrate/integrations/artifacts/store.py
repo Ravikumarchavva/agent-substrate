@@ -140,7 +140,7 @@ class ArtifactStore:
     ) -> tuple[str, Concept]:
         """Build, slug and persist a concept in one call.
 
-        Exists so callers outside ``capabilities/`` (the HTTP routes, the
+        Exists so callers outside ``integrations/`` (the HTTP routes, the
         agent tool) never have to construct a ``Concept`` themselves — that
         would make them import this layer directly, which the project's
         import-linter contracts forbid.

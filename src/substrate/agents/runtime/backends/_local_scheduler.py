@@ -1,7 +1,7 @@
 """LocalScheduler — SQLite-durable SchedulerProtocol + RunRegistryProtocol
 (no-infra tier).
 
-Mirrors ``infrastructure/runtime/scheduler.py``'s durable design (a
+Mirrors ``integrations/runtime/scheduler.py``'s durable design (a
 ``run_queue`` table, a durable ``wake_at`` column instead of an in-process
 timer, retry backoff via suspend+wake_at rather than ``asyncio.sleep``) —
 just SQLite SQL instead of asyncpg SQL, and single-writer-lock atomicity

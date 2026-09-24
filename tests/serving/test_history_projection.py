@@ -8,6 +8,7 @@ depends on any run being the "currently active" one.
 
 from __future__ import annotations
 
+from substrate.kernel.llm import ModelCapabilities
 from substrate.agents.core.react import ReActAgent
 from substrate.agents.runtime import Runtime
 from substrate.kernel.core.content import TextBlock
@@ -25,6 +26,7 @@ from substrate.serving.stream.history import project_thread
 class _StubLLM:
     def __init__(self, answer: str) -> None:
         self.model = "stub"
+        self.capabilities = ModelCapabilities(model_id="stub")
         self._answer = answer
 
     async def generate_stream(self, messages, *, options, ctx=None):

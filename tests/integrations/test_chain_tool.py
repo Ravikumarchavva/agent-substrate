@@ -1,4 +1,4 @@
-"""Tests for capabilities/tools/chain/ — bridge, prelude, ToolChainTool."""
+"""Tests for integrations/tools/chain/ — bridge, prelude, ToolChainTool."""
 
 from __future__ import annotations
 

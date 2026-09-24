@@ -1,7 +1,7 @@
 """Erasure for the per-user session-document index (vector + PageIndex tree
-+ knowledge graph — see ``capabilities/knowledge/session_ingest.py``).
++ knowledge graph — see ``integrations/knowledge/session_ingest.py``).
 
-Not covered by ``capabilities/gdpr/eraser.py``'s existing object-storage
+Not covered by ``integrations/gdpr/eraser.py``'s existing object-storage
 prefix delete: that sweeps whatever ``ctx.file_store`` points at, but the
 Lance data lives somewhere structurally different depending on
 ``SESSION_INDEX_NAMESPACE_URI``:
@@ -41,7 +41,7 @@ async def _drop_lance_namespace(db: Any, namespace_path: list[str]) -> int:
     a namespace that was never created (nothing was ever ingested) or is
     already gone — both no-op rather than raise, matching
     ``_delete_prefix``'s "erasing something that may not exist" tolerance
-    in ``capabilities/gdpr/eraser.py``."""
+    in ``integrations/gdpr/eraser.py``."""
     try:
         resp = await db.list_tables(namespace_path=namespace_path)
     except Exception:
@@ -89,7 +89,7 @@ async def erase_session_index_for_tenant(
     """Erase every user's session-document index under one tenant.
 
     ``known_user_ids`` (from the caller's own Postgres Thread rows — see
-    ``capabilities/gdpr/eraser.py::erase_tenant``) is erased explicitly by
+    ``integrations/gdpr/eraser.py::erase_tenant``) is erased explicitly by
     id; in namespace mode, also enumerates and erases any *other* user
     namespaces this tenant has (belt-and-suspenders — catches a user whose
     only trace left is uploaded documents, with no surviving Thread row),

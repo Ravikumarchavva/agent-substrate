@@ -16,10 +16,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from substrate.kernel.core.usage import Usage
+from substrate.kernel.llm import ModelCapabilities, Modality
+
 
 @dataclass(frozen=True)
 class ModelProfile:
-    """Metadata about a specific LLM model."""
+    """Metadata about a specific LLM model.
+
+    ``modalities`` is the single source of truth for what the model accepts
+    as input — ``supports_vision``/``supports_audio_input`` are derived from
+    it, never set separately.
+    """
 
     name: str
     provider: str  # "openai" | "anthropic" | "gemini"
@@ -29,15 +37,14 @@ class ModelProfile:
     # Cost in USD per 1 million tokens
     input_cost_per_mtok: float = 0.0
     output_cost_per_mtok: float = 0.0
+    cached_input_cost_per_mtok: float | None = None
 
     # Capabilities
-    supports_vision: bool = False
     supports_tools: bool = True
     supports_structured_output: bool = True
     supports_streaming: bool = True
     supports_thinking: bool = False
-    thinking_always_on: bool = False  # o-series models
-    supports_audio_input: bool = False
+    thinking_always_on: bool = False  # reasoning models: fixed temperature
     supports_audio_output: bool = False
     supports_image_generation: bool = False
     supports_prompt_caching: bool = False
@@ -45,6 +52,28 @@ class ModelProfile:
     modalities: tuple[str, ...] = ("text",)
     default_dimensions: int | None = None
     aliases: tuple[str, ...] = ()
+
+    @property
+    def supports_vision(self) -> bool:
+        return "image" in self.modalities
+
+    @property
+    def supports_audio_input(self) -> bool:
+        return "audio" in self.modalities
+
+    @property
+    def capabilities(self) -> ModelCapabilities:
+        return ModelCapabilities(
+            model_id=self.name,
+            context_window=self.context_length,
+            max_output_tokens=self.max_output_tokens,
+            input_modalities=frozenset(Modality(m) for m in self.modalities),
+            supports_tool_calling=self.supports_tools,
+            supports_reasoning=self.supports_thinking,
+            input_cost_per_mtok=self.input_cost_per_mtok,
+            cached_input_cost_per_mtok=self.cached_input_cost_per_mtok,
+            output_cost_per_mtok=self.output_cost_per_mtok,
+        )
 
 
 _MODELS: list[ModelProfile] = [
@@ -56,10 +85,7 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=16_384,
         input_cost_per_mtok=2.50,
         output_cost_per_mtok=10.00,
-        supports_vision=True,
-        supports_audio_input=True,
-        supports_audio_output=True,
-        modalities=("text", "image", "audio"),
+        modalities=("text", "image", "document"),
         aliases=("gpt-4o-2024-11-20",),
     ),
     ModelProfile(
@@ -69,8 +95,7 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=16_384,
         input_cost_per_mtok=0.15,
         output_cost_per_mtok=0.60,
-        supports_vision=True,
-        modalities=("text", "image"),
+        modalities=("text", "image", "document"),
         aliases=("gpt-4o-mini-2024-07-18",),
     ),
     ModelProfile(
@@ -80,8 +105,7 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=32_768,
         input_cost_per_mtok=2.00,
         output_cost_per_mtok=8.00,
-        supports_vision=True,
-        modalities=("text", "image"),
+        modalities=("text", "image", "document"),
     ),
     ModelProfile(
         name="gpt-4.1-mini",
@@ -90,8 +114,7 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=32_768,
         input_cost_per_mtok=0.40,
         output_cost_per_mtok=1.60,
-        supports_vision=True,
-        modalities=("text", "image"),
+        modalities=("text", "image", "document"),
     ),
     ModelProfile(
         name="gpt-4.1-nano",
@@ -100,8 +123,7 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=32_768,
         input_cost_per_mtok=0.10,
         output_cost_per_mtok=0.40,
-        supports_vision=True,
-        modalities=("text", "image"),
+        modalities=("text", "image", "document"),
     ),
     ModelProfile(
         name="o3",
@@ -110,10 +132,9 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=100_000,
         input_cost_per_mtok=10.00,
         output_cost_per_mtok=40.00,
-        supports_vision=True,
         supports_thinking=True,
         thinking_always_on=True,
-        modalities=("text", "image"),
+        modalities=("text", "image", "document"),
         aliases=("o3-2025-04-16",),
     ),
     ModelProfile(
@@ -135,34 +156,33 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=100_000,
         input_cost_per_mtok=1.10,
         output_cost_per_mtok=4.40,
-        supports_vision=True,
         supports_thinking=True,
         thinking_always_on=True,
-        modalities=("text", "image"),
+        modalities=("text", "image", "document"),
         aliases=("o4-mini-2025-04-16",),
     ),
     ModelProfile(
         name="gpt-5",
         provider="openai",
-        context_length=1_047_576,
-        max_output_tokens=32_768,
-        input_cost_per_mtok=2.00,
-        output_cost_per_mtok=8.00,
-        supports_vision=True,
-        supports_audio_input=True,
-        supports_audio_output=True,
-        modalities=("text", "image", "audio"),
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_mtok=1.25,
+        output_cost_per_mtok=10.00,
+        supports_thinking=True,
+        thinking_always_on=True,
+        modalities=("text", "image", "document"),
         aliases=("gpt-5.4",),
     ),
     ModelProfile(
         name="gpt-5-mini",
         provider="openai",
-        context_length=1_047_576,
-        max_output_tokens=32_768,
+        context_length=400_000,
+        max_output_tokens=128_000,
         input_cost_per_mtok=0.25,
         output_cost_per_mtok=2.00,
-        supports_vision=True,
-        modalities=("text", "image"),
+        supports_thinking=True,
+        thinking_always_on=True,
+        modalities=("text", "image", "document"),
         aliases=("gpt-5.4-mini",),
     ),
     # ── Anthropic ─────────────────────────────────────────────────────────────
@@ -173,10 +193,9 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=16_384,
         input_cost_per_mtok=3.00,
         output_cost_per_mtok=15.00,
-        supports_vision=True,
         supports_thinking=True,
         supports_prompt_caching=True,
-        modalities=("text", "image"),
+        modalities=("text", "image", "document"),
         aliases=("claude-sonnet-4",),
     ),
     ModelProfile(
@@ -186,10 +205,9 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=32_000,
         input_cost_per_mtok=15.00,
         output_cost_per_mtok=75.00,
-        supports_vision=True,
         supports_thinking=True,
         supports_prompt_caching=True,
-        modalities=("text", "image"),
+        modalities=("text", "image", "document"),
         aliases=("claude-opus-4",),
     ),
     ModelProfile(
@@ -199,7 +217,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=8_192,
         input_cost_per_mtok=1.00,
         output_cost_per_mtok=5.00,
-        supports_vision=True,
         supports_thinking=True,
         supports_prompt_caching=True,
         modalities=("text", "image"),
@@ -212,9 +229,8 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=8_192,
         input_cost_per_mtok=3.00,
         output_cost_per_mtok=15.00,
-        supports_vision=True,
         supports_prompt_caching=True,
-        modalities=("text", "image"),
+        modalities=("text", "image", "document"),
         aliases=("claude-3-5-sonnet", "claude-3-5-sonnet-latest"),
     ),
     ModelProfile(
@@ -224,7 +240,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=8_192,
         input_cost_per_mtok=0.80,
         output_cost_per_mtok=4.00,
-        supports_vision=True,
         supports_prompt_caching=True,
         modalities=("text", "image"),
         aliases=("claude-3-5-haiku", "claude-3-5-haiku-latest"),
@@ -236,7 +251,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=4_096,
         input_cost_per_mtok=0.25,
         output_cost_per_mtok=1.25,
-        supports_vision=True,
         supports_prompt_caching=True,
         modalities=("text", "image"),
         aliases=("claude-3-haiku",),
@@ -249,11 +263,9 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=65_536,
         input_cost_per_mtok=0.30,
         output_cost_per_mtok=2.50,
-        supports_vision=True,
         supports_thinking=True,
-        supports_audio_input=True,
         supports_prompt_caching=True,
-        modalities=("text", "image", "audio", "video"),
+        modalities=("text", "image", "audio", "video", "document"),
         aliases=("gemini-2.5-flash-preview-05-20", "gemini-2.5-flash-latest"),
     ),
     ModelProfile(
@@ -263,11 +275,9 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=65_536,
         input_cost_per_mtok=0.10,
         output_cost_per_mtok=0.40,
-        supports_vision=True,
         supports_thinking=False,
-        supports_audio_input=True,
         supports_prompt_caching=True,
-        modalities=("text", "image", "audio", "video"),
+        modalities=("text", "image", "audio", "video", "document"),
         aliases=("gemini-2.5-flash-lite-preview-06-17", "gemini-2.5-flash-lite-latest"),
     ),
     ModelProfile(
@@ -277,11 +287,9 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=65_536,
         input_cost_per_mtok=0.50,
         output_cost_per_mtok=3.00,
-        supports_vision=True,
         supports_thinking=False,
-        supports_audio_input=True,
         supports_prompt_caching=True,
-        modalities=("text", "image", "audio", "video"),
+        modalities=("text", "image", "audio", "video", "document"),
         aliases=("gemini-3.1-flash-lite-latest",),
     ),
     ModelProfile(
@@ -291,11 +299,9 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=65_536,
         input_cost_per_mtok=1.25,
         output_cost_per_mtok=10.00,
-        supports_vision=True,
         supports_thinking=True,
-        supports_audio_input=True,
         supports_prompt_caching=True,
-        modalities=("text", "image", "audio", "video"),
+        modalities=("text", "image", "audio", "video", "document"),
         aliases=("gemini-2.5-pro-preview-06-05", "gemini-2.5-pro-latest"),
     ),
     ModelProfile(
@@ -305,11 +311,9 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=8_192,
         input_cost_per_mtok=0.10,
         output_cost_per_mtok=0.40,
-        supports_vision=True,
-        supports_audio_input=True,
         supports_image_generation=True,
         supports_prompt_caching=True,
-        modalities=("text", "image", "audio", "video"),
+        modalities=("text", "image", "audio", "video", "document"),
         aliases=("gemini-2.0-flash-latest",),
     ),
     ModelProfile(
@@ -319,10 +323,8 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=8_192,
         input_cost_per_mtok=0.075,
         output_cost_per_mtok=0.30,
-        supports_vision=True,
-        supports_audio_input=True,
         supports_prompt_caching=True,
-        modalities=("text", "image", "audio", "video"),
+        modalities=("text", "image", "audio", "video", "document"),
         aliases=("gemini-1.5-flash-latest", "gemini-1.5-flash-8b"),
     ),
     ModelProfile(
@@ -332,10 +334,8 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=8_192,
         input_cost_per_mtok=1.25,
         output_cost_per_mtok=5.00,
-        supports_vision=True,
-        supports_audio_input=True,
         supports_prompt_caching=True,
-        modalities=("text", "image", "audio", "video"),
+        modalities=("text", "image", "audio", "video", "document"),
         aliases=("gemini-1.5-pro-latest",),
     ),
     # ── Groq ──────────────────────────────────────────────────────────────────
@@ -346,7 +346,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=32_768,
         input_cost_per_mtok=0.59,
         output_cost_per_mtok=0.79,
-        supports_vision=False,
         supports_tools=True,
         supports_streaming=True,
         modalities=("text",),
@@ -359,7 +358,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=32_768,
         input_cost_per_mtok=0.59,
         output_cost_per_mtok=0.79,
-        supports_vision=False,
         supports_tools=True,
         supports_streaming=True,
         modalities=("text",),
@@ -372,7 +370,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=8_192,
         input_cost_per_mtok=0.05,
         output_cost_per_mtok=0.08,
-        supports_vision=False,
         supports_tools=True,
         supports_streaming=True,
         modalities=("text",),
@@ -385,7 +382,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=8_192,
         input_cost_per_mtok=0.59,
         output_cost_per_mtok=0.79,
-        supports_vision=False,
         supports_tools=True,
         supports_streaming=True,
         modalities=("text",),
@@ -398,7 +394,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=8_192,
         input_cost_per_mtok=0.05,
         output_cost_per_mtok=0.08,
-        supports_vision=False,
         supports_tools=True,
         supports_streaming=True,
         modalities=("text",),
@@ -412,7 +407,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=0,
         input_cost_per_mtok=0.02,
         output_cost_per_mtok=0.0,
-        supports_vision=False,
         supports_tools=False,
         supports_structured_output=False,
         supports_streaming=False,
@@ -426,7 +420,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=0,
         input_cost_per_mtok=0.13,
         output_cost_per_mtok=0.0,
-        supports_vision=False,
         supports_tools=False,
         supports_structured_output=False,
         supports_streaming=False,
@@ -440,7 +433,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=0,
         input_cost_per_mtok=0.10,
         output_cost_per_mtok=0.0,
-        supports_vision=False,
         supports_tools=False,
         supports_structured_output=False,
         supports_streaming=False,
@@ -455,7 +447,6 @@ _MODELS: list[ModelProfile] = [
         max_output_tokens=0,
         input_cost_per_mtok=0.00625,
         output_cost_per_mtok=0.0,
-        supports_vision=False,
         supports_tools=False,
         supports_structured_output=False,
         supports_streaming=False,
@@ -488,14 +479,21 @@ def get_context_length(model: str, default: int = 128_000) -> int:
     return profile.context_length if profile else default
 
 
+def resolve_capabilities(model: str) -> ModelCapabilities:
+    """Registry capabilities for *model*, or a conservative text-only,
+    unpriced default for a model the registry doesn't know (a local
+    Ollama/vLLM model, say) — pass ``capabilities=`` to the client to
+    declare what such a model can really see."""
+    profile = get_model_profile(model)
+    if profile is not None:
+        return profile.capabilities
+    return ModelCapabilities(model_id=model)
+
+
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Estimate the cost in USD for a request."""
-    profile = get_model_profile(model)
-    if not profile:
-        return 0.0
-    return (
-        profile.input_cost_per_mtok * input_tokens / 1_000_000
-        + profile.output_cost_per_mtok * output_tokens / 1_000_000
+    return resolve_capabilities(model).cost_usd(
+        Usage(input_tokens=input_tokens, output_tokens=output_tokens)
     )
 
 

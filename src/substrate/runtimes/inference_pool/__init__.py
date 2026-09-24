@@ -8,7 +8,7 @@ consumer) once ``embedding_reranker`` became a real second one — see
 ``docs/claude_docs/decisions.md`` for the "why promote now" reasoning.
 Placed here, a sibling of ``document_intelligence``/``embedding_reranker``,
 because it's the only legal home reachable from ``serving/``,
-``capabilities/``, and ``runtimes/`` alike without a new import-linter
+``integrations/``, and ``runtimes/`` alike without a new import-linter
 exception (``runtimes/`` is already exempt from the "serving cannot import
 agents/capabilities" contract).
 """

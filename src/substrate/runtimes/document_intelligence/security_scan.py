@@ -23,7 +23,7 @@ from substrate.logger import setup_logging
 logger = setup_logging("substrate.runtimes.document_intelligence.security_scan")
 
 # Structural-only parsing risks (downgraded to warnings rather than blocking execution;
-# see docs/capabilities/08-document-intelligence.md)
+# see docs/integrations/08-document-intelligence.md)
 _STRUCTURAL_ONLY_THREATS = {"T6_DOS", "T3_OBFUSCATION"}
 
 _VERDICT_SEVERITY = {

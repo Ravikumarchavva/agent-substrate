@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, Awaitable, ClassVar
+from typing import Awaitable, Callable, ClassVar, Iterator
 
 from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.exceptions import MiddlewareTermination
@@ -16,6 +16,19 @@ _PII_PATTERNS: dict[str, re.Pattern[str]] = {
     "credit_card": re.compile(r"\b\d(?:[ -]?\d){12,18}\b"),
     "ip_address": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
 }
+
+
+def _strings(value: object) -> Iterator[str]:
+    """Every string inside *value*, however deeply nested — a tool argument can
+    be a dict or list, and PII in ``{"body": {"email": ...}}`` must not slip by."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _strings(item)
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            yield from _strings(item)
 
 
 class PIIDetectionMiddleware:
@@ -52,13 +65,11 @@ class PIIDetectionMiddleware:
             return
 
         for key, val in arguments.items():
-            if not isinstance(val, str):
-                continue
-            for label, pattern in self._patterns.items():
-                match = pattern.search(val)
-                if match:
-                    raise MiddlewareTermination(
-                        f"PIIDetection: PII detected ({label}) in argument '{key}'"
-                    )
+            for text in _strings(val):
+                for label, pattern in self._patterns.items():
+                    if pattern.search(text):
+                        raise MiddlewareTermination(
+                            f"PIIDetection: PII detected ({label}) in argument '{key}'"
+                        )
 
         await call_next()

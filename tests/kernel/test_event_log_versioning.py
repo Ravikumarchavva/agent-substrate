@@ -24,6 +24,7 @@ def test_core_kind_values_are_the_persisted_strings() -> None:
         "RUN_COMPLETED": "run.completed",
         "RUN_FAILED": "run.failed",
         "RUN_CANCELLED": "run.cancelled",
+        "RUN_TRUNCATED": "run.truncated",
         "EFFECT_RESULT": "effect.result",
         "LLM_CALL": "llm.call",
         "TOOL_CALL": "tool.call",

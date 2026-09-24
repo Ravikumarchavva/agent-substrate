@@ -35,7 +35,7 @@ from typing import Any, Iterable
 
 from substrate.kernel.document import ExtractedImage, ExtractedPage, ExtractionResult
 
-# Layout regions extracted as discrete image crops (see docs/capabilities/08-document-intelligence.md)
+# Layout regions extracted as discrete image crops (see docs/integrations/08-document-intelligence.md)
 _IMAGE_LABELS = {"chart", "table", "figure", "image"}
 
 # Minimum confidence required to extract region as an image crop

@@ -123,7 +123,7 @@ build:
 # were in the tree at all.)
 #   PYSEC-2026-282 (apscheduler, RCE via unmarshal_object) — no fix version
 #     exists upstream yet. Not reachable today: we only ever construct
-#     AsyncScheduler(data_store=MemoryDataStore()) (capabilities/triggers/
+#     AsyncScheduler(data_store=MemoryDataStore()) (integrations/triggers/
 #     scheduler.py) — no persistent data store, so the vulnerable
 #     serialize/deserialize round-trip never runs. Re-audit if the data
 #     store is ever changed to a persistent backend.

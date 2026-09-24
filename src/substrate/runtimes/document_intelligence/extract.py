@@ -7,15 +7,15 @@ reimplementations of "try the document-intelligence extraction service,
 else fall back to pypdf" existed before this module —
 ``serving/monolith/routes/files.py::_build_extracted_sidecar_text``,
 ``serving/monolith/routes/chat_context.py::_extract_document_text``, and
-``capabilities/knowledge/backends/local.py::LocalRagBackend._load``. Every
+``integrations/knowledge/backends/local.py::LocalRagBackend._load``. Every
 one of them now calls this instead.
 
 Placed inside ``runtimes/`` deliberately: ``runtimes/`` imports only
 ``substrate.kernel``/``substrate.logger`` today (verified via grep), and
 ``pyproject.toml`` already documents it as exempt from the "serving cannot
 import agents/capabilities" import-linter contract — this needs zero new
-lint exceptions, while a ``capabilities/knowledge/`` home would need two.
-``capabilities/`` already imports ``runtimes/`` today (``local.py`` imports
+lint exceptions, while a ``integrations/knowledge/`` home would need two.
+``integrations/`` already imports ``runtimes/`` today (``local.py`` imports
 both ``document_intelligence.client`` and ``embedding_reranker.client``),
 so the dependency direction is already blessed, not new.
 

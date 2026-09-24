@@ -336,6 +336,18 @@ def is_hosted_tool(tool: object) -> TypeGuard[HostedTool]:
     )
 
 
+def is_concurrency_safe(tool: object) -> bool:
+    """``True`` only when *tool* declares ``concurrency_safe = True``.
+
+    A tool opts in when several calls to it (and to any other opted-in
+    tool) can run at the same time without sharing mutable state — pure
+    reads like search or fetching a URL. Fail-safe: anything that doesn't
+    declare it runs one call at a time. Independent of ``risk``, which is
+    about approval, not shared state.
+    """
+    return getattr(tool, "concurrency_safe", False) is True
+
+
 # ---------------------------------------------------------------------------
 # ToolRegistry Protocol
 # ---------------------------------------------------------------------------
@@ -370,6 +382,7 @@ __all__ = [
     "ProviderDefinedTool",
     "AnyTool",
     "is_hosted_tool",
+    "is_concurrency_safe",
     "is_provider_defined_tool",
     "ToolRegistry",
 ]

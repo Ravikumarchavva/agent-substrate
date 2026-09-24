@@ -6,7 +6,7 @@ import { SourceChip } from "@/components/CitationChip";
 /**
  * The clickable "Sources" row under an assistant message — built entirely
  * from `Message.sources`, which itself is built entirely from real
- * retrieval metadata (see agent-substrate's capabilities/knowledge/
+ * retrieval metadata (see agent-substrate's integrations/knowledge/
  * citations.py). Renders nothing when there are no sources, so it's always
  * safe to mount unconditionally.
  */

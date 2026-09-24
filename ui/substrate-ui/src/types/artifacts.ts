@@ -1,5 +1,5 @@
 /** Curated knowledge stored as OKF concepts. See agent-substrate's
- *  capabilities/artifacts/ — this mirrors ArtifactOut in routes/artifacts.py. */
+ *  integrations/artifacts/ — this mirrors ArtifactOut in routes/artifacts.py. */
 
 /** `session` is one conversation; `global` spans all of them. */
 export type ArtifactScope = "session" | "global";

@@ -2,7 +2,7 @@ import type { CitationSource } from "@/types";
 
 /**
  * Parse the `structured_content.citations` payload a `tool.result` SSE event
- * carries (see agent-substrate's capabilities/knowledge/citations.py::
+ * carries (see agent-substrate's integrations/knowledge/citations.py::
  * Citation.to_wire) into `CitationSource[]`.
  *
  * Grounding lives entirely on the backend — this only reshapes snake_case

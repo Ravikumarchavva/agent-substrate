@@ -1,5 +1,5 @@
 // A grounded source reference behind a retrieved passage — built entirely
-// from real retrieval metadata on the backend (capabilities/knowledge/
+// from real retrieval metadata on the backend (integrations/knowledge/
 // citations.py), never from the model's own text. `index` maps to the `[n]`
 // markers a message's prose cites; the backend guarantees indices are
 // stable for the life of a chat thread, so `[2]` always means the same

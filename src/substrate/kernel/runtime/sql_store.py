@@ -887,6 +887,17 @@ class SqlRuntimeStore:
         except asyncio.TimeoutError:
             pass
 
+    async def annotate(self, run_id: RunId, entries: Sequence[NewEntry]) -> list[int]:
+        async def do(tx: Tx) -> list[int]:
+            await tx.lock(str(run_id))
+            if await tx.fetchone("SELECT 1 AS x FROM rt_runs WHERE run_id = ?", run_id) is None:
+                raise KeyError(run_id)
+            return [await self._append(tx, str(run_id), entry) for entry in entries]
+
+        seqs = await self._tx(do)
+        self._notify({str(run_id)})
+        return seqs
+
     async def append_ephemeral(self, lease: Lease, entries: Sequence[NewEntry]) -> None:
         async def do(tx: Tx) -> None:
             run = await self._fenced_run(tx, lease)

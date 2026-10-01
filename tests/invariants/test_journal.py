@@ -1,9 +1,8 @@
 """Invariant register — the journal is replay state, not a token stream.
 
-Every streamed token is currently appended to the run's durable log as its own
-row, so a 1000-token reply writes 1000 rows that every subsequent ``fold()``
-reads back. Replay needs the finished message, not the keystrokes; live tokens
-belong on an ephemeral channel.
+A streamed token is live output, not replay state: the durable log holds the
+finished message, and the tokens travel on an ephemeral channel a tail can see and a
+replay never reads.
 
 The row asserts the shape rather than a constant: journal growth must not track
 token count.
@@ -17,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from substrate.kernel.runtime.runtime import Runtime
+from substrate.kernel.testing.runtime import ephemeral_runtime
 from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.core.usage import Usage
@@ -69,18 +68,16 @@ class _ChattyAgent:
 
 async def _journal_rows(chunks: int) -> int:
     agent = _ChattyAgent(chunks)
-    async with Runtime() as runtime:
+    async with ephemeral_runtime() as runtime:
         await runtime.register(agent)
         run_id = await runtime.submit(
             agent.id,
             Message(target=agent.id, sender=Actor.system("test"), payload=DataPayload(data={})),
         )
-        rows = 0
-        async for entry in runtime.event_log.tail(run_id):
-            rows += 1
+        async for entry in runtime.tail(run_id):
             if entry.kind in ("run.completed", "run.failed"):
                 break
-        return rows
+        return len(await runtime.read(run_id))
 
 
 @pytest.fixture(scope="module")
@@ -91,12 +88,6 @@ def rows_by_chunk_count() -> dict[int, int]:
     return asyncio.run(_collect())
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Journal/stream split: one durable row is appended per streamed "
-    "token, so the log grows with reply length and every fold() re-reads it. "
-    "Fixed in step 3 (ephemeral stream channel + append_many).",
-)
 def test_journal_size_does_not_grow_with_token_count(
     rows_by_chunk_count: dict[int, int],
 ) -> None:

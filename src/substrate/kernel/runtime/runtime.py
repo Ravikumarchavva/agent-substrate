@@ -37,6 +37,7 @@ from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogK
 from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 from substrate.kernel.abstractions.runtime.store import Delivery, RunRecord, RunSpec, RuntimeStore
 from substrate.kernel.runtime.resolver import ActorFactory, ActorResolver
+from substrate.kernel.runtime.tail import tail
 from substrate.kernel.runtime.worker import Worker
 
 if TYPE_CHECKING:
@@ -45,7 +46,6 @@ if TYPE_CHECKING:
 _TERMINAL_KINDS = frozenset(
     {RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED, RunLogKind.RUN_TRUNCATED}
 )
-_TAIL_WAIT_S = 1.0
 
 
 @dataclass
@@ -165,9 +165,9 @@ class Runtime:
         async for entry in self.tail(run_id):
             payload = entry.payload or {}
             if entry.kind == RunLogKind.TOOL_RESULT:
-                text = ""  # a new turn: the answer is what follows the last tool result
-            elif entry.kind == RunLogKind.TEXT_DELTA:
-                text += payload.get("text", "")
+                text = ""  # a new turn: the answer is the last assistant message after the final tool result
+            elif entry.kind == RunLogKind.ASSISTANT_MESSAGE:
+                text = payload.get("text", "")
             elif entry.kind == RunLogKind.RUN_COMPLETED:
                 return RunOutcome(run_id=run_id, status=RunStatus.COMPLETED, output=text or None)
             elif entry.kind == RunLogKind.RUN_FAILED:
@@ -210,18 +210,10 @@ class Runtime:
     def store(self) -> RuntimeStore:
         return self._store
 
-    async def tail(self, run_id: RunId | str, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]:
+    def tail(self, run_id: RunId | str, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]:
         """A run's entries — live output included — as they happen. Never ends on its own:
         stop iterating when you see the terminal entry you care about."""
-        seq = from_seq
-        run_id = RunId(run_id)
-        while True:
-            entries = await self._store.read_events(run_id, from_seq=seq)
-            for entry in entries:
-                yield entry
-                seq = entry.seq + 1
-            if not entries:
-                await self._store.wait_events(run_id, after_seq=seq - 1, timeout_s=_TAIL_WAIT_S)
+        return tail(self._store, run_id, from_seq=from_seq)
 
     async def read(self, run_id: RunId | str, *, from_seq: int = 0) -> list[RunLogEntry]:
         """A run's durable entries so far (no live output): what a replay would see."""

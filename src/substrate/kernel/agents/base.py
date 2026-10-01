@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from substrate.kernel.version import __version__ as _PACKAGE_VERSION
 from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.kernel.abstractions.core.content import (
     ChatMessage,
@@ -176,6 +177,12 @@ class BaseAgent:
     only factors out the conversation bookkeeping every turn-loop agent
     repeats identically (see module docstring).
     """
+
+    version: str = _PACKAGE_VERSION
+    """The version a run is pinned to when it starts. The worker will not replay a run under
+    a different one: its journal records what the old code did, and attaching those results
+    to changed code is how a replay quietly goes wrong. An agent whose behaviour changes
+    incompatibly overrides this."""
 
     @staticmethod
     def _message_to_chat(msg: Message) -> ChatMessage:

@@ -81,7 +81,7 @@ async def execute_agent_run(
     )
     actual_run_id = await runtime.submit(agent.id, msg)  # type: ignore[union-attr]
 
-    async for entry in runtime.event_log.tail(actual_run_id):  # type: ignore[union-attr]
+    async for entry in runtime.tail(actual_run_id):  # type: ignore[union-attr]
         kind = entry.kind
         p = entry.payload or {}
 

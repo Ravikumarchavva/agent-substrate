@@ -3,16 +3,7 @@ their persisted spellings, and a log with an unknown kind still loads."""
 
 from __future__ import annotations
 
-import os
-import uuid
-
-import pytest
-
 from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
-
-_PG_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb"
-).replace("+asyncpg", "")
 
 
 def test_core_kind_values_are_the_persisted_strings() -> None:
@@ -29,6 +20,7 @@ def test_core_kind_values_are_the_persisted_strings() -> None:
         "EFFECT_INTENT": "effect.intent",
         "EFFECT_RESULT": "effect.result",
         "LLM_CALL": "llm.call",
+        "ASSISTANT_MESSAGE": "assistant.message",
         "TOOL_CALL": "tool.call",
         "TOOL_RESULT": "tool.result",
         "USER_MESSAGE": "user.message",
@@ -49,35 +41,3 @@ def test_entry_defaults_to_version_1_and_accepts_unknown_kinds() -> None:
     assert entry.v == 1
     assert entry.kind == "some.app.kind"
     assert RunLogEntry(run_id="r", seq=0, kind=RunLogKind.RUN_STARTED).kind == "run.started"
-
-
-async def test_version_and_unknown_kind_round_trip_through_postgres() -> None:
-    asyncpg = pytest.importorskip("asyncpg")
-    try:
-        pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
-    except Exception:
-        pytest.skip("Postgres not reachable")
-
-    from substrate.integrations.runtime.event_log import EventLog
-
-    log = EventLog(pool)
-    run_id = f"evlog-{uuid.uuid4().hex}"
-    try:
-        await log.setup()
-        await log.append(
-            run_id,
-            RunLogEntry(run_id=run_id, seq=0, kind=RunLogKind.RUN_STARTED, v=2),
-            expected_seq=-1,
-        )
-        await log.append(
-            run_id,
-            RunLogEntry(run_id=run_id, seq=1, kind="future.kind", payload={"x": 1}),
-            expected_seq=0,
-        )
-        got = [e async for e in log.read(run_id)]
-        assert [(e.kind, e.v) for e in got] == [("run.started", 2), ("future.kind", 1)]
-        assert got[1].payload == {"x": 1}
-    finally:
-        async with pool.acquire() as conn:
-            await conn.execute("DELETE FROM event_log WHERE run_id = $1", run_id)
-        await pool.close()

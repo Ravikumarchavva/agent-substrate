@@ -32,6 +32,7 @@ from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     JsonObject,
     MediaBlock,
+    ReasoningBlock,
     TextBlock,
     parse_content_block,
 )
@@ -233,21 +234,29 @@ class RunContext:
             "llm", {"model": client.model, "msg_count": len(messages)}, run, idempotent=True
         )
         response = _deserialize(outcome.value)
-        if not outcome.replayed:
-            await self._commit(
-                [
-                    NewEntry(
-                        kind=RunLogKind.LLM_CALL,
-                        payload={
-                            "model": client.model,
-                            "tokens": response.usage.total_tokens,
-                            "cost_usd": response.cost_usd,
-                            "finish_reason": response.finish_reason.value,
-                        },
-                        dedup_key=f"llm.call:{outcome.effect_id}",
-                    )
-                ]
+        # Written on a replay too (deduplicated), so the record exists even if the worker died
+        # between recording the call and writing these.
+        entries = [
+            NewEntry(
+                kind=RunLogKind.ASSISTANT_MESSAGE,
+                payload={"text": response.text, "reasoning": "\n".join(b.text for b in response.content if isinstance(b, ReasoningBlock))},
+                dedup_key=f"assistant.message:{outcome.effect_id}",
             )
+        ]
+        if not outcome.replayed:
+            entries.append(
+                NewEntry(
+                    kind=RunLogKind.LLM_CALL,
+                    payload={
+                        "model": client.model,
+                        "tokens": response.usage.total_tokens,
+                        "cost_usd": response.cost_usd,
+                        "finish_reason": response.finish_reason.value,
+                    },
+                    dedup_key=f"llm.call:{outcome.effect_id}",
+                )
+            )
+        await self._commit(entries)
         return response
 
     async def _generate(self, client: LLMClient, messages: list[ChatMessage], options: GenerationOptions) -> LLMResponse:

@@ -529,9 +529,7 @@ async def add_scheduled_task_feedback(
     runtime = ctx.runtime
     if runtime is None:
         raise HTTPException(status_code=503, detail="Runtime not configured")
-    attached = await append_user_message(
-        runtime.event_log, runtime.scheduler, str(task.thread_id), body.content
-    )
+    attached = await append_user_message(runtime.store, str(task.thread_id), body.content)
     if not attached:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

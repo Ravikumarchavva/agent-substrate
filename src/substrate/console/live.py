@@ -67,14 +67,14 @@ class LiveTurn:
         theme: ConsoleTheme,
         status: StatusLine,
         hitl_handler: ConsoleHumanHandler | None = None,
-        signal_bus: Optional[Any] = None,
+        store: Optional[Any] = None,
     ) -> None:
         self.console = console
         self.name = name
         self.theme = theme
         self.status = status
         self._hitl_handler = hitl_handler
-        self._signal_bus = signal_bus
+        self._store = store
 
         # Ephemeral state held in the live region until committed.
         self._section: str | None = None  # "reasoning" | "text" | None
@@ -161,8 +161,8 @@ class LiveTurn:
                 )
 
         # Fire the signal to resume the suspended run.
-        if self._signal_bus is not None and ev.run_id:
-            await self._signal_bus.signal(
+        if self._store is not None and ev.run_id:
+            await self._store.signal(
                 ev.run_id, f"hitl:{ev.request_id}", signal_payload
             )
 

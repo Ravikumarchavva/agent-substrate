@@ -135,7 +135,7 @@ class Console:
             theme=self.theme,
             status=status,
             hitl_handler=self._hitl_handler,
-            signal_bus=self._runtime.signal_bus if self._hitl_handler else None,
+            store=self._runtime.store if self._hitl_handler else None,
         )
         final = await turn.consume(self._events(task))
         self._pending_followup = turn.pending_followup

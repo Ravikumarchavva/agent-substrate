@@ -28,7 +28,6 @@ from typing import Any, List, Optional, cast
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from substrate.config import SubstrateConfig
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.llm import EmbeddingClient, LLMClient
 from substrate.kernel.abstractions.storage.history import HistoryProvider
@@ -159,40 +158,30 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
 
     Returns ``(runtime, stack_or_None)`` — caller must close the stack on shutdown.
     """
-    if cfg.RUNTIME_BACKEND.lower() == "postgres":
-        from substrate.integrations.runtime import build_postgres_runtime
-
-        pg_url = (cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL).replace("+asyncpg", "")
-        stack = AsyncExitStack()
-        runtime = await stack.enter_async_context(
-            build_postgres_runtime(
-                postgres_url=pg_url,
-                reclaim_orphans=True,
-                pool_min_size=cfg.RUNTIME_PG_POOL_MIN_SIZE,
-                pool_max_size=cfg.RUNTIME_PG_POOL_MAX_SIZE,
-            )
-        )
-        logger.info("Agent runtime: durable (Postgres EventLogProtocol)")
-        return runtime, stack
-
-    if cfg.RUNTIME_BACKEND.lower() == "local":
-        from substrate.kernel.runtime.local_runtime import build_local_runtime
-
-        stack = AsyncExitStack()
-        runtime = await stack.enter_async_context(
-            build_local_runtime(path=cfg.RUNTIME_LOCAL_DB_PATH)
-        )
-        logger.info(
-            "Agent runtime: durable, no infra (SQLite at %s)", cfg.RUNTIME_LOCAL_DB_PATH
-        )
-        return runtime, stack
-
     from substrate.kernel.runtime import Runtime
 
-    runtime = Runtime()
-    await runtime.start()
-    logger.info("Agent runtime: in-memory")
-    return runtime, None
+    backend = cfg.RUNTIME_BACKEND.lower()
+    if backend == "postgres":
+        from substrate.integrations.runtime import PostgresRuntimeStore
+
+        pg_url = (cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL).replace("+asyncpg", "")
+        store = PostgresRuntimeStore(
+            pg_url,
+            pool_min_size=cfg.RUNTIME_PG_POOL_MIN_SIZE,
+            pool_max_size=cfg.RUNTIME_PG_POOL_MAX_SIZE,
+        )
+        logger.info("Agent runtime: durable (Postgres)")
+    elif backend == "local":
+        from substrate.kernel.runtime import SqliteRuntimeStore
+
+        store = SqliteRuntimeStore(cfg.RUNTIME_LOCAL_DB_PATH)
+        logger.info("Agent runtime: durable, no infra (SQLite at %s)", cfg.RUNTIME_LOCAL_DB_PATH)
+    else:
+        raise ValueError(f"RUNTIME_BACKEND must be 'postgres' or 'local', got {cfg.RUNTIME_BACKEND!r}")
+
+    stack = AsyncExitStack()
+    runtime = await stack.enter_async_context(Runtime(store))
+    return runtime, stack
 
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
@@ -380,8 +369,7 @@ async def init_infrastructure(
 
     bridge_registry = BridgeRegistry(
         response_timeout=300.0,
-        signal_bus=runtime.signal_bus,
-        scheduler=runtime.scheduler,
+        store=runtime.store,
     )
     skill_manager = SkillManager(auto_discover=True)
 
@@ -725,69 +713,29 @@ async def init_runtime_services(
 
 
 async def resume_pending_runs(runtime: Any, *, registry: Any, model_client: Any) -> int:
-    """Register rebuilt agents for pending runs that have a persisted spec."""
-    scheduler = getattr(runtime, "_scheduler", None)
-    if scheduler is None or not hasattr(scheduler, "pending_run_specs"):
-        return 0
+    """Rebuild and register the agent of every active run that carries a recipe.
 
-    import substrate
+    A run left over from before a restart can only continue if something can run its
+    agent again, so the host rebuilds agents from the recipes stored with their runs.
+    A run whose recipe was written by a different version of the code is not special-cased
+    here: the worker refuses to replay a run under a version other than the one that
+    started it, and fails that run cleanly.
+    """
     from substrate.kernel.agents.factory import rebuild_agent
-    from substrate.kernel.abstractions.runtime.ids import RunStatus
-    from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
 
-    specs = await scheduler.pending_run_specs()
-    if not specs:
-        return 0
-
-    for run_id, agent_id, spec in specs:
-        spec_version = spec.get("agent_version")
-        if spec_version != substrate.__version__:
-            # The code that would replay this run's effects has moved on
-            # since the spec was persisted — resuming anyway risks the
-            # replayed effect path silently diverging from what actually
-            # happened (a tool renamed/removed, prompt logic changed, etc).
-            # Fail the run cleanly rather than attempt a divergent replay.
-            logger.warning(
-                "Refusing to resume agent %s for run %s: spec version %r != "
-                "running version %r",
-                agent_id,
-                run_id,
-                spec_version,
-                substrate.__version__,
-            )
-            error = (
-                f"agent version mismatch: spec was persisted at version "
-                f"{spec_version!r}, running version is {substrate.__version__!r}"
-            )
-            final_seq = await runtime.event_log.last_seq(run_id)
-            await runtime.event_log.append(
-                run_id,
-                RunLogEntry(
-                    run_id=run_id,
-                    seq=final_seq + 1,
-                    kind=RunLogKind.RUN_FAILED,
-                    payload={"error": error, "status": "version_mismatch"},
-                ),
-                expected_seq=final_seq,
-            )
-            if hasattr(scheduler, "fail_pending_run"):
-                await scheduler.fail_pending_run(run_id)
-            await runtime.supervisor.finish_run(run_id, RunStatus.FAILED, error=error)
-            continue
-
-        tool_names: list[str] = spec.get("tool_names") or []
-        resolved_tools = [
-            t for t in registry.all() if getattr(t, "name", None) in tool_names
-        ]
+    resumable = [run for run in await runtime.store.find_runs() if run.recipe]
+    for run in resumable:
+        recipe = run.recipe or {}
+        tool_names: list[str] = recipe.get("tool_names") or []
+        tools = [t for t in registry.all() if getattr(t, "name", None) in tool_names]
         try:
-            agent = rebuild_agent(spec, model_client=model_client, tools=resolved_tools)
-            agent.id = agent_id  # type: ignore[attr-defined]
+            agent = rebuild_agent(recipe, model_client=model_client, tools=tools)
+            agent.id = run.agent  # type: ignore[attr-defined]
             await runtime.register(agent)
-            logger.info("Resumed agent %s for pending run", agent_id)
-        except Exception as exc:
-            logger.warning("Failed to resume agent %s: %s", agent_id, exc)
-
-    return len(specs)
+            logger.info("Resumed agent %s for run %s", run.agent, run.run_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to resume agent %s: %s", run.agent, exc)
+    return len(resumable)
 
 
 # ── Agent construction ────────────────────────────────────────────────────────

@@ -25,7 +25,7 @@ Implementations must honour this coalescing guarantee.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Protocol, runtime_checkable
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 

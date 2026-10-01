@@ -128,6 +128,9 @@ class AgentStreamSession:
                     max_retries=0,
                     thread_id=self._thread_id,
                     tenant=self._tenant_id or "default",
+                    # What a host needs to rebuild this agent after a restart, recorded
+                    # with the run itself rather than in a second, separate write.
+                    recipe=self._spec,
                 )
             except ThreadBusyError:
                 # The route's own pre-check (find_run_for_thread) already
@@ -141,16 +144,7 @@ class AgentStreamSession:
                 return "error"
             self._run_id = run_id
 
-            # Persist the agent spec so it can be rebuilt on cold resume.
-            if self._spec is not None:
-                scheduler = getattr(self._runtime, "_scheduler", None)
-                if scheduler is not None and hasattr(scheduler, "save_run_spec"):
-                    try:
-                        await scheduler.save_run_spec(run_id, self._spec)
-                    except Exception:
-                        logger.debug("save_run_spec unavailable or failed — skipping")
-
-            async for entry in self._runtime.event_log.tail(run_id):
+            async for entry in self._runtime.tail(run_id):
                 kind = entry.kind
                 if kind == RunLogKind.RUN_COMPLETED:
                     await self._settle_task_boards()
@@ -409,7 +403,7 @@ def _log_detached_agent_task_exception(task: asyncio.Task) -> None:
 
 
 async def tail_wire_events(
-    event_log: Any, run_id: str, *, from_seq: int = 0
+    runtime: Any, run_id: str, *, from_seq: int = 0
 ) -> AsyncIterator[WireEvent]:
     """Read-only reconnect tail: relay an ALREADY-RUNNING run's remaining
     wire events, for a browser that lost its original SSE connection
@@ -423,7 +417,7 @@ async def tail_wire_events(
     ``run.suspended``/``run.resumed``/``llm.call``/``effect.result``, all of
     which must be silently skipped, not crash the generator).
     """
-    async for entry in event_log.tail(run_id, from_seq=from_seq):
+    async for entry in runtime.tail(run_id, from_seq=from_seq):
         kind = entry.kind
         if kind == RunLogKind.RUN_COMPLETED:
             yield RunCompletedEvent()

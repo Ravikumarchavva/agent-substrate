@@ -19,12 +19,11 @@ is violated the test name says which.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from substrate.kernel.abstractions.agent.supervision import ExecutionBudget, Priority, SpawnBudget, Supervision
+from substrate.kernel.abstractions.agent.supervision import Priority, SpawnBudget, Supervision
 from substrate.kernel.abstractions.core.error_info import ErrorInfo
 from substrate.kernel.abstractions.core.identity import Actor, Topic
 from substrate.kernel.abstractions.exceptions import BudgetExhaustedError, LeaseLostError, ThreadBusyError
@@ -197,6 +196,27 @@ class RuntimeStoreConformance:
         lease = await self.lease_one(store)
         await store.commit(lease, Commit(entries=tuple(NewEntry(kind=f"k{i}") for i in range(5))))
         assert [e.seq for e in await store.read_events(lease.run_id, from_seq=3)] == [3, 4]
+
+    async def test_an_entry_kind_this_version_does_not_know_survives_a_round_trip(self, store: RuntimeStore) -> None:
+        """A newer worker may write kinds an older reader has never seen; reading must not lose them."""
+        await store.create_run(RunSpec(agent=AGENT))
+        lease = await self.lease_one(store)
+        await store.commit(lease, Commit(entries=(NewEntry(kind="future.kind", payload={"x": 1}),)))
+        got = (await store.read_events(lease.run_id))[0]
+        assert (got.kind, got.payload) == ("future.kind", {"x": 1})
+
+    async def test_a_host_can_annotate_a_run_without_a_lease(self, store: RuntimeStore) -> None:
+        run = await store.create_run(RunSpec(agent=AGENT))
+        lease = await self.lease_one(store)
+        await store.commit(lease, Commit(entries=(NewEntry(kind="a"),)))
+        seqs = await store.annotate(run.run_id, [NewEntry(kind="note", payload={"text": "hi"})])
+        assert seqs == [1]
+        await store.commit(lease, Commit(entries=(NewEntry(kind="b"),)))
+        assert [e.kind for e in await store.read_events(run.run_id)] == ["a", "note", "b"]
+
+    async def test_annotating_an_unknown_run_is_an_error(self, store: RuntimeStore) -> None:
+        with pytest.raises(KeyError):
+            await store.annotate("nope", [NewEntry(kind="x")])
 
     async def test_live_output_is_visible_to_a_tail_but_not_to_a_replay(self, store: RuntimeStore) -> None:
         await store.create_run(RunSpec(agent=AGENT))

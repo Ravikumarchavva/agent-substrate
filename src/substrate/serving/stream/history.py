@@ -1,8 +1,8 @@
 """Conversation history — projected directly from the EventLog.
 
-The EventLog is the single source of truth for a thread's conversation, not
+The runtime's run record is the single source of truth for a thread's conversation, not
 a separately-written relational table. A thread's runs (in chronological
-order — ``Scheduler.find_all_runs_for_thread()``) each contribute their
+order — ``RuntimeStore.find_runs(thread_id=…)``) each contribute their
 streaming wire events (``user.message``, ``text.delta``, ``tool.call``,
 ``tool.result``, ``input.requested`` — the same ``STREAMING_KINDS``
 ``wire_from_log`` maps for live streaming and reconnect) to one flat,
@@ -15,113 +15,57 @@ the log.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.exceptions import ConcurrentAppendError
-from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
+from substrate.kernel.abstractions.runtime.store import NewEntry, RuntimeStore
 from substrate.serving.protocol.events import WireEvent
 from substrate.serving.protocol.from_log import wire_from_log
 
-if TYPE_CHECKING:
-    from substrate.kernel.abstractions.runtime.log_entry import EventLogProtocol
-    from substrate.kernel.abstractions.runtime.scheduler import RunRegistryProtocol
 
+async def project_thread(store: RuntimeStore, thread_id: str) -> list[WireEvent]:
+    """The full conversation for ``thread_id`` as an ordered wire-event list — the
+    canonical history read, used by the history endpoint.
 
-async def project_thread(
-    event_log: "EventLogProtocol", scheduler: "RunRegistryProtocol", thread_id: str
-) -> list[WireEvent]:
-    """Return the full conversation for ``thread_id`` as an ordered wire-event
-    list — the canonical history read, used by the history endpoint and by
-    memory-seeding (via a sibling projection over ``ChatMessage`` instead of
-    wire events; see ``agents/factory.py``).
-
-    Concatenates each of the thread's runs' EventLogs, oldest run first,
-    each read in its own seq order. Skips any log entry ``wire_from_log``
-    doesn't map to a streaming event (``run.started``, ``effect.result``,
-    ``llm.call``, ...) — exactly the same filtering live streaming applies.
+    Concatenates each of the thread's runs' durable records, oldest run first, each in
+    its own seq order. Entries with no streaming meaning (``run.started``,
+    ``effect.result``, ``llm.call`` …) are skipped, exactly as in a live view.
     """
     events: list[WireEvent] = []
-    run_ids = await scheduler.find_all_runs_for_thread(thread_id)
-    for run_id in run_ids:
-        async for entry in event_log.read(run_id):
-            wire = wire_from_log(entry.kind, entry.payload or {})
+    for run in await store.find_runs(thread_id=thread_id, active_only=False):
+        for entry in await store.read_events(run.run_id, durable_only=True):
+            wire = wire_from_log(entry.kind, entry.payload or {}, history=True)
             if wire is not None:
                 events.append(wire)
     return events
 
 
-async def _append_to_thread(
-    event_log: "EventLogProtocol",
-    scheduler: "RunRegistryProtocol",
-    thread_id: str,
-    kind: str,
-    payload: dict[str, Any],
-) -> bool:
-    """Append a log entry to the thread's active run, or its most recent run
-    if none is active — for out-of-band writes that don't originate from a
-    running agent (an MCP App context update, a note added between runs).
-
-    Retries on ``ConcurrentAppendError`` (the target run may have concurrent
-    activity, e.g. the agent itself appending) by reloading the log's current
-    tail and re-attempting. Returns ``False`` if the thread has no runs at
-    all yet (nothing to attach to).
+async def _annotate_thread(store: RuntimeStore, thread_id: str, kind: str, payload: dict[str, Any]) -> bool:
+    """Append an entry to the thread's active run, or its latest if none is active — for
+    writes that do not come from a running agent (an MCP App context update, a note added
+    between runs). ``False`` if the thread has no runs yet: there is nothing to attach to.
     """
-    active = await scheduler.find_run_for_thread(thread_id)
-    if active is not None:
-        run_id = active[0]
-    else:
-        run_ids = await scheduler.find_all_runs_for_thread(thread_id)
-        if not run_ids:
-            return False
-        run_id = run_ids[-1]
-
-    while True:
-        last_seq = -1
-        async for entry in event_log.read(run_id):
-            last_seq = entry.seq
-        entry = RunLogEntry(run_id=run_id, seq=last_seq + 1, kind=kind, payload=payload)
-        try:
-            await event_log.append(run_id, entry, expected_seq=last_seq)
-            return True
-        except ConcurrentAppendError:
-            continue
+    runs = await store.find_runs(thread_id=thread_id)
+    if not runs:
+        runs = await store.find_runs(thread_id=thread_id, active_only=False)
+    if not runs:
+        return False
+    target = runs[0] if runs[0].status.value in ("pending", "running", "suspended") else runs[-1]
+    await store.annotate(target.run_id, [NewEntry(kind=kind, payload=payload)])
+    return True
 
 
-async def append_mcp_app_context(
-    event_log: "EventLogProtocol",
-    scheduler: "RunRegistryProtocol",
-    thread_id: str,
-    payload: dict[str, Any],
-) -> None:
-    """Log an interactive MCP App's context update to the thread's run.
-
-    See ``_append_to_thread`` for attach/retry semantics. No-ops if the
-    thread has no runs at all yet.
-    """
-    await _append_to_thread(event_log, scheduler, thread_id, RunLogKind.MCP_APP_CONTEXT, payload)
+async def append_mcp_app_context(store: RuntimeStore, thread_id: str, payload: dict[str, Any]) -> None:
+    """Log an interactive MCP App's context update to the thread's run. A no-op if the
+    thread has no runs yet."""
+    await _annotate_thread(store, thread_id, RunLogKind.MCP_APP_CONTEXT, payload)
 
 
-async def append_user_message(
-    event_log: "EventLogProtocol",
-    scheduler: "RunRegistryProtocol",
-    thread_id: str,
-    text: str,
-) -> bool:
-    """Log an out-of-band user message to the thread's run (e.g. feedback
-    added to a scheduled task between its runs, for lookback context on the
-    next execution).
-
-    See ``_append_to_thread`` for attach/retry semantics. Returns ``False``
-    if the thread has no runs at all yet — there is nothing to attach to.
-    """
-    return await _append_to_thread(
-        event_log,
-        scheduler,
-        thread_id,
-        RunLogKind.USER_MESSAGE,
-        {"text": text, "attachments": []},
-    )
+async def append_user_message(store: RuntimeStore, thread_id: str, text: str) -> bool:
+    """Log an out-of-band user message to the thread's run (feedback added to a scheduled
+    task between its runs, for lookback on the next execution). ``False`` if the thread
+    has no runs yet."""
+    return await _annotate_thread(store, thread_id, RunLogKind.USER_MESSAGE, {"text": text, "attachments": []})
 
 
 __all__ = ["project_thread", "append_mcp_app_context", "append_user_message"]

@@ -369,7 +369,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
                 toolbox.add(t)
         history = LocalFilesystemHistoryProvider(root="./data/history")
         await history.connect()
-        async with Runtime() as rt:
+        async with Runtime.local("./data/db/runtime.sqlite3") as rt:
             agent = ReActAgent(
                 args.name,
                 model=OpenAIClient(model=args.model),

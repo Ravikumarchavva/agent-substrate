@@ -21,18 +21,18 @@ this identical path today):
   3. The frontend shows a UI card and POSTs the user's response to
      ``/chat/respond/{request_id}``.
   4. The POST endpoint calls ``bridge.resolve(request_id, data)``, which
-     fires ``SignalBus.signal()`` — durable, survives a process restart in
+     fires ``RuntimeStore.signal()`` — durable, survives a process restart in
      between steps 1 and 4.
   5. The agent resumes with the response.
 
 Future-based fallback (only when a handler is constructed with no
-``signal_bus`` — tests, or a deliberately non-durable setup): steps 1 and 4
+``store`` — tests, or a deliberately non-durable setup): steps 1 and 4
 instead go through ``bridge.request_and_wait()``/an ``asyncio.Future`` held
 in this process's memory, per ``_pending`` below.
 
 Usage::
 
-    bridge = WebHITLBridge(signal_bus=runtime.signal_bus)
+    bridge = WebHITLBridge(store=runtime.store)
     agent = ReActAgent(
         ...,
         approval_handler=SSEApprovalHandler(bridge),
@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
     from substrate.serving.protocol import WireEvent
-    from substrate.kernel.abstractions.runtime.wakeup import SignalBusProtocol
+    from substrate.kernel.abstractions.runtime.store import RuntimeStore
 
 from substrate.integrations.tools.human_input import (
     CallbackHumanHandler,
@@ -117,10 +117,10 @@ class WebHITLBridge:
 
     Incoming (frontend → agent):
         ``resolve(request_id, data)`` completes the matching Future (tool
-        approval) or fires ``SignalBus.signal()`` (signal-based human input).
+        approval) or fires ``RuntimeStore.signal()`` (signal-based human input).
 
     ``human_handler`` is a pre-built handler instance that routes through
-    this bridge. When ``signal_bus`` is provided, it's marked
+    this bridge. When ``store`` is provided, it's marked
     ``suspends_via_signal = True`` so ``AskHumanTool`` suspends via
     ``ctx.sleep_until_signal()`` and the event flows through the normal
     run-log tail instead of the bridge queue. Tool approval has no
@@ -138,13 +138,13 @@ class WebHITLBridge:
     def __init__(
         self,
         response_timeout: float = 300.0,
-        signal_bus: Optional["SignalBusProtocol"] = None,
+        store: Optional["RuntimeStore"] = None,
     ):
         self._outgoing: asyncio.Queue[Any] = asyncio.Queue()
         self._pending: Dict[str, asyncio.Future[Dict[str, Any]]] = {}
         self._pending_payloads: Dict[str, Dict[str, Any]] = {}
         self._response_timeout = response_timeout
-        self._signal_bus = signal_bus
+        self._store = store
         # request_id → run_id for signal-based human input requests
         self._signal_requests: Dict[str, str] = {}
 
@@ -152,8 +152,8 @@ class WebHITLBridge:
         self._human_handler = CallbackHumanHandler(
             callback=self._handle_human_input,
         )
-        if signal_bus is not None:
-            # Marker: AskHumanTool will suspend via SignalBus instead of calling
+        if store is not None:
+            # Marker: AskHumanTool will suspend via a signal instead of calling
             # request_input().  The callback above becomes unreachable for the
             # human-input path when this flag is set.
             self._human_handler.suspends_via_signal = True  # type: ignore[attr-defined]
@@ -255,8 +255,8 @@ class WebHITLBridge:
         finish, preserving valid tool_use / tool_result pairing in history.
         """
         for request_id, run_id in list(self._signal_requests.items()):
-            if self._signal_bus is not None:
-                await self._signal_bus.signal(
+            if self._store is not None:
+                await self._store.signal(
                     run_id,
                     f"hitl:{request_id}",
                     {"action": "cancelled", "reason": reason},
@@ -289,7 +289,7 @@ class WebHITLBridge:
         """Resolve a pending HITL request with the user's response.
 
         For signal-based human-input requests (``_signal_requests``), fires
-        ``SignalBus.signal()`` to resume the suspended run.
+        ``RuntimeStore.signal()`` to resume the suspended run.
         For Future-based tool-approval requests (``_pending``), completes the Future.
 
         Returns True if the request was found and resolved, False otherwise.
@@ -298,13 +298,13 @@ class WebHITLBridge:
         if request_id in self._signal_requests:
             run_id = self._signal_requests.pop(request_id)
             self._pending_payloads.pop(request_id, None)
-            if self._signal_bus is None:
+            if self._store is None:
                 logger.warning(
-                    "Bridge: signal HITL %s has no signal_bus — cannot resolve",
+                    "Bridge: signal HITL %s has no runtime store — cannot resolve",
                     request_id,
                 )
                 return False
-            await self._signal_bus.signal(run_id, f"hitl:{request_id}", data)
+            await self._store.signal(run_id, f"hitl:{request_id}", data)
             logger.info("Resolved signal HITL %s (run=%s)", request_id, run_id)
             return True
 
@@ -423,27 +423,21 @@ class BridgeRegistry:
     Resolution uses UUID uniqueness to scan bridges without a secondary
     request_id → thread_id index (UUIDs are collision-free in practice).
 
-    Pass ``signal_bus`` (from ``runtime.signal_bus``) to enable signal-based
-    human-input HITL.  Without it only the Future-based tool-approval path
-    is available.
-
-    Pass ``scheduler`` (from ``runtime.scheduler``) to make signal-based
-    resolution work cross-replica: a ``resolve()`` call for a request_id
-    with no local bridge (this replica never saw the ``input.requested``
-    event, because no session is running here for that thread) falls back
-    to ``Scheduler.find_run_by_wake_signal()`` — a durable query, not the
-    in-process ``_signal_requests`` map any single bridge keeps.
+    Pass ``store`` (``runtime.store``) to enable signal-based human-input HITL, and to
+    make resolution work across replicas: a ``resolve()`` for a request id with no
+    local bridge (this replica never saw the ``input.requested`` event) looks up the run
+    waiting on it in the store — durable state, not the in-process ``_signal_requests``
+    map any single bridge keeps. Without it only the Future-based tool-approval path is
+    available.
     """
 
     def __init__(
         self,
         response_timeout: float = 300.0,
-        signal_bus: Optional["SignalBusProtocol"] = None,
-        scheduler: Optional[Any] = None,
+        store: Optional["RuntimeStore"] = None,
     ) -> None:
         self._timeout = response_timeout
-        self._signal_bus = signal_bus
-        self._scheduler = scheduler
+        self._store = store
         self._bridges: Dict[str, "WebHITLBridge"] = {}
         self._lock = asyncio.Lock()
 
@@ -452,7 +446,7 @@ class BridgeRegistry:
         async with self._lock:
             if thread_id not in self._bridges:
                 self._bridges[thread_id] = WebHITLBridge(
-                    self._timeout, signal_bus=self._signal_bus
+                    self._timeout, store=self._store
                 )
                 logger.debug("BridgeRegistry: created bridge for thread %s", thread_id)
             return self._bridges[thread_id]
@@ -504,18 +498,19 @@ class BridgeRegistry:
         session registered ``request_id`` in a bridge's ``_signal_requests``
         (that registration only happens as a side effect of *this* replica
         having tailed the ``input.requested`` event — see
-        ``AgentStreamSession``), so the SignalBus's own durable state
-        (``Scheduler.find_run_by_wake_signal``) is the source of truth, not
+        ``AgentStreamSession``), so the store's own durable state
+        (``RuntimeStore.find_runs(wake_signal=…)``) is the source of truth, not
         any bridge's local map.
         """
         for bridge in list(self._bridges.values()):
             if request_id in bridge._pending or request_id in bridge._signal_requests:
                 return await bridge.resolve(request_id, data)
 
-        if self._scheduler is not None and self._signal_bus is not None:
-            run_id = await self._scheduler.find_run_by_wake_signal(f"hitl:{request_id}")
+        if self._store is not None:
+            waiting = await self._store.find_runs(wake_signal=f"hitl:{request_id}")
+            run_id = waiting[0].run_id if waiting else None
             if run_id is not None:
-                await self._signal_bus.signal(run_id, f"hitl:{request_id}", data)
+                await self._store.signal(run_id, f"hitl:{request_id}", data)
                 logger.info(
                     "BridgeRegistry: resolved request_id=%s durably (run=%s, "
                     "no local bridge owned it)",

@@ -2,7 +2,7 @@
 
 The proxy receives messages FROM other agents (HITL clarification requests)
 and suspends via ``ctx.sleep_until_signal`` until a human provides input
-(delivered via the HTTP layer → ``SignalBusProtocol.signal()``).
+(delivered via the HTTP layer → ``RuntimeStore.signal()``).
 
 External callers that want to START a task should submit a Message directly
 to a ``ReActAgent`` via ``Runtime.submit()``.

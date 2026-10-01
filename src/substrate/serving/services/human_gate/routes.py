@@ -134,7 +134,7 @@ async def respond_to_request(
         responded_by=body.responded_by,
         redis_client=request.app.state.redis,
         event_bus=request.app.state.event_bus,
-        signal_bus=getattr(request.app.state, "signal_bus", None),
+        store=getattr(request.app.state, "runtime_store", None),
     )
 
     return _to_out(resolved)
@@ -177,6 +177,6 @@ async def cancel_thread_requests(
         db,
         thread_id,
         redis_client=request.app.state.redis,
-        signal_bus=getattr(request.app.state, "signal_bus", None),
+        store=getattr(request.app.state, "runtime_store", None),
     )
     return {"thread_id": str(thread_id), "cancelled_count": count}

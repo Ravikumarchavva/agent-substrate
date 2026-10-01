@@ -27,24 +27,24 @@ logger = setup_logging()
 
 @asynccontextmanager
 async def _runtime_cm(backend: str, pg_url: str):
+    from substrate.kernel.runtime import Runtime
+
     if backend == "postgres" and pg_url:
-        from substrate.integrations.runtime import build_postgres_runtime
+        from substrate.integrations.runtime import PostgresRuntimeStore
 
-        pool_min_size = int(os.environ.get("RUNTIME_PG_POOL_MIN_SIZE", "2"))
-        pool_max_size = int(os.environ.get("RUNTIME_PG_POOL_MAX_SIZE", "10"))
-        async with build_postgres_runtime(
-            postgres_url=pg_url,
-            pool_min_size=pool_min_size,
-            pool_max_size=pool_max_size,
-        ) as rt:
-            logger.info("Agent Runtime: durable (Postgres EventLogProtocol)")
-            yield rt
+        store = PostgresRuntimeStore(
+            pg_url,
+            pool_min_size=int(os.environ.get("RUNTIME_PG_POOL_MIN_SIZE", "2")),
+            pool_max_size=int(os.environ.get("RUNTIME_PG_POOL_MAX_SIZE", "10")),
+        )
+        logger.info("Agent Runtime: durable (Postgres)")
     else:
-        from substrate.kernel.runtime import Runtime
+        from substrate.kernel.runtime import SqliteRuntimeStore
 
-        async with Runtime() as rt:
-            logger.info("Agent Runtime: in-memory (no durability)")
-            yield rt
+        store = SqliteRuntimeStore(os.environ.get("RUNTIME_LOCAL_DB_PATH", "./data/db/runtime.sqlite3"))
+        logger.info("Agent Runtime: durable, no infra (SQLite)")
+    async with Runtime(store) as rt:
+        yield rt
 
 
 async def _cancel_listener(runtime: object, event_bus: object) -> None:
@@ -59,9 +59,6 @@ async def _cancel_listener(runtime: object, event_bus: object) -> None:
     ``cancel_requested`` flag the owning replica's own heartbeat observes,
     same as the monolith's ``POST /chat/{id}/cancel`` (see routes/cancel.py).
     """
-    from substrate.kernel.abstractions.core.identity import Actor
-    from substrate.kernel.abstractions.runtime.supervisor import RunHandle
-
     try:
         async for envelope in event_bus.subscribe(  # type: ignore[union-attr]
             "job.cancel_requested",
@@ -71,13 +68,7 @@ async def _cancel_listener(runtime: object, event_bus: object) -> None:
             if run_id:
                 logger.info("Cancelling run %s via event bus", run_id)
                 try:
-                    await runtime.cancel(run_id)  # type: ignore[union-attr]
-                    handle = RunHandle(
-                        run_id=run_id,
-                        agent_id=Actor(type="unresolved"),
-                        parent_run="",
-                    )
-                    await runtime.supervisor.cancel(handle, reason="user_requested")  # type: ignore[union-attr]
+                    await runtime.cancel(run_id, reason="user_requested")  # type: ignore[union-attr]
                 except Exception:
                     logger.exception("Failed to cancel run %s", run_id)
     except asyncio.CancelledError:

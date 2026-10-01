@@ -47,7 +47,6 @@ from substrate.kernel.agents.base import BaseAgent
 from substrate.kernel.agents.routed import handle
 from substrate.kernel.context.compaction.sliding_window import SlidingWindowCompaction
 from substrate.kernel.context.context import ContextConfig
-from substrate.kernel.hooks.manager import HookEvent, HookManager
 from substrate.kernel.middleware._contracts import (
     AgentRunResult,
     MiddlewareContext,
@@ -95,7 +94,6 @@ class ReActAgent(BaseAgent):
         approval_handler: ApprovalHandler | None = None,
         approval_required_risk: ToolRisk | None = None,
         execution_budget: ExecutionBudget | None = None,
-        hooks: HookManager | None = None,
         middleware: MiddlewarePipeline | None = None,
         initial_tool_choice: str | None = None,
         session_id: str | None = None,
@@ -123,7 +121,6 @@ class ReActAgent(BaseAgent):
         self.approval_handler = approval_handler
         self.approval_required_risk = approval_required_risk
         self.execution_budget = execution_budget  # what the engine enforces when no budget was inherited
-        self.hooks = hooks
         self.middleware = middleware or MiddlewarePipeline()
         self._initial_tool_choice = initial_tool_choice
         self._reasoning = reasoning
@@ -185,11 +182,7 @@ class ReActAgent(BaseAgent):
         messages: list[ChatMessage],
         options: GenerationOptions,
     ) -> LLMResponse:
-        """One LLM call for the loop: dispatch hooks, compact, call, track budget."""
-        if self.hooks:
-            await self.hooks.dispatch(
-                HookEvent.LLM_START, {"agent_name": self.name, "run_id": ctx.run_id}
-            )
+        """One LLM call for the loop: compact the view, call, and recover once from a context overflow."""
         # Compact before each LLM call so tool results don't inflate the
         # context unboundedly across iterations.  We compact a *view* of
         # messages here and keep the full list intact for persistence.
@@ -205,11 +198,6 @@ class ReActAgent(BaseAgent):
                 raise
             logger.warning("context window exceeded; retrying with %d of %d messages", len(smaller), len(llm_messages))
             resp = await ctx.llm(smaller, options=options)
-        if self.hooks:
-            await self.hooks.dispatch(
-                HookEvent.LLM_END,
-                {"agent_name": self.name, "run_id": ctx.run_id, "usage": resp.usage},
-            )
         return resp
 
     def _batchable(self, tool_calls: list[ToolUseBlock]) -> bool:

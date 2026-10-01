@@ -348,7 +348,6 @@ async def run_demo(
 
 
 async def main() -> None:
-    import os
 
     # Use real LLM if key is present; otherwise fall back to the stub
     if settings.OPENAI_API_KEY:

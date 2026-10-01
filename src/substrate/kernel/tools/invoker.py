@@ -53,7 +53,6 @@ from substrate.kernel.abstractions.tools.chain import (
     ChainPolicy,
     InvocationResult,
 )
-from substrate.kernel.hooks.manager import HookEvent, HookManager
 
 if TYPE_CHECKING:
     from substrate.kernel.abstractions.tools.tools import ToolExecutionResult
@@ -101,13 +100,11 @@ class ToolInvoker:
         approval_handler: ApprovalHandler | None = None,
         artifact_store: BlobStore | None = None,
         policy: ChainPolicy | None = None,
-        hooks: HookManager | None = None,
     ) -> None:
         self._registry = registry
         self._approval = approval_handler
         self._store = artifact_store
         self._policy = policy or ChainPolicy()
-        self._hooks = hooks
 
     @property
     def registry(self) -> ToolRegistry:
@@ -140,9 +137,6 @@ class ToolInvoker:
         tool_name = call.name
         status: str = "ok"
 
-        if self._hooks:
-            await self._hooks.dispatch(HookEvent.TOOL_START, {"tool_name": tool_name})
-
         try:
             result = await self._invoke_inner(
                 call, session=session, ctx=ctx, progress_sink=progress_sink
@@ -158,15 +152,6 @@ class ToolInvoker:
             )
         finally:
             duration_ms = int(time.monotonic() * 1000) - start_ms
-            if self._hooks:
-                await self._hooks.dispatch(
-                    HookEvent.TOOL_END,
-                    {
-                        "tool_name": tool_name,
-                        "status": status,
-                        "duration_ms": duration_ms,
-                    },
-                )
             args_digest = _digest(call.arguments)
             session._trace.append(
                 ChainCallRecord(
@@ -474,7 +459,7 @@ class ToolInvoker:
 
 def build_invoker(agent: Any) -> ToolInvoker:
     """The ``ToolInvoker`` for an agent, from what the agent declares: its tools, its
-    approval handler, its blob store, its hooks and the highest risk it lets through
+    approval handler, its blob store and the highest risk it lets through
     without approval."""
     from substrate.kernel.abstractions.tools.approval import (
         ApprovalDecision,
@@ -509,7 +494,6 @@ def build_invoker(agent: Any) -> ToolInvoker:
         approval_handler=approval,
         artifact_store=getattr(agent, "blob_store", None),
         policy=policy,
-        hooks=getattr(agent, "hooks", None),
     )
 
 

@@ -107,7 +107,7 @@ src/substrate/
 │   ├── agents/           RoutedAgent + @handle, ReActAgent, OrchestratorAgent, UserProxyAgent
 │   ├── runtime/          Runtime, Worker, Journal, RunContext, SqlRuntimeStore (+ SQLite adapter)
 │   ├── telemetry/        spans/metrics at every chokepoint; GenAI + substrate.* conventions
-│   ├── llm/ context/ tools/ middleware/ hooks/ limits/ safety/ storage/ workspace/ flows/ document/
+│   ├── llm/ context/ tools/ middleware/ limits/ safety/ storage/ workspace/ flows/ document/
 │   └── testing/          conformance suites + doubles (never imported by production code)
 │
 ├── evals/        eval harness (EvalCase, EvalDataset, LLMJudge, EvalRunner) — a client of the kernel
@@ -230,7 +230,7 @@ are *executed* (not just described) are in `docs/claude_docs/architecture/invari
 |---|---|
 | `the kernel imports nothing above it` | `kernel` never imports integrations/runtimes/serving/evals/console/cli/config-wiring |
 | `abstractions are independent of the engine` | `kernel/abstractions` imports no engine package |
-| `adapters depend on abstractions and the engine's support libraries, not its internals` | integrations/runtimes may use `abstractions` plus `llm/workspace/storage/safety/tools/runtime/telemetry`, never `agents/context/flows/hooks/middleware/limits` |
+| `adapters depend on abstractions and the engine's support libraries, not its internals` | integrations/runtimes may use `abstractions` plus `llm/workspace/storage/safety/tools/runtime/telemetry`, never `agents/context/flows/middleware/limits` |
 | `serving cannot import agents or integrations-that-were-capabilities` | serving/'s routes and services don't reach past its `factory.py`/`research_orchestrator.py` composition root |
 
 **Structure rows** (`tests/invariants/test_structure.py`): kernel third-party imports are exactly the allowed

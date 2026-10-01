@@ -26,6 +26,12 @@ the kernel, asyncpg in `integrations/runtime`). There is deliberately no in-memo
 `:memory:` SQLite through the same code. **Consequence accepted:** SQLite is the zero-infra floor, so a
 process always has a real database file or `:memory:` connection.
 
+## One observability mechanism: the lifecycle hook manager and the second exception tree are deleted (2026-10-02)
+
+`kernel/hooks` (RUN/LLM/TOOL start/end callbacks) duplicated what spans and metrics now record, and
+`kernel/exceptions.py` carried an `AgentError` tree nothing raised. Both are gone; telemetry is the one way to
+observe a run and `abstractions/exceptions.py` the one error taxonomy.
+
 ## No in-memory stores; the floor is a folder (2026-10-02)
 
 `InMemoryHistoryProvider`, `InMemoryVectorStore`, `InMemoryGraphStore`, `InMemoryFileStore` and the dict-based

@@ -66,7 +66,6 @@ async def section_2_memory_clients() -> None:
 
     # --- RedisMemory ---
     try:
-        from substrate.integrations.history import RedisHistoryProvider
 
         mem = RedisMemory(
             session_id="healthcheck",
@@ -87,7 +86,6 @@ async def section_2_memory_clients() -> None:
 
     # --- PostgresMemory ---
     try:
-        from substrate.integrations.history import DurableHistoryProvider
 
         db_url = (
             settings.DATABASE_URL

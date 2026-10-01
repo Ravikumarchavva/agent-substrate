@@ -54,7 +54,7 @@ from substrate.kernel.abstractions.agent.safety import (
 )
 from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
 from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.exceptions import MiddlewareTermination
 from substrate.kernel.middleware._contracts import MiddlewareContext
 from substrate.kernel.middleware.guardrails.prompt_injection import (
     _INJECTION_PATTERNS,

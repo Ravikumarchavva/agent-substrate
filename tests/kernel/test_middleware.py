@@ -12,7 +12,7 @@ from substrate.kernel.middleware import (
     MiddlewareContext,
     AgentRunResult,
 )
-from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.exceptions import MiddlewareTermination
 
 
 def _ctx(text: str = "hello") -> MiddlewareContext:

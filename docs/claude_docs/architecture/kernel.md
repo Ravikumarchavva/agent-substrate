@@ -12,7 +12,7 @@ kernel/               the engine, built on those ports
   runtime/            Runtime, Worker, Journal, RunContext, SqlRuntimeStore (+ SQLite adapter)
   telemetry/          spans and metrics at every chokepoint (opentelemetry-api only)
   llm/                capability registry, modality fitting, error classification
-  context/ tools/ middleware/ hooks/ limits/ safety/ storage/ workspace/ flows/ document/
+  context/ tools/ middleware/ limits/ safety/ storage/ workspace/ flows/ document/
   testing/            conformance suites and doubles; never imported by production code
 evals/                the eval harness, a client of the kernel (not part of it)
 integrations/ runtimes/   adapters: vendor LLM clients, Postgres/Redis/S3/Lance stores, MCP, tools
@@ -23,7 +23,7 @@ Enforced by `uv run lint-imports` (four contracts) and `tests/invariants/test_st
 the kernel imports nothing above it; its only third-party imports are pydantic,
 `opentelemetry-api`, `confusable_homoglyphs` and `typing_extensions`; `abstractions` never
 imports the engine; adapters use `abstractions` and the engine's named support libraries
-(see the contract's comment in `pyproject.toml`), never `agents/context/flows/hooks/middleware/limits`.
+(see the contract's comment in `pyproject.toml`), never `agents/context/flows/middleware/limits`.
 
 ## Running an agent
 

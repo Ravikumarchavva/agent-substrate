@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.exceptions import MiddlewareTermination
 from substrate.kernel.middleware import (
     ContentFilterMiddleware,
     MaxTokenMiddleware,

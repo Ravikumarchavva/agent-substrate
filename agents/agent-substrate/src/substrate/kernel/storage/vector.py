@@ -1,99 +1,89 @@
-"""Vector store contracts — Protocol and shared value types for RAG.
+"""In-memory vector store for local development and tests (L1).
 
-A ``Document`` carries *multimodal* content: text, images, audio, video,
-structured data, or any combination thereof, expressed as a list of
-``ContentBlock`` objects (the same primitive used everywhere else in the
-kernel).  Callers that only work with plain text use ``Document.to_text()``
-to get a string representation without caring about the underlying modality.
+A dependency-free :class:`~substrate.kernel.storage.vector.VectorStore` implementation
+that keeps documents in a per-collection dict and ranks them with brute-force
+cosine similarity. It mirrors :class:`PgVectorStore`'s contract exactly, so RAG
+pipelines can run against it in tests without Postgres/pgvector.
 
-``SearchResult`` mirrors ``Document`` so retrieve operations return the same
-rich content that was stored.
+Embeddings: like ``PgVectorStore``, a document must carry an ``embedding``.
+When a document has none and an ``embedding_client`` was supplied, the store
+computes it from the document's text; otherwise it raises ``ValueError``.
+
+Usage::
+
+    from substrate.agents.storage import InMemoryVectorStore
+
+    store = InMemoryVectorStore(embedding_client=embed)
+    await store.add([Document.from_text("hello")], collection="kb")
+    hits = await store.search(query_vec, collection="kb", limit=5)
 """
 
 from __future__ import annotations
 
-import uuid
-from typing import Any, Protocol, Sequence, runtime_checkable
+import math
+from typing import TYPE_CHECKING, Any
 
-from pydantic import Field
+from substrate.kernel.storage.vector import Document, SearchResult
 
-from substrate.kernel.core.content import (
-    ContentBlock,
-    JsonObject,
-    KernelModel,
-    TextBlock,
-    content_blocks_to_str,
-)
+if TYPE_CHECKING:
+    from substrate.kernel.llm import EmbeddingClient
 
 
-class Document(KernelModel):
-    """A content chunk with optional metadata ready for vector storage.
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Cosine similarity of two equal-length vectors (0.0 if either is zero)."""
+    if len(a) != len(b):
+        return 0.0
+    dot: float = sum(x * y for x, y in zip(a, b))
+    norm_a: float = math.sqrt(sum(x * x for x in a))
+    norm_b: float = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
 
-    ``content`` is a sequence of ``ContentBlock`` — text, images, audio,
-    structured data, or any mix.  Use ``Document.from_text(s)`` for the
-    common case of plain-text chunks.
 
-    ``embedding`` is optional: if provided, the store skips embedding
-    (useful when the caller pre-computes embeddings or when the store
-    supports server-side embedding and the field is ignored).
+class InMemoryVectorStore:
+    """Dict-backed VectorStore with brute-force cosine search.
+
+    Args:
+        embedding_client: Optional embedding provider used to compute a
+            document's embedding when it is missing. When ``None`` every
+            document must already carry an ``embedding``.
     """
 
-    content: Sequence[ContentBlock] = Field(default_factory=list)
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    embedding: Sequence[float] | None = None
-    metadata: JsonObject = Field(default_factory=dict)
+    def __init__(self, embedding_client: EmbeddingClient | None = None) -> None:
+        self._embedding: EmbeddingClient | None = embedding_client
+        # collection -> {doc_id: Document}
+        self._collections: dict[str, dict[str, Document]] = {}
 
-    # ── Convenience constructors ───────────────────────────────────────────
+    # ── Helpers ────────────────────────────────────────────────────────────
 
-    @classmethod
-    def from_text(
-        cls,
-        text: str,
-        *,
-        id: str | None = None,
-        embedding: Sequence[float] | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> "Document":
-        """Create a text-only document — the common case for plain-text RAG."""
-        return cls(
-            content=[TextBlock(text=text)],
-            id=id or str(uuid.uuid4()),
-            embedding=embedding,
-            metadata=metadata or {},
+    def _bucket(self, collection: str) -> dict[str, Document]:
+        return self._collections.setdefault(collection, {})
+
+    async def _ensure_embedding(self, doc: Document) -> Document:
+        """Return *doc* with an embedding, computing one if needed."""
+        if doc.embedding is not None:
+            return doc
+        if self._embedding is None:
+            raise ValueError(
+                f"Document {doc.id} is missing an embedding and no embedding_client "
+                "was provided to InMemoryVectorStore."
+            )
+        vector: list[float] = await self._embedding.embed_single(doc.to_text())
+        return Document(
+            content=doc.content,
+            id=doc.id,
+            embedding=vector,
+            metadata=doc.metadata,
         )
 
-    # ── Helpers ───────────────────────────────────────────────────────────
+    @staticmethod
+    def _matches_filter(doc: Document, filter: dict[str, Any] | None) -> bool:
+        if not filter:
+            return True
+        return all(doc.metadata.get(key) == value for key, value in filter.items())
 
-    def to_text(self) -> str:
-        """Return a human-readable text representation of the content.
-
-        Suitable for embedding, display, or passing to an LLM as context.
-        Each block contributes its own text via ``str(block)``.
-        """
-        return content_blocks_to_str(self.content)
-
-
-class SearchResult(KernelModel):
-    """A single result from a vector similarity search.
-
-    ``content`` mirrors ``Document.content`` — the same multimodal blocks
-    that were stored are returned unchanged so callers can render, embed,
-    or further process the original payload.
-    """
-
-    id: str
-    content: Sequence[ContentBlock]
-    score: float
-    metadata: JsonObject = Field(default_factory=dict)
-
-    def to_text(self) -> str:
-        """Return a human-readable text representation of the content."""
-        return content_blocks_to_str(self.content)
-
-
-@runtime_checkable
-class VectorStore(Protocol):
-    """Contract every vector store adapter must satisfy."""
+    # ── Write ──────────────────────────────────────────────────────────────
 
     async def add(
         self,
@@ -101,12 +91,53 @@ class VectorStore(Protocol):
         *,
         collection: str = "default",
     ) -> list[str]:
-        """Persist *documents* and return their assigned ids.
+        bucket = self._bucket(collection)
+        ids: list[str] = []
+        for doc in documents:
+            stored = await self._ensure_embedding(doc)
+            bucket.setdefault(stored.id, stored)  # add = insert-if-absent
+            ids.append(stored.id)
+        return ids
 
-        If ``document.embedding`` is ``None``, the store is responsible for
-        computing embeddings (e.g. via a server-side embedding model).
-        """
-        ...
+    async def upsert(
+        self,
+        documents: list[Document],
+        *,
+        collection: str = "default",
+    ) -> list[str]:
+        bucket = self._bucket(collection)
+        ids: list[str] = []
+        for doc in documents:
+            stored = await self._ensure_embedding(doc)
+            bucket[stored.id] = stored  # upsert = insert-or-replace
+            ids.append(stored.id)
+        return ids
+
+    async def delete(
+        self,
+        ids: list[str],
+        *,
+        collection: str = "default",
+    ) -> int:
+        bucket = self._collections.get(collection)
+        if not bucket:
+            return 0
+        removed = 0
+        for doc_id in ids:
+            if bucket.pop(doc_id, None) is not None:
+                removed += 1
+        return removed
+
+    # ── Read ───────────────────────────────────────────────────────────────
+
+    async def get(
+        self,
+        ids: list[str],
+        *,
+        collection: str = "default",
+    ) -> list[Document]:
+        bucket = self._collections.get(collection, {})
+        return [bucket[doc_id] for doc_id in ids if doc_id in bucket]
 
     async def search(
         self,
@@ -115,40 +146,32 @@ class VectorStore(Protocol):
         collection: str = "default",
         limit: int = 5,
         filter: dict[str, Any] | None = None,
-    ) -> list[SearchResult]: ...
+    ) -> list[SearchResult]:
+        bucket = self._collections.get(collection, {})
+        scored: list[SearchResult] = []
+        for doc in bucket.values():
+            if doc.embedding is None or not self._matches_filter(doc, filter):
+                continue
+            score = cosine_similarity(query_embedding, doc.embedding)
+            scored.append(
+                SearchResult(
+                    id=doc.id,
+                    content=doc.content,
+                    score=score,
+                    metadata=doc.metadata,
+                )
+            )
+        scored.sort(key=lambda r: r.score, reverse=True)
+        return scored[:limit]
 
-    async def get(
-        self,
-        ids: list[str],
-        *,
-        collection: str = "default",
-    ) -> list[Document]:
-        """Retrieve documents by id."""
-        ...
+    # ── Collections ────────────────────────────────────────────────────────
 
-    async def upsert(
-        self,
-        documents: list[Document],
-        *,
-        collection: str = "default",
-    ) -> list[str]:
-        """Insert or replace documents by id."""
-        ...
+    async def list_collections(self) -> list[str]:
+        return list(self._collections.keys())
 
-    async def delete(
-        self,
-        ids: list[str],
-        *,
-        collection: str = "default",
-    ) -> int: ...
-
-    async def list_collections(self) -> list[str]: ...
-
-    async def delete_collection(self, collection: str) -> int: ...
-
-    async def rename_collection(self, old: str, new: str) -> int:
-        """Re-key every document from collection *old* to *new*."""
-        ...
+    async def delete_collection(self, collection: str) -> int:
+        bucket = self._collections.pop(collection, None)
+        return len(bucket) if bucket else 0
 
 
-__all__ = ["Document", "SearchResult", "VectorStore"]
+__all__ = ["InMemoryVectorStore", "cosine_similarity"]

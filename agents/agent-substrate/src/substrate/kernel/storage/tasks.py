@@ -1,152 +1,248 @@
-"""Task storage contract — per-agent Kanban board with a 6-state lifecycle."""
+"""In-memory task store — per-agent Kanban boards, keyed by (conversation_id, agent_id, branch_id).
+
+Constructor-injected everywhere, like every other backend in this codebase —
+see ``serving/factory.py::init_infrastructure`` for where a
+``PgTaskStore`` is built instead when ``RUNTIME_BACKEND=postgres``.
+"""
 
 from __future__ import annotations
 
-from enum import StrEnum
-from typing import Protocol, Sequence, runtime_checkable
+import asyncio
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
+from uuid import uuid4
 
-from pydantic import Field
+from substrate.kernel.storage.tasks import Task, TaskList, TaskStatus
 
-from substrate.kernel.core.content import KernelModel
+class TaskStore:
+    """Thread-safe in-memory task store."""
 
-
-class TaskStatus(StrEnum):
-    """6-state lifecycle for a task.
-
-    Transitions::
-
-        planned ──start──▶ in_progress ──complete──▶ succeeded (terminal)
-                             │   ▲  │
-                    block ──▶│   │  └──fail──▶ failed ──retry (count<max)──▶ in_progress
-                             ▼   │                │
-                          blocked│                └──retries exhausted──▶ abandoned (terminal)
-                          (unblock → in_progress)
-    """
-
-    PLANNED = "planned"
-    IN_PROGRESS = "in_progress"
-    BLOCKED = "blocked"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    ABANDONED = "abandoned"
-
-
-class Task(KernelModel):
-    id: str
-    title: str
-    status: TaskStatus = TaskStatus.PLANNED
-    order: int = 0
-    retry_count: int = 0
-    note: str = ""
-
-
-class TaskList(KernelModel):
-    """One agent's Kanban board within a conversation."""
-
-    id: str
-    conversation_id: str
-    tasks: Sequence[Task] = Field(default_factory=list)
-    max_retries: int = 3
-    agent_id: str = ""
-    agent_label: str = ""
-    parent_agent_id: str | None = None
-    # Which conversation branch this board belongs to. A speculative branch
-    # gets its own boards, so abandoning it never touches the "main" board.
-    branch_id: str = "main"
-    # ISO-8601 creation time — lets a UI anchor the board to the turn that
-    # created it (stable, unlike updated_at which moves on every status change).
-    created_at: str = ""
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "conversation_id": self.conversation_id,
-            "max_retries": self.max_retries,
-            "agent_id": self.agent_id,
-            "agent_label": self.agent_label,
-            "parent_agent_id": self.parent_agent_id,
-            "branch_id": self.branch_id,
-            "created_at": self.created_at,
-            "tasks": [
-                {
-                    "id": t.id,
-                    "title": t.title,
-                    "status": t.status,
-                    "order": t.order,
-                    "retry_count": t.retry_count,
-                    "max_retries": self.max_retries,
-                    "note": t.note,
-                }
-                for t in self.tasks
-            ],
-        }
-
-
-@runtime_checkable
-class TaskStore(Protocol):
-    """Durable storage for per-agent Kanban boards, scoped by conversation."""
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        # task_list_id -> TaskList
+        self._lists: Dict[str, TaskList] = {}
+        # (conversation_id, agent_id, branch_id) -> task_list_id
+        self._by_key: Dict[tuple[str, str, str], str] = {}
 
     async def create_task_list(
         self,
         conversation_id: str,
-        task_titles: list[str],
+        task_titles: List[str],
         *,
         agent_id: str = "",
         agent_label: str = "",
-        parent_agent_id: str | None = None,
+        parent_agent_id: Optional[str] = None,
         max_retries: int = 3,
         branch_id: str = "main",
     ) -> TaskList:
-        """Create (or replace) the board for (conversation_id, agent_id, branch_id)."""
-        ...
+        async with self._lock:
+            task_list = TaskList(
+                id=str(uuid4()),
+                conversation_id=conversation_id,
+                max_retries=max_retries,
+                agent_id=agent_id,
+                agent_label=agent_label,
+                parent_agent_id=parent_agent_id,
+                branch_id=branch_id,
+                created_at=datetime.now(timezone.utc).isoformat(),
+                tasks=[
+                    Task(
+                        id=str(uuid4()),
+                        title=t.strip(),
+                        status=TaskStatus.PLANNED,
+                        order=i,
+                    )
+                    for i, t in enumerate(task_titles)
+                    if t.strip()
+                ],
+            )
+            self._lists[task_list.id] = task_list
+            self._by_key[(conversation_id, agent_id, branch_id)] = task_list.id
+            return task_list
 
-    async def get_task_list(self, task_list_id: str) -> TaskList | None:
-        """Fetch a board by its own id."""
-        ...
+    async def get_task_list(self, task_list_id: str) -> Optional[TaskList]:
+        return self._lists.get(task_list_id)
 
     async def get_by_conversation(
         self, conversation_id: str, branch_id: str = "main"
-    ) -> TaskList | None:
-        """Return the primary board for a conversation's ``branch_id``."""
-        ...
+    ) -> Optional[TaskList]:
+        # Return the "root" board (agent_id="") or the first one found,
+        # within this branch only.
+        tl_id = self._by_key.get((conversation_id, "", branch_id))
+        if tl_id:
+            return self._lists.get(tl_id)
+        # Fallback: any board for this conversation on this branch
+        for (cid, _, bid), tl_id in self._by_key.items():
+            if cid == conversation_id and bid == branch_id:
+                return self._lists.get(tl_id)
+        return None
 
     async def get_boards_by_conversation(
         self, conversation_id: str, branch_id: str = "main"
-    ) -> list[TaskList]:
-        """Return all agent boards (including subagents) on one branch."""
-        ...
+    ) -> List[TaskList]:
+        results = []
+        for (cid, _, bid), tl_id in self._by_key.items():
+            if cid == conversation_id and bid == branch_id:
+                tl = self._lists.get(tl_id)
+                if tl:
+                    results.append(tl)
+        return results
+
+    async def settle_conversation(self, conversation_id: str) -> List[TaskList]:
+        """Settle a conversation's boards when its run ends.
+
+        Flips any lingering ``in_progress`` task to ``succeeded`` so the UI
+        board stops spinning after the agent has produced its final answer.
+        Planned/blocked/failed/abandoned tasks are left untouched. Returns the
+        boards that changed.
+        """
+        async with self._lock:
+            changed: List[TaskList] = []
+            for (cid, _, bid), tl_id in self._by_key.items():
+                if cid != conversation_id or bid != "main":
+                    continue
+                task_list = self._lists.get(tl_id)
+                if not task_list:
+                    continue
+                new_tasks = []
+                mutated = False
+                for task in task_list.tasks:
+                    if task.status == TaskStatus.IN_PROGRESS:
+                        new_tasks.append(
+                            task.model_copy(update={"status": TaskStatus.SUCCEEDED})
+                        )
+                        mutated = True
+                    else:
+                        new_tasks.append(task)
+                if mutated:
+                    updated = task_list.model_copy(update={"tasks": new_tasks})
+                    self._lists[tl_id] = updated
+                    changed.append(updated)
+            return changed
 
     async def update_status(
         self, task_list_id: str, task_id: str, status: TaskStatus, note: str = ""
-    ) -> Task | None:
-        """Update a task's status (and optional note)."""
-        ...
+    ) -> Optional[Task]:
+        async with self._lock:
+            task_list = self._lists.get(task_list_id)
+            if not task_list:
+                return None
+            for task in task_list.tasks:
+                if task.id == task_id:
+                    new_task = task.model_copy(
+                        update={"status": status, "note": note if note else task.note}
+                    )
+                    self._lists[task_list_id] = task_list.model_copy(
+                        update={
+                            "tasks": [
+                                new_task if t.id == task_id else t for t in task_list.tasks
+                            ]
+                        }
+                    )
+                    return new_task
+            return None
 
-    async def add_tasks(self, task_list_id: str, titles: list[str]) -> list[Task]:
-        """Append new tasks to a board."""
-        ...
+    async def add_tasks(self, task_list_id: str, titles: List[str]) -> List[Task]:
+        async with self._lock:
+            task_list = self._lists.get(task_list_id)
+            if not task_list:
+                return []
+            start_order = len(task_list.tasks)
+            new_tasks = [
+                Task(
+                    id=str(uuid4()),
+                    title=t.strip(),
+                    status=TaskStatus.PLANNED,
+                    order=start_order + i,
+                )
+                for i, t in enumerate(titles)
+                if t.strip()
+            ]
+            self._lists[task_list_id] = task_list.model_copy(
+                update={"tasks": [*task_list.tasks, *new_tasks]}
+            )
+            return new_tasks
 
     async def delete_task(self, task_list_id: str, task_id: str) -> bool:
-        """Remove a task; returns True if found and deleted."""
-        ...
+        async with self._lock:
+            task_list = self._lists.get(task_list_id)
+            if not task_list:
+                return False
+            before = len(task_list.tasks)
+            new_tasks = [t for t in task_list.tasks if t.id != task_id]
+            self._lists[task_list_id] = task_list.model_copy(update={"tasks": new_tasks})
+            return len(new_tasks) < before
 
-    async def increment_retry(self, task_list_id: str, task_id: str) -> Task | None:
-        """Agent retry: increment retry_count, move to in_progress.
+    async def increment_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
+        """Agent bounded retry: increment retry_count, move to in_progress.
 
-        Returns None when the task is not found OR retry_count has reached
-        max_retries (caller must set status to abandoned in that case).
+        Returns None if not found or retry_count has reached max_retries.
         """
-        ...
+        async with self._lock:
+            task_list = self._lists.get(task_list_id)
+            if not task_list:
+                return None
+            for task in task_list.tasks:
+                if task.id == task_id:
+                    if task.retry_count >= task_list.max_retries:
+                        return None
+                    new_task = task.model_copy(
+                        update={
+                            "retry_count": task.retry_count + 1,
+                            "status": TaskStatus.IN_PROGRESS,
+                        }
+                    )
+                    self._lists[task_list_id] = task_list.model_copy(
+                        update={
+                            "tasks": [
+                                new_task if t.id == task_id else t for t in task_list.tasks
+                            ]
+                        }
+                    )
+                    return new_task
+            return None
 
-    async def force_retry(self, task_list_id: str, task_id: str) -> Task | None:
-        """User override: reset retry_count to 0 and set in_progress.
-
-        Works on both failed and abandoned tasks.
-        """
-        ...
+    async def force_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
+        """User override: reset retry_count to 0 and set in_progress."""
+        async with self._lock:
+            task_list = self._lists.get(task_list_id)
+            if not task_list:
+                return None
+            for task in task_list.tasks:
+                if task.id == task_id:
+                    new_task = task.model_copy(
+                        update={
+                            "retry_count": 0,
+                            "status": TaskStatus.IN_PROGRESS,
+                            "note": "",
+                        }
+                    )
+                    self._lists[task_list_id] = task_list.model_copy(
+                        update={
+                            "tasks": [
+                                new_task if t.id == task_id else t for t in task_list.tasks
+                            ]
+                        }
+                    )
+                    return new_task
+            return None
 
     async def update_task_title(
         self, task_list_id: str, task_id: str, title: str
-    ) -> Task | None:
-        """Rename a task."""
-        ...
+    ) -> Optional[Task]:
+        async with self._lock:
+            task_list = self._lists.get(task_list_id)
+            if not task_list:
+                return None
+            for task in task_list.tasks:
+                if task.id == task_id:
+                    new_task = task.model_copy(update={"title": title.strip()})
+                    self._lists[task_list_id] = task_list.model_copy(
+                        update={
+                            "tasks": [
+                                new_task if t.id == task_id else t for t in task_list.tasks
+                            ]
+                        }
+                    )
+                    return new_task
+            return None

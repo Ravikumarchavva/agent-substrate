@@ -1,83 +1,14 @@
-"""kernel.runtime — durable runtime contracts (L0).
+"""substrate.agents.runtime — agent execution runtime.
 
-All items here are Protocols, dataclasses, or value types.
-No I/O, no concrete implementations, no external dependencies beyond pydantic.
-
-File map
---------
-ids.py            RunId, RunStatus, new_run_id
-log_entry.py      RunLogKind, RunLogEntry, EventLogProtocol  (the append-only durable spine)
-effects.py        Effect, EffectResult  (at-most-once external effects)
-inbox.py          InboxProtocol, DeadLetterEntry, DeadLetterReason  (durable mailbox)
-follow_graph.py   FollowGraph  (social follow-graph — NOT the RAG knowledge graph)
-fanout.py         FanoutStrategy  (how an emit reaches all followers)
-wakeup.py         Wakeup, SignalBusProtocol  (what resumes a dormant run)
-scheduler.py      Lease, RunRetryPolicy, SchedulerProtocol, RunRegistryProtocol
-                  (work-queue + leasing; registry lookups + wake control)
-supervisor.py     RunHandle, RunResult, SupervisorProtocol  (spawn/join/cancel subagents)
-agent.py          AgentRunContext, Agent  (the agent contract)
-communication.py  AskOutcome, RunStatusSummary  (ask/reply value types)
+Exports the Runtime facade, RunContext (the L1 journaled execution context
+that agents receive as ``ctx`` in ``agent.run(ctx, inbox)``), and the Worker.
 """
 
 from __future__ import annotations
 
-from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
-from substrate.kernel.runtime.log_entry import EventLogProtocol, RunLogEntry, RunLogKind
-from substrate.kernel.runtime.effects import Effect, EffectResult
-from substrate.kernel.runtime.inbox import (
-    DeadLetterEntry,
-    DeadLetterReason,
-    InboxProtocol,
-)
-from substrate.kernel.runtime.follow_graph import FollowGraph
-from substrate.kernel.runtime.fanout import FanoutStrategy
-from substrate.kernel.runtime.wakeup import SignalBusProtocol, Wakeup
-from substrate.kernel.runtime.scheduler import (
-    Lease,
-    RunRegistryProtocol,
-    RunRetryPolicy,
-    SchedulerProtocol,
-)
-from substrate.kernel.runtime.supervisor import RunHandle, RunResult, SupervisorProtocol
-from substrate.kernel.runtime.agent import Agent, AgentRunContext
-from substrate.kernel.runtime.communication import AskOutcome, RunStatusSummary
+from substrate.agents.runtime.context import RunContext
+from substrate.agents.runtime.local_runtime import build_local_runtime
+from substrate.agents.runtime.runtime import Runtime, RunOutcome
+from substrate.agents.runtime.worker import Worker
 
-__all__ = [
-    # ids
-    "RunId",
-    "RunStatus",
-    "new_run_id",
-    # log
-    "RunLogEntry",
-    "RunLogKind",
-    "EventLogProtocol",
-    # effects
-    "Effect",
-    "EffectResult",
-    # inbox
-    "DeadLetterReason",
-    "DeadLetterEntry",
-    "InboxProtocol",
-    # follow graph
-    "FollowGraph",
-    # fanout
-    "FanoutStrategy",
-    # wakeup
-    "Wakeup",
-    "SignalBusProtocol",
-    # scheduler
-    "RunRetryPolicy",
-    "Lease",
-    "SchedulerProtocol",
-    "RunRegistryProtocol",
-    # supervisor
-    "RunHandle",
-    "RunResult",
-    "SupervisorProtocol",
-    # agent
-    "AgentRunContext",
-    "Agent",
-    # communication
-    "AskOutcome",
-    "RunStatusSummary",
-]
+__all__ = ["Runtime", "RunOutcome", "RunContext", "Worker", "build_local_runtime"]

@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 from typing import Awaitable, Callable, ClassVar, Iterator
 
-from substrate.agents.middleware._contracts import MiddlewareContext
-from substrate.exceptions import MiddlewareTermination
-from substrate.kernel.agent.middleware import MiddlewareStage
+from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
 
 _PII_PATTERNS: dict[str, re.Pattern[str]] = {
     "email": re.compile(

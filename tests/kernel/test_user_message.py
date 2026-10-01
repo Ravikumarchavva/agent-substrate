@@ -5,14 +5,14 @@ history, replacing the old steps-table write path)."""
 
 from __future__ import annotations
 
-from substrate.kernel.llm import ModelCapabilities
-from substrate.agents.core.react import ReActAgent
-from substrate.agents.runtime import Runtime
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.core.usage import Usage
-from substrate.kernel.messaging.message import ChatPayload, Message
-from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+from substrate.kernel.abstractions.llm import ModelCapabilities
+from substrate.kernel.agents.react import ReActAgent
+from substrate.kernel.runtime import Runtime
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.core.usage import Usage
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
 
 
 class _StubLLM:
@@ -79,7 +79,7 @@ async def test_user_message_prefers_display_text_metadata() -> None:
 async def test_orchestrator_also_logs_user_message() -> None:
     """OrchestratorAgent gets the same treatment as ReActAgent — both are
     top-level agent types users interact with directly."""
-    from substrate.agents.core.orchestrator import OrchestratorAgent
+    from substrate.kernel.agents.orchestrator import OrchestratorAgent
 
     agent = OrchestratorAgent("coordinator", model=_StubLLM())
     async with Runtime() as rt:

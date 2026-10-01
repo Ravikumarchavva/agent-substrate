@@ -1,11 +1,11 @@
-"""substrate.agents.core — agent types."""
+"""substrate.kernel.agents — agent types."""
 
 from __future__ import annotations
 
-from substrate.agents.core.base import BaseAgent
-from substrate.agents.core.react import ReActAgent
-from substrate.agents.core.proxy import UserProxyAgent
-from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
+from substrate.kernel.agents.base import BaseAgent
+from substrate.kernel.agents.react import ReActAgent
+from substrate.kernel.agents.proxy import UserProxyAgent
+from substrate.kernel.agents.orchestrator import OrchestratorAgent, SubAgentConfig
 
 __all__ = [
     "BaseAgent",

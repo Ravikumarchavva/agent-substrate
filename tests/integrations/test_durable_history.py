@@ -5,8 +5,8 @@ import pytest
 from sqlalchemy.exc import OperationalError
 
 from substrate.integrations.history import DurableHistoryProvider
-from substrate.kernel import ChatMessage
-from substrate.kernel.core.content import TextBlock
+from substrate.kernel.abstractions import ChatMessage
+from substrate.kernel.abstractions.core.content import TextBlock
 
 pytestmark = [pytest.mark.requires_postgres]
 
@@ -16,7 +16,7 @@ async def test_legacy_linear_sessions_are_chained_into_the_dag_on_connect():
     """Pre-DAG chats lived in history_messages; connect() must not strand them."""
     from sqlalchemy import delete
 
-    from substrate.agents.storage.history import project_messages
+    from substrate.kernel.storage.history import project_messages
     from substrate.integrations.history.durable_history import (
         HistoryMessage,
         HistorySession,
@@ -93,8 +93,8 @@ async def test_postgres_history_dag_node_append_and_retrieval():
     try:
         await provider.delete_session(session_id)
 
-        from substrate.kernel.exceptions import DAGIntegrityError
-        from substrate.kernel.storage.history import MessageNode
+        from substrate.kernel.abstractions.exceptions import DAGIntegrityError
+        from substrate.kernel.abstractions.storage.history import MessageNode
 
         # 1. Root node append
         root = MessageNode(
@@ -177,8 +177,8 @@ async def test_postgres_history_dag_append_and_advance_and_cas():
     try:
         await provider.delete_session(session_id)
 
-        from substrate.kernel.exceptions import BranchHeadConflictError
-        from substrate.kernel.storage.history import MessageNode
+        from substrate.kernel.abstractions.exceptions import BranchHeadConflictError
+        from substrate.kernel.abstractions.storage.history import MessageNode
 
         # 1. Advance on empty branch
         n1 = MessageNode(
@@ -239,9 +239,9 @@ async def test_postgres_history_dag_forking_and_checkpoints():
     try:
         await provider.delete_session(session_id)
 
-        from substrate.agents.storage.history import AncestryCheckpointResolver, DefaultHistoryResolver
-        from substrate.kernel.exceptions import BranchAlreadyExistsError
-        from substrate.kernel.storage.history import HistoryCheckpoint, MessageNode
+        from substrate.kernel.storage.history import AncestryCheckpointResolver, DefaultHistoryResolver
+        from substrate.kernel.abstractions.exceptions import BranchAlreadyExistsError
+        from substrate.kernel.abstractions.storage.history import HistoryCheckpoint, MessageNode
 
         # Setup 3-node chain: root -> middle -> leaf
         n1 = MessageNode(

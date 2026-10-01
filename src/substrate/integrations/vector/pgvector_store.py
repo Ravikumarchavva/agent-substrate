@@ -34,11 +34,23 @@ from typing import Any, Optional
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from substrate.kernel.core.content import parse_content_block
-from substrate.kernel.storage.vector import Document, SearchResult
+from substrate.kernel.abstractions.core.content import parse_content_block
+from substrate.kernel.abstractions.storage.vector import Document, SearchResult
+from substrate.kernel.abstractions.ids import new_id
 from substrate.logger import setup_logging
 
 logger = setup_logging()
+
+
+def _doc_id(value: object) -> str:
+    """The canonical spelling of a document id: 32 lowercase hex characters.
+
+    The column is a Postgres ``UUID``, which hands ids back dashed; the kernel
+    mints them undashed. Normalising both ways means the id a caller stored is
+    the id they read back.
+    """
+    return uuid.UUID(str(value)).hex
+
 
 
 def _blocks_to_json(doc: Document) -> str:
@@ -49,7 +61,7 @@ def _blocks_to_json(doc: Document) -> str:
 def _blocks_from_json(raw: str | list) -> list:
     """Deserialize blocks from the content_json column."""
     items: list = json.loads(raw) if isinstance(raw, str) else raw
-    return [parse_content_block(item) for item in items]
+    return [parse_content_block(item, forward_compatible=True) for item in items]
 
 
 _TABLE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -175,7 +187,7 @@ class PgVectorStore:
     def _row_params(
         self, doc: Document, collection: str, now: datetime
     ) -> dict[str, Any]:
-        doc_id = doc.id or str(uuid.uuid4())
+        doc_id = _doc_id(doc.id) if doc.id else new_id()
         if doc.embedding is None:
             raise ValueError(
                 f"Document {doc_id} is missing embedding required by PgVectorStore"
@@ -300,7 +312,7 @@ class PgVectorStore:
 
             documents.append(
                 Document(
-                    id=str(row.id),
+                    id=_doc_id(row.id),
                     content=_blocks_from_json(row.content_json),
                     embedding=emb,
                     metadata=row.metadata or {},
@@ -445,7 +457,7 @@ class PgVectorStore:
 
         return [
             SearchResult(
-                id=str(row.id),
+                id=_doc_id(row.id),
                 content=_blocks_from_json(row.content_json),
                 score=float(row.similarity),
                 metadata=row.metadata or {},
@@ -495,7 +507,7 @@ class PgVectorStore:
 
         return [
             SearchResult(
-                id=str(row.id),
+                id=_doc_id(row.id),
                 content=_blocks_from_json(row.content_json),
                 score=float(row.rank),
                 metadata=row.metadata or {},
@@ -578,7 +590,7 @@ class PgVectorStore:
 
         return [
             SearchResult(
-                id=str(row.id),
+                id=_doc_id(row.id),
                 content=_blocks_from_json(row.content_json),
                 score=float(row.rrf_score),
                 metadata=row.metadata or {},

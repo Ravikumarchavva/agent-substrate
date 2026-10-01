@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from substrate.kernel.storage.snapshots import (
+from substrate.kernel.abstractions.storage.snapshots import (
     WorkspaceFileEntry,
     WorkspaceManifest,
     WorkspaceSnapshot,

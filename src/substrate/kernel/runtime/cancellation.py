@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 from typing import Callable
 
-from substrate.kernel.exceptions import CancellationError
+from substrate.kernel.abstractions.exceptions import CancellationError
 
 
 class CancellationToken:

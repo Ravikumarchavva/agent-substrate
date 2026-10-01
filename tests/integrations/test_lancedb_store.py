@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 
 from substrate.integrations.vector.lancedb_store import LanceDBVectorStore
-from substrate.kernel.core.content import TextBlock
-from substrate.kernel.storage.vector import Document
+from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.kernel.abstractions.storage.vector import Document
 
 
 @pytest.fixture

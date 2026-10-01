@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from substrate.agents.workspace.layout import conversation_workspace_prefix
-from substrate.agents.storage.local_object_store import (
+from substrate.kernel.workspace.layout import conversation_workspace_prefix
+from substrate.kernel.storage.local_object_store import (
     WorkspaceFileStore,
     WorkspaceQuotaExceededError,
 )

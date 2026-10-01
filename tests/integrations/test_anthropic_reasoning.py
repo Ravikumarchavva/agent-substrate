@@ -11,7 +11,7 @@ construction. These tests lock in that the encoder now round-trips it.
 from __future__ import annotations
 
 from substrate.integrations.llm.encoders.anthropic import encode_messages
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     ReasoningBlock,
     TextBlock,

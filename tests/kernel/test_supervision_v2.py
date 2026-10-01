@@ -12,11 +12,11 @@ from __future__ import annotations
 import asyncio
 
 
-from substrate.agents.storage.history import project_messages
-from substrate.agents.runtime import Runtime
-from substrate.kernel.agent.supervision import HistoryRetention
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import DataPayload, Message
+from substrate.kernel.storage.history import project_messages
+from substrate.kernel.runtime import Runtime
+from substrate.kernel.abstractions.agent.supervision import HistoryRetention
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import DataPayload, Message
 
 
 def _agent_id(name: str) -> Actor:
@@ -62,7 +62,7 @@ async def test_crash_records_agent_crashed_status() -> None:
 
 async def test_guardrail_trip_records_guardrail_tripped_status() -> None:
     """MiddlewareTermination is recorded as guardrail_tripped, not agent_crashed."""
-    from substrate.kernel.exceptions import MiddlewareTermination
+    from substrate.kernel.abstractions.exceptions import MiddlewareTermination
 
     class GuardrailAgent:
         id = _agent_id("guardrail")
@@ -84,7 +84,7 @@ async def test_guardrail_trip_records_guardrail_tripped_status() -> None:
 
 async def test_budget_exhausted_records_budget_exhausted_status() -> None:
     """BudgetExhaustedError is recorded as budget_exhausted."""
-    from substrate.kernel.exceptions import BudgetExhaustedError
+    from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
 
     class BudgetAgent:
         id = _agent_id("budgeter")
@@ -111,10 +111,10 @@ async def test_budget_exhausted_records_budget_exhausted_status() -> None:
 
 async def test_history_retention_run_clears_after_completion() -> None:
     """Agents with HistoryRetention.RUN have run-scoped history cleared on completion."""
-    from substrate.agents.context.context import ContextConfig
-    from substrate.agents.storage.history import InMemoryHistoryProvider
-    from substrate.agents.core.base import persist_turns
-    from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+    from substrate.kernel.context.context import ContextConfig
+    from substrate.kernel.storage.history import InMemoryHistoryProvider
+    from substrate.kernel.agents.base import persist_turns
+    from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 
     history = InMemoryHistoryProvider()
     ctx_cfg = ContextConfig(history, retention=HistoryRetention.RUN)
@@ -166,10 +166,10 @@ async def test_history_retention_run_clears_after_completion() -> None:
 
 async def test_history_retention_permanent_survives_completion() -> None:
     """Agents with HistoryRetention.PERMANENT (default) keep history after run ends."""
-    from substrate.agents.context.context import ContextConfig
-    from substrate.agents.storage.history import InMemoryHistoryProvider
-    from substrate.agents.core.base import persist_turns
-    from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+    from substrate.kernel.context.context import ContextConfig
+    from substrate.kernel.storage.history import InMemoryHistoryProvider
+    from substrate.kernel.agents.base import persist_turns
+    from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 
     history = InMemoryHistoryProvider()
     ctx_cfg = ContextConfig(history, retention=HistoryRetention.PERMANENT)

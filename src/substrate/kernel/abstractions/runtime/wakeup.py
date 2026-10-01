@@ -27,10 +27,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from substrate.kernel.core.content import JsonObject
-from substrate.kernel.runtime.ids import RunId
+from substrate.kernel.abstractions.core.content import JsonObject
+from substrate.kernel.abstractions.runtime.ids import RunId
 
 
 class Wakeup(BaseModel):
@@ -60,69 +60,18 @@ class Wakeup(BaseModel):
 
     model_config = {"frozen": True}
 
-
-@runtime_checkable
-class SignalBusProtocol(Protocol):
-    """Contract for sending named signals and timers to suspended runs.
-
-    Signals are lightweight — they carry a small JSON payload and wake a
-    specific run by name.  They are the mechanism behind ``ctx.wait_signal()``
-    and ``ctx.sleep_until()``.
-
-    Implementations: in-memory asyncio dict (Stage 0), Postgres table +
-    ``pg_notify`` (Stage 1+).
-
-    Semantic guarantees
-    -------------------
-    - A signal fired before the run suspends is not lost — it is buffered as
-      an unconsumed row/entry and delivered the next time something consumes
-      that name for that run.
-    - ``consume`` is exactly-once per ``effect_id``: the caller supplies a
-      deterministic, replay-stable ``effect_id`` (see
-      ``RunContext``/``Effect.make_id``); a wait that replays after already
-      having consumed a signal gets the SAME payload back (idempotent
-      re-claim), never a different or absent one.
-    - ``timer`` is best-effort with millisecond granularity; the implementation
-      may fire up to a few seconds late under load.  Agents must not rely on
-      precise wall-clock accuracy for correctness.
-    """
-
-    async def signal(
-        self,
-        run_id: RunId,
-        name: str,
-        payload: JsonObject,
-    ) -> None:
-        """Fire a named signal at ``run_id``.
-
-        Wakes a suspended run that is waiting on this signal name.
-        If the run is not currently suspended, the signal is buffered.
-        """
-        ...
-
-    async def consume(
-        self,
-        run_id: RunId,
-        name: str,
-        effect_id: str,
-    ) -> JsonObject | None:
-        """Claim one buffered signal named ``name`` for ``run_id``, or ``None``.
-
-        Exactly-once: if ``effect_id`` already claimed a signal (a replay of
-        the same journaled wait), returns that same payload again without
-        claiming a new one.  Otherwise atomically claims the oldest unclaimed
-        signal matching ``name`` and returns its payload, or ``None`` if none
-        is buffered yet.
-        """
-        ...
-
-    async def timer(self, run_id: RunId, at: datetime) -> None:
-        """Schedule a timer wakeup for ``run_id`` at wall-clock time ``at``.
-
-        If ``at`` is in the past, the wakeup fires immediately.
-        Cancelling the run before ``at`` cancels the pending timer.
-        """
-        ...
+    @model_validator(mode="after")
+    def _fields_match_kind(self) -> "Wakeup":
+        # One flat model with a ``kind`` tag would otherwise let a timer exist
+        # with no time and a signal wait with nothing to wait for — states no
+        # consumer can act on.
+        if self.kind == "timer" and self.at is None:
+            raise ValueError("a timer wakeup needs `at`")
+        if self.kind == "signal" and not self.signals:
+            raise ValueError("a signal wakeup needs at least one signal name")
+        if self.kind == "child_done" and self.child_run is None:
+            raise ValueError("a child_done wakeup needs `child_run`")
+        return self
 
 
-__all__ = ["Wakeup", "SignalBusProtocol"]
+__all__ = ["Wakeup"]

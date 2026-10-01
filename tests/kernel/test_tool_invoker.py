@@ -6,16 +6,16 @@ import asyncio
 from typing import Any
 
 
-from substrate.agents.tools.invoker import ToolInvoker
-from substrate.agents.tools.toolbox import Toolbox
-from substrate.kernel.tools.approval import (
+from substrate.kernel.tools.invoker import ToolInvoker
+from substrate.kernel.tools.toolbox import Toolbox
+from substrate.kernel.abstractions.tools.approval import (
     ApprovalDecision,
     ApprovalRequest,
     ApprovalResult,
 )
-from substrate.kernel.tools.chain import ChainPolicy
-from substrate.kernel.core.content import MediaBlock, TextBlock
-from substrate.kernel.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
+from substrate.kernel.abstractions.tools.chain import ChainPolicy
+from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
+from substrate.kernel.abstractions.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
 
 
 # ---------------------------------------------------------------------------

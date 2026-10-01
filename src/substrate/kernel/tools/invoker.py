@@ -24,24 +24,24 @@ import json
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from substrate.kernel.runtime.log_entry import RunLogKind
-from substrate.kernel.tools.approval import (
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.tools.approval import (
     ApprovalDecision,
     ApprovalHandler,
     ApprovalRequest,
     ApprovalResult,
 )
-from substrate.kernel.storage.blob import BlobStore
-from substrate.kernel.tools.chain import (
+from substrate.kernel.abstractions.storage.blob import BlobStore
+from substrate.kernel.abstractions.tools.chain import (
     ChainCallRecord,
     ChainFile,
     ChainPolicy,
     InvocationResult,
 )
-from substrate.kernel.core.content import JsonObject, MediaBlock, content_blocks_to_str
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.stream import AgentProgress, AgentStep
-from substrate.kernel.tools import (
+from substrate.kernel.abstractions.core.content import JsonObject, MediaBlock, content_blocks_to_str
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.stream import AgentProgress, AgentStep
+from substrate.kernel.abstractions.tools import (
     ToolCallRequest,
     ToolRegistry,
     ToolRisk,
@@ -49,20 +49,15 @@ from substrate.kernel.tools import (
     is_provider_defined_tool,
 )
 
-from substrate.agents.hooks.manager import HookEvent, HookManager
+from substrate.kernel.hooks.manager import HookEvent, HookManager
 from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.context import RunContext
-    from substrate.kernel.tools.tools import ToolExecutionResult
+    from substrate.kernel.runtime.context import RunContext
+    from substrate.kernel.abstractions.tools.tools import ToolExecutionResult
 
-logger = setup_logging("substrate.agents.tools.invoker")
+logger = setup_logging("substrate.kernel.tools.invoker")
 
-_RISK_ORDER: dict[ToolRisk, int] = {
-    ToolRisk.SAFE: 0,
-    ToolRisk.HIGH: 1,
-    ToolRisk.CRITICAL: 2,
-}
 
 _CHAIN_TOOL_NAME = "tool_chain"
 
@@ -110,6 +105,11 @@ class ToolInvoker:
         self._store = artifact_store
         self._policy = policy or ChainPolicy()
         self._hooks = hooks
+
+    @property
+    def registry(self) -> ToolRegistry:
+        """The tools this invoker can call."""
+        return self._registry
 
     def open_session(self) -> InvokerSession:
         """Create a fresh per-chain session (call counter, trace, pinned refs)."""
@@ -242,7 +242,7 @@ class ToolInvoker:
         else:
             tool_risk = ToolRisk(getattr(tool, "risk", ToolRisk.SAFE))
         max_allowed = policy.max_risk_unapproved
-        if _RISK_ORDER[tool_risk] > _RISK_ORDER[max_allowed]:
+        if tool_risk > max_allowed:
             if self._approval is None:
                 return InvocationResult(
                     status="denied",
@@ -271,7 +271,7 @@ class ToolInvoker:
                 signal_payload = await ctx.sleep_until_signal(f"hitl:{request_id}")
                 result: ApprovalResult = _approval_result_from_signal(signal_payload)
             else:
-                from substrate.kernel.core.identity import Actor
+                from substrate.kernel.abstractions.core.identity import Actor
 
                 approval_req = ApprovalRequest(
                     call=call,
@@ -443,6 +443,44 @@ class ToolInvoker:
         )
 
 
+def build_invoker(agent: Any) -> ToolInvoker:
+    """The ``ToolInvoker`` for an agent, from what the agent declares: its tools, its
+    approval handler, its blob store, its hooks and the highest risk it lets through
+    without approval."""
+    from substrate.kernel.abstractions.tools.approval import ApprovalDecision, ApprovalResult
+    from substrate.kernel.tools.toolbox import Toolbox
+
+    registry = getattr(agent, "tools", None) or Toolbox()
+    approval = getattr(agent, "approval_handler", None)
+    if approval is not None and not hasattr(approval, "request"):
+        callback = approval
+
+        class _CallbackApproval:
+            """Adapts a bare ``async def (name, args) -> bool`` into the approval port.
+            A bare bool can say yes or no, never "yes, but change this"."""
+
+            async def request(self, req: Any) -> ApprovalResult:
+                approved = await callback(req.call.name, req.call.arguments)
+                return ApprovalResult(decision=ApprovalDecision.APPROVED if approved else ApprovalDecision.DENIED)
+
+        approval = _CallbackApproval()
+
+    policy = getattr(agent, "tool_policy", None) or DIRECT_CALL_POLICY
+    required = getattr(agent, "approval_required_risk", None)
+    if required is not None:
+        # Approval is required from ``required`` upward, so what may pass unapproved is
+        # the level just below it.
+        below = {ToolRisk.CRITICAL: ToolRisk.HIGH, ToolRisk.HIGH: ToolRisk.SAFE}
+        policy = policy.model_copy(update={"max_risk_unapproved": below.get(required, ToolRisk.SAFE)})
+    return ToolInvoker(
+        registry=registry,
+        approval_handler=approval,
+        artifact_store=getattr(agent, "blob_store", None),
+        policy=policy,
+        hooks=getattr(agent, "hooks", None),
+    )
+
+
 # ---------------------------------------------------------------------------
 # InvokerSession — per-chain mutable state
 # ---------------------------------------------------------------------------
@@ -542,4 +580,4 @@ def _emit_progress(
         logger.warning("Failed to emit progress: %s", exc)
 
 
-__all__ = ["ToolInvoker", "InvokerSession"]
+__all__ = ["ToolInvoker", "InvokerSession", "build_invoker"]

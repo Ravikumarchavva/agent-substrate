@@ -5,15 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Protocol
 
-from substrate.kernel import ChatMessage
-from substrate.kernel.agent.middleware import MiddlewareStage
-from substrate.kernel.core.content import KernelModel
-from substrate.kernel.llm import LLMResponse
-from substrate.kernel.tools.chain import InvocationResult
-from substrate.kernel.tools.tools import AnyTool
+from substrate.kernel.abstractions import ChatMessage
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.abstractions.core.content import KernelModel
+from substrate.kernel.abstractions.llm import LLMResponse
+from substrate.kernel.abstractions.tools.chain import InvocationResult
+from substrate.kernel.abstractions.tools.tools import AnyTool
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.context import RunContext
+    from substrate.kernel.runtime.context import RunContext
 
 
 # ---------------------------------------------------------------------------

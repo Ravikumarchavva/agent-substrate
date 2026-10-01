@@ -10,7 +10,8 @@ dispatch point-to-point sends from broadcasts via ``isinstance``.
 
 from __future__ import annotations
 
-import uuid
+from substrate.kernel.abstractions.ids import new_id
+
 from dataclasses import dataclass
 
 
@@ -60,7 +61,7 @@ class Actor:
     @classmethod
     def generate(cls, type: str) -> Actor:
         """Create an Actor with a random key, for genuinely anonymous actors."""
-        return cls(type=type, key=uuid.uuid4().hex)
+        return cls(type=type, key=new_id())
 
     @classmethod
     def system(cls, key: str = "bootstrap") -> Actor:
@@ -91,16 +92,6 @@ class Topic:
 
     def __str__(self) -> str:
         return self.name
-
-    @classmethod
-    def progress(cls, run_id: str) -> Topic:
-        """Standard channel for execution progress events of a specific run."""
-        return cls(f"agent.progress/{run_id}")
-
-    @classmethod
-    def stream(cls, run_id: str) -> Topic:
-        """Standard channel for token streaming of a specific run."""
-        return cls(f"agent.stream/{run_id}")
 
 
 __all__ = ["Actor", "Topic"]

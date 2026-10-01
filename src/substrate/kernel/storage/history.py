@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from substrate.kernel.core.content import ChatMessage
-from substrate.kernel.exceptions import (
+from substrate.kernel.abstractions.core.content import ChatMessage
+from substrate.kernel.abstractions.exceptions import (
     BranchAlreadyExistsError,
     BranchHeadConflictError,
     BranchNotFoundError,
     DAGIntegrityError,
 )
-from substrate.kernel.storage.history import (
+from substrate.kernel.abstractions.storage.history import (
     Branch,
     HistoryCheckpoint,
     HistoryProvider,
@@ -479,7 +479,7 @@ async def project_messages(
         branch.head_message_id
     )
     if builder is None:
-        from substrate.agents.context.builder import DefaultContextBuilder
+        from substrate.kernel.context.builder import DefaultContextBuilder
 
         builder = DefaultContextBuilder()
     window = await builder.build(nodes, checkpoint=checkpoint)

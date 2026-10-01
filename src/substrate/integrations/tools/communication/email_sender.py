@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import re
 
-from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions import TextBlock
 from substrate.logger import setup_logging
 
 logger = setup_logging()

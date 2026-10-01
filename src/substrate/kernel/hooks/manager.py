@@ -31,7 +31,7 @@ from collections import defaultdict
 from enum import Enum
 from typing import Awaitable, Callable
 
-from substrate.kernel.core.content import JsonObject
+from substrate.kernel.abstractions.core.content import JsonObject
 from substrate.logger import setup_logging
 
 logger = setup_logging()
@@ -185,7 +185,7 @@ class CostTracker:
         cost_per_1k_prompt: float | None = None,
         cost_per_1k_completion: float | None = None,
     ):
-        from substrate.agents.llm.models import get_model_profile
+        from substrate.kernel.llm.models import get_model_profile
 
         profile = get_model_profile(model) if model else None
         self.cost_per_1k_prompt = cost_per_1k_prompt or (

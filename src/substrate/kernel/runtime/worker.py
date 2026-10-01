@@ -1,492 +1,464 @@
-"""Worker — the run loop that leases runs and calls Agent.run().
+"""Worker — leases runs from the store and drives each through its agent.
 
-Each leased run is executed as an asyncio Task, but the Task does NOT stay
-alive across a suspension. When the agent awaits something not yet available
-(``ctx.ask()``, ``ctx.sleep_until_signal()``, ``ctx.sleep_until()``,
-``ctx.join()``), ``RunContext`` raises ``SuspendInterrupt`` — a
-``BaseException`` that unwinds straight out of ``agent.run()`` to
-``_run_agent`` below. This Task then genuinely ends: the run is released
-with ``status=SUSPENDED`` and costs nothing until something wakes it. Resume
-is just a fresh lease: any worker (this one or another) picks it up, folds a
-new ``EffectCache`` from the EventLogProtocol, and calls ``agent.run()`` again from
-the top — every already-completed effect and consumed signal replays as a
-cache hit, so execution fast-forwards silently back to the same wait point,
-which now succeeds. See ``agents/runtime/context.py`` module docstring for
-the full suspend/resume contract.
+Each leased run is an asyncio task, but the task does not outlive a suspension. When
+an agent waits on something not yet available, ``RunContext`` raises
+``SuspendInterrupt``, which unwinds out of ``agent.run`` to here; the worker commits
+the suspension and the task ends. The run then costs nothing until a message, signal,
+timer or finished child wakes it, at which point any worker leases it, folds its
+journal and calls ``agent.run`` again from the top. Every step already done answers
+from the journal, so execution fast-forwards back to the wait that now succeeds.
 
-Multiple agents can be in-flight concurrently because each is its own Task.
-The SchedulerProtocol's lease capacity controls how many are started per poll tick.
+Every way a run can end is **one commit**: the journal entry, the status, the inbox
+acknowledgement and the signal that wakes a parent land together or not at all. The
+commit carries the lease's epoch, so a worker that was paused past its lease and has
+since been replaced cannot write anything.
+
+What stops a run
+----------------
+* the agent returns            -> ``Complete``
+* the agent raises             -> ``Retry`` (backoff) while retries remain, else ``Fail``
+* a policy halt (guardrail, budget, permanent error) -> ``Fail``, never retried: the
+  same inputs would produce the same decision.
+* cancellation                 -> ``Cancel``
+* the lease is lost            -> nothing: the run now belongs to someone else
+* the process is shutting down -> nothing: the lease expires and the run resumes
 """
 
 from __future__ import annotations
 
 import asyncio
-import logging
+import random
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.runtime.log_entry import RunLogKind
-from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.agents.runtime.cancellation import CancellationToken
-from substrate.kernel.runtime.ids import RunId, RunStatus
-from substrate.kernel.runtime.log_entry import RunLogEntry
-from substrate.kernel.agent.supervision import Supervision
-from substrate.kernel.exceptions import CancellationError, SuspendInterrupt
+from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+from substrate.kernel.abstractions.core.error_info import ErrorInfo
+from substrate.kernel.abstractions.exceptions import (
+    AgentCrashError,
+    BudgetExhaustedError,
+    CancellationError,
+    KernelError,
+    LeaseLostError,
+    MiddlewareTermination,
+    NonDeterminismError,
+    PermanentError,
+    SuspendInterrupt,
+)
+from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.runtime.store import (
+    Cancel,
+    Commit,
+    Complete,
+    Fail,
+    HeartbeatResult,
+    Lease,
+    Nack,
+    NewEntry,
+    Retry,
+    RuntimeStore,
+    Suspend,
+)
+from substrate.kernel.runtime.cancellation import CancellationToken
+from substrate.kernel.runtime.context import RunContext
+from substrate.kernel.runtime.journal import Journal
+from substrate.kernel.telemetry import instruments, semconv, span
+from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.resolver import ActorResolver
-    from substrate.kernel.runtime.log_entry import EventLogProtocol
-    from substrate.kernel.runtime.inbox import InboxProtocol
-    from substrate.agents.runtime._scheduling import SchedulerBackend
-    from substrate.kernel.runtime.wakeup import SignalBusProtocol
-    from substrate.kernel.runtime.supervisor import SupervisorProtocol
-    from substrate.agents.runtime.context import Agent
-    from substrate.kernel.runtime.fanout import FanoutStrategy
-    from substrate.kernel.runtime.follow_graph import FollowGraph
+    from substrate.kernel.runtime.resolver import ActorResolver
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
+
+# A heartbeat that fails this many times in a row is treated as a lost lease: the
+# store is unreachable, so this worker can no longer prove it still owns the run.
+_HEARTBEAT_FAILURES_BEFORE_LOST = 3
+
+
+def _now() -> datetime:
+    return datetime.now(tz=timezone.utc)
+
+
+def classify_failure(exc: BaseException, *, run_id: str, agent_id: Any) -> tuple[ErrorInfo, bool]:
+    """How a failed attempt should be recorded, and whether trying again can help.
+
+    A guardrail trip, an exhausted budget or a permanent error is a deterministic
+    decision: replaying it produces the same one, and retrying only burns a lease.
+    Anything else is treated as transient — the default for an unexpected crash.
+    """
+    if isinstance(exc, MiddlewareTermination):
+        return ErrorInfo(code="guardrail_tripped", message=f"Request blocked: {exc.message or exc}"), False
+    if isinstance(exc, BudgetExhaustedError):
+        return ErrorInfo(code="budget_exhausted", message=str(exc)), False
+    if isinstance(exc, (PermanentError, NonDeterminismError)):
+        return ErrorInfo(code="permanent_error", message=str(exc)), False
+    if isinstance(exc, KernelError):
+        return exc.to_info().model_copy(update={"code": "agent_crashed"}), exc.retryable
+    crash = AgentCrashError(str(exc), run_id=run_id, agent_id=agent_id)
+    return ErrorInfo(code="agent_crashed", message=str(crash), retryable=True), True
+
+
+def backoff(policy: RunRetryPolicy, retry_count: int) -> float:
+    """Exponential backoff with jitter, capped at the policy's ceiling. Jitter keeps a
+    batch of runs that failed together from retrying together."""
+    delay = min(policy.backoff_s * (2 ** retry_count), policy.max_backoff_s)
+    return delay * random.uniform(0.8, 1.2) if delay else 0.0
 
 
 class Worker:
-    """Single-process worker that drives leased runs to completion."""
-
-    POLL_INTERVAL = 0.05  # seconds between queue polls
+    """Leases runs and executes them. Any number may share one store."""
 
     def __init__(
         self,
+        *,
         worker_id: str,
-        event_log: EventLogProtocol,
-        inbox: InboxProtocol,
-        follow_graph: FollowGraph,
-        fanout: FanoutStrategy,
-        scheduler: SchedulerBackend,
-        supervisor: SupervisorProtocol,
-        signal_bus: SignalBusProtocol,
+        store: RuntimeStore,
         resolver: ActorResolver,
+        max_concurrency: int = 10,
+        lease_s: float = 30.0,
+        poll_interval_s: float = 0.05,
     ) -> None:
         self._worker_id = worker_id
-        self._event_log = event_log
-        self._inbox = inbox
-        self._follow_graph = follow_graph
-        self._fanout = fanout
-        self._scheduler = scheduler
-        self._supervisor = supervisor
-        self._signal_bus = signal_bus
+        self._store = store
         self._resolver = resolver
+        self._max_concurrency = max_concurrency
+        self._lease_s = lease_s
+        self._poll_interval_s = poll_interval_s
         self._running = False
-        self._poll_task: asyncio.Task | None = None
-        self._tokens: dict[
-            str, CancellationToken
-        ] = {}  # run_id → token for external cancel
-        self._tasks: dict[str, asyncio.Task] = {}  # run_id → Task
+        self._poll_task: asyncio.Task[None] | None = None
+        self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._tokens: dict[str, CancellationToken] = {}
+        # Why a task was asked to stop, so the handler can tell a cancel from a shutdown.
+        self._stop_reason: dict[str, str] = {}
+        self._stats_task: asyncio.Task[None] | None = None
+        self._last_stats: dict[str, float] = {}
+
+    # ------------------------------------------------------------------ lifecycle
 
     async def start(self) -> None:
         self._running = True
-        self._poll_task = asyncio.create_task(self._poll_loop(), name="worker-poll")
+        self._poll_task = asyncio.create_task(self._poll(), name="worker-poll")
+        self._stats_task = asyncio.create_task(self._publish_stats(), name="worker-stats")
 
     async def stop(self) -> None:
         self._running = False
-        if self._poll_task:
-            self._poll_task.cancel()
-            try:
-                await self._poll_task
-            except asyncio.CancelledError:
-                pass
-        # Cancel all active agent tasks
-        tasks = list(self._tasks.values())
-        for task in tasks:
+        for task in (self._poll_task, self._stats_task):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        running = list(self._tasks.items())
+        for run_id, task in running:
+            self._stop_reason.setdefault(run_id, "shutdown")
             task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        if running:
+            await asyncio.gather(*(t for _, t in running), return_exceptions=True)
 
-    async def cancel(self, run_id: str) -> None:
-        """Cancel a running or pending task by run_id.
-
-        Local fast path only: cancels this worker's own Task/CancellationToken
-        if it holds one. If it doesn't, that does NOT mean the run is idle —
-        on a durable multi-replica backend it may be actively leased by
-        another worker right now. ``cancel_pending()`` atomically checks and
-        transitions in one step, so only a genuinely non-running run gets
-        force-terminalized here; a RUNNING run is left alone for
-        ``SupervisorProtocol.cancel()``'s durable ``cancel_requested`` flag (observed
-        by the owning worker's own heartbeat) to handle instead — forcing
-        completion here would race that worker's real completion.
-        """
+    def cancel_local(self, run_id: str, reason: str = "cancelled") -> bool:
+        """Interrupt a run this worker is executing. The store's cancel flag reaches
+        runs on other workers through their heartbeat; this is the fast path for ours."""
         task = self._tasks.get(run_id)
-        if task is not None and not task.done():
-            task.cancel()
+        if task is None or task.done():
+            return False
+        self._stop_reason[run_id] = f"cancel:{reason}"
         token = self._tokens.get(run_id)
         if token is not None:
-            token.cancel("cancelled-externally")
+            token.cancel(reason)
+        task.cancel()
+        return True
 
-        if task is None and await self._scheduler.cancel_pending(run_id):
-            from substrate.kernel.runtime.log_entry import RunLogEntry
+    # ------------------------------------------------------------------ polling
 
-            try:
-                seq = await self._event_log.last_seq(run_id)
-                # If run.started was not even logged yet, make sure we sequence it properly
-                if seq < 0:
-                    await self._event_log.append(
-                        run_id,
-                        RunLogEntry(run_id=run_id, seq=0, kind=RunLogKind.RUN_STARTED),
-                        expected_seq=-1,
-                    )
-                    seq = 0
-                await self._event_log.append(
-                    run_id,
-                    RunLogEntry(
-                        run_id=run_id,
-                        seq=seq + 1,
-                        kind=RunLogKind.RUN_CANCELLED,
-                        payload={"reason": "cancelled-externally"},
-                    ),
-                    expected_seq=seq,
-                )
-            except Exception:
-                pass
-            try:
-                await self._supervisor.finish_run(run_id, RunStatus.CANCELLED)
-            except Exception:
-                pass
-
-    async def _poll_loop(self) -> None:
+    async def _poll(self) -> None:
         while self._running:
             try:
-                leases = await self._scheduler.lease(
-                    worker_id=self._worker_id, capacity=10
+                free = self._max_concurrency - len(self._tasks)
+                leases = (
+                    await self._store.lease(worker_id=self._worker_id, capacity=free, lease_s=self._lease_s, now=_now())
+                    if free > 0
+                    else []
                 )
                 for lease in leases:
-                    agent = await self._resolver.resolve(lease.agent_id)
+                    agent = await self._resolver.resolve(lease.agent)
                     if agent is None:
-                        # No live instance and no factory for this type (e.g.
-                        # startup cold-resume race, before registration runs).
-                        # Hold the lease and skip — it expires after 30 s, at which
-                        # point the run is reclaimed as pending and retried once the
-                        # resume hook has registered the agent.
-                        logger.warning(
-                            "Agent %s not in registry — holding lease for resume",
-                            lease.agent_id,
-                        )
+                        # Nothing here can run it yet (a cold start before registration
+                        # finishes). Holding the lease lets it expire and the run be
+                        # reclaimed once the agent is registered.
+                        logger.warning("agent %s is not registered; leaving run %s to be reclaimed", lease.agent, lease.run_id)
                         continue
-                    task = asyncio.create_task(
-                        self._run_agent(lease, agent),
-                        name=f"run-{lease.run_id[:8]}",
-                    )
-                    self._tasks[lease.run_id] = task
-            except Exception:
-                logger.exception("Worker poll error")
-            await asyncio.sleep(self.POLL_INTERVAL)
+                    self._tasks[lease.run_id] = asyncio.create_task(self._run(lease, agent), name=f"run-{lease.run_id[:8]}")
+            except Exception:  # noqa: BLE001
+                logger.exception("worker poll failed")
+            await asyncio.sleep(self._poll_interval_s)
 
-    def _build_tool_invoker(self, agent: Agent):
-        """Build a ToolInvoker from the agent's declared tools, if any."""
-        registry = getattr(agent, "tools", None)
-        if registry is None:
-            from substrate.agents.tools.toolbox import Toolbox
+    async def _publish_stats(self) -> None:
+        """Keep the queue-depth and oldest-lease gauges current."""
+        from opentelemetry.metrics import Observation
 
-            registry = Toolbox()
-        from substrate.agents.tools.invoker import DIRECT_CALL_POLICY, ToolInvoker
-        from substrate.kernel.tools import ToolRisk
+        def observe(_options: Any) -> list[Observation]:
+            return [Observation(value, {"state": state}) for state, value in self._last_stats.items()]
 
-        approval = getattr(agent, "approval_handler", None)
-        if approval is not None and not hasattr(approval, "request"):
-            from substrate.kernel.tools.approval import ApprovalDecision, ApprovalResult
+        instruments().observe_queue(observe)
+        while self._running:
+            try:
+                stats = await self._store.stats()
+                self._last_stats = {
+                    "pending": stats.pending,
+                    "running": stats.running,
+                    "suspended": stats.suspended,
+                    "dead_letters": stats.dead_letters,
+                    "oldest_lease_age_s": stats.oldest_lease_age_s,
+                }
+            except Exception:  # noqa: BLE001
+                pass
+            await asyncio.sleep(5.0)
 
-            class CallbackApprovalHandlerAdapter:
-                """Adapts a bare ``async def callback(name, args) -> bool`` into
-                the kernel ``ApprovalHandler`` Protocol — for callers that hand
-                ``ReActAgent(approval_handler=...)`` a plain approve/deny
-                callback rather than a full Protocol implementation. Can only
-                ever produce APPROVED/DENIED — a bare bool has no way to
-                express MODIFIED."""
+    # ------------------------------------------------------------------ one run
 
-                def __init__(self, callback):
-                    self.callback = callback
+    def _build_tool_invoker(self, agent: Any) -> Any:
+        from substrate.kernel.tools.invoker import build_invoker
 
-                async def request(self, req):
-                    approved = await self.callback(req.call.name, req.call.arguments)
-                    return ApprovalResult(
-                        decision=ApprovalDecision.APPROVED
-                        if approved
-                        else ApprovalDecision.DENIED
-                    )
+        return build_invoker(agent)
 
-            approval = CallbackApprovalHandlerAdapter(approval)
+    def _deadline(self, lease: Lease) -> datetime | None:
+        """The run's absolute cutoff: the earlier of its own deadline and its budget's,
+        anchored to when the run *first* started — a resumed run must not get a fresh
+        allowance on every lease."""
+        cutoffs: list[datetime] = []
+        if lease.deadline is not None:
+            cutoffs.append(lease.deadline)
+        budget = lease.supervision.execution_budget if lease.supervision else None
+        if budget is not None and budget.deadline_s is not None and lease.started_at is not None:
+            cutoffs.append(lease.started_at + timedelta(seconds=budget.deadline_s))
+        return min(cutoffs) if cutoffs else None
 
-        blob_store = getattr(agent, "blob_store", None)
-        policy = getattr(agent, "tool_policy", None) or DIRECT_CALL_POLICY
-        hooks = getattr(agent, "hooks", None)
-
-        req_risk = getattr(agent, "approval_required_risk", None)
-        if req_risk is not None:
-            if req_risk == ToolRisk.CRITICAL:
-                max_unapproved = ToolRisk.HIGH
-            elif req_risk == ToolRisk.HIGH:
-                max_unapproved = ToolRisk.SAFE
-            else:
-                max_unapproved = ToolRisk.SAFE
-            policy = policy.model_copy(update={"max_risk_unapproved": max_unapproved})
-
-        return ToolInvoker(
-            registry=registry,
-            approval_handler=approval,
-            artifact_store=blob_store,
-            policy=policy,
-            hooks=hooks,
-        )
-
-    async def _resolve_deadline(
-        self, run_id: RunId, supervision: Supervision | None
-    ) -> datetime | None:
-        """Resolve ``supervision.execution_budget.deadline_s`` into an absolute
-        cutoff, enforced by ``RunMeta.check()`` at every ``ctx.check()`` call.
-
-        Anchored to the run's true start (the ``ts`` of its ``run.started``
-        log entry, seq 0), not "now" on this lease — a resumed run must not
-        get its deadline pushed out on every re-lease, or the budget would
-        never actually expire. On the very first lease the log has no
-        entries yet (``run.started`` is logged from inside ``agent.run()``,
-        after this method runs), so "now" genuinely *is* the run's start in
-        that one case.
-        """
-        budget = supervision.execution_budget if supervision else None
-        if budget is None or budget.deadline_s is None:
-            return None
-        started_at = None
-        async for entry in self._event_log.read(run_id, from_seq=0):
-            started_at = entry.ts
-            break
-        if started_at is None:
-            started_at = datetime.now(timezone.utc)
-        return started_at + timedelta(seconds=budget.deadline_s)
-
-    async def _run_agent(self, lease, agent: Agent) -> None:
-        from substrate.agents.runtime.context import RunContext
-        from substrate.agents.runtime.effect_cache import EffectCache
-
+    async def _run(self, lease: Lease, agent: Any) -> None:
         run_id = lease.run_id
         token = CancellationToken()
-        # Populate tenant and supervision hierarchy (inheriting parent budgets)
-        supervision = await self._supervisor.supervision_of(run_id)
-        deadline = await self._resolve_deadline(run_id, supervision)
-        meta = RunMeta(
-            run_id=run_id,
-            cancellation=token,
-            tenant_id=lease.tenant,
-            supervision=supervision,
-            deadline=deadline,
-        )
         self._tokens[run_id] = token
-
-        llm_client = getattr(agent, "model", None)
-        tool_invoker = self._build_tool_invoker(agent)
-        blob_store = getattr(agent, "blob_store", None)
-
-        # Fold recorded effect.result entries into the effect cache for replay
-        effect_cache = await EffectCache.fold(self._event_log, run_id)
-
-        ctx = RunContext(
-            meta=meta,
-            event_log=self._event_log,
-            effect_cache=effect_cache,
-            blob_store=blob_store,
-            inbox=self._inbox,
-            follow_graph=self._follow_graph,
-            fanout=self._fanout,
-            scheduler=self._scheduler,
-            supervisor=self._supervisor,
-            signal_bus=self._signal_bus,
-            llm_client=llm_client,
-            tool_invoker=tool_invoker,
-            agent=agent,
-        )
-
-        # Log initial run start via ctx._log to preserve seq cursor
-        if effect_cache.last_seq < 0:
-            await ctx._log(RunLogKind.RUN_STARTED, {})
-
-        # Journaled inbox drain: preserve exact drained message IDs across replays
-        from substrate.kernel.runtime.effects import Effect
-
-        drain_path = ctx._alloc_path()
-        drain_effect_id = Effect.make_id(run_id, drain_path, "inbox.drain", {})
-        cached_drain = ctx._lookup_effect(drain_effect_id)
-        if cached_drain is not None:
-            drained = await ctx._resolve_effect_value(cached_drain)
-            all_msgs = await self._inbox.drain(agent.id, max=1000)
-            by_id = {m.id: m for m in all_msgs}
-            inbox_msgs = [
-                by_id[mid] for mid in drained.get("msg_ids", []) if mid in by_id
-            ]
-        else:
-            inbox_msgs = await self._inbox.drain(agent.id, max=100)
-            await ctx._record_effect(
-                drain_effect_id, "ok", {"msg_ids": [m.id for m in inbox_msgs]}
-            )
-
+        started = _now()
+        outcome_label = "completed"
+        attributes = {
+            semconv.RUN_ID: str(run_id),
+            semconv.RUN_AGENT: str(lease.agent),
+            semconv.RUN_ATTEMPT: lease.attempt,
+            semconv.RUN_TENANT: lease.tenant,
+            semconv.LEASE_WORKER: self._worker_id,
+            semconv.LEASE_EPOCH: lease.epoch,
+            semconv.GEN_AI_AGENT_NAME: str(lease.agent),
+        }
+        if lease.thread_id:
+            attributes[semconv.RUN_THREAD] = lease.thread_id
+        heartbeat: asyncio.Task[None] | None = None
         hooks = getattr(agent, "hooks", None)
-        if hooks:
-            from substrate.agents.hooks.manager import HookEvent
-
-            await hooks.dispatch(
-                HookEvent.RUN_START, {"agent_name": str(agent.id), "run_id": run_id}
-            )
-
-        # Keep the Postgres lease alive for long-running agents (LLM calls can
-        # easily exceed the 30-second default lease).  The heartbeat runs every
-        # Periodic heartbeat maintains the lease during long-running operations
-        _HEARTBEAT_INTERVAL = 15
-
-        async def _heartbeat() -> None:
-            while True:
-                await asyncio.sleep(_HEARTBEAT_INTERVAL)
-                try:
-                    cancel_requested = await self._scheduler.heartbeat(lease)
-                    if cancel_requested:
-                        # Cancellation requested out-of-band by supervisor/admin
-                        token.cancel("cancel_requested")
-                except Exception:
-                    pass  # never let a missed heartbeat kill the run
-
-        heartbeat_task = asyncio.create_task(_heartbeat(), name=f"hb-{run_id[:8]}")
         try:
-            await agent.run(ctx, inbox_msgs)
-
-            # Ack all processed messages
-            for msg in inbox_msgs:
-                await self._inbox.ack(agent.id, msg.id)
-
-            # Clean up run-scoped history for transient sub-agents
-            session_ids = {msg.correlation_id or run_id for msg in inbox_msgs} or {
-                run_id
-            }
-            await self._maybe_clear_run_history(agent, run_id, session_ids=session_ids)
-
-            final_seq = await self._event_log.last_seq(run_id)
-            await self._event_log.append(
-                run_id,
-                RunLogEntry(run_id=run_id, seq=final_seq + 1, kind=RunLogKind.RUN_COMPLETED),
-                expected_seq=final_seq,
-            )
-            await self._scheduler.release(lease, status=RunStatus.COMPLETED)
-            await self._supervisor.finish_run(run_id, RunStatus.COMPLETED)
-
-        except SuspendInterrupt as exc:
-            # Genuine dormancy: messages remain unacked for replay; release with wake condition
-            await self._scheduler.release(
-                lease, status=RunStatus.SUSPENDED, wake_on=exc.wakeup
-            )
-
-        except (asyncio.CancelledError, CancellationError):
-            token.cancel("task-cancelled")
-            final_seq = await self._event_log.last_seq(run_id)
-            await self._event_log.append(
-                run_id,
-                RunLogEntry(run_id=run_id, seq=final_seq + 1, kind=RunLogKind.RUN_CANCELLED),
-                expected_seq=final_seq,
-            )
-            await self._scheduler.release(lease, status=RunStatus.CANCELLED)
-            await self._supervisor.finish_run(run_id, RunStatus.CANCELLED)
-
-        except Exception as exc:
-            from substrate.kernel.exceptions import (
-                AgentCrashError,
-                BudgetExhaustedError,
-                MiddlewareTermination,
-                PermanentError,
-            )
-
-            is_guardrail = isinstance(exc, MiddlewareTermination)
-            is_budget = isinstance(exc, BudgetExhaustedError)
-            is_permanent = isinstance(exc, PermanentError)
-            is_crash = not is_guardrail and not is_budget and not is_permanent
-            # Deterministic errors (guardrails, budgets, permanent errors) skip retries
-            retryable = not (is_guardrail or is_budget or is_permanent)
-
-            if is_crash:
-                logger.exception("Agent %s run %s crashed", agent.id, run_id)
-            else:
-                logger.warning("Agent %s run %s stopped: %s", agent.id, run_id, exc)
-
-            if is_guardrail or is_budget or is_permanent:
-                for msg in inbox_msgs:
-                    await self._inbox.ack(agent.id, msg.id)
-            else:
-                for msg in inbox_msgs:
-                    await self._inbox.nack(agent.id, msg.id, error=str(exc))
-
-            # Atomically decide retry-vs-terminal before emitting run.failed
-            terminal = await self._scheduler.release(
-                lease, status=RunStatus.FAILED, retryable=retryable
-            )
-            if terminal:
-                if is_guardrail:
-                    guardrail_msg = getattr(exc, "message", None) or str(exc)
-                    payload = {
-                        "error": f"Request blocked: {guardrail_msg}",
-                        "status": "guardrail_tripped",
-                    }
-                elif is_budget:
-                    payload = {"error": str(exc), "status": "budget_exhausted"}
-                elif is_permanent:
-                    payload = {"error": str(exc), "status": "permanent_error"}
-                else:
-                    crash = AgentCrashError(str(exc), run_id=run_id, agent_id=agent.id)
-                    payload = {"error": str(crash), "status": "agent_crashed"}
-
-                final_seq = await self._event_log.last_seq(run_id)
-                await self._event_log.append(
-                    run_id,
-                    RunLogEntry(
+            with span(semconv.SPAN_RUN, attributes=attributes, parent=lease.trace) as handle:
+                try:
+                    meta = RunMeta(
                         run_id=run_id,
-                        seq=final_seq + 1,
-                        kind=RunLogKind.RUN_FAILED,
-                        payload=payload,
-                    ),
-                    expected_seq=final_seq,
-                )
-                await self._supervisor.finish_run(
-                    run_id, RunStatus.FAILED, error=str(exc)
-                )
-        finally:
-            heartbeat_task.cancel()
-            try:
-                await heartbeat_task
-            except asyncio.CancelledError:
-                pass
-            if hooks:
-                from substrate.agents.hooks.manager import HookEvent
+                        cancellation=token,
+                        supervision=lease.supervision,
+                        deadline=self._deadline(lease),
+                        trace=handle.context(),
+                        tenant_id=lease.tenant,
+                    )
+                    version = str(getattr(agent, "version", "0"))
+                    if lease.agent_version != version:
+                        raise NonDeterminismError(
+                            f"run {run_id} was started by agent version {lease.agent_version!r} but this worker has "
+                            f"{version!r}; replaying it could attach old results to new code",
+                            path="",
+                            expected=lease.agent_version,
+                            actual=version,
+                        )
+                    events = await self._store.read_events(run_id, durable_only=True)
 
-                await hooks.dispatch(
-                    HookEvent.RUN_END, {"agent_name": str(agent.id), "run_id": run_id}
-                )
+                    async def commit(entries: Any) -> Any:
+                        return await self._store.commit(lease, Commit(entries=tuple(entries)))
+
+                    blob_store = getattr(agent, "blob_store", None)
+                    journal = Journal(str(run_id), events, commit, blob_store=blob_store)
+                    ctx = RunContext(
+                        meta=meta,
+                        lease=lease,
+                        store=self._store,
+                        journal=journal,
+                        blob_store=blob_store,
+                        llm_client=getattr(agent, "model", None),
+                        tool_invoker=self._build_tool_invoker(agent),
+                        agent=agent,
+                    )
+                    started_before = any(e.kind == RunLogKind.RUN_STARTED for e in events)
+                    await commit(
+                        [
+                            NewEntry(
+                                kind=RunLogKind.RUN_RESUMED if started_before else RunLogKind.RUN_STARTED,
+                                payload={"agent": str(lease.agent), "attempt": lease.attempt, "agent_version": version},
+                                dedup_key=f"lease:{lease.epoch}",
+                            )
+                        ]
+                    )
+                    heartbeat = asyncio.create_task(self._heartbeat(lease, token, asyncio.current_task()), name=f"hb-{run_id[:8]}")
+
+                    drained = await self._journaled_drain(ctx, journal, lease)
+                    if hooks:
+                        from substrate.kernel.hooks.manager import HookEvent
+
+                        await hooks.dispatch(HookEvent.RUN_START, {"agent_name": str(agent.id), "run_id": run_id})
+                    await agent.run(ctx, drained)
+                    await self._finish(lease, agent, drained, Complete())
+                except SuspendInterrupt as signal:
+                    outcome_label = "suspended"
+                    await self._commit_end(lease, Commit(outcome=Suspend(wake=signal.wakeup)))
+                    instruments().suspensions.add(1)
+                except LeaseLostError:
+                    outcome_label = "lost"
+                    logger.warning("lost the lease on run %s", run_id)
+                except (asyncio.CancelledError, CancellationError) as stop:
+                    outcome_label = await self._on_stop(lease, agent, stop, token)
+                except Exception as exc:  # noqa: BLE001
+                    outcome_label = await self._on_failure(lease, agent, exc)
+                handle.set_attribute(semconv.RUN_OUTCOME, outcome_label)
+        finally:
+            if heartbeat is not None:
+                heartbeat.cancel()
+                try:
+                    await heartbeat
+                except asyncio.CancelledError:
+                    pass
+            if hooks and outcome_label != "lost":
+                from substrate.kernel.hooks.manager import HookEvent
+
+                await hooks.dispatch(HookEvent.RUN_END, {"agent_name": str(agent.id), "run_id": run_id})
+            if outcome_label in ("completed", "failed", "cancelled"):
+                instruments().runs.add(1, {semconv.RUN_OUTCOME: outcome_label})
+                instruments().run_duration.record((_now() - started).total_seconds(), {semconv.RUN_OUTCOME: outcome_label})
             self._tokens.pop(run_id, None)
             self._tasks.pop(run_id, None)
+            self._stop_reason.pop(run_id, None)
 
-    async def _maybe_clear_run_history(
-        self, agent: object, run_id: str, *, session_ids: set[str]
-    ) -> None:
-        """Delete each session touched in this run if retention is RUN (run-scoped history)."""
-        from substrate.kernel.agent.supervision import HistoryRetention
+    async def _journaled_drain(self, ctx: RunContext, journal: Journal, lease: Lease) -> list[Any]:
+        """Drain the inbox once and remember which messages: a replay must process
+        exactly the messages the first attempt saw, not whatever has arrived since."""
+        fetched: list[Any] = []
+
+        async def build(_path: str, _effect: str):
+            fetched.extend(await self._store.drain(lease.agent, limit=100))
+            return {"msg_ids": [m.id for m in fetched]}, lambda entries: ctx._commit(entries)
+
+        outcome = await journal.record_atomic("inbox.drain", {}, build)
+        if not outcome.replayed:
+            return fetched
+        by_id = {m.id: m for m in await self._store.drain(lease.agent, limit=1000)}
+        return [by_id[i] for i in outcome.value["msg_ids"] if i in by_id]
+
+    async def _heartbeat(self, lease: Lease, token: CancellationToken, task: asyncio.Task[Any] | None) -> None:
+        interval = max(self._lease_s / 3, 0.05)
+        failures = 0
+        run_id = str(lease.run_id)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                result = await self._store.heartbeat(lease, lease_s=self._lease_s, now=_now())
+                failures = 0
+            except Exception:  # noqa: BLE001
+                failures += 1
+                logger.warning("heartbeat for run %s failed (%d)", run_id, failures, exc_info=failures == 1)
+                if failures < _HEARTBEAT_FAILURES_BEFORE_LOST:
+                    continue
+                result = HeartbeatResult.LOST
+            if result == HeartbeatResult.OK:
+                continue
+            reason = {
+                HeartbeatResult.CANCEL_REQUESTED: "cancel:cancel_requested",
+                HeartbeatResult.DEADLINE: "deadline",
+                HeartbeatResult.LOST: "lost",
+            }[result]
+            self._stop_reason[run_id] = reason
+            token.cancel(reason)
+            if task is not None:
+                task.cancel()
+            return
+
+    # ------------------------------------------------------------------ ways a run ends
+
+    async def _commit_end(self, lease: Lease, commit: Commit) -> None:
+        """Commit how an attempt ended. A lost lease here is not an error: the run is
+        someone else's now."""
+        try:
+            await self._store.commit(lease, commit)
+        except LeaseLostError:
+            logger.warning("lost the lease on run %s while ending it", lease.run_id)
+
+    async def _finish(self, lease: Lease, agent: Any, handled: list[Any], outcome: Complete) -> None:
+        await self._store.commit(lease, Commit(ack=tuple(m.id for m in handled), outcome=outcome))
+        await self._clear_run_history(agent, str(lease.run_id), handled)
+
+    async def _on_stop(self, lease: Lease, agent: Any, stop: BaseException, token: CancellationToken) -> str:
+        run_id = str(lease.run_id)
+        reason = self._stop_reason.get(run_id, "")
+        if reason == "lost":
+            logger.warning("run %s was stopped because its lease was lost", run_id)
+            return "lost"
+        if isinstance(stop, asyncio.CancelledError) and reason == "shutdown":
+            # Shutting down is not cancelling: leave the run for its lease to expire, and
+            # it resumes on whichever worker next picks it up.
+            raise stop
+        if reason == "deadline" or "deadline" in str(stop):
+            error = ErrorInfo(code="deadline_exceeded", message="the run's deadline passed", retryable=False)
+            await self._commit_end(lease, Commit(outcome=Fail(error=error)))
+            return "failed"
+        why = reason.removeprefix("cancel:") or str(stop) or "cancelled"
+        await self._commit_end(lease, Commit(outcome=Cancel(reason=why)))
+        return "cancelled"
+
+    async def _on_failure(self, lease: Lease, agent: Any, exc: Exception) -> str:
+        run_id = str(lease.run_id)
+        error, retryable = classify_failure(exc, run_id=run_id, agent_id=agent.id)
+        if retryable:
+            logger.exception("agent %s crashed in run %s", agent.id, run_id)
+        else:
+            logger.warning("agent %s run %s stopped: %s", agent.id, run_id, exc)
+        inbox = await self._safe_drain(lease)
+        if retryable and lease.retry_count < lease.retry_policy.max_retries:
+            # The messages stay in the inbox: the retry will find the same input.
+            delay = backoff(lease.retry_policy, lease.retry_count)
+            await self._commit_end(lease, Commit(outcome=Retry(error=error, delay_s=delay)))
+            instruments().retries.add(1)
+            return "retrying"
+        if retryable:
+            # Out of retries: nobody is left to try these messages again.
+            nacks = tuple(Nack(msg_id=m.id, error=error, final=True) for m in inbox)
+            await self._commit_end(lease, Commit(nack=nacks, outcome=Fail(error=error)))
+        else:
+            await self._commit_end(lease, Commit(ack=tuple(m.id for m in inbox), outcome=Fail(error=error)))
+        return "failed"
+
+    async def _safe_drain(self, lease: Lease) -> list[Any]:
+        try:
+            return await self._store.drain(lease.agent, limit=100)
+        except Exception:  # noqa: BLE001
+            return []
+
+    async def _clear_run_history(self, agent: Any, run_id: str, handled: list[Any]) -> None:
+        """Delete run-scoped history once the run has ended. After the commit, never
+        before: a crash between the two leaks a transcript, whereas deleting first would
+        lose one a retry still needs."""
+        from substrate.kernel.abstractions.agent.supervision import HistoryRetention
 
         context_cfg = getattr(agent, "_context", None)
-        if context_cfg is None:
+        if context_cfg is None or getattr(context_cfg, "retention", HistoryRetention.PERMANENT) != HistoryRetention.RUN:
             return
-        retention = getattr(context_cfg, "retention", HistoryRetention.PERMANENT)
-        if retention != HistoryRetention.RUN:
-            return
-
         history = getattr(context_cfg, "history", None)
         if history is None:
             return
-
-        agent_id = getattr(agent, "id", None)
-        for session_id in session_ids:
+        for session_id in {m.correlation_id or run_id for m in handled} or {run_id}:
             try:
                 await history.delete_session(session_id)
-            except Exception:
-                logger.warning(
-                    "delete_session failed for agent %s run %s session %s",
-                    agent_id,
-                    run_id,
-                    session_id,
-                )
+            except Exception:  # noqa: BLE001
+                logger.warning("could not delete history for agent %s run %s session %s", agent.id, run_id, session_id)
+
+
+__all__ = ["Worker", "backoff", "classify_failure"]

@@ -7,12 +7,12 @@ class is an ordinary middleware — the only thing distinguishing them is the
 
 Usage::
 
-    from substrate.agents.middleware.observability import (
+    from substrate.kernel.middleware.observability import (
         AgentTracingMiddleware,
         ChatTracingMiddleware,
         FunctionTracingMiddleware,
     )
-    from substrate.agents.middleware.pipeline import MiddlewarePipeline
+    from substrate.kernel.middleware.pipeline import MiddlewarePipeline
 
     agent = ReActAgent(
         "bot", model=client,
@@ -27,8 +27,8 @@ from __future__ import annotations
 import time
 from typing import Callable, Awaitable, ClassVar
 
-from substrate.agents.middleware._contracts import MiddlewareContext
-from substrate.kernel.agent.middleware import MiddlewareStage
+from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
 from substrate.logger import setup_logging
 
 logger = setup_logging()
@@ -39,7 +39,7 @@ def _otel_span(name: str) -> object | None:
     try:
         from opentelemetry import trace  # type: ignore[import-not-found]
 
-        tracer = trace.get_tracer("substrate.agents")
+        tracer = trace.get_tracer("substrate.kernel")
         return tracer.start_span(name)
     except Exception:
         return None

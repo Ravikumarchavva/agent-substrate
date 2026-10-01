@@ -42,7 +42,7 @@ from substrate.runtimes.inference_pool.pool_types import (
     InferencePool,
     PoolWorker,
 )
-from substrate.kernel.document import ExtractionResult
+from substrate.kernel.abstractions.document import ExtractionResult
 
 logger = setup_logging()
 

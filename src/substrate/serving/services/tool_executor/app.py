@@ -31,7 +31,7 @@ def _load_default_tools(code_interpreter_tool=None, task_store=None) -> list:
 
     try:
         from substrate.integrations.tools.task_manager.tool import TaskManagerTool
-        from substrate.agents.storage.tasks import TaskStore
+        from substrate.kernel.storage.tasks import TaskStore
 
         tools.append(TaskManagerTool(store=task_store or TaskStore()))
     except Exception:
@@ -97,7 +97,7 @@ async def lifespan(app):
     app.state.artifact_url = artifact_url.rstrip("/")
 
     # Tool Registry
-    from substrate.agents.storage.tasks import TaskStore
+    from substrate.kernel.storage.tasks import TaskStore
 
     task_store = TaskStore()
     registry = ToolRegistry()

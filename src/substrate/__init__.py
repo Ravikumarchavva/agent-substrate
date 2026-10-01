@@ -15,25 +15,25 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from substrate.integrations.llm.factory import LLMFactory, create_model_client
-    from substrate.agents.core.react import ReActAgent
-    from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-    from substrate.agents.core.proxy import UserProxyAgent
+    from substrate.kernel.agents.react import ReActAgent
+    from substrate.kernel.agents.orchestrator import OrchestratorAgent, SubAgentConfig
+    from substrate.kernel.agents.proxy import UserProxyAgent
     from substrate.config import SubstrateConfig
-    from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
-    from substrate.agents.workspace.local_workspace_store import (
+    from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
+    from substrate.kernel.workspace.local_workspace_store import (
         LocalFilesystemWorkspaceStore,
     )
-    from substrate.agents.storage.local_short_term_memory import LocalFilesystemShortTermMemory
-    from substrate.agents.storage.local_object_store import WorkspaceFileStore
-    from substrate.agents.context import (
+    from substrate.kernel.storage.local_short_term_memory import LocalFilesystemShortTermMemory
+    from substrate.kernel.storage.local_object_store import WorkspaceFileStore
+    from substrate.kernel.context import (
         AgentContext,
         ContextConfig,
         SlidingWindowCompaction,
     )
-    from substrate.agents.storage import (
+    from substrate.kernel.storage import (
         InMemoryHistoryProvider,
     )
-    from substrate.agents.middleware import (
+    from substrate.kernel.middleware import (
         AgentRunResult,
         MiddlewareContext,
         MiddlewareStage,
@@ -53,11 +53,11 @@ if TYPE_CHECKING:
         ToolCallValidationMiddleware,
         MiddlewarePipeline,
     )
-    from substrate.agents.runtime import Runtime, RunOutcome
-    from substrate.kernel.tools import Skill
-    from substrate.kernel.exceptions import MiddlewareTermination
-    from substrate.kernel import ChatMessage, TextBlock, ToolExecutionResult
-    from substrate.kernel.messaging.stream import (
+    from substrate.kernel.runtime import Runtime, RunOutcome
+    from substrate.kernel.abstractions.tools import Skill
+    from substrate.kernel.abstractions.exceptions import MiddlewareTermination
+    from substrate.kernel.abstractions import ChatMessage, TextBlock, ToolExecutionResult
+    from substrate.kernel.abstractions.messaging.stream import (
         CompletionEvent,
         ReasoningDelta,
         StreamDone,
@@ -127,94 +127,94 @@ __all__ = [
 
 _LAZY: dict[str, tuple[str, str]] = {
     # agent types
-    "ReActAgent": ("substrate.agents.core.react", "ReActAgent"),
-    "OrchestratorAgent": ("substrate.agents.core.orchestrator", "OrchestratorAgent"),
-    "SubAgentConfig": ("substrate.agents.core.orchestrator", "SubAgentConfig"),
-    "UserProxyAgent": ("substrate.agents.core.proxy", "UserProxyAgent"),
+    "ReActAgent": ("substrate.kernel.agents.react", "ReActAgent"),
+    "OrchestratorAgent": ("substrate.kernel.agents.orchestrator", "OrchestratorAgent"),
+    "SubAgentConfig": ("substrate.kernel.agents.orchestrator", "SubAgentConfig"),
+    "UserProxyAgent": ("substrate.kernel.agents.proxy", "UserProxyAgent"),
     # runtime
-    "Runtime": ("substrate.agents.runtime", "Runtime"),
-    "RunOutcome": ("substrate.agents.runtime", "RunOutcome"),
+    "Runtime": ("substrate.kernel.runtime", "Runtime"),
+    "RunOutcome": ("substrate.kernel.runtime", "RunOutcome"),
     # config
     "SubstrateConfig": ("substrate.config", "SubstrateConfig"),
     # native durable storage
     "LocalFilesystemHistoryProvider": (
-        "substrate.agents.storage.local_history",
+        "substrate.kernel.storage.local_history",
         "LocalFilesystemHistoryProvider",
     ),
     "LocalHistoryProvider": (
-        "substrate.agents.storage.local_history",
+        "substrate.kernel.storage.local_history",
         "LocalFilesystemHistoryProvider",
     ),
     "LocalFilesystemWorkspaceStore": (
-        "substrate.agents.workspace.local_workspace_store",
+        "substrate.kernel.workspace.local_workspace_store",
         "LocalFilesystemWorkspaceStore",
     ),
     "LocalWorkspaceStore": (
-        "substrate.agents.workspace.local_workspace_store",
+        "substrate.kernel.workspace.local_workspace_store",
         "LocalFilesystemWorkspaceStore",
     ),
     "LocalFilesystemShortTermMemory": (
-        "substrate.agents.storage.local_short_term_memory",
+        "substrate.kernel.storage.local_short_term_memory",
         "LocalFilesystemShortTermMemory",
     ),
     "WorkspaceFileStore": (
-        "substrate.agents.storage.local_object_store",
+        "substrate.kernel.storage.local_object_store",
         "WorkspaceFileStore",
     ),
     "LocalFileStore": (
-        "substrate.agents.storage.local_object_store",
+        "substrate.kernel.storage.local_object_store",
         "WorkspaceFileStore",
     ),
     # supporting
-    "AgentRunResult": ("substrate.agents.middleware", "AgentRunResult"),
-    "Skill": ("substrate.kernel.tools", "Skill"),
+    "AgentRunResult": ("substrate.kernel.middleware", "AgentRunResult"),
+    "Skill": ("substrate.kernel.abstractions.tools", "Skill"),
     "InMemoryHistoryProvider": (
-        "substrate.agents.storage.local_history",
+        "substrate.kernel.storage.local_history",
         "LocalFilesystemHistoryProvider",
     ),
-    "AgentContext": ("substrate.agents.context", "AgentContext"),
-    "ContextConfig": ("substrate.agents.context", "ContextConfig"),
-    "SlidingWindowCompaction": ("substrate.agents.context", "SlidingWindowCompaction"),
+    "AgentContext": ("substrate.kernel.context", "AgentContext"),
+    "ContextConfig": ("substrate.kernel.context", "ContextConfig"),
+    "SlidingWindowCompaction": ("substrate.kernel.context", "SlidingWindowCompaction"),
     # middleware
-    "MiddlewareContext": ("substrate.agents.middleware", "MiddlewareContext"),
-    "MiddlewareStage": ("substrate.agents.middleware", "MiddlewareStage"),
-    "MiddlewarePipeline": ("substrate.agents.middleware", "MiddlewarePipeline"),
-    "AuditLoggerMiddleware": ("substrate.agents.middleware", "AuditLoggerMiddleware"),
-    "CacheMiddleware": ("substrate.agents.middleware", "CacheMiddleware"),
+    "MiddlewareContext": ("substrate.kernel.middleware", "MiddlewareContext"),
+    "MiddlewareStage": ("substrate.kernel.middleware", "MiddlewareStage"),
+    "MiddlewarePipeline": ("substrate.kernel.middleware", "MiddlewarePipeline"),
+    "AuditLoggerMiddleware": ("substrate.kernel.middleware", "AuditLoggerMiddleware"),
+    "CacheMiddleware": ("substrate.kernel.middleware", "CacheMiddleware"),
     "ContentFilterMiddleware": (
-        "substrate.agents.middleware",
+        "substrate.kernel.middleware",
         "ContentFilterMiddleware",
     ),
     "ContentTruncatorMiddleware": (
-        "substrate.agents.middleware",
+        "substrate.kernel.middleware",
         "ContentTruncatorMiddleware",
     ),
     "FileValidatorMiddleware": (
-        "substrate.agents.middleware",
+        "substrate.kernel.middleware",
         "FileValidatorMiddleware",
     ),
     "HistoryTruncatorMiddleware": (
-        "substrate.agents.middleware",
+        "substrate.kernel.middleware",
         "HistoryTruncatorMiddleware",
     ),
-    "LLMJudgeMiddleware": ("substrate.agents.middleware", "LLMJudgeMiddleware"),
-    "MaxTokenMiddleware": ("substrate.agents.middleware", "MaxTokenMiddleware"),
-    "PIIDetectionMiddleware": ("substrate.agents.middleware", "PIIDetectionMiddleware"),
+    "LLMJudgeMiddleware": ("substrate.kernel.middleware", "LLMJudgeMiddleware"),
+    "MaxTokenMiddleware": ("substrate.kernel.middleware", "MaxTokenMiddleware"),
+    "PIIDetectionMiddleware": ("substrate.kernel.middleware", "PIIDetectionMiddleware"),
     "PromptInjectionMiddleware": (
-        "substrate.agents.middleware",
+        "substrate.kernel.middleware",
         "PromptInjectionMiddleware",
     ),
-    "RateLimiterMiddleware": ("substrate.agents.middleware", "RateLimiterMiddleware"),
-    "RetryMiddleware": ("substrate.agents.middleware", "RetryMiddleware"),
+    "RateLimiterMiddleware": ("substrate.kernel.middleware", "RateLimiterMiddleware"),
+    "RetryMiddleware": ("substrate.kernel.middleware", "RetryMiddleware"),
     "SchemaValidatorMiddleware": (
-        "substrate.agents.middleware",
+        "substrate.kernel.middleware",
         "SchemaValidatorMiddleware",
     ),
     "ToolCallValidationMiddleware": (
-        "substrate.agents.middleware",
+        "substrate.kernel.middleware",
         "ToolCallValidationMiddleware",
     ),
-    "MiddlewareTermination": ("substrate.kernel.exceptions", "MiddlewareTermination"),
+    "MiddlewareTermination": ("substrate.kernel.abstractions.exceptions", "MiddlewareTermination"),
     # factory
     "create_model_client": (
         "substrate.integrations.llm.factory",
@@ -222,14 +222,14 @@ _LAZY: dict[str, tuple[str, str]] = {
     ),
     "LLMFactory": ("substrate.integrations.llm.factory", "LLMFactory"),
     # stream
-    "TextDelta": ("substrate.kernel.messaging.stream", "TextDelta"),
-    "ReasoningDelta": ("substrate.kernel.messaging.stream", "ReasoningDelta"),
-    "CompletionEvent": ("substrate.kernel.messaging.stream", "CompletionEvent"),
-    "StreamDone": ("substrate.kernel.messaging.stream", "StreamDone"),
+    "TextDelta": ("substrate.kernel.abstractions.messaging.stream", "TextDelta"),
+    "ReasoningDelta": ("substrate.kernel.abstractions.messaging.stream", "ReasoningDelta"),
+    "CompletionEvent": ("substrate.kernel.abstractions.messaging.stream", "CompletionEvent"),
+    "StreamDone": ("substrate.kernel.abstractions.messaging.stream", "StreamDone"),
     # kernel types
-    "ChatMessage": ("substrate.kernel.core.content", "ChatMessage"),
-    "TextBlock": ("substrate.kernel.core.content", "TextBlock"),
-    "ToolExecutionResult": ("substrate.kernel.tools", "ToolExecutionResult"),
+    "ChatMessage": ("substrate.kernel.abstractions.core.content", "ChatMessage"),
+    "TextBlock": ("substrate.kernel.abstractions.core.content", "TextBlock"),
+    "ToolExecutionResult": ("substrate.kernel.abstractions.tools", "ToolExecutionResult"),
 }
 
 

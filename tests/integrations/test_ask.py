@@ -4,12 +4,12 @@ this targets the two behaviors this session's storage rewrite changed)."""
 
 from __future__ import annotations
 
-from substrate.kernel.llm import ModelCapabilities
+from substrate.kernel.abstractions.llm import ModelCapabilities
 from substrate.integrations.knowledge.ask import _is_text, ask
-from substrate.kernel.core.content import MediaBlock, TextBlock
-from substrate.kernel.core.usage import Usage
-from substrate.kernel.llm.llm import LLMResponse
-from substrate.kernel.storage.vector import SearchResult
+from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
+from substrate.kernel.abstractions.core.usage import Usage
+from substrate.kernel.abstractions.llm.llm import LLMResponse
+from substrate.kernel.abstractions.storage.vector import SearchResult
 
 
 def _text_result(**metadata) -> SearchResult:

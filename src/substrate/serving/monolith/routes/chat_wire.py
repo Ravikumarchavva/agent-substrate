@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from substrate.kernel.core.content import MediaBlock, TextBlock
+from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
 
 
 @dataclass

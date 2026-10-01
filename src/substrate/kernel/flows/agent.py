@@ -31,19 +31,19 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, Callable
 
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     Role,
     TextBlock,
     content_blocks_to_str,
 )
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
-from substrate.kernel.runtime.communication import AskOutcome
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import ChatPayload, DataPayload, Message
+from substrate.kernel.abstractions.runtime.communication import AskOutcome
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.context import Agent, RunContext
-    from substrate.kernel.runtime.supervisor import RunHandle
+    from substrate.kernel.runtime.context import Agent, RunContext
+    from substrate.kernel.abstractions.runtime.supervisor import RunHandle
 
 logger = logging.getLogger(__name__)
 

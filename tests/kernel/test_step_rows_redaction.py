@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.core.log_projection import (
+from substrate.kernel.agents.log_projection import (
     rebuild_messages_from_steps,
     step_rows_from_log,
 )
-from substrate.agents.runtime.backends._event_log import InMemoryEventLog
-from substrate.kernel.runtime.log_entry import RunLogEntry
+from substrate.kernel.runtime.backends._event_log import InMemoryEventLog
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
 
 
 class _FixedScheduler:

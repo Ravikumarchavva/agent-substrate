@@ -22,21 +22,21 @@ from uuid import uuid4
 
 import pytest
 
-from substrate.kernel.core.identity import Actor, Topic
-from substrate.kernel.messaging.message import Message, DataPayload
-from substrate.kernel.exceptions import ConcurrentAppendError
-from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.agents.runtime.cancellation import CancellationToken
-from substrate.kernel.agent.supervision import Supervision
-from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
-from substrate.kernel.runtime.log_entry import RunLogEntry
-from substrate.kernel.runtime.effects import Effect, EffectResult
-from substrate.kernel.runtime.inbox import DeadLetterReason, DeadLetterEntry
-from substrate.kernel.runtime.wakeup import Wakeup
-from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
-from substrate.kernel.runtime.supervisor import RunHandle, RunResult
-from substrate.kernel.runtime.agent import AgentRunContext, Agent
-from substrate.kernel.storage.memory import MemoryProvenance
+from substrate.kernel.abstractions.core.identity import Actor, Topic
+from substrate.kernel.abstractions.messaging.message import Message, DataPayload
+from substrate.kernel.abstractions.exceptions import ConcurrentAppendError
+from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+from substrate.kernel.runtime.cancellation import CancellationToken
+from substrate.kernel.abstractions.agent.supervision import Supervision
+from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus, new_run_id
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
+from substrate.kernel.abstractions.runtime.effects import Effect, EffectResult
+from substrate.kernel.abstractions.runtime.inbox import DeadLetterReason, DeadLetterEntry
+from substrate.kernel.abstractions.runtime.wakeup import Wakeup
+from substrate.kernel.abstractions.runtime.scheduler import Lease, RunRetryPolicy
+from substrate.kernel.abstractions.runtime.supervisor import RunHandle, RunResult
+from substrate.kernel.abstractions.runtime.agent import AgentRunContext, Agent
+from substrate.kernel.abstractions.storage.memory import MemoryProvenance
 
 
 # ---------------------------------------------------------------------------
@@ -476,7 +476,7 @@ def test_memory_provenance_rejects_confidence_outside_range() -> None:
 
 class TestLease:
     def test_round_trip_json(self) -> None:
-        from substrate.kernel.core.identity import Actor
+        from substrate.kernel.abstractions.core.identity import Actor
 
         lease = Lease(
             run_id=new_run_id(),

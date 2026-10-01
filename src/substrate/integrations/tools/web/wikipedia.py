@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import httpx2 as httpx
 
-from substrate.kernel import TextBlock
-from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.abstractions import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
 
 _BASE = "https://en.wikipedia.org/api/rest_v1"
 _MAX_CHARS = 6000

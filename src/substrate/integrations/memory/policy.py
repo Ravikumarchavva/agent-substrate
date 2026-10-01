@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Protocol, Sequence
 
-from substrate.kernel.core.content import ContentBlock, TextBlock
-from substrate.kernel.storage.memory import (
+from substrate.kernel.abstractions.core.content import ContentBlock, TextBlock
+from substrate.kernel.abstractions.storage.memory import (
     ContextMemoryInjection,
     MemoryMatch,
     MemoryRecord,

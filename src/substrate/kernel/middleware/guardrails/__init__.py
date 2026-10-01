@@ -14,19 +14,19 @@ to via a ``stages`` class attribute, so a TURN-stage guardrail (e.g.
 
 from __future__ import annotations
 
-from substrate.agents.middleware.guardrails.content_filter import (
+from substrate.kernel.middleware.guardrails.content_filter import (
     ContentFilterMiddleware,
 )
-from substrate.agents.middleware.guardrails.llm_judge import LLMJudgeMiddleware
-from substrate.agents.middleware.guardrails.max_token import MaxTokenMiddleware
-from substrate.agents.middleware.guardrails.multimodal_safety import (
+from substrate.kernel.middleware.guardrails.llm_judge import LLMJudgeMiddleware
+from substrate.kernel.middleware.guardrails.max_token import MaxTokenMiddleware
+from substrate.kernel.middleware.guardrails.multimodal_safety import (
     MultimodalSafetyMiddleware,
 )
-from substrate.agents.middleware.guardrails.pii import PIIDetectionMiddleware
-from substrate.agents.middleware.guardrails.prompt_injection import (
+from substrate.kernel.middleware.guardrails.pii import PIIDetectionMiddleware
+from substrate.kernel.middleware.guardrails.prompt_injection import (
     PromptInjectionMiddleware,
 )
-from substrate.agents.middleware.guardrails.tool_call_validation import (
+from substrate.kernel.middleware.guardrails.tool_call_validation import (
     ToolCallValidationMiddleware,
 )
 

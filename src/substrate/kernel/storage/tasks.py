@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import uuid4
 
-from substrate.kernel.storage.tasks import Task, TaskList, TaskStatus
+from substrate.kernel.abstractions.storage.tasks import Task, TaskList, TaskStatus
 
 class TaskStore:
     """Thread-safe in-memory task store."""

@@ -13,21 +13,21 @@ Covers:
 
 from __future__ import annotations
 
-from substrate.kernel.llm import ModelCapabilities
-from substrate.agents.runtime.backends._event_log import InMemoryEventLog
-from substrate.agents.runtime.backends._fanout import PushAllFanout
-from substrate.agents.runtime.backends._follow_graph import InMemoryFollowGraph
-from substrate.agents.runtime.backends._inbox import InMemoryInbox
-from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
-from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
-from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
-from substrate.agents.runtime.context import RunContext
-from substrate.agents.runtime.effect_cache import EffectCache
-from substrate.agents.runtime.cancellation import CancellationToken
-from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.kernel.exceptions import ConcurrentAppendError
-from substrate.kernel.runtime.effects import EffectResult
-from substrate.kernel.runtime.log_entry import RunLogEntry
+from substrate.kernel.abstractions.llm import ModelCapabilities
+from substrate.kernel.runtime.backends._event_log import InMemoryEventLog
+from substrate.kernel.runtime.backends._fanout import PushAllFanout
+from substrate.kernel.runtime.backends._follow_graph import InMemoryFollowGraph
+from substrate.kernel.runtime.backends._inbox import InMemoryInbox
+from substrate.kernel.runtime.backends._scheduler import InMemoryScheduler
+from substrate.kernel.runtime.backends._signal_bus import InMemorySignalBus
+from substrate.kernel.runtime.backends._supervisor import InMemorySupervisor
+from substrate.kernel.runtime.context import RunContext
+from substrate.kernel.runtime.effect_cache import EffectCache
+from substrate.kernel.runtime.cancellation import CancellationToken
+from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+from substrate.kernel.abstractions.exceptions import ConcurrentAppendError
+from substrate.kernel.abstractions.runtime.effects import EffectResult
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
 
 
 # ---------------------------------------------------------------------------
@@ -179,10 +179,10 @@ async def test_crash_and_replay_does_not_reexecute_journaled_effect() -> None:
 async def test_crash_and_replay_llm_effect_does_not_rebill() -> None:
     """Same proof, but for the llm() path — the one that would otherwise
     re-bill an LLM provider on every replay."""
-    from substrate.kernel.core.content import TextBlock
-    from substrate.kernel.core.usage import Usage
-    from substrate.kernel.llm.llm import GenerationOptions, LLMResponse
-    from substrate.kernel.messaging.stream import CompletionEvent
+    from substrate.kernel.abstractions.core.content import TextBlock
+    from substrate.kernel.abstractions.core.usage import Usage
+    from substrate.kernel.abstractions.llm.llm import GenerationOptions, LLMResponse
+    from substrate.kernel.abstractions.messaging.stream import CompletionEvent
 
     call_count = 0
 

@@ -17,7 +17,7 @@ detection, pulls torch+transformers) is deliberately NOT installed.
 
 from __future__ import annotations
 
-from substrate.kernel.agent.safety import SafetyVerdict, Severity
+from substrate.kernel.abstractions.agent.safety import SafetyVerdict, Severity
 from substrate.logger import setup_logging
 
 logger = setup_logging("substrate.runtimes.document_intelligence.security_scan")

@@ -14,10 +14,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Union
 
-from substrate.agents.document import DocumentExtractor, LocalDocumentExtractor
+from substrate.integrations.document.local_extractor import LocalDocumentExtractor
+from substrate.kernel.abstractions.document import DocumentExtractor
 from substrate.integrations.knowledge.loaders.base import BaseDocumentLoader
-from substrate.kernel.core.content import TextBlock
-from substrate.kernel.storage.vector import Document
+from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.kernel.abstractions.storage.vector import Document
 from substrate.logger import setup_logging
 
 logger = setup_logging()

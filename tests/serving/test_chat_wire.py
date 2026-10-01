@@ -8,7 +8,7 @@ resolved for the request — the model always saw text-only content."""
 
 from __future__ import annotations
 
-from substrate.kernel.core.content import MediaBlock, TextBlock
+from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
 from substrate.serving.monolith.routes.chat_wire import _ImagePayload, build_user_blocks
 
 

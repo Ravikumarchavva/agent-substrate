@@ -38,13 +38,13 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from substrate.agents.workspace.cas import BlobCAS
-from substrate.agents.workspace.materialize import materialize as materialize_manifest
-from substrate.agents.workspace.scope import WorkspaceScope
-from substrate.agents.workspace.snapshots import commit_turn
-from substrate.kernel.exceptions import SnapshotConflictError
-from substrate.kernel.storage.objects import ObjectStore
-from substrate.kernel.storage.snapshots import WorkspaceStore
+from substrate.kernel.workspace.cas import BlobCAS
+from substrate.kernel.workspace.materialize import materialize as materialize_manifest
+from substrate.kernel.workspace.scope import WorkspaceScope
+from substrate.kernel.workspace.snapshots import commit_turn
+from substrate.kernel.abstractions.exceptions import SnapshotConflictError
+from substrate.kernel.abstractions.storage.objects import ObjectStore
+from substrate.kernel.abstractions.storage.snapshots import WorkspaceStore
 from substrate.logger import setup_logging
 
 from .base import ExecResult, SandboxSpec

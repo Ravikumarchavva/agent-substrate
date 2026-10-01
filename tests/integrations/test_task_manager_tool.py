@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from substrate.agents.runtime.cancellation import CancellationToken
-from substrate.agents.storage.tasks import TaskStore
+from substrate.kernel.runtime.cancellation import CancellationToken
+from substrate.kernel.storage.tasks import TaskStore
 from substrate.integrations.tools.task_manager.tool import TaskManagerTool
-from substrate.kernel.agent.runtime_context import RunMeta, RunScope
-from substrate.kernel.storage.tasks import TaskStatus
+from substrate.kernel.abstractions.agent.runtime_context import RunMeta, RunScope
+from substrate.kernel.abstractions.storage.tasks import TaskStatus
 
 
 def _ctx(thread_id: str, agent_id: str, parent: str | None = None) -> RunMeta:

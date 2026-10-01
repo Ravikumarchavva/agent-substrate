@@ -7,14 +7,15 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, AsyncIterator, Protocol, runtime_checkable
 
-from substrate.kernel.core.content import ChatMessage, ContentBlock, KernelModel, TextBlock
-from substrate.kernel.messaging.stream import CompletionEvent, ReasoningDelta, TextDelta
-from substrate.kernel.core.usage import Usage
+from substrate.kernel.abstractions.core.content import ChatMessage, ContentBlock, KernelModel, TextBlock
+from substrate.kernel.abstractions.messaging.stream import CompletionEvent, ReasoningDelta, TextDelta
+from substrate.kernel.abstractions.core.finish_reason import FinishReason
+from substrate.kernel.abstractions.core.usage import Usage
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
-    from substrate.kernel.agent.runtime_context import RunMeta
-    from substrate.kernel.tools import AnyTool
+    from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+    from substrate.kernel.abstractions.tools import AnyTool
 
 
 class Modality(StrEnum):
@@ -64,6 +65,8 @@ class ModelCapabilities(KernelModel):
     # None -> cached input is billed at the full input rate (an overestimate,
     # which is the safe direction for a budget).
     cached_input_cost_per_mtok: float | None = None
+    # None -> cache writes are billed at the full input rate.
+    cache_write_cost_per_mtok: float | None = None
     output_cost_per_mtok: float = 0.0
 
     def accepts(self, modality: Modality) -> bool:
@@ -75,10 +78,19 @@ class ModelCapabilities(KernelModel):
             if self.cached_input_cost_per_mtok is not None
             else self.input_cost_per_mtok
         )
-        uncached = max(usage.input_tokens - usage.cached_tokens, 0)
+        write_rate = (
+            self.cache_write_cost_per_mtok
+            if self.cache_write_cost_per_mtok is not None
+            else self.input_cost_per_mtok
+        )
+        # Cache reads and writes are both inside input_tokens; each is billed at
+        # its own rate, and the remainder at the plain input rate.
+        special = min(usage.cached_tokens + usage.cache_write_tokens, usage.input_tokens)
+        uncached = max(usage.input_tokens - special, 0)
         return (
             uncached * self.input_cost_per_mtok
             + usage.cached_tokens * cached_rate
+            + usage.cache_write_tokens * write_rate
             + usage.output_tokens * self.output_cost_per_mtok
         ) / 1_000_000
 
@@ -91,6 +103,11 @@ class LLMResponse:
     usage: Usage
     # Priced by the harness from ``LLMClient.capabilities`` — clients leave it 0.
     cost_usd: float = 0.0
+    finish_reason: FinishReason = FinishReason.UNSPECIFIED
+    # The provider's own id for this response — what a support ticket needs.
+    response_id: str | None = None
+    # The model that actually served it (an alias resolves to a dated snapshot).
+    served_model: str | None = None
 
     @property
     def text(self) -> str:
@@ -201,4 +218,5 @@ __all__ = [
     "Modality",
     "ReasoningEffort",
     "ModelCapabilities",
+    "FinishReason",
 ]

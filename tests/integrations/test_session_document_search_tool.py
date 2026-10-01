@@ -21,10 +21,10 @@ from substrate.config import SubstrateConfig
 from substrate.integrations.llm.openai.openai_embedding_client import (
     OpenAIEmbeddingClient,
 )
-from substrate.kernel import ChatMessage, TextBlock
-from substrate.kernel.agent.runtime_context import RunMeta, RunScope
-from substrate.kernel.core.usage import Usage
-from substrate.kernel.llm import EmbeddingResult, GenerationOptions, LLMResponse
+from substrate.kernel.abstractions import ChatMessage, TextBlock
+from substrate.kernel.abstractions.agent.runtime_context import RunMeta, RunScope
+from substrate.kernel.abstractions.core.usage import Usage
+from substrate.kernel.abstractions.llm import EmbeddingResult, GenerationOptions, LLMResponse
 
 FIXTURE_PDF = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
 
@@ -60,7 +60,7 @@ def embedding_client() -> OpenAIEmbeddingClient:
 
 def _ctx(scope: RunScope | None = None) -> RunMeta:
     """The run context ReActAgent._handle_message() would have built."""
-    from substrate.agents.runtime.cancellation import CancellationToken
+    from substrate.kernel.runtime.cancellation import CancellationToken
 
     return RunMeta(
         run_id="run-1",

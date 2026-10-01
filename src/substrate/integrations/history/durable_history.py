@@ -44,14 +44,14 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from substrate.kernel.core.content import ChatMessage
-from substrate.kernel.exceptions import (
+from substrate.kernel.abstractions.core.content import ChatMessage
+from substrate.kernel.abstractions.exceptions import (
     BranchAlreadyExistsError,
     BranchHeadConflictError,
     BranchNotFoundError,
     DAGIntegrityError,
 )
-from substrate.kernel.storage.history import (
+from substrate.kernel.abstractions.storage.history import (
     Branch,
     HistoryCheckpoint,
     MessageNode,
@@ -93,7 +93,7 @@ def serialize_message(message: ChatMessage) -> Dict[str, Any]:
 
 def deserialize_message(data: Dict[str, Any]) -> ChatMessage:
     """Deserialize a JSONB dict back to a ChatMessage."""
-    return ChatMessage.model_validate(_b64_to_bytes(data))
+    return ChatMessage.model_validate(_b64_to_bytes(data), context={"forward_compatible": True})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

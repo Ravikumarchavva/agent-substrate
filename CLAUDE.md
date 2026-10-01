@@ -127,7 +127,7 @@ src/substrate/
 │   │                     LocalFilesystemDocumentStore — L1 defaults for the kernel document Protocols
 │   ├── llm/              client.py/models.py (kernel re-export + ModelProfile registry,
 │   │                     resolve_capabilities), modalities.py (fit_to_capabilities),
-│   │                     chat_client.py (OpenAIChatCompletionClient — L1 default chat
+│   │                     chat_client.py (OpenAICompatibleClient — L1 default chat
 │   │                     client), embedding_client.py (SentenceTransformersEmbeddingClient —
 │   │                     L1 default embedding client, local model, no external API)
 │   ├── flows/            SequentialFlow, ParallelFlow, ConditionalFlow
@@ -315,8 +315,8 @@ serving  =  orthogonal (cross-layer by design)
 ### Tool creation
 
 ```python
-from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel.core.content import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions.core.content import TextBlock
 
 class MyTool:
     name = "my_tool"
@@ -333,7 +333,7 @@ time (pure reads); a turn's tool calls then run concurrently and are journaled r
 needs to know whose work it is reads `scope_of(ctx)` (tenant/user/thread/branch/agent —
 `kernel.agent.runtime_context.RunScope`), never a global and never a model-supplied argument.
 
-`substrate.kernel.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
+`substrate.kernel.abstractions.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
 `HostedTool` (provider-executed, `provider_specs`), `ProviderDefinedTool`
 (provider call-shape + local `handle_call()`). Use `is_hosted_tool` /
 `is_provider_defined_tool` to branch at dispatch. Wire-dict encoding for each
@@ -360,8 +360,8 @@ client = LLMFactory("groq/llama-3.3-70b-versatile", api_key).build()
 client = LLMFactory("ollama/llama3.2", "ollama").build()   # local, no key
 
 # Or construct the L1-default universal client directly (agents/, zero infra)
-from substrate.agents.llm import OpenAIChatCompletionClient
-client = OpenAIChatCompletionClient(model="llama3.2", api_key="ollama",
+from substrate.kernel.llm import OpenAICompatibleClient
+client = OpenAICompatibleClient(model="llama3.2", api_key="ollama",
                                     base_url="http://localhost:11434/v1")
 ```
 
@@ -413,10 +413,10 @@ All shared objects (LLM clients, tool registry, event bus, HITL bridge) are wire
 
 ```python
 # L1 default — one JSON file per session, zero infra
-from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
+from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
 
 # In-memory (testing only)
-from substrate.agents.storage.history import InMemoryHistoryProvider
+from substrate.kernel.storage.history import InMemoryHistoryProvider
 
 # Redis-backed
 from substrate.integrations.history import RedisHistoryProvider
@@ -433,8 +433,8 @@ Vector and graph store contracts live in the kernel. Concrete implementations li
 
 ```python
 # Contracts (kernel)
-from substrate.kernel.storage.vector import VectorStore, Document, SearchResult
-from substrate.kernel.storage.graph import GraphStore, Entity, Relationship, SubGraph
+from substrate.kernel.abstractions.storage.vector import VectorStore, Document, SearchResult
+from substrate.kernel.abstractions.storage.graph import GraphStore, Entity, Relationship, SubGraph
 
 # Concrete implementations
 from substrate.integrations.vector import PgVectorStore
@@ -555,7 +555,7 @@ make ci
 ## Evaluation Framework (`agents/evals/`)
 
 ```python
-from substrate.agents.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
+from substrate.kernel.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
 
 runner = EvalRunner(agent=my_agent, judge=LLMJudge(criteria=[CORRECTNESS]))
 report = await runner.run(dataset)

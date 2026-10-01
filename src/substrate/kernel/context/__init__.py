@@ -1,4 +1,4 @@
-"""substrate.agents.context — context window assembly and compaction.
+"""substrate.kernel.context — context window assembly and compaction.
 
 History providers moved to ``agents.storage`` — general-purpose kernel
 ``HistoryProvider`` implementations belong beside the other in-memory/local

@@ -5,15 +5,15 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from substrate.agents.storage.history import DefaultHistoryResolver, InMemoryHistoryProvider
-from substrate.kernel.core.content import ChatMessage, TextBlock
-from substrate.kernel.exceptions import (
+from substrate.kernel.storage.history import DefaultHistoryResolver, InMemoryHistoryProvider
+from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
+from substrate.kernel.abstractions.exceptions import (
     BranchAlreadyExistsError,
     BranchHeadConflictError,
     BranchNotFoundError,
     DAGIntegrityError,
 )
-from substrate.kernel.storage.history import Branch, MessageNode
+from substrate.kernel.abstractions.storage.history import Branch, MessageNode
 
 
 def _msg(text: str, role: str = "user") -> ChatMessage:

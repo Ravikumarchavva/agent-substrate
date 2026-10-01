@@ -5,8 +5,8 @@ Wraps the OpenAI Images API to produce images from text prompts.
 
 from __future__ import annotations
 
-from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel import MediaBlock, TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions import MediaBlock, TextBlock
 
 
 class ImageGeneratorTool:

@@ -19,8 +19,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from substrate.kernel.storage.objects import ObjectStore
-from substrate.kernel.storage.snapshots import ContentRef
+from substrate.kernel.abstractions.storage.objects import ObjectStore
+from substrate.kernel.abstractions.storage.snapshots import ContentRef
 
 from .layout import blob_key
 

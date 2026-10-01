@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 
-from substrate.kernel.document import ExtractedPage, ExtractionResult
+from substrate.kernel.abstractions.document import ExtractedPage, ExtractionResult
 from substrate.runtimes.document_intelligence.service import convert
 
 

@@ -339,16 +339,16 @@ def cmd_chat(args: argparse.Namespace) -> None:
     """Launch an interactive CLI chat session with a ReAct agent."""
     # Late imports so the CLI stays fast for server commands
     from substrate.console import Console
-    from substrate.agents.core import ReActAgent
-    from substrate.agents.runtime import Runtime
-    from substrate.agents.tools.toolbox import Toolbox
+    from substrate.kernel.agents import ReActAgent
+    from substrate.kernel.runtime import Runtime
+    from substrate.kernel.tools.toolbox import Toolbox
     from substrate.integrations.llm.openai.openai_client import OpenAIClient
-    from substrate.agents.context import (
+    from substrate.kernel.context import (
         CompactionPipeline,
         ContextConfig,
         SlidingWindowCompaction,
     )
-    from substrate.agents.storage import (
+    from substrate.kernel.storage import (
         InMemoryHistoryProvider,
         LocalFilesystemHistoryProvider,
     )

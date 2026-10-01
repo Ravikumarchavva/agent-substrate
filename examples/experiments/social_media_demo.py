@@ -16,11 +16,11 @@ from pathlib import Path
 # Allow sibling-module imports (social_media_assistant lives in the same folder)
 sys.path.insert(0, str(Path(__file__).parent))
 
-from substrate.agents.core import ReActAgent
-from substrate.agents.tools.builtin_tools import WebSearchTool
+from substrate.kernel.agents import ReActAgent
+from substrate.kernel.tools.builtin_tools import WebSearchTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.agents.storage import LocalFilesystemHistoryProvider
+from substrate.kernel.storage import LocalFilesystemHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable
 

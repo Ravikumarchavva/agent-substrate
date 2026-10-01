@@ -10,19 +10,19 @@ from typing import Protocol
 
 import pytest
 
-import substrate.kernel as kernel_pkg
-from substrate.agents.storage.graph import InMemoryGraphStore
-from substrate.agents.storage.tasks import TaskStore as InMemoryTaskStore
-from substrate.kernel.core.content import MediaBlock, TextBlock
-from substrate.kernel.exceptions import UnsupportedContentError
-from substrate.kernel.llm.llm import EmbeddingClient, EmbeddingResult
-from substrate.kernel.storage.graph import Entity, GraphStore, Relationship
-from substrate.kernel.storage.tasks import TaskStatus, TaskStore
+import substrate.kernel.abstractions as kernel_pkg
+from substrate.kernel.storage.graph import InMemoryGraphStore
+from substrate.kernel.storage.tasks import TaskStore as InMemoryTaskStore
+from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
+from substrate.kernel.abstractions.exceptions import UnsupportedContentError
+from substrate.kernel.abstractions.llm.llm import EmbeddingClient, EmbeddingResult
+from substrate.kernel.abstractions.storage.graph import Entity, GraphStore, Relationship
+from substrate.kernel.abstractions.storage.tasks import TaskStatus, TaskStore
 
 
 def _kernel_protocols() -> list[type]:
     found: dict[str, type] = {}
-    for mod_info in pkgutil.walk_packages(kernel_pkg.__path__, "substrate.kernel."):
+    for mod_info in pkgutil.walk_packages(kernel_pkg.__path__, "substrate.kernel.abstractions."):
         mod = importlib.import_module(mod_info.name)
         for _, obj in inspect.getmembers(mod, inspect.isclass):
             if (
@@ -62,7 +62,7 @@ class _RecordingEmbedder:
         return [float(len(text))]
 
     async def embed_blocks(self, blocks) -> list[float]:
-        from substrate.kernel.core.content import content_blocks_to_str
+        from substrate.kernel.abstractions.core.content import content_blocks_to_str
 
         return await self.embed_single(content_blocks_to_str(blocks))
 
@@ -79,7 +79,7 @@ async def test_embed_blocks_accepts_text_and_media() -> None:
 
 
 async def test_sentence_transformers_and_base_clients_expose_embed_blocks() -> None:
-    from substrate.agents.llm.embedding_client import (
+    from substrate.integrations.llm.local_embeddings import (
         SentenceTransformersEmbeddingClient,
     )
     from substrate.integrations.llm.base import BaseEmbeddingClient
@@ -89,7 +89,7 @@ async def test_sentence_transformers_and_base_clients_expose_embed_blocks() -> N
 
 
 async def test_text_only_embedding_clients_reject_media_content() -> None:
-    from substrate.agents.llm.embedding_client import (
+    from substrate.integrations.llm.local_embeddings import (
         SentenceTransformersEmbeddingClient,
     )
     from substrate.integrations.llm.base import BaseEmbeddingClient

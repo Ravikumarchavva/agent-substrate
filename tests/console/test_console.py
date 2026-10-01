@@ -23,8 +23,8 @@ from substrate.console.stream_adapter import (
 from substrate.console.subagents import SubagentTracker
 from substrate.console.status import StatusLine
 from substrate.console.theme import DEFAULT_THEME
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.stream import (
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.stream import (
     AgentProgress,
     AgentStep,
     CompletionEvent,
@@ -32,7 +32,7 @@ from substrate.kernel.messaging.stream import (
     StreamDone,
     TextDelta,
 )
-from substrate.kernel.runtime.log_entry import RunLogEntry
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +425,7 @@ async def test_live_turn_sets_failed_flag_on_run_failed() -> None:
 
 async def test_live_turn_failed_false_on_success() -> None:
     """LiveTurn.failed stays False on a normal completion."""
-    from substrate.kernel.core.content import TextBlock
+    from substrate.kernel.abstractions.core.content import TextBlock
 
     turn = _make_turn()
     await _feed(
@@ -441,7 +441,7 @@ async def test_live_turn_failed_false_on_success() -> None:
 
 
 async def test_live_turn_returns_assistant_text() -> None:
-    from substrate.kernel.core.content import TextBlock
+    from substrate.kernel.abstractions.core.content import TextBlock
 
     turn = _make_turn()
     result = await _feed(

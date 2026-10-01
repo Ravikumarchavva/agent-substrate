@@ -17,8 +17,8 @@ from typing import Any, cast
 
 from google.genai import types as genai_types
 
-from substrate.kernel import ChatMessage
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions import ChatMessage
+from substrate.kernel.abstractions.core.content import (
     DataBlock,
     ErrorBlock,
     MediaBlock,

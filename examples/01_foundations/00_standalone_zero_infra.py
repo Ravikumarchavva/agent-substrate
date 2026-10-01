@@ -1,6 +1,6 @@
 """Example 1-0: Standalone, zero-infra chatbot — proof of the L1 charter.
 
-Every import below comes from ``substrate.agents`` (or stdlib/``dotenv``) —
+Every import below comes from ``substrate.kernel`` (or stdlib/``dotenv``) —
 nothing from ``substrate.integrations`` or ``substrate.serving``. No
 Docker, no Postgres, no Redis, no S3: history is
 one local JSON file, the runtime is one local SQLite file. This is the
@@ -28,13 +28,13 @@ from dotenv import load_dotenv
 
 load_dotenv()  # walks up to find the repo-root .env
 
-from substrate.agents import ReActAgent
-from substrate.agents.context import ContextConfig
-from substrate.agents.llm import OpenAIChatCompletionClient
-from substrate.agents.runtime import build_local_runtime
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import ChatPayload, Message
+from substrate.kernel import ReActAgent
+from substrate.kernel.context import ContextConfig
+from substrate.kernel.llm import OpenAICompatibleClient
+from substrate.kernel.runtime import build_local_runtime
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 
 
 async def main() -> None:
@@ -47,7 +47,7 @@ async def main() -> None:
             "for Ollama, api_key can be anything non-empty in that case)."
         )
 
-    model = OpenAIChatCompletionClient(
+    model = OpenAICompatibleClient(
         model=os.environ.get("STANDALONE_DEMO_MODEL", "gpt-4o-mini"),
         api_key=api_key or "local",
         base_url=base_url,

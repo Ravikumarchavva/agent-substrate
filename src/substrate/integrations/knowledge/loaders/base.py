@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Union
 
-from substrate.kernel.storage.vector import Document
+from substrate.kernel.abstractions.storage.vector import Document
 
 
 class BaseDocumentLoader(ABC):

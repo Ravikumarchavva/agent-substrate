@@ -26,22 +26,22 @@ import uuid
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
-from substrate.agents.context import (
+from substrate.kernel.context import (
     ContextConfig,
     SlidingWindowCompaction,
     CompactionPipeline,
 )
-from substrate.agents.storage import (
+from substrate.kernel.storage import (
     LocalFilesystemHistoryProvider,
 )
-from substrate.agents.core.react import ReActAgent
-from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-from substrate.agents.runtime import Runtime
-from substrate.agents.middleware import AgentRunResult
-from substrate.kernel.core.content import Role
-from substrate.kernel.messaging.message import Message, ChatPayload
+from substrate.kernel.agents.react import ReActAgent
+from substrate.kernel.agents.orchestrator import OrchestratorAgent, SubAgentConfig
+from substrate.kernel.runtime import Runtime
+from substrate.kernel.middleware import AgentRunResult
+from substrate.kernel.abstractions.core.content import Role
+from substrate.kernel.abstractions.messaging.message import Message, ChatPayload
 from substrate.integrations.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
-from substrate.kernel import (
+from substrate.kernel.abstractions import (
     Priority,
     TextBlock,
     Tool,
@@ -317,7 +317,7 @@ async def run_demo(
                                     is_error = getattr(res_block, "is_error", False)
                                     break
 
-                    from substrate.agents.middleware._contracts import ToolCallRecord
+                    from substrate.kernel.middleware._contracts import ToolCallRecord
 
                     tool_calls.append(
                         ToolCallRecord(

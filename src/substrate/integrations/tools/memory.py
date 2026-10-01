@@ -11,8 +11,8 @@ are scoped to the agent.
 from __future__ import annotations
 
 
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.storage.memory import (
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.storage.memory import (
     MemoryCategory,
     MemoryNamespace,
     MemoryQuery,
@@ -20,8 +20,8 @@ from substrate.kernel.storage.memory import (
     MemoryStore,
     ShortTermMemory,
 )
-from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions import TextBlock
 from substrate.logger import setup_logging
 
 logger = setup_logging()

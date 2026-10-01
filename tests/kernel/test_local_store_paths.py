@@ -7,15 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from substrate.agents.storage.fs import safe_name
-from substrate.agents.storage.local_graph import LocalFilesystemGraphStore
-from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
-from substrate.agents.storage.local_memory_store import LocalFilesystemMemoryStore
-from substrate.agents.storage.local_short_term_memory import LocalFilesystemShortTermMemory
-from substrate.agents.storage.local_vector import LocalFilesystemVectorStore
-from substrate.agents.workspace.local_workspace_store import LocalFilesystemWorkspaceStore
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.storage.history import MessageNode
+from substrate.kernel.storage.fs import safe_name
+from substrate.kernel.storage.local_graph import LocalFilesystemGraphStore
+from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
+from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
+from substrate.kernel.storage.local_short_term_memory import LocalFilesystemShortTermMemory
+from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore
+from substrate.kernel.workspace.local_workspace_store import LocalFilesystemWorkspaceStore
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.storage.history import MessageNode
 
 HOSTILE = ["../../evil", "..", ".", "a/b", "a\\b", "/etc/passwd", "x/../../y", "..%2F..", "\x00"]
 
@@ -111,7 +111,7 @@ async def test_history_still_round_trips_with_a_hostile_branch_and_session(tmp_p
 
 
 async def test_memory_store_finds_records_across_tenants_with_unusual_ids(tmp_path: Path):
-    from substrate.kernel.storage.memory import (
+    from substrate.kernel.abstractions.storage.memory import (
         MemoryNamespace,
         MemoryRecord,
     )

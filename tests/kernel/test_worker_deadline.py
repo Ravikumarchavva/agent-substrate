@@ -11,12 +11,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from substrate.agents.runtime.backends._event_log import InMemoryEventLog
-from substrate.agents.runtime.worker import Worker
-from substrate.kernel.agent.supervision import ExecutionBudget, Supervision
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.runtime.ids import RunId, new_run_id
-from substrate.kernel.runtime.log_entry import RunLogEntry, RunLogKind
+from substrate.kernel.runtime.backends._event_log import InMemoryEventLog
+from substrate.kernel.runtime.worker import Worker
+from substrate.kernel.abstractions.agent.supervision import ExecutionBudget, Supervision
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.runtime.ids import RunId, new_run_id
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
 
 
 def _worker(event_log: InMemoryEventLog) -> Worker:
@@ -87,8 +87,8 @@ async def test_resumed_run_anchors_to_original_start_not_now() -> None:
 
 async def test_run_meta_check_raises_past_deadline() -> None:
     """The other half of the contract: RunMeta.check() enforces the resolved deadline."""
-    from substrate.kernel.agent.runtime_context import RunMeta
-    from substrate.kernel.exceptions import CancellationError
+    from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+    from substrate.kernel.abstractions.exceptions import CancellationError
 
     class _NeverCancelledToken:
         is_cancelled = False

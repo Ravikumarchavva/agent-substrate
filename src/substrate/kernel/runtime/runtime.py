@@ -1,190 +1,106 @@
-"""Runtime — durable runtime over injectable kernel-Protocol backends.
+"""Runtime — the durable engine, over one ``RuntimeStore``.
 
-The Runtime is backend-agnostic: every backend is injected and defaults to its
-in-process implementation.  It never imports a concrete durable backend, so the
-``agents`` layer stays strictly above ``infrastructure``.
+::
 
-Usage (in-memory, Stage 0 — default)::
+    async with Runtime.local("./data/runtime.sqlite3") as rt:
+        await rt.register(agent)
+        outcome = await rt.run(agent, "What is the capital of France?")
 
-    async with Runtime() as rt:
-        await rt.register(my_agent)
-        run_id = await rt.submit(my_agent.id, boot_msg)
+A runtime owns a worker that leases runs from its store and executes them, and the
+store's lifecycle: ``async with`` starts both and stops both. Everything it needs to
+survive a restart is in the store, so a run submitted before a crash is picked up
+after one.
 
-Usage (Postgres + Redis, Stage 1) — use the infrastructure-layer factory, which
-constructs the durable backends and injects them::
-
-    from substrate.integrations.runtime import build_postgres_runtime
-
-    async with build_postgres_runtime(
-        postgres_url="postgresql://...",
-        redis_url="redis://localhost:6379/0",
-    ) as rt:
-        ...
-
-All backends implement the same kernel Protocols, so agent code never
-needs to know which backend is active.
+The store is the only thing that varies between deployments — the SQLite file here,
+a Postgres database for workers on several machines — and every engine behaviour
+(retries, leases, replay, supervision) is the same across them, because it lives
+here and not in the store.
 """
 
 from __future__ import annotations
 
-import uuid
+import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from substrate.kernel.abstractions.agent.supervision import Priority
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.core.identity import Actor, Topic
+from substrate.kernel.abstractions.core.trace import TraceContext
+from substrate.kernel.abstractions.exceptions import ThreadBusyError
+from substrate.kernel.abstractions.ids import new_id
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
+from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
+from substrate.kernel.abstractions.runtime.store import Delivery, RunRecord, RunSpec, RuntimeStore
+from substrate.kernel.runtime.resolver import ActorFactory, ActorResolver
+from substrate.kernel.runtime.worker import Worker
 
 if TYPE_CHECKING:
-    from substrate.agents.core.orchestrator import SubAgentConfig
+    from substrate.kernel.agents.orchestrator import SubAgentConfig
 
-from substrate.kernel.runtime.log_entry import RunLogKind
-from substrate.kernel.agent.supervision import Priority
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import Message
-from substrate.agents.runtime.context import Agent
-from substrate.kernel.runtime.fanout import FanoutStrategy
-from substrate.kernel.runtime.follow_graph import FollowGraph
-from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
-from substrate.kernel.runtime.inbox import InboxProtocol
-from substrate.kernel.runtime.log_entry import EventLogProtocol
-from substrate.kernel.runtime.scheduler import RunRetryPolicy
-from substrate.agents.runtime._scheduling import SchedulerBackend
-from substrate.kernel.runtime.supervisor import SupervisorProtocol
-from substrate.kernel.runtime.wakeup import SignalBusProtocol
-
-from substrate.agents.runtime.backends._event_log import InMemoryEventLog
-from substrate.agents.runtime.backends._fanout import PushAllFanout
-from substrate.agents.runtime.backends._follow_graph import InMemoryFollowGraph
-from substrate.agents.runtime.backends._inbox import InMemoryInbox
-from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
-from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
-from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
-from substrate.agents.runtime.resolver import ActorFactory, ActorResolver
-from substrate.agents.runtime.worker import Worker
+_TERMINAL_KINDS = frozenset(
+    {RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED, RunLogKind.RUN_TRUNCATED}
+)
+_TAIL_WAIT_S = 1.0
 
 
 @dataclass
 class RunOutcome:
-    """Result of ``Runtime.run()`` — the ergonomic, one-shot run API.
-
-    ``output`` is the agent's final assistant text (``None`` if the run
-    produced no text or did not complete). ``error`` carries the failure
-    message when ``status`` is ``FAILED``.
-    """
+    """The result of ``Runtime.run`` — the one-shot "ask once, get one answer" API."""
 
     run_id: str
     status: RunStatus
     output: str | None = None
     error: str | None = None
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __str__(self) -> str:
         return self.output or ""
 
 
 class Runtime:
-    """Durable runtime over injectable kernel-Protocol backends.
-
-    Each backend defaults to its in-process implementation.  Pass durable
-    backends (built by ``infrastructure.runtime.build_postgres_runtime``) to run
-    against Postgres/Redis.  The Runtime never imports a concrete durable
-    backend itself, keeping ``agents`` strictly above ``infrastructure``.
-    """
+    """Registers agents, submits work, and runs it on a worker over a store."""
 
     def __init__(
         self,
+        store: RuntimeStore,
         *,
-        event_log: EventLogProtocol | None = None,
-        inbox: InboxProtocol | None = None,
-        scheduler: SchedulerBackend | None = None,
-        signal_bus: SignalBusProtocol | None = None,
-        supervisor: SupervisorProtocol | None = None,
-        follow_graph: FollowGraph | None = None,
-        fanout: FanoutStrategy | None = None,
         resolver: ActorResolver | None = None,
+        max_concurrency: int = 10,
+        lease_s: float = 30.0,
+        poll_interval_s: float = 0.05,
     ) -> None:
-        self._event_log: EventLogProtocol = event_log or InMemoryEventLog()
-        self._scheduler: SchedulerBackend = scheduler or InMemoryScheduler()
-        self._inbox: InboxProtocol = inbox or InMemoryInbox()
-        # The inbox→runtime wakeup hook is a runtime concern; wire it on whatever
-        # inbox was injected (or the default).
-        self._inbox.set_deliver_hook(self._on_inbox_deliver)  # type: ignore[attr-defined]
-        self._follow_graph: FollowGraph = follow_graph or InMemoryFollowGraph()
-        self._fanout: FanoutStrategy = fanout or PushAllFanout()
-        # The default in-memory SignalBusProtocol wakes suspended runs via the
-        # scheduler it's paired with — see backends/_signal_bus.py.
-        self._signal_bus: SignalBusProtocol = signal_bus or InMemorySignalBus(
-            self._scheduler  # type: ignore[arg-type]
-        )
-        self._supervisor: SupervisorProtocol | None = supervisor
-        # Injectable like every other backend, rather than hardcoded, so
-        # infrastructure wiring can tune capacity/TTL (e.g. for a production
-        # deployment expecting far more than the 10k-actor default) without
-        # reaching into a private attribute.
+        self._store = store
         self._resolver = resolver or ActorResolver()
-        self._worker: Worker | None = None
-
-    def _on_inbox_deliver(self, agent_id: Actor) -> None:
-        """Sync hook called by InboxProtocol.deliver(); schedules an async dispatch task."""
-        import asyncio
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        loop.call_soon(
-            lambda: asyncio.create_task(self._handle_inbox_delivery(agent_id))
+        self._worker = Worker(
+            worker_id=f"worker-{new_id()}",
+            store=store,
+            resolver=self._resolver,
+            max_concurrency=max_concurrency,
+            lease_s=lease_s,
+            poll_interval_s=poll_interval_s,
         )
+        self._started = False
 
-    async def _handle_inbox_delivery(self, agent_id: Actor) -> None:
-        """Async: decide whether to wake a suspended run or spawn a fresh one.
+    @classmethod
+    def local(cls, path: str | Path = "./data/db/runtime.sqlite3", **options: Any) -> Runtime:
+        """A runtime on a SQLite file: durable, no server, safe for workers on one host."""
+        from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
 
-        - Suspended run → wake it.
-        - PENDING / RUNNING run → no-op (active run will drain inbox).
-        - No active run → spawn a fresh run.
+        return cls(SqliteRuntimeStore(path), **options)
 
-        Uses ``scheduler.find_run_for_agent()`` so this works for both the
-        in-memory and Postgres schedulers without accessing private attributes.
-        """
-        result = await self._scheduler.find_run_for_agent(agent_id)
-        if result is None:
-            await self._spawn_run_for_inbox(agent_id)
-            return
-        run_id, status = result
-        if status == RunStatus.SUSPENDED:
-            await self._scheduler.wake_suspended(run_id)
+    # ------------------------------------------------------------------ registration
 
-    async def _spawn_run_for_inbox(self, agent_id: Actor) -> None:
-        """Create a fresh run so a queued inbox message gets processed."""
-        run_id = new_run_id()
-        self._scheduler.register_run(run_id, agent_id)
-        await self._scheduler.enqueue(run_id, priority=Priority.NORMAL, tenant="default")
+    async def register(self, agent: Any, *, pinned: bool = True) -> None:
+        """Make an agent runnable. ``pinned=False`` lets it be evicted when idle, for a
+        call site that rebuilds one instance per entity on every call anyway.
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
-    async def register(self, agent: Agent, *, pinned: bool = True) -> None:
-        """Register one already-built agent.
-
-        ``pinned=True`` (the default, unchanged) keeps it resident for the
-        process lifetime — right for singletons and low-cardinality agents.
-
-        ``pinned=False`` is the virtual-actor migration path for a call site
-        that already builds a fresh instance per entity on every call (a
-        per-request chat agent keyed by thread id, say): the construction
-        code doesn't change at all, but the registered instance now
-        participates in LRU/idle-TTL eviction instead of being held forever.
-        Safe specifically because such a call site rebuilds unconditionally
-        on its next invocation — eviction just means "rebuilt next time"
-        instead of "never freed." See ``ActorResolver.register_instance``.
-
-        If ``agent`` is an OrchestratorAgent whose ``_sub_agents`` list is
-        populated, every sub-agent is also registered automatically (always
-        pinned — sub-agent lifecycle isn't part of this migration path).
-        This prevents the Worker from silently holding the lease (for up to
-        its timeout) when the orchestrator spawns a child that isn't
-        registered.
-
-        Pinning one object per entity does not scale past a few thousand —
-        see ``register_factory`` for the on-demand alternative.
+        An orchestrator's configured sub-agents are registered with it: a child that is
+        not registered would hold its lease until it expired.
         """
         self._resolver.register_instance(agent, pinned=pinned)
         sub_agents: list[SubAgentConfig] = getattr(agent, "_sub_agents", [])
@@ -192,19 +108,14 @@ class Runtime:
             self._resolver.register_instance(cfg.agent)
 
     def register_factory(self, actor_type: str, factory: ActorFactory) -> None:
-        """Register how to build *any* actor of ``actor_type``, on demand.
+        """Say how to build *any* actor of a type on demand — one entry per type
+        instead of one pinned object per entity::
 
-        The bounded alternative to registering an instance per entity: one
-        entry per type, with instances materialized from their address when a
-        run is leased for them and evicted once idle. ``factory`` receives the
-        full ``Actor`` — ``actor.key`` says which instance to build.
-
-            runtime.register_factory(
-                "conversation",
-                lambda actor: ReActAgent("conversation", session_id=actor.key, ...),
-            )
+            runtime.register_factory("conversation", lambda actor: ReActAgent(..., session_id=actor.key))
         """
         self._resolver.register_factory(actor_type, factory)
+
+    # ------------------------------------------------------------------ submitting work
 
     async def submit(
         self,
@@ -216,228 +127,142 @@ class Runtime:
         max_retries: int = 3,
         retry_policy: RunRetryPolicy | None = None,
         thread_id: str | None = None,
+        recipe: dict[str, Any] | None = None,
     ) -> RunId:
-        """Deliver ``msg`` to ``agent_id`` and enqueue a run.
+        """Create a run for ``agent_id`` carrying ``msg`` and return its id.
 
-        Returns the new run_id.  The run starts when the Worker next polls.
-        Pass ``max_retries=0`` for interactive runs where the journal-replay
-        retry loop would cause repeated failures on the same journaled error.
-
-        ``retry_policy``, if given, is used verbatim (``max_retries`` is
-        ignored) — for callers that need to tune ``backoff_s``/
-        ``max_backoff_s`` rather than just the retry count.
-
-        ``thread_id`` (optional) enforces durable, cross-replica single-flight
-        for the conversation thread this run belongs to — a second
-        ``submit(..., thread_id=X)`` while thread X already has an active run
-        raises ``kernel.exceptions.ThreadBusyError`` instead of enqueuing.
-        On that (rare) rejection, ``msg`` may already be sitting in
-        ``agent_id``'s inbox — delivery happens first, before the
-        single-flight check, because the run must find its own message
-        already there the instant it's leasable (delivery has to happen
-        before enqueue, not after — a worker can lease and start draining
-        the inbox as soon as the queue row exists, and a message that lands
-        a moment later would be invisible to that first drain). A caller
-        that wires ``thread_id`` is expected to have already done its own
-        cheap pre-check (see ``routes/chat.py``) so this collision is rare;
-        the orphaned inbox entry is picked up by the next legitimate run for
-        this agent_id, same as an unsolicited delivery would be.
+        The message and the run are created in one step, so a worker that leases the run
+        always finds its message. With ``thread_id`` the thread allows one active run at
+        a time, across every worker sharing the store: a second ``submit`` for it raises
+        ``ThreadBusyError`` and leaves nothing behind. ``recipe`` is opaque to the engine:
+        whatever a host needs to rebuild this run's agent after a restart.
         """
-        run_id = new_run_id()
-        self._scheduler.register_run(run_id, agent_id)
-        # Deliver with notify=False: this submit() explicitly enqueues its own
-        # run below, so the inbox deliver-hook (_handle_inbox_delivery) must NOT
-        # fire. If it did, it would race against our enqueue() — finding no
-        # active run yet via find_run_for_agent() and spawning a DUPLICATE run
-        # for this same message. The hook is only for unsolicited deliveries
-        # (publish/fanout/inter-agent ask) that have no accompanying submit.
-        await self._inbox.deliver(agent_id, msg, notify=False)
-        await self._scheduler.enqueue(
-            run_id,
-            priority=priority,
-            tenant=tenant,
-            retry_policy=retry_policy or RunRetryPolicy(max_retries=max_retries),
-            thread_id=thread_id,
-        )
-        return run_id
-
-    async def run(
-        self,
-        agent: Agent,
-        prompt: str,
-        *,
-        tenant: str = "default",
-    ) -> RunOutcome:
-        """Run ``agent`` on a single ``prompt`` and wait for the final answer.
-
-        The ergonomic one-shot entry point: registers the agent, delivers the
-        prompt as a chat message, submits a run, tails its EventLogProtocol until the
-        run reaches a terminal state, and returns a :class:`RunOutcome` whose
-        ``output`` is the agent's final assistant text.
-
-        For streaming, multi-message, or durable-suspend workflows use
-        ``register`` + ``submit`` and tail ``event_log`` yourself — this helper
-        is for the common "ask once, get one answer" case.
-        """
-        from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-        from substrate.kernel.messaging.message import ChatPayload
-
-        await self.register(agent)
-        msg = Message(
-            target=agent.id,
-            sender=Actor(type="user", key="run"),
-            payload=ChatPayload(
-                message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
+        agent = await self._resolver.resolve(agent_id)
+        run = await self._store.create_run(
+            RunSpec(
+                agent=agent_id,
+                tenant=tenant,
+                thread_id=thread_id,
+                priority=priority,
+                retry_policy=retry_policy or RunRetryPolicy(max_retries=max_retries),
+                trace=TraceContext.new(),
+                agent_version=str(getattr(agent, "version", "0")),
+                recipe=recipe,
             ),
+            deliveries=[Delivery(agent=agent_id, msg=msg, tenant=tenant)],
         )
-        # max_retries=0: a one-shot interactive run must not replay-retry a
-        # journaled error (see AgentStreamSession).
-        run_id = await self.submit(agent.id, msg, tenant=tenant, max_retries=0)
+        return run.run_id
 
-        text_acc = ""
-        async for entry in self._event_log.tail(run_id):
-            kind = entry.kind
+    async def run(self, agent: Any, prompt: str, *, tenant: str = "default") -> RunOutcome:
+        """Run an agent on one prompt and wait for its answer.
+
+        For streaming, several messages, or runs that suspend, use ``register`` +
+        ``submit`` and read ``tail`` yourself.
+        """
+        await self.register(agent)
+        run_id = await self.submit(agent.id, _chat(Actor(type="user", key="run"), agent.id, prompt), tenant=tenant, max_retries=0)
+        text = ""
+        async for entry in self.tail(run_id):
             payload = entry.payload or {}
-            if kind == RunLogKind.TOOL_RESULT:
-                # New turn boundary — the final answer is the text produced
-                # after the last tool result.
-                text_acc = ""
-            elif kind == RunLogKind.TEXT_DELTA:
-                text_acc += payload.get("text", "")
-            elif kind == RunLogKind.RUN_COMPLETED:
-                return RunOutcome(
-                    run_id=run_id, status=RunStatus.COMPLETED, output=text_acc or None
-                )
-            elif kind == RunLogKind.RUN_FAILED:
-                return RunOutcome(
-                    run_id=run_id,
-                    status=RunStatus.FAILED,
-                    error=payload.get("error", "agent run failed"),
-                )
-            elif kind == RunLogKind.RUN_CANCELLED:
+            if entry.kind == RunLogKind.TOOL_RESULT:
+                text = ""  # a new turn: the answer is what follows the last tool result
+            elif entry.kind == RunLogKind.TEXT_DELTA:
+                text += payload.get("text", "")
+            elif entry.kind == RunLogKind.RUN_COMPLETED:
+                return RunOutcome(run_id=run_id, status=RunStatus.COMPLETED, output=text or None)
+            elif entry.kind == RunLogKind.RUN_FAILED:
+                return RunOutcome(run_id=run_id, status=RunStatus.FAILED, error=payload.get("error", "agent run failed"))
+            elif entry.kind == RunLogKind.RUN_CANCELLED:
                 return RunOutcome(run_id=run_id, status=RunStatus.CANCELLED)
-        return RunOutcome(
-            run_id=run_id, status=RunStatus.COMPLETED, output=text_acc or None
-        )
+        return RunOutcome(run_id=run_id, status=RunStatus.COMPLETED, output=text or None)
 
-    async def ask(
-        self,
-        agent: Agent,
-        prompt: str,
-        *,
-        timeout: float = 120.0,
-        tenant: str = "default",
-    ) -> RunOutcome:
-        """Run an ask/reply-style ``agent`` (e.g. a ``fabric.flows`` pipeline) and
-        wait for its ``ctx.reply()`` result.
+    async def ask(self, agent: Any, prompt: str, *, timeout: float = 120.0, tenant: str = "default") -> RunOutcome:
+        """Run an agent that answers with ``ctx.reply`` (a flow, say) and wait for the reply.
 
-        Coordination primitives (``SequentialFlow``, ``ParallelFlow``,
-        ``ConditionalFlow``, or any hand-written agent that calls
-        ``ctx.reply(msg, ...)`` instead of streaming text via ``ctx.llm()``)
-        don't produce ``text.delta`` log entries, so :meth:`run` can't capture
-        their output. This method mirrors how one agent invokes another via
-        ``ctx.ask()``: the entry message carries a synthetic ``reply_to``, and
-        the result is read directly off the ``SignalBusProtocol`` — the same
-        mechanism ``ctx.ask()`` itself consumes.
-
-        Register any of ``agent``'s dependencies (e.g. a flow's ``steps``)
-        with ``Runtime.register()`` before calling this.
+        Such agents do not stream text, so ``run`` cannot capture their output. This
+        mirrors how one agent calls another: the message carries a ``reply_to`` and the
+        reply is read off the signal buffer.
         """
-        import asyncio
-
-        from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-        from substrate.kernel.messaging.message import ChatPayload
-
         await self.register(agent)
-        sentinel = new_run_id()
-        msg = Message(
-            target=agent.id,
-            sender=Actor(type="user", key="ask"),
-            payload=ChatPayload(
-                message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
-            ),
-            reply_to=sentinel,
-        )
+        sentinel = RunId(new_id())
+        msg = _chat(Actor(type="user", key="ask"), agent.id, prompt).model_copy(update={"reply_to": sentinel})
         run_id = await self.submit(agent.id, msg, tenant=tenant, max_retries=0)
-
-        deadline = asyncio.get_event_loop().time() + timeout
-        while asyncio.get_event_loop().time() < deadline:
-            payload = await self._signal_bus.consume(
-                sentinel, f"reply:{msg.correlation_id}", f"runtime-ask:{sentinel}"
-            )
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while loop.time() < deadline:
+            payload = await self._store.consume(sentinel, f"reply:{msg.correlation_id}", f"runtime-ask:{sentinel}")
             if payload is not None:
-                return RunOutcome(
-                    run_id=run_id,
-                    status=RunStatus.COMPLETED,
-                    output=payload.get("text") or None,
-                    error=payload.get("error") or None,
-                )
+                return RunOutcome(run_id=run_id, status=RunStatus.COMPLETED, output=payload.get("text") or None, error=payload.get("error") or None)
             await asyncio.sleep(0.02)
-        return RunOutcome(
-            run_id=run_id, status=RunStatus.FAILED, error="timed out waiting for reply"
-        )
+        return RunOutcome(run_id=run_id, status=RunStatus.FAILED, error="timed out waiting for reply")
 
-    async def follow(
-        self, follower: Actor, topic_type: str, topic_source: str
-    ) -> None:
-        """Subscribe ``follower`` to a topic."""
-        from substrate.kernel.core.identity import Topic
-
-        await self._follow_graph.follow(
-            follower, Topic(f"{topic_type}/{topic_source}")
-        )
+    async def follow(self, follower: Actor, topic_type: str, topic_source: str) -> None:
+        await self._store.follow(follower, Topic(f"{topic_type}/{topic_source}"))
 
     async def publish(self, topic_type: str, topic_source: str, msg: Message) -> None:
-        """Publish ``msg`` to all followers of a topic."""
-        from substrate.kernel.core.identity import Topic
+        """Deliver ``msg`` to every follower of the topic."""
+        for follower in await self._store.followers_of(Topic(f"{topic_type}/{topic_source}")):
+            await self._store.deliver(Delivery(agent=follower, msg=msg))
 
-        topic = Topic(f"{topic_type}/{topic_source}")
-        await self._fanout.publish(
-            topic, msg, graph=self._follow_graph, inbox=self._inbox
-        )
+    # ------------------------------------------------------------------ observing
 
-    # ------------------------------------------------------------------
-    # Async context manager
-    # ------------------------------------------------------------------
+    @property
+    def store(self) -> RuntimeStore:
+        return self._store
+
+    async def tail(self, run_id: RunId | str, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]:
+        """A run's entries — live output included — as they happen. Never ends on its own:
+        stop iterating when you see the terminal entry you care about."""
+        seq = from_seq
+        run_id = RunId(run_id)
+        while True:
+            entries = await self._store.read_events(run_id, from_seq=seq)
+            for entry in entries:
+                yield entry
+                seq = entry.seq + 1
+            if not entries:
+                await self._store.wait_events(run_id, after_seq=seq - 1, timeout_s=_TAIL_WAIT_S)
+
+    async def read(self, run_id: RunId | str, *, from_seq: int = 0) -> list[RunLogEntry]:
+        """A run's durable entries so far (no live output): what a replay would see."""
+        return await self._store.read_events(RunId(run_id), from_seq=from_seq, durable_only=True)
+
+    async def get_run(self, run_id: RunId | str) -> RunRecord | None:
+        return await self._store.get_run(RunId(run_id))
+
+    async def active_run_for_thread(self, thread_id: str) -> RunRecord | None:
+        found = await self._store.find_runs(thread_id=thread_id)
+        return found[0] if found else None
+
+    async def runs_for_thread(self, thread_id: str) -> list[RunRecord]:
+        """Every run a thread has had, oldest first: the basis for projecting its conversation."""
+        return await self._store.find_runs(thread_id=thread_id, active_only=False)
+
+    # ------------------------------------------------------------------ control
+
+    async def cancel(self, run_id: RunId | str, *, reason: str = "cancelled") -> list[RunId]:
+        """Cancel a run and everything it spawned. A run on this worker is interrupted
+        now; one on another worker notices at its next heartbeat."""
+        affected = await self._store.request_cancel(RunId(run_id), reason=reason)
+        for affected_id in affected:
+            self._worker.cancel_local(str(affected_id), reason)
+        return affected
+
+    # ------------------------------------------------------------------ lifecycle
 
     async def start(self) -> None:
-        if self._supervisor is None:
-            # InMemorySupervisor reaches into InMemoryScheduler's private state
-            # (see backends/_supervisor.py), so it can only stand in as the
-            # default when every other backend is also the in-memory one — a
-            # caller mixing durable backends must supply an explicit supervisor.
-            assert isinstance(self._event_log, InMemoryEventLog)
-            assert isinstance(self._inbox, InMemoryInbox)
-            assert isinstance(self._scheduler, InMemoryScheduler)
-            assert isinstance(self._signal_bus, InMemorySignalBus)
-            self._supervisor = InMemorySupervisor(
-                event_log=self._event_log,
-                inbox=self._inbox,
-                scheduler=self._scheduler,
-                signal_bus=self._signal_bus,
-            )
-        supervisor = self._supervisor
-        self._worker = Worker(
-            worker_id=f"worker-{uuid.uuid4().hex}",
-            event_log=self._event_log,
-            inbox=self._inbox,
-            follow_graph=self._follow_graph,
-            fanout=self._fanout,
-            scheduler=self._scheduler,
-            supervisor=supervisor,
-            signal_bus=self._signal_bus,
-            resolver=self._resolver,
-        )
+        if self._started:
+            return
+        await self._store.start()
         await self._worker.start()
+        self._started = True
 
     async def stop(self) -> None:
-        if self._worker is not None:
-            await self._worker.stop()
-
-    async def cancel(self, run_id: str) -> None:
-        """Cancel an in-flight run."""
-        if self._worker is not None:
-            await self._worker.cancel(run_id)
+        if not self._started:
+            return
+        await self._worker.stop()
+        await self._store.aclose()
+        self._started = False
 
     async def __aenter__(self) -> Runtime:
         await self.start()
@@ -446,41 +271,13 @@ class Runtime:
     async def __aexit__(self, *_: object) -> None:
         await self.stop()
 
-    # ------------------------------------------------------------------
-    # Internal accessors (for tests)
-    # ------------------------------------------------------------------
 
-    @property
-    def event_log(self) -> EventLogProtocol:
-        return self._event_log
+def _chat(sender: Actor, target: Actor, prompt: str) -> Message:
+    return Message(
+        target=target,
+        sender=sender,
+        payload=ChatPayload(message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])),
+    )
 
-    @property
-    def inbox(self) -> InboxProtocol:
-        return self._inbox
 
-    @property
-    def scheduler(self) -> SchedulerBackend:
-        # Exposed for find_run_for_thread() — serving code resolves a
-        # conversation thread's active run_id durably (works across
-        # replicas) instead of keeping its own thread_id → run_id registry.
-        return self._scheduler
-
-    @property
-    def signal_bus(self) -> SignalBusProtocol:
-        # Whatever backend was injected (InMemorySignalBus by default, or a
-        # durable backend via build_postgres_runtime) — serving/console code
-        # only ever calls .signal() on this, which every backend implements
-        # identically per the kernel Protocol.
-        return self._signal_bus
-
-    @property
-    def supervisor(self) -> SupervisorProtocol:
-        """The active SupervisorProtocol — ``None`` until ``start()``/``__aenter__``.
-
-        Exposed for cascading ``cancel(handle)`` (recursive subtree
-        cancellation — distinct from ``Runtime.cancel(run_id)`` above, which
-        only cancels a single in-process Task) and other SupervisorProtocol-level
-        operations (``children_of`` for crash reconciliation).
-        """
-        assert self._supervisor is not None, "Runtime not started"
-        return self._supervisor
+__all__ = ["RunOutcome", "Runtime", "ThreadBusyError"]

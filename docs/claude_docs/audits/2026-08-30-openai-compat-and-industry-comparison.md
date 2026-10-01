@@ -19,7 +19,7 @@ The first version of this audit claimed `LLMFactory`'s `"compatible"`
 provider built `OpenAIClient` (the Responses-API client) and was therefore
 broken against self-hosted servers. **That was a real research error, not a
 real bug** — it was written from an import-list grep
-(`grep -rln "OpenAIChatCompletionClient" ...`) without actually reading
+(`grep -rln "OpenAICompatibleClient" ...`) without actually reading
 `LLMFactory.build()`'s dispatch logic. Reading `build()` directly
 (`integrations/llm/factory.py:262-326`) shows the design was already
 correct:
@@ -29,17 +29,17 @@ if self._provider == "openai":
     return OpenAIClient(...)            # Responses API — real OpenAI cloud only
 
 if self._provider in _CHAT_COMPLETIONS_PROVIDERS:   # compatible, vllm, ollama,
-    return OpenAIChatCompletionClient(...)          # groq, lmstudio, etc.
+    return OpenAICompatibleClient(...)          # groq, lmstudio, etc.
 ```
 
 `_CHAT_COMPLETIONS_PROVIDERS` (`factory.py:83-100`) already lists every
 self-hosted-friendly provider, and the module's own docstring already
 documents this split correctly. The two-clients-in-two-layers structure
 noted in the original text is real and worth knowing (`OpenAIClient` in
-`integrations/llm/openai/`, `OpenAIChatCompletionClient` in
+`integrations/llm/openai/`, `OpenAICompatibleClient` in
 `capabilities/llm/`) — but they are *not* in tension the way originally
 claimed: `OpenAIClient` is the Responses-API client used only for real
-OpenAI cloud; `OpenAIChatCompletionClient` is the Chat-Completions client
+OpenAI cloud; `OpenAICompatibleClient` is the Chat-Completions client
 used for everything else, and the factory already routes correctly between
 them.
 
@@ -47,7 +47,7 @@ them.
 at all — nothing would have caught a future regression breaking it.
 Verified fresh (`tests/integrations/test_llm_factory_routing.py`,
 `tests/capabilities/test_chat_client.py`, both passing): `LLMFactory`
-correctly builds `OpenAIChatCompletionClient` for `compatible`/`vllm`/
+correctly builds `OpenAICompatibleClient` for `compatible`/`vllm`/
 `ollama`/`groq`, that client issues real `POST /v1/chat/completions`
 requests (not `/v1/responses`), and a full tool-call round trip — the
 mechanism `ReActAgent`'s tool loop depends on — works correctly against a

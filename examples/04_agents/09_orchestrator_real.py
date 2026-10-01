@@ -32,17 +32,17 @@ settings = SubstrateConfig()
 
 import asyncio
 
-from substrate.agents.context import (
+from substrate.kernel.context import (
     ContextConfig,
     SlidingWindowCompaction,
     CompactionPipeline,
 )
-from substrate.agents.storage import (
+from substrate.kernel.storage import (
     LocalFilesystemHistoryProvider,
 )
-from substrate.agents.core.react import ReActAgent
-from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-from substrate.agents.runtime import Runtime
+from substrate.kernel.agents.react import ReActAgent
+from substrate.kernel.agents.orchestrator import OrchestratorAgent, SubAgentConfig
+from substrate.kernel.runtime import Runtime
 from substrate.integrations.llm import (
     create_model_client,
     detect_provider,
@@ -50,7 +50,7 @@ from substrate.integrations.llm import (
 )
 from substrate.integrations.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
 from substrate.console import Console
-from substrate.kernel import Priority
+from substrate.kernel.abstractions import Priority
 
 
 def _model():

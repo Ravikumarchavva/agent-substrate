@@ -1,36 +1,11 @@
-"""substrate.agents.document — kernel DocumentExtractor contract and its
-one L1 default implementation.
+"""substrate.kernel.document — local filesystem document store.
 
-``LocalDocumentExtractor`` and ``LocalFilesystemDocumentStore`` are the L1
-defaults — the same "one implementation needing the least infrastructure the
-Protocol can possibly need" rule every other storage Protocol already follows.
-(``DocumentChunker``'s default lives with the RAG stack, in
-``integrations/knowledge/chunking.py``.) Stronger adapters (e.g. the
-PaddleOCR-backed service) live in ``integrations``/``runtimes`` for L2.
+The DocumentExtractor contract lives in the kernel; extraction backends (the
+local PDF/OCR extractor, the PaddleOCR service) are adapters in ``integrations``.
 """
 
 from __future__ import annotations
 
-from substrate.kernel.document import (
-    DocumentChunker,
-    DocumentExtractor,
-    DocumentStore,
-    ExtractedImage,
-    ExtractedImageLabel,
-    ExtractedPage,
-    ExtractionResult,
-)
-from substrate.agents.document.local_document_store import LocalFilesystemDocumentStore
-from substrate.agents.document.local_extractor import LocalDocumentExtractor
+from substrate.kernel.document.local_document_store import LocalFilesystemDocumentStore
 
-__all__ = [
-    "DocumentExtractor",
-    "DocumentChunker",
-    "DocumentStore",
-    "ExtractedImage",
-    "ExtractedImageLabel",
-    "ExtractedPage",
-    "ExtractionResult",
-    "LocalDocumentExtractor",
-    "LocalFilesystemDocumentStore",
-]
+__all__ = ["LocalFilesystemDocumentStore"]

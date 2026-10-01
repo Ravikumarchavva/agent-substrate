@@ -1,41 +1,41 @@
-"""Supervision hierarchy — agent execution policy and tree position.
+"""Supervision — an agent's position in an execution tree, and the policy it runs under.
 
-Supervision types live here rather than in ``identity`` because they model
-execution policy, not routing identity.  ``Actor`` and ``Topic``
-(in ``identity.py``) are pure routing keys; ``Supervision``, ``Priority``,
-and ``HistoryRetention`` are policy metadata that flows down the agent tree.
+``Actor`` and ``Topic`` are pure routing addresses. ``Supervision`` is policy
+that flows down the agent tree: who the parent is, how deep this agent sits, how
+many agents may exist, and what one agent may spend.
 
-Budget model (supervision v2)
-------------------------------
-Two orthogonal frozen configs are embedded in every ``Supervision`` node:
+Two budgets, deliberately separate:
 
 ``SpawnBudget``
-    Run-wide cap on the total number of agents that may be spawned.
-    Shared across the entire tree — the same object is propagated to every
-    child via ``spawn_child()``.  The L1 ``SpawnTracker`` (agents layer)
-    carries the mutable state (current count, paused set) that enforces it.
+    A run-wide cap on how many agents may exist. Shared by every node in the
+    tree, so the headcount is global rather than per-branch.
 
 ``ExecutionBudget``
-    Per-agent resource limits: tokens, cost, turns, wall-clock time.
-    Each child inherits the parent's policy by default; ``spawn_child()``
-    accepts an override so a sub-agent can be given a tighter budget.
-    The L1 ``ExecutionTracker`` (agents layer) tracks consumption against it.
+    Resource limits for one agent: tokens, cost, turns, wall-clock time.
+
+Both are persisted with a spawned run and read back by whichever worker later
+leases it, which may be a different version of the code. These are therefore
+models that ignore fields they do not know, rather than hand-written
+``to_dict``/``from_dict`` pairs that crash on an unknown key and silently drop a
+new one.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum
-from uuid import uuid4
+from enum import IntEnum, StrEnum
+from typing import Any
 
-from substrate.kernel.core.identity import Actor, Topic
+from pydantic import BaseModel, ConfigDict, Field
+
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.ids import new_id
 
 
-class HistoryRetention(str, Enum):
+class HistoryRetention(StrEnum):
     """How long a subagent's conversation history is kept after the run ends.
 
     NONE      — stateless worker; no history persisted at all.
-    RUN       — kept for the run (scoped by run_id), deleted after.
+    RUN       — kept for the run, deleted after.
     PERMANENT — kept forever. For top-level user-facing agents.
     """
 
@@ -44,16 +44,8 @@ class HistoryRetention(str, Enum):
     PERMANENT = "permanent"
 
 
-class Priority(int, Enum):
-    """Preemption rank for an agent branch.
-
-    Values are compared ordinally, not used as proportional weights —
-    ``SpawnTracker`` (``agents/supervision/budget.py``) checks
-    ``priority <= NORMAL`` / ``priority >= NORMAL`` to decide whether a
-    branch can preempt another when the spawn budget is full. Higher
-    ranks better survive preemption; BACKGROUND is first to be preempted,
-    CRITICAL is never preempted.
-    """
+class Priority(IntEnum):
+    """Queue priority: higher ranks are leased first when work exceeds capacity."""
 
     BACKGROUND = 0
     LOW = 1
@@ -62,73 +54,56 @@ class Priority(int, Enum):
     CRITICAL = 8
 
 
-@dataclass(frozen=True, slots=True)
-class SpawnBudget:
-    """Run-wide cap on how many agents may exist simultaneously.
+class _Policy(BaseModel):
+    """Persisted policy: frozen, and tolerant of fields from another version."""
 
-    Shared across the entire agent tree — every ``Supervision`` node in one
-    run carries the same ``SpawnBudget`` instance so the headcount limit is
-    global, not per-branch.
-
-    ``max_agents``   — total agents allowed in the run (root counts as 1).
-    ``allow_preempt``— when True, HIGH/CRITICAL agents may cooperatively
-                       pause lower-priority ones to claim their slot instead
-                       of raising ``BudgetExhaustedError`` immediately.
-    """
-
-    max_agents: int = 50
-    allow_preempt: bool = True
+    model_config = ConfigDict(frozen=True, extra="ignore", arbitrary_types_allowed=True)
 
 
-@dataclass(frozen=True, slots=True)
-class ExecutionBudget:
-    """Per-agent resource limits — frozen policy carried in Supervision.
+class SpawnBudget(_Policy):
+    """Run-wide cap on how many agents may exist at once (the root counts as 1)."""
 
-    ``None`` means unlimited for that dimension.  The L1 ``ExecutionTracker``
-    (agents layer) tracks actual consumption and raises ``BudgetExhaustedError``
-    when a limit is breached.
+    max_agents: int = Field(default=50, ge=1)
+
+
+class ExecutionBudget(_Policy):
+    """Resource limits for one agent. ``None`` means unlimited for that dimension.
 
     ``max_tokens``   — total LLM tokens (prompt + completion) across all turns.
     ``max_cost_usd`` — cumulative LLM cost in USD.
-    ``max_turns``    — number of LLM round-trips (one tool call = one turn).
-    ``deadline_s``   — wall-clock seconds from run start; enforced by RunContext.
+    ``max_turns``    — number of LLM round-trips.
+    ``deadline_s``   — wall-clock seconds from the run's start.
     """
 
-    max_tokens: int | None = None
-    max_cost_usd: float | None = None
-    max_turns: int | None = None
-    deadline_s: float | None = None
+    max_tokens: int | None = Field(default=None, ge=0)
+    max_cost_usd: float | None = Field(default=None, ge=0)
+    max_turns: int | None = Field(default=None, ge=0)
+    deadline_s: float | None = Field(default=None, ge=0)
 
 
-@dataclass(frozen=True, slots=True)
-class Supervision:
+class Supervision(_Policy):
     """An agent's formal position in an execution hierarchy.
 
-    Analogous to an org-chart position: who your manager is, which project
-    you're on, what level you sit at, and what the org's resource limits are.
-    Passed top-down when spawning child agents so every agent in the tree
-    shares the same ``run_id``, ``session_id``, and resource policy.
+    Two ids with different lifetimes:
 
-    Two ids serve different purposes:
-    - ``session_id`` — the conversation thread (long-lived; many runs).
-      History is always keyed by ``session_id``.
-    - ``run_id`` — one execution tree (short-lived; one run() call).
-      Scopes budget, supervision, resume, and the progress pub/sub topic.
+    - ``session_id`` — the conversation thread (long-lived; many runs). History
+      is keyed by it.
+    - ``run_id`` — the *execution tree* (short-lived; one root run). Scopes the
+      spawn budget and supervision. Note that it names the whole tree: each
+      spawned child is its own durable run with its own run id, and carries this
+      one as the tree it belongs to.
 
-    Progress channel: ``Topic.progress(run_id)``
-    All agents in one run publish there; the UI subscribes once.
-
-    ``depth`` is informational only (for UI indentation and AgentProgress).
-    There is no depth limit; ``spawn_budget`` is the single unified constraint.
+    ``depth`` is informational (UI indentation); ``spawn_budget`` is the only
+    constraint on how large the tree may grow.
     """
 
     run_id: str
     session_id: str
     root_id: Actor
-    parent_id: Actor | None
-    depth: int = 0
-    spawn_budget: SpawnBudget = field(default_factory=SpawnBudget)
-    execution_budget: ExecutionBudget = field(default_factory=ExecutionBudget)
+    parent_id: Actor | None = None
+    depth: int = Field(default=0, ge=0)
+    spawn_budget: SpawnBudget = Field(default_factory=SpawnBudget)
+    execution_budget: ExecutionBudget = Field(default_factory=ExecutionBudget)
     retention: HistoryRetention = HistoryRetention.RUN
     priority: Priority = Priority.NORMAL
 
@@ -143,26 +118,10 @@ class Supervision:
         retention: HistoryRetention = HistoryRetention.PERMANENT,
         priority: Priority = Priority.NORMAL,
     ) -> Supervision:
-        """Create the root supervision context — generates a fresh run_id.
-
-        Call this once on the top-level (user-facing) agent. Pass the
-        returned object into every spawned child via ``spawn_child()``.
-
-        Parameters
-        ----------
-        session_id:
-            The conversation thread id.  If ``None``, a fresh uuid is
-            generated.  Pass an explicit id to resume a multi-turn session.
-        spawn_budget:
-            Run-wide agent headcount policy.  Defaults to ``SpawnBudget()``
-            (50 agents, preemption allowed).
-        execution_budget:
-            Per-agent resource limits for the root agent.  Defaults to
-            ``ExecutionBudget()`` (all unlimited).
-        """
+        """The supervision of a top-level agent: a fresh tree, no parent."""
         return cls(
-            run_id=uuid4().hex,
-            session_id=session_id or uuid4().hex,
+            run_id=new_id(),
+            session_id=session_id or new_id(),
             root_id=agent_id,
             parent_id=None,
             depth=0,
@@ -180,107 +139,39 @@ class Supervision:
         priority: Priority = Priority.NORMAL,
         execution_budget: ExecutionBudget | None = None,
     ) -> Supervision:
-        """Create supervision for a child agent reporting to ``parent_id``.
+        """Supervision for a child reporting to ``parent_id``.
 
-        Carries the same ``run_id``, ``session_id``, and ``spawn_budget``
-        (the headcount cap is shared across the whole tree).  ``depth``
-        increments by one.  ``execution_budget`` defaults to the parent's
-        policy; pass an explicit value to give the child tighter limits.
+        Same tree, same conversation, same shared spawn budget; one level deeper.
+        The execution budget defaults to the parent's; pass one to give the child
+        tighter limits.
         """
-        return Supervision(
-            run_id=self.run_id,
-            session_id=self.session_id,
-            root_id=self.root_id,
-            parent_id=parent_id,
-            depth=self.depth + 1,
-            spawn_budget=self.spawn_budget,  # shared tree-wide
-            execution_budget=execution_budget or self.execution_budget,
-            retention=retention,
-            priority=priority,
+        return self.model_copy(
+            update={
+                "parent_id": parent_id,
+                "depth": self.depth + 1,
+                "execution_budget": execution_budget or self.execution_budget,
+                "retention": retention,
+                "priority": priority,
+            }
         )
-
-    @property
-    def progress_topic(self) -> Topic:
-        """The single pub/sub topic for all progress events in this run."""
-        return Topic.progress(self.run_id)
 
     @property
     def is_root(self) -> bool:
         return self.parent_id is None
 
-    def to_dict(self) -> dict:
-        """JSON-serializable form — for persisting alongside a spawned run.
-
-        A child's ``Supervision`` only exists as a live Python object in the
-        parent's process at spawn time; the child executes in a fresh
-        ``RunContext`` built by whichever worker later leases it (possibly a
-        different process entirely), so this is what makes
-        ``execution_budget`` inheritance survive that boundary — see
-        ``SupervisorProtocol.spawn()``'s persistence of this alongside the run.
-        """
-        return {
-            "run_id": self.run_id,
-            "session_id": self.session_id,
-            "root_id": {
-                "type": self.root_id.type,
-                "key": self.root_id.key,
-            },
-            "parent_id": (
-                {
-                    "type": self.parent_id.type,
-                    "key": self.parent_id.key,
-                }
-                if self.parent_id
-                else None
-            ),
-            "depth": self.depth,
-            "spawn_budget": {
-                "max_agents": self.spawn_budget.max_agents,
-                "allow_preempt": self.spawn_budget.allow_preempt,
-            },
-            "execution_budget": {
-                "max_tokens": self.execution_budget.max_tokens,
-                "max_cost_usd": self.execution_budget.max_cost_usd,
-                "max_turns": self.execution_budget.max_turns,
-                "deadline_s": self.execution_budget.deadline_s,
-            },
-            "retention": self.retention.value,
-            "priority": int(self.priority),
-        }
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-serialisable form, for persisting alongside a spawned run."""
+        return self.model_dump(mode="json")
 
     @classmethod
-    def from_dict(cls, data: dict) -> Supervision:
-        root = data["root_id"]
-        parent = data.get("parent_id")
-        return cls(
-            run_id=data["run_id"],
-            session_id=data["session_id"],
-            root_id=Actor(
-                type=root["type"],
-                key=root["key"],
-            ),
-            parent_id=(
-                Actor(
-                    type=parent["type"],
-                    key=parent["key"],
-                )
-                if parent
-                else None
-            ),
-            depth=data.get("depth", 0),
-            spawn_budget=SpawnBudget(**data.get("spawn_budget", {})),
-            execution_budget=ExecutionBudget(**data.get("execution_budget", {})),
-            retention=HistoryRetention(
-                data.get("retention", HistoryRetention.RUN.value)
-            ),
-            priority=Priority(data.get("priority", Priority.NORMAL.value)),
-        )
+    def from_dict(cls, data: dict[str, Any]) -> Supervision:
+        return cls.model_validate(data)
 
 
 __all__ = [
+    "ExecutionBudget",
     "HistoryRetention",
     "Priority",
     "SpawnBudget",
-    "ExecutionBudget",
     "Supervision",
 ]

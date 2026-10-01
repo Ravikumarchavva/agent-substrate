@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import datetime
 
-from substrate.kernel import TextBlock
-from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.abstractions import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
 
 
 class CurrentTimeTool:

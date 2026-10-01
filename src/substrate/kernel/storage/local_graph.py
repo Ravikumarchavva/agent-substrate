@@ -24,8 +24,8 @@ import json
 from collections import deque
 from pathlib import Path
 
-from substrate.agents.storage.fs import atomic_write_json, safe_name
-from substrate.kernel.storage.graph import Entity, Relationship, SubGraph
+from substrate.kernel.storage.fs import atomic_write_json, safe_name
+from substrate.kernel.abstractions.storage.graph import Entity, Relationship, SubGraph
 
 
 class LocalFilesystemGraphStore:

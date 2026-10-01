@@ -1,6 +1,6 @@
 """In-memory vector store for local development and tests (L1).
 
-A dependency-free :class:`~substrate.kernel.storage.vector.VectorStore` implementation
+A dependency-free :class:`~substrate.kernel.abstractions.storage.vector.VectorStore` implementation
 that keeps documents in a per-collection dict and ranks them with brute-force
 cosine similarity. It mirrors :class:`PgVectorStore`'s contract exactly, so RAG
 pipelines can run against it in tests without Postgres/pgvector.
@@ -11,7 +11,7 @@ computes it from the document's text; otherwise it raises ``ValueError``.
 
 Usage::
 
-    from substrate.agents.storage import InMemoryVectorStore
+    from substrate.kernel.storage import InMemoryVectorStore
 
     store = InMemoryVectorStore(embedding_client=embed)
     await store.add([Document.from_text("hello")], collection="kb")
@@ -23,10 +23,10 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.storage.vector import Document, SearchResult
+from substrate.kernel.abstractions.storage.vector import Document, SearchResult
 
 if TYPE_CHECKING:
-    from substrate.kernel.llm import EmbeddingClient
+    from substrate.kernel.abstractions.llm import EmbeddingClient
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:

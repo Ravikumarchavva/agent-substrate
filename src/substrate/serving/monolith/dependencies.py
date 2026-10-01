@@ -11,8 +11,8 @@ from typing import Any, Optional
 
 from fastapi import Request
 
-from substrate.kernel.llm import LLMClient
-from substrate.kernel.storage.history import HistoryProvider
+from substrate.kernel.abstractions.llm import LLMClient
+from substrate.kernel.abstractions.storage.history import HistoryProvider
 from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
 

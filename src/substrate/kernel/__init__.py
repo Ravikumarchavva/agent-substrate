@@ -1,4 +1,4 @@
-"""substrate.agents — runtime services layer.
+"""substrate.kernel — runtime services layer.
 
 Provides the infrastructure agents run on top of: context and history
 management, message middleware, resource budgets, supervision, and the
@@ -7,7 +7,7 @@ concrete agent types (ReActAgent, OrchestratorAgent, etc.).
 
 from __future__ import annotations
 
-from substrate.agents.context import (
+from substrate.kernel.context import (
     AgentContext,
     CompactionStrategy,
     ContextConfig,
@@ -18,11 +18,11 @@ from substrate.agents.context import (
     TruncationStrategy,
     TokenBudgetComposedStrategy,
 )
-from substrate.agents.storage import (
+from substrate.kernel.storage import (
     HistoryProvider,
     InMemoryHistoryProvider,
 )
-from substrate.agents.llm import (
+from substrate.kernel.llm import (
     EmbeddingClient,
     LLMClient,
     MODEL_REGISTRY,
@@ -31,7 +31,7 @@ from substrate.agents.llm import (
     get_model_profile,
     list_models,
 )
-from substrate.agents.middleware import (
+from substrate.kernel.middleware import (
     AuditLoggerMiddleware,
     Middleware,
     MiddlewareStage,
@@ -51,15 +51,15 @@ from substrate.agents.middleware import (
     PIIDetectionMiddleware,
     ToolCallValidationMiddleware,
 )
-from substrate.agents.core import (
+from substrate.kernel.agents import (
     ReActAgent,
     UserProxyAgent,
     OrchestratorAgent,
     SubAgentConfig,
 )
-from substrate.agents.runtime import Runtime, RunContext, RunOutcome
-from substrate.agents.flows import SequentialFlow, ParallelFlow, ConditionalFlow
-from substrate.agents.evals import (
+from substrate.kernel.runtime import Runtime, RunContext, RunOutcome
+from substrate.kernel.flows import SequentialFlow, ParallelFlow, ConditionalFlow
+from substrate.kernel.evals import (
     EvalCase,
     EvalDataset,
     LLMJudge,

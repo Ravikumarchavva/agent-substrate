@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 from functools import partial
 
-from substrate.kernel import TextBlock
-from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.abstractions import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
 
 
 class WebSearchTool:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from substrate.exceptions import (
+from substrate.kernel.exceptions import (
     AgentError,
     ConfigurationError,
     ContextLimitExceededError,
@@ -11,7 +11,7 @@ from substrate.exceptions import (
     ToolError,
     ToolNotFoundError,
 )
-from substrate.kernel.exceptions import (
+from substrate.kernel.abstractions.exceptions import (
     KernelError,
     PermanentError,
     SuspendInterrupt,
@@ -51,8 +51,8 @@ def test_suspend_interrupt_is_base_exception() -> None:
 
 
 def test_kernel_exceptions_module() -> None:
-    """substrate.kernel.exceptions must export all L0 exceptions with correct semantic tiering."""
-    import substrate.kernel.exceptions as ke
+    """substrate.kernel.abstractions.exceptions must export all L0 exceptions with correct semantic tiering."""
+    import substrate.kernel.abstractions.exceptions as ke
 
     # 1. Control Signals (BaseException)
     assert issubclass(ke.ControlSignal, BaseException)

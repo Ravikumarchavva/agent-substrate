@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.middleware._contracts import MiddlewareContext
-from substrate.agents.middleware.guardrails.multimodal_safety import (
+from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.kernel.middleware.guardrails.multimodal_safety import (
     MultimodalSafetyMiddleware,
 )
-from substrate.exceptions import MiddlewareTermination
-from substrate.kernel.agent.middleware import MiddlewareStage
-from substrate.kernel.agent.safety import SafetyVerdict, Severity
-from substrate.kernel.core.content import ChatMessage, MediaBlock, TextBlock
+from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.abstractions.agent.safety import SafetyVerdict, Severity
+from substrate.kernel.abstractions.core.content import ChatMessage, MediaBlock, TextBlock
 
 
 class _FakeTextClassifier:

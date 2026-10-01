@@ -25,7 +25,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from substrate.agents.storage.fs import atomic_write_json, safe_name
+from substrate.kernel.storage.fs import atomic_write_json, safe_name
 
 
 class LocalFilesystemShortTermMemory:

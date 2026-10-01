@@ -43,25 +43,25 @@ from __future__ import annotations
 import asyncio
 from typing import Callable, Awaitable, ClassVar
 
-from substrate.kernel.runtime.log_entry import RunLogKind
-from substrate.agents.middleware._contracts import MiddlewareContext
-from substrate.agents.middleware.guardrails.prompt_injection import (
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.kernel.middleware.guardrails.prompt_injection import (
     _INJECTION_PATTERNS,
 )
-from substrate.agents.safety.normalize import normalize
-from substrate.exceptions import MiddlewareTermination
-from substrate.kernel.agent.middleware import MiddlewareStage
-from substrate.kernel.agent.safety import (
+from substrate.kernel.safety.normalize import normalize
+from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.abstractions.agent.safety import (
     ImageSafetyClassifier,
     SafetyVerdict,
     Severity,
     TextSafetyClassifier,
     max_severity,
 )
-from substrate.kernel.core.content import MediaBlock, TextBlock
+from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
 from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.agents.middleware.multimodal_safety")
+logger = setup_logging("substrate.kernel.middleware.multimodal_safety")
 
 
 def _regex_verdict(text: str) -> SafetyVerdict:

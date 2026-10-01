@@ -4,13 +4,13 @@ import json
 import re
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, ClassVar
 
-from substrate.agents.middleware._contracts import MiddlewareContext
-from substrate.kernel.agent.middleware import MiddlewareStage
-from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.abstractions.exceptions import MiddlewareTermination
 from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
-    from substrate.kernel.llm.llm import LLMClient
+    from substrate.kernel.abstractions.llm.llm import LLMClient
 
 logger = setup_logging()
 
@@ -51,13 +51,13 @@ class LLMJudgeMiddleware:
         logger.debug("[LLMJudge] checking %r (agent=%s)", text[:80], context.agent_name)
 
         try:
-            from substrate.kernel import ChatMessage, TextBlock
+            from substrate.kernel.abstractions import ChatMessage, TextBlock
 
             classify_request = f'Classify this message:\n"""\n{text}\n"""'
             messages = [
                 ChatMessage(role="user", content=[TextBlock(text=classify_request)])
             ]
-            from substrate.kernel.llm import GenerationOptions
+            from substrate.kernel.abstractions.llm import GenerationOptions
 
             resp = await self._model_client.generate(
                 messages,

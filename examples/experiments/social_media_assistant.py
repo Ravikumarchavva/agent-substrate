@@ -14,14 +14,14 @@ import json
 import re
 from typing import ClassVar
 
-from substrate.agents.core import ReActAgent
-from substrate.agents.tools.builtin_tools import WebSearchTool
+from substrate.kernel.agents import ReActAgent
+from substrate.kernel.tools.builtin_tools import WebSearchTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.agents.storage import LocalFilesystemHistoryProvider
+from substrate.kernel.storage import LocalFilesystemHistoryProvider
 from substrate.kernel.messages.content import TextBlock
 from substrate.kernel.messages._types import TextDeltaChunk
-from substrate.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from substrate.kernel.abstractions.tools.base_tool import BaseTool, ToolResult, ToolRisk
 
 # Infrastructure: OPENAI_API_KEY environment variable
 

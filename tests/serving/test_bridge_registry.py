@@ -7,11 +7,11 @@ SchedulerProtocol.find_run_by_wake_signal(), not silently fail.
 
 from __future__ import annotations
 
-from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
-from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.runtime.ids import RunStatus
-from substrate.kernel.runtime.wakeup import Wakeup
+from substrate.kernel.runtime.backends._scheduler import InMemoryScheduler
+from substrate.kernel.runtime.backends._signal_bus import InMemorySignalBus
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.runtime.ids import RunStatus
+from substrate.kernel.abstractions.runtime.wakeup import Wakeup
 from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
 

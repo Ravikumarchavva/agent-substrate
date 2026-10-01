@@ -41,7 +41,7 @@ from substrate.integrations.artifacts.okf import (
     utc_now_iso,
 )
 from substrate.integrations.artifacts.okf import human_actor as okf_human_actor
-from substrate.agents.workspace.layout import (
+from substrate.kernel.workspace.layout import (
     conversation_artifacts_prefix,
     user_artifacts_prefix,
 )

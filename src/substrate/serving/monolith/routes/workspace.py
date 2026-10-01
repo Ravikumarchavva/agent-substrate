@@ -26,8 +26,8 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.agents.storage.local_object_store import WorkspacePathError
-from substrate.agents.workspace.layout import (
+from substrate.kernel.storage.local_object_store import WorkspacePathError
+from substrate.kernel.workspace.layout import (
     conversation_shared_key,
     conversation_workspace_prefix,
     user_prefix,

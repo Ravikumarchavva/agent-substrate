@@ -13,17 +13,17 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from substrate.kernel import ChatMessage, TextBlock
-from substrate.kernel.llm import LLMClient, GenerationOptions
-from substrate.kernel.storage.vector import SearchResult
-from substrate.kernel.storage.memory import (
+from substrate.kernel.abstractions import ChatMessage, TextBlock
+from substrate.kernel.abstractions.llm import LLMClient, GenerationOptions
+from substrate.kernel.abstractions.storage.vector import SearchResult
+from substrate.kernel.abstractions.storage.memory import (
     MemoryCategory,
     MemoryNamespace,
     MemoryQuery,
     MemoryRecord,
     MemoryStore,
 )
-from substrate.kernel.core.identity import Actor
+from substrate.kernel.abstractions.core.identity import Actor
 
 logger = logging.getLogger(__name__)
 

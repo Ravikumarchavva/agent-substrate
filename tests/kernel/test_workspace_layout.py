@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.workspace.layout import (
+from substrate.kernel.workspace.layout import (
     conversation_shared_key,
     conversation_workspace_prefix,
     knowledge_document_prefix,

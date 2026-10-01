@@ -38,9 +38,8 @@ Use ``is_hosted_tool`` / ``is_provider_defined_tool`` to branch at dispatch time
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -52,14 +51,15 @@ from typing import (
 
 from pydantic import BaseModel, Field
 
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.ids import new_id
+from substrate.kernel.abstractions.core.content import (
     ContentBlock,
     JsonObject,
     content_blocks_to_str,
 )
 
 if TYPE_CHECKING:
-    from substrate.kernel.agent.runtime_context import RunMeta
+    from substrate.kernel.abstractions.agent.runtime_context import RunMeta
 
 
 # ---------------------------------------------------------------------------
@@ -67,20 +67,44 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-class ToolRisk(str, Enum):
-    """Risk classification for a tool.
+class ToolRisk(StrEnum):
+    """Risk classification for a tool, ordered ``SAFE < HIGH < CRITICAL``.
 
     SAFE     — no side-effects; execute without approval.
     HIGH     — external side-effects (email, DB write); may require approval.
     CRITICAL — destructive / irreversible; always requires approval.
+
+    Ordered because approval is decided by comparing a tool's risk to a
+    threshold. As a plain string enum ``SAFE > CRITICAL`` was ``True`` (alphabetical),
+    which silently inverted that decision and left two call sites hand-rolling an
+    ordering of their own.
     """
 
     SAFE = "safe"
     HIGH = "high"
     CRITICAL = "critical"
 
+    @property
+    def rank(self) -> int:
+        return _RISK_RANK[self]
 
-class ToolType(str, Enum):
+    def __lt__(self, other: object) -> bool:
+        return self.rank < other.rank if isinstance(other, ToolRisk) else NotImplemented
+
+    def __le__(self, other: object) -> bool:
+        return self.rank <= other.rank if isinstance(other, ToolRisk) else NotImplemented
+
+    def __gt__(self, other: object) -> bool:
+        return self.rank > other.rank if isinstance(other, ToolRisk) else NotImplemented
+
+    def __ge__(self, other: object) -> bool:
+        return self.rank >= other.rank if isinstance(other, ToolRisk) else NotImplemented
+
+
+_RISK_RANK = {ToolRisk.SAFE: 0, ToolRisk.HIGH: 1, ToolRisk.CRITICAL: 2}
+
+
+class ToolType(StrEnum):
     """Category classification for a tool.
 
     Used for discovery grouping, dashboard display, and audit logging.
@@ -151,7 +175,7 @@ class ToolCallRequest(PayloadBase):
     kind: Literal["tool_call"] = "tool_call"  # pyright: ignore[reportIncompatibleVariableOverride]
     name: str
     arguments: JsonObject = Field(default_factory=dict)
-    call_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    call_id: str = Field(default_factory=lambda: new_id())
 
 
 # ---------------------------------------------------------------------------

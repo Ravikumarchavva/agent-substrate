@@ -5,8 +5,8 @@ import time
 from typing import Callable, Awaitable, ClassVar
 
 from substrate.logger import setup_logging
-from substrate.agents.middleware._contracts import MiddlewareContext
-from substrate.kernel.agent.middleware import MiddlewareStage
+from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
 
 logger = setup_logging()
 

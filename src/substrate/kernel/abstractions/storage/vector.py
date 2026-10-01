@@ -12,12 +12,12 @@ rich content that was stored.
 
 from __future__ import annotations
 
-import uuid
 from typing import Any, Protocol, Sequence, runtime_checkable
 
 from pydantic import Field
 
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.ids import new_id
+from substrate.kernel.abstractions.core.content import (
     ContentBlock,
     JsonObject,
     KernelModel,
@@ -39,7 +39,7 @@ class Document(KernelModel):
     """
 
     content: Sequence[ContentBlock] = Field(default_factory=list)
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(default_factory=lambda: new_id())
     embedding: Sequence[float] | None = None
     metadata: JsonObject = Field(default_factory=dict)
 
@@ -57,7 +57,7 @@ class Document(KernelModel):
         """Create a text-only document — the common case for plain-text RAG."""
         return cls(
             content=[TextBlock(text=text)],
-            id=id or str(uuid.uuid4()),
+            id=id or new_id(),
             embedding=embedding,
             metadata=metadata or {},
         )

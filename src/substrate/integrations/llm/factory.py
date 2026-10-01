@@ -11,11 +11,11 @@ System instructions are NOT passed through this layer.  They travel as an
 explicit ``system_instructions=`` kwarg on every ``generate()`` call (see
 ``LLMClient.generate``).  The factory only handles connection wiring.
 
-Provider / model / cost table lives in ``substrate.kernel.llm.models``.
+Provider / model / cost table lives in ``substrate.kernel.abstractions.llm.models``.
 
 OpenAI-compatible providers
 ----------------------------
-The following provider prefixes all route to ``OpenAIChatCompletionClient``
+The following provider prefixes all route to ``OpenAICompatibleClient``
 (standard ``/v1/chat/completions`` endpoint):
 
     Cloud — require an API key:
@@ -60,7 +60,7 @@ from __future__ import annotations
 
 from typing import ClassVar, Optional, Any
 
-from substrate.agents.llm import (
+from substrate.kernel.llm import (
     EmbeddingClient,
     LLMClient,
     ModelProfile,
@@ -289,11 +289,11 @@ class LLMFactory:
             )
 
         if self._provider in _CHAT_COMPLETIONS_PROVIDERS:
-            from substrate.agents.llm.chat_client import (
-                OpenAIChatCompletionClient,
+            from substrate.integrations.llm.openai_compatible import (
+                OpenAICompatibleClient,
             )
 
-            client = OpenAIChatCompletionClient(
+            client = OpenAICompatibleClient(
                 model=self._bare_model,
                 api_key=self._api_key,
                 **kwargs,
@@ -497,8 +497,8 @@ def create_model_client(
         base_url = LLMFactory._BASE_URLS.get(provider)
 
     if provider == "openrouter" and (openrouter_site_url or openrouter_app_name):
-        from substrate.agents.llm.chat_client import (
-            OpenAIChatCompletionClient,
+        from substrate.integrations.llm.openai_compatible import (
+            OpenAICompatibleClient,
         )
 
         bare = strip_provider_prefix(model)
@@ -510,7 +510,7 @@ def create_model_client(
             }.items()
             if v
         }
-        client = OpenAIChatCompletionClient(
+        client = OpenAICompatibleClient(
             model=bare,
             api_key=api_key,
             temperature=temperature,
@@ -573,7 +573,7 @@ def create_embedding_client(
         )
 
     if provider == "sentence_transformers":
-        from substrate.agents.llm.embedding_client import (
+        from substrate.integrations.llm.local_embeddings import (
             SentenceTransformersEmbeddingClient,
         )
 

@@ -13,9 +13,9 @@ Verifies:
 from __future__ import annotations
 
 
-from substrate.kernel.core.content import DataBlock, MediaBlock, TextBlock
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.storage.memory import (
+from substrate.kernel.abstractions.core.content import DataBlock, MediaBlock, TextBlock
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.storage.memory import (
     ContextMemoryInjection,
     MemoryCategory,
     MemoryMatch,
@@ -29,10 +29,9 @@ from substrate.kernel.storage.memory import (
 
 def test_memory_record_content_normalization():
     # String content is normalized to a list of TextBlock (same BlockList
-    # coercion ChatMessage.content uses — list, not tuple, is the kernel-wide
-    # shape for multimodal content).
+    # coercion ChatMessage.content uses — a tuple: content is immutable).
     r1 = MemoryRecord(content="User prefers Python 3.13")
-    assert isinstance(r1.content, list)
+    assert isinstance(r1.content, tuple)
     assert len(r1.content) == 1
     assert isinstance(r1.content[0], TextBlock)
     assert r1.content[0].text == "User prefers Python 3.13"
@@ -41,14 +40,14 @@ def test_memory_record_content_normalization():
     # Single ContentBlock is normalized to a 1-item list
     block = DataBlock(data={"key": "val"})
     r2 = MemoryRecord(content=block)
-    assert isinstance(r2.content, list)
+    assert isinstance(r2.content, tuple)
     assert len(r2.content) == 1
     assert r2.content[0] == block
 
-    # List of blocks stays a list
+    # A list of blocks becomes an immutable tuple
     blocks = [TextBlock(text="Note"), MediaBlock.image(url="https://example.com/a.png")]
     r3 = MemoryRecord(content=blocks)
-    assert isinstance(r3.content, list)
+    assert isinstance(r3.content, tuple)
     assert len(r3.content) == 2
 
 

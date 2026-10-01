@@ -246,7 +246,7 @@ Key architecture decisions locked during planning (recorded in
 grep -n "signal_bus\|supervisor" src/substrate/infrastructure/runtime/factory.py
 
 # SUSPENDED actually used?
-grep -rn "SUSPENDED" src/substrate/agents/runtime/worker.py src/substrate/infrastructure/runtime/pg_scheduler.py
+grep -rn "SUSPENDED" src/substrate/kernel/runtime/worker.py src/substrate/infrastructure/runtime/pg_scheduler.py
 
 # IDOR: ownership enforced?
 grep -n "user_id" src/substrate/serving/monolith/services/thread_service.py
@@ -255,7 +255,7 @@ grep -n "user_id" src/substrate/serving/monolith/services/thread_service.py
 grep -n "_lock_key\|sha256" src/substrate/infrastructure/runtime/pg_event_log.py
 
 # Effect results in the event log?
-grep -rn "effect.result" src/substrate/agents/runtime/context.py
+grep -rn "effect.result" src/substrate/kernel/runtime/context.py
 
 # Tracing middleware attached?
 grep -rn "TracingMiddleware" src/substrate/infrastructure/serving_factory.py

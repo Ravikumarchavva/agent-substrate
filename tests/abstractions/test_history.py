@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.storage import InMemoryHistoryProvider
-from substrate.agents.storage.history import project_messages
-from substrate.kernel.core.content import ChatMessage, TextBlock
-from substrate.kernel.storage.history import HistoryProvider, MessageNode
+from substrate.kernel.storage import InMemoryHistoryProvider
+from substrate.kernel.storage.history import project_messages
+from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
+from substrate.kernel.abstractions.storage.history import HistoryProvider, MessageNode
 
 
 def _msg(text: str) -> ChatMessage:

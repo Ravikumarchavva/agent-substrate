@@ -17,15 +17,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.runtime.log_entry import RunLogKind
-from substrate.kernel.exceptions import ConcurrentAppendError
-from substrate.kernel.runtime.log_entry import RunLogEntry
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.exceptions import ConcurrentAppendError
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
 from substrate.serving.protocol.events import WireEvent
 from substrate.serving.protocol.from_log import wire_from_log
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.log_entry import EventLogProtocol
-    from substrate.kernel.runtime.scheduler import RunRegistryProtocol
+    from substrate.kernel.abstractions.runtime.log_entry import EventLogProtocol
+    from substrate.kernel.abstractions.runtime.scheduler import RunRegistryProtocol
 
 
 async def project_thread(

@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from substrate.agents.workspace import LocalFilesystemWorkspaceStore
-from substrate.agents.workspace.scope import WorkspaceScope
-from substrate.agents.storage.local_object_store import WorkspaceFileStore
+from substrate.kernel.workspace import LocalFilesystemWorkspaceStore
+from substrate.kernel.workspace.scope import WorkspaceScope
+from substrate.kernel.storage.local_object_store import WorkspaceFileStore
 from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
     ExecResult,
     SandboxSpec,
@@ -79,8 +79,8 @@ def _inline(name: str, data: bytes, mime: str = "text/plain") -> dict:
 async def _seed_branch(object_store, ws_store, files: dict[str, bytes]) -> None:
     """Commit a snapshot to main directly, bypassing the runtime — chains
     onto the branch's current head (if any), same as a real prior turn."""
-    from substrate.agents.workspace.cas import BlobCAS
-    from substrate.agents.workspace.materialize import commit
+    from substrate.kernel.workspace.cas import BlobCAS
+    from substrate.kernel.workspace.materialize import commit
 
     cas = BlobCAS(object_store, tenant_id=TENANT, user_id=USER)
     tmp_seed = Path(object_store._root) / ".seed"  # type: ignore[attr-defined]
@@ -183,7 +183,7 @@ async def test_commit_conflict_does_not_fail_the_run(tmp_path, spec):
     snap_b = await ws_store.get_branch_snapshot_head(CONVERSATION, BRANCH)
     assert snap_b is not None and snap_b.id != snap_a.id
 
-    from substrate.agents.workspace.cas import BlobCAS
+    from substrate.kernel.workspace.cas import BlobCAS
 
     cas = BlobCAS(store, tenant_id=TENANT, user_id=USER)
     scratch_dir = tmp_path / "scratch" / SESSION_KEY

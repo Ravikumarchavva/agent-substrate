@@ -16,15 +16,15 @@ round-trips cleanly for any transport (Kafka, NATS, Redis Streams, etc.).
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, SerializeAsAny, field_validator
 
-from substrate.kernel.core.content import ChatMessage, JsonObject
-from substrate.kernel.core.identity import Actor, Topic
-from substrate.kernel.tools import PayloadBase, ToolCallRequest, ToolExecutionResult
+from substrate.kernel.abstractions.ids import new_id
+from substrate.kernel.abstractions.core.content import ChatMessage, JsonObject
+from substrate.kernel.abstractions.core.identity import Actor, Topic
+from substrate.kernel.abstractions.tools import PayloadBase, ToolCallRequest, ToolExecutionResult
 
 
 # ---------------------------------------------------------------------------
@@ -94,13 +94,13 @@ class Message(BaseModel):
     ``causation_id`` names the specific message that triggered this one.
     """
 
-    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    id: str = Field(default_factory=lambda: new_id())
     schema_version: int = 1
     created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     target: Actor | Topic
     sender: Actor
     payload: Payload
-    correlation_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    correlation_id: str = Field(default_factory=lambda: new_id())
     causation_id: str | None = None
     metadata: JsonObject = Field(default_factory=dict)
     reply_to: str | None = None  # run_id of the asker; set by RunContext.ask()
@@ -139,7 +139,7 @@ class Message(BaseModel):
 class Subscription(BaseModel):
     """Tracks a single active topic subscription."""
 
-    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    id: str = Field(default_factory=lambda: new_id())
     topic: Topic
     agent_id: Actor
 

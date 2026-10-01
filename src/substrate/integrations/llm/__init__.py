@@ -22,11 +22,10 @@ Any provider by model name::
 
 Direct client construction::
 
-    # Universal client — the L1 default LLMClient — lives in agents/llm
-    from substrate.agents.llm import OpenAIChatCompletionClient
+    from substrate.integrations.llm import OpenAICompatibleClient
 
     # Points at Ollama running locally
-    client = OpenAIChatCompletionClient(
+    client = OpenAICompatibleClient(
         model="llama3.2",
         api_key="ollama",
         base_url="http://localhost:11434/v1",
@@ -55,12 +54,8 @@ from substrate.integrations.llm.openai import (
     OpenAIEmbeddingClient,
 )
 
-# Universal clients — the L1 defaults, no external API dependency beyond
-# the model endpoint itself — live in agents/llm
-from substrate.agents.llm import (
-    OpenAIChatCompletionClient,
-    SentenceTransformersEmbeddingClient,
-)
+from substrate.integrations.llm.local_embeddings import SentenceTransformersEmbeddingClient
+from substrate.integrations.llm.openai_compatible import OpenAICompatibleClient
 
 __all__ = [
     # Factory
@@ -79,7 +74,7 @@ __all__ = [
     "VISION_MODEL_FALLBACKS",
     # Concrete clients
     "OpenAIClient",
-    "OpenAIChatCompletionClient",
+    "OpenAICompatibleClient",
     "OpenAIEmbeddingClient",
     "SentenceTransformersEmbeddingClient",
 ]

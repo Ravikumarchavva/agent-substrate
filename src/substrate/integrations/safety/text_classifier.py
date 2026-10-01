@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import math
 
-from substrate.kernel.agent.safety import SafetyVerdict, Severity
+from substrate.kernel.abstractions.agent.safety import SafetyVerdict, Severity
 from substrate.logger import setup_logging
 
 logger = setup_logging("substrate.integrations.safety.text_classifier")

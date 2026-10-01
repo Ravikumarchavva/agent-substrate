@@ -6,15 +6,15 @@ import logging
 from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable
 
-from substrate.agents.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
-from substrate.kernel.agent.context import (
+from substrate.kernel.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
+from substrate.kernel.abstractions.agent.context import (
     CompactionContext,
     CompactionPhase,
     CompactionResult,
     CompactionStrategy,
 )
-from substrate.kernel.core.content import ChatMessage, ContentBlock, Role
-from substrate.kernel.exceptions import BudgetExhaustedError
+from substrate.kernel.abstractions.core.content import ChatMessage, ContentBlock, Role
+from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
 
 logger = logging.getLogger(__name__)
 

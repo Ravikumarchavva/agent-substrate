@@ -20,8 +20,8 @@ from substrate.logger import setup_logging
 from pathlib import Path
 from typing import Any
 
-from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions import TextBlock
 
 logger = setup_logging()
 

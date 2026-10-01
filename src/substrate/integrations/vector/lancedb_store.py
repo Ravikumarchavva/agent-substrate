@@ -95,8 +95,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from substrate.kernel.core.content import content_blocks_to_str, parse_content_block
-from substrate.kernel.storage.vector import Document, SearchResult
+from substrate.kernel.abstractions.core.content import content_blocks_to_str, parse_content_block
+from substrate.kernel.abstractions.storage.vector import Document, SearchResult
 
 # Exhaustive search covers every row regardless of this value (no ANN index
 # is ever created for vector search) — it just needs to be >= the table
@@ -110,7 +110,7 @@ def _blocks_to_json(doc: Document) -> str:
 
 
 def _blocks_from_json(raw: str) -> list:
-    return [parse_content_block(item) for item in json.loads(raw)]
+    return [parse_content_block(item, forward_compatible=True) for item in json.loads(raw)]
 
 
 class LanceDBVectorStore:

@@ -3,7 +3,7 @@ builds. Found with zero test coverage while auditing whether self-hosted
 servers (vLLM/SGLang/llama.cpp) actually work through this factory: the
 design in ``factory.py``'s own docstring/``_CHAT_COMPLETIONS_PROVIDERS`` was
 correct (every self-hosted-friendly provider routes to
-``OpenAIChatCompletionClient``, the ``/v1/chat/completions`` client — only
+``OpenAICompatibleClient``, the ``/v1/chat/completions`` client — only
 ``"openai"`` gets the Responses-API ``OpenAIClient``) but nothing verified
 it, so a future refactor could silently break self-hosted-model support
 with no test catching it.
@@ -46,14 +46,14 @@ def test_self_hosted_and_openai_compatible_providers_route_to_chat_completions_c
     the client that speaks ``/v1/chat/completions``, not the one that
     speaks OpenAI's newer Responses API, which self-hosted servers do not
     implement."""
-    from substrate.agents.llm.chat_client import OpenAIChatCompletionClient
+    from substrate.integrations.llm.openai_compatible import OpenAICompatibleClient
 
     factory = LLMFactory(model, "sk-test")
     kwargs = {"base_url": base_url} if base_url else {}
     client = factory.build(**kwargs)
 
-    assert isinstance(client, OpenAIChatCompletionClient)
-    # The strict-tool-schema branch in OpenAIChatCompletionClient keys off
+    assert isinstance(client, OpenAICompatibleClient)
+    # The strict-tool-schema branch in OpenAICompatibleClient keys off
     # this tag — a provider must be tagged as itself, not silently left as
     # the client's own "openai"/"compatible" default from __init__.
     assert client.provider == factory.provider

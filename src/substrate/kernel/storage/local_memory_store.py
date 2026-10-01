@@ -34,8 +34,8 @@ from typing import Sequence
 
 from urllib.parse import unquote
 
-from substrate.agents.storage.fs import atomic_write_json, safe_name
-from substrate.kernel.storage.memory import (
+from substrate.kernel.storage.fs import atomic_write_json, safe_name
+from substrate.kernel.abstractions.storage.memory import (
     MemoryMatch,
     MemoryNamespace,
     MemoryQuery,

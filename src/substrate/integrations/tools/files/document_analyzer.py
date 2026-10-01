@@ -9,8 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions import TextBlock
 from substrate.logger import setup_logging
 
 logger = setup_logging()
@@ -110,10 +110,10 @@ class DocumentAnalyzerTool:
                 system = "Answer the user's question based on the document content."
                 user_msg = f"Document:\n{display_content}\n\nQuestion: {question}"
 
-            from substrate.kernel import ChatMessage, TextBlock as _TB
+            from substrate.kernel.abstractions import ChatMessage, TextBlock as _TB
 
             messages = [ChatMessage(role="user", content=[_TB(text=user_msg)])]
-            from substrate.kernel.llm import GenerationOptions
+            from substrate.kernel.abstractions.llm import GenerationOptions
 
             response = await self._model_client.generate(
                 messages, options=GenerationOptions(system_instructions=system)

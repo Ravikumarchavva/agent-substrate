@@ -39,7 +39,7 @@ contract. Nothing in `agents/` or `kernel/` has to change or be forked.
 
 | Protocol | L1 native default | L2 upgrades |
 |---|---|---|
-| `LLMClient` | `OpenAIChatCompletionClient` (any `/v1/chat/completions`, incl. local Ollama) | Responses-API, Anthropic, Gemini clients |
+| `LLMClient` | `OpenAICompatibleClient` (any `/v1/chat/completions`, incl. local Ollama) | Responses-API, Anthropic, Gemini clients |
 | `EmbeddingClient` | `SentenceTransformersEmbeddingClient` (local model) | OpenAI/Gemini embeddings, the reranker service |
 | `HistoryProvider` | `LocalFilesystemHistoryProvider` | Redis, Postgres |
 | `MemoryStore` / `ShortTermMemory` | `LocalFilesystemMemoryStore` / `...ShortTermMemory` | Postgres, Redis, Lance |

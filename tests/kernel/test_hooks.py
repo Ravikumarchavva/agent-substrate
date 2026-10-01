@@ -8,28 +8,28 @@ Covers all three dispatch points added in the audit:
 
 from __future__ import annotations
 
-from substrate.kernel.llm import ModelCapabilities
+from substrate.kernel.abstractions.llm import ModelCapabilities
 from typing import Any, AsyncIterator
 
-from substrate.agents.context import (
+from substrate.kernel.context import (
     CompactionPipeline,
     ContextConfig,
     SlidingWindowCompaction,
 )
-from substrate.agents.storage import (
+from substrate.kernel.storage import (
     InMemoryHistoryProvider,
 )
-from substrate.agents.core import ReActAgent
-from substrate.agents.hooks.manager import HookEvent, HookManager
-from substrate.agents.runtime import Runtime
-from substrate.agents.tools.invoker import ToolInvoker
-from substrate.agents.tools.toolbox import Toolbox
-from substrate.kernel import TextBlock, ToolExecutionResult, ToolRisk
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
-from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
-from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
-from substrate.kernel.core.content import ChatMessage, Role
+from substrate.kernel.agents import ReActAgent
+from substrate.kernel.hooks.manager import HookEvent, HookManager
+from substrate.kernel.runtime import Runtime
+from substrate.kernel.tools.invoker import ToolInvoker
+from substrate.kernel.tools.toolbox import Toolbox
+from substrate.kernel.abstractions import TextBlock, ToolExecutionResult, ToolRisk
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.llm import GenerationOptions, LLMResponse, Usage
+from substrate.kernel.abstractions.messaging.message import ChatPayload, DataPayload, Message
+from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
+from substrate.kernel.abstractions.core.content import ChatMessage, Role
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ async def test_run_end_fires_even_on_agent_crash() -> None:
 
 async def test_tool_start_end_fire() -> None:
     """TOOL_START and TOOL_END are dispatched by ToolInvoker around every tool call."""
-    from substrate.kernel.tools import ToolCallRequest
+    from substrate.kernel.abstractions.tools import ToolCallRequest
 
     hooks, log = _recording_hooks(HookEvent.TOOL_START, HookEvent.TOOL_END)
 

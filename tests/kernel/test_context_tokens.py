@@ -3,12 +3,12 @@ returned beyond its text."""
 
 from __future__ import annotations
 
-from substrate.agents.context.compaction import (
+from substrate.kernel.context.compaction import (
     ToolResultCompactionStrategy,
     TruncationStrategy,
 )
-from substrate.agents.context.tokens import estimate_message_tokens, estimate_tokens
-from substrate.kernel.core.content import (
+from substrate.kernel.context.tokens import estimate_message_tokens, estimate_tokens
+from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     DataBlock,
     MediaBlock,
@@ -111,7 +111,7 @@ def _history_with_tool_calls() -> list[ChatMessage]:
 async def test_sliding_window_never_starts_on_a_tool_result_without_its_call():
     """Regression: slicing the last N messages could leave a tool result at the
     head with its call cut off, which every provider rejects with a 400."""
-    from substrate.agents.context.compaction import SlidingWindowCompaction
+    from substrate.kernel.context.compaction import SlidingWindowCompaction
 
     history = _history_with_tool_calls()
     window = await SlidingWindowCompaction(max_messages=2).compact(history)

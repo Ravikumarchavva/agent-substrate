@@ -21,9 +21,9 @@ from substrate.integrations.knowledge.segmentation import (
     RegexSegmenter,
     SentenceSegmenter,
 )
-from substrate.kernel.core.content import TextBlock
-from substrate.kernel.document.models import DocumentChunk, ExtractionResult
-from substrate.kernel.storage.vector import Document
+from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.kernel.abstractions.document.models import DocumentChunk, ExtractionResult
+from substrate.kernel.abstractions.storage.vector import Document
 
 
 class TextChunker:

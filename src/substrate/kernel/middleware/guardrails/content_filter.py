@@ -3,10 +3,10 @@ from __future__ import annotations
 import re
 from typing import Callable, Awaitable, ClassVar
 
-from substrate.agents.middleware._contracts import MiddlewareContext
-from substrate.exceptions import MiddlewareTermination
-from substrate.kernel.agent.middleware import MiddlewareStage
-from substrate.kernel.core.content import TextBlock
+from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.abstractions.core.content import TextBlock
 
 
 class ContentFilterMiddleware:

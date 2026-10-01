@@ -26,7 +26,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from substrate.kernel.tools.approval import (
+from substrate.kernel.abstractions.tools.approval import (
     ApprovalDecision,
     ApprovalRequest,
     ApprovalResult,

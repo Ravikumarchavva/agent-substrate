@@ -12,7 +12,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from substrate.kernel.core.content import JsonObject
+from substrate.kernel.abstractions.core.content import JsonObject
 
 
 # ── Thread / Session schemas ─────────────────────────────────────────────────

@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from substrate.kernel.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 from substrate.serving.shared.settings import settings
 from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
@@ -18,13 +18,13 @@ from substrate.serving.factory import (
     build_agent_for_thread,
     build_chat_tools,
 )
-from substrate.kernel.messaging.message import Message, ChatPayload
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.messaging.message import Message, ChatPayload
+from substrate.kernel.abstractions.core.content import (
     ChatMessage as KernelChatMessage,
     Role,
     TextBlock as KernelTextBlock,
 )
-from substrate.kernel.core.identity import Actor
+from substrate.kernel.abstractions.core.identity import Actor
 
 logger = setup_logging()
 

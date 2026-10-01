@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from substrate.agents.storage.local_graph import LocalFilesystemGraphStore
-from substrate.kernel.storage.graph import Entity, Relationship
+from substrate.kernel.storage.local_graph import LocalFilesystemGraphStore
+from substrate.kernel.abstractions.storage.graph import Entity, Relationship
 
 
 async def test_add_and_get_neighbors_round_trip(tmp_path):

@@ -1,8 +1,8 @@
-"""substrate.agents.flows — kernel-native agent orchestration flows."""
+"""substrate.kernel.flows — kernel-native agent orchestration flows."""
 
 from __future__ import annotations
 
-from substrate.agents.flows.agent import (
+from substrate.kernel.flows.agent import (
     ConditionalFlow,
     ParallelFlow,
     SequentialFlow,

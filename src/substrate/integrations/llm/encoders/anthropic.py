@@ -16,8 +16,8 @@ from typing import Any
 
 from substrate.integrations.llm.encoders._media import bytes_to_base64
 
-from substrate.kernel import ChatMessage
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions import ChatMessage
+from substrate.kernel.abstractions.core.content import (
     DataBlock,
     ErrorBlock,
     MediaBlock,

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from substrate.kernel.tools import ToolExecutionResult, ToolType
-from substrate.kernel import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
+from substrate.kernel.abstractions import TextBlock
 
 
 class PipelineManagerTool:

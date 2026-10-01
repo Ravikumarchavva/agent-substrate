@@ -1,53 +1,91 @@
-"""Kernel exceptions — single source of truth for L0 execution failures and control signals.
+"""Kernel exceptions — the typed vocabulary for failures and control flow.
 
-Architecture:
-  BaseException
-  └── ControlSignal (never caught by 'except Exception:', unwinds worker directly)
-      ├── SuspendInterrupt (agent goes dormant, awaits wakeup signal)
-      └── CancellationError (run cancelled via CancellationToken)
+::
 
-  KernelError (root of all runtime execution errors)
-  ├── TransientError (scheduler retries with exponential backoff)
-  │   ├── ConcurrentAppendError (optimistic concurrency conflict on EventLog)
-  │   └── ThreadBusyError (thread currently has an active run)
-  ├── PermanentError (scheduler fails immediately on attempt 1 — no retry)
-  │   ├── AgentCrashError (unhandled exception inside agent code)
-  │   └── BlockValidationError (content block failed schema validation)
-  └── PolicyTermination (intentional governance and safety halt)
-      ├── BudgetExhaustedError (token, cost, turn, or headcount budget exceeded)
-      └── MiddlewareTermination (guardrail tripped, rate limit reached)
+    BaseException
+    └── ControlSignal              unwinds the worker; never swallowed by `except Exception`
+        ├── SuspendInterrupt       the run goes dormant until a wakeup
+        ├── CancellationError      the run was cancelled, or its deadline passed
+        └── LeaseLostError         another worker now owns this run; stop touching it
+
+    KernelError                    carries `code` (stable id) and `retryable`
+    ├── TransientError             retryable
+    │   ├── ConcurrentAppendError
+    │   ├── ThreadBusyError
+    │   ├── BranchHeadConflictError
+    │   ├── SnapshotConflictError
+    │   └── RateLimitedError       carries `retry_after`
+    ├── PermanentError             never worth retrying
+    │   ├── AgentCrashError
+    │   ├── BlockValidationError
+    │   ├── UnsupportedContentError
+    │   ├── BranchNotFoundError / BranchAlreadyExistsError / DAGIntegrityError
+    │   ├── ObjectNotFoundError
+    │   ├── ContextLengthError     the prompt exceeded the model's window
+    │   ├── ContentFilterError     the provider refused on content grounds
+    │   ├── AuthError              credentials rejected
+    │   ├── NonDeterminismError    a replay diverged from its journal
+    │   └── OrphanedEffectError    an effect started and its outcome was never recorded
+    └── PolicyTermination          intentional halt, not a bug
+        ├── BudgetExhaustedError
+        └── MiddlewareTermination
+
+Every exception can be pickled and copied. Most take keyword-only fields, which
+the default exception pickling cannot rebuild; a failure that crosses a process
+boundary (a worker pool, a job queue) used to arrive as a ``TypeError`` about
+its own constructor instead of as the failure.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import re
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from substrate.kernel.core.identity import Actor
+from substrate.kernel.abstractions.core.identity import Actor
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.wakeup import Wakeup
+    from substrate.kernel.abstractions.core.error_info import ErrorInfo
+    from substrate.kernel.abstractions.runtime.wakeup import Wakeup
+
+
+def _snake(name: str) -> str:
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+
+def _rebuild(cls: type, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
+    return cls(*args, **kwargs)
+
+
+class _Reconstructible:
+    """Remembers its constructor arguments so pickle and copy can rebuild it."""
+
+    _ctor: tuple[tuple[Any, ...], dict[str, Any]]
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Any:
+        instance = super().__new__(cls, *args)  # type: ignore[call-arg]
+        instance._ctor = (args, kwargs)
+        return instance
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        args, kwargs = self._ctor
+        return (_rebuild, (type(self), args, kwargs))
 
 
 # ---------------------------------------------------------------------------
-# Control Signals (BaseException — Unwinds Worker, Never Swallowed)
+# Control signals
 # ---------------------------------------------------------------------------
 
 
-class ControlSignal(BaseException):
-    """Base class for runtime control signals that must unwind to the Worker.
+class ControlSignal(_Reconstructible, BaseException):
+    """Runtime control flow that must unwind to the worker.
 
-    Inherits from ``BaseException`` rather than ``Exception`` so that general
-    ``except Exception:`` handlers in user tools or middleware cannot swallow
-    lifecycle signals like suspension or cancellation.
+    A ``BaseException`` so that a broad ``except Exception`` in agent or tool
+    code cannot swallow suspension or cancellation.
     """
 
 
 class SuspendInterrupt(ControlSignal):
-    """Raised to unwind a run to the Worker when it must go dormant.
-
-    The raiser (``RunContext``) supplies a ``wakeup`` payload instructing
-    the scheduler what event should wake this run back up.
-    """
+    """Unwinds a run to the worker so it can go dormant until ``wakeup``."""
 
     def __init__(self, run_id: str, wakeup: "Wakeup", *, reason: str = "") -> None:
         super().__init__(f"run {run_id} suspended" + (f": {reason}" if reason else ""))
@@ -57,49 +95,56 @@ class SuspendInterrupt(ControlSignal):
 
 
 class CancellationError(ControlSignal):
-    """Raised when an operation is cancelled via ``CancellationToken``."""
+    """The run was cancelled, or its deadline passed."""
+
+
+class LeaseLostError(ControlSignal):
+    """This worker no longer owns the run: its lease expired and another worker
+    holds it. Continuing would let two workers execute the same run."""
+
+    def __init__(self, run_id: str, *, epoch: int | None = None) -> None:
+        super().__init__(f"lease on run {run_id} was lost")
+        self.run_id = run_id
+        self.epoch = epoch
 
 
 # ---------------------------------------------------------------------------
-# Root Kernel Error
+# Kernel errors
 # ---------------------------------------------------------------------------
 
 
-class KernelError(Exception):
-    """Base class for all substrate kernel execution errors.
+class KernelError(_Reconstructible, Exception):
+    """Base of every typed runtime failure.
 
-    Catching ``KernelError`` is sufficient to intercept any typed error
-    raised by the runtime, routing, or budget layers.
+    ``code`` is a stable machine-readable identifier (``rate_limited``), derived
+    from the class name unless overridden, so alerts and dashboards group
+    failures by meaning. ``retryable`` says whether trying again can help.
     """
 
+    retryable: ClassVar[bool] = False
+    code: ClassVar[str] = "kernel"
 
-# ---------------------------------------------------------------------------
-# Transient Errors (Retryable with Backoff)
-# ---------------------------------------------------------------------------
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if "code" not in cls.__dict__:
+            cls.code = _snake(cls.__name__.removesuffix("Error"))
+
+    def to_info(self) -> "ErrorInfo":
+        from substrate.kernel.abstractions.core.error_info import ErrorInfo
+
+        return ErrorInfo(code=self.code, message=str(self), retryable=self.retryable)
 
 
 class TransientError(KernelError):
-    """Base for errors that the scheduler can safely retry with exponential backoff.
+    """A failure that may succeed if tried again: a conflict, a blip, a limit."""
 
-    Indicates an environmental or concurrency conflict that may succeed on a subsequent attempt.
-    """
+    retryable = True
 
 
 class ConcurrentAppendError(TransientError):
-    """Raised by ``EventLogProtocol.append`` when optimistic concurrency fails.
+    """``EventLog.append`` found the log had moved on: another writer won."""
 
-    Two workers tried to write to the same run simultaneously. The caller
-    must reload the current ``last_seq`` and retry with the correct value.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        run_id: str,
-        expected_seq: int,
-        actual_seq: int,
-    ) -> None:
+    def __init__(self, message: str, *, run_id: str, expected_seq: int, actual_seq: int) -> None:
         super().__init__(message)
         self.run_id = run_id
         self.expected_seq = expected_seq
@@ -107,78 +152,15 @@ class ConcurrentAppendError(TransientError):
 
 
 class ThreadBusyError(TransientError):
-    """Raised by ``SchedulerProtocol.enqueue`` when ``thread_id`` already has an active run."""
+    """The thread already has an active run."""
 
     def __init__(self, message: str, *, thread_id: str) -> None:
         super().__init__(message)
         self.thread_id = thread_id
 
 
-# ---------------------------------------------------------------------------
-# Permanent Errors (Fatal — Fail Immediately)
-# ---------------------------------------------------------------------------
-
-
-class PermanentError(KernelError):
-    """Base for failures that are never worth retrying.
-
-    The Worker's failure handler skips retry policies entirely and terminal-fails
-    the run on the first attempt (e.g. invalid schemas, fatal bugs, corrupt state).
-    """
-
-
-class AgentCrashError(PermanentError):
-    """Raised when an agent's run fails with an unexpected exception."""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        run_id: str,
-        agent_id: Actor,
-    ) -> None:
-        super().__init__(message)
-        self.run_id = run_id
-        self.agent_id = agent_id
-
-    def __str__(self) -> str:
-        return f"[{self.agent_id} in run {self.run_id}] {super().__str__()}"
-
-
-class BlockValidationError(PermanentError, ValueError):
-    """Raised when a content block fails schema validation.
-
-    Inherits from both ``PermanentError`` and ``ValueError`` for compatibility
-    with standard Python data validation.
-    """
-
-
-class UnsupportedContentError(PermanentError, ValueError):
-    """Raised when a client cannot process a given content block mix."""
-
-
-# ---------------------------------------------------------------------------
-# Policy Terminations (Intentional Governance & Safety Halts)
-# ---------------------------------------------------------------------------
-
-
-class PolicyTermination(KernelError):
-    """Base for intentional, policy-enforced halts (not bugs or crashes)."""
-
-    def __init__(self, message: str = "") -> None:
-        super().__init__(message)
-        self.message = message
-
-
-class BudgetExhaustedError(PolicyTermination):
-    """Raised when an agent headcount or token/cost/turn budget is exhausted."""
-
-
-class MiddlewareTermination(PolicyTermination):
-    """Raised by any middleware to immediately halt the agent run (e.g. guardrail)."""
-
 class BranchHeadConflictError(TransientError):
-    """Raised when set_branch_head or append_and_advance fails optimistic concurrency."""
+    """A branch-head update lost an optimistic-concurrency check."""
 
     def __init__(
         self,
@@ -197,7 +179,7 @@ class BranchHeadConflictError(TransientError):
 
 
 class SnapshotConflictError(TransientError):
-    """Raised when commit_snapshot fails optimistic concurrency check."""
+    """A workspace snapshot commit lost an optimistic-concurrency check."""
 
     def __init__(
         self,
@@ -215,41 +197,138 @@ class SnapshotConflictError(TransientError):
         self.actual_parent_id = actual_parent_id
 
 
+class RateLimitedError(TransientError):
+    """The provider is rate limiting us. ``retry_after`` is its own hint, in seconds."""
+
+    def __init__(self, message: str = "rate limited", *, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+class PermanentError(KernelError):
+    """A failure that retrying cannot fix."""
+
+
+class AgentCrashError(PermanentError):
+    """An agent's run failed with an unexpected exception."""
+
+    def __init__(self, message: str, *, run_id: str, agent_id: Actor) -> None:
+        super().__init__(message)
+        self.run_id = run_id
+        self.agent_id = agent_id
+
+    def __str__(self) -> str:
+        return f"[{self.agent_id} in run {self.run_id}] {super().__str__()}"
+
+
+class BlockValidationError(PermanentError, ValueError):
+    """A content block failed validation."""
+
+
+class UnsupportedContentError(PermanentError, ValueError):
+    """A client cannot process this mix of content."""
+
+
 class BranchNotFoundError(PermanentError, KeyError):
-    """Raised when a requested branch_id does not exist in the session."""
+    """The requested branch does not exist."""
 
 
 class BranchAlreadyExistsError(PermanentError, ValueError):
-    """Raised when attempting to create or fork to a branch_id that already exists."""
+    """The branch id is already taken."""
 
 
 class DAGIntegrityError(PermanentError, ValueError):
-    """Raised on cross-session edges, self-loops, invalid parents, or DAG corruption."""
+    """A cross-session edge, self-loop, invalid parent or other DAG corruption."""
+
+
+class ObjectNotFoundError(PermanentError):
+    """No object exists at the requested key."""
+
+    def __init__(self, key: str) -> None:
+        super().__init__(f"no object at {key!r}")
+        self.key = key
+
+
+class ContextLengthError(PermanentError):
+    """The prompt exceeded the model's context window. Compacting the history and
+    trying again is the remedy, which is why this is not just a generic 400."""
+
+    def __init__(self, message: str = "context length exceeded", *, limit: int | None = None) -> None:
+        super().__init__(message)
+        self.limit = limit
+
+
+class ContentFilterError(PermanentError):
+    """The provider refused the request or response on content grounds."""
+
+
+class AuthError(PermanentError):
+    """The provider rejected our credentials."""
+
+
+class NonDeterminismError(PermanentError):
+    """A replay reached a journaled step that does not match what the journal
+    recorded there. Executing on would attach a stale result to a different call."""
+
+    def __init__(self, message: str, *, path: str, expected: str, actual: str) -> None:
+        super().__init__(message)
+        self.path = path
+        self.expected = expected
+        self.actual = actual
+
+
+class OrphanedEffectError(PermanentError):
+    """An effect was started and its outcome never recorded, and it is not safe to
+    run again. The journaled intent is the record to compensate from."""
+
+    def __init__(self, message: str, *, effect_id: str, kind: str) -> None:
+        super().__init__(message)
+        self.effect_id = effect_id
+        self.kind = kind
+
+
+class PolicyTermination(KernelError):
+    """An intentional, policy-enforced halt — not a bug and not a crash."""
+
+    def __init__(self, message: str = "") -> None:
+        super().__init__(message)
+        self.message = message
+
+
+class BudgetExhaustedError(PolicyTermination):
+    """A token, cost, turn or headcount budget ran out."""
+
+
+class MiddlewareTermination(PolicyTermination):
+    """A middleware halted the run (a guardrail, a rate limit)."""
 
 
 __all__ = [
-    # Control Signals
-    "ControlSignal",
-    "SuspendInterrupt",
-    "CancellationError",
-    # Root Error
-    "KernelError",
-    # Transient / Retryable
-    "TransientError",
-    "ConcurrentAppendError",
-    "ThreadBusyError",
-    "BranchHeadConflictError",
-    "SnapshotConflictError",
-    # Permanent / Fatal
-    "PermanentError",
     "AgentCrashError",
+    "AuthError",
     "BlockValidationError",
-    "UnsupportedContentError",
-    "BranchNotFoundError",
     "BranchAlreadyExistsError",
-    "DAGIntegrityError",
-    # Governance / Policy
-    "PolicyTermination",
+    "BranchHeadConflictError",
+    "BranchNotFoundError",
     "BudgetExhaustedError",
+    "CancellationError",
+    "ConcurrentAppendError",
+    "ContentFilterError",
+    "ContextLengthError",
+    "ControlSignal",
+    "DAGIntegrityError",
+    "KernelError",
+    "LeaseLostError",
     "MiddlewareTermination",
+    "NonDeterminismError",
+    "ObjectNotFoundError",
+    "OrphanedEffectError",
+    "PermanentError",
+    "PolicyTermination",
+    "RateLimitedError",
+    "SnapshotConflictError",
+    "SuspendInterrupt",
+    "ThreadBusyError",
+    "TransientError",
+    "UnsupportedContentError",
 ]

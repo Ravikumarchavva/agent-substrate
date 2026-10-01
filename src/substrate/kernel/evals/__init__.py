@@ -9,7 +9,7 @@ Provides:
 
 Quick start::
 
-    from substrate.agents.evals import (
+    from substrate.kernel.evals import (
         EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS,
     )
 
@@ -30,14 +30,14 @@ Quick start::
 from __future__ import annotations
 
 
-from substrate.agents.evals.models import (
+from substrate.kernel.evals.models import (
     EvalCase,
     EvalDataset,
     EvalScore,
     EvalCaseResult,
     EvalReport,
 )
-from substrate.agents.evals.criteria import (
+from substrate.kernel.evals.criteria import (
     EvalCriterion,
     CORRECTNESS,
     HELPFULNESS,
@@ -46,8 +46,8 @@ from substrate.agents.evals.criteria import (
     CONCISENESS,
     TOOL_USAGE,
 )
-from substrate.agents.evals.judge import LLMJudge
-from substrate.agents.evals.runner import EvalRunner
+from substrate.kernel.evals.judge import LLMJudge
+from substrate.kernel.evals.runner import EvalRunner
 
 __all__ = [
     # Models

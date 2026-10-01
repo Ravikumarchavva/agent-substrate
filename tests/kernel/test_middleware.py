@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import logging
 import pytest
-from substrate.kernel.core.content import ChatMessage, TextBlock
-from substrate.agents.middleware import (
+from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
+from substrate.kernel.middleware import (
     MiddlewarePipeline,
     MiddlewareStage,
     AuditLoggerMiddleware,
     MiddlewareContext,
     AgentRunResult,
 )
-from substrate.exceptions import MiddlewareTermination
+from substrate.kernel.exceptions import MiddlewareTermination
 
 
 def _ctx(text: str = "hello") -> MiddlewareContext:

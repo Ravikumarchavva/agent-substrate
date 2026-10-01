@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from substrate.agents.storage import LocalFilesystemMemoryStore
-from substrate.kernel.core.content import TextBlock
-from substrate.kernel.storage.memory import (
+from substrate.kernel.storage import LocalFilesystemMemoryStore
+from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.kernel.abstractions.storage.memory import (
     MemoryCategory,
     MemoryNamespace,
     MemoryQuery,

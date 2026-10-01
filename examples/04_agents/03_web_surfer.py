@@ -19,11 +19,11 @@ Prerequisites: OPENAI_API_KEY set.
 
 import asyncio
 
-from substrate.agents.core import ReActAgent
-from substrate.agents.tools.builtin_tools import WebSearchTool
+from substrate.kernel.agents import ReActAgent
+from substrate.kernel.tools.builtin_tools import WebSearchTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.agents.storage import LocalFilesystemHistoryProvider
+from substrate.kernel.storage import LocalFilesystemHistoryProvider
 from substrate.kernel.messages._types import TextDeltaChunk
 
 # Infrastructure:

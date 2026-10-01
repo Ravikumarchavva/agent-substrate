@@ -15,15 +15,15 @@ there's genuinely one middleware concept, not three.
 
 from __future__ import annotations
 
-from substrate.agents.middleware import (
+from substrate.kernel.middleware import (
     CacheMiddleware,
     ContentFilterMiddleware,
     MaxTokenMiddleware,
     MiddlewarePipeline,
     PIIDetectionMiddleware,
 )
-from substrate.agents.runtime import Runtime
-from substrate.kernel import TextBlock, ToolExecutionResult, ToolUseBlock
+from substrate.kernel.runtime import Runtime
+from substrate.kernel.abstractions import TextBlock, ToolExecutionResult, ToolUseBlock
 
 from tests.reasoning.test_assistant_agent import make_agent, run_agent
 

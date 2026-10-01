@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import json
 
-from substrate.kernel import Tool, TextBlock
-from substrate.kernel.tools import ToolExecutionResult, ToolRisk
+from substrate.kernel.abstractions import Tool, TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
 
 
 def _param_summary(schema: dict[str, object]) -> str:

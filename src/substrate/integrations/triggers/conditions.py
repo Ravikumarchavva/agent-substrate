@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime import Runtime
+    from substrate.kernel.runtime import Runtime
     from substrate.integrations.events.redis_event_bus import EventBus
 
 logger = setup_logging()
@@ -187,8 +187,8 @@ class ConditionMonitor:
         )
 
         if self._runtime is not None:
-            from substrate.kernel.core.identity import Actor
-            from substrate.kernel.messaging.message import Message, DataPayload
+            from substrate.kernel.abstractions.core.identity import Actor
+            from substrate.kernel.abstractions.messaging.message import Message, DataPayload
 
             combined_params = {**condition.target_params, "event": event}
             agent_id = Actor(type=condition.target_type, key=condition.target_name)

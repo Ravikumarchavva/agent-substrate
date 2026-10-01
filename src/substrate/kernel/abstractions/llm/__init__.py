@@ -7,8 +7,9 @@ from .llm import (
     ModelCapabilities,
     Modality,
     ReasoningEffort,
+    FinishReason,
 )
-from substrate.kernel.core.usage import Usage
+from substrate.kernel.abstractions.core.usage import Usage
 
 __all__ = [
     "GenerationOptions",
@@ -19,5 +20,6 @@ __all__ = [
     "ModelCapabilities",
     "Modality",
     "ReasoningEffort",
+    "FinishReason",
     "Usage",
 ]

@@ -10,10 +10,10 @@ from __future__ import annotations
 import asyncio
 from typing import AsyncIterator
 
-from substrate.agents.context import SlidingWindowCompaction, SummarizationCompaction
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
-from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+from substrate.kernel.context import SlidingWindowCompaction, SummarizationCompaction
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.llm import GenerationOptions, LLMResponse, Usage
+from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
 
 
 class MockLLM:

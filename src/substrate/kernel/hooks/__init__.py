@@ -1,8 +1,8 @@
-"""substrate.agents.hooks — lifecycle event hooks for agents."""
+"""substrate.kernel.hooks — lifecycle event hooks for agents."""
 
 from __future__ import annotations
 
-from substrate.agents.hooks.manager import (
+from substrate.kernel.hooks.manager import (
     HookEvent,
     HookManager,
     CostTracker,

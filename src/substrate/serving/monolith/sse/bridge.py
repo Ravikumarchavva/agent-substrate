@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
     from substrate.serving.protocol import WireEvent
-    from substrate.kernel.runtime.wakeup import SignalBusProtocol
+    from substrate.kernel.abstractions.runtime.wakeup import SignalBusProtocol
 
 from substrate.integrations.tools.human_input import (
     CallbackHumanHandler,

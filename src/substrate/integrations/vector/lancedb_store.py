@@ -5,8 +5,7 @@ mode.
 
 Same ``VectorStore`` Protocol as ``PgVectorStore`` (kernel/storage/vector.py),
 so a pipeline written against this can switch to Postgres later with zero
-code changes beyond the constructor call. Unlike ``InMemoryVectorStore``
-(agents/storage/vector.py), state survives process restarts. Unlike a
+code changes beyond the constructor call. State survives process restarts. Unlike a
 hand-rolled SQLite table with Python-side cosine similarity, LanceDB does
 real vector search (via its own columnar/Arrow storage) — a purpose-built
 tool, not a reinvented one.
@@ -24,7 +23,7 @@ one). A full-text-search index *is* created lazily on first
 ``hybrid_search()`` call — see below.
 
 Metadata ``filter`` is applied in Python after an exhaustive vector search
-(same approach ``InMemoryVectorStore`` uses) rather than pushed into a
+(the same approach ``LocalFilesystemVectorStore`` uses) rather than pushed into a
 LanceDB ``where()`` SQL expression — metadata is stored as an opaque JSON
 string column (documents carry arbitrary metadata shapes), and building a
 real SQL predicate from a generic ``dict`` isn't a clean fit for that. This

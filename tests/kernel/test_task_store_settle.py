@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from substrate.kernel.storage.tasks import TaskStore
+from tests._stores import fs_tasks
+
 from substrate.kernel.abstractions.storage.tasks import TaskStatus
 
 
 async def test_settle_flips_in_progress_to_succeeded() -> None:
-    store = TaskStore()
+    store = fs_tasks()
     tl = await store.create_task_list("conv-1", ["a", "b", "c"], agent_id="root")
     # Advance: a -> succeeded, b -> in_progress, c stays planned.
     await store.update_status(tl.id, tl.tasks[0].id, TaskStatus.SUCCEEDED)
@@ -27,7 +28,7 @@ async def test_settle_flips_in_progress_to_succeeded() -> None:
 
 
 async def test_settle_leaves_failed_and_blocked_untouched() -> None:
-    store = TaskStore()
+    store = fs_tasks()
     tl = await store.create_task_list("conv-2", ["x", "y"], agent_id="root")
     await store.update_status(tl.id, tl.tasks[0].id, TaskStatus.FAILED)
     await store.update_status(tl.id, tl.tasks[1].id, TaskStatus.BLOCKED)
@@ -41,7 +42,7 @@ async def test_settle_leaves_failed_and_blocked_untouched() -> None:
 
 
 async def test_settle_is_scoped_to_conversation() -> None:
-    store = TaskStore()
+    store = fs_tasks()
     tl_a = await store.create_task_list("conv-a", ["one"], agent_id="root")
     tl_b = await store.create_task_list("conv-b", ["two"], agent_id="root")
     await store.update_status(tl_a.id, tl_a.tasks[0].id, TaskStatus.IN_PROGRESS)

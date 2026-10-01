@@ -165,7 +165,7 @@ def _subagent_progress(
 
 
 async def _task_boards(correlation_id: str, task_store: Any = None) -> list[Any]:
-    from substrate.kernel.storage.tasks import TaskStore
+    from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
 
-    store = task_store or TaskStore()
+    store = task_store or LocalFilesystemTaskStore()
     return await store.get_boards_by_conversation(correlation_id)

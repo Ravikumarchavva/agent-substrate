@@ -3,13 +3,14 @@ spawned sub-agent inherits it."""
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 from substrate.kernel.abstractions.tools import ToolRisk
 
 from substrate.kernel.context import ContextConfig
 from substrate.kernel.agents.orchestrator import OrchestratorAgent, SubAgentConfig
 from substrate.kernel.agents.react import ReActAgent
 from substrate.kernel.runtime.runtime import Runtime
-from substrate.kernel.storage.history import InMemoryHistoryProvider
 from substrate.kernel.abstractions.agent.runtime_context import RunScope, scope_of
 from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock, ToolUseBlock
 from substrate.kernel.abstractions.core.identity import Actor
@@ -37,7 +38,7 @@ class ProbeTool:
 
 
 def _isolated() -> ContextConfig:
-    return ContextConfig(history=InMemoryHistoryProvider())
+    return ContextConfig(history=fs_history())
 
 
 def _message(target: Actor, *, thread: str, metadata: dict[str, str]) -> Message:

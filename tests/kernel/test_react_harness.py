@@ -3,6 +3,8 @@ budgets, bad tool-call arguments, and graceful step-limit handling."""
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 from substrate.kernel.abstractions.tools import ToolRisk
 
 import asyncio
@@ -12,7 +14,6 @@ from substrate.kernel.context import ContextConfig
 from substrate.kernel.agents.react import ReActAgent
 from substrate.kernel.abstractions.agent.supervision import ExecutionBudget
 from substrate.kernel.runtime.runtime import Runtime
-from substrate.kernel.storage.history import InMemoryHistoryProvider
 from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     ContentBlock,
@@ -141,7 +142,7 @@ def make_agent(llm: ScriptedLLM, **kwargs: object) -> ReActAgent:
     return ReActAgent(
         "bot",
         model=llm,
-        context=ContextConfig(history=InMemoryHistoryProvider()),
+        context=ContextConfig(history=fs_history()),
         **kwargs,  # type: ignore[arg-type]
     )
 
@@ -372,7 +373,7 @@ async def test_a_budget_stop_keeps_the_turn_in_history():
     message and every tool result vanished from the conversation."""
     from substrate.kernel.storage.history import project_messages
 
-    history = InMemoryHistoryProvider()
+    history = fs_history()
     llm = ScriptedLLM(
         [[_use("count", "c1")], [_use("count", "c2")]],
         usage=Usage(input_tokens=10),

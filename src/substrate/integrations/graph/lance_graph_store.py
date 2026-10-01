@@ -278,6 +278,13 @@ class LanceGraphStore:
         before = await table.count_rows()
         await table.delete(_scoped_id_filter(entity_id, self._scope_filter(namespace)))
         after = await table.count_rows()
+        if after < before:
+            # An edge cannot outlive an endpoint: left behind, it would keep the deleted entity
+            # reachable and connect the entities on either side of it.
+            scope = self._scope_filter(namespace)
+            literal = _sql_escape(entity_id)
+            touching = f"(source_id = '{literal}' OR target_id = '{literal}')"
+            await (await self._relationships_table()).delete(f"{touching} AND {scope}" if scope else touching)
         return after < before
 
     async def delete_relationship(

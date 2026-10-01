@@ -11,6 +11,8 @@ in it by default.
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 import asyncio
 from typing import Any
 
@@ -26,7 +28,6 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from substrate.kernel.context import ContextConfig
 from substrate.kernel.agents.react import ReActAgent
 from substrate.kernel.runtime.runtime import Runtime
-from substrate.kernel.storage.history import InMemoryHistoryProvider
 from substrate.kernel.tools.toolbox import Toolbox
 from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock, ToolUseBlock
 from substrate.kernel.abstractions.core.identity import Actor
@@ -63,7 +64,7 @@ def _spans() -> list[Any]:
         "traced",
         model=llm,
         tools=tools,
-        context=ContextConfig(history=InMemoryHistoryProvider()),
+        context=ContextConfig(history=fs_history()),
     )
 
     async def _run() -> None:

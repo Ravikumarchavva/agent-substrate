@@ -137,8 +137,7 @@ class PgTaskStore:
                 Task(
                     id=str(uuid4()), title=t.strip(), status=TaskStatus.PLANNED, order=i
                 )
-                for i, t in enumerate(task_titles)
-                if t.strip()
+                for i, t in enumerate(t for t in task_titles if t.strip())
             ],
         )
         tasks_json = json.dumps([_task_to_dict(t) for t in task_list.tasks])
@@ -298,8 +297,7 @@ class PgTaskStore:
                 status=TaskStatus.PLANNED,
                 order=start + i,
             )
-            for i, t in enumerate(titles)
-            if t.strip()
+            for i, t in enumerate(t for t in titles if t.strip())
         ]
         updated_list = task_list.model_copy(
             update={"tasks": [*task_list.tasks, *new_tasks]}

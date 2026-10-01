@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from tests._stores import fs_tasks
+
 from substrate.kernel.runtime.cancellation import CancellationToken
-from substrate.kernel.storage.tasks import TaskStore
 from substrate.integrations.tools.task_manager.tool import TaskManagerTool
 from substrate.kernel.abstractions.agent.runtime_context import RunMeta, RunScope
 from substrate.kernel.abstractions.storage.tasks import TaskStatus
@@ -25,7 +26,7 @@ async def test_start_task_auto_completes_prior_in_progress() -> None:
     """start_task closes any task left in_progress so the board always advances
     even when the model skips complete_task."""
     ctx = _ctx("conv-1", "root")
-    tool = TaskManagerTool(store=TaskStore())
+    tool = TaskManagerTool(store=fs_tasks())
 
     await tool.execute(ctx=ctx, action="create_list", tasks=["one", "two", "three"])
     await tool.execute(ctx=ctx, action="start_task")  # one -> in_progress
@@ -42,7 +43,7 @@ async def test_start_task_auto_completes_prior_in_progress() -> None:
 async def test_add_task_skips_existing_titles() -> None:
     """Repeated/confused add_task calls can't pile up phantom duplicate steps."""
     ctx = _ctx("conv-dup", "root")
-    tool = TaskManagerTool(store=TaskStore())
+    tool = TaskManagerTool(store=fs_tasks())
 
     await tool.execute(ctx=ctx, action="create_list", tasks=["Research", "Compare", "Recommend"])
     # Model re-adds two titles that already exist (different case / whitespace).
@@ -54,7 +55,7 @@ async def test_add_task_skips_existing_titles() -> None:
 
 async def test_create_list_dedupes_input() -> None:
     ctx = _ctx("conv-dup2", "root")
-    tool = TaskManagerTool(store=TaskStore())
+    tool = TaskManagerTool(store=fs_tasks())
 
     result = await tool.execute(
         ctx=ctx,
@@ -75,13 +76,13 @@ async def test_event_sink_fires_for_subagent_boards_only() -> None:
 
     # Root agent (no parent) — sink must NOT fire.
     ctx = _ctx("conv-root", "root")
-    root_tool = TaskManagerTool(store=TaskStore(), event_sink=sink)
+    root_tool = TaskManagerTool(store=fs_tasks(), event_sink=sink)
     await root_tool.execute(ctx=ctx, action="create_list", tasks=["a"])
     assert calls == []
 
     # Subagent (parent set) — sink fires with the nested board.
     ctx = _ctx("conv-sub", "child", parent="root")
-    sub_tool = TaskManagerTool(store=TaskStore(), event_sink=sink)
+    sub_tool = TaskManagerTool(store=fs_tasks(), event_sink=sink)
     await sub_tool.execute(ctx=ctx, action="create_list", tasks=["x", "y"])
 
     assert len(calls) == 1
@@ -93,7 +94,7 @@ async def test_event_sink_fires_for_subagent_boards_only() -> None:
 
 async def test_start_task_does_not_touch_failed_or_blocked() -> None:
     ctx = _ctx("conv-2", "root")
-    tool = TaskManagerTool(store=TaskStore())
+    tool = TaskManagerTool(store=fs_tasks())
 
     await tool.execute(ctx=ctx, action="create_list", tasks=["a", "b"])
     await tool.execute(ctx=ctx, action="start_task")  # a -> in_progress

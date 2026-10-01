@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 import pytest
 from pydantic import ValidationError
 
 from substrate.kernel.context.builder import DefaultContextBuilder
-from substrate.kernel.storage.history import DefaultHistoryResolver, InMemoryHistoryProvider
+from substrate.kernel.storage.history import DefaultHistoryResolver
 from substrate.kernel.abstractions.agent.context import ContextWindow
 from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.abstractions.storage.history import MessageNode
@@ -103,7 +105,7 @@ async def test_context_builder_sliding_window_token_budget():
 
 @pytest.mark.asyncio
 async def test_end_to_end_ancestry_to_prompt_window():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
 
     # Turn 0
     n0 = MessageNode(id="n0", session_id="s1", parent_id=None, payload=_msg("What is AI?"))

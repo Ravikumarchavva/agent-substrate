@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 import pytest
 from substrate.kernel.abstractions.storage.history import MessageNode
 from substrate.kernel.context import (
@@ -9,9 +11,6 @@ from substrate.kernel.context import (
     SummarizationCompaction,
     TokenBudgetComposedStrategy,
     CompactionPipeline,
-)
-from substrate.kernel.storage import (
-    InMemoryHistoryProvider,
 )
 from substrate.kernel.abstractions import Actor
 from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
@@ -34,7 +33,7 @@ async def test_sliding_window_compaction():
 
 @pytest.mark.asyncio
 async def test_context_config():
-    history = InMemoryHistoryProvider()
+    history = fs_history()
     pipeline = CompactionPipeline([SlidingWindowCompaction(max_messages=10)])
     cfg = ContextConfig(history, pipeline)
 
@@ -51,7 +50,7 @@ async def test_context_config():
 
 @pytest.mark.asyncio
 async def test_agent_context():
-    history = InMemoryHistoryProvider()
+    history = fs_history()
     pipeline = CompactionPipeline([SlidingWindowCompaction(max_messages=10)])
     agent_id = Actor(type="agent", key="agent_1")
     session_id = "test-session"

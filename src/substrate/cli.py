@@ -348,10 +348,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
         ContextConfig,
         SlidingWindowCompaction,
     )
-    from substrate.kernel.storage import (
-        InMemoryHistoryProvider,
-        LocalFilesystemHistoryProvider,
-    )
+    from substrate.kernel.storage import LocalFilesystemHistoryProvider
 
     # Build tools
     tools = []
@@ -375,7 +372,6 @@ def cmd_chat(args: argparse.Namespace) -> None:
                 model=OpenAIClient(model=args.model),
                 tools=toolbox,
                 context=ContextConfig(
-                    InMemoryHistoryProvider(),
                     history,
                     CompactionPipeline([SlidingWindowCompaction(max_messages=1000)]),
                 ),

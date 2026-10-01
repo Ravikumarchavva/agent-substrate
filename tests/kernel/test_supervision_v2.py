@@ -9,6 +9,8 @@ Covers:
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 import asyncio
 
 
@@ -112,11 +114,10 @@ async def test_budget_exhausted_records_budget_exhausted_status() -> None:
 async def test_history_retention_run_clears_after_completion() -> None:
     """Agents with HistoryRetention.RUN have run-scoped history cleared on completion."""
     from substrate.kernel.context.context import ContextConfig
-    from substrate.kernel.storage.history import InMemoryHistoryProvider
     from substrate.kernel.agents.base import persist_turns
     from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 
-    history = InMemoryHistoryProvider()
+    history = fs_history()
     ctx_cfg = ContextConfig(history, retention=HistoryRetention.RUN)
 
     written_session: list[str] = []
@@ -167,11 +168,10 @@ async def test_history_retention_run_clears_after_completion() -> None:
 async def test_history_retention_permanent_survives_completion() -> None:
     """Agents with HistoryRetention.PERMANENT (default) keep history after run ends."""
     from substrate.kernel.context.context import ContextConfig
-    from substrate.kernel.storage.history import InMemoryHistoryProvider
     from substrate.kernel.agents.base import persist_turns
     from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 
-    history = InMemoryHistoryProvider()
+    history = fs_history()
     ctx_cfg = ContextConfig(history, retention=HistoryRetention.PERMANENT)
 
     captured_session: list[str] = []

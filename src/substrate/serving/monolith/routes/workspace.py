@@ -5,7 +5,7 @@ Works against any file store that can enumerate a prefix — both
 ``WorkspaceFileStore`` (``FILE_STORE_BACKEND=local``, a filesystem tree) and
 ``S3FileStore`` (``=s3``, object storage keyed on the same
 ``tenants/{tenant_id}/...`` layout, see ``agents/workspace/layout.py``)
-qualify. Stores that can't, like ``InMemoryFileStore``, 501 here.
+qualify. Stores that can't 501 here.
 
 Routes:
   GET    /workspace/usage   – bytes used vs. quota for the caller's tenant
@@ -81,7 +81,7 @@ class _WorkspaceCapableStore(Protocol):
     ``WorkspaceFileStore`` (filesystem tree) and ``S3FileStore`` (object
     storage, keyed on the same ``tenants/{tenant_id}/...`` layout) implement
     it, and the backend is meant to be swappable without touching this API.
-    Stores that can't enumerate a prefix — ``InMemoryFileStore`` — still get
+    Stores that can't enumerate a prefix still get
     a 501.
     """
 

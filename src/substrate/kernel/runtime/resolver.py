@@ -12,12 +12,6 @@ Eviction is safe here because an agent object holds no durable state: a
 ``ReActAgent`` loads conversation history from its ``HistoryProvider`` at the
 start of every run and writes it back at the end, so the object itself carries
 only configuration. Rebuilding it from the factory produces an identical actor.
-
-The one case where that is not true is an in-memory ``HistoryProvider``, where
-the "durable" store is a dict living inside the agent's own config — evicting
-then rebuilding silently loses the conversation. ``allow_unsafe_eviction``
-guards that: by default such actors are kept resident rather than evicted, so
-dev behaviour doesn't quietly diverge from production.
 """
 
 from __future__ import annotations
@@ -40,35 +34,11 @@ a real agent (e.g. acquiring its HITL bridge, wiring history) is usually a
 coroutine, so ``resolve()`` awaits the result when the factory returns one."""
 
 
-def _history_is_in_memory(agent: Agent) -> bool:
-    """True when this agent's history lives in the object itself, making
-    eviction lossy. Unknown providers are treated as durable — this only
-    ever *adds* pinning, so a wrong guess costs memory, never a conversation.
-
-    Imported lazily: ``agents/context`` pulls in the compaction pipeline,
-    which this module has no reason to load just to be imported.
-    """
-    provider = getattr(agent, "history", None)
-    if provider is None:
-        return False
-    try:
-        from substrate.kernel.storage import InMemoryHistoryProvider
-
-        if isinstance(provider, InMemoryHistoryProvider):
-            return True
-    except ImportError:  # pragma: no cover - context layer always present
-        pass
-    # Fallback for stand-ins that mirror the provider without subclassing it.
-    return "InMemoryHistoryProvider" in type(provider).__name__
-
-
 class ActorResolver:
     """Resolve an address to a live actor, activating and evicting as needed.
 
     ``max_live`` caps resident actors (LRU beyond it); ``idle_ttl`` evicts
-    actors untouched for that many seconds. Both are ceilings, not guarantees:
-    an actor whose history is in-memory is never evicted unless
-    ``allow_unsafe_eviction`` is set.
+    actors untouched for that many seconds. Both are ceilings, not guarantees.
     """
 
     def __init__(
@@ -76,14 +46,12 @@ class ActorResolver:
         *,
         max_live: int = 10_000,
         idle_ttl: float = 300.0,
-        allow_unsafe_eviction: bool = False,
     ) -> None:
         self._factories: dict[str, ActorFactory] = {}
         self._live: OrderedDict[Actor, tuple[Agent, float]] = OrderedDict()
         self._pinned: set[Actor] = set()
         self._max_live = max_live
         self._idle_ttl = idle_ttl
-        self._allow_unsafe_eviction = allow_unsafe_eviction
 
     # -- registration ---------------------------------------------------------
 
@@ -146,9 +114,6 @@ class ActorResolver:
         if inspect.isawaitable(agent):
             agent = await agent
         self._live[actor] = (agent, time.monotonic())
-        if not self._allow_unsafe_eviction and _history_is_in_memory(agent):
-            # Evicting would drop this conversation entirely — see module docstring.
-            self._pinned.add(actor)
         self._evict_over_capacity()
         return agent
 

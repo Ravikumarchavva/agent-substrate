@@ -106,8 +106,12 @@ async def test_delete_entity_and_relationship(store: LanceGraphStore) -> None:
     assert await store.delete_entity("alice") is True
     assert await store.delete_entity("alice") is False  # already gone
 
-    assert await store.delete_relationship(rel_ids[0]) is True
+    # The edge went with its endpoint.
     assert await store.delete_relationship(rel_ids[0]) is False
+
+    other = await store.add_relationships([Relationship(source_id="acme", target_id="acme", type="SELF")])
+    assert await store.delete_relationship(other[0]) is True
+    assert await store.delete_relationship(other[0]) is False
 
 
 async def test_query_cypher_match_all_pattern(store: LanceGraphStore) -> None:

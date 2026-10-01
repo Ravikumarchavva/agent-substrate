@@ -63,7 +63,7 @@ _USAGE_CACHE_TTL = 30.0  # seconds
 class WorkspaceFileStore:
     """Async file store backed by a plain directory tree.
 
-    Duck-types the same shape as ``S3FileStore``/``InMemoryFileStore``:
+    Satisfies ``ObjectStore``, the same port as ``S3FileStore``:
     ``upload``/``download``/``delete``/``presign_url``/``connect``/``disconnect``,
     plus workspace-specific helpers (``usage_bytes``, ``list_prefix``)
     used by the workspace management API.
@@ -322,8 +322,8 @@ class WorkspaceFileStore:
     async def presign_url(self, key: str, *, expires_in: int = 3600) -> str:
         del expires_in
         # No real URL — caller detects "workspace://" and falls back to
-        # /files/{id}/download, same convention as InMemoryFileStore's
-        # "memory://" sentinel.
+        # /files/{id}/download, same convention a store with no
+        # direct URL uses.
         return f"workspace://{key}"
 
     async def list_prefix(self, prefix: str) -> list[tuple[str, int, float]]:

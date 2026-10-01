@@ -57,7 +57,6 @@ from substrate.kernel.middleware import (
 from substrate.kernel.runtime import RunContext, RunOutcome, Runtime
 from substrate.kernel.storage import (
     HistoryProvider,
-    InMemoryHistoryProvider,
 )
 
 __all__ = [
@@ -66,7 +65,6 @@ __all__ = [
     "CompactionStrategy",
     "ContextConfig",
     "HistoryProvider",
-    "InMemoryHistoryProvider",
     "SlidingWindowCompaction",
     "SummarizationCompaction",
     "ToolResultCompactionStrategy",

@@ -3,9 +3,10 @@ projection of one branch, and a session can be deleted as a unit."""
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 import pytest
 
-from substrate.kernel.storage import InMemoryHistoryProvider
 from substrate.kernel.storage.history import project_messages
 from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
 from substrate.kernel.abstractions.storage.history import HistoryProvider, MessageNode
@@ -29,7 +30,7 @@ async def _append(provider, session_id: str, text: str, *, run_id: str = "", bra
 
 @pytest.mark.asyncio
 async def test_history_provider_contract():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     assert isinstance(provider, HistoryProvider)
 
     assert await project_messages(provider, "session-abc") == []
@@ -44,7 +45,7 @@ async def test_history_provider_contract():
 
 @pytest.mark.asyncio
 async def test_branches_project_independently():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     first = await _append(provider, "s", "one")
     await _append(provider, "s", "two")
     await provider.fork_branch("s", "main", "alt", fork_from_message_id=first.id)
@@ -59,7 +60,7 @@ async def test_branches_project_independently():
 
 @pytest.mark.asyncio
 async def test_delete_branch_removes_pointer_but_not_shared_ancestry():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     first = await _append(provider, "s", "one")
     await _append(provider, "s", "two")
     await provider.fork_branch("s", "main", "alt", fork_from_message_id=first.id)
@@ -76,7 +77,7 @@ async def test_delete_branch_removes_pointer_but_not_shared_ancestry():
 
 @pytest.mark.asyncio
 async def test_delete_branch_rejects_main():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     await _append(provider, "s", "one")
     with pytest.raises(ValueError):
         await provider.delete_branch("s", "main")
@@ -84,13 +85,13 @@ async def test_delete_branch_rejects_main():
 
 @pytest.mark.asyncio
 async def test_delete_branch_is_idempotent():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     await provider.delete_branch("never-existed", "some-branch")  # no error
 
 
 @pytest.mark.asyncio
 async def test_delete_session_removes_only_that_session():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     await _append(provider, "keep", "stay")
     doomed = await _append(provider, "gone", "bye")
 

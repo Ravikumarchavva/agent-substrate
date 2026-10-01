@@ -3,41 +3,20 @@
 from __future__ import annotations
 
 
-from substrate.kernel.exceptions import (
-    AgentError,
-    ConfigurationError,
-    ContextLimitExceededError,
-    ModelProviderError,
-    ToolError,
-    ToolNotFoundError,
-)
 from substrate.kernel.abstractions.exceptions import (
+    ContextLengthError,
     KernelError,
     PermanentError,
     SuspendInterrupt,
+    ToolDeclarationError,
+    UnroutableMessageError,
 )
 
 
-def test_public_exceptions_inherit_from_kernel_error() -> None:
-    """Every AgentError must be an instance of KernelError."""
-    err = AgentError("something failed")
-    assert isinstance(err, KernelError)
-    assert isinstance(ConfigurationError("missing key"), KernelError)
-    assert isinstance(ModelProviderError("rate limit"), KernelError)
-    assert isinstance(ToolError("fail", tool_name="search"), KernelError)
-    assert isinstance(ToolNotFoundError("missing", tool_name="search"), KernelError)
-    assert isinstance(ContextLimitExceededError("too long"), KernelError)
-
-
 def test_deterministic_errors_inherit_from_permanent_error() -> None:
-    """Non-retryable deterministic errors must inherit from PermanentError.
-
-    This ensures the Worker's retry policy immediately skips futile retries
-    on configuration mistakes, missing tools, or context window overflow.
-    """
-    assert issubclass(ConfigurationError, PermanentError)
-    assert issubclass(ToolNotFoundError, PermanentError)
-    assert issubclass(ContextLimitExceededError, PermanentError)
+    """Errors that retrying cannot fix must be PermanentError, so the worker skips futile retries."""
+    for cls in (ContextLengthError, ToolDeclarationError, UnroutableMessageError):
+        assert issubclass(cls, PermanentError) and issubclass(cls, KernelError)
 
 
 def test_suspend_interrupt_is_base_exception() -> None:

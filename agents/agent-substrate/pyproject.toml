@@ -259,7 +259,6 @@ forbidden_modules = [
     "substrate.kernel.context",
     "substrate.kernel.document",
     "substrate.kernel.flows",
-    "substrate.kernel.hooks",
     "substrate.kernel.limits",
     "substrate.kernel.llm",
     "substrate.kernel.middleware",
@@ -268,7 +267,6 @@ forbidden_modules = [
     "substrate.kernel.storage",
     "substrate.kernel.tools",
     "substrate.kernel.workspace",
-    "substrate.kernel.exceptions",
     "substrate.integrations",
     "substrate.runtimes",
     "substrate.serving",
@@ -297,10 +295,8 @@ forbidden_modules = [
     "substrate.kernel.context",
     "substrate.kernel.document",
     "substrate.kernel.flows",
-    "substrate.kernel.hooks",
     "substrate.kernel.limits",
     "substrate.kernel.middleware",
-    "substrate.kernel.exceptions",
 ]
 allow_indirect_imports = "true"
 
@@ -325,7 +321,6 @@ forbidden_modules = [
     "substrate.kernel.context",
     "substrate.kernel.document",
     "substrate.kernel.flows",
-    "substrate.kernel.hooks",
     "substrate.kernel.limits",
     "substrate.kernel.llm",
     "substrate.kernel.middleware",
@@ -334,7 +329,6 @@ forbidden_modules = [
     "substrate.kernel.storage",
     "substrate.kernel.tools",
     "substrate.kernel.workspace",
-    "substrate.kernel.exceptions",
     # These are the former `capabilities/` submodules, now merged into
     # `integrations/` (Phase G of the layer-charter pass). serving/ was
     # always freely allowed to import `integrations.llm`/`.events`/`.tts`/

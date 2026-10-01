@@ -252,7 +252,6 @@ class Worker:
         if lease.thread_id:
             attributes[semconv.RUN_THREAD] = lease.thread_id
         heartbeat: asyncio.Task[None] | None = None
-        hooks = getattr(agent, "hooks", None)
         try:
             with span(semconv.SPAN_RUN, attributes=attributes, parent=lease.trace) as handle:
                 try:
@@ -306,10 +305,6 @@ class Worker:
                     heartbeat = asyncio.create_task(self._heartbeat(lease, token, asyncio.current_task()), name=f"hb-{run_id[:8]}")
 
                     drained = await self._journaled_drain(ctx, journal, lease)
-                    if hooks:
-                        from substrate.kernel.hooks.manager import HookEvent
-
-                        await hooks.dispatch(HookEvent.RUN_START, {"agent_name": str(agent.id), "run_id": run_id})
                     await agent.run(ctx, drained)
                     await self._finish(lease, agent, drained, Complete())
                 except SuspendInterrupt as signal:
@@ -331,10 +326,6 @@ class Worker:
                     await heartbeat
                 except asyncio.CancelledError:
                     pass
-            if hooks and outcome_label != "lost":
-                from substrate.kernel.hooks.manager import HookEvent
-
-                await hooks.dispatch(HookEvent.RUN_END, {"agent_name": str(agent.id), "run_id": run_id})
             if outcome_label in ("completed", "failed", "cancelled"):
                 instruments().runs.add(1, {semconv.RUN_OUTCOME: outcome_label})
                 instruments().run_duration.record((_now() - started).total_seconds(), {semconv.RUN_OUTCOME: outcome_label})

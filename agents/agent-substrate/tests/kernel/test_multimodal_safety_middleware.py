@@ -16,7 +16,7 @@ from substrate.kernel.middleware._contracts import MiddlewareContext
 from substrate.kernel.middleware.guardrails.multimodal_safety import (
     MultimodalSafetyMiddleware,
 )
-from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.exceptions import MiddlewareTermination
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
 from substrate.kernel.abstractions.agent.safety import SafetyVerdict, Severity
 from substrate.kernel.abstractions.core.content import ChatMessage, MediaBlock, TextBlock

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, ClassVar
 
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.exceptions import MiddlewareTermination
 from substrate.kernel.middleware._contracts import MiddlewareContext
 
 logger = logging.getLogger(__name__)

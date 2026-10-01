@@ -4,7 +4,7 @@ import re
 from typing import Awaitable, Callable, ClassVar, Iterator
 
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.exceptions import MiddlewareTermination
 from substrate.kernel.middleware._contracts import MiddlewareContext
 
 _PII_PATTERNS: dict[str, re.Pattern[str]] = {

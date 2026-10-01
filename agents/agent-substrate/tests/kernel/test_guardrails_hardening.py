@@ -9,7 +9,7 @@ from substrate.kernel.middleware._contracts import MiddlewareContext
 from substrate.kernel.middleware.guardrails.max_token import MaxTokenMiddleware
 from substrate.kernel.middleware.guardrails.pii import PIIDetectionMiddleware
 from substrate.kernel.middleware.retry import RetryMiddleware
-from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.exceptions import MiddlewareTermination
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
 from substrate.kernel.abstractions.core.content import (
     ChatMessage,

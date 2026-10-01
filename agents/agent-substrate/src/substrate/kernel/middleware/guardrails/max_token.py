@@ -4,7 +4,7 @@ from typing import Awaitable, Callable, ClassVar
 
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
 from substrate.kernel.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
-from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.abstractions.exceptions import MiddlewareTermination
 from substrate.kernel.middleware._contracts import MiddlewareContext
 
 

@@ -4,7 +4,6 @@ a non-admin)."""
 
 from __future__ import annotations
 
-from tests._stores import fs_files
 
 from contextlib import asynccontextmanager
 
@@ -172,11 +171,14 @@ async def test_set_quota_persists_and_takes_effect_immediately(tmp_path) -> None
 
 @pytest.mark.requires_postgres
 async def test_storage_routes_501_for_non_workspace_backend() -> None:
-    """S3FileStore/InMemoryFileStore don't support per-user quota overrides
-    or list_all_users — the admin storage API is explicitly local-only."""
+    """S3FileStore doesn't support per-user quota overrides or list_all_users — the admin
+    storage API is explicitly local-only."""
+    from substrate.integrations.storage.s3 import S3FileStore
 
     async with app.router.lifespan_context(app):
-        app.state.ctx.file_store = fs_files()
+        app.state.ctx.file_store = S3FileStore(
+            endpoint_url="http://localhost:9000", access_key="k", secret_key="s", bucket="b"
+        )
         app.dependency_overrides[get_current_user] = lambda: _admin_claims()
         try:
             async with AsyncClient(

@@ -73,8 +73,9 @@ once, as a recoverable error and as a killed worker, and asserts the guarantees 
 A guarantee not yet true is `xfail(strict=True)` naming what fixes it.
 
 Conformance suites live in `kernel/testing/conformance/` and are run by every implementation of
-their port (`RuntimeStore`: SQLite, Postgres; `MemoryStore`: local filesystem, Postgres, Lance; `VectorStore`: in-memory,
-local filesystem, pgvector, LanceDB).
+their port: `RuntimeStore` (SQLite, Postgres), `MemoryStore` (local, Postgres, Lance), `VectorStore` (local,
+pgvector, LanceDB), `HistoryProvider` (local, Postgres), `ObjectStore` (workspace folder, S3), `TaskStore` (local,
+Postgres), `GraphStore` (local, Lance). There is no in-memory store: the minimum a durable agent rests on is a folder.
 Row I30 fails the build if an implementation of a port that has a suite does not run it.
 
 ## Safety, tenancy, observability
@@ -101,5 +102,5 @@ Row I30 fails the build if an implementation of a port that has a suite does not
 ## Not done yet
 
 Recorded in the register as pending (`xfail(strict=True)`), not forgotten: conformance suites for the
-history, graph, object, task, LLM-client, embedding and extractor ports (row I30), and scope-bound
-handles for those stores (only memory is scope-addressed so far).
+LLM-client, embedding-client and document-extractor ports (row I30), and scope-bound handles for the
+stores other than memory.

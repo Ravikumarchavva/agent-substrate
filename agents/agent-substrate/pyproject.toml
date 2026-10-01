@@ -366,7 +366,7 @@ ignore_imports = [
     # agent_runtime: in-memory fallback Runtime (for RUNTIME_BACKEND=memory env)
     "substrate.serving.services.agent_runtime.app -> substrate.kernel.runtime",
     # tool_executor IS a capability executor by design
-    "substrate.serving.services.tool_executor.app -> substrate.kernel.storage.tasks",
+    "substrate.serving.services.tool_executor.app -> substrate.kernel.storage.local_tasks",
     "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.code_interpreter",
     "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.factory",
     "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.task_manager.tool",

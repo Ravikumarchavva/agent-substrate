@@ -1,57 +1,7 @@
-from .tools import (
-    PayloadBase,
-    ToolRisk,
-    ToolType,
-    ToolUI,
-    ToolCallRequest,
-    ToolExecutionResult,
-    Tool,
-    HostedTool,
-    ProviderDefinedTool,
-    AnyTool,
-    is_hosted_tool,
-    is_concurrency_safe,
-    is_provider_defined_tool,
-    ToolRegistry,
-)
-from .skills import Skill
-from .approval import (
-    ApprovalDecision,
-    ApprovalRequest,
-    ApprovalResult,
-    ApprovalHandler,
-)
-from .chain import (
-    ChainPolicy,
-    ChainFile,
-    InvocationResult,
-    ChainCallRecord,
-    ChainRunResult,
-)
+"""Agent-layer tool utilities."""
 
-__all__ = [
-    "PayloadBase",
-    "ToolRisk",
-    "ToolType",
-    "ToolUI",
-    "ToolCallRequest",
-    "ToolExecutionResult",
-    "Tool",
-    "HostedTool",
-    "ProviderDefinedTool",
-    "AnyTool",
-    "is_hosted_tool",
-    "is_concurrency_safe",
-    "is_provider_defined_tool",
-    "ToolRegistry",
-    "Skill",
-    "ApprovalDecision",
-    "ApprovalRequest",
-    "ApprovalResult",
-    "ApprovalHandler",
-    "ChainPolicy",
-    "ChainFile",
-    "InvocationResult",
-    "ChainCallRecord",
-    "ChainRunResult",
-]
+from __future__ import annotations
+
+from substrate.agents.tools.toolbox import Toolbox
+
+__all__ = ["Toolbox"]

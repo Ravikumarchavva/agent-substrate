@@ -20,8 +20,6 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.runtime.supervisor import RunHandle
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
@@ -53,26 +51,18 @@ async def cancel_chat(
     if runtime is None:
         raise HTTPException(status_code=503, detail="Runtime not configured")
 
-    found = await runtime.scheduler.find_run_for_thread(str(thread_id))
+    found = await runtime.active_run_for_thread(str(thread_id))
     if found is None:
         logger.debug(
             "Cancel requested for thread %s but no active run found", thread_id
         )
         return {"status": "not_found", "thread_id": str(thread_id)}
 
-    run_id, _status = found
-    # agent_id/parent_run are unused by SupervisorProtocol.cancel() (it only reads
-    # handle.run_id — see Supervisor.cancel()); find_run_for_thread
-    # doesn't resolve the agent, so these are placeholders, not real values.
-    handle = RunHandle(run_id=run_id, agent_id=Actor(type="unresolved"), parent_run="")
-
-    # Best-effort fast path: if this request happens to land on the replica
-    # actually running the task, this cancels its local CancellationToken
-    # immediately instead of waiting out a heartbeat interval.
-    await runtime.cancel(run_id)
-    # Durable, cross-replica cascade: always correct regardless of which
-    # replica owns the run (see module docstring).
-    await runtime.supervisor.cancel(handle, reason="user_requested")
+    run_id = found.run_id
+    # Records the cancel durably for the run and everything it spawned, whichever replica
+    # owns it (the owner sees it at its next heartbeat), and interrupts the run right
+    # now if this replica happens to be the one executing it.
+    await runtime.cancel(run_id, reason="user_requested")
 
     logger.info("Cancellation requested for thread %s (run %s)", thread_id, run_id)
     return {"status": "cancelled", "thread_id": str(thread_id)}

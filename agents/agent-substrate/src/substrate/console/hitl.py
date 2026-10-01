@@ -5,7 +5,7 @@ suspend the run via ``ctx.sleep_until_signal()`` instead of blocking on a
 Future.  The ``LiveTurn`` renderer sees the ``_HITLRequest`` event (emitted
 from the ``input.requested`` log entry), stops the live region, renders an
 option card, collects the user's choice, and fires
-``SignalBusProtocol.signal(run_id, "hitl:<id>", payload)`` to resume the suspended
+``RuntimeStore.signal(run_id, "hitl:<id>", payload)`` to resume the suspended
 run.  Zero compute is consumed while the human decides.
 
 Usage::
@@ -18,7 +18,7 @@ Usage::
 
     agent = ReActAgent(name="assistant", model_client=client, tools=[ask])
 
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         await Console(agent, runtime=rt, hitl_handler=handler).run_stream("help me")
 """
 
@@ -63,7 +63,7 @@ class ConsoleHumanHandler:
     Setting ``suspends_via_signal = True`` tells ``AskHumanTool`` to log
     ``input.requested`` and call ``ctx.sleep_until_signal()`` instead of
     calling ``request_input()``.  The suspended run is resumed when
-    ``LiveTurn._handle_hitl`` fires ``SignalBusProtocol.signal()`` in response to
+    ``LiveTurn._handle_hitl`` fires ``RuntimeStore.signal()`` in response to
     the user's keypress.
     """
 

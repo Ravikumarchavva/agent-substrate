@@ -335,8 +335,7 @@ async def update_mcp_context(
     if runtime is None:
         raise HTTPException(status_code=503, detail="Runtime not configured")
     await append_mcp_app_context(
-        runtime.event_log,
-        runtime.scheduler,
+        runtime.store,
         str(thread_id),
         {"tool_name": body.tool_name, "context": context_str},
     )

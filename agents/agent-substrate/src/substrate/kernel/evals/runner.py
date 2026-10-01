@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.runtime.runtime import Runtime
+from substrate.kernel.runtime import Runtime
+from substrate.kernel.testing.runtime import ephemeral_runtime
 from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
@@ -82,7 +83,7 @@ class EvalRunner:
     async def run(self, dataset: EvalDataset) -> EvalReport:
         """Run all cases in the dataset and return an aggregated EvalReport."""
         wall_start = time.monotonic()
-        async with Runtime() as rt:
+        async with ephemeral_runtime() as rt:
             await rt.register(self._agent)
 
             if self._concurrency == 1:
@@ -109,7 +110,7 @@ class EvalRunner:
 
     async def run_case(self, case: EvalCase) -> EvalCaseResult:
         """Run a single case with its own ephemeral Runtime."""
-        async with Runtime() as rt:
+        async with ephemeral_runtime() as rt:
             await rt.register(self._agent)
             return await self._run_case(case, rt=rt)
 
@@ -135,9 +136,8 @@ class EvalRunner:
         trace = _Trace()
         try:
             run_id = await rt.submit(self._agent.id, msg)
-            # Poll consume() rather than block: SignalBusProtocol is consume-based
-            # (matches the durable backend, which has no way to "block" on a
-            # DB row). sentinel_run_id is a synthetic mailbox key for this
+            # Poll consume() rather than block: signals are consume-based, as a durable
+            # backend has no way to "block" on a row. sentinel_run_id is a synthetic mailbox key for this
             # external harness, not a real tracked run, so a fixed effect_id
             # is fine — this call site never replays.
             deadline = (
@@ -145,7 +145,7 @@ class EvalRunner:
             )
             payload: dict | None = None
             while deadline is None or time.monotonic() < deadline:
-                payload = await rt.signal_bus.consume(
+                payload = await rt.store.consume(
                     sentinel_run_id,
                     f"reply:{cid}",
                     f"eval-wait:{sentinel_run_id}:{cid}",
@@ -204,13 +204,13 @@ class EvalRunner:
 
     @staticmethod
     async def _collect_trace(rt: Runtime, run_id: RunId) -> _Trace:
-        """Aggregate steps / tokens / tool calls from the run's event log.
+        """Aggregate steps / tokens / tool calls from the run's record.
 
         Read once the reply has arrived: every ``llm.call`` and ``tool.call``
         entry is journaled during the agent loop, before it replies.
         """
         trace = _Trace()
-        async for entry in rt.event_log.read(run_id):
+        for entry in await rt.read(run_id):
             payload = entry.payload or {}
             if entry.kind == RunLogKind.LLM_CALL:
                 trace.steps += 1

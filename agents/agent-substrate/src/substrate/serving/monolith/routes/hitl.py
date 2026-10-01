@@ -95,16 +95,14 @@ async def _durable_pending_hitl(ctx: ServerDependencies, thread_id: str) -> list
     runtime = getattr(ctx, "runtime", None)
     if runtime is None:
         return []
-    found = await runtime.scheduler.find_run_for_thread(thread_id)
-    if found is None:
+    found = await runtime.active_run_for_thread(thread_id)
+    if found is None or found.status != RunStatus.SUSPENDED:
         return []
-    run_id, status = found
-    if status != RunStatus.SUSPENDED:
-        return []
+    run_id = found.run_id
 
     last_kind: str | None = None
     last_request: dict | None = None
-    async for entry in runtime.event_log.read(run_id):
+    for entry in await runtime.read(run_id):
         if entry.kind in (RunLogKind.INPUT_REQUESTED, RunLogKind.APPROVAL_REQUESTED):
             last_kind = entry.kind
             last_request = entry.payload

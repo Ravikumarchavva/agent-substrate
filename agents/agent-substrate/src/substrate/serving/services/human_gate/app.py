@@ -38,27 +38,21 @@ async def lifespan(app):
     await event_bus.connect()
     app.state.event_bus = event_bus
 
-    # Same physical Postgres database agent_runtime's durable Runtime uses
-    # (both read DATABASE_URL, see deployment/docker/docker-compose.
-    # microservices.yml's shared x-common-env) — this is what lets
-    # resolve_request() wake a signal-suspended run directly, converging
-    # onto the Phase-1 SignalBusProtocol instead of only Redis pub/sub.
-    import asyncpg
+    # The same physical Postgres database agent_runtime's durable runtime uses (both
+    # read DATABASE_URL) — this is what lets resolve_request() wake a signal-suspended
+    # run directly instead of only publishing on Redis.
+    from substrate.integrations.runtime import PostgresRuntimeStore
 
-    from substrate.integrations.runtime.signal_bus import SignalBus
-
-    signal_pool = await asyncpg.create_pool(db_url.replace("+asyncpg", ""))
-    signal_bus = SignalBus(signal_pool)
-    await signal_bus.setup()
-    app.state.signal_bus = signal_bus
-    app.state.signal_pool = signal_pool
+    runtime_store = PostgresRuntimeStore(db_url.replace("+asyncpg", ""), pool_min_size=1, pool_max_size=4)
+    await runtime_store.start()
+    app.state.runtime_store = runtime_store
 
     logger.info("Human Gate service started")
     yield
 
     await event_bus.disconnect()
     await redis_connector.disconnect()
-    await signal_pool.close()
+    await runtime_store.aclose()
     await engine.dispose()
 
 

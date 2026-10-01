@@ -23,8 +23,7 @@ from substrate.kernel.abstractions import (
 )
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.runtime.log_entry import EventLogProtocol
-    from substrate.kernel.runtime._scheduling import SchedulerBackend
+    from substrate.kernel.abstractions.runtime.store import RuntimeStore
 
 
 async def rebuild_messages_from_steps(
@@ -141,9 +140,7 @@ async def rebuild_messages_from_steps(
     return messages
 
 
-async def step_rows_from_log(
-    event_log: EventLogProtocol, scheduler: SchedulerBackend, thread_id: str
-) -> list[dict]:
+async def step_rows_from_log(store: RuntimeStore, thread_id: str) -> list[dict]:
     """Project a thread's EventLogProtocol into ``rebuild_messages_from_steps``'s
     step-row schema — the monolith's cold-store source, now that the EventLogProtocol
     (not a separate ``steps`` table) is the single source of truth for
@@ -151,7 +148,7 @@ async def step_rows_from_log(
     the sibling projection for UI display).
 
     Turn-boundary rule matches ``project_thread``'s UI-facing counterpart
-    (substrate-ui's ``history-fold.ts``): a ``text.delta``/``tool.call``
+    (substrate-ui's ``history-fold.ts``): an ``assistant.message``/``tool.call``
     arriving after a ``tool.result`` starts a new ``assistant_message`` row —
     each real LLM generation's text + tool-use calls land in one row, exactly
     matching how the live react loop actually shaped them.
@@ -184,9 +181,8 @@ async def step_rows_from_log(
         current = None
         saw_tool_result = False
 
-    run_ids = await scheduler.find_all_runs_for_thread(thread_id)
-    for run_id in run_ids:
-        async for entry in event_log.read(run_id):
+    for run in await store.find_runs(thread_id=thread_id, active_only=False):
+        for entry in await store.read_events(run.run_id, durable_only=True):
             kind = entry.kind
             payload = entry.payload or {}
 
@@ -209,7 +205,7 @@ async def step_rows_from_log(
                     flagged_seqs.add(seq)
                 continue
 
-            if kind == RunLogKind.TEXT_DELTA:
+            if kind == RunLogKind.ASSISTANT_MESSAGE:
                 if saw_tool_result:
                     _flush()
                 if current is None:

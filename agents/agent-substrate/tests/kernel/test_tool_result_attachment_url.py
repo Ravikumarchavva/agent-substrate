@@ -1,6 +1,6 @@
 """_attachment_url — tool-result image → wire attachment URL.
 
-Covers only the pure mapping in agents/runtime/context/tool.py, not the
+Covers only the pure mapping in kernel/runtime/context.py, not the
 surrounding journaled-effect machinery: a durably-backed ImageBlock (has
 storage_key) must produce a bare `object:` scheme rather than an inlined data
 URI, since inlining is what made every image get re-stored, base64-inflated,
@@ -9,7 +9,7 @@ on every tool call that returned it.
 
 from __future__ import annotations
 
-from substrate.kernel.runtime.context.tool import _attachment_url
+from substrate.kernel.runtime.context import _attachment_url
 from substrate.kernel.abstractions.core.content import MediaBlock
 
 

@@ -137,7 +137,7 @@ async def get_thread_steps(
     if runtime is None:
         raise HTTPException(status_code=503, detail="Runtime not configured")
 
-    events = await project_thread(runtime.event_log, runtime.scheduler, thread_id)
+    events = await project_thread(runtime.store, thread_id)
     return [event.model_dump(mode="json") for event in events]
 
 

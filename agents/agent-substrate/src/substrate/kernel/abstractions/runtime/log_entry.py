@@ -68,6 +68,9 @@ class RunLogKind(StrEnum):
     EFFECT_INTENT = "effect.intent"
     EFFECT_RESULT = "effect.result"
     LLM_CALL = "llm.call"
+    # The assistant's whole reply for one LLM call: text and reasoning. Durable, unlike the
+    # token stream (TEXT_DELTA), which is live output that is dropped after the run ends.
+    ASSISTANT_MESSAGE = "assistant.message"
     TOOL_CALL = "tool.call"
     TOOL_RESULT = "tool.result"
 

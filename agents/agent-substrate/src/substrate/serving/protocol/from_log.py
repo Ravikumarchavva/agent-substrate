@@ -36,8 +36,21 @@ STREAMING_KINDS = frozenset(
 )
 
 
-def wire_from_log(kind: str, payload: dict) -> WireEvent | None:
-    """Return the wire event for a log entry, or None if it isn't streamable."""
+def wire_from_log(kind: str, payload: dict, *, history: bool = False) -> WireEvent | None:
+    """Return the wire event for a log entry, or None if it isn't streamable.
+
+    A live view reads the token stream (``text.delta``). A *history* view reads a
+    finished run, where that stream is gone — it was live output, dropped after the run
+    ended — so it takes the durable ``assistant.message`` instead and shows it as the
+    same wire event. Either way the client sees the same events.
+    """
+    if history:
+        if kind == RunLogKind.ASSISTANT_MESSAGE:
+            return _ADAPTER.validate_python({"type": RunLogKind.TEXT_DELTA, "text": payload.get("text", "")})
+        if kind in (RunLogKind.TEXT_DELTA, RunLogKind.REASONING_DELTA):
+            return None
+    elif kind == RunLogKind.ASSISTANT_MESSAGE:
+        return None  # live viewers already have this text, token by token
     if kind not in STREAMING_KINDS:
         return None
     return _ADAPTER.validate_python({"type": kind, **payload})

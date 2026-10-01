@@ -366,6 +366,13 @@ class RuntimeStore(Protocol):
         ``timeout_s``. A hint to stop a tail polling; it may return early."""
         ...
 
+    async def annotate(self, run_id: RunId, entries: Sequence[NewEntry]) -> list[int]:
+        """Append durable entries to a run's record from outside its worker — a note a
+        host adds to a thread (feedback, an MCP App's context). The store assigns ``seq``;
+        no lease is needed, because these entries never take part in a run's replay.
+        Returns the seqs. Raises ``KeyError`` for an unknown run."""
+        ...
+
     async def append_ephemeral(self, lease: Lease, entries: Sequence[NewEntry]) -> None:
         """Append live (non-journal) entries under the lease. Fenced like a commit."""
         ...

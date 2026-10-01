@@ -1,23 +1,19 @@
-"""Conformance tests for the durable runtime kernel contracts.
+"""Tests for the durable-runtime value types in ``kernel.abstractions.runtime``.
 
-These tests verify that:
-1. All value types (RunLogEntry, Effect, Wakeup, …) round-trip through JSON.
-2. All Protocol interfaces are structurally sound (implementable by a minimal stub).
-3. Effect.make_id is deterministic and collision-resistant.
-4. RunContext carries run_id correctly in both standalone and supervised modes.
-5. Error types carry their structured fields.
+These verify that:
+1. Value types (RunLogEntry, Effect, Wakeup, …) round-trip through JSON and reject
+   illegal states.
+2. Effect.make_id is deterministic and collision-resistant.
+3. RunMeta carries run_id correctly in both standalone and supervised modes.
+4. Error types carry their structured fields.
 
-When Stage 1 (Postgres) in-memory impls are added, the same suite is run
-against those implementations unchanged — that is the "swap the impl, not the
-contract" verification the plan promises.
+Behaviour of the ``RuntimeStore`` port (leases, journal, inbox, signals) is not tested
+here: it is the runtime-store conformance suite, run against every implementation.
 """
 
 from __future__ import annotations
 
-import asyncio
-from collections import defaultdict, deque
 from datetime import datetime, timezone
-from typing import AsyncIterator
 from uuid import uuid4
 
 import pytest
@@ -28,12 +24,11 @@ from substrate.kernel.abstractions.exceptions import ConcurrentAppendError
 from substrate.kernel.abstractions.agent.runtime_context import RunMeta
 from substrate.kernel.runtime.cancellation import CancellationToken
 from substrate.kernel.abstractions.agent.supervision import Supervision
-from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus, new_run_id
+from substrate.kernel.abstractions.runtime.ids import RunStatus, new_run_id
 from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
 from substrate.kernel.abstractions.runtime.effects import Effect, EffectResult
-from substrate.kernel.abstractions.runtime.inbox import DeadLetterReason, DeadLetterEntry
 from substrate.kernel.abstractions.runtime.wakeup import Wakeup
-from substrate.kernel.abstractions.runtime.scheduler import Lease, RunRetryPolicy
+from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 from substrate.kernel.abstractions.runtime.supervisor import RunHandle, RunResult
 from substrate.kernel.abstractions.runtime.agent import AgentRunContext, Agent
 from substrate.kernel.abstractions.storage.memory import MemoryProvenance
@@ -124,124 +119,6 @@ class TestRunLogEntry:
         assert entry.ts.tzinfo is not None
 
 
-class InMemoryEventLog:
-    """Minimal in-memory EventLogProtocol for contract conformance testing."""
-
-    def __init__(self) -> None:
-        self._logs: dict[RunId, list[RunLogEntry]] = defaultdict(list)
-        self._waiters: dict[RunId, list[asyncio.Event]] = defaultdict(list)
-
-    async def append(
-        self, run_id: RunId, entry: RunLogEntry, *, expected_seq: int
-    ) -> int:
-        current = len(self._logs[run_id]) - 1
-        if current != expected_seq:
-            raise ConcurrentAppendError(
-                f"expected {expected_seq}, got {current}",
-                run_id=run_id,
-                expected_seq=expected_seq,
-                actual_seq=current,
-            )
-        self._logs[run_id].append(entry)
-        new_seq = len(self._logs[run_id]) - 1
-        for ev in self._waiters[run_id]:
-            ev.set()
-        self._waiters[run_id].clear()
-        return new_seq
-
-    def read(self, run_id: RunId, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]:
-        return self._read_iter(run_id, from_seq)
-
-    async def _read_iter(self, run_id: RunId, from_seq: int):  # type: ignore[return]
-        for entry in self._logs[run_id][from_seq:]:
-            yield entry
-
-    def tail(self, run_id: RunId, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]:
-        return self._tail_iter(run_id, from_seq)
-
-    async def _tail_iter(self, run_id: RunId, from_seq: int):  # type: ignore[return]
-        idx = from_seq
-        while True:
-            entries = self._logs[run_id]
-            while idx < len(entries):
-                yield entries[idx]
-                idx += 1
-            ev = asyncio.Event()
-            self._waiters[run_id].append(ev)
-            await ev.wait()
-
-    async def last_seq(self, run_id: RunId) -> int:
-        return len(self._logs[run_id]) - 1
-
-
-class TestEventLog:
-    async def test_append_and_read(self) -> None:
-        log = InMemoryEventLog()
-        rid = new_run_id()
-        e0 = RunLogEntry(run_id=rid, seq=0, kind="run.started")
-        e1 = RunLogEntry(run_id=rid, seq=1, kind="msg.received")
-
-        await log.append(rid, e0, expected_seq=-1)
-        await log.append(rid, e1, expected_seq=0)
-
-        entries = [e async for e in log.read(rid)]
-        assert len(entries) == 2
-        assert entries[0].kind == "run.started"
-        assert entries[1].kind == "msg.received"
-
-    async def test_concurrent_append_raises(self) -> None:
-        log = InMemoryEventLog()
-        rid = new_run_id()
-        e0 = RunLogEntry(run_id=rid, seq=0, kind="run.started")
-        await log.append(rid, e0, expected_seq=-1)
-
-        with pytest.raises(ConcurrentAppendError) as exc:
-            await log.append(
-                rid, RunLogEntry(run_id=rid, seq=1, kind="x"), expected_seq=-1
-            )
-        assert exc.value.run_id == rid
-        assert exc.value.expected_seq == -1
-        assert exc.value.actual_seq == 0
-
-    async def test_last_seq_empty(self) -> None:
-        log = InMemoryEventLog()
-        assert await log.last_seq(new_run_id()) == -1
-
-    async def test_read_from_seq(self) -> None:
-        log = InMemoryEventLog()
-        rid = new_run_id()
-        for i in range(5):
-            await log.append(
-                rid, RunLogEntry(run_id=rid, seq=i, kind=f"k{i}"), expected_seq=i - 1
-            )
-        entries = [e async for e in log.read(rid, from_seq=3)]
-        assert [e.kind for e in entries] == ["k3", "k4"]
-
-    async def test_tail_yields_existing_then_new(self) -> None:
-        log = InMemoryEventLog()
-        rid = new_run_id()
-        await log.append(
-            rid, RunLogEntry(run_id=rid, seq=0, kind="k0"), expected_seq=-1
-        )
-
-        collected: list[str] = []
-
-        async def consume() -> None:
-            async for entry in log.tail(rid):
-                collected.append(entry.kind)
-                if len(collected) >= 2:
-                    break
-
-        async def produce() -> None:
-            await asyncio.sleep(0.01)
-            await log.append(
-                rid, RunLogEntry(run_id=rid, seq=1, kind="k1"), expected_seq=0
-            )
-
-        await asyncio.gather(consume(), produce())
-        assert collected == ["k0", "k1"]
-
-
 # ---------------------------------------------------------------------------
 # effects.py
 # ---------------------------------------------------------------------------
@@ -286,126 +163,6 @@ class TestEffectResult:
         r = EffectResult(effect_id="x", status="error", value={"err": "timeout"})
         restored = EffectResult.model_validate_json(r.model_dump_json())
         assert restored == r
-
-
-# ---------------------------------------------------------------------------
-# inbox.py
-# ---------------------------------------------------------------------------
-
-
-class InMemoryInbox:
-    """Minimal in-memory InboxProtocol — dedup + FIFO + dead-letter after 3 retries."""
-
-    MAX_RETRIES = 3
-
-    def __init__(self) -> None:
-        self._queues: dict[str, deque[Message]] = defaultdict(deque)
-        self._seen: dict[str, set[str]] = defaultdict(set)  # agent_id -> msg_ids
-        self._retries: dict[str, dict[str, int]] = defaultdict(dict)
-        self._dead: dict[str, list[DeadLetterEntry]] = defaultdict(list)
-
-    def _key(self, agent_id: Actor) -> str:
-        return str(agent_id)
-
-    async def deliver(self, agent_id: Actor, msg: Message) -> bool:
-        k = self._key(agent_id)
-        if msg.id in self._seen[k]:
-            return False
-        self._seen[k].add(msg.id)
-        self._queues[k].append(msg)
-        return True
-
-    async def drain(self, agent_id: Actor, *, max: int = 100) -> list[Message]:
-        k = self._key(agent_id)
-        q = self._queues[k]
-        result = []
-        for _ in range(min(max, len(q))):
-            result.append(q[0])
-            q.rotate(-1)  # move to back (not yet acked)
-        return result
-
-    async def ack(self, agent_id: Actor, msg_id: str) -> None:
-        k = self._key(agent_id)
-        q = self._queues[k]
-        self._queues[k] = deque(m for m in q if m.id != msg_id)
-        self._retries[k].pop(msg_id, None)
-
-    async def nack(self, agent_id: Actor, msg_id: str, *, error: str = "") -> None:
-        k = self._key(agent_id)
-        count = self._retries[k].get(msg_id, 0) + 1
-        self._retries[k][msg_id] = count
-        if count >= self.MAX_RETRIES:
-            msg_list = [m for m in self._queues[k] if m.id == msg_id]
-            self._queues[k] = deque(m for m in self._queues[k] if m.id != msg_id)
-            if msg_list:
-                self._dead[k].append(
-                    DeadLetterEntry(
-                        agent_id=agent_id,
-                        msg=msg_list[0],
-                        reason=DeadLetterReason.MAX_RETRIES,
-                        attempts=count,
-                        last_error=error or None,
-                    )
-                )
-
-    async def dead_letters(self, agent_id: Actor) -> list[DeadLetterEntry]:
-        return list(self._dead[self._key(agent_id)])
-
-    async def pending_count(self, agent_id: Actor) -> int:
-        return len(self._queues[self._key(agent_id)])
-
-
-class TestInbox:
-    async def test_deliver_and_drain(self) -> None:
-        inbox = InMemoryInbox()
-        agent = _agent_id()
-        msg = _message(target=agent)
-        delivered = await inbox.deliver(agent, msg)
-        assert delivered is True
-        msgs = await inbox.drain(agent)
-        assert len(msgs) == 1
-        assert msgs[0].id == msg.id
-
-    async def test_dedup_idempotent(self) -> None:
-        inbox = InMemoryInbox()
-        agent = _agent_id()
-        msg = _message(target=agent)
-        r1 = await inbox.deliver(agent, msg)
-        r2 = await inbox.deliver(agent, msg)
-        assert r1 is True
-        assert r2 is False
-        assert await inbox.pending_count(agent) == 1
-
-    async def test_ack_removes_message(self) -> None:
-        inbox = InMemoryInbox()
-        agent = _agent_id()
-        msg = _message(target=agent)
-        await inbox.deliver(agent, msg)
-        await inbox.ack(agent, msg.id)
-        assert await inbox.pending_count(agent) == 0
-
-    async def test_nack_dead_letter_after_max_retries(self) -> None:
-        inbox = InMemoryInbox()
-        agent = _agent_id()
-        msg = _message(target=agent)
-        await inbox.deliver(agent, msg)
-        for i in range(InMemoryInbox.MAX_RETRIES):
-            await inbox.nack(agent, msg.id, error=f"err{i}")
-        dead = await inbox.dead_letters(agent)
-        assert len(dead) == 1
-        assert dead[0].reason == DeadLetterReason.MAX_RETRIES
-        assert dead[0].attempts == InMemoryInbox.MAX_RETRIES
-        assert await inbox.pending_count(agent) == 0
-
-    async def test_fifo_per_sender(self) -> None:
-        inbox = InMemoryInbox()
-        agent = _agent_id()
-        sender = _agent_id("sender")
-        msgs = [_message(sender=sender, target=agent) for _ in range(3)]
-        for m in msgs:
-            await inbox.deliver(agent, m)
-        drained = await inbox.drain(agent, max=10)
-        assert [m.id for m in drained] == [m.id for m in msgs]
 
 
 # ---------------------------------------------------------------------------
@@ -472,20 +229,6 @@ def test_run_log_entry_rejects_negative_sequence() -> None:
 def test_memory_provenance_rejects_confidence_outside_range() -> None:
     with pytest.raises(ValueError):
         MemoryProvenance(confidence=1.1)
-
-
-class TestLease:
-    def test_round_trip_json(self) -> None:
-        from substrate.kernel.abstractions.core.identity import Actor
-
-        lease = Lease(
-            run_id=new_run_id(),
-            agent_id=Actor(type="agent", key="agent"),
-            worker_id="worker-1",
-            expires_at=datetime(2026, 12, 31, tzinfo=timezone.utc),
-        )
-        restored = Lease.model_validate_json(lease.model_dump_json())
-        assert restored == lease
 
 
 # ---------------------------------------------------------------------------

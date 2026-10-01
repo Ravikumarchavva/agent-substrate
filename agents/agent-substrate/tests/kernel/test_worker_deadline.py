@@ -1,8 +1,7 @@
-"""Worker._resolve_deadline — ExecutionBudget.deadline_s wired into a real RunMeta.deadline.
+"""Worker._deadline — ExecutionBudget.deadline_s wired into the run's absolute cutoff.
 
-Unit-level: exercises the resolution logic directly against a real
-InMemoryEventLog, without needing the full spawn/orchestration machinery
-(Supervision.supervision_of() only returns non-None for spawned runs).
+Unit-level: the resolution is a pure function of the lease, so it is exercised directly,
+without the spawn/orchestration machinery that a supervised run needs.
 """
 
 from __future__ import annotations
@@ -11,28 +10,19 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from substrate.kernel.runtime.backends._event_log import InMemoryEventLog
-from substrate.kernel.runtime.worker import Worker
 from substrate.kernel.abstractions.agent.supervision import ExecutionBudget, Supervision
 from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.runtime.ids import RunId, new_run_id
-from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
+from substrate.kernel.abstractions.runtime.store import Lease
+from substrate.kernel.runtime.resolver import ActorResolver
+from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
+from substrate.kernel.runtime.worker import Worker
+
+_AGENT = Actor(type="agent", key="a")
 
 
-def _worker(event_log: InMemoryEventLog) -> Worker:
-    # Only self._event_log is touched by _resolve_deadline — the rest are
-    # never called, so None stand-ins are fine for this unit-level test.
-    return Worker(
-        worker_id="w1",
-        event_log=event_log,
-        inbox=None,  # type: ignore[arg-type]
-        follow_graph=None,  # type: ignore[arg-type]
-        fanout=None,  # type: ignore[arg-type]
-        scheduler=None,  # type: ignore[arg-type]
-        supervisor=None,  # type: ignore[arg-type]
-        signal_bus=None,  # type: ignore[arg-type]
-        resolver=None,  # type: ignore[arg-type]
-    )
+def _worker() -> Worker:
+    return Worker(worker_id="w1", store=SqliteRuntimeStore(":memory:"), resolver=ActorResolver())
 
 
 def _supervision(run_id: RunId, *, deadline_s: float | None) -> Supervision:
@@ -45,44 +35,44 @@ def _supervision(run_id: RunId, *, deadline_s: float | None) -> Supervision:
     )
 
 
-async def test_no_budget_means_no_deadline() -> None:
-    event_log = InMemoryEventLog()
-    worker = _worker(event_log)
+def _lease(
+    *,
+    deadline_s: float | None = None,
+    started_at: datetime | None = None,
+    deadline: datetime | None = None,
+    supervised: bool = True,
+) -> Lease:
     run_id = new_run_id()
-    assert await worker._resolve_deadline(run_id, None) is None
-    assert await worker._resolve_deadline(run_id, _supervision(run_id, deadline_s=None)) is None
-
-
-async def test_fresh_run_anchors_deadline_to_now() -> None:
-    """First lease, empty log: "now" genuinely is the run's start."""
-    event_log = InMemoryEventLog()
-    worker = _worker(event_log)
-    run_id = new_run_id()
-    before = datetime.now(timezone.utc)
-    deadline = await worker._resolve_deadline(run_id, _supervision(run_id, deadline_s=60.0))
-    after = datetime.now(timezone.utc)
-    assert deadline is not None
-    assert before + timedelta(seconds=60) <= deadline <= after + timedelta(seconds=60)
-
-
-async def test_resumed_run_anchors_to_original_start_not_now() -> None:
-    """A resumed run's deadline must not be pushed out on every re-lease."""
-    event_log = InMemoryEventLog()
-    run_id = new_run_id()
-    started_at = datetime.now(timezone.utc) - timedelta(seconds=30)
-    await event_log.append(
-        run_id,
-        RunLogEntry(run_id=run_id, seq=0, kind=RunLogKind.RUN_STARTED, ts=started_at),
-        expected_seq=-1,
+    return Lease(
+        run_id=run_id,
+        agent=_AGENT,
+        worker_id="w1",
+        epoch=1,
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=30),
+        supervision=_supervision(run_id, deadline_s=deadline_s) if supervised else None,
+        started_at=started_at,
+        deadline=deadline,
     )
-    worker = _worker(event_log)
 
-    deadline = await worker._resolve_deadline(run_id, _supervision(run_id, deadline_s=60.0))
 
-    assert deadline is not None
-    # Anchored to started_at (30s ago) + 60s, NOT datetime.now() + 60s.
-    assert abs((deadline - (started_at + timedelta(seconds=60))).total_seconds()) < 1
+def test_no_budget_means_no_deadline() -> None:
+    assert _worker()._deadline(_lease(supervised=False)) is None
+    assert _worker()._deadline(_lease(deadline_s=None, started_at=datetime.now(timezone.utc))) is None
+
+
+def test_budget_anchors_to_when_the_run_first_started() -> None:
+    """A resumed run's deadline must not be pushed out on every re-lease."""
+    started_at = datetime.now(timezone.utc) - timedelta(seconds=30)
+    deadline = _worker()._deadline(_lease(deadline_s=60.0, started_at=started_at))
+    assert deadline == started_at + timedelta(seconds=60)
     assert deadline < datetime.now(timezone.utc) + timedelta(seconds=60)
+
+
+def test_the_earlier_of_the_run_deadline_and_the_budget_wins() -> None:
+    started_at = datetime.now(timezone.utc)
+    hard = started_at + timedelta(seconds=10)
+    assert _worker()._deadline(_lease(deadline_s=60.0, started_at=started_at, deadline=hard)) == hard
+    assert _worker()._deadline(_lease(deadline_s=5.0, started_at=started_at, deadline=hard)) == started_at + timedelta(seconds=5)
 
 
 async def test_run_meta_check_raises_past_deadline() -> None:

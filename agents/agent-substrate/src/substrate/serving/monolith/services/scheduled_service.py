@@ -175,10 +175,10 @@ async def execute_scheduled_task(
             )
 
             output_text = ""
-            async for entry in app_state.runtime.event_log.tail(run_id):
+            async for entry in app_state.runtime.tail(run_id):
                 kind = entry.kind
                 p = entry.payload or {}
-                if kind == RunLogKind.TEXT_DELTA:
+                if kind == RunLogKind.ASSISTANT_MESSAGE:
                     output_text += p.get("text", "")
                 elif kind == RunLogKind.RUN_COMPLETED:
                     break

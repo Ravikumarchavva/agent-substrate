@@ -1,182 +1,136 @@
-"""Tool-approval HITL is durable: a pending CRITICAL/HIGH-risk approval
-survives a process restart, the same way ask_human already does — proven
-here by resuming from a *fresh* RunContext folded from the same EventLogProtocol,
-exactly simulating two independent process lifetimes sharing only the
-durable EventLogProtocol + SignalBusProtocol (see test_effect_cache.py's identical pattern
-for the "crash and replay" fixture shape)."""
+"""Tool-approval HITL is durable: a pending CRITICAL/HIGH-risk approval survives a process
+restart, the same way ask_human does.
+
+Two runtimes on one SQLite file stand in for two process lifetimes: the first reaches the
+approval and is stopped, the human answers while nothing is running, and a second runtime
+with brand-new agent objects picks the run up and finishes it.
+"""
 
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
 from typing import Any
 
-import pytest
-
-from substrate.kernel.runtime.backends._event_log import InMemoryEventLog
-from substrate.kernel.runtime.backends._fanout import PushAllFanout
-from substrate.kernel.runtime.backends._follow_graph import InMemoryFollowGraph
-from substrate.kernel.runtime.backends._inbox import InMemoryInbox
-from substrate.kernel.runtime.backends._scheduler import InMemoryScheduler
-from substrate.kernel.runtime.backends._signal_bus import InMemorySignalBus
-from substrate.kernel.runtime.backends._supervisor import InMemorySupervisor
-from substrate.kernel.runtime.cancellation import CancellationToken
-from substrate.kernel.runtime.context import RunContext
-from substrate.kernel.runtime.effect_cache import EffectCache
-from substrate.kernel.tools.invoker import ToolInvoker
-from substrate.kernel.tools.toolbox import Toolbox
-from substrate.kernel.abstractions.agent.runtime_context import RunMeta
 from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.exceptions import SuspendInterrupt
-from substrate.kernel.abstractions.runtime.ids import new_run_id
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import DataPayload, Message
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.runtime.store import Delivery
 from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
 from substrate.kernel.abstractions.tools.approval import ApprovalRequest, ApprovalResult
+from substrate.kernel.runtime import Runtime
+from substrate.kernel.tools.toolbox import Toolbox
+
+TIMEOUT = 10
 
 
 class SendEmailTool:
     name = "send_email"
     description = "Sends an email."
     risk = ToolRisk.HIGH
-    input_schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {"to": {"type": "string"}},
-    }
+    idempotent = False
+    input_schema: dict[str, Any] = {"type": "object", "properties": {"to": {"type": "string"}}}
 
     async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:
-        return ToolExecutionResult(
-            content=[TextBlock(text=f"email sent to {kwargs.get('to')}")]
-        )
+        return ToolExecutionResult(name=self.name, content=[TextBlock(text=f"email sent to {kwargs.get('to')}")])
 
 
-class FakeSignalApprovalHandler:
-    """Marks itself signal-capable, matching SSEApprovalHandler's own
-    marker convention. request() must never be called by ToolInvoker when
-    this marker is set and ctx is available — if it is, the fallback path
-    fired instead of the durable one, which is the bug this test guards
-    against."""
+class SignalApprovalHandler:
+    """Marks itself signal-capable, as the web approval handler does. ``request()`` must
+    never be called: if it is, the in-memory fallback fired instead of the durable path."""
 
     suspends_via_signal = True
 
     async def request(self, req: ApprovalRequest) -> ApprovalResult:
-        raise AssertionError(
-            "request() called — ToolInvoker should have used the signal "
-            "path (suspends_via_signal=True + ctx provided), not the "
-            "Future-based fallback"
-        )
+        raise AssertionError("request() called — the durable signal path was not used")
 
 
-async def _fresh_ctx(event_log: InMemoryEventLog, run_id: str) -> RunContext:
-    """Build a standalone RunContext for run_id, folding fresh from
-    event_log — a new instance each call simulates a new process picking up
-    the same durable state, not the same in-memory object resuming."""
-    inbox = InMemoryInbox()
-    scheduler = InMemoryScheduler()
-    signal_bus = InMemorySignalBus(scheduler)
-    registry = Toolbox()
-    registry.add(SendEmailTool())
-    tool_invoker = ToolInvoker(
-        registry=registry, approval_handler=FakeSignalApprovalHandler()
-    )
-    meta = RunMeta(run_id=run_id, cancellation=CancellationToken())
-    effect_cache = await EffectCache.fold(event_log, run_id)
-    return RunContext(
-        meta=meta,
-        event_log=event_log,
-        effect_cache=effect_cache,
-        inbox=inbox,
-        follow_graph=InMemoryFollowGraph(),
-        fanout=PushAllFanout(),
-        scheduler=scheduler,
-        supervisor=InMemorySupervisor(event_log, inbox, scheduler, signal_bus),
-        signal_bus=signal_bus,
-        tool_invoker=tool_invoker,
-    )
+class Mailer:
+    """Calls the HIGH-risk tool once and keeps the answer."""
+
+    def __init__(self) -> None:
+        self.id = Actor("agent", "mailer")
+        self.tools = Toolbox()
+        self.tools.add(SendEmailTool())
+        self.approval_handler = SignalApprovalHandler()
+        self.results: list[Any] = []
+
+    async def run(self, ctx: Any, inbox: list[Message]) -> None:
+        self.results.append(await ctx.tool("send_email", {"to": "user@example.com"}))
 
 
-def _extract_request_id(entries: list) -> str:
-    for entry in entries:
-        if entry.kind == "approval.requested":
-            return entry.payload["request_id"]
-    raise AssertionError("no approval.requested entry found in the EventLogProtocol")
+def _boot(agent: Mailer) -> Message:
+    return Message(target=agent.id, sender=Actor.system("test"), payload=DataPayload(data={}))
 
 
-async def test_tool_approval_survives_restart_and_resumes_when_approved():
-    event_log = InMemoryEventLog()
-    run_id = new_run_id()
+async def _wait_for(rt: Runtime, run_id: str, kind: str) -> dict[str, Any]:
+    async def watch() -> dict[str, Any]:
+        async for entry in rt.tail(run_id):
+            if entry.kind == kind:
+                return dict(entry.payload or {})
+        raise AssertionError(f"tail ended before {kind}")
 
-    # "Process 1": the run reaches the HIGH-risk tool call, suspends —
-    # nothing resolves the approval yet.
-    ctx1 = await _fresh_ctx(event_log, run_id)
-    with pytest.raises(SuspendInterrupt):
-        await ctx1.tool("send_email", {"to": "user@example.com"})
+    return await asyncio.wait_for(watch(), TIMEOUT)
 
-    entries = [e async for e in event_log.read(run_id)]
-    request_id = _extract_request_id(entries)
 
-    # The human responds while nothing is running — exactly what a process
-    # restart between suspend and response looks like. In-memory backends
-    # have no shared external process to signal through, so this test
-    # shares ctx1's SignalBusProtocol instance with ctx2 below as the stand-in for
-    # what a real SignalBus already gives for free (any process can
-    # signal the same durable run) — see the two Postgres-backed
-    # Supervisor tests for the equivalent proof against the real
-    # backend.
-    await ctx1._signal_bus.signal(  # type: ignore[attr-defined]
-        run_id, f"hitl:{request_id}", {"action": "approve"}
-    )
+async def _approve_across_restart(path: Path, action: str) -> Mailer:
+    first = Mailer()
+    async with Runtime.local(path) as rt:
+        await rt.register(first)
+        run_id = await rt.submit(first.id, _boot(first))
+        request = await _wait_for(rt, run_id, RunLogKind.APPROVAL_REQUESTED)
+        # Let the suspension commit before the "process" goes away.
+        for _ in range(200):
+            if (await rt.get_run(run_id)).status == "suspended":
+                break
+            await asyncio.sleep(0.01)
 
-    # "Process 2": a brand-new RunContext, folded fresh from the EventLogProtocol —
-    # no shared Python object with ctx1 except event_log itself.
-    ctx2 = await _fresh_ctx(event_log, run_id)
-    ctx2._signal_bus = ctx1._signal_bus  # type: ignore[attr-defined]
-    result = await ctx2.tool("send_email", {"to": "user@example.com"})
+    # The human responds while nothing is running.
+    async with Runtime.local(path) as rt:
+        await rt.store.signal(run_id, f"hitl:{request['request_id']}", {"action": action})
+        second = Mailer()
+        await rt.register(second)
+        await _wait_for(rt, run_id, RunLogKind.RUN_COMPLETED)
+    return second
 
+
+async def test_tool_approval_survives_restart_and_resumes_when_approved(tmp_path: Path) -> None:
+    second = await _approve_across_restart(tmp_path / "rt.sqlite3", "approve")
+
+    (result,) = second.results
     assert result.status == "ok"
-    assert result.text is not None
-    assert "user@example.com" in result.text
+    assert "user@example.com" in (result.text or "")
 
 
-async def test_tool_approval_survives_restart_and_denies_when_rejected():
-    event_log = InMemoryEventLog()
-    run_id = new_run_id()
+async def test_tool_approval_survives_restart_and_denies_when_rejected(tmp_path: Path) -> None:
+    second = await _approve_across_restart(tmp_path / "rt.sqlite3", "deny")
 
-    ctx1 = await _fresh_ctx(event_log, run_id)
-    with pytest.raises(SuspendInterrupt):
-        await ctx1.tool("send_email", {"to": "user@example.com"})
-
-    entries = [e async for e in event_log.read(run_id)]
-    request_id = _extract_request_id(entries)
-
-    await ctx1._signal_bus.signal(  # type: ignore[attr-defined]
-        run_id, f"hitl:{request_id}", {"action": "deny"}
-    )
-
-    ctx2 = await _fresh_ctx(event_log, run_id)
-    ctx2._signal_bus = ctx1._signal_bus  # type: ignore[attr-defined]
-    result = await ctx2.tool("send_email", {"to": "user@example.com"})
-
+    (result,) = second.results
     assert result.status == "denied"
 
 
-async def test_tool_approval_request_id_is_replay_stable():
-    """A second suspend attempt on the SAME run (no signal yet) must reuse
-    the identical request_id — otherwise every retry would orphan the
-    previous SSE card, exactly the bug ctx.uuid() (not uuid4()) prevents."""
-    event_log = InMemoryEventLog()
-    run_id = new_run_id()
+async def test_tool_approval_request_id_is_replay_stable(tmp_path: Path) -> None:
+    """A replayed suspend (no answer yet) must reuse the identical request_id and not write
+    a second approval.requested — otherwise every retry would orphan the previous card."""
+    path = tmp_path / "rt.sqlite3"
+    agent = Mailer()
+    async with Runtime.local(path) as rt:
+        await rt.register(agent)
+        run_id = await rt.submit(agent.id, _boot(agent))
+        first = await _wait_for(rt, run_id, RunLogKind.APPROVAL_REQUESTED)
+        for _ in range(200):
+            if (await rt.get_run(run_id)).status == "suspended":
+                break
+            await asyncio.sleep(0.01)
 
-    ctx1 = await _fresh_ctx(event_log, run_id)
-    with pytest.raises(SuspendInterrupt):
-        await ctx1.tool("send_email", {"to": "user@example.com"})
-    first_entries = [e async for e in event_log.read(run_id)]
-    first_id = _extract_request_id(first_entries)
+    async with Runtime.local(path) as rt:
+        again = Mailer()
+        await rt.register(again)
+        # A new message wakes the suspended run; it replays to the same approval and suspends again.
+        await rt.store.deliver(Delivery(agent=again.id, msg=_boot(again)))
+        await asyncio.sleep(0.3)
+        assert [e.kind for e in await rt.read(run_id)].count(RunLogKind.RUN_RESUMED) >= 1, "the run was not replayed"
+        requests = [e for e in await rt.read(run_id) if e.kind == RunLogKind.APPROVAL_REQUESTED]
 
-    # Replay without ever resolving the signal: must re-suspend, and the
-    # approval.requested entry must NOT be duplicated (log_once).
-    ctx2 = await _fresh_ctx(event_log, run_id)
-    ctx2._signal_bus = ctx1._signal_bus  # type: ignore[attr-defined]
-    with pytest.raises(SuspendInterrupt):
-        await ctx2.tool("send_email", {"to": "user@example.com"})
-
-    second_entries = [e async for e in event_log.read(run_id)]
-    approval_entries = [e for e in second_entries if e.kind == "approval.requested"]
-    assert len(approval_entries) == 1
-    assert approval_entries[0].payload["request_id"] == first_id
+    assert [r.payload["request_id"] for r in requests] == [first["request_id"]]

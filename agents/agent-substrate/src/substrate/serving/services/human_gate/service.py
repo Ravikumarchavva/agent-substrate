@@ -21,7 +21,7 @@ from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.runtime.wakeup import SignalBusProtocol
+    from substrate.kernel.abstractions.runtime.store import RuntimeStore
 
 logger = setup_logging()
 
@@ -90,15 +90,15 @@ async def resolve_request(
     responded_by: Optional[str] = None,
     redis_client: Optional[aioredis.Redis] = None,
     event_bus: Optional[EventBus] = None,
-    signal_bus: Optional["SignalBusProtocol"] = None,
+    store: Optional["RuntimeStore"] = None,
 ) -> Optional[HITLRequest]:
     """Resolve a HITL request and notify the waiting agent.
 
     Two independent notification channels, since this service predates the
     Phase-1 durable runtime and nothing has migrated off Redis pub/sub yet:
     ``redis_client`` (legacy, for any consumer still watching
-    ``HITL_RESPONSE_CHANNEL``) and ``signal_bus`` (the durable Phase-1
-    ``SignalBusProtocol`` — same ``hitl:{request_id}`` signal name
+    ``HITL_RESPONSE_CHANNEL``) and ``store`` (the durable runtime
+    store — same ``hitl:{request_id}`` signal name
     ``AskHumanTool``'s signal-suspend path waits on via
     ``ctx.sleep_until_signal``, see ``integrations/tools/human_input.py``).
     Both are optional and independent; pass whichever your deployment needs.
@@ -144,8 +144,8 @@ async def resolve_request(
     # (integrations/tools/human_input.py); map from this service's own
     # status vocabulary ("answered"/"approved"/"rejected"/"cancelled") since
     # the two were built independently and don't share a payload shape.
-    if signal_bus is not None and req.run_id:
-        await signal_bus.signal(
+    if store is not None and req.run_id:
+        await store.signal(
             req.run_id,
             f"hitl:{request_id}",
             {
@@ -181,7 +181,7 @@ async def cancel_pending_for_thread(
     *,
     reason: str = "cancelled",
     redis_client: Optional[aioredis.Redis] = None,
-    signal_bus: Optional["SignalBusProtocol"] = None,
+    store: Optional["RuntimeStore"] = None,
 ) -> int:
     """Cancel all pending HITL requests for a thread. Returns count cancelled."""
     pending = await get_pending_for_thread(db, thread_id)
@@ -192,6 +192,6 @@ async def cancel_pending_for_thread(
             status="cancelled",
             response_value=reason,
             redis_client=redis_client,
-            signal_bus=signal_bus,
+            store=store,
         )
     return len(pending)

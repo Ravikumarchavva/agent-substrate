@@ -6,11 +6,11 @@ SSE-stream endpoint for it.
 
     from fastapi import FastAPI
     from substrate.kernel.agents.react import ReActAgent
-    from substrate.kernel.runtime.runtime import Runtime
+    from substrate.kernel.runtime import Runtime
     from substrate.serve import add_routes
 
     app = FastAPI()
-    runtime = Runtime()
+    runtime = Runtime.local()
     agent = ReActAgent("my-agent", model=..., tools=[...])
 
     @app.on_event("startup")
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     # see pyproject.toml), but because Runtime/Agent pull in the full
     # agents/kernel import chain, which this module has no need to force
     # just by being imported (only calling add_routes() does).
-    from substrate.kernel.runtime.runtime import Runtime
+    from substrate.kernel.runtime import Runtime
     from substrate.kernel.abstractions.runtime.agent import Agent
 
 

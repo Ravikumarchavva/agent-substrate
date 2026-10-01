@@ -133,8 +133,8 @@ async def chat(
         )
 
     # 2. Single-flight: only one active stream per thread at a time (enforced
-    # durably across replicas via Scheduler unique partial index on run_queue)
-    if await runtime.scheduler.find_run_for_thread(str(body.thread_id)):
+    # durably across replicas by a unique index in the runtime store)
+    if await runtime.active_run_for_thread(str(body.thread_id)):
         raise HTTPException(
             status_code=409,
             detail=(
@@ -461,7 +461,7 @@ async def stream_thread(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    found = await runtime.scheduler.find_run_for_thread(str(thread_id))
+    found = await runtime.active_run_for_thread(str(thread_id))
 
     async def _empty_generator() -> AsyncIterator[str]:
         yield "data: [DONE]\n\n"
@@ -476,14 +476,13 @@ async def stream_thread(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    run_id, _status = found
-    event_log = runtime.event_log
-    from_seq = await event_log.last_seq(run_id) + 1
+    run_id = found.run_id
+    from_seq = await runtime.store.last_seq(run_id) + 1
 
     async def sse_generator() -> AsyncIterator[str]:
         try:
             yield f"data: {json.dumps(HelloEvent().model_dump(mode='json'), default=str)}\n\n"
-            async for wire in tail_wire_events(event_log, run_id, from_seq=from_seq):
+            async for wire in tail_wire_events(runtime, run_id, from_seq=from_seq):
                 yield f"data: {json.dumps(wire.model_dump(mode='json'), default=str)}\n\n"
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("Reconnect stream error for thread %s", thread_id)

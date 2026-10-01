@@ -190,5 +190,5 @@ async def get_thread_messages(
     if runtime is None:
         raise HTTPException(status_code=503, detail="Runtime not configured")
 
-    events = await project_thread(runtime.event_log, runtime.scheduler, str(thread_id))
+    events = await project_thread(runtime.store, str(thread_id))
     return [event.model_dump(mode="json") for event in events]

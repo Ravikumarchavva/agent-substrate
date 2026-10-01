@@ -62,7 +62,7 @@ async def stream_events(
     run_id = await runtime.submit(agent.id, msg)
     final_text = ""
 
-    async for entry in runtime.event_log.tail(run_id):
+    async for entry in runtime.tail(run_id):
         kind = entry.kind
         p = entry.payload or {}
         seq = int(getattr(entry, "seq", 0) or 0)

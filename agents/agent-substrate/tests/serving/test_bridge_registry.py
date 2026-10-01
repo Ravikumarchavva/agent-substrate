@@ -1,47 +1,45 @@
 """BridgeRegistry durable HITL resolution — the cross-replica fallback path.
 
-A request_id with no local bridge (this "replica" never tailed the
-input.requested event for that thread) must still resolve via
-SchedulerProtocol.find_run_by_wake_signal(), not silently fail.
+A request_id with no local bridge (this "replica" never tailed the input.requested event
+for that thread) must still resolve by finding the run waiting on it in the store.
 """
 
 from __future__ import annotations
 
-from substrate.kernel.runtime.backends._scheduler import InMemoryScheduler
-from substrate.kernel.runtime.backends._signal_bus import InMemorySignalBus
+from datetime import datetime, timezone
+
 from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.runtime.ids import RunStatus
+from substrate.kernel.abstractions.runtime.store import Commit, RunSpec, Suspend
 from substrate.kernel.abstractions.runtime.wakeup import Wakeup
+from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
 from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
 
 async def test_resolve_falls_back_to_durable_lookup_when_no_local_bridge() -> None:
-    scheduler = InMemoryScheduler()
-    signal_bus = InMemorySignalBus(scheduler)
+    store = SqliteRuntimeStore(":memory:")
+    await store.start()
+    try:
+        run = await store.create_run(RunSpec(agent=Actor(type="agent", key="x")))
+        (lease,) = await store.lease(worker_id="w1", capacity=1, lease_s=30, now=datetime.now(timezone.utc))
+        request_id = "req-123"
+        # The run has suspended waiting on this HITL signal.
+        await store.commit(lease, Commit(outcome=Suspend(wake=Wakeup(kind="signal", signals=[f"hitl:{request_id}"]))))
 
-    run_id = "run-durable-hitl"
-    request_id = "req-123"
-    scheduler.register_run(run_id, Actor(type="agent", key="x"))
-    await scheduler.enqueue(run_id, priority=5, tenant="default")
-    # Simulate the run having suspended waiting on this HITL signal — same
-    # state Worker._run_agent would leave behind via release(SUSPENDED, ...).
-    scheduler._status[run_id] = RunStatus.SUSPENDED
-    scheduler._wakeups[run_id] = Wakeup(kind="signal", signals=[f"hitl:{request_id}"])
+        registry = BridgeRegistry(store=store)
+        # No bridge for any thread was ever acquired — this replica has zero local
+        # knowledge of request_id, exactly the cross-replica scenario.
+        assert await registry.resolve(request_id, {"answer": "yes"}) is True
 
-    registry = BridgeRegistry(signal_bus=signal_bus, scheduler=scheduler)
-    # No bridge for any thread was ever acquired — this replica has zero
-    # local knowledge of request_id, exactly the cross-replica scenario.
-    ok = await registry.resolve(request_id, {"answer": "yes"})
-    assert ok is True
-
-    payload = await signal_bus.consume(run_id, f"hitl:{request_id}", "test-effect-id")
-    assert payload == {"answer": "yes"}
+        payload = await store.consume(run.run_id, f"hitl:{request_id}", "test-effect-id")
+        assert payload == {"answer": "yes"}
+    finally:
+        await store.aclose()
 
 
 async def test_resolve_returns_false_when_truly_unknown() -> None:
-    scheduler = InMemoryScheduler()
-    signal_bus = InMemorySignalBus(scheduler)
-    registry = BridgeRegistry(signal_bus=signal_bus, scheduler=scheduler)
-
-    ok = await registry.resolve("nonexistent-request-id", {})
-    assert ok is False
+    store = SqliteRuntimeStore(":memory:")
+    await store.start()
+    try:
+        assert await BridgeRegistry(store=store).resolve("nonexistent-request-id", {}) is False
+    finally:
+        await store.aclose()

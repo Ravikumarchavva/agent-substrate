@@ -26,14 +26,15 @@ from dataclasses import dataclass, field
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from substrate.kernel.runtime.context.journal import _JournalMixin
+from substrate.kernel.abstractions.runtime.store import Commit
+from substrate.kernel.runtime.journal import Journal
 
 
-class _Allocator(_JournalMixin):
-    """The path allocator on its own, with nothing else attached."""
+class _Allocator(Journal):
+    """The path allocator on its own: a journal over an empty record."""
 
     def __init__(self) -> None:
-        self._path_stack: list[int] = [0]
+        super().__init__("run", [], Commit())
 
 
 @dataclass
@@ -82,11 +83,11 @@ async def _execute(
             while index < len(program) and program[index].batch:
                 siblings.append(program[index])
                 index += 1
-            stacks = allocator._fork_scopes(len(siblings))
+            stacks = allocator.fork_scopes(len(siblings))
             async def _one(sibling: Call, stack: list[int]) -> None:
                 async def _body() -> None:
                     await _run_one(allocator, sibling, hits=hits, observed=observed)
-                await allocator._in_scope(stack, _body)
+                await allocator.in_scope(stack, _body)
             await asyncio.gather(*(_one(s, st_) for s, st_ in zip(siblings, stacks)))
             continue
         await _run_one(allocator, call, hits=hits, observed=observed)
@@ -96,16 +97,16 @@ async def _execute(
 async def _run_one(
     allocator: _Allocator, call: Call, *, hits: frozenset[int], observed: dict[int, str]
 ) -> None:
-    path = allocator._alloc_path()
+    path = allocator.alloc_path()
     observed[call.uid] = path
     if call.uid in hits:
         return  # journal hit: the body never runs
     if call.children:
-        allocator._enter_scope()
+        allocator.enter_scope()
         try:
             await _execute(allocator, call.children, hits=hits, observed=observed)
         finally:
-            allocator._exit_scope()
+            allocator.exit_scope()
 
 
 # A program: a list of calls, each possibly nesting more calls. ``batch`` marks

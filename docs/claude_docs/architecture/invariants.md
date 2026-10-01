@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**84 enforced · 1 pending · 85 total**
+**93 enforced · 1 pending · 94 total**
 
 ## approvals
 
@@ -136,6 +136,27 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i06_the_allocator_returns_to_its_starting_depth`
 - ✅ **Run a program of journaled operations, kill the attempt after an arbitrary prefix, and let the retry replay. The retry must see exactly the values the first attempt saw for the prefix, and a tool must have run once per call in the program — never again for a call the journal already held.**
   `test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect`
+
+## scope binding
+
+- ✅ **a scope needs a tenant**
+  `test_a_scope_needs_a_tenant`
+- ✅ **i03 history of one tenant is invisible to another**
+  `test_i03_history_of_one_tenant_is_invisible_to_another`
+- ✅ **i03 ids returned to the caller carry no tenant prefix**
+  `test_i03_ids_returned_to_the_caller_carry_no_tenant_prefix`
+- ✅ **i03 vector collections are per tenant and erasable**
+  `test_i03_vector_collections_are_per_tenant_and_erasable`
+- ✅ **i03 graph namespaces cannot be escaped**
+  `test_i03_graph_namespaces_cannot_be_escaped`
+- ✅ **i03 tasks of another tenant cannot be touched by board id**
+  `test_i03_tasks_of_another_tenant_cannot_be_touched_by_board_id`
+- ✅ **i03 object keys cannot climb out of the tenant**
+  `test_i03_object_keys_cannot_climb_out_of_the_tenant`
+- ✅ **i03 object stores are per tenant with their own usage and erase**
+  `test_i03_object_stores_are_per_tenant_with_their_own_usage_and_erase`
+- ✅ **i03 a tenant whose name looks like another tenants prefix gets its own wall**
+  `test_i03_a_tenant_whose_name_looks_like_another_tenants_prefix_gets_its_own_wall`
 
 ## structure
 

@@ -58,6 +58,7 @@ from substrate.kernel.abstractions.core.identity import (
     Actor,
     Topic,
 )
+from substrate.kernel.abstractions.core.scope import Scope
 from substrate.kernel.abstractions.core.trace import TraceContext
 from substrate.kernel.abstractions.core.usage import Usage
 from substrate.kernel.abstractions.document import (
@@ -301,6 +302,7 @@ __all__ = [
     "Actor",
     "Topic",
     "ErrorInfo",
+    "Scope",
     "TraceContext",
     "TenantId",
     "UserId",

@@ -380,9 +380,6 @@ All shared objects (LLM clients, tool registry, event bus, HITL bridge) are wire
 # zero-infra default — one JSON file per session
 from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
 
-# In-memory (testing only)
-from substrate.kernel.storage.history import InMemoryHistoryProvider
-
 # Redis-backed
 from substrate.integrations.history import RedisHistoryProvider
 
@@ -478,7 +475,8 @@ JWT_SECRET=<32+ char random string — required>
 SANDBOX_RUNTIME=nsjail
 
 # Agent runtime store: "postgres" (default, durable) or "local" (SQLite file, no infra).
-# There is no in-memory store: tests use Runtime.local(":memory:") through the same code.
+# There is no in-memory store anywhere: the floor is a folder (or a SQLite file). Runtime tests use
+# Runtime.local(":memory:") — the same SQLite code on a throwaway connection.
 RUNTIME_BACKEND=postgres
 
 # Durable runtime's own asyncpg pool (separate from the ORM engine's pool)

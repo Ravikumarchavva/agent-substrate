@@ -26,6 +26,14 @@ the kernel, asyncpg in `integrations/runtime`). There is deliberately no in-memo
 `:memory:` SQLite through the same code. **Consequence accepted:** SQLite is the zero-infra floor, so a
 process always has a real database file or `:memory:` connection.
 
+## No in-memory stores; the floor is a folder (2026-10-02)
+
+`InMemoryHistoryProvider`, `InMemoryVectorStore`, `InMemoryGraphStore`, `InMemoryFileStore` and the dict-based
+`TaskStore` are deleted (the kernel's task default is `LocalFilesystemTaskStore`). A store that forgets on exit
+cannot be what an agent's conversation, memory or tasks rest on, and a second implementation per port is a second
+thing to drift. Tests use `tmp_path` folders (`tests/_stores.py`); runtime tests use `Runtime.local(":memory:")`.
+Removing them also removed the resolver's "pin actors with in-memory history" guard.
+
 ## Tools declare risk and idempotency; MCP defaults to deny (2026-10-02)
 
 `Toolbox.add` refuses a tool without a `ToolRisk` and an `idempotent` bool. `idempotent` decides what a

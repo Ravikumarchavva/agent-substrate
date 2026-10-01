@@ -37,6 +37,8 @@ def test_the_register_lists_every_invariant_test(request: pytest.FixtureRequest)
         item.name.split("[")[0]
         for item in request.session.items
         if item.path.parent == INVARIANTS_DIR and item.path.name.startswith("test_")
+        # Tests inherited from a conformance suite are the suite's, listed in its own module.
+        and item.cls is None
     }
     listed = {row.test for row in collect()}
     missing = sorted(collected - listed)

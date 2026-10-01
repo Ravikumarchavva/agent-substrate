@@ -142,6 +142,7 @@
     "RunStatusSummary",
     "RuntimeStore",
     "SafetyVerdict",
+    "Scope",
     "SearchResult",
     "Severity",
     "ShortTermMemory",

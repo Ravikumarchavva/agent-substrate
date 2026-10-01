@@ -37,6 +37,7 @@ from substrate.kernel.abstractions.core.content import (
     TextBlock,
     parse_content_block,
 )
+from substrate.kernel.abstractions.core.scope import Scope
 from substrate.kernel.abstractions.core.identity import Actor, Topic
 from substrate.kernel.abstractions.core.trace import TraceContext
 from substrate.kernel.abstractions.core.usage import Usage
@@ -153,6 +154,12 @@ class RunContext:
     def scope(self) -> RunScope:
         """Whose work the message currently being handled is."""
         return self._meta.scope
+
+    @property
+    def store_scope(self) -> Scope:
+        """The tenant this run's store handles are bound to: ``bind_history(store, ctx.store_scope)`` and
+        its siblings in ``kernel.storage``. Taken from the run's authenticated scope, never an argument."""
+        return Scope.of(self.scope)
 
     def set_scope(self, scope: RunScope) -> None:
         self._meta = replace(self._meta, scope=scope)

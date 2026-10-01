@@ -277,7 +277,7 @@ async def run_demo(
     run_id = await runtime.submit(orchestrator.id, msg)
 
     status = "success"
-    async for entry in runtime.event_log.tail(run_id):
+    async for entry in runtime.tail(run_id):
         if entry.kind == "run.completed":
             break
         elif entry.kind == "run.failed":
@@ -365,7 +365,7 @@ async def main() -> None:
             "No OPENAI_API_KEY found — running with StubLLMClient (scripted responses)"
         )
 
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         orchestrator = build_agents(rt, model)
 
         stub = model if isinstance(model, StubLLMClient) else None

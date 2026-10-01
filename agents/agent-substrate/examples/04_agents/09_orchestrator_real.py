@@ -146,7 +146,7 @@ QUERY = (
 
 
 async def main() -> None:
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         orchestrator = build_team(rt)
         await rt.register(orchestrator)  # sub-agents are registered automatically
         print(f"\nQuery: {QUERY}\n")

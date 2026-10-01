@@ -7,25 +7,28 @@ concrete agent types (ReActAgent, OrchestratorAgent, etc.).
 
 from __future__ import annotations
 
+from substrate.kernel.agents import (
+    OrchestratorAgent,
+    ReActAgent,
+    SubAgentConfig,
+    UserProxyAgent,
+)
 from substrate.kernel.context import (
     AgentContext,
     CompactionStrategy,
     ContextConfig,
+    SelectiveToolCallCompactionStrategy,
     SlidingWindowCompaction,
     SummarizationCompaction,
-    ToolResultCompactionStrategy,
-    SelectiveToolCallCompactionStrategy,
-    TruncationStrategy,
     TokenBudgetComposedStrategy,
+    ToolResultCompactionStrategy,
+    TruncationStrategy,
 )
-from substrate.kernel.storage import (
-    HistoryProvider,
-    InMemoryHistoryProvider,
-)
+from substrate.kernel.flows import ConditionalFlow, ParallelFlow, SequentialFlow
 from substrate.kernel.llm import (
+    MODEL_REGISTRY,
     EmbeddingClient,
     LLMClient,
-    MODEL_REGISTRY,
     ModelProfile,
     estimate_cost,
     get_model_profile,
@@ -33,38 +36,28 @@ from substrate.kernel.llm import (
 )
 from substrate.kernel.middleware import (
     AuditLoggerMiddleware,
-    Middleware,
-    MiddlewareStage,
-    MiddlewarePipeline,
-    MiddlewareContext,
-    RateLimiterMiddleware,
-    RetryMiddleware,
     CacheMiddleware,
+    ContentFilterMiddleware,
     ContentTruncatorMiddleware,
     FileValidatorMiddleware,
-    SchemaValidatorMiddleware,
     HistoryTruncatorMiddleware,
-    ContentFilterMiddleware,
-    PromptInjectionMiddleware,
-    MaxTokenMiddleware,
     LLMJudgeMiddleware,
+    MaxTokenMiddleware,
+    Middleware,
+    MiddlewareContext,
+    MiddlewarePipeline,
+    MiddlewareStage,
     PIIDetectionMiddleware,
+    PromptInjectionMiddleware,
+    RateLimiterMiddleware,
+    RetryMiddleware,
+    SchemaValidatorMiddleware,
     ToolCallValidationMiddleware,
 )
-from substrate.kernel.agents import (
-    ReActAgent,
-    UserProxyAgent,
-    OrchestratorAgent,
-    SubAgentConfig,
-)
-from substrate.kernel.runtime import Runtime, RunContext, RunOutcome
-from substrate.kernel.flows import SequentialFlow, ParallelFlow, ConditionalFlow
-from substrate.kernel.evals import (
-    EvalCase,
-    EvalDataset,
-    LLMJudge,
-    EvalReport,
-    EvalRunner,
+from substrate.kernel.runtime import RunContext, RunOutcome, Runtime
+from substrate.kernel.storage import (
+    HistoryProvider,
+    InMemoryHistoryProvider,
 )
 
 __all__ = [
@@ -121,10 +114,4 @@ __all__ = [
     "SequentialFlow",
     "ParallelFlow",
     "ConditionalFlow",
-    # evals
-    "EvalCase",
-    "EvalDataset",
-    "LLMJudge",
-    "EvalReport",
-    "EvalRunner",
 ]

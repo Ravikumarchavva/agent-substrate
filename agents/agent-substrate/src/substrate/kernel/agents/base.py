@@ -19,8 +19,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.version import __version__ as _PACKAGE_VERSION
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     Role,
@@ -28,7 +26,14 @@ from substrate.kernel.abstractions.core.content import (
     content_blocks_to_str,
 )
 from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.messaging.message import ChatPayload, DataPayload, Message
+from substrate.kernel.abstractions.messaging.message import (
+    ChatPayload,
+    DataPayload,
+    Message,
+)
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.agents.routed import RoutedAgent
+from substrate.kernel.version import __version__ as _PACKAGE_VERSION
 
 if TYPE_CHECKING:
     from substrate.kernel.context.context import ContextConfig
@@ -169,7 +174,7 @@ async def deliver(
         await ctx.emit(output_topic, out_msg)
 
 
-class BaseAgent:
+class BaseAgent(RoutedAgent):
     """Shared turn-loop primitives for ``ReActAgent``/``OrchestratorAgent``.
 
     Not a kernel ``Agent`` Protocol implementation itself — subclasses still

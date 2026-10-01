@@ -10,7 +10,7 @@ Coverage:
 from __future__ import annotations
 
 import io
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 from rich.console import Console as RichConsole
@@ -45,8 +45,8 @@ def _entry(kind: str, payload: dict[str, Any], seq: int = 0) -> RunLogEntry:
 
 
 @dataclass
-class _FakeEventLog:
-    """Replays a fixed list of RunLogEntry objects, then stops."""
+class _FakeRuntime:
+    """Replays a fixed list of RunLogEntry objects from ``tail``, then stops."""
 
     entries: list[RunLogEntry]
 
@@ -55,15 +55,6 @@ class _FakeEventLog:
     ) -> AsyncIterator[RunLogEntry]:
         for e in self.entries:
             yield e
-
-
-@dataclass
-class _FakeRuntime:
-    entries: list[RunLogEntry]
-    event_log: _FakeEventLog = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.event_log = _FakeEventLog(self.entries)
 
     async def register(self, agent: Any) -> None:
         pass

@@ -12,10 +12,16 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 
 router = APIRouter(prefix="/me/memories", tags=["memory"])
+
+
+def _caller(user: AuthClaims) -> MemoryNamespace:
+    """Who is asking: the authenticated user, in their tenant."""
+    return MemoryNamespace(tenant_id=user.tenant_id or "default", user_id=user.sub)
 
 
 class MemoryOut(BaseModel):
@@ -30,16 +36,11 @@ async def list_memories(
 ) -> list[MemoryOut]:
     if ctx.long_term_memory is None:
         return []
-    from substrate.kernel.abstractions.core.identity import Actor
-
-    # No namespace override: MemoryTool.remember() never passes one, so
-    # every fact lands in DurableMemoryStore's default namespace — read from
-    # the same place things are actually written to (see also
-    # serving/factory.py::build_user_memory_context_block()).
-    memories = await ctx.long_term_memory.list_all(
-        Actor(type="user", key=user.sub), limit=100
-    )
-    return [MemoryOut(id=m.id, content=m.content) for m in memories]
+    # The user's own facts — what ``MemoryTool.remember()`` saved for them (see also
+    # serving/factory.py::build_user_memory_context_block()). Tenant-level facts are visible
+    # to them too, but they are not the user's to list for deletion.
+    matches = await ctx.long_term_memory.query(MemoryQuery(namespace=_caller(user), limit=100))
+    return [MemoryOut(id=m.id, content=m.text) for m in matches if m.record.namespace.user_id == user.sub]
 
 
 @router.delete("/{memory_id}", status_code=204)
@@ -50,10 +51,6 @@ async def delete_memory(
 ) -> None:
     if ctx.long_term_memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
-    from substrate.kernel.abstractions.core.identity import Actor
-
-    deleted = await ctx.long_term_memory.delete(
-        Actor(type="user", key=user.sub), memory_id
-    )
+    deleted = await ctx.long_term_memory.delete(_caller(user), memory_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Memory not found")

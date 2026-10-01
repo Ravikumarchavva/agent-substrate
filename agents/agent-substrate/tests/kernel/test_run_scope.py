@@ -3,6 +3,8 @@ spawned sub-agent inherits it."""
 
 from __future__ import annotations
 
+from substrate.kernel.abstractions.tools import ToolRisk
+
 from substrate.kernel.context import ContextConfig
 from substrate.kernel.agents.orchestrator import OrchestratorAgent, SubAgentConfig
 from substrate.kernel.agents.react import ReActAgent
@@ -20,6 +22,8 @@ from tests.kernel.test_react_harness import ScriptedLLM  # noqa: E402
 class ProbeTool:
     """Records the scope it is called with."""
 
+    risk = ToolRisk.SAFE
+    idempotent = True
     name = "probe"
     description = "records ctx.scope"
     input_schema: dict[str, object] = {"type": "object", "properties": {}}
@@ -51,7 +55,7 @@ def _message(target: Actor, *, thread: str, metadata: dict[str, str]) -> Message
 async def _finish(rt: Runtime, agent, msg: Message) -> None:
     await rt.register(agent)
     run_id = await rt.submit(agent.id, msg)
-    async for entry in rt.event_log.tail(run_id):
+    async for entry in rt.tail(run_id):
         if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
             assert entry.kind == "run.completed", entry.payload
             return
@@ -90,7 +94,7 @@ async def test_a_tool_sees_the_scope_of_the_message_being_handled():
     llm = ScriptedLLM([[ToolUseBlock(call_id="c1", tool_name="probe", arguments={})], [TextBlock(text="ok")]])
     agent = ReActAgent("bot", model=llm, tools=[probe], context=_isolated())
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await _finish(
             rt,
             agent,
@@ -133,7 +137,7 @@ async def test_a_sub_agent_inherits_tenant_user_and_branch():
         context=_isolated(),
     )
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(worker)
         await _finish(
             rt,

@@ -51,12 +51,12 @@ from typing import (
 
 from pydantic import BaseModel, Field
 
-from substrate.kernel.abstractions.ids import new_id
 from substrate.kernel.abstractions.core.content import (
     ContentBlock,
     JsonObject,
     content_blocks_to_str,
 )
+from substrate.kernel.abstractions.ids import new_id
 
 if TYPE_CHECKING:
     from substrate.kernel.abstractions.agent.runtime_context import RunMeta
@@ -219,7 +219,10 @@ class ToolExecutionResult(PayloadBase):
 class Tool(Protocol):
     """Contract every locally-executed tool must satisfy.
 
-    ``risk`` defaults to ``ToolRisk.SAFE`` when absent.
+    ``risk`` and ``idempotent`` are required, and are checked when the tool is registered.
+    ``risk`` says whether a human must approve a call; ``idempotent`` says whether a call
+    that may or may not have happened can safely be made again (the engine then repeats it
+    under the same idempotency key instead of failing the run).
     ``ui`` is an optional ``ToolUI`` declaration.
     ``tool_type`` defaults to ``ToolType.FUNCTION`` when absent.
 
@@ -231,6 +234,8 @@ class Tool(Protocol):
     name: str
     description: str
     input_schema: dict[str, object]
+    risk: ToolRisk
+    idempotent: bool
 
     async def execute(
         self, *, ctx: RunMeta | None = None, **kwargs: Any
@@ -296,12 +301,16 @@ class ProviderDefinedTool(Protocol):
     (e.g. ``("shell_call",)``).
     ``handle_call`` — receives the raw provider call item and returns the
     corresponding output item.
+    ``risk`` / ``idempotent`` — required, as for ``Tool``: this tool runs on the developer's
+    machine, so what it can do is the developer's to classify.
     """
 
     name: str
     description: str
     provider_specs: dict[str, JsonObject]
     call_types: tuple[str, ...]
+    risk: ToolRisk
+    idempotent: bool
 
     async def handle_call(
         self, call: JsonObject, *, ctx: RunMeta | None = None

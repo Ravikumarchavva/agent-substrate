@@ -25,6 +25,7 @@ from substrate.kernel.abstractions.storage.tasks import TaskStatus
 from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolUI
 from substrate.kernel.abstractions import TextBlock
 from substrate.logger import setup_logging
+from substrate.kernel.abstractions.tools import ToolRisk
 
 logger = setup_logging()
 
@@ -46,11 +47,12 @@ class TaskManagerTool:
     update_title  – Rename a task.
     """
 
-    risk: str = "safe"
 
     ui: ToolUI = ToolUI(resource_uri="ui://kanban_board", prefers_border=True)
 
     name: str = "manage_tasks"
+    risk = ToolRisk.SAFE
+    idempotent = False
     description: str = (
         "Create and update a visible task-board for complex, multi-step work. "
         "ALWAYS call action=create_list FIRST with all planned steps. "

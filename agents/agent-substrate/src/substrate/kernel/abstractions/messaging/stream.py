@@ -24,10 +24,9 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from substrate.kernel.abstractions.core.content import ContentBlock
-from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.core.finish_reason import FinishReason
+from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.core.usage import Usage
-
 
 # ---------------------------------------------------------------------------
 # Token stream events  (LLM output, token by token)

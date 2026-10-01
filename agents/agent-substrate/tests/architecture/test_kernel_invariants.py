@@ -47,7 +47,6 @@ _FORBIDDEN_PREFIXES = (
     "substrate.kernel.agents",
     "substrate.kernel.context",
     "substrate.kernel.document",
-    "substrate.kernel.evals",
     "substrate.kernel.exceptions",
     "substrate.kernel.flows",
     "substrate.kernel.hooks",

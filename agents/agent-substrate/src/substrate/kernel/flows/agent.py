@@ -15,7 +15,7 @@ SequentialFlow
     previous steps appended to the original input.
 
 ParallelFlow
-    Runs all branches concurrently with asyncio.gather; outputs merged via a
+    Starts all branches at once and merges their outputs via a
     configurable strategy (concat / vote / custom callable).
 
 ConditionalFlow
@@ -25,7 +25,6 @@ ConditionalFlow
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from functools import cached_property
@@ -38,12 +37,17 @@ from substrate.kernel.abstractions.core.content import (
     content_blocks_to_str,
 )
 from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import ChatPayload, DataPayload, Message
+from substrate.kernel.abstractions.messaging.message import (
+    ChatPayload,
+    DataPayload,
+    Message,
+)
 from substrate.kernel.abstractions.runtime.communication import AskOutcome
+from substrate.kernel.agents.routed import RoutedAgent, handle
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.context import Agent, RunContext
     from substrate.kernel.abstractions.runtime.supervisor import RunHandle
+    from substrate.kernel.runtime.context import Agent, RunContext
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +96,7 @@ def _text_from_outcome(outcome: AskOutcome) -> str:
 
 
 @dataclass
-class SequentialFlow:
+class SequentialFlow(RoutedAgent):
     """Execute steps in order, piping accumulated output into each next step.
 
     Each step is a kernel Agent registered with the same Runtime as this flow.
@@ -112,21 +116,20 @@ class SequentialFlow:
     def id(self) -> Actor:
         return Actor(type="flow", key=self.name)
 
-    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-        for msg in inbox:
-            ctx.check()
-            accumulated = _text_from_message(msg)
-            for step in self.steps:
-                step_msg = _make_step_message(step.id, accumulated, sender=self.id)
-                handle: RunHandle = await ctx.spawn(step.id, boot=step_msg)
-                outcome = await ctx.ask(handle, step_msg, timeout=self.step_timeout)
-                if outcome.kind != "replied":
-                    await ctx.reply(msg, {"text": "", "error": outcome.kind})
-                    return
-                output = _text_from_outcome(outcome)
-                if output:
-                    accumulated = f"{accumulated}\n\n{output}"
-            await ctx.reply(msg, {"text": accumulated})
+    @handle(ChatPayload, DataPayload)
+    async def _on_message(self, ctx: RunContext, msg: Message) -> None:
+        accumulated = _text_from_message(msg)
+        for step in self.steps:
+            step_msg = _make_step_message(step.id, accumulated, sender=self.id)
+            child: RunHandle = await ctx.spawn(step.id, boot=step_msg)
+            outcome = await ctx.ask(child, step_msg, timeout=self.step_timeout)
+            if outcome.kind != "replied":
+                await ctx.reply(msg, {"text": "", "error": outcome.kind})
+                return
+            output = _text_from_outcome(outcome)
+            if output:
+                accumulated = f"{accumulated}\n\n{output}"
+        await ctx.reply(msg, {"text": accumulated})
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +138,7 @@ class SequentialFlow:
 
 
 @dataclass
-class ParallelFlow:
+class ParallelFlow(RoutedAgent):
     """Run all branches concurrently and merge their outputs.
 
     Merge strategies
@@ -168,25 +171,24 @@ class ParallelFlow:
             return Counter(outputs).most_common(1)[0][0]
         return "\n\n".join(outputs)
 
-    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-        for msg in inbox:
-            ctx.check()
-            text = _text_from_message(msg)
-            pairs: list[tuple[Message, RunHandle]] = []
-            for branch in self.branches:
-                bm = _make_step_message(branch.id, text, sender=self.id)
-                handle: RunHandle = await ctx.spawn(branch.id, boot=bm)
-                pairs.append((bm, handle))
-            outcomes: list[AskOutcome] = await asyncio.gather(
-                *[
-                    ctx.ask(handle, bm, timeout=self.branch_timeout)
-                    for bm, handle in pairs
-                ]
-            )
-            outputs = [
-                _text_from_outcome(o) if o.kind == "replied" else "" for o in outcomes
-            ]
-            await ctx.reply(msg, {"text": self._merge_outputs(outputs)})
+    @handle(ChatPayload, DataPayload)
+    async def _on_message(self, ctx: RunContext, msg: Message) -> None:
+        text = _text_from_message(msg)
+        pairs: list[tuple[Message, RunHandle]] = []
+        for branch in self.branches:
+            bm = _make_step_message(branch.id, text, sender=self.id)
+            child: RunHandle = await ctx.spawn(branch.id, boot=bm)
+            pairs.append((bm, child))
+        # Every branch is already running, so waiting on them one after another costs
+        # nothing in wall-clock time — and keeps each wait on its own journal path.
+        # Waiting concurrently would let one suspended wait race the others for paths.
+        outcomes: list[AskOutcome] = [
+            await ctx.ask(child, bm, timeout=self.branch_timeout) for bm, child in pairs
+        ]
+        outputs = [
+            _text_from_outcome(o) if o.kind == "replied" else "" for o in outcomes
+        ]
+        await ctx.reply(msg, {"text": self._merge_outputs(outputs)})
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +197,7 @@ class ParallelFlow:
 
 
 @dataclass
-class ConditionalFlow:
+class ConditionalFlow(RoutedAgent):
     """Route to one of two sub-agents based on a predicate.
 
     If the predicate raises, ``if_false`` is taken as the safe fallback.
@@ -212,19 +214,18 @@ class ConditionalFlow:
     def id(self) -> Actor:
         return Actor(type="flow", key=self.name)
 
-    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-        for msg in inbox:
-            ctx.check()
-            text = _text_from_message(msg)
-            try:
-                branch = self.if_true if self.predicate(text) else self.if_false
-            except Exception as exc:
-                logger.warning(
-                    "[%s] predicate raised %s — taking if_false", self.name, exc
-                )
-                branch = self.if_false
-            bm = _make_step_message(branch.id, text, sender=self.id)
-            handle: RunHandle = await ctx.spawn(branch.id, boot=bm)
-            outcome = await ctx.ask(handle, bm, timeout=self.branch_timeout)
-            text_out = _text_from_outcome(outcome) if outcome.kind == "replied" else ""
-            await ctx.reply(msg, {"text": text_out})
+    @handle(ChatPayload, DataPayload)
+    async def _on_message(self, ctx: RunContext, msg: Message) -> None:
+        text = _text_from_message(msg)
+        try:
+            branch = self.if_true if self.predicate(text) else self.if_false
+        except Exception as exc:
+            logger.warning(
+                "[%s] predicate raised %s — taking if_false", self.name, exc
+            )
+            branch = self.if_false
+        bm = _make_step_message(branch.id, text, sender=self.id)
+        child: RunHandle = await ctx.spawn(branch.id, boot=bm)
+        outcome = await ctx.ask(child, bm, timeout=self.branch_timeout)
+        text_out = _text_from_outcome(outcome) if outcome.kind == "replied" else ""
+        await ctx.reply(msg, {"text": text_out})

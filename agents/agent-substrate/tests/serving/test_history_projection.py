@@ -37,7 +37,7 @@ class _StubLLM:
 async def test_project_thread_returns_one_runs_full_conversation() -> None:
     agent = ReActAgent("assistant", model=_StubLLM("hi there"))
     thread_id = "thread-1"
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
         from substrate.kernel.abstractions.core.content import ChatMessage, Role
         from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
@@ -51,11 +51,11 @@ async def test_project_thread_returns_one_runs_full_conversation() -> None:
             correlation_id=thread_id,
         )
         run_id = await rt.submit(agent.id, msg, thread_id=thread_id, max_retries=0)
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind == "run.completed":
                 break
 
-        events = await project_thread(rt.event_log, rt.scheduler, thread_id)
+        events = await project_thread(rt.store, thread_id)
 
     assert isinstance(events[0], UserMessageEvent)
     assert events[0].text == "hello"
@@ -70,7 +70,7 @@ async def test_project_thread_spans_multiple_runs_in_order() -> None:
     from substrate.kernel.abstractions.core.content import ChatMessage, Role
     from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
 
         msg1 = Message(
@@ -82,7 +82,7 @@ async def test_project_thread_spans_multiple_runs_in_order() -> None:
             correlation_id=thread_id,
         )
         run1 = await rt.submit(agent.id, msg1, thread_id=thread_id, max_retries=0)
-        async for entry in rt.event_log.tail(run1):
+        async for entry in rt.tail(run1):
             if entry.kind == "run.completed":
                 break
 
@@ -95,11 +95,11 @@ async def test_project_thread_spans_multiple_runs_in_order() -> None:
             correlation_id=thread_id,
         )
         run2 = await rt.submit(agent.id, msg2, thread_id=thread_id, max_retries=0)
-        async for entry in rt.event_log.tail(run2):
+        async for entry in rt.tail(run2):
             if entry.kind == "run.completed":
                 break
 
-        events = await project_thread(rt.event_log, rt.scheduler, thread_id)
+        events = await project_thread(rt.store, thread_id)
 
     user_texts = [e.text for e in events if isinstance(e, UserMessageEvent)]
     assert user_texts == ["first", "second"], "both runs' turns, in order"
@@ -112,7 +112,7 @@ async def test_project_thread_skips_non_streaming_log_kinds() -> None:
     from substrate.kernel.abstractions.core.content import ChatMessage, Role
     from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
         msg = Message(
             target=agent.id,
@@ -123,11 +123,11 @@ async def test_project_thread_skips_non_streaming_log_kinds() -> None:
             correlation_id=thread_id,
         )
         run_id = await rt.submit(agent.id, msg, thread_id=thread_id, max_retries=0)
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind == "run.completed":
                 break
 
-        events = await project_thread(rt.event_log, rt.scheduler, thread_id)
+        events = await project_thread(rt.store, thread_id)
 
     assert not any(isinstance(e, RunCompletedEvent) for e in events), (
         "run lifecycle kinds are not streaming kinds, must not appear"

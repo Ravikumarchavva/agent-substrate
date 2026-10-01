@@ -10,9 +10,9 @@ dispatch point-to-point sends from broadcasts via ``isinstance``.
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.ids import new_id
-
 from dataclasses import dataclass
+
+from substrate.kernel.abstractions.ids import new_id
 
 
 @dataclass(frozen=True, slots=True)

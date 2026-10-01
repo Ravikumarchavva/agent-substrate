@@ -4,14 +4,16 @@ Exposes both short-term session state (ShortTermMemory) and long-term
 persistent facts (LongTermMemory) as a single LLM-callable tool.
 
 Short-term operations (get/set/clear) are scoped to the current session.
-Long-term operations (remember/recall/forget) persist across sessions and
-are scoped to the agent.
+Long-term operations (remember/recall/forget) persist across sessions and are scoped to the
+person the run is for: tenant and user come from the run's scope (``scope_of(ctx)``), never
+from an argument the model supplies. With no user — an anonymous run — a fact is kept for
+the conversation only.
 """
 
 from __future__ import annotations
 
 
-from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.agent.runtime_context import scope_of
 from substrate.kernel.abstractions.storage.memory import (
     MemoryCategory,
     MemoryNamespace,
@@ -23,6 +25,7 @@ from substrate.kernel.abstractions.storage.memory import (
 from substrate.kernel.abstractions.tools import ToolExecutionResult
 from substrate.kernel.abstractions import TextBlock
 from substrate.logger import setup_logging
+from substrate.kernel.abstractions.tools import ToolRisk
 
 logger = setup_logging()
 
@@ -31,6 +34,8 @@ class MemoryTool:
     """Read/write agent memories via ShortTermMemory and MemoryStore protocols."""
 
     name = "memory"
+    risk = ToolRisk.SAFE
+    idempotent = False
     description = (
         "Manage agent memory. "
         "Short-term: get/set/clear key-value state within the current session. "
@@ -74,13 +79,11 @@ class MemoryTool:
 
     def __init__(
         self,
-        agent_id: Actor,
         session_id: str,
         *,
         short_term: ShortTermMemory | None = None,
         long_term: MemoryStore | None = None,
     ) -> None:
-        self._agent_id = agent_id
         self._session_id = session_id
         self._short_term = short_term
         self._long_term = long_term
@@ -88,6 +91,7 @@ class MemoryTool:
     async def execute(  # type: ignore[override]
         self,
         *,
+        ctx: object = None,
         action: str,
         key: str = "",
         value: str = "",
@@ -112,7 +116,7 @@ class MemoryTool:
                     is_error=True,
                 )
             return await self._long_term_op(
-                action, value=value, query=query, memory_id=memory_id
+                action, value=value, query=query, memory_id=memory_id, owner=self._owner(ctx)
             )
 
         return ToolExecutionResult(
@@ -152,8 +156,16 @@ class MemoryTool:
         await self._short_term.clear(self._session_id)
         return ToolExecutionResult(content=[TextBlock(text="Session state cleared.")])
 
+    def _owner(self, ctx: object) -> MemoryNamespace:
+        """Who a long-term memory belongs to: this run's tenant and user, or — with no user —
+        this conversation alone."""
+        scope = scope_of(ctx)
+        if scope.user_id:
+            return MemoryNamespace(tenant_id=scope.tenant_id or "default", user_id=scope.user_id)
+        return MemoryNamespace(tenant_id=scope.tenant_id or "default", session_id=scope.thread_id or self._session_id)
+
     async def _long_term_op(
-        self, action: str, *, value: str, query: str, memory_id: str
+        self, action: str, *, value: str, query: str, memory_id: str, owner: MemoryNamespace
     ) -> ToolExecutionResult:
         assert self._long_term is not None
         if action == "remember":
@@ -162,8 +174,7 @@ class MemoryTool:
                     content=[TextBlock(text="'value' is required for remember.")],
                     is_error=True,
                 )
-            ns = MemoryNamespace.from_actor(self._agent_id, session_id=self._session_id)
-            rec = MemoryRecord.from_text(value, namespace=ns, category=MemoryCategory.SEMANTIC)
+            rec = MemoryRecord.from_text(value, namespace=owner, category=MemoryCategory.SEMANTIC)
             mem_id = await self._long_term.save(rec)
             return ToolExecutionResult(
                 content=[TextBlock(text=f"Stored memory (id={mem_id}).")],
@@ -176,8 +187,7 @@ class MemoryTool:
                     content=[TextBlock(text="'query' is required for recall.")],
                     is_error=True,
                 )
-            ns = MemoryNamespace.from_actor(self._agent_id)
-            spec = MemoryQuery(namespace=ns, text_query=query, limit=10)
+            spec = MemoryQuery(namespace=owner, text_query=query, limit=10)
             matches = await self._long_term.query(spec)
             if not matches:
                 return ToolExecutionResult(
@@ -192,7 +202,7 @@ class MemoryTool:
                 content=[TextBlock(text="'memory_id' is required for forget.")],
                 is_error=True,
             )
-        deleted = await self._long_term.delete(memory_id)
+        deleted = await self._long_term.delete(owner, memory_id)
         if deleted:
             return ToolExecutionResult(
                 content=[TextBlock(text=f"Deleted memory {memory_id}.")]

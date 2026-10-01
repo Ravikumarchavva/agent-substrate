@@ -144,7 +144,7 @@ class PageIndexRAGPipeline:
             matches = await self._memory.query(spec)
             for match in matches:
                 if match.record.metadata.get("collection") == collection:
-                    await self._memory.delete(match.record.id)
+                    await self._memory.delete(spec.namespace, match.record.id)
 
             # Save new tree
             rec = MemoryRecord.from_text(

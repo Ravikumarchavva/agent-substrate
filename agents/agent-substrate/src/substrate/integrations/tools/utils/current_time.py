@@ -6,6 +6,7 @@ import datetime
 
 from substrate.kernel.abstractions import TextBlock
 from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions.tools import ToolRisk
 
 
 class CurrentTimeTool:
@@ -18,6 +19,8 @@ class CurrentTimeTool:
     """
 
     name = "get_current_time"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description = (
         "Return the current UTC date and time. "
         "Optionally convert to a named timezone (e.g. 'US/Eastern', 'Asia/Kolkata')."

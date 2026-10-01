@@ -6,6 +6,7 @@ import httpx2 as httpx
 
 from substrate.kernel.abstractions import TextBlock
 from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions.tools import ToolRisk
 
 _BASE = "https://en.wikipedia.org/api/rest_v1"
 _MAX_CHARS = 6000
@@ -23,6 +24,8 @@ class WikipediaTool:
     """
 
     name = "wikipedia"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description = (
         "Search Wikipedia for a topic and return a summary or article extract. "
         "Great for factual lookups, definitions, and background knowledge."

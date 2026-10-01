@@ -3,12 +3,14 @@ budgets, bad tool-call arguments, and graceful step-limit handling."""
 
 from __future__ import annotations
 
+from substrate.kernel.abstractions.tools import ToolRisk
+
 import asyncio
 from typing import AsyncIterator
 
 from substrate.kernel.context import ContextConfig
 from substrate.kernel.agents.react import ReActAgent
-from substrate.kernel.limits.execution import ExecutionTracker
+from substrate.kernel.abstractions.agent.supervision import ExecutionBudget
 from substrate.kernel.runtime.runtime import Runtime
 from substrate.kernel.storage.history import InMemoryHistoryProvider
 from substrate.kernel.abstractions.core.content import (
@@ -75,6 +77,8 @@ class PairTool:
     both run at the same time. Same tool name for both calls on purpose —
     their journal identity then comes from their path alone."""
 
+    risk = ToolRisk.SAFE
+    idempotent = True
     name = "pair"
     description = "test tool"
     input_schema: dict[str, object] = {
@@ -98,6 +102,8 @@ class PairTool:
 
 
 class CountingTool:
+    risk = ToolRisk.SAFE
+    idempotent = True
     name = "count"
     description = "counts executions"
     input_schema: dict[str, object] = {"type": "object", "properties": {"x": {"type": "integer"}}}
@@ -124,7 +130,7 @@ async def run_to_end(
     )
     kwargs = {"retry_policy": retry_policy} if retry_policy else {}
     run_id = await rt.submit(agent.id, msg, **kwargs)
-    async for entry in rt.event_log.tail(run_id):
+    async for entry in rt.tail(run_id):
         if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
             return entry.kind, entry.payload, run_id
     raise AssertionError("log ended without a terminal entry")
@@ -157,7 +163,7 @@ def _use(name: str, call_id: str, **args: object) -> ToolUseBlock:
 async def _tool_results(rt: Runtime, run_id: str) -> list[dict]:
     return [
         e.payload
-        async for e in rt.event_log.read(run_id, from_seq=0)
+        for e in await rt.read(run_id, from_seq=0)
         if e.kind == "tool.result"
     ]
 
@@ -169,7 +175,7 @@ async def test_concurrency_safe_calls_run_together_and_keep_call_order():
     )
     agent = make_agent(llm, tools=[tool])
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         kind, _, run_id = await run_to_end(rt, agent)
         results = await _tool_results(rt, run_id)
 
@@ -186,7 +192,7 @@ async def test_calls_without_the_marker_run_one_at_a_time():
     )
     agent = make_agent(llm, tools=[tool])
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         _, _, run_id = await run_to_end(rt, agent)
         results = await _tool_results(rt, run_id)
 
@@ -210,7 +216,7 @@ async def test_replay_after_a_crash_finds_each_batched_call_at_its_own_path():
     )
     agent = make_agent(llm, tools=[tool])
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         kind, _, run_id = await run_to_end(
             rt, agent, retry_policy=RunRetryPolicy(max_retries=2, backoff_s=0.0)
         )
@@ -233,9 +239,9 @@ async def test_cost_budget_stops_the_run():
         usage=Usage(input_tokens=1_000_000),  # $1.00 per call
     )
     agent = make_agent(
-        llm, tools=[CountingTool()], execution_budget=ExecutionTracker(max_cost_usd=1.5)
+        llm, tools=[CountingTool()], execution_budget=ExecutionBudget(max_cost_usd=1.5)
     )
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         kind, payload, _ = await run_to_end(rt, agent)
 
     assert kind == "run.failed"
@@ -251,7 +257,7 @@ async def test_invalid_tool_arguments_are_reported_to_the_model_not_executed():
     llm = ScriptedLLM([[bad], [_use("count", "c2", x=1)], [TextBlock(text="done")]])
     agent = make_agent(llm, tools=[tool])
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         kind, _, _ = await run_to_end(rt, agent)
 
     assert kind == "run.completed"
@@ -268,20 +274,20 @@ class _ProviderError(Exception):
 async def test_a_request_that_can_never_succeed_fails_immediately_without_retries():
     llm = ScriptedLLM([_ProviderError(401), [TextBlock(text="never")]])
     agent = make_agent(llm)
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         kind, payload, _ = await run_to_end(
             rt, agent, retry_policy=RunRetryPolicy(max_retries=3, backoff_s=0.0)
         )
 
     assert kind == "run.failed"
-    assert payload["status"] == "permanent_error"
+    assert payload["status"] == "auth"  # a typed code, not a generic "permanent"
     assert llm.calls == 1  # not retried
 
 
 async def test_a_transient_provider_error_is_still_retried():
     llm = ScriptedLLM([_ProviderError(503), [TextBlock(text="recovered")]])
     agent = make_agent(llm)
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         kind, _, _ = await run_to_end(
             rt, agent, retry_policy=RunRetryPolicy(max_retries=3, backoff_s=0.0)
         )
@@ -297,6 +303,8 @@ async def test_every_tool_returned_image_reaches_the_model_not_only_the_inline_o
     from substrate.kernel.abstractions.core.content import MediaBlock
 
     class GalleryTool:
+        risk = ToolRisk.SAFE
+        idempotent = True
         name = "gallery"
         description = "returns three images"
         input_schema: dict[str, object] = {"type": "object", "properties": {}}
@@ -314,7 +322,7 @@ async def test_every_tool_returned_image_reaches_the_model_not_only_the_inline_o
 
     llm = ScriptedLLM([[_use("gallery", "c1")], [TextBlock(text="done")]])
     agent = make_agent(llm, tools=[GalleryTool()])
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await run_to_end(rt, agent)
 
     (result,) = [
@@ -353,7 +361,7 @@ async def test_the_reply_is_the_answer_text_not_the_reasoning_trace():
         [[ReasoningBlock(text="private chain of thought"), TextBlock(text="The answer is 4.")]]
     )
     agent = make_agent(llm, middleware=MiddlewarePipeline([CaptureOutput()]))
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await run_to_end(rt, agent)
 
     assert outputs == ["The answer is 4."]
@@ -374,9 +382,9 @@ async def test_a_budget_stop_keeps_the_turn_in_history():
         model=llm,
         tools=[CountingTool()],
         context=ContextConfig(history=history),
-        execution_budget=ExecutionTracker(max_turns=1),
+        execution_budget=ExecutionBudget(max_turns=1),
     )
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         kind, payload, _ = await run_to_end(rt, agent)
         saved = await project_messages(history, "s1")
 
@@ -393,7 +401,7 @@ async def test_an_agent_can_make_more_than_fifty_tool_calls_in_one_run():
     turns: list = [[_use("count", f"c{i}")] for i in range(60)] + [[TextBlock(text="done")]]
     agent = make_agent(ScriptedLLM(turns), tools=[tool], max_iterations=70)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         kind, _, run_id = await run_to_end(rt, agent)
         results = await _tool_results(rt, run_id)
 
@@ -412,6 +420,8 @@ async def test_an_agent_can_set_its_own_tool_policy():
     from substrate.kernel.abstractions.tools.chain import ChainPolicy
 
     class SlowTool:
+        risk = ToolRisk.SAFE
+        idempotent = True
         name = "slow"
         description = "sleeps"
         input_schema: dict[str, object] = {"type": "object", "properties": {}}
@@ -423,7 +433,7 @@ async def test_an_agent_can_set_its_own_tool_policy():
     llm = ScriptedLLM([[_use("slow", "c1")], [TextBlock(text="done")]])
     agent = make_agent(llm, tools=[SlowTool()], tool_policy=ChainPolicy(call_timeout_s=0.05))
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         _, _, run_id = await run_to_end(rt, agent)
         (result,) = await _tool_results(rt, run_id)
 

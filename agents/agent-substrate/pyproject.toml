@@ -27,7 +27,6 @@ dependencies = [
     "mcp>=1.0.0",
     "openai>=2.15.0",
     "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
     "python-json-logger>=2.0.7",
@@ -58,8 +57,6 @@ dependencies = [
     # its own JWTs), so they moved to the `server` extra instead of being
     # forced onto every `agent-substrate` install.
     "fastapi>=0.128.0",
-    "opentelemetry-exporter-otlp",
-    "opentelemetry-instrumentation-fastapi<0.60b1",
     "kokoro>=0.9.4",
     "soundfile>=0.12.1",
 ]
@@ -119,6 +116,11 @@ safety = [
 # and run an agent object with substrate.kernel/integrations alone.
 server = [
     "agent-substrate[web,code,rag,s3,safety,sandbox,anthropic,gemini]",
+    # The engine only ever imports opentelemetry-api (a no-op until something configures an SDK);
+    # the SDK, the OTLP exporter and the FastAPI instrumentation are what the reference server wires up.
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-instrumentation-fastapi<0.60b1",
     "uvicorn[standard]>=0.34.0",
     "python-multipart>=0.0.9",
     "pyjwt>=2.12.0",
@@ -198,6 +200,7 @@ torch = { index = "pytorch-cpu" }
 [dependency-groups]
 dev = [
     "hypothesis>=6.168.3",
+    "opentelemetry-sdk>=1.20.0",
     "import-linter>=2.11",
     "ipykernel>=7.2.0",
     "pytest>=9.0.3",
@@ -239,6 +242,7 @@ name = "the kernel imports nothing above it"
 type = "forbidden"
 source_modules = ["substrate.kernel"]
 forbidden_modules = [
+    "substrate.evals",
     "substrate.integrations",
     "substrate.runtimes",
     "substrate.serving",
@@ -254,7 +258,6 @@ forbidden_modules = [
     "substrate.kernel.agents",
     "substrate.kernel.context",
     "substrate.kernel.document",
-    "substrate.kernel.evals",
     "substrate.kernel.flows",
     "substrate.kernel.hooks",
     "substrate.kernel.limits",
@@ -274,63 +277,32 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "adapters depend on abstractions, not on the engine"
+name = "adapters depend on abstractions and the engine's support libraries, not its internals"
 type = "forbidden"
-# BOUNDARY DEBT. Every line below is an adapter reaching into engine internals.
-# The list may only shrink; step 7 of the kernel rewrite requires it empty.
+# What an adapter (integrations/, runtimes/) may use from the kernel:
+#   abstractions      the ports and value types it implements
+#   llm               capability registry, modality fitting, tool-argument parsing, error classification
+#   workspace         object-key layout, content-addressed store, scope
+#   storage           the local default stores that the cloud stores wrap or reuse
+#   safety            text normalisation shared by the guardrail and the classifiers
+#   tools, runtime    Toolbox / ToolInvoker (the chain and pipeline tools) and Runtime / RunContext / the
+#                     SQL runtime store (triggers, human input, the Postgres store)
+#   telemetry         spans and metrics
+# These are pure or reusable by design. What it may not reach is how the engine runs an agent — the
+# agents, context window, flows, hooks, middleware and limits — because depending on those is how an
+# adapter ends up coupled to behaviour that is free to change.
 source_modules = ["substrate.integrations", "substrate.runtimes"]
 forbidden_modules = [
     "substrate.kernel.agents",
     "substrate.kernel.context",
     "substrate.kernel.document",
-    "substrate.kernel.evals",
     "substrate.kernel.flows",
     "substrate.kernel.hooks",
     "substrate.kernel.limits",
-    "substrate.kernel.llm",
     "substrate.kernel.middleware",
-    "substrate.kernel.runtime",
-    "substrate.kernel.safety",
-    "substrate.kernel.storage",
-    "substrate.kernel.tools",
-    "substrate.kernel.workspace",
     "substrate.kernel.exceptions",
 ]
 allow_indirect_imports = "true"
-ignore_imports = [
-    "substrate.integrations.artifacts.store -> substrate.kernel.workspace.layout",
-    "substrate.integrations.gdpr.eraser -> substrate.kernel.workspace.layout",
-    "substrate.integrations.knowledge.backends.local -> substrate.kernel.workspace.layout",
-    "substrate.integrations.llm.anthropic.anthropic_client -> substrate.kernel.llm.tool_arguments",
-    "substrate.integrations.llm.anthropic.anthropic_client -> substrate.kernel.llm.modalities",
-    "substrate.integrations.llm.anthropic.anthropic_client -> substrate.kernel.llm.models",
-    "substrate.integrations.llm.factory -> substrate.kernel.llm",
-    "substrate.integrations.llm.gemini.gemini_client -> substrate.kernel.llm.modalities",
-    "substrate.integrations.llm.gemini.gemini_client -> substrate.kernel.llm.models",
-    "substrate.integrations.llm.openai.openai_client -> substrate.kernel.llm.tool_arguments",
-    "substrate.integrations.llm.openai.openai_client -> substrate.kernel.llm.modalities",
-    "substrate.integrations.llm.openai.openai_client -> substrate.kernel.llm.models",
-    "substrate.integrations.llm.openai_compatible -> substrate.kernel.llm.modalities",
-    "substrate.integrations.llm.openai_compatible -> substrate.kernel.llm.tool_arguments",
-    "substrate.integrations.llm.openai_compatible -> substrate.kernel.llm.models",
-    "substrate.integrations.memory.factory -> substrate.kernel.storage.local_short_term_memory",
-    "substrate.integrations.pipeline.engine -> substrate.kernel.tools.toolbox",
-    "substrate.integrations.runtime.postgres -> substrate.kernel.runtime.sql_store",
-    "substrate.integrations.safety -> substrate.kernel.safety.normalize",
-    "substrate.integrations.storage.s3 -> substrate.kernel.storage.local_object_store",
-    "substrate.integrations.storage.session_index_erasure -> substrate.kernel.workspace.layout",
-    "substrate.integrations.tools.chain.bridge -> substrate.kernel.tools.invoker",
-    "substrate.integrations.tools.chain.tool -> substrate.kernel.tools.invoker",
-    "substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.staged -> substrate.kernel.workspace.cas",
-    "substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.staged -> substrate.kernel.workspace.materialize",
-    "substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.staged -> substrate.kernel.workspace.scope",
-    "substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.staged -> substrate.kernel.workspace.snapshots",
-    "substrate.integrations.tools.code_interpreter.code_interpreter.tool -> substrate.kernel.workspace.scope",
-    "substrate.integrations.tools.human_input -> substrate.kernel.runtime.context",
-    "substrate.integrations.triggers.conditions -> substrate.kernel.runtime",
-    "substrate.integrations.triggers.scheduler -> substrate.kernel.runtime",
-    "substrate.integrations.triggers.webhooks -> substrate.kernel.runtime",
-]
 
 [[tool.importlinter.contracts]]
 name = "serving cannot import agents or integrations-that-were-capabilities"
@@ -352,7 +324,6 @@ forbidden_modules = [
     "substrate.kernel.agents",
     "substrate.kernel.context",
     "substrate.kernel.document",
-    "substrate.kernel.evals",
     "substrate.kernel.flows",
     "substrate.kernel.hooks",
     "substrate.kernel.limits",

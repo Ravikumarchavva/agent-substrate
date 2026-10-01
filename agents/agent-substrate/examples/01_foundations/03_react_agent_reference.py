@@ -52,7 +52,7 @@ async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: st
         correlation_id=sid,
     )
     run_id = await rt.submit(agent.id, msg)
-    async for entry in rt.event_log.tail(run_id):
+    async for entry in rt.tail(run_id):
         if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
             break
     history = await agent.history.get_messages(agent.id, session_id=sid)
@@ -112,7 +112,7 @@ async def demo_basic_run() -> None:
         max_iterations=6,
     )
 
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         await rt.register(agent)
         output = await run_agent(rt, agent, "What is math.sqrt(256) * math.pi?")
     print(f"  output : {output!r}")
@@ -141,7 +141,7 @@ async def demo_multi_turn() -> None:
         "What is my name and what was the result I asked for?",
     ]
     session = "tutor-session"
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         await rt.register(agent)
         for q in turns:
             output = await run_agent(rt, agent, q, session_id=session)
@@ -166,7 +166,7 @@ async def demo_proxy() -> None:
         max_iterations=6,
     )
 
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         await rt.register(backend)
         proxy = UserProxyAgent("proxy", rt, key="user-1")
         output = await proxy.ask("What is math.factorial(10)?", recipient=backend.id)
@@ -209,7 +209,7 @@ async def demo_orchestrator() -> None:
         max_iterations=10,
     )
 
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         await rt.register(math_agent)
         await rt.register(time_agent)
         await rt.register(orchestrator)
@@ -252,7 +252,7 @@ async def demo_interactive() -> None:
     )
 
     session = "repl-session"
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         await rt.register(math_agent)
         await rt.register(time_agent)
         await rt.register(orchestrator)

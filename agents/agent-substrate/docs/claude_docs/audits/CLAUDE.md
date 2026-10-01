@@ -32,4 +32,4 @@ orchestration + tenancy + observability). Kernel-only audits live in
 
 - [`../kernel/CLAUDE.md`](../kernel/CLAUDE.md) — kernel-scoped audit series (2026-07-02 kernel audit is the deep-dive behind several findings here).
 - [`../roadmap.md`](../roadmap.md) — the prioritized program derived from this audit.
-- [`../architecture/runtime-stages.md`](../architecture/runtime-stages.md) — Stage 0/1/2 backend matrix these audits check against.
+- [`../architecture/kernel.md`](../architecture/kernel.md) — Stage 0/1/2 backend matrix these audits check against.

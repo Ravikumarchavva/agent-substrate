@@ -15,8 +15,8 @@ The root `CLAUDE.md` links here — you should already be here if you followed i
 
 | File | Read it when... |
 |---|---|
-| [`architecture/layers.md`](architecture/layers.md) | You need the *why* behind the L0-L3 stack, not just the *what* (root CLAUDE.md has the what). |
-| [`architecture/runtime-stages.md`](architecture/runtime-stages.md) | You're touching `agents/runtime/`, `infrastructure/runtime/`, or anything durability-related — tells you what's Stage 0 (in-memory) vs Stage 1 (Postgres) vs not-yet-built. |
+| [`architecture/kernel.md`](architecture/kernel.md) | You're touching `kernel/` — the engine, its runtime store, journal, budgets, tenancy, safety. Start here. |
+| [`architecture/invariants.md`](architecture/invariants.md) | You want to know which guarantees are *executed* tests rather than prose (generated; do not edit). |
 | [`architecture/hitl.md`](architecture/hitl.md) | You're touching human-in-the-loop: `ask_human`, tool approval, or the microservices `human_gate`. Explains all three mechanisms and why they currently diverge. |
 | [`architecture/prompt-and-skills.md`](architecture/prompt-and-skills.md) | You're adding/editing a system prompt section, a skill, a tool description, or a conditional instruction block in `chat_intents.py` — tells you which one owns a given piece of guidance, so it doesn't get restated in two places. |
 | [`architecture/optional-dependencies.md`](architecture/optional-dependencies.md) | You're adding/changing a `[project.optional-dependencies]` extra in `pyproject.toml`, or need the *why* behind one (size cost, version pin, mutual exclusivity) — the extras themselves stay one-line comments there for scannability; the rationale lives here instead. |
@@ -40,7 +40,7 @@ The root `CLAUDE.md` links here — you should already be here if you followed i
   to actual code. If you're not sure something is still true, verify before
   trusting it — these docs decay just like the root CLAUDE.md does.
 - **New architecture area → new file under `architecture/`.** Don't let
-  `layers.md` or `hitl.md` become a dumping ground for unrelated topics.
+  `kernel.md` or `hitl.md` become a dumping ground for unrelated topics.
 - **New recurring debugging pattern → new file under `playbooks/`.** If you
   find yourself re-deriving the same set of DB queries or log filters twice,
   it belongs here.

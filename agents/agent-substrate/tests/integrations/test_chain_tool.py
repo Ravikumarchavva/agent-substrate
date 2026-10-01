@@ -20,6 +20,7 @@ from substrate.kernel.abstractions.tools import ToolCallRequest, ToolExecutionRe
 
 
 class EchoTool:
+    idempotent = True
     name = "echo"
     description = "Echoes the input."
     risk = ToolRisk.SAFE

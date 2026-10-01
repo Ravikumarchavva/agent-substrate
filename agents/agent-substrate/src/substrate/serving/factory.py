@@ -299,7 +299,7 @@ async def init_infrastructure(
         session_factory=session_factory,
         engine=engine,
         dimensions=cfg.RAG_IMAGE_EMBEDDING_DIM,
-        table_name="vector_documents_images",
+        table_name="vector_records_images",
     )
     # Built before the RAG backend, which takes it: extracted chart/table
     # images are written here rather than inlined into the image vector rows.
@@ -752,6 +752,7 @@ async def build_agent_for_thread(
     short_term_memory: Any = None,
     long_term_memory: Any = None,
     user_id: str | None = None,
+    tenant_id: str | None = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
     runtime: Any = None,
@@ -823,7 +824,7 @@ async def build_agent_for_thread(
     # block — not merged into the base instructions — before the closure
     # below captures system_instructions for cold-store reseeding too, so
     # a reconstructed-from-EventLog turn sees the same block a live one does.
-    memory_context = await build_user_memory_context_block(long_term_memory, user_id)
+    memory_context = await build_user_memory_context_block(long_term_memory, tenant_id, user_id)
     if memory_context:
         system_instructions = system_instructions.rstrip() + "\n\n" + memory_context
 
@@ -835,9 +836,7 @@ async def build_agent_for_thread(
         await history.connect()
     memory = history
 
-    memory_tool = build_memory_tool(
-        session_id, user_id, short_term_memory, long_term_memory
-    )
+    memory_tool = build_memory_tool(session_id, short_term_memory, long_term_memory)
     if memory_tool is not None:
         tools = [*tools, memory_tool]
 
@@ -1339,33 +1338,23 @@ async def build_cached_history_for_thread(
 
 def build_memory_tool(
     session_id: str,
-    user_id: str | None,
     short_term_memory: Any,
     long_term_memory: Any = None,
 ) -> Any | None:
     """Build a ``MemoryTool`` bound to *session_id*, or ``None`` if neither
     memory backend is configured.
 
-    Short-term ops (get/set/clear_session) stay scoped to *session_id* as
-    before. Long-term ops (remember/recall/forget) are scoped to *user_id*
-    — not *session_id* — so a fact saved in one thread is actually visible
-    in every other thread that same user opens later, matching
-    ``LongTermMemory``'s own "persist across sessions forever" contract.
-    Falls back to session scope only when there's no authenticated user
-    (``user_id`` is ``None``) rather than erroring — long-term memory then
-    behaves like it did before this change, not like it's broken.
+    Short-term ops (get/set/clear_session) are scoped to *session_id*. Long-term ops
+    (remember/recall/forget) are scoped to the person the run is for — tenant and user are
+    read from the run's scope when a call is made, so a fact saved in one thread is visible
+    in every other thread that same user opens later. A run with no authenticated user keeps
+    its facts for that conversation only.
     """
     if short_term_memory is None and long_term_memory is None:
         return None
     from substrate.integrations.tools.memory import MemoryTool
-    from substrate.kernel.abstractions.core.identity import Actor
 
-    return MemoryTool(
-        Actor(type="user", key=user_id or session_id),
-        session_id,
-        short_term=short_term_memory,
-        long_term=long_term_memory,
-    )
+    return MemoryTool(session_id, short_term=short_term_memory, long_term=long_term_memory)
 
 
 def _xml_escape(text: str) -> str:
@@ -1382,7 +1371,7 @@ def _xml_escape(text: str) -> str:
 
 
 async def build_user_memory_context_block(
-    long_term_memory: Any, user_id: str | None, *, limit: int = 20
+    long_term_memory: Any, tenant_id: str | None, user_id: str | None, *, limit: int = 20
 ) -> str:
     """``<user_context>`` block appended to the system prompt — same
     labeled-block-appended-to-system-prompt pattern as
@@ -1397,33 +1386,17 @@ async def build_user_memory_context_block(
     stale or simply wrong. Capped at *limit* most-recent entries so
     accumulated memories can't unboundedly bloat or dominate the prompt.
 
-    Lives here (not ``agents/factory.py``) because it calls
-    ``DurableMemoryStore.list_all()`` — a concrete method, not part of the
-    ``LongTermMemory`` kernel Protocol — and agents/ (L1) cannot import
-    integrations/ (L2) concrete classes; this module is the sanctioned
-    meeting point for exactly that kind of glue (see its own module
-    docstring). Returns "" when there's no user or no standing memories.
+    Reads what ``MemoryTool.remember()`` wrote for this user in this tenant. Returns "" when
+    there's no user or no standing memories.
     """
     if long_term_memory is None or not user_id:
         return ""
-    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery
 
-    # namespace="default": MemoryTool.remember() never passes a namespace,
-    # so every fact it saves lands in DurableMemoryStore's default one —
-    # this must read from the same place things are actually written to.
-    if hasattr(long_term_memory, "list_all"):
-        memories = await long_term_memory.list_all(
-            Actor(type="user", key=user_id), limit=limit
-        )
-    elif hasattr(long_term_memory, "query"):
-        from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery
-
-        matches = await long_term_memory.query(
-            MemoryQuery(namespace=MemoryNamespace(user_id=user_id), limit=limit)
-        )
-        memories = [m.record for m in matches]
-    else:
-        memories = []
+    matches = await long_term_memory.query(
+        MemoryQuery(namespace=MemoryNamespace(tenant_id=tenant_id or "default", user_id=user_id), limit=limit)
+    )
+    memories = [m.record for m in matches]
     if not memories:
         return ""
 

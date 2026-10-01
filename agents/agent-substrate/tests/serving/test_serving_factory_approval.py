@@ -34,6 +34,7 @@ from substrate.serving.monolith.sse.bridge import WebHITLBridge
 
 
 class _DropDatabaseTool:
+    idempotent = True
     name = "drop_database"
     description = "Drops the production database."
     risk = ToolRisk.CRITICAL
@@ -73,7 +74,7 @@ async def test_critical_tool_call_pauses_for_approval_and_resumes():
     llm = _ScriptedLLMClient()
     thread_id = uuid.uuid4()
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = await build_agent_for_thread(
             thread_id,
             model_client=llm,
@@ -112,7 +113,7 @@ async def test_critical_tool_call_pauses_for_approval_and_resumes():
         resolved = await bridge.resolve(request_id, {"action": "approve"})
         assert resolved
 
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                 assert entry.kind == "run.completed", entry.payload
                 break
@@ -123,7 +124,7 @@ async def test_critical_tool_call_denied_does_not_execute():
     llm = _ScriptedLLMClient()
     thread_id = uuid.uuid4()
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = await build_agent_for_thread(
             thread_id,
             model_client=llm,
@@ -148,14 +149,14 @@ async def test_critical_tool_call_denied_does_not_execute():
         request_id = event["request_id"]
         await bridge.resolve(request_id, {"action": "deny"})
 
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                 assert entry.kind == "run.completed"
                 break
 
         # The tool never actually ran — only the denial-error result did.
         found_tool_result = False
-        async for entry in rt.event_log.read(run_id):
+        for entry in await rt.read(run_id):
             if entry.kind == "tool.result":
                 found_tool_result = True
                 assert entry.payload.get("ok") is False

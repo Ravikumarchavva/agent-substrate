@@ -7,6 +7,7 @@ from functools import partial
 
 from substrate.kernel.abstractions import TextBlock
 from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions.tools import ToolRisk
 
 
 class WebSearchTool:
@@ -22,6 +23,8 @@ class WebSearchTool:
     """
 
     name = "web_search"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description = (
         "Search the web for current information. "
         "Returns titles, URLs, and relevant excerpts from the top results."

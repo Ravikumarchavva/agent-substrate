@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
-from typing import Callable, Awaitable, ClassVar
+from typing import Awaitable, Callable, ClassVar
 
-from substrate.logger import setup_logging
-from substrate.kernel.middleware._contracts import MiddlewareContext
-from substrate.kernel.exceptions import MiddlewareTermination
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.middleware._contracts import MiddlewareContext
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class FileValidatorMiddleware:

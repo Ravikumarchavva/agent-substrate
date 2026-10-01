@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Callable, Awaitable, Any, ClassVar
+import logging
+from typing import Any, Awaitable, Callable, ClassVar
 
-from substrate.logger import setup_logging
-from substrate.kernel.middleware._contracts import MiddlewareContext
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.middleware._contracts import MiddlewareContext
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class CacheMiddleware:

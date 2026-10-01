@@ -70,9 +70,9 @@ class MemoryManager:
 
         return candidates
 
-    async def promote(self, candidate_id: str) -> MemoryRecord | None:
+    async def promote(self, caller: MemoryNamespace, candidate_id: str) -> MemoryRecord | None:
         """Promote a CANDIDATE record to ACTIVE canonical status."""
-        record = await self._store.get(candidate_id)
+        record = await self._store.get(caller, candidate_id)
         if record is None:
             return None
 
@@ -83,9 +83,9 @@ class MemoryManager:
         await self._store.save(active_record)
         return active_record
 
-    async def reject(self, candidate_id: str) -> bool:
+    async def reject(self, caller: MemoryNamespace, candidate_id: str) -> bool:
         """Reject and delete a candidate record."""
-        return await self._store.delete(candidate_id)
+        return await self._store.delete(caller, candidate_id)
 
     async def reconcile_and_save(
         self,
@@ -95,7 +95,7 @@ class MemoryManager:
     ) -> str:
         """Save a new memory record and mark any superseded prior record as SUPERSEDED."""
         if supersedes_id:
-            old_record = await self._store.get(supersedes_id)
+            old_record = await self._store.get(new_record.namespace, supersedes_id)
             if old_record is not None:
                 superseded = old_record.model_copy(
                     update={"status": MemoryStatus.SUPERSEDED}
@@ -126,7 +126,7 @@ class MemoryManager:
         discarded_count = 0
         for match in matches:
             if match.record.provenance.source_branch_id == branch_id:
-                deleted = await self._store.delete(match.record.id)
+                deleted = await self._store.delete(namespace, match.record.id)
                 if deleted:
                     discarded_count += 1
 

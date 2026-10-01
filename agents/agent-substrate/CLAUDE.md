@@ -93,67 +93,28 @@ agent-substrate/                         ← repo root
 
 ```
 src/substrate/
-├── kernel/       L0 — FROZEN. Pure contracts: Protocols, dataclasses, enums. No I/O.
-│   ├── core/             content.py (ContentBlock, TextBlock, ChatMessage, ToolUseBlock, …),
-│   │                     identity.py (AgentId, TopicId), usage.py (Usage), errors.py
-│   ├── llm/              llm.py — LLMClient, EmbeddingClient Protocols
-│   ├── messaging/        message.py (Message, Subscription), stream.py (TextDelta,
-│   │                     ReasoningDelta, CompletionEvent, StreamDone, AgentProgress)
-│   ├── storage/          blob.py (BlobStore), history.py (HistoryProvider),
-│   │                     vector.py (VectorStore, Document), graph.py (GraphStore),
-│   │                     memory.py (ShortTermMemory, MemoryStore)
-│   ├── tools/            tools.py (Tool/HostedTool/ProviderDefinedTool, AnyTool,
-│   │                     ToolRegistry, ToolRisk, ToolExecutionResult), chain.py (chain
-│   │                     contracts: ChainPolicy, InvocationResult, ChainRunResult),
-│   │                     skills.py, approval.py (ApprovalHandler, ApprovalResult)
-│   ├── agent/            context.py (CompactionStrategy), middleware.py (MiddlewareStage —
-│   │                     the real Interceptor/MiddlewarePipeline machinery is L1, not kernel;
-│   │                     see agents/middleware/ below),
-│   │                     supervision.py (Supervision, SpawnBudget, Priority),
-│   │                     runtime_context.py (RunMeta), safety.py (SafetyVerdict,
-│   │                     TextSafetyClassifier/ImageSafetyClassifier Protocols)
-│   └── runtime/          agent.py (Agent), inbox.py, scheduler.py, supervisor.py,
-│                         effects.py, fanout.py, follow_graph.py, log_entry.py, ids.py, …
+├── kernel/       the ENGINE — everything needed to run a durable agent (see
+│   │             docs/claude_docs/architecture/kernel.md). Third-party imports: pydantic,
+│   │             opentelemetry-api, confusable_homoglyphs, typing_extensions only.
+│   ├── abstractions/     what the engine needs from outside — ports + value types, pure:
+│   │   ├── core/         content blocks (deep-immutable), Actor/Topic, Usage, ErrorInfo,
+│   │   │                 FinishReason, TraceContext
+│   │   ├── runtime/      RuntimeStore (the one durable port), RunLogEntry, Wakeup, effects
+│   │   ├── tools/        Tool/HostedTool/ProviderDefinedTool, ToolRisk, approval
+│   │   ├── llm/ storage/ agent/ messaging/ document/   LLMClient, History/Memory/Vector/Graph/
+│   │   │                 Object stores, Supervision/budgets, Message, DocumentExtractor
+│   │   └── exceptions.py typed errors (stable `code`, `retryable`)
+│   ├── agents/           RoutedAgent + @handle, ReActAgent, OrchestratorAgent, UserProxyAgent
+│   ├── runtime/          Runtime, Worker, Journal, RunContext, SqlRuntimeStore (+ SQLite adapter)
+│   ├── telemetry/        spans/metrics at every chokepoint; GenAI + substrate.* conventions
+│   ├── llm/ context/ tools/ middleware/ hooks/ limits/ safety/ storage/ workspace/ flows/ document/
+│   └── testing/          conformance suites + doubles (never imported by production code)
 │
-├── agents/       L1 — "run a complete chatbot, zero infra". Every kernel Protocol gets
-│   │             exactly one default implementation here, using the least infra that
-│   │             Protocol can possibly need — local filesystem/SQLite for storage/runtime,
-│   │             one OpenAI-compatible chat client + one local embedding client for LLM.
-│   ├── core/             ReActAgent, OrchestratorAgent (+ SubAgentConfig), UserProxyAgent,
-│   │                     BaseAgent
-│   ├── context/          AgentContext, ContextConfig, tokens.py (the one token estimator —
-│   │                     counts tool args, tool results and media), compaction/ strategies
-│   ├── document/         LocalDocumentExtractor (pdfplumber/pypdf + Tesseract fallback),
-│   │                     LocalFilesystemDocumentStore — L1 defaults for the kernel document Protocols
-│   ├── llm/              client.py/models.py (kernel re-export + ModelProfile registry,
-│   │                     resolve_capabilities), modalities.py (fit_to_capabilities),
-│   │                     chat_client.py (OpenAICompatibleClient — L1 default chat
-│   │                     client), embedding_client.py (SentenceTransformersEmbeddingClient —
-│   │                     L1 default embedding client, local model, no external API)
-│   ├── flows/            SequentialFlow, ParallelFlow, ConditionalFlow
-│   ├── evals/            EvalCase, EvalDataset, LLMJudge, EvalRunner, EvalReport
-│   ├── middleware/       MiddlewarePipeline, guardrails/ (incl. MultimodalSafetyMiddleware),
-│   │                     AuditLogger, RateLimiter, …
-│   ├── safety/           normalize() — NFKC + UTS-39 confusables-skeleton homoglyph
-│   │                     defense, shared by the L1 guardrail and L2 classifiers
-│   ├── runtime/          Runtime facade + Worker + backends/ (InMemory* + Local* SQLite —
-│   │                     build_local_runtime() wires the 6 SQLite backends together)
-│   ├── tools/            Toolbox (ToolRegistry impl), ToolInvoker (chain dispatch, L1)
-│   ├── storage/          history, graph, vector, tasks + local_object_store.py, fs.py
-│   │                     (atomic_write_json + safe_name — every Local* store builds paths
-│   │                     through safe_name, ids are untrusted)
-│   │                     (WorkspaceFileStore — L1 default ObjectStore),
-│   │                     local_short_term_memory.py, local_memory_store.py (L1 defaults
-│   │                     for the kernel ShortTermMemory / MemoryStore Protocols)
-│   ├── limits/           ExecutionTracker (per-agent spend), SpawnTracker (headcount +
-│   │                     priority preemption), RetryPolicy
-│   ├── hooks/            lifecycle hooks (RUN_START/END, STEP, LLM, TOOL, HANDOFF)
-│   ├── workspace/        WorkspaceScope, BlobCAS, branching, snapshots
-│   └── factory.py        create_assistant_agent, load_session_memory, rebuild_messages
+├── evals/        eval harness (EvalCase, EvalDataset, LLMJudge, EvalRunner) — a client of the kernel
 │
-├── integrations/ L2 — everything that reaches outside the process: more storage backends,
+├── integrations/ adapters — everything that reaches outside the process: more storage backends,
 │   │             more LLM vendors, tools, RAG, MCP, sandboxed code execution — everything
-│   │             past the one L1 default for a given Protocol.
+│   │             past the engine's own zero-infra defaults.
 │   ├── llm/              LLMFactory (vendor auto-detect), provider clients (openai/,
 │   │                     anthropic/, gemini/), encoders/
 │   ├── tools/            tool implementations + skills + discovery scanner + MCP bridge
@@ -180,8 +141,7 @@ src/substrate/
 │   │                     impl built on top), PgTaskStore, PostgresWorkspaceStore
 │   ├── database/         PostgresConnector (asyncpg pool — engine's own DB)
 │   ├── cache/            RedisConnector
-│   ├── runtime/          EventLog/Inbox/Scheduler (durable Postgres backends),
-│   │                     build_postgres_runtime()
+│   ├── runtime/          PostgresRuntimeStore (the RuntimeStore on asyncpg)
 │   ├── pipeline/         PipelineEngine, DataRef/DataRefArtifactStore, PipelineStore
 │   ├── triggers/         TriggerScheduler, WebhookRegistry, ConditionMonitor
 │   ├── safety/           TextSafetyClassifier, ImageSafetyClassifier (model-backed)
@@ -198,7 +158,7 @@ src/substrate/
 │   │                     `from_log.wire_from_log(kind, payload)` converts log entries to WireEvents
 │   ├── stream/           AgentStreamSession — tails EventLog, maps entries via wire_from_log
 │   ├── factory.py        constructs agents, tools, and runtime for the HTTP shell —
-│   │                     the primary place serving/ and agents/integrations meet
+│   │                     the primary place serving/, the kernel and the integrations meet
 │   └── research_orchestrator.py  fixed researcher/calculator/clock/coordinator topology
 │                         used when AGENT_MODE=orchestrator
 │
@@ -246,52 +206,41 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 
 ---
 
-## Architecture — three enforced layers
+## Architecture — an engine, its ports, and the adapters around it
 
 ```
-kernel (L0)        Pure contracts: Protocols, dataclasses, enums. No I/O.
-    ↑ imported by
-agents (L1)        Run a complete chatbot, zero infra: LLM loop, guardrails,
-                    middleware, flows, evals — one default implementation per
-                    kernel Protocol, using the least infra it can need.
-    ↑ imported by
-integrations (L2)  Everything that reaches outside the process: more storage
-                    backends (Postgres/S3/Redis), more LLM vendors, tools,
-                    RAG, MCP, sandboxed code execution.
+kernel/abstractions   ports + value types (pure)            ← what adapters implement
+kernel/               the engine, built on those ports      ← almost all the behaviour
+integrations/ runtimes/   adapters: vendors, databases, MCP, tools
+serving/ console/ cli     wiring: FastAPI apps, the REPL, the CLI
+evals/                    the eval harness (a client of the kernel)
 ```
 
-`serving/` is **orthogonal** — it implements kernel Protocols and wires
-kernel/agents/integrations together in lifespan (in its own composition root,
-`serving/factory.py`); it is not part of the stack hierarchy. There used to be
-a separate `infrastructure/` folder for built-in backend connectors — it was
-eliminated: those connectors merged into `integrations/` (same "reaches
-outside the process" shape as everything else there), and its composition
-root (`serving_factory.py`/`research_orchestrator.py`) moved into `serving/`
-itself, since building the DI graph `serving/monolith/app.py` consumes is
-serving's own job, not a layer.
+The kernel is **not** a layer of contracts: it routes messages, runs and replays durable agents,
+enforces budgets and approvals, and instruments itself. `abstractions` is the seam — it names what the
+engine needs from outside (an LLM client, a runtime store, a memory store…) and carries no behaviour.
+The full rationale, the runtime-store/journal design and the invariants are in
+[`docs/claude_docs/architecture/kernel.md`](docs/claude_docs/architecture/kernel.md); the guarantees that
+are *executed* (not just described) are in `docs/claude_docs/architecture/invariants.md`, generated from
+`tests/invariants/` — a test fails if it is stale.
 
-**Dependency rule** (strictly downward; enforced by `uv run lint-imports`):
-
-```
-integrations  →  agents  →  kernel
-serving  =  orthogonal (cross-layer by design)
-```
-
-**Import-linter contracts** (`pyproject.toml`, CI fails if violated):
+**Import-linter contracts** (`pyproject.toml`; `uv run lint-imports`, CI fails if violated):
 
 | Contract | Rule |
 |---|---|
-| `three stack layers` | Each layer only imports from the layer(s) below it |
-| `agents cannot import integrations` | L1 must not reach up to L2 |
-| `kernel is independent` | L0 imports nothing from the rest of the codebase |
-| `serving cannot import agents or integrations-that-were-capabilities` | serving/'s routes and services don't reach past its own `factory.py`/`research_orchestrator.py` composition root — those two files are exempt by design |
+| `the kernel imports nothing above it` | `kernel` never imports integrations/runtimes/serving/evals/console/cli/config-wiring |
+| `abstractions are independent of the engine` | `kernel/abstractions` imports no engine package |
+| `adapters depend on abstractions and the engine's support libraries, not its internals` | integrations/runtimes may use `abstractions` plus `llm/workspace/storage/safety/tools/runtime/telemetry`, never `agents/context/flows/hooks/middleware/limits` |
+| `serving cannot import agents or integrations-that-were-capabilities` | serving/'s routes and services don't reach past its `factory.py`/`research_orchestrator.py` composition root |
 
-**Kernel invariants** (`tests/architecture/test_kernel_invariants.py`):
-- Flat layout (only the permitted subpackages), no upward imports, no vendor strings
-  (`gpt-`, `claude-`, …), pydantic as the only third-party dependency, wire types round-trip
-- Contracts only — no working implementations (there is no LOC/file-count ceiling; nothing enforces one)
+**Structure rows** (`tests/invariants/test_structure.py`): kernel third-party imports are exactly the allowed
+set; `kernel/testing` is never imported by production code; the public API of `kernel.abstractions` matches
+`tests/invariants/public_api.json` (change it in the same commit as an intended API change); the core install
+carries `opentelemetry-api` only (the SDK/exporter belong to the `server` extra).
 
-`src/substrate/kernel/` is **frozen** — new contracts belong there only if they have zero external dependencies and are needed by multiple layers. New zero-infra defaults go in `agents/`, new production-infra backends/vendors/tools go in `integrations/`.
+New agent behaviour goes in `kernel/agents/` (declare handlers with `@handle(PayloadType)` on a `RoutedAgent`),
+new orchestration in `kernel/flows/`, a new port in `kernel/abstractions/` **with a conformance suite** in
+`kernel/testing/conformance/`, and a new vendor/backend/tool in `integrations/`.
 
 ---
 
@@ -301,37 +250,47 @@ serving  =  orthogonal (cross-layer by design)
 
 | You want to add… | Write it in… |
 |---|---|
-| A new agent type | `agents/core/<name>.py` — follow `ReActAgent` pattern |
-| A new guardrail | `agents/middleware/guardrails/<name>.py` — implement middleware contract |
-| A new LLM provider | `integrations/llm/<provider>/` — implement `LLMClient` Protocol from `kernel/llm/llm.py` |
-| A new memory backend | `integrations/history/<name>.py` — implement `HistoryProvider` Protocol from `kernel/storage/history.py` |
-| A new vector store | `integrations/vector/<name>.py` — implement `VectorStore` Protocol from `kernel/storage/vector.py` |
-| A new graph store | `integrations/graph/<name>.py` — implement `GraphStore` Protocol from `kernel/storage/graph.py` |
-| A new document extractor | `agents/document/<name>.py` if zero/near-zero-infra, else `integrations/<name>.py` — implement `DocumentExtractor` Protocol from `kernel/document/protocols.py` |
-| A new tool | `integrations/tools/<name>/tool.py` — implement `Tool` Protocol (auto-scanned, no registration needed) |
+| A new agent type | `kernel/agents/<name>.py` — subclass `RoutedAgent`, declare handlers with `@handle(PayloadType)` |
+| A new guardrail | `kernel/middleware/guardrails/<name>.py` — implement the middleware contract |
+| A new LLM provider | `integrations/llm/<provider>/` — implement `LLMClient` (`kernel/abstractions/llm/`); report a `FinishReason` and let `classify_llm_error` type its failures |
+| A new memory backend | `integrations/memory/<name>.py` — implement `MemoryStore` and run `MemoryStoreConformance` against it |
+| A new history backend | `integrations/history/<name>.py` — implement `HistoryProvider` (`kernel/abstractions/storage/history.py`) |
+| A new vector store | `integrations/vector/<name>.py` — implement `VectorStore` (`kernel/abstractions/storage/vector.py`) |
+| A new graph store | `integrations/graph/<name>.py` — implement `GraphStore` (`kernel/abstractions/storage/graph.py`) |
+| A new runtime store | implement `RuntimeStore` (`kernel/abstractions/runtime/store.py`) — or a new `Database` adapter for `SqlRuntimeStore` — and run `RuntimeStoreConformance` against it |
+| A new document extractor | `integrations/document/<name>.py` — implement `DocumentExtractor` (`kernel/abstractions/document/`) |
+| A new tool | `integrations/tools/<name>/tool.py` — implement `Tool`, **declaring `risk` and `idempotent`** (auto-scanned, no registration needed) |
 | A new skill | `integrations/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
-| A new agent flow | `agents/flows/` — write a standalone agent (`id` + `run(ctx, inbox)`) using SequentialFlow / ParallelFlow / ConditionalFlow |
+| A new agent flow | `kernel/flows/` — SequentialFlow / ParallelFlow / ConditionalFlow are `RoutedAgent`s |
 
 ### Tool creation
 
 ```python
-from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
 from substrate.kernel.abstractions.core.content import TextBlock
 
 class MyTool:
     name = "my_tool"
     description = "What it does"
     input_schema = {"type": "object", "properties": {...}, "required": [...]}
+    risk = ToolRisk.SAFE          # required. HIGH/CRITICAL need approval.
+    idempotent = True             # required. May a call that might not have happened be repeated?
 
     async def execute(self, *, ctx=None, **kwargs) -> ToolExecutionResult:
-        return ToolExecutionResult(content=[TextBlock(text="result")])
+        return ToolExecutionResult(name=self.name, content=[TextBlock(text="result")])
 ```
+
+`risk` and `idempotent` are **required** — `Toolbox.add` raises `ToolDeclarationError` without them. `idempotent`
+decides what a crash window means: a non-idempotent tool whose outcome was never recorded is *not* re-run (the
+run fails with `OrphanedEffectError`, the journaled intent being what you compensate from); an idempotent one
+re-runs under the same idempotency key (`current_idempotency_key()`). A tool from an MCP server defaults to
+`HIGH` / not idempotent unless the operator connecting it says otherwise.
 
 A tool declares `concurrency_safe = True` when several calls to it can run at the same
 time (pure reads); a turn's tool calls then run concurrently and are journaled replay-safely
 (`ctx.tool_batch`). Anything that doesn't declare it runs one call at a time. A tool that
 needs to know whose work it is reads `scope_of(ctx)` (tenant/user/thread/branch/agent —
-`kernel.agent.runtime_context.RunScope`), never a global and never a model-supplied argument.
+`kernel.abstractions.agent.runtime_context.RunScope`), never a global and never a model-supplied argument.
 
 `substrate.kernel.abstractions.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
 `HostedTool` (provider-executed, `provider_specs`), `ProviderDefinedTool`
@@ -359,11 +318,17 @@ client = LLMFactory("gpt-4o", api_key).build()
 client = LLMFactory("groq/llama-3.3-70b-versatile", api_key).build()
 client = LLMFactory("ollama/llama3.2", "ollama").build()   # local, no key
 
-# Or construct the L1-default universal client directly (agents/, zero infra)
-from substrate.kernel.llm import OpenAICompatibleClient
+# Or construct the universal OpenAI-compatible client directly
+from substrate.integrations.llm.openai_compatible import OpenAICompatibleClient
 client = OpenAICompatibleClient(model="llama3.2", api_key="ollama",
-                                    base_url="http://localhost:11434/v1")
+                                base_url="http://localhost:11434/v1")
 ```
+
+Every client reports why the model stopped (`FinishReason`) and the engine acts on it: a reply cut off at
+the token limit is marked `run.truncated`, a content-filter stop fails the run as `content_filter`.
+Provider failures are typed by `classify_llm_error` — `RateLimitedError` (carrying the provider's
+`Retry-After`, which the worker honours), `ContextLengthError` (the agent halves the prompt and retries
+once), `AuthError`, `ContentFilterError` — so a transient one retries and a permanent one does not.
 
 ### MCP tools
 
@@ -412,7 +377,7 @@ All shared objects (LLM clients, tool registry, event bus, HITL bridge) are wire
 ## Memory / History
 
 ```python
-# L1 default — one JSON file per session, zero infra
+# zero-infra default — one JSON file per session
 from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
 
 # In-memory (testing only)
@@ -427,6 +392,29 @@ from substrate.integrations.history import DurableHistoryProvider
 
 All `HistoryProvider` methods are `async def`. Always `await` them.
 
+### Long-term memory (`MemoryStore`)
+
+Memory is **scope-addressed**. A record is owned by a `MemoryNamespace(tenant_id, user_id?, agent_id?, session_id?)`;
+a caller passes *its own* namespace to every read and delete, and sees the records whose owner fields it shares —
+so leaving a field out narrows what you see, never widens it.
+
+```python
+from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery, MemoryRecord, TenantWide
+
+me = MemoryNamespace(tenant_id="acme", user_id="alice")
+await store.save(MemoryRecord.from_text("prefers French", namespace=me))
+await store.get(me, record_id)                       # an id alone addresses nothing
+await store.query(MemoryQuery(namespace=me, text_query="French"))
+await store.query(MemoryQuery(namespace=MemoryNamespace(tenant_id="acme"),
+                              tenant_wide=TenantWide(reason="admin export, ticket 123")))  # explicit, with a reason
+await store.erase(MemoryNamespace(tenant_id="acme", user_id="alice"))   # everything under a user
+```
+
+Ids are tenant-qualified (another tenant's same id is a different record); saving over another namespace's id in the
+same tenant raises `ScopeViolationError`; deleting requires owning the record (same user). Implementations:
+`LocalFilesystemMemoryStore` (default), `DurableMemoryStore` (Postgres, table `memory_records`), `LanceMemoryStore`;
+all three run `MemoryStoreConformance` (`kernel/testing/conformance/memory_store.py`). The memory *tool* takes tenant
+and user from the run's `scope_of(ctx)`, never from model arguments.
 ## Knowledge / RAG
 
 Vector and graph store contracts live in the kernel. Concrete implementations live in `integrations/`; `integrations/knowledge/` wires them into pipelines.
@@ -489,7 +477,8 @@ JWT_SECRET=<32+ char random string — required>
 # this host, no container) | "k8s" (one agent-sandbox pod per session) | "inprocess"
 SANDBOX_RUNTIME=nsjail
 
-# Agent runtime backend: "postgres" (default, durable) or "memory" (in-process, no infra)
+# Agent runtime store: "postgres" (default, durable) or "local" (SQLite file, no infra).
+# There is no in-memory store: tests use Runtime.local(":memory:") through the same code.
 RUNTIME_BACKEND=postgres
 
 # Durable runtime's own asyncpg pool (separate from the ORM engine's pool)
@@ -527,12 +516,18 @@ All observability services start via `make infra-up`.
 | Prometheus | Metrics collection |
 | Grafana | Dashboards at `http://localhost:3001` (admin/admin) |
 
-Logging convention in Python modules:
+Logging convention:
 ```python
+# application code (serving/, integrations/, console/, cli) — configures handlers on first use
 from substrate.logger import setup_logging
 logger = setup_logging("substrate.my_module")
+
+# the kernel is a library: it only emits, and the host decides where it goes
+import logging
+logger = logging.getLogger(__name__)
 ```
-Do not call `logging.getLogger(...)` directly.
+`kernel/` must not import `substrate.logger` — importing the engine configures nothing and loads no logging stack
+(row I26 loads the whole engine in a subprocess and checks what came in).
 
 ---
 
@@ -552,10 +547,10 @@ make ci
 
 ---
 
-## Evaluation Framework (`agents/evals/`)
+## Evaluation Framework (`evals/`)
 
 ```python
-from substrate.kernel.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
+from substrate.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
 
 runner = EvalRunner(agent=my_agent, judge=LLMJudge(criteria=[CORRECTNESS]))
 report = await runner.run(dataset)
@@ -594,7 +589,7 @@ runner.export_markdown()
 
 | Area | Issue |
 |---|---|
-| Test coverage | `guardrails`/`middleware`/MCP adapter/`agents/evals` have real (if not exhaustive) coverage as of 2026-07-05 — the genuinely thin area is **microservices business logic** (`identity`, `policy`, `job_controller`, `tool_executor`, `code_interpreter`): only health/smoke tests exist (`tests/server/test_services_health.py`), no per-service behavior tests. See `docs/claude_docs/roadmap.md` "Recently shipped" (v1 remediation) for what else shipped that session and its known gaps. |
+| Test coverage | `guardrails`/`middleware`/MCP adapter/`evals` have real (if not exhaustive) coverage as of 2026-07-05 — the genuinely thin area is **microservices business logic** (`identity`, `policy`, `job_controller`, `tool_executor`, `code_interpreter`): only health/smoke tests exist (`tests/server/test_services_health.py`), no per-service behavior tests. See `docs/claude_docs/roadmap.md` "Recently shipped" (v1 remediation) for what else shipped that session and its known gaps. |
 | Microservices event architecture | Only 3 of ~28 domain-event factories in `serving/shared/events/types.py` have a real producer (`session_started`, `workflow_started`, `workflow_failed`); `live_stream` (the SSE projector) has almost nothing to project in the microservices deployment beyond a run starting/failing. Concretely: `workflow_completed` is never published by any service, so `job_controller::complete_run` is unreachable — a successful run has no code path that marks it `completed`. See `docs/claude_docs/roadmap.md`'s deferred-items list (2026-07-12 entry) for the full finding. |
 
 ---

@@ -41,15 +41,9 @@ security bypass of something we could check).
 from __future__ import annotations
 
 import asyncio
-from typing import Callable, Awaitable, ClassVar
+import logging
+from typing import Awaitable, Callable, ClassVar
 
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.middleware._contracts import MiddlewareContext
-from substrate.kernel.middleware.guardrails.prompt_injection import (
-    _INJECTION_PATTERNS,
-)
-from substrate.kernel.safety.normalize import normalize
-from substrate.kernel.exceptions import MiddlewareTermination
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
 from substrate.kernel.abstractions.agent.safety import (
     ImageSafetyClassifier,
@@ -59,9 +53,15 @@ from substrate.kernel.abstractions.agent.safety import (
     max_severity,
 )
 from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
-from substrate.logger import setup_logging
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.exceptions import MiddlewareTermination
+from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.kernel.middleware.guardrails.prompt_injection import (
+    _INJECTION_PATTERNS,
+)
+from substrate.kernel.safety.normalize import normalize
 
-logger = setup_logging("substrate.kernel.middleware.multimodal_safety")
+logger = logging.getLogger(__name__)
 
 
 def _regex_verdict(text: str) -> SafetyVerdict:

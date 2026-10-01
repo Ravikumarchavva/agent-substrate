@@ -48,7 +48,7 @@ async def _run_flow(flow, text: str, *extra_agents, timeout: float = 5.0) -> str
         reply_to=sentinel,
     )
     cid = msg.correlation_id
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         for agent in extra_agents:
             await rt.register(agent)
         await rt.register(flow)
@@ -58,7 +58,7 @@ async def _run_flow(flow, text: str, *extra_agents, timeout: float = 5.0) -> str
         deadline = asyncio.get_event_loop().time() + timeout
         payload = None
         while asyncio.get_event_loop().time() < deadline:
-            payload = await rt.signal_bus.consume(
+            payload = await rt.store.consume(
                 sentinel, f"reply:{cid}", f"test-wait:{sentinel}:{cid}"
             )
             if payload is not None:

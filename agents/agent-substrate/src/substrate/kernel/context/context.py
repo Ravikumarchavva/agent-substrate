@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
+from substrate.kernel.abstractions.agent.context import ContextBuilder
+from substrate.kernel.abstractions.agent.supervision import HistoryRetention
+from substrate.kernel.abstractions.core.content import ChatMessage
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.storage.history import HistoryProvider
 from substrate.kernel.context.builder import DefaultContextBuilder
 from substrate.kernel.context.compaction import (
     CompactionCoordinator,
@@ -9,14 +16,8 @@ from substrate.kernel.context.compaction import (
     SlidingWindowCompaction,
 )
 from substrate.kernel.storage.history import project_messages
-from substrate.kernel.abstractions.agent.context import ContextBuilder
-from substrate.kernel.abstractions.agent.supervision import HistoryRetention
-from substrate.kernel.abstractions.core.content import ChatMessage
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.storage.history import HistoryProvider
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class ContextConfig:
@@ -80,7 +81,9 @@ class ContextConfig:
     @classmethod
     def default(cls) -> "ContextConfig":
         """Return a durable local filesystem context with default sliding-window compaction."""
-        from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
+        from substrate.kernel.storage.local_history import (
+            LocalFilesystemHistoryProvider,
+        )
 
         return cls(LocalFilesystemHistoryProvider())
 

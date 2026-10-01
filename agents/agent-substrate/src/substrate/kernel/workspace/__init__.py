@@ -18,7 +18,9 @@ from substrate.kernel.workspace.branching import (
     resolve_workspace_snapshot_id,
 )
 from substrate.kernel.workspace.cas import BlobCAS
-from substrate.kernel.workspace.local_workspace_store import LocalFilesystemWorkspaceStore
+from substrate.kernel.workspace.local_workspace_store import (
+    LocalFilesystemWorkspaceStore,
+)
 from substrate.kernel.workspace.scope import (
     WorkspaceScope,
     workspace_scope,

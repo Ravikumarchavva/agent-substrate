@@ -88,7 +88,7 @@ async def main():
         system_instructions="You are a helpful assistant.",
     )
 
-    async with Runtime() as runtime:
+    async with Runtime.local() as runtime:
         result = await runtime.run(agent, "Write a Python function to compute Fibonacci numbers.")
         print(result.output)
 
@@ -114,7 +114,7 @@ async def main():
         system_instructions="Always use the calculator tool to solve math problems.",
     )
 
-    async with Runtime() as runtime:
+    async with Runtime.local() as runtime:
         result = await runtime.run(agent, "Calculate 1234 * 5678.")
         print(result.output)
 
@@ -234,7 +234,7 @@ orchestrator = OrchestratorAgent(
     ],
 )
 
-async with Runtime() as runtime:
+async with Runtime.local() as runtime:
     result = await runtime.run(orchestrator, "Research and draft a blog post about Rust vs Go.")
     print(result.output)
 ```
@@ -269,7 +269,7 @@ async def main():
     fetch, analyze = FetchStep(), AnalyzeStep()
     pipeline = SequentialFlow(steps=[fetch, analyze], name="demo_pipeline")
 
-    async with Runtime() as runtime:
+    async with Runtime.local() as runtime:
         await runtime.register(fetch)
         await runtime.register(analyze)
         result = await runtime.ask(pipeline, "Process the latest dataset.")

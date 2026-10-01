@@ -162,6 +162,8 @@ async def execute_scheduled_task(
                     )
                 ),
                 correlation_id=str(task.thread_id),
+                # Whose run this is, so tools that act for a person (memory) act for this one.
+                metadata={"user_id": str(task.user_id)} if task.user_id else {},
             )
 
             start = time.monotonic()

@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, ClassVar
 
-from substrate.kernel.middleware._contracts import MiddlewareContext
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
 from substrate.kernel.abstractions.exceptions import MiddlewareTermination
-from substrate.logger import setup_logging
+from substrate.kernel.middleware._contracts import MiddlewareContext
 
 if TYPE_CHECKING:
     from substrate.kernel.abstractions.llm.llm import LLMClient
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class LLMJudgeMiddleware:

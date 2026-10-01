@@ -6,8 +6,8 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import Field
 
-from substrate.kernel.abstractions.ids import new_id
 from substrate.kernel.abstractions.core.content import JsonObject, KernelModel
+from substrate.kernel.abstractions.ids import new_id
 
 
 class Entity(KernelModel):

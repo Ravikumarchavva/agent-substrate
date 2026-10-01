@@ -114,6 +114,7 @@ class _StubLLM:
 
 
 class _PingTool:
+    idempotent = True
     name = "ping"
     description = "Returns pong."
     risk = ToolRisk.SAFE
@@ -134,7 +135,7 @@ async def test_run_start_end_fire() -> None:
     agent_id = Actor(type="agent", key="minimal")
     agent = _MinimalAgent(agent_id, hooks)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
         run_id = await rt.submit(
             agent_id,
@@ -145,7 +146,7 @@ async def test_run_start_end_fire() -> None:
             ),
         )
         # Wait for the run to complete
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                 break
 
@@ -172,7 +173,7 @@ async def test_run_end_fires_even_on_agent_crash() -> None:
     hooks, log = _recording_hooks(HookEvent.RUN_START, HookEvent.RUN_END)
     agent = _CrashingAgent(hooks)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
         # max_retries=0: this test is about hook firing on a crash, not
         # retry semantics — a default retry policy would back the run off
@@ -186,7 +187,7 @@ async def test_run_end_fires_even_on_agent_crash() -> None:
             ),
             max_retries=0,
         )
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                 break
 
@@ -232,7 +233,7 @@ async def test_llm_start_end_fire() -> None:
     )
     agent_id = agent.id
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
         run_id = await rt.submit(
             agent_id,
@@ -244,7 +245,7 @@ async def test_llm_start_end_fire() -> None:
                 ),
             ),
         )
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                 break
 

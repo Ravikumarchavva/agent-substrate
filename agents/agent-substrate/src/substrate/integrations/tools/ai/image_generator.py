@@ -7,12 +7,15 @@ from __future__ import annotations
 
 from substrate.kernel.abstractions.tools import ToolExecutionResult
 from substrate.kernel.abstractions import MediaBlock, TextBlock
+from substrate.kernel.abstractions.tools import ToolRisk
 
 
 class ImageGeneratorTool:
     """Generate images from text prompts using OpenAI DALL-E."""
 
     name = "image_generator"
+    risk = ToolRisk.SAFE
+    idempotent = False
     description = "Generate an image from a text prompt using DALL-E 3."
     input_schema: dict[str, object] = {
         "type": "object",

@@ -12,6 +12,7 @@ from typing import Any
 from substrate.kernel.abstractions.tools import ToolExecutionResult
 from substrate.kernel.abstractions import TextBlock
 from substrate.logger import setup_logging
+from substrate.kernel.abstractions.tools import ToolRisk
 
 logger = setup_logging()
 
@@ -20,6 +21,8 @@ class DocumentAnalyzerTool:
     """Parse and analyze document content with optional summarization."""
 
     name = "document_analyzer"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description = "Extract text from a file and optionally summarize it or answer a question about it."
     input_schema: dict[str, object] = {
         "type": "object",

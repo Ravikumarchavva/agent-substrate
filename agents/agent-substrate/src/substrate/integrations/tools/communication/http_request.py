@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from substrate.kernel.abstractions.tools import ToolExecutionResult
 from substrate.kernel.abstractions import TextBlock
+from substrate.kernel.abstractions.tools import ToolRisk
 
 
 _DEFAULT_ALLOWED_DOMAINS: List[str] = [
@@ -22,6 +23,9 @@ _DEFAULT_ALLOWED_DOMAINS: List[str] = [
 
 class HttpRequestTool:
     """Make HTTP GET/POST/PUT/DELETE requests with domain allowlisting."""
+
+    risk = ToolRisk.HIGH  # POST/PUT/DELETE change things on someone else's server
+    idempotent = False
 
     def __init__(
         self,

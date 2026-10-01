@@ -173,5 +173,13 @@ class InMemoryVectorStore:
         bucket = self._collections.pop(collection, None)
         return len(bucket) if bucket else 0
 
+    async def rename_collection(self, old: str, new: str) -> int:
+        """Move every document of *old* into *new*; a document already in *new* with the same id is replaced."""
+        moved = self._collections.pop(old, None)
+        if not moved:
+            return 0
+        self._collections.setdefault(new, {}).update(moved)
+        return len(moved)
+
 
 __all__ = ["InMemoryVectorStore", "cosine_similarity"]

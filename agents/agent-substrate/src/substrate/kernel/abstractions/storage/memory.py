@@ -8,12 +8,21 @@ Memory Taxonomy:
 
 Memory Scopes & Tenancy:
     MemoryNamespace scopes every record by `tenant_id` (mandatory isolation),
-    with optional `user_id`, `agent_id`, and `session_id` sub-scoping.
+    with optional `user_id`, `agent_id`, and `session_id` sub-scoping. A record's
+    namespace says who owns it; the namespace a caller passes says who is asking.
+    A record is visible to a caller when each owner field the record sets is the
+    caller's own (``MemoryNamespace.visible_from``). Leaving a field out of the
+    caller's namespace therefore *narrows* what it sees — it can never widen it.
+    Seeing across users takes an explicit ``TenantWide`` with a stated reason.
 
 Write Semantics:
-    MemoryStore.save(record) performs an explicit upsert by record.id:
-      - If record.id does not exist: INSERT.
-      - If record.id exists: REPLACE.
+    MemoryStore.save(record) performs an explicit upsert by record.id within the
+    record's tenant:
+      - If record.id does not exist in that tenant: INSERT.
+      - If it exists and belongs to the same namespace: REPLACE.
+      - If it exists and belongs to a different namespace: ``ScopeViolationError``.
+    Ids are qualified by tenant, so another tenant's record with the same id is a
+    different record, never overwritten or readable.
 
 Lifecycle signal (not enforced here):
     ``MemoryRecord.importance``/``last_accessed_at``/``access_count`` carry the
@@ -31,9 +40,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol, Sequence, runtime_checkable
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
-from substrate.kernel.abstractions.ids import new_id
 from substrate.kernel.abstractions.core.content import (
     BlockList,
     ContentBlock,
@@ -43,6 +51,7 @@ from substrate.kernel.abstractions.core.content import (
     content_blocks_to_str,
 )
 from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.ids import new_id
 
 
 class MemoryCategory(StrEnum):
@@ -87,6 +96,53 @@ class MemoryNamespace(KernelModel):
     user_id: str | None = None
     agent_id: str | None = None
     session_id: str | None = None
+
+    @field_validator("tenant_id")
+    @classmethod
+    def _tenant_is_named(cls, value: str) -> str:
+        if not value:
+            raise ValueError("a namespace needs a tenant_id")
+        return value
+
+    @field_validator("user_id", "agent_id", "session_id")
+    @classmethod
+    def _no_empty_owner(cls, value: str | None) -> str | None:
+        """An empty string is falsy: a store that tests ``if user_id`` would read it as 'no user'."""
+        if value == "":
+            raise ValueError("an owner field is either absent (None) or a non-empty id")
+        return value
+
+    def visible_from(self, caller: MemoryNamespace) -> bool:
+        """Whether a record owned by this namespace may be seen by ``caller``.
+
+        Every owner field this namespace sets must be the caller's own. A record with no
+        user is a tenant-level fact every user of the tenant sees; a record with a user is
+        seen only by that user; one with a session only inside that session.
+        """
+        return (
+            self.tenant_id == caller.tenant_id
+            and (self.user_id is None or self.user_id == caller.user_id)
+            and (self.agent_id is None or self.agent_id == caller.agent_id)
+            and (self.session_id is None or self.session_id == caller.session_id)
+        )
+
+    def owned_by(self, caller: MemoryNamespace) -> bool:
+        """Whether ``caller`` may change or delete a record owned by this namespace: it must
+        see it, and be the same user. A tenant-level record belongs to the tenant, so a user
+        cannot delete the whole organisation's facts; only a caller with no user (an
+        administrator or system job acting for the tenant) can."""
+        return self.visible_from(caller) and self.user_id == caller.user_id
+
+    def within(self, boundary: MemoryNamespace) -> bool:
+        """Whether this namespace lies inside ``boundary``: the tenant matches and every
+        field ``boundary`` sets matches. The one place an unset field means "any" — it is
+        how an erasure names everything under a user, an agent or a tenant."""
+        return (
+            self.tenant_id == boundary.tenant_id
+            and (boundary.user_id is None or self.user_id == boundary.user_id)
+            and (boundary.agent_id is None or self.agent_id == boundary.agent_id)
+            and (boundary.session_id is None or self.session_id == boundary.session_id)
+        )
 
     @classmethod
     def from_actor(
@@ -260,10 +316,26 @@ class MemoryMatch(KernelModel):
         return self.record.to_text()
 
 
+class TenantWide(KernelModel):
+    """An explicit, accountable request to look across every user of a tenant.
+
+    Admin tooling and background jobs legitimately need this; ordinary reads never do. It
+    carries a reason so a store can log why, and it is a separate type so that forgetting
+    a field in a namespace can never produce it by accident.
+    """
+
+    reason: str = Field(min_length=3)
+
+
 class MemoryQuery(KernelModel):
-    """Composable specification for searching memory stores."""
+    """Composable specification for searching memory stores.
+
+    ``namespace`` is the caller's: results are the records visible from it. Pass
+    ``tenant_wide`` to see every record of the namespace's tenant instead.
+    """
 
     namespace: MemoryNamespace
+    tenant_wide: TenantWide | None = None
     text_query: str | None = None
     embedding: Sequence[float] | None = None
     categories: Sequence[MemoryCategory] | None = None
@@ -326,33 +398,40 @@ class ShortTermMemory(Protocol):
 class MemoryStore(Protocol):
     """The canonical durable memory storage contract.
 
+    Every read and delete names the caller's namespace: an id alone never addresses a
+    record, because ids come from request bodies and model output. A record the caller
+    cannot see behaves exactly as if it did not exist.
+
     Write Semantics:
-      - save(record): Explicit upsert by ID. If record.id does not exist, it is inserted;
-        if record.id already exists, it is replaced.
+      - save(record): upsert by ID within the record's tenant; taking over a record of
+        another namespace in the same tenant raises ``ScopeViolationError``.
     """
 
     async def save(self, record: MemoryRecord) -> str:
         """Persist or replace a record by its ID. Returns the record ID."""
         ...
 
-    async def get(self, record_id: str) -> MemoryRecord | None:
-        """Retrieve a specific record by ID."""
+    async def get(self, caller: MemoryNamespace, record_id: str) -> MemoryRecord | None:
+        """The record, if it exists and is visible from ``caller``."""
         ...
 
-    async def delete(self, record_id: str) -> bool:
-        """Permanently delete a record by ID. Returns True if deleted."""
+    async def delete(self, caller: MemoryNamespace, record_id: str) -> bool:
+        """Permanently delete a record ``caller`` owns (see ``MemoryNamespace.owned_by``).
+        Returns True if deleted."""
         ...
 
     async def query(self, spec: MemoryQuery) -> list[MemoryMatch]:
         """Execute a search conforming to spec and return ranked matches."""
         ...
 
-    async def touch(self, record_ids: Sequence[str]) -> None:
-        """Record an access event (updates last_accessed_at and increments count)."""
+    async def touch(self, caller: MemoryNamespace, record_ids: Sequence[str]) -> None:
+        """Record an access to the visible records among ``record_ids`` (updates
+        last_accessed_at and increments the count)."""
         ...
 
-    async def clear(self, namespace: MemoryNamespace) -> None:
-        """Purge all records matching the given namespace boundary."""
+    async def erase(self, within: MemoryNamespace) -> int:
+        """Remove every record under ``within`` — a tenant, a user, an agent or a session,
+        by which fields it sets — leaving nothing of it behind. Returns how many."""
         ...
 
 
@@ -365,6 +444,7 @@ __all__ = [
     "MemoryRecord",
     "MemoryMatch",
     "MemoryQuery",
+    "TenantWide",
     "ContextMemoryInjection",
     "ShortTermMemory",
     "MemoryStore",

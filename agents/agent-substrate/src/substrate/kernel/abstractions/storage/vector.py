@@ -16,7 +16,6 @@ from typing import Any, Protocol, Sequence, runtime_checkable
 
 from pydantic import Field
 
-from substrate.kernel.abstractions.ids import new_id
 from substrate.kernel.abstractions.core.content import (
     ContentBlock,
     JsonObject,
@@ -24,6 +23,7 @@ from substrate.kernel.abstractions.core.content import (
     TextBlock,
     content_blocks_to_str,
 )
+from substrate.kernel.abstractions.ids import new_id
 
 
 class Document(KernelModel):

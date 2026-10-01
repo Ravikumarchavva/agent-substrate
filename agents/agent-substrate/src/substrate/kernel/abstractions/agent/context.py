@@ -9,7 +9,11 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
-from substrate.kernel.abstractions.core.content import ChatMessage, ContentBlock, KernelModel
+from substrate.kernel.abstractions.core.content import (
+    ChatMessage,
+    ContentBlock,
+    KernelModel,
+)
 from substrate.kernel.abstractions.storage.history import HistoryCheckpoint, MessageNode
 
 if TYPE_CHECKING:

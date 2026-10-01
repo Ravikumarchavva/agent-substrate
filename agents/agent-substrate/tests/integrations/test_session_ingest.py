@@ -114,7 +114,6 @@ async def test_ingest_session_document_writes_to_all_three_stores(
     assert len(hits) == result.chunks
     assert all(h.metadata.get("session_id") == "session-1" for h in hits)
 
-    from substrate.kernel.abstractions.core.identity import Actor
 
     # PageIndexRAGPipeline's default agent_id ("system") when
     # ingest_session_document doesn't override it — see its constructor.

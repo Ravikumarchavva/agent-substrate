@@ -42,6 +42,7 @@ from pydantic import BaseModel, Field
 
 from substrate.kernel.abstractions.tools import ToolExecutionResult
 from substrate.kernel.abstractions import TextBlock
+from substrate.kernel.abstractions.tools import ToolRisk
 
 logger = setup_logging()
 
@@ -297,7 +298,8 @@ class AskHumanTool:
         )
     """
 
-    risk: str = "safe"  # ask_human IS the human — never needs separate approval
+    risk = ToolRisk.SAFE  # ask_human IS the human — never needs separate approval
+    idempotent = True  # a replayed ask reuses its journaled request id and answer
 
     # The tool suspends the run waiting on a human; it must NOT be subject to the
     # ToolInvoker's per-call timeout (a human may take minutes to answer). The

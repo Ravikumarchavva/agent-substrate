@@ -65,7 +65,8 @@ class ToolChainTool:
     """
 
     name: str = "tool_chain"
-    risk: ToolRisk = ToolRisk.SAFE
+    risk = ToolRisk.SAFE
+    idempotent = False
     description: str = (
         "Execute a Python script that chains multiple tools together in one "
         "sandbox run.  Use 'tools.<name>(...)' to call any registered tool; "

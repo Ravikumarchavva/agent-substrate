@@ -12,6 +12,7 @@ from substrate.kernel.llm.tool_arguments import parse_tool_arguments
 from substrate.kernel.llm.modalities import fit_to_capabilities
 from substrate.kernel.llm.models import resolve_capabilities
 from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+from substrate.kernel.abstractions.core.finish_reason import FinishReason
 from substrate.kernel.abstractions.llm import (
     GenerationOptions,
     LLMClient,
@@ -58,6 +59,23 @@ def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str,
         for t in local_tools
     ]
 
+
+
+_ANTHROPIC_FINISH = {
+    "end_turn": FinishReason.STOP,
+    "stop_sequence": FinishReason.STOP,
+    "tool_use": FinishReason.TOOL_CALLS,
+    "max_tokens": FinishReason.LENGTH,
+    "model_context_window_exceeded": FinishReason.LENGTH,
+    "refusal": FinishReason.REFUSAL,
+}
+
+
+def anthropic_finish_reason(stop_reason: str | None) -> FinishReason:
+    """An Anthropic ``stop_reason`` as ours; none at all is reported, not assumed to be a stop."""
+    if stop_reason is None:
+        return FinishReason.UNSPECIFIED
+    return _ANTHROPIC_FINISH.get(stop_reason, FinishReason.OTHER)
 
 class AnthropicClient(LLMClient):
     """Anthropic Claude API client — text and vision.
@@ -296,7 +314,13 @@ class AnthropicClient(LLMClient):
             if u
             else Usage()
         )
-        return LLMResponse(content=final_blocks, usage=usage)
+        return LLMResponse(
+            content=final_blocks,
+            usage=usage,
+            finish_reason=anthropic_finish_reason(getattr(response, "stop_reason", None)),
+            response_id=getattr(response, "id", None),
+            served_model=getattr(response, "model", None),
+        )
 
     def generate_stream(
         self,
@@ -330,6 +354,7 @@ class AnthropicClient(LLMClient):
         current_thinking_signature: Optional[str] = None
         in_thinking_block = False
         input_tokens = cache_read = cache_creation = output_tokens = 0
+        stop_reason: str | None = None
 
         async with self.client.messages.stream(**params) as stream:
             async for event in stream:
@@ -405,6 +430,7 @@ class AnthropicClient(LLMClient):
                         current_tool_json = ""
 
                 elif event_type == "message_delta":
+                    stop_reason = getattr(getattr(event_any, "delta", None), "stop_reason", None) or stop_reason
                     if hasattr(event_any, "usage"):
                         output_tokens = getattr(event_any.usage, "output_tokens", 0) or 0
 
@@ -438,6 +464,7 @@ class AnthropicClient(LLMClient):
         yield CompletionEvent(
             content=final_blocks,
             usage=self._usage(input_tokens, cache_read, cache_creation, output_tokens),
+            finish_reason=anthropic_finish_reason(stop_reason),
         )
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:

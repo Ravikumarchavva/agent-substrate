@@ -1,53 +1,44 @@
 """build_user_memory_context_block() — the <user_context> system-prompt
-block, its bounding/gating behavior, and that it's framed as background,
-not as an instruction the model is told to obey unconditionally."""
+block, its bounding/gating behavior, whose facts it reads, and that it's framed as
+background, not as an instruction the model is told to obey unconditionally."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+import pytest
 
+from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryRecord
+from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
 from substrate.serving.factory import build_user_memory_context_block
 
-
-@dataclass
-class _FakeMemory:
-    content: str
-    id: str = "mem-id"
-    score: float = 0.0
-    metadata: dict[str, Any] = field(default_factory=dict)
+TENANT = "acme"
 
 
-class _FakeLongTermMemory:
-    def __init__(self, memories: list[_FakeMemory]) -> None:
-        self._memories = memories
-        self.calls: list[tuple[str, str, int]] = []
+@pytest.fixture
+def store(tmp_path) -> LocalFilesystemMemoryStore:
+    return LocalFilesystemMemoryStore(tmp_path)
 
-    async def list_all(self, agent_id, *, namespace="default", limit=20):
-        self.calls.append((str(agent_id), namespace, limit))
-        return self._memories[:limit]
+
+async def _remember(store: LocalFilesystemMemoryStore, text: str, *, user: str = "user-1", tenant: str = TENANT) -> None:
+    await store.save(MemoryRecord.from_text(text, namespace=MemoryNamespace(tenant_id=tenant, user_id=user)))
 
 
 async def test_returns_empty_string_when_no_long_term_memory_configured():
-    assert await build_user_memory_context_block(None, "user-1") == ""
+    assert await build_user_memory_context_block(None, TENANT, "user-1") == ""
 
 
-async def test_returns_empty_string_when_no_user_id():
-    store = _FakeLongTermMemory([_FakeMemory("some fact")])
-    assert await build_user_memory_context_block(store, None) == ""
-    assert store.calls == []  # never even queries without a user id
+async def test_returns_empty_string_when_no_user_id(store):
+    await _remember(store, "some fact")
+    assert await build_user_memory_context_block(store, TENANT, None) == ""
 
 
-async def test_returns_empty_string_when_user_has_no_memories():
-    store = _FakeLongTermMemory([])
-    assert await build_user_memory_context_block(store, "user-1") == ""
+async def test_returns_empty_string_when_user_has_no_memories(store):
+    assert await build_user_memory_context_block(store, TENANT, "user-1") == ""
 
 
-async def test_builds_a_user_context_block_with_facts():
-    store = _FakeLongTermMemory(
-        [_FakeMemory("Always answer in French"), _FakeMemory("Prefers concise answers")]
-    )
-    block = await build_user_memory_context_block(store, "user-1")
+async def test_builds_a_user_context_block_with_facts(store):
+    await _remember(store, "Always answer in French")
+    await _remember(store, "Prefers concise answers")
+    block = await build_user_memory_context_block(store, TENANT, "user-1")
 
     assert block.startswith("<user_context>")
     assert block.endswith("</user_context>")
@@ -55,42 +46,44 @@ async def test_builds_a_user_context_block_with_facts():
     assert "<fact>Prefers concise answers</fact>" in block
 
 
-async def test_framed_as_background_not_instruction():
+async def test_framed_as_background_not_instruction(store):
     """The whole point of the user's requested design: the block must not
     read as an unconditional directive."""
-    store = _FakeLongTermMemory([_FakeMemory("some fact")])
-    block = await build_user_memory_context_block(store, "user-1")
+    await _remember(store, "some fact")
+    block = await build_user_memory_context_block(store, TENANT, "user-1")
 
     assert "not a command" in block.lower()
     assert "judgment" in block.lower()
 
 
-async def test_queried_with_default_namespace_and_user_scoped_agent_id():
-    """namespace must match what MemoryTool.remember() actually writes to
-    (it never overrides the store's default) — querying a different
-    namespace here would silently return nothing forever."""
-    store = _FakeLongTermMemory([_FakeMemory("fact")])
-    await build_user_memory_context_block(store, "user-42", limit=5)
+async def test_only_this_users_facts_in_this_tenant_are_included(store):
+    """What goes into a system prompt is exactly what this user in this tenant saved —
+    another user's, or another tenant's, never."""
+    await _remember(store, "mine")
+    await _remember(store, "someone else's", user="user-2")
+    await _remember(store, "another tenant's", tenant="evilcorp")
+    await store.save(MemoryRecord.from_text("everyone in acme", namespace=MemoryNamespace(tenant_id=TENANT)))
 
-    assert len(store.calls) == 1
-    agent_id_str, namespace, limit = store.calls[0]
-    assert namespace == "default"
-    assert limit == 5
-    assert "user-42" in agent_id_str
+    block = await build_user_memory_context_block(store, TENANT, "user-1")
+
+    assert "<fact>mine</fact>" in block
+    assert "<fact>everyone in acme</fact>" in block
+    assert "someone else's" not in block
+    assert "another tenant's" not in block
 
 
-async def test_limit_is_passed_through_to_bound_the_block():
-    memories = [_FakeMemory(f"fact {i}") for i in range(30)]
-    store = _FakeLongTermMemory(memories)
+async def test_limit_is_passed_through_to_bound_the_block(store):
+    for i in range(30):
+        await _remember(store, f"fact {i}")
 
-    block = await build_user_memory_context_block(store, "user-1", limit=3)
+    block = await build_user_memory_context_block(store, TENANT, "user-1", limit=3)
 
     assert block.count("<fact>") == 3
 
 
-async def test_escapes_xml_special_characters_in_fact_content():
-    store = _FakeLongTermMemory([_FakeMemory('User said <script>&"quote"')])
-    block = await build_user_memory_context_block(store, "user-1")
+async def test_escapes_xml_special_characters_in_fact_content(store):
+    await _remember(store, 'User said <script>&"quote"')
+    block = await build_user_memory_context_block(store, TENANT, "user-1")
 
     assert "<script>" not in block
     assert "&lt;script&gt;" in block

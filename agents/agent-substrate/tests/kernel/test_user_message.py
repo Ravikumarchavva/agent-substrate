@@ -25,14 +25,14 @@ class _StubLLM:
 
 
 async def _log_kinds(rt: Runtime, run_id: str) -> list[tuple[str, dict]]:
-    return [(e.kind, e.payload) async for e in rt.event_log.read(run_id)]
+    return [(e.kind, e.payload) for e in await rt.read(run_id)]
 
 
 async def test_user_message_defaults_to_the_turn_text() -> None:
     """No display_text metadata set (e.g. via Runtime.run()) -> falls back to
     the actual message content."""
     agent = ReActAgent("assistant", model=_StubLLM())
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         result = await rt.run(agent, "What is 2+2?")
         entries = await _log_kinds(rt, result.run_id)
 
@@ -46,7 +46,7 @@ async def test_user_message_prefers_display_text_metadata() -> None:
     file context), user.message must log what the user actually typed/saw —
     read from Message.metadata["display_text"], not the augmented content."""
     agent = ReActAgent("assistant", model=_StubLLM())
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
         msg = Message(
             target=agent.id,
@@ -63,7 +63,7 @@ async def test_user_message_prefers_display_text_metadata() -> None:
             },
         )
         run_id = await rt.submit(agent.id, msg, max_retries=0)
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind == "run.completed":
                 break
         entries = await _log_kinds(rt, run_id)
@@ -82,7 +82,7 @@ async def test_orchestrator_also_logs_user_message() -> None:
     from substrate.kernel.agents.orchestrator import OrchestratorAgent
 
     agent = OrchestratorAgent("coordinator", model=_StubLLM())
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         result = await rt.run(agent, "Plan a trip")
         entries = await _log_kinds(rt, result.run_id)
 
@@ -94,7 +94,7 @@ async def test_orchestrator_also_logs_user_message() -> None:
 async def test_exactly_one_user_message_per_inbound_message() -> None:
     """Not one per middleware/hook stage — log_once must dedupe correctly."""
     agent = ReActAgent("assistant", model=_StubLLM())
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         result = await rt.run(agent, "hello")
         entries = await _log_kinds(rt, result.run_id)
 

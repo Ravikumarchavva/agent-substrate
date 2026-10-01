@@ -81,7 +81,7 @@ async def test_retrieval_eval_starter_dataset(capsys) -> None:
         session_factory=session_factory,
         engine=engine,
         dimensions=1536,
-        table_name="vector_documents_eval_test",
+        table_name="vector_records_eval_test",
     )
     await store.ensure_table()
 

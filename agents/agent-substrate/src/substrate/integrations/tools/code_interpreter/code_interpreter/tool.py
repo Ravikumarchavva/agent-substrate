@@ -46,7 +46,8 @@ _MAX_TIMEOUT = 300
 class CodeInterpreterTool:
     """Execute Python or shell in an isolated, session-scoped sandbox."""
 
-    risk: str = "critical"  # executes arbitrary code
+    risk = ToolRisk.CRITICAL  # executes arbitrary code
+    idempotent = False
 
     def __init__(
         self,

@@ -31,7 +31,7 @@ The four hard properties realized on the durable substrate
 3. **Budget, not depth.**
    ``spawn`` consults a ``SpawnBudget`` bound to the root ``run_id``.  Over
    budget → ``BudgetExhaustedError`` (``kernel/exceptions.py`` — the same
-   exception ``ExecutionTracker`` raises for token/cost/turn exhaustion; one
+   exception the engine raises for token/cost/turn exhaustion; one
    exception type for "a budget of some kind ran out," not a spawn-specific
    one).  Per supervision-v2, ``max_agents`` / ``depth`` ceilings are
    dropped — the budget is the single constraint.  Enforced durably here
@@ -57,7 +57,6 @@ parent's terminal entry so it is replayable. Design it before relying on it.
 """
 
 from __future__ import annotations
-
 
 from pydantic import BaseModel, Field
 

@@ -1,56 +1,14 @@
-"""Tests for budget wiring: ExecutionTracker in ReActAgent, SpawnTracker in OrchestratorAgent."""
+"""Tests for budget wiring: the engine's tree-wide spend budget in ReActAgent runs, SpawnTracker in OrchestratorAgent."""
 
 from __future__ import annotations
 
 from substrate.kernel.abstractions.llm import ModelCapabilities
 import pytest
 
-from substrate.kernel.limits.execution import ExecutionTracker
 from substrate.kernel.limits.spawn import SpawnTracker
-from substrate.kernel.abstractions.agent.supervision import Priority, SpawnBudget
+from substrate.kernel.abstractions.agent.supervision import ExecutionBudget, Priority, SpawnBudget
 from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
 from substrate.kernel.abstractions.core.identity import Actor
-
-
-# ---------------------------------------------------------------------------
-# ExecutionTracker unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_execution_tracker_consumes_tokens() -> None:
-    tracker = ExecutionTracker(max_tokens=100)
-    tracker.consume(tokens=40)
-    tracker.consume(tokens=50)
-    assert tracker.used_tokens == 90
-
-
-def test_execution_tracker_raises_on_token_overflow() -> None:
-    tracker = ExecutionTracker(max_tokens=50)
-    tracker.consume(tokens=30)
-    with pytest.raises(BudgetExhaustedError, match="Token budget exceeded"):
-        tracker.consume(tokens=30)
-
-
-def test_execution_tracker_raises_on_turn_overflow() -> None:
-    tracker = ExecutionTracker(max_turns=3)
-    tracker.consume(turns=1)
-    tracker.consume(turns=1)
-    tracker.consume(turns=1)
-    with pytest.raises(BudgetExhaustedError, match="Turn limit exceeded"):
-        tracker.consume(turns=1)
-
-
-def test_execution_tracker_raises_on_cost_overflow() -> None:
-    tracker = ExecutionTracker(max_cost_usd=0.01)
-    with pytest.raises(BudgetExhaustedError, match="Cost budget exceeded"):
-        tracker.consume(cost=0.02)
-
-
-def test_execution_tracker_unlimited_by_default() -> None:
-    tracker = ExecutionTracker()
-    for _ in range(1000):
-        tracker.consume(tokens=1000, turns=1, cost=1.0)
-    assert tracker.used_tokens == 1_000_000
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +49,7 @@ def test_spawn_tracker_priority_of_tracks_active_agents() -> None:
 
 
 # ---------------------------------------------------------------------------
-# ReActAgent + ExecutionTracker integration (mocked LLM)
+# ReActAgent + execution budget integration (mocked LLM)
 # ---------------------------------------------------------------------------
 
 
@@ -122,15 +80,14 @@ async def test_react_agent_respects_execution_budget() -> None:
 
     llm = MockLLMClient()
 
-    tracker = ExecutionTracker(max_tokens=100)
     agent = ReActAgent(
         "BudgetBot",
         model=llm,
-        execution_budget=tracker,
+        execution_budget=ExecutionBudget(max_tokens=100),
         max_iterations=5,
     )
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
 
         msg = Message(
@@ -141,7 +98,7 @@ async def test_react_agent_respects_execution_budget() -> None:
             ),
         )
         run_id = await rt.submit(agent.id, msg)
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                 assert entry.kind == "run.failed"
                 assert "Token budget exceeded" in (entry.payload or {}).get("error", "")
@@ -155,7 +112,7 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
     propagation-without-enforcement left open (see kernel/agent/supervision.py
     and docs/claude_docs/kernel's audit): Supervision.execution_budget flowed
     through ctx.spawn()/spawn_child() but nothing ever converted it into an
-    enforced ExecutionTracker for the spawned run."""
+    enforced budget for the spawned run."""
     from substrate.kernel.agents.react import ReActAgent
     from substrate.kernel.runtime import Runtime
     from substrate.kernel.abstractions.agent.supervision import ExecutionBudget, Supervision
@@ -208,7 +165,7 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
 
     parent = SpawningParent()
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(parent)
         await rt.register(child)
 
@@ -224,7 +181,7 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
         found_child_run = False
         async for run_id in _poll_for_child_run(rt, child_id):
             found_child_run = True
-            async for entry in rt.event_log.tail(run_id):
+            async for entry in rt.tail(run_id):
                 if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                     assert entry.kind == "run.failed"
                     assert "Token budget exceeded" in (entry.payload or {}).get(
@@ -240,8 +197,8 @@ async def _poll_for_child_run(rt, child_id):
     import asyncio
 
     for _ in range(100):
-        found = await rt.scheduler.find_run_for_agent(child_id)
-        if found is not None:
-            yield found[0]
+        found = await rt.store.find_runs(agent=child_id)
+        if found:
+            yield found[0].run_id
             return
         await asyncio.sleep(0.02)

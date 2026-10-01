@@ -35,7 +35,12 @@ from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus
 from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
 from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
-from substrate.kernel.abstractions.runtime.store import Delivery, RunRecord, RunSpec, RuntimeStore
+from substrate.kernel.abstractions.runtime.store import (
+    Delivery,
+    RunRecord,
+    RunSpec,
+    RuntimeStore,
+)
 from substrate.kernel.runtime.resolver import ActorFactory, ActorResolver
 from substrate.kernel.runtime.tail import tail
 from substrate.kernel.runtime.worker import Worker
@@ -137,7 +142,7 @@ class Runtime:
         ``ThreadBusyError`` and leaves nothing behind. ``recipe`` is opaque to the engine:
         whatever a host needs to rebuild this run's agent after a restart.
         """
-        agent = await self._resolver.resolve(agent_id)
+        await self._resolver.resolve(agent_id)  # an unknown agent is refused here, not after a lease
         run = await self._store.create_run(
             RunSpec(
                 agent=agent_id,
@@ -146,7 +151,6 @@ class Runtime:
                 priority=priority,
                 retry_policy=retry_policy or RunRetryPolicy(max_retries=max_retries),
                 trace=TraceContext.new(),
-                agent_version=str(getattr(agent, "version", "0")),
                 recipe=recipe,
             ),
             deliveries=[Delivery(agent=agent_id, msg=msg, tenant=tenant)],

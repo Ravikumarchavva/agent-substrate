@@ -1,11 +1,9 @@
-"""human_gate service-layer tests — the signal_bus convergence added in
-Phase 2 of the remediation program (resolve_request() now fires a durable
-SignalBusProtocol signal alongside the legacy Redis pub/sub publish).
+"""human_gate service-layer tests — resolve_request() fires a durable runtime-store
+signal alongside the legacy Redis pub/sub publish.
 
-Uses the real Postgres test DB (skips if unreachable) — human_gate is
-SQLAlchemy-ORM-backed (its own hitl_requests table), separate from the
-asyncpg-based substrate_* tables SignalBus itself uses, but both point at
-the same physical database (see human_gate/app.py's lifespan docstring).
+Uses the real Postgres test DB for the service's own ORM table (skips if unreachable);
+the runtime store the signal lands in is an in-memory SQLite one — the service only
+needs the ``RuntimeStore`` port.
 """
 
 from __future__ import annotations
@@ -56,20 +54,17 @@ async def db_session():
 
 
 @pytest.fixture
-async def signal_bus():
-    import asyncpg
+async def store():
+    from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
 
-    from substrate.integrations.runtime.signal_bus import SignalBus
-
-    pool = await asyncpg.create_pool(_PG_URL.replace("+asyncpg", ""))
-    bus = SignalBus(pool)
-    await bus.setup()
-    yield bus
-    await pool.close()
+    runtime_store = SqliteRuntimeStore(":memory:")
+    await runtime_store.start()
+    yield runtime_store
+    await runtime_store.aclose()
 
 
-async def test_resolve_request_fires_durable_signal(db_session, signal_bus) -> None:
-    """resolve_request(signal_bus=...) fires hitl:{request_id} on req.run_id
+async def test_resolve_request_fires_durable_signal(db_session, store) -> None:
+    """resolve_request(store=...) fires hitl:{request_id} on req.run_id
     — the same signal name/shape AskHumanTool's signal-suspend path
     (ctx.sleep_until_signal) waits on."""
     request_id = f"req-{uuid.uuid4().hex}"
@@ -92,14 +87,14 @@ async def test_resolve_request_fires_durable_signal(db_session, signal_bus) -> N
         status="answered",
         response_value="option-a",
         responded_by="tester",
-        signal_bus=signal_bus,
+        store=store,
     )
     await db_session.commit()
 
     assert resolved is not None
     assert resolved.status == "answered"
 
-    payload = await signal_bus.consume(run_id, f"hitl:{request_id}", "test-effect-id")
+    payload = await store.consume(run_id, f"hitl:{request_id}", "test-effect-id")
     assert payload is not None
     assert payload["action"] == "answered"
     assert payload["value"] == "option-a"
@@ -107,7 +102,7 @@ async def test_resolve_request_fires_durable_signal(db_session, signal_bus) -> N
 
 
 async def test_resolve_request_without_run_id_does_not_signal(
-    db_session, signal_bus
+    db_session, store
 ) -> None:
     """A Future-based (non-signal) request has no run_id — resolve_request()
     must not attempt to signal anything for it."""
@@ -130,7 +125,7 @@ async def test_resolve_request_without_run_id_does_not_signal(
         request_id,
         status="approved",
         response_value="approved",
-        signal_bus=signal_bus,
+        store=store,
     )
     await db_session.commit()
     assert resolved is not None
@@ -138,7 +133,7 @@ async def test_resolve_request_without_run_id_does_not_signal(
 
 
 async def test_cancel_pending_for_thread_signals_each_request(
-    db_session, signal_bus
+    db_session, store
 ) -> None:
     thread_id = uuid.uuid4()
     run_id_a = f"run-{uuid.uuid4().hex}"
@@ -163,13 +158,13 @@ async def test_cancel_pending_for_thread_signals_each_request(
     await db_session.commit()
 
     count = await cancel_pending_for_thread(
-        db_session, thread_id, signal_bus=signal_bus
+        db_session, thread_id, store=store
     )
     await db_session.commit()
     assert count == 2
 
     for run_id, req_id in ((run_id_a, req_a), (run_id_b, req_b)):
-        payload = await signal_bus.consume(run_id, f"hitl:{req_id}", f"test-{req_id}")
+        payload = await store.consume(run_id, f"hitl:{req_id}", f"test-{req_id}")
         assert payload is not None
         assert payload["action"] == "cancelled"
 

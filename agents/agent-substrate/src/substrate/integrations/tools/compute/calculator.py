@@ -8,6 +8,7 @@ from typing import Callable
 
 from substrate.kernel.abstractions import TextBlock
 from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions.tools import ToolRisk
 
 # Whitelisted binary/unary operators. Anything not in these maps is rejected —
 # there is no ``eval``, so LLM-controlled input can never reach attribute
@@ -77,6 +78,8 @@ class CalculatorTool:
     """
 
     name = "calculator"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description = (
         "Evaluate a Python arithmetic expression and return the numeric result."
     )

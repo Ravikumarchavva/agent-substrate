@@ -6,7 +6,6 @@ import logging
 from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable
 
-from substrate.kernel.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
 from substrate.kernel.abstractions.agent.context import (
     CompactionContext,
     CompactionPhase,
@@ -15,6 +14,7 @@ from substrate.kernel.abstractions.agent.context import (
 )
 from substrate.kernel.abstractions.core.content import ChatMessage, ContentBlock, Role
 from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
+from substrate.kernel.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
 
 logger = logging.getLogger(__name__)
 

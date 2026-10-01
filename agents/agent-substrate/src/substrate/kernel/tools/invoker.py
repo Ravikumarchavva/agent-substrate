@@ -21,26 +21,19 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.tools.approval import (
-    ApprovalDecision,
-    ApprovalHandler,
-    ApprovalRequest,
-    ApprovalResult,
+from substrate.kernel.abstractions.core.content import (
+    JsonObject,
+    MediaBlock,
+    content_blocks_to_str,
 )
-from substrate.kernel.abstractions.storage.blob import BlobStore
-from substrate.kernel.abstractions.tools.chain import (
-    ChainCallRecord,
-    ChainFile,
-    ChainPolicy,
-    InvocationResult,
-)
-from substrate.kernel.abstractions.core.content import JsonObject, MediaBlock, content_blocks_to_str
 from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.messaging.stream import AgentProgress, AgentStep
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.storage.blob import BlobStore
 from substrate.kernel.abstractions.tools import (
     ToolCallRequest,
     ToolRegistry,
@@ -48,15 +41,25 @@ from substrate.kernel.abstractions.tools import (
     is_hosted_tool,
     is_provider_defined_tool,
 )
-
+from substrate.kernel.abstractions.tools.approval import (
+    ApprovalDecision,
+    ApprovalHandler,
+    ApprovalRequest,
+    ApprovalResult,
+)
+from substrate.kernel.abstractions.tools.chain import (
+    ChainCallRecord,
+    ChainFile,
+    ChainPolicy,
+    InvocationResult,
+)
 from substrate.kernel.hooks.manager import HookEvent, HookManager
-from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.context import RunContext
     from substrate.kernel.abstractions.tools.tools import ToolExecutionResult
+    from substrate.kernel.runtime.context import RunContext
 
-logger = setup_logging("substrate.kernel.tools.invoker")
+logger = logging.getLogger(__name__)
 
 
 _CHAIN_TOOL_NAME = "tool_chain"
@@ -240,7 +243,7 @@ class ToolInvoker:
                 classifier(dict(call.arguments)),
             )
         else:
-            tool_risk = ToolRisk(getattr(tool, "risk", ToolRisk.SAFE))
+            tool_risk = tool.risk
         max_allowed = policy.max_risk_unapproved
         if tool_risk > max_allowed:
             if self._approval is None:
@@ -268,11 +271,13 @@ class ToolInvoker:
                     await ctx.log_once(RunLogKind.APPROVAL_REQUESTED, log_payload)
                 except Exception:
                     pass
+                decision_key = request_id
                 signal_payload = await ctx.sleep_until_signal(f"hitl:{request_id}")
-                result: ApprovalResult = _approval_result_from_signal(signal_payload)
+                result: ApprovalResult = ApprovalResult.from_response(signal_payload)
             else:
                 from substrate.kernel.abstractions.core.identity import Actor
 
+                decision_key = call.call_id
                 approval_req = ApprovalRequest(
                     call=call,
                     risk=tool_risk,
@@ -294,6 +299,7 @@ class ToolInvoker:
                             "Call this tool directly outside the chain for interactive approval."
                         ),
                     )
+            await self._journal_decision(ctx, decision_key, tool_name, tool_risk, result)
             if result.decision == ApprovalDecision.MODIFIED:
                 call = call.model_copy(update={"arguments": result.modified_args or {}})
             elif result.decision != ApprovalDecision.APPROVED:
@@ -350,6 +356,29 @@ class ToolInvoker:
         # 9. Result shaping
         return await self._shape_result(
             exec_result, tool_name=tool_name, session=session
+        )
+
+    async def _journal_decision(
+        self, ctx: Any, request_id: str, tool_name: str, risk: ToolRisk, result: ApprovalResult
+    ) -> None:
+        """Record who decided what, and when, on the run's own journal. Written once per
+        request however often the run replays; a run with no journal to write to (a bare
+        tool call outside a run) has nothing to record into."""
+        log_once = getattr(ctx, "log_once", None)
+        if log_once is None:
+            return
+        await log_once(
+            RunLogKind.APPROVAL_DECIDED,
+            {
+                "request_id": request_id,
+                "tool_name": tool_name,
+                "risk": risk.value,
+                "decision": result.decision.value,
+                "decided_by": result.decided_by,
+                "decided_at": result.decided_at.isoformat() if result.decided_at else None,
+                "reason": result.reason,
+                "modified": result.decision == ApprovalDecision.MODIFIED,
+            },
         )
 
     async def _resolve_inbound_refs(self, arguments: JsonObject) -> dict[str, Any]:
@@ -447,7 +476,10 @@ def build_invoker(agent: Any) -> ToolInvoker:
     """The ``ToolInvoker`` for an agent, from what the agent declares: its tools, its
     approval handler, its blob store, its hooks and the highest risk it lets through
     without approval."""
-    from substrate.kernel.abstractions.tools.approval import ApprovalDecision, ApprovalResult
+    from substrate.kernel.abstractions.tools.approval import (
+        ApprovalDecision,
+        ApprovalResult,
+    )
     from substrate.kernel.tools.toolbox import Toolbox
 
     registry = getattr(agent, "tools", None) or Toolbox()
@@ -534,25 +566,6 @@ class InvokerSession:
 def _digest(arguments: JsonObject) -> str:
     raw = json.dumps(arguments, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
-
-
-def _approval_result_from_signal(data: dict[str, Any]) -> ApprovalResult:
-    """Map the frontend's response payload (``{action, modified_arguments}``,
-    or ``{action: "cancelled"}`` on a disconnect/new-message cancel) to an
-    ``ApprovalResult``. Deliberately duplicated in
-    ``serving/monolith/sse/approval.py`` (that copy backs the Future-based
-    fallback path) rather than imported — agents/ (L1) must never import
-    serving/, and this ~10-line function is small enough that duplicating it
-    is cheaper than the layering violation an import would cost."""
-    action = data.get("action", "deny")
-    if action == "modify":
-        return ApprovalResult(
-            decision=ApprovalDecision.MODIFIED,
-            modified_args=data.get("modified_arguments") or {},
-        )
-    if action == "approve":
-        return ApprovalResult(decision=ApprovalDecision.APPROVED)
-    return ApprovalResult(decision=ApprovalDecision.DENIED)
 
 
 def _emit_progress(

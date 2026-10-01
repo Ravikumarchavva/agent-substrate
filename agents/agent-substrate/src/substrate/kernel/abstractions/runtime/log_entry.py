@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
+
 from pydantic import BaseModel, Field
 
 from substrate.kernel.abstractions.core.content import JsonObject
@@ -80,6 +81,7 @@ class RunLogKind(StrEnum):
     MCP_APP_CONTEXT = "mcp_app_context"  # legacy underscore spelling — persisted, keep
     INPUT_REQUESTED = "input.requested"
     APPROVAL_REQUESTED = "approval.requested"
+    APPROVAL_DECIDED = "approval.decided"  # who decided, when and why; written once per request
 
     # Supervision
     CHILD_SPAWNED = "child.spawned"

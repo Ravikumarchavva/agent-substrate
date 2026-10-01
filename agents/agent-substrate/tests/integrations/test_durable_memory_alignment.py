@@ -85,8 +85,8 @@ async def test_postgres_memory_store_tenancy():
 
     try:
         # Clear both namespaces
-        await store.clear(ns_a)
-        await store.clear(ns_b)
+        await store.erase(ns_a)
+        await store.erase(ns_b)
 
         # Save to tenant-a
         rec_a = MemoryRecord.from_text("Memory for A", namespace=ns_a)
@@ -107,15 +107,15 @@ async def test_postgres_memory_store_tenancy():
         assert matches_b[0].record.to_text() == "Memory for B"
 
         # Verify get retrieves record
-        assert await store.get(id_a) is not None
+        assert await store.get(ns_a, id_a) is not None
 
         # Delete from tenant-a
-        deleted = await store.delete(id_a)
+        deleted = await store.delete(ns_a, id_a)
         assert deleted is True
 
         # Check id_a is deleted, id_b remains
-        assert await store.get(id_a) is None
-        assert await store.get(id_b) is not None
+        assert await store.get(ns_a, id_a) is None
+        assert await store.get(ns_b, id_b) is not None
     finally:
         await store.disconnect()
 
@@ -135,8 +135,8 @@ async def test_durable_memory_store_query_paging():
     ns_other = MemoryNamespace(tenant_id="preference", user_id="list-all-test-other-user")
 
     try:
-        await store.clear(ns_user)
-        await store.clear(ns_other)
+        await store.erase(ns_user)
+        await store.erase(ns_other)
 
         await store.save(MemoryRecord.from_text("Always answer in French", namespace=ns_user))
         await store.save(MemoryRecord.from_text("Prefers concise answers", namespace=ns_user))
@@ -161,8 +161,8 @@ async def test_durable_memory_store_query_paging():
         assert len(other_matches) == 1
         assert other_matches[0].record.to_text() == "Not this user's memory"
     finally:
-        await store.clear(ns_user)
-        await store.clear(ns_other)
+        await store.erase(ns_user)
+        await store.erase(ns_other)
         await store.disconnect()
 
 
@@ -180,7 +180,7 @@ async def test_durable_memory_store_multimodal():
 
     ns = MemoryNamespace(tenant_id="docs", user_id="multimodal-user")
     try:
-        await store.clear(ns)
+        await store.erase(ns)
         blocks = [
             TextBlock(text="Invoice #1234 details"),
             MediaBlock.image(url="https://example.com/receipt.jpg", media_type="image/jpeg"),
@@ -201,7 +201,7 @@ async def test_durable_memory_store_multimodal():
         assert isinstance(retrieved.content[2], DataBlock)
         assert retrieved.content[2].data["amount"] == 420.50
     finally:
-        await store.clear(ns)
+        await store.erase(ns)
         await store.disconnect()
 
 
@@ -271,8 +271,10 @@ async def test_pgvector_store_conformance():
     # Clear default collection
     await store.delete_collection("default")
 
+    # Different directions: cosine similarity ignores magnitude, so [0.1]*n and [0.5]*n tie exactly
+    # and which one a limit=1 search returns would be arbitrary.
     emb1 = [0.1] * 384
-    emb2 = [0.5] * 384
+    emb2 = [0.5] * 192 + [-0.5] * 192
 
     try:
         # Create documents with embeddings populated

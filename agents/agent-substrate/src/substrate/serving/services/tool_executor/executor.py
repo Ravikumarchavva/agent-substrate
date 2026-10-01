@@ -46,7 +46,7 @@ class ToolRegistry:
                         "name": tool.name,
                         "description": tool.description,
                         "input_schema": tool.input_schema,
-                        "risk": getattr(tool, "risk", "safe"),
+                        "risk": tool.risk.value,
                     }
                 )
             except Exception as e:

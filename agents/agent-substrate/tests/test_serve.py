@@ -33,7 +33,7 @@ class ReplyAgent:
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
-            await ctx._log("text.delta", {"text": self.reply})
+            await ctx.live("text.delta", {"text": self.reply})
             await ctx.reply(msg, {"text": self.reply})
 
 
@@ -50,7 +50,7 @@ class CrashAgent:
 
 
 def _build_app(agent) -> tuple[FastAPI, Runtime]:
-    runtime = Runtime()
+    runtime = Runtime.local(":memory:")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -126,7 +126,7 @@ def test_add_routes_threadless_request_gets_a_generated_correlation_id() -> None
 
 def test_add_routes_respects_a_custom_path() -> None:
     agent = ReplyAgent(reply="custom path works", name="custom_path_agent")
-    runtime = Runtime()
+    runtime = Runtime.local(":memory:")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

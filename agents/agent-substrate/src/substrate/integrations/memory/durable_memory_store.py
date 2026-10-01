@@ -1,69 +1,80 @@
 """DurableMemoryStore — Postgres-backed MemoryStore with full-text search.
 
-Stores memories as rows in an ``agent_memories`` table. Retrieval uses
-Postgres ``tsvector`` full-text search — no embeddings required.
+Records live in ``memory_records``, one row per record, keyed by ``(tenant_id, id)`` so an id
+is only ever meaningful inside its tenant. The owner fields (``user_id``, ``agent_id``,
+``session_id``) are real columns, which is what lets visibility be decided in SQL::
 
-Schema (run once via migration or ``create_tables()``)::
+    visible to caller  <=>  tenant matches
+                            AND (row.user_id    IS NULL OR row.user_id    = caller.user_id)
+                            AND (row.agent_id   IS NULL OR row.agent_id   = caller.agent_id)
+                            AND (row.session_id IS NULL OR row.session_id = caller.session_id)
 
-    CREATE TABLE agent_memories (
-        id          TEXT PRIMARY KEY,
-        agent_name  TEXT NOT NULL,
-        content     TEXT NOT NULL,
-        metadata    JSONB NOT NULL DEFAULT '{}',
-        namespace   VARCHAR(255) NOT NULL DEFAULT 'default',
-        search_vec  TSVECTOR GENERATED ALWAYS AS
-                        (to_tsvector('english', content)) STORED,
-        created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX ON agent_memories USING GIN (search_vec);
-    CREATE INDEX ON agent_memories (agent_name);
-    CREATE INDEX ON agent_memories (namespace);
+Retrieval uses Postgres ``tsvector`` full-text search — no embeddings required. The whole
+record is kept as JSON beside the columns, so it comes back exactly as it went in.
 """
 
 from __future__ import annotations
 
-import json
 from typing import Any, Sequence
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from substrate.kernel.abstractions.core.content import (
-    TextBlock,
-    content_blocks_to_str,
-    parse_content_block,
-)
+from substrate.kernel.abstractions.core.content import content_blocks_to_str
+from substrate.kernel.abstractions.exceptions import ScopeViolationError
 from substrate.kernel.abstractions.storage.memory import (
-    MemoryCategory,
     MemoryMatch,
     MemoryNamespace,
-    MemoryProvenance,
     MemoryQuery,
     MemoryRecord,
-    MemoryStatus,
 )
 from substrate.logger import setup_logging
 
 logger = setup_logging()
 
 _CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS agent_memories (
-    id          TEXT PRIMARY KEY,
-    agent_name  TEXT NOT NULL,
-    content     TEXT NOT NULL,
-    metadata    JSONB NOT NULL DEFAULT '{}',
-    namespace   VARCHAR(255) NOT NULL DEFAULT 'default',
-    search_vec  TSVECTOR GENERATED ALWAYS AS
-                    (to_tsvector('english', content)) STORED,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS memory_records (
+    tenant_id        TEXT NOT NULL,
+    id               TEXT NOT NULL,
+    user_id          TEXT,
+    agent_id         TEXT,
+    session_id       TEXT,
+    category         TEXT NOT NULL,
+    status           TEXT NOT NULL,
+    content          TEXT NOT NULL,
+    record           JSONB NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_accessed_at TIMESTAMPTZ,
+    access_count     INTEGER NOT NULL DEFAULT 0,
+    search_vec       TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
+    PRIMARY KEY (tenant_id, id)
 );
-CREATE INDEX IF NOT EXISTS agent_memories_search_idx
-    ON agent_memories USING GIN (search_vec);
-CREATE INDEX IF NOT EXISTS agent_memories_agent_idx
-    ON agent_memories (agent_name);
-CREATE INDEX IF NOT EXISTS agent_memories_namespace_idx
-    ON agent_memories (namespace);
+CREATE INDEX IF NOT EXISTS memory_records_search_idx ON memory_records USING GIN (search_vec);
+CREATE INDEX IF NOT EXISTS memory_records_owner_idx ON memory_records (tenant_id, user_id);
 """
+
+# The caller's visibility rule, as SQL. ``CAST(:x AS TEXT)`` types the parameter when it is NULL.
+_VISIBLE = (
+    "tenant_id = :tenant_id"
+    " AND (user_id IS NULL OR user_id = CAST(:user_id AS TEXT))"
+    " AND (agent_id IS NULL OR agent_id = CAST(:agent_id AS TEXT))"
+    " AND (session_id IS NULL OR session_id = CAST(:session_id AS TEXT))"
+)
+_WITHIN = (
+    "tenant_id = :tenant_id"
+    " AND (CAST(:user_id AS TEXT) IS NULL OR user_id = CAST(:user_id AS TEXT))"
+    " AND (CAST(:agent_id AS TEXT) IS NULL OR agent_id = CAST(:agent_id AS TEXT))"
+    " AND (CAST(:session_id AS TEXT) IS NULL OR session_id = CAST(:session_id AS TEXT))"
+)
+
+
+def _scope_params(scope: MemoryNamespace) -> dict[str, Any]:
+    return {
+        "tenant_id": scope.tenant_id,
+        "user_id": scope.user_id,
+        "agent_id": scope.agent_id,
+        "session_id": scope.session_id,
+    }
 
 
 class DurableMemoryStore:
@@ -90,193 +101,139 @@ class DurableMemoryStore:
             self._engine = None
 
     async def create_tables(self) -> None:
-        """Create the ``agent_memories`` table if it does not exist."""
+        """Create the ``memory_records`` table if it does not exist."""
         async with self._eng().begin() as conn:
             for stmt in _CREATE_TABLE.split(";"):
                 stmt_clean = stmt.strip()
                 if stmt_clean:
                     await conn.execute(text(stmt_clean))
-            await conn.execute(
-                text(
-                    "ALTER TABLE agent_memories ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT 'default'"
-                )
-            )
-            await conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS agent_memories_namespace_idx ON agent_memories (namespace)"
-                )
-            )
 
     def _eng(self) -> AsyncEngine:
         if self._engine is None:
-            raise RuntimeError(
-                "DurableMemoryStore not connected — call await connect() first"
-            )
+            raise RuntimeError("DurableMemoryStore not connected — call await connect() first")
         return self._engine
 
-    def _row_to_memory(self, row: Any) -> MemoryRecord:
-        meta = (
-            row.metadata
-            if isinstance(row.metadata, dict)
-            else json.loads(row.metadata)
-        )
-        blocks_raw = meta.pop("_blocks", None) if isinstance(meta, dict) else None
-        if blocks_raw:
-            blocks = [parse_content_block(b, forward_compatible=True) for b in blocks_raw]
-        else:
-            blocks = [TextBlock(text=row.content)]
-
-        cat_val = meta.pop("_category", MemoryCategory.SEMANTIC.value) if isinstance(meta, dict) else MemoryCategory.SEMANTIC.value
-        status_val = meta.pop("_status", MemoryStatus.ACTIVE.value) if isinstance(meta, dict) else MemoryStatus.ACTIVE.value
-        ns_raw = meta.pop("_namespace", None) if isinstance(meta, dict) else None
-        prov_raw = meta.pop("_provenance", None) if isinstance(meta, dict) else None
-
-        ns = MemoryNamespace(**ns_raw) if ns_raw else MemoryNamespace(tenant_id=getattr(row, "namespace", "default"))
-        prov = MemoryProvenance(**prov_raw) if prov_raw else MemoryProvenance()
-
-        return MemoryRecord(
-            id=row.id,
-            content=tuple(blocks),
-            category=MemoryCategory(cat_val),
-            status=MemoryStatus(status_val),
-            namespace=ns,
-            provenance=prov,
-            metadata=meta,
-        )
+    @staticmethod
+    def _row_to_record(row: Any) -> MemoryRecord:
+        record = MemoryRecord.model_validate(row.record)
+        return record.model_copy(update={"last_accessed_at": row.last_accessed_at, "access_count": row.access_count})
 
     async def save(self, record: MemoryRecord) -> str:
-        """Persist or replace a record (explicit UPSERT semantics)."""
-        mem_id = record.id
-        blocks = list(record.content)
-        agent_str = record.namespace.user_id or record.namespace.agent_id or "default"
-        ns_str = record.namespace.tenant_id or "default"
-        meta = dict(record.metadata)
-        meta["_category"] = record.category.value
-        meta["_status"] = record.status.value
-        meta["_namespace"] = {
-            "tenant_id": record.namespace.tenant_id,
-            "user_id": record.namespace.user_id,
-            "agent_id": record.namespace.agent_id,
-            "session_id": record.namespace.session_id,
-        }
-        meta["_provenance"] = {
-            "source_session_id": record.provenance.source_session_id,
-            "source_node_id": record.provenance.source_node_id,
-            "source_branch_id": record.provenance.source_branch_id,
-            "source_run_id": record.provenance.source_run_id,
-            "confidence": record.provenance.confidence,
-            "extraction_method": record.provenance.extraction_method,
-            "supersedes_id": record.provenance.supersedes_id,
-        }
-
-        text_content = content_blocks_to_str(blocks)
-        meta["_blocks"] = [b.model_dump(mode="json") for b in blocks]
-
+        """Persist or replace a record. Refuses to take over another namespace's record."""
+        ns = record.namespace
         async with self._eng().begin() as conn:
-            await conn.execute(
+            result = await conn.execute(
                 text(
-                    "INSERT INTO agent_memories (id, agent_name, content, metadata, namespace) "
-                    "VALUES (:id, :agent_name, :content, CAST(:metadata AS jsonb), :namespace) "
-                    "ON CONFLICT (id) DO UPDATE SET "
-                    "content = EXCLUDED.content, metadata = EXCLUDED.metadata, "
-                    "agent_name = EXCLUDED.agent_name, namespace = EXCLUDED.namespace"
+                    "INSERT INTO memory_records "
+                    "(tenant_id, id, user_id, agent_id, session_id, category, status, content, record) "
+                    "VALUES (:tenant_id, :id, :user_id, :agent_id, :session_id, :category, :status, :content, "
+                    "CAST(:record AS jsonb)) "
+                    "ON CONFLICT (tenant_id, id) DO UPDATE SET "
+                    "category = EXCLUDED.category, status = EXCLUDED.status, content = EXCLUDED.content, "
+                    "record = EXCLUDED.record "
+                    "WHERE memory_records.user_id IS NOT DISTINCT FROM EXCLUDED.user_id "
+                    "AND memory_records.agent_id IS NOT DISTINCT FROM EXCLUDED.agent_id "
+                    "AND memory_records.session_id IS NOT DISTINCT FROM EXCLUDED.session_id "
+                    "RETURNING 1"
                 ),
                 {
-                    "id": mem_id,
-                    "agent_name": agent_str,
-                    "content": text_content,
-                    "metadata": json.dumps(meta),
-                    "namespace": ns_str,
+                    **_scope_params(ns),
+                    "id": record.id,
+                    "category": record.category.value,
+                    "status": record.status.value,
+                    "content": content_blocks_to_str(list(record.content)),
+                    "record": record.model_dump_json(),
                 },
             )
-        logger.debug(
-            "[memory] saved id=%s agent=%s namespace=%s", mem_id, agent_str, ns_str
-        )
-        return mem_id
+            if result.first() is None:
+                raise ScopeViolationError(
+                    f"record {record.id!r} already belongs to a different namespace in tenant {ns.tenant_id!r}",
+                    record_id=record.id,
+                )
+        logger.debug("[memory] saved id=%s tenant=%s", record.id, ns.tenant_id)
+        return record.id
 
     async def query(self, spec: MemoryQuery) -> list[MemoryMatch]:
         """Execute structured search conforming to MemoryQuery."""
-        where_clauses = ["namespace = :tenant_id"]
-        params: dict[str, Any] = {"tenant_id": spec.namespace.tenant_id, "limit": spec.limit}
-
-        if spec.namespace.user_id:
-            where_clauses.append("(agent_name = :user_key OR agent_name = :user_raw)")
-            params["user_key"] = f"user:{spec.namespace.user_id}"
-            params["user_raw"] = spec.namespace.user_id
-        elif spec.namespace.agent_id:
-            where_clauses.append("(agent_name = :agent_key OR agent_name = :agent_raw)")
-            params["agent_key"] = f"agent:{spec.namespace.agent_id}"
-            params["agent_raw"] = spec.namespace.agent_id
-
-        if spec.text_query:
-            where_clauses.append("search_vec @@ plainto_tsquery('english', :query)")
-            params["query"] = spec.text_query
-            order_clause = "ts_rank(search_vec, plainto_tsquery('english', :query)) DESC"
-            score_expr = "ts_rank(search_vec, plainto_tsquery('english', :query)) AS score"
+        scope = spec.namespace
+        if spec.tenant_wide is not None:
+            logger.info("[memory] tenant-wide query on %s: %s", scope.tenant_id, spec.tenant_wide.reason)
+            where = ["tenant_id = :tenant_id"]
+            params: dict[str, Any] = {"tenant_id": scope.tenant_id}
         else:
-            order_clause = "created_at DESC"
-            score_expr = "1.0 AS score"
+            where = [_VISIBLE]
+            params = _scope_params(scope)
+        params["limit"] = spec.limit
 
-        sql = f"SELECT id, content, metadata, namespace, agent_name, {score_expr} FROM agent_memories WHERE {' AND '.join(where_clauses)} ORDER BY {order_clause} LIMIT :limit"
+        if spec.statuses:
+            where.append("status = ANY(:statuses)")
+            params["statuses"] = [s.value for s in spec.statuses]
+        if spec.categories:
+            where.append("category = ANY(:categories)")
+            params["categories"] = [c.value for c in spec.categories]
+        if spec.text_query:
+            where.append("search_vec @@ plainto_tsquery('english', :query)")
+            params["query"] = spec.text_query
+            order = "ts_rank(search_vec, plainto_tsquery('english', :query)) DESC"
+            score = "ts_rank(search_vec, plainto_tsquery('english', :query)) AS score"
+        else:
+            order = "created_at DESC"
+            score = "1.0 AS score"
 
+        sql = (
+            f"SELECT record, last_accessed_at, access_count, {score} FROM memory_records "
+            f"WHERE {' AND '.join(where)} ORDER BY {order} LIMIT :limit"
+        )
         async with self._eng().begin() as conn:
-            rows = await conn.execute(text(sql), params)
-            matches: list[MemoryMatch] = []
-            for i, row in enumerate(rows):
-                rec = self._row_to_memory(row)
-                if spec.categories and rec.category not in spec.categories:
-                    continue
-                if spec.statuses and rec.status not in spec.statuses:
-                    continue
-                matches.append(MemoryMatch(record=rec, score=float(row.score), rank=i, retrieval_method="fulltext"))
-            return matches
+            rows = (await conn.execute(text(sql), params)).all()
+        matches: list[MemoryMatch] = []
+        for i, row in enumerate(rows):
+            record = self._row_to_record(row)
+            if spec.metadata_filter and not all(record.metadata.get(k) == v for k, v in spec.metadata_filter.items()):
+                continue
+            matches.append(
+                MemoryMatch(record=record, score=float(row.score), rank=i, retrieval_method="fulltext" if spec.text_query else "default")
+            )
+        return matches
 
-    async def touch(self, record_ids: Sequence[str]) -> None:
-        """Update last_accessed_at for records."""
+    async def touch(self, caller: MemoryNamespace, record_ids: Sequence[str]) -> None:
+        """Count an access to each visible record in ``record_ids``."""
         if not record_ids:
             return
         async with self._eng().begin() as conn:
             await conn.execute(
-                text("UPDATE agent_memories SET created_at = now() WHERE id = ANY(:ids)"),
-                {"ids": list(record_ids)},
+                text(
+                    "UPDATE memory_records SET last_accessed_at = now(), access_count = access_count + 1 "
+                    f"WHERE {_VISIBLE} AND id = ANY(:ids)"
+                ),
+                {**_scope_params(caller), "ids": list(record_ids)},
             )
 
-    async def get(self, record_id: str) -> MemoryRecord | None:
-        """Retrieve a specific record by ID."""
-        sql = "SELECT id, content, metadata, namespace, agent_name FROM agent_memories WHERE id = :id"
-        params = {"id": record_id}
-
+    async def get(self, caller: MemoryNamespace, record_id: str) -> MemoryRecord | None:
+        """The record, if it exists and is visible from ``caller``."""
         async with self._eng().begin() as conn:
-            row = (await conn.execute(text(sql), params)).first()
-        if row is None:
-            return None
-        return self._row_to_memory(row)
+            row = (
+                await conn.execute(
+                    text(f"SELECT record, last_accessed_at, access_count FROM memory_records WHERE {_VISIBLE} AND id = :id"),
+                    {**_scope_params(caller), "id": record_id},
+                )
+            ).first()
+        return None if row is None else self._row_to_record(row)
 
-    async def delete(self, record_id: str) -> bool:
-        """Permanently delete a record by ID."""
-        sql = "DELETE FROM agent_memories WHERE id = :id"
-        params = {"id": record_id}
-
+    async def delete(self, caller: MemoryNamespace, record_id: str) -> bool:
+        """Permanently delete a record ``caller`` owns (see ``MemoryNamespace.owned_by``)."""
         async with self._eng().begin() as conn:
-            result = await conn.execute(text(sql), params)
+            result = await conn.execute(
+                text(f"DELETE FROM memory_records WHERE {_VISIBLE} AND user_id IS NOT DISTINCT FROM CAST(:user_id AS TEXT) AND id = :id"),
+                {**_scope_params(caller), "id": record_id},
+            )
         return result.rowcount > 0
 
-    async def clear(self, namespace: MemoryNamespace) -> None:
-        """Purge all records matching the given namespace boundary."""
-        where_clauses = ["namespace = :tenant_id"]
-        params: dict[str, Any] = {"tenant_id": namespace.tenant_id}
-        if namespace.user_id:
-            where_clauses.append("(agent_name = :user_key OR agent_name = :user_raw)")
-            params["user_key"] = f"user:{namespace.user_id}"
-            params["user_raw"] = namespace.user_id
-        elif namespace.agent_id:
-            where_clauses.append("(agent_name = :agent_key OR agent_name = :agent_raw)")
-            params["agent_key"] = f"agent:{namespace.agent_id}"
-            params["agent_raw"] = namespace.agent_id
-        sql = f"DELETE FROM agent_memories WHERE {' AND '.join(where_clauses)}"
-
+    async def erase(self, within: MemoryNamespace) -> int:
+        """Remove every record under ``within``. Returns how many."""
         async with self._eng().begin() as conn:
-            await conn.execute(text(sql), params)
+            result = await conn.execute(text(f"DELETE FROM memory_records WHERE {_WITHIN}"), _scope_params(within))
+        return int(result.rowcount)
 
     async def __aenter__(self) -> DurableMemoryStore:
         await self.connect()

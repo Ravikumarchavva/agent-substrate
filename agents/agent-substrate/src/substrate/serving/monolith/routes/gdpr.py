@@ -54,6 +54,8 @@ async def erase_user_data(
         user_id=body.user_id,
         cfg=settings,
         pending_store=ctx.pending_file_store,
+        memory_store=ctx.long_term_memory,
+        runtime_store=ctx.runtime.store if ctx.runtime is not None else None,
     )
     return summary.as_dict()
 
@@ -73,5 +75,7 @@ async def erase_tenant_data(
         tenant_id=body.tenant_id,
         cfg=settings,
         pending_store=ctx.pending_file_store,
+        memory_store=ctx.long_term_memory,
+        runtime_store=ctx.runtime.store if ctx.runtime is not None else None,
     )
     return summary.as_dict()

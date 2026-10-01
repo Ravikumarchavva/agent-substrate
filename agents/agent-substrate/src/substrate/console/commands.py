@@ -131,7 +131,7 @@ async def _cmd_tools(app: "Console", args: str) -> bool:
     table.add_column("Description")
     for t in tools:
         name = getattr(t, "name", "?")
-        risk = str(getattr(t, "risk", "safe")).split(".")[-1].lower()
+        risk = t.risk.value if hasattr(t, "risk") else "hosted"
         desc = getattr(t, "description", "")
         if len(desc) > 70:
             desc = desc[:67] + "..."

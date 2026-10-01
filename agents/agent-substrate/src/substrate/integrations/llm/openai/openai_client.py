@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional, 
 import tiktoken
 from openai import AsyncOpenAI
 from openai.types.responses.response_completed_event import ResponseCompletedEvent
+from openai.types.responses.response_incomplete_event import ResponseIncompleteEvent
 from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
 from openai.types.responses.response_reasoning_summary_text_delta_event import (
     ResponseReasoningSummaryTextDeltaEvent,
@@ -19,6 +20,7 @@ from substrate.kernel.llm.tool_arguments import parse_tool_arguments
 from substrate.kernel.llm.modalities import fit_to_capabilities
 from substrate.kernel.llm.models import resolve_capabilities
 from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+from substrate.kernel.abstractions.core.finish_reason import FinishReason
 from substrate.kernel.abstractions.llm import (
     GenerationOptions,
     LLMClient,
@@ -139,6 +141,28 @@ def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str,
         for t in local_tools
     ]
 
+
+
+def responses_finish_reason(response: object, content: list) -> FinishReason:
+    """Why a Responses-API response stopped, from its status and ``incomplete_details``."""
+    status = getattr(response, "status", None)
+    if status == "incomplete":
+        reason = getattr(getattr(response, "incomplete_details", None), "reason", None)
+        if reason == "max_output_tokens":
+            return FinishReason.LENGTH
+        if reason == "content_filter":
+            return FinishReason.CONTENT_FILTER
+        return FinishReason.OTHER
+    if status == "failed":
+        return FinishReason.ERROR
+    if any(isinstance(block, ToolUseBlock) for block in content):
+        return FinishReason.TOOL_CALLS
+    for item in getattr(response, "output", None) or []:
+        if getattr(item, "type", None) == "message" and any(
+            getattr(part, "type", None) == "refusal" for part in getattr(item, "content", None) or []
+        ):
+            return FinishReason.REFUSAL
+    return FinishReason.STOP if status in ("completed", None) else FinishReason.OTHER
 
 class OpenAIClient(LLMClient):
     """OpenAI API client — text, vision, and audio in one place.
@@ -368,9 +392,13 @@ class OpenAIClient(LLMClient):
         """Generate a single response from OpenAI using Responses API."""
         params = self._build_params(messages, options, stream=False)
         response = await self.client.responses.create(**params)
+        content = self._parse_output(response, options.response_format)
         return LLMResponse(
-            content=self._parse_output(response, options.response_format),
+            content=content,
             usage=self._extract_usage(response),
+            finish_reason=responses_finish_reason(response, content),
+            response_id=getattr(response, "id", None),
+            served_model=getattr(response, "model", None),
         )
 
     def generate_stream(
@@ -399,7 +427,9 @@ class OpenAIClient(LLMClient):
             elif isinstance(event, ResponseReasoningSummaryTextDeltaEvent):
                 if event.delta:
                     yield ReasoningDelta(text=event.delta)
-            elif isinstance(event, ResponseCompletedEvent):
+            elif isinstance(event, (ResponseCompletedEvent, ResponseIncompleteEvent)):
+                # An incomplete response (cut off at max_output_tokens, or filtered) is still a
+                # response: its text so far is the answer, and its reason says why it stopped.
                 final_response = event.response
 
         if final_response is None:
@@ -413,9 +443,13 @@ class OpenAIClient(LLMClient):
                 f"a completion. The provider may not support the OpenAI "
                 f"Responses API. Check server logs for details."
             )
+        content = self._parse_output(final_response, options.response_format)
         yield CompletionEvent(
-            content=self._parse_output(final_response, options.response_format),
+            content=content,
             usage=self._extract_usage(final_response),
+            finish_reason=responses_finish_reason(final_response, content),
+            response_id=getattr(final_response, "id", None),
+            served_model=getattr(final_response, "model", None),
         )
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:

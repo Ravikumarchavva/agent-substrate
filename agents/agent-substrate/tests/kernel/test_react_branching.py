@@ -60,7 +60,7 @@ class MockLLMClient:
 
 
 async def wait_run(rt: Runtime, run_id: str) -> None:
-    async for entry in rt.event_log.tail(run_id):
+    async for entry in rt.tail(run_id):
         if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
             assert entry.kind == "run.completed", f"Run ended with {entry.kind}: {entry.payload}"
             break
@@ -81,7 +81,7 @@ async def test_react_agent_branching_and_dag_history():
     agent = ReActAgent("assistant", model=llm, context=ctx_cfg)
     session_id = "test-session-branching"
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
 
         # Turn 1: On main branch

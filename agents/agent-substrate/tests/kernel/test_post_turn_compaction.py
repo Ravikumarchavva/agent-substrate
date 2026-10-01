@@ -64,7 +64,7 @@ class MockLLMClient:
 
 
 async def wait_run(rt: Runtime, run_id: str) -> None:
-    async for entry in rt.event_log.tail(run_id):
+    async for entry in rt.tail(run_id):
         if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
             assert entry.kind == "run.completed", f"Run ended with {entry.kind}: {entry.payload}"
             break
@@ -87,7 +87,7 @@ async def test_react_agent_post_turn_compaction_creates_checkpoint():
     agent = ReActAgent("compact-agent", model=llm, context=ctx_cfg)
     session_id = "test-compaction-sess"
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
 
         # Turn 1: 1 user message + 1 assistant message = 2 messages -> triggers turn_threshold=2!

@@ -26,3 +26,23 @@ class TestSqliteRuntimeStoreInMemory(RuntimeStoreConformance):
         await store.start()
         yield store
         await store.aclose()
+
+
+async def test_closing_while_cancelled_callers_statements_are_in_flight_does_not_crash() -> None:
+    """A task cancelled mid-statement does not stop the statement: its thread finishes it.
+    Closing the connection under that thread is a segfault, not an exception, so close
+    must queue behind in-flight work. Repeated, because the window is narrow."""
+    import asyncio
+
+    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.runtime.store import RunSpec
+
+    for _ in range(25):
+        store = SqliteRuntimeStore(":memory:")
+        await store.start()
+        tasks = [asyncio.create_task(store.create_run(RunSpec(agent=Actor(type="agent", key=f"a{i}")))) for i in range(20)]
+        await asyncio.sleep(0)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await store.aclose()

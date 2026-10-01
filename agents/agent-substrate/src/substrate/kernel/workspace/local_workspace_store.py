@@ -12,7 +12,6 @@ import json
 import logging
 from pathlib import Path
 
-from substrate.kernel.storage.fs import atomic_write_json, safe_name
 from substrate.kernel.abstractions.exceptions import SnapshotConflictError
 from substrate.kernel.abstractions.storage.snapshots import (
     WorkspaceFileEntry,
@@ -20,6 +19,7 @@ from substrate.kernel.abstractions.storage.snapshots import (
     WorkspaceSnapshot,
     WorkspaceStore,
 )
+from substrate.kernel.storage.fs import atomic_write_json, safe_name
 
 logger = logging.getLogger(__name__)
 

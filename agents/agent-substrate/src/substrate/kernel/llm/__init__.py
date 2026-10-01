@@ -7,12 +7,12 @@ embedding models live in ``integrations/llm``.
 
 from __future__ import annotations
 
-from substrate.kernel.llm.client import LLMClient, EmbeddingClient
+from substrate.kernel.llm.client import EmbeddingClient, LLMClient
 from substrate.kernel.llm.models import (
-    ModelProfile,
     MODEL_REGISTRY,
-    get_model_profile,
+    ModelProfile,
     estimate_cost,
+    get_model_profile,
     list_models,
 )
 

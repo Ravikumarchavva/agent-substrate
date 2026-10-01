@@ -20,8 +20,6 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Literal
 
-from pythonjsonlogger.msgspec import MsgspecFormatter
-
 _LOGGER_NAMESPACE = "substrate"
 _CONFIG_LOCK = threading.Lock()
 _CONFIGURED = False
@@ -32,19 +30,28 @@ _CONFIGURED = False
 # ---------------------------------------------------------------------------
 
 
-class JsonFormatter(MsgspecFormatter):
-    """JSON formatter for server / structured-log pipelines."""
+def _json_formatter() -> logging.Formatter:
+    """The JSON formatter for server / structured-log pipelines.
 
-    def add_fields(self, log_record, record, message_dict):  # type: ignore[override]
-        super().add_fields(log_record, record, message_dict)
-        if not log_record.get("timestamp"):
-            from datetime import datetime, timezone
+    Built on first use: its library (python-json-logger over msgspec) is only needed once someone
+    actually asks for JSON output, and importing ``substrate.logger`` — which every module does, the
+    kernel included — must not pull a logging stack into a process that never formats one.
+    """
+    from pythonjsonlogger.msgspec import MsgspecFormatter
 
-            log_record["timestamp"] = datetime.now(timezone.utc).isoformat()
-        if log_record.get("level"):
-            log_record["level"] = log_record["level"].upper()
-        else:
-            log_record["level"] = record.levelname
+    class JsonFormatter(MsgspecFormatter):
+        def add_fields(self, log_record, record, message_dict):  # type: ignore[override]
+            super().add_fields(log_record, record, message_dict)
+            if not log_record.get("timestamp"):
+                from datetime import datetime, timezone
+
+                log_record["timestamp"] = datetime.now(timezone.utc).isoformat()
+            if log_record.get("level"):
+                log_record["level"] = log_record["level"].upper()
+            else:
+                log_record["level"] = record.levelname
+
+    return JsonFormatter("%(timestamp)s %(level)s %(name)s %(message)s")
 
 
 class TextFormatter(logging.Formatter):
@@ -118,9 +125,7 @@ def _build_handler(
     if mode == "pretty":
         handler.setFormatter(TextFormatter())
     else:
-        handler.setFormatter(
-            JsonFormatter("%(timestamp)s %(level)s %(name)s %(message)s")
-        )
+        handler.setFormatter(_json_formatter())
     setattr(handler, "_substrate_managed", True)
     return handler
 

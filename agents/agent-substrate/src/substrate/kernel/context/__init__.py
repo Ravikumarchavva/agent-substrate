@@ -10,16 +10,16 @@ from __future__ import annotations
 
 from .builder import DefaultContextBuilder
 from .compaction import (
-    CompactionStrategy,
-    CompactionPipeline,
     CompactionCoordinator,
+    CompactionPipeline,
+    CompactionStrategy,
     DefaultCompactionCoordinator,
+    SelectiveToolCallCompactionStrategy,
     SlidingWindowCompaction,
     SummarizationCompaction,
-    ToolResultCompactionStrategy,
-    SelectiveToolCallCompactionStrategy,
-    TruncationStrategy,
     TokenBudgetComposedStrategy,
+    ToolResultCompactionStrategy,
+    TruncationStrategy,
 )
 from .context import AgentContext, ContextConfig
 

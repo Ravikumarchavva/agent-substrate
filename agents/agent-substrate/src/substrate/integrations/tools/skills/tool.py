@@ -20,6 +20,7 @@ from typing import Any
 from substrate.kernel.abstractions import TextBlock
 from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
+from substrate.kernel.abstractions.tools import ToolRisk
 
 logger = setup_logging()
 
@@ -29,6 +30,8 @@ class SkillTool:
 
     tool_type: str = ToolType.SKILL
     name: str = "skills"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description: str = (
         "Manage agent skills. "
         "action=list: show all available skills with names and descriptions. "

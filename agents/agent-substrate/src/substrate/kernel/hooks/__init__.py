@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from substrate.kernel.hooks.manager import (
+    CostTracker,
     HookEvent,
     HookManager,
-    CostTracker,
 )
 
 __all__ = ["HookEvent", "HookManager", "CostTracker"]

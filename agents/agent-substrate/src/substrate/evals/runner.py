@@ -17,14 +17,13 @@ from typing import TYPE_CHECKING
 
 from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.kernel.runtime import Runtime
-from substrate.kernel.testing.runtime import ephemeral_runtime
 from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 from substrate.kernel.abstractions.runtime.ids import RunId, new_run_id
 
-from substrate.kernel.evals.judge import LLMJudge
-from substrate.kernel.evals.models import (
+from substrate.evals.judge import LLMJudge
+from substrate.evals.models import (
     EvalCase,
     EvalCaseResult,
     EvalDataset,
@@ -83,7 +82,7 @@ class EvalRunner:
     async def run(self, dataset: EvalDataset) -> EvalReport:
         """Run all cases in the dataset and return an aggregated EvalReport."""
         wall_start = time.monotonic()
-        async with ephemeral_runtime() as rt:
+        async with Runtime.local(":memory:") as rt:
             await rt.register(self._agent)
 
             if self._concurrency == 1:
@@ -110,7 +109,7 @@ class EvalRunner:
 
     async def run_case(self, case: EvalCase) -> EvalCaseResult:
         """Run a single case with its own ephemeral Runtime."""
-        async with ephemeral_runtime() as rt:
+        async with Runtime.local(":memory:") as rt:
             await rt.register(self._agent)
             return await self._run_case(case, rt=rt)
 
@@ -151,6 +150,13 @@ class EvalRunner:
                     f"eval-wait:{sentinel_run_id}:{cid}",
                 )
                 if payload is not None:
+                    break
+                record = await rt.get_run(run_id)
+                if record is not None and record.status.is_terminal:
+                    # The run is over and left no reply: waiting longer cannot produce one.
+                    payload = await rt.store.consume(sentinel_run_id, f"reply:{cid}", f"eval-wait:{sentinel_run_id}:{cid}")
+                    if payload is None:
+                        raise RuntimeError(f"agent run {record.status} without replying")
                     break
                 await asyncio.sleep(0.05)
             if payload is None:

@@ -56,26 +56,26 @@ async def test_get_and_delete(store: LanceMemoryStore) -> None:
     rec = MemoryRecord.from_text("hello", namespace=ns)
     memory_id = await store.save(rec)
 
-    fetched = await store.get(memory_id)
+    fetched = await store.get(ns, memory_id)
     assert fetched is not None and fetched.to_text() == "hello"
 
-    deleted = await store.delete(memory_id)
+    deleted = await store.delete(ns, memory_id)
     assert deleted is True
-    assert await store.get(memory_id) is None
+    assert await store.get(ns, memory_id) is None
 
 
 async def test_get_missing_returns_none(store: LanceMemoryStore) -> None:
-    assert await store.get("nope") is None
+    assert await store.get(MemoryNamespace(tenant_id="ns"), "nope") is None
 
 
-async def test_clear_removes_only_matching_namespace(store: LanceMemoryStore) -> None:
+async def test_erase_removes_only_matching_namespace(store: LanceMemoryStore) -> None:
     ns1 = MemoryNamespace(tenant_id="ns1", agent_id="agent1")
     ns2 = MemoryNamespace(tenant_id="ns2", agent_id="agent1")
 
     await store.save(MemoryRecord.from_text("a", namespace=ns1))
     await store.save(MemoryRecord.from_text("b", namespace=ns2))
 
-    await store.clear(ns1)
+    assert await store.erase(ns1) == 1
 
     assert await store.query(MemoryQuery(namespace=ns1)) == []
     assert len(await store.query(MemoryQuery(namespace=ns2))) == 1
@@ -102,7 +102,7 @@ async def test_multimodal_blocks_roundtrip(store: LanceMemoryStore) -> None:
     rec = MemoryRecord(content=blocks, namespace=ns)
     mem_id = await store.save(rec)
 
-    fetched = await store.get(mem_id)
+    fetched = await store.get(ns, mem_id)
     assert fetched is not None
     assert len(fetched.content) == 3
     assert isinstance(fetched.content[0], TextBlock)

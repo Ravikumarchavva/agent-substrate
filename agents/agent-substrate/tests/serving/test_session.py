@@ -74,7 +74,7 @@ class ReplyAgent:
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
-            await ctx._log("text.delta", {"text": self.reply})
+            await ctx.live("text.delta", {"text": self.reply})
             await ctx.reply(msg, {"text": self.reply})
 
 
@@ -110,7 +110,7 @@ def _make_msg(agent_id: Actor, text: str = "hello") -> Message:
 async def _stream_events(
     agent: Any, text: str = "hello", timeout: float = 5.0
 ) -> list[WireEvent]:
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         msg = _make_msg(agent.id, text)
         session = AgentStreamSession(
             runtime=rt,
@@ -186,7 +186,7 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
                 # Suspends here (raises SuspendInterrupt) until the signal
                 # fires — exactly like ask_human's sleep_until_signal.
                 await ctx.sleep_until_signal(signal_name)
-                await ctx._log("text.delta", {"text": "post-resume reply"})
+                await ctx.log("assistant.message", {"text": "post-resume reply"})
                 await ctx.reply(msg, {"text": "post-resume reply"})
 
     is_disconnected = False
@@ -194,7 +194,7 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
     async def check_disconnected() -> bool:
         return is_disconnected
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = SuspendingReplyAgent()
         msg = _make_msg(agent.id)
         session = AgentStreamSession(
@@ -220,7 +220,7 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
         run_id = session._run_id
         assert run_id is not None
         for _ in range(100):
-            status = await rt.scheduler.get_status(run_id)
+            status = (await rt.get_run(run_id)).status
             if status is not None and status.value == "suspended":
                 break
             await asyncio.sleep(0.02)
@@ -231,13 +231,13 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
         # Now the human answers. The detached task must still be tailing (or
         # the run resumes on its own via a fresh lease either way) for the
         # post-resume reply to land durably in the EventLogProtocol.
-        await rt.signal_bus.signal(run_id, signal_name, {})
+        await rt.store.signal(run_id, signal_name, {})
 
         found_reply = False
         for _ in range(200):
-            entries = [e async for e in rt.event_log.read(run_id)]
+            entries = list(await rt.read(run_id))
             if any(
-                e.kind == "text.delta" and e.payload.get("text") == "post-resume reply"
+                e.kind == "assistant.message" and e.payload.get("text") == "post-resume reply"
                 for e in entries
             ):
                 found_reply = True
@@ -253,8 +253,6 @@ async def test_durable_cancel_ends_session() -> None:
     with no session-owned cancel Event/registry involved at all. This is
     what makes cancel work correctly even when POST /cancel lands on a
     different replica than the one running the SSE stream."""
-    from substrate.kernel.abstractions.core.identity import Actor as _Actor
-    from substrate.kernel.abstractions.runtime.supervisor import RunHandle
 
     @dataclass
     class HangingAgent:
@@ -268,7 +266,7 @@ async def test_durable_cancel_ends_session() -> None:
             for msg in inbox:
                 await asyncio.sleep(100)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = HangingAgent()
         msg = _make_msg(agent.id)
         thread_id = "test-thread-durable-cancel"
@@ -284,18 +282,12 @@ async def test_durable_cancel_ends_session() -> None:
         async def _cancel_once_active() -> None:
             found = None
             for _ in range(200):
-                found = await rt.scheduler.find_run_for_thread(thread_id)
+                found = await rt.active_run_for_thread(thread_id)
                 if found is not None:
                     break
                 await asyncio.sleep(0.01)
             assert found is not None, "run never became active for thread"
-            run_id, _status = found
-            # agent_id/parent_run are placeholders — SupervisorProtocol.cancel() only
-            # reads handle.run_id (see routes/cancel.py for the same pattern).
-            handle = RunHandle(
-                run_id=run_id, agent_id=_Actor(type="unresolved"), parent_run=""
-            )
-            await rt.supervisor.cancel(handle, reason="test")
+            await rt.cancel(found.run_id, reason="test")
 
         asyncio.create_task(_cancel_once_active())
 
@@ -334,7 +326,7 @@ async def test_disconnected_stops_local_relay_without_cancelling_run() -> None:
     async def check_disconnected() -> bool:
         return is_disconnected
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = SlowAgent()
         msg = _make_msg(agent.id)
         session = AgentStreamSession(
@@ -360,7 +352,7 @@ async def test_disconnected_stops_local_relay_without_cancelling_run() -> None:
         run_id = session._run_id
         assert run_id is not None
         for _ in range(100):
-            status = await rt.scheduler.get_status(run_id)
+            status = (await rt.get_run(run_id)).status
             if status is not None and status.value == "completed":
                 break
             await asyncio.sleep(0.02)
@@ -378,7 +370,7 @@ async def test_bridge_none_still_completes_and_terminates() -> None:
     loop to stop -- a naive `bridge=None` would just poll forever after the
     run finishes. Real Runtime, real agent, no bridge object anywhere."""
     agent = ReplyAgent(reply="no bridge needed", name="no_bridge_agent")
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         msg = _make_msg(agent.id)
         session = AgentStreamSession(runtime=rt, agent=agent, msg=msg)
         events = await asyncio.wait_for(_collect(session), timeout=5.0)
@@ -389,7 +381,7 @@ async def test_bridge_none_still_completes_and_terminates() -> None:
 
 async def test_bridge_none_error_still_emits_run_failed() -> None:
     agent = CrashAgent(name="crash_no_bridge")
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         msg = _make_msg(agent.id)
         session = AgentStreamSession(runtime=rt, agent=agent, msg=msg)
         events = await asyncio.wait_for(_collect(session), timeout=5.0)
@@ -418,7 +410,7 @@ async def test_bridge_none_disconnect_does_not_crash_on_missing_bridge() -> None
             for msg in inbox:
                 await asyncio.sleep(0.2)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = SlowAgent()
         msg = _make_msg(agent.id)
         session = AgentStreamSession(
@@ -454,18 +446,16 @@ async def test_tail_wire_events_skips_non_streamable_kinds_without_crashing() ->
     they're silently skipped, not fatal."""
 
     async def agent_run(ctx: RunContext, inbox: list[Message]) -> None:
-        await ctx._log("run.started", {})
-        await ctx._log("effect.result", {"value": {}})
-        await ctx._log("text.delta", {"text": "hello "})
-        await ctx._log("llm.call", {"model": "x", "tokens": 1})
-        await ctx._log("text.delta", {"text": "world"})
-        await ctx._log("run.completed", {})
+        await ctx.log("note.custom", {"value": {}})
+        await ctx.live("text.delta", {"text": "hello "})
+        await ctx.log("llm.call", {"model": "x", "tokens": 1})
+        await ctx.live("text.delta", {"text": "world"})
 
     class InlineAgent:
         id = Actor(type="agent", key="tail_wire_test")
         run = staticmethod(agent_run)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = InlineAgent()
         await rt.register(agent)
         msg = Message(
@@ -478,13 +468,13 @@ async def test_tail_wire_events_skips_non_streamable_kinds_without_crashing() ->
         run_id = await rt.submit(agent.id, msg)
 
         for _ in range(200):
-            status = await rt.scheduler.get_status(run_id)
+            status = (await rt.get_run(run_id)).status
             if status is not None and status.value == "completed":
                 break
             await asyncio.sleep(0.01)
         assert status is not None and status.value == "completed"
 
-        events = [ev async for ev in tail_wire_events(rt.event_log, run_id, from_seq=0)]
+        events = [ev async for ev in tail_wire_events(rt, run_id, from_seq=0)]
 
     assert any(isinstance(e, RunCompletedEvent) for e in events)
     text_events = [e for e in events if getattr(e, "type", None) == "text.delta"]
@@ -499,7 +489,7 @@ async def test_tail_wire_events_maps_run_failed() -> None:
         id = Actor(type="agent", key="tail_wire_fail_test")
         run = staticmethod(agent_run)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = CrashInlineAgent()
         await rt.register(agent)
         msg = Message(
@@ -516,13 +506,13 @@ async def test_tail_wire_events_maps_run_failed() -> None:
         run_id = await rt.submit(agent.id, msg, max_retries=0)
 
         for _ in range(200):
-            status = await rt.scheduler.get_status(run_id)
+            status = (await rt.get_run(run_id)).status
             if status is not None and status.value == "failed":
                 break
             await asyncio.sleep(0.01)
         assert status is not None and status.value == "failed"
 
-        events = [ev async for ev in tail_wire_events(rt.event_log, run_id, from_seq=0)]
+        events = [ev async for ev in tail_wire_events(rt, run_id, from_seq=0)]
 
     assert len(events) == 1
     assert isinstance(events[0], RunFailedEvent)

@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm import ModelCapabilities, Modality
+from substrate.kernel.abstractions.llm import Modality, ModelCapabilities
 
 
 @dataclass(frozen=True)

@@ -8,7 +8,24 @@ pass a plain list[AnyTool] to the agent constructor.
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.tools import AnyTool, ToolRisk
+from substrate.kernel.abstractions.exceptions import ToolDeclarationError
+from substrate.kernel.abstractions.tools import AnyTool, ToolRisk, is_hosted_tool
+
+
+def check_declaration(tool: object) -> None:
+    """Refuse a locally-executed tool that does not declare ``risk`` and ``idempotent``.
+
+    A provider-hosted tool runs on the provider's side and has no local effect to classify.
+    """
+    if is_hosted_tool(tool):
+        return
+    problems: list[str] = []
+    if not isinstance(getattr(tool, "risk", None), ToolRisk):
+        problems.append(f"risk must be a ToolRisk, got {getattr(tool, 'risk', None)!r}")
+    if not isinstance(getattr(tool, "idempotent", None), bool):
+        problems.append(f"idempotent must be True or False, got {getattr(tool, 'idempotent', None)!r}")
+    if problems:
+        raise ToolDeclarationError(str(getattr(tool, "name", tool)), tuple(problems))
 
 
 class Toolbox:
@@ -21,6 +38,7 @@ class Toolbox:
         self._tools: dict[str, AnyTool] = {}
 
     def add(self, tool: AnyTool) -> None:
+        check_declaration(tool)
         self._tools[tool.name] = tool
 
     def get(self, name: str) -> AnyTool | None:
@@ -42,4 +60,4 @@ class Toolbox:
         return name in self._tools
 
 
-__all__ = ["Toolbox"]
+__all__ = ["Toolbox", "check_declaration"]

@@ -24,6 +24,7 @@ from substrate.kernel.abstractions.tools import ToolCallRequest, ToolExecutionRe
 
 
 class EchoTool:
+    idempotent = True
     name = "echo"
     description = "Echoes the input."
     risk = ToolRisk.SAFE
@@ -37,6 +38,7 @@ class EchoTool:
 
 
 class HighRiskTool:
+    idempotent = True
     name = "send_email"
     description = "Sends an email."
     risk = ToolRisk.HIGH
@@ -52,6 +54,7 @@ class HighRiskTool:
 
 
 class CriticalTool:
+    idempotent = True
     name = "drop_db"
     description = "Drops the database."
     risk = ToolRisk.CRITICAL
@@ -62,6 +65,7 @@ class CriticalTool:
 
 
 class SlowTool:
+    idempotent = True
     name = "slow_tool"
     description = "Takes forever."
     risk = ToolRisk.SAFE
@@ -73,6 +77,7 @@ class SlowTool:
 
 
 class ImageTool:
+    idempotent = True
     name = "image_tool"
     description = "Returns an image."
     risk = ToolRisk.SAFE
@@ -213,6 +218,8 @@ async def test_invoke_provider_defined_tool_blocked():
         description = "Shell."
         provider_specs = {"openai": {"type": "shell"}}
         call_types = ("shell_call",)
+        risk = ToolRisk.CRITICAL
+        idempotent = False
 
         async def handle_call(self, call: dict, *, ctx: Any = None) -> dict:
             return {}
@@ -355,6 +362,7 @@ async def test_large_result_offloaded():
     big_msg = "x" * 8000
 
     class BigTool:
+        idempotent = True
         name = "big_tool"
         description = "Returns big data."
         risk = ToolRisk.SAFE
@@ -395,6 +403,7 @@ async def test_inbound_artifact_ref_resolved():
     received_args: dict[str, Any] = {}
 
     class RecordingTool:
+        idempotent = True
         name = "recording_tool"
         description = "Records args."
         risk = ToolRisk.SAFE

@@ -20,8 +20,8 @@ import logging
 import re
 from typing import List, Optional
 
-from substrate.kernel.evals.criteria import EvalCriterion
-from substrate.kernel.evals.models import EvalScore
+from substrate.evals.criteria import EvalCriterion
+from substrate.evals.models import EvalScore
 from substrate.kernel.abstractions.llm import LLMClient
 from substrate.kernel.abstractions import ChatMessage
 

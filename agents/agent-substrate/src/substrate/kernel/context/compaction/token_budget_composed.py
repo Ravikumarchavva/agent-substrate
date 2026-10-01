@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from substrate.kernel.context.tokens import estimate_tokens
-from substrate.kernel.abstractions.core.content import ChatMessage
-from substrate.kernel.abstractions.agent.context import CompactionStrategy
-from substrate.logger import setup_logging
+import logging
 
-logger = setup_logging()
+from substrate.kernel.abstractions.agent.context import CompactionStrategy
+from substrate.kernel.abstractions.core.content import ChatMessage
+from substrate.kernel.context.tokens import estimate_tokens
+
+logger = logging.getLogger(__name__)
 
 
 class TokenBudgetComposedStrategy:

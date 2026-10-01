@@ -89,7 +89,7 @@ Check these in order:
    [`decisions.md`](../decisions.md#tools-that-suspend-must-declare-suspends--true).
 2. **Did the monolith process restart** between suspend and your click? This
    is fine for both HITL kinds now — suspended runs are durable (fixed
-   2026-07-03, see [`architecture/runtime-stages.md`](../architecture/runtime-stages.md)),
+   2026-07-03, see [`architecture/kernel.md`](../architecture/kernel.md)),
    and tool-approval was migrated onto the same `ctx.sleep_until_signal()`
    path `ask_human` already used (see `ToolInvoker._invoke_inner` in
    `agents/tools/invoker.py` and `SSEApprovalHandler` in

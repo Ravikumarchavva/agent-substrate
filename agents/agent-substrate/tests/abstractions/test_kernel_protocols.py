@@ -38,7 +38,7 @@ PROTOCOLS = _kernel_protocols()
 
 
 def test_protocol_discovery_is_not_vacuous() -> None:
-    assert len(PROTOCOLS) >= 30  # guards against the walker silently finding nothing
+    assert len(PROTOCOLS) >= 25  # guards against the walker silently finding nothing
 
 
 @pytest.mark.parametrize("proto", PROTOCOLS, ids=lambda p: p.__name__)

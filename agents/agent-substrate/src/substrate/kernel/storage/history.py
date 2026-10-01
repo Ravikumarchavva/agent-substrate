@@ -18,7 +18,6 @@ from substrate.kernel.abstractions.storage.history import (
     MessageNode,
 )
 
-
 _UNSET: Any = object()
 
 

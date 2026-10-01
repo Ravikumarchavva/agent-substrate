@@ -1,4 +1,4 @@
-"""substrate.agents.limits — enforce numeric run-time budgets, raise on breach.
+"""substrate.kernel.limits — enforce numeric run-time budgets, raise on breach.
 
 Two trackers, same shape: ``ExecutionTracker`` (token/cost/turn budget for a
 single agent's execution loop) and ``SpawnTracker`` (headcount budget for an
@@ -12,7 +12,7 @@ mechanism the runtime actually exercises on a failed run.
 
 from __future__ import annotations
 
-from substrate.agents.limits.execution import ExecutionTracker
-from substrate.agents.limits.spawn import SpawnTracker
+from substrate.kernel.limits.execution import ExecutionTracker
+from substrate.kernel.limits.spawn import SpawnTracker
 
 __all__ = ["ExecutionTracker", "SpawnTracker"]

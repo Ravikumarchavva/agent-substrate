@@ -7,16 +7,16 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.runtime.backends._event_log import InMemoryEventLog
-from substrate.agents.runtime.backends._inbox import InMemoryInbox
-from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
-from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
-from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
-from substrate.kernel.agent.supervision import Supervision, SpawnBudget
-from substrate.kernel.exceptions import BudgetExhaustedError
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import ChatPayload, Message
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.runtime.backends._event_log import InMemoryEventLog
+from substrate.kernel.runtime.backends._inbox import InMemoryInbox
+from substrate.kernel.runtime.backends._scheduler import InMemoryScheduler
+from substrate.kernel.runtime.backends._signal_bus import InMemorySignalBus
+from substrate.kernel.runtime.backends._supervisor import InMemorySupervisor
+from substrate.kernel.abstractions.agent.supervision import Supervision, SpawnBudget
+from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 
 
 def _boot(text: str = "hi") -> Message:

@@ -44,8 +44,8 @@ from __future__ import annotations
 
 from typing import Protocol, TypeVar, runtime_checkable
 
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import Message
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import Message
 
 
 @runtime_checkable

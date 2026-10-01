@@ -28,12 +28,12 @@ from typing import Any, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.core.content import (
     TextBlock,
     content_blocks_to_str,
     parse_content_block,
 )
-from substrate.kernel.storage.memory import (
+from substrate.kernel.abstractions.storage.memory import (
     MemoryCategory,
     MemoryMatch,
     MemoryNamespace,
@@ -122,7 +122,7 @@ class DurableMemoryStore:
         )
         blocks_raw = meta.pop("_blocks", None) if isinstance(meta, dict) else None
         if blocks_raw:
-            blocks = [parse_content_block(b) for b in blocks_raw]
+            blocks = [parse_content_block(b, forward_compatible=True) for b in blocks_raw]
         else:
             blocks = [TextBlock(text=row.content)]
 

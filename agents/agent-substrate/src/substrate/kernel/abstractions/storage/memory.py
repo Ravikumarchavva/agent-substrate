@@ -27,14 +27,14 @@ Lifecycle signal (not enforced here):
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol, Sequence, runtime_checkable
 
 from pydantic import Field
 
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.ids import new_id
+from substrate.kernel.abstractions.core.content import (
     BlockList,
     ContentBlock,
     JsonObject,
@@ -42,7 +42,7 @@ from substrate.kernel.core.content import (
     TextBlock,
     content_blocks_to_str,
 )
-from substrate.kernel.core.identity import Actor
+from substrate.kernel.abstractions.core.identity import Actor
 
 
 class MemoryCategory(StrEnum):
@@ -126,7 +126,7 @@ class MemoryRecord(KernelModel):
     cannot handle (same rule as ``RunLogEntry.v``).
     """
 
-    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    id: str = Field(default_factory=lambda: new_id())
     content: BlockList = Field(default_factory=list)
     category: MemoryCategory = MemoryCategory.SEMANTIC
     status: MemoryStatus = MemoryStatus.ACTIVE
@@ -164,7 +164,7 @@ class MemoryRecord(KernelModel):
         )
         return cls(
             content=[TextBlock(text=text)],
-            id=id or uuid.uuid4().hex,
+            id=id or new_id(),
             category=category,
             status=status,
             namespace=ns,

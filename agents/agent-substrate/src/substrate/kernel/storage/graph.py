@@ -1,6 +1,6 @@
 """In-memory graph store for local development and tests (L1).
 
-A dependency-free :class:`~substrate.kernel.storage.graph.GraphStore` implementation
+A dependency-free :class:`~substrate.kernel.abstractions.storage.graph.GraphStore` implementation
 backed by plain dicts. ``get_neighbors`` does a breadth-first traversal up to
 ``depth`` hops over undirected edges (matching the AGE store's ``-[r]-`` pattern),
 optionally filtered by relationship type.
@@ -10,7 +10,7 @@ engine here, so ``isinstance(store, CypherCapable)`` correctly returns ``False``
 
 Usage::
 
-    from substrate.agents.storage import InMemoryGraphStore
+    from substrate.kernel.storage import InMemoryGraphStore
 
     store = InMemoryGraphStore()
     await store.add_entities([Entity(label="Person", id="p1")])
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from substrate.kernel.storage.graph import Entity, Relationship, SubGraph
+from substrate.kernel.abstractions.storage.graph import Entity, Relationship, SubGraph
 
 
 class InMemoryGraphStore:

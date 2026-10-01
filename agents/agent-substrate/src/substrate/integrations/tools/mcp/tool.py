@@ -3,8 +3,8 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from substrate.kernel.core.content import MediaBlock, TextBlock
-from substrate.kernel.tools import ToolExecutionResult, ToolType
+from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
 from substrate.integrations.tools.mcp.client import MCPClient
 
 

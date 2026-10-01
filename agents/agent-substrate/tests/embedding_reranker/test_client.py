@@ -9,8 +9,8 @@ import json
 import httpx2 as httpx
 import pytest
 
-from substrate.kernel.core.content import MediaBlock, TextBlock
-from substrate.kernel.exceptions import UnsupportedContentError
+from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
+from substrate.kernel.abstractions.exceptions import UnsupportedContentError
 from substrate.runtimes.embedding_reranker.client import (
     EmbeddingRerankerClient,
     EmbeddingRerankerTextEmbeddingClient,

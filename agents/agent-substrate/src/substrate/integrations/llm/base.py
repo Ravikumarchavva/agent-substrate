@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from substrate.kernel.core.content import ContentBlock, MediaBlock, TextBlock
-from substrate.kernel.exceptions import UnsupportedContentError
-from substrate.kernel.llm import EmbeddingResult
+from substrate.kernel.abstractions.core.content import ContentBlock, MediaBlock, TextBlock
+from substrate.kernel.abstractions.exceptions import UnsupportedContentError
+from substrate.kernel.abstractions.llm import EmbeddingResult
 
 
 class BaseEmbeddingClient:

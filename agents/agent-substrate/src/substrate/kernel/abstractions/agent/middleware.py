@@ -17,16 +17,16 @@ dependency-free enum that every middleware implementation across the agents
 layer needs, which is exactly the kind of small shared value kernel exists
 to hold — so it stays here on its own.
 
-Raise ``MiddlewareTermination`` (see ``substrate.kernel.exceptions``) from
+Raise ``MiddlewareTermination`` (see ``substrate.kernel.abstractions.exceptions``) from
 any ``process`` implementation to halt execution cleanly at that point.
 """
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class MiddlewareStage(str, Enum):
+class MiddlewareStage(StrEnum):
     """Which moment of an agent's execution a ``MiddlewareContext`` represents.
 
     TURN — one inbox message (one call to the agent's message handler).

@@ -20,8 +20,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.runtime.supervisor import RunHandle
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.runtime.supervisor import RunHandle
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user

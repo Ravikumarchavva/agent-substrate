@@ -6,8 +6,8 @@ import base64
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 
-from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel import ContentBlock, MediaBlock, TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions import ContentBlock, MediaBlock, TextBlock
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, Page, Playwright

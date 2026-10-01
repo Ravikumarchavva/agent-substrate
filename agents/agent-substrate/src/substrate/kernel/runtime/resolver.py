@@ -28,8 +28,8 @@ import time
 from collections import OrderedDict
 from typing import Awaitable, Callable, Union
 
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.runtime.agent import Agent
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.runtime.agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def _history_is_in_memory(agent: Agent) -> bool:
     if provider is None:
         return False
     try:
-        from substrate.agents.storage import InMemoryHistoryProvider
+        from substrate.kernel.storage import InMemoryHistoryProvider
 
         if isinstance(provider, InMemoryHistoryProvider):
             return True

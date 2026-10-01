@@ -23,10 +23,10 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
-from substrate.agents.workspace.scope import workspace_scope
-from substrate.kernel.agent.runtime_context import scope_of
-from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel.tools.tools import ToolRisk
+from substrate.kernel.workspace.scope import workspace_scope
+from substrate.kernel.abstractions.agent.runtime_context import scope_of
+from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions.tools.tools import ToolRisk
 from substrate.logger import setup_logging
 
 from .code_risk import classify_and_summarize

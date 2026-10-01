@@ -10,7 +10,7 @@ instead of burning every retry.
 
 from __future__ import annotations
 
-from substrate.kernel.exceptions import KernelError, PermanentError
+from substrate.kernel.abstractions.exceptions import KernelError, PermanentError
 
 _PERMANENT_STATUS = frozenset({400, 401, 403, 404, 413, 422})
 

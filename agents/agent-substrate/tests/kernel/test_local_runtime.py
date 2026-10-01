@@ -9,28 +9,28 @@ a fresh one against the same file.
 
 from __future__ import annotations
 
-from substrate.kernel.llm import ModelCapabilities
+from substrate.kernel.abstractions.llm import ModelCapabilities
 from pathlib import Path
 
 import pytest
 
-from substrate.kernel.agent.supervision import Supervision
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.core.identity import Actor, Topic
-from substrate.kernel.exceptions import ConcurrentAppendError, ThreadBusyError
-from substrate.kernel.messaging.message import ChatPayload, Message
-from substrate.kernel.runtime.ids import RunStatus, new_run_id
-from substrate.kernel.runtime.log_entry import RunLogEntry
-from substrate.kernel.runtime.wakeup import Wakeup
+from substrate.kernel.abstractions.agent.supervision import Supervision
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.core.identity import Actor, Topic
+from substrate.kernel.abstractions.exceptions import ConcurrentAppendError, ThreadBusyError
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.kernel.abstractions.runtime.ids import RunStatus, new_run_id
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
+from substrate.kernel.abstractions.runtime.wakeup import Wakeup
 
-from substrate.agents.runtime.backends._local_db import LocalRuntimeDB
-from substrate.agents.runtime.backends._local_event_log import LocalEventLog
-from substrate.agents.runtime.backends._local_follow_graph import LocalFollowGraph
-from substrate.agents.runtime.backends._local_inbox import LocalInbox
-from substrate.agents.runtime.backends._local_scheduler import LocalScheduler
-from substrate.agents.runtime.backends._local_signal_bus import LocalSignalBus
-from substrate.agents.runtime.backends._local_supervisor import LocalSupervisor
-from substrate.agents.runtime.local_runtime import build_local_runtime
+from substrate.kernel.runtime.backends._local_db import LocalRuntimeDB
+from substrate.kernel.runtime.backends._local_event_log import LocalEventLog
+from substrate.kernel.runtime.backends._local_follow_graph import LocalFollowGraph
+from substrate.kernel.runtime.backends._local_inbox import LocalInbox
+from substrate.kernel.runtime.backends._local_scheduler import LocalScheduler
+from substrate.kernel.runtime.backends._local_signal_bus import LocalSignalBus
+from substrate.kernel.runtime.backends._local_supervisor import LocalSupervisor
+from substrate.kernel.runtime.local_runtime import build_local_runtime
 
 
 def _msg(text: str, *, target: Actor, sender: Actor) -> Message:
@@ -177,7 +177,7 @@ async def test_scheduler_thread_singleflight_raises(tmp_path: Path) -> None:
 
 
 async def test_scheduler_retry_backoff_then_wake_via_lease_poll(tmp_path: Path) -> None:
-    from substrate.kernel.runtime.scheduler import RunRetryPolicy
+    from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 
     db = LocalRuntimeDB(tmp_path / "rt.db")
     sched = LocalScheduler(db)
@@ -309,11 +309,11 @@ async def test_supervisor_cancel_cascades_to_children(tmp_path: Path) -> None:
 
 async def test_react_agent_runs_end_to_end_on_local_runtime(tmp_path: Path) -> None:
     """The whole stack together via the Runtime facade — a real agent turn,
-    same shape as tests/agents/test_budgets.py's in-memory equivalent, just
+    same shape as tests/kernel/test_budgets.py's in-memory equivalent, just
     on build_local_runtime()."""
-    from substrate.agents.core.react import ReActAgent
-    from substrate.kernel.core.usage import Usage
-    from substrate.kernel.messaging.stream import CompletionEvent
+    from substrate.kernel.agents.react import ReActAgent
+    from substrate.kernel.abstractions.core.usage import Usage
+    from substrate.kernel.abstractions.messaging.stream import CompletionEvent
 
     class MockLLMClient:
         model = "mock-model"

@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock
 
 from pydantic import BaseModel
 
-from substrate.agents.llm import OpenAIChatCompletionClient
+from substrate.integrations.llm import OpenAICompatibleClient
 from substrate.integrations.llm.anthropic.anthropic_client import AnthropicClient
 from substrate.integrations.llm.gemini.gemini_client import GeminiClient
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.kernel.core.content import ChatMessage, ReasoningBlock, Role, TextBlock
-from substrate.kernel.llm import GenerationOptions, ReasoningEffort
+from substrate.kernel.abstractions.core.content import ChatMessage, ReasoningBlock, Role, TextBlock
+from substrate.kernel.abstractions.llm import GenerationOptions, ReasoningEffort
 
 MSGS = [ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])]
 HIGH = GenerationOptions(reasoning=ReasoningEffort.HIGH)
@@ -101,8 +101,8 @@ def test_openai_usage_reads_the_responses_api_field_names():
 
 
 def test_chat_completions_sends_reasoning_effort_only_to_openai_itself():
-    openai = OpenAIChatCompletionClient(model="o3", api_key="x")
-    other = OpenAIChatCompletionClient(model="o3", api_key="x", base_url="http://local/v1")
+    openai = OpenAICompatibleClient(model="o3", api_key="x")
+    other = OpenAICompatibleClient(model="o3", api_key="x", base_url="http://local/v1")
     assert openai._build_params(MSGS, HIGH, stream=False)["reasoning_effort"] == "high"
     assert "reasoning_effort" not in other._build_params(MSGS, HIGH, stream=False)
 

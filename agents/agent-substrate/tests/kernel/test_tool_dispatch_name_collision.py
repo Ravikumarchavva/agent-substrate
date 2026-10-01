@@ -19,22 +19,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from substrate.agents.runtime.backends._event_log import InMemoryEventLog
-from substrate.agents.runtime.backends._fanout import PushAllFanout
-from substrate.agents.runtime.backends._follow_graph import InMemoryFollowGraph
-from substrate.agents.runtime.backends._inbox import InMemoryInbox
-from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
-from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
-from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
-from substrate.agents.runtime.cancellation import CancellationToken
-from substrate.agents.runtime.context import RunContext
-from substrate.agents.runtime.effect_cache import EffectCache
-from substrate.agents.tools.invoker import ToolInvoker
-from substrate.agents.tools.toolbox import Toolbox
-from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.kernel.core.content import TextBlock
-from substrate.kernel.runtime.ids import new_run_id
-from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.runtime.backends._event_log import InMemoryEventLog
+from substrate.kernel.runtime.backends._fanout import PushAllFanout
+from substrate.kernel.runtime.backends._follow_graph import InMemoryFollowGraph
+from substrate.kernel.runtime.backends._inbox import InMemoryInbox
+from substrate.kernel.runtime.backends._scheduler import InMemoryScheduler
+from substrate.kernel.runtime.backends._signal_bus import InMemorySignalBus
+from substrate.kernel.runtime.backends._supervisor import InMemorySupervisor
+from substrate.kernel.runtime.cancellation import CancellationToken
+from substrate.kernel.runtime.context import RunContext
+from substrate.kernel.runtime.effect_cache import EffectCache
+from substrate.kernel.tools.invoker import ToolInvoker
+from substrate.kernel.tools.toolbox import Toolbox
+from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.kernel.abstractions.runtime.ids import new_run_id
+from substrate.kernel.abstractions.tools import ToolExecutionResult
 
 
 class _NameArgTool:

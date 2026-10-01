@@ -22,10 +22,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
-from substrate.kernel.runtime.ids import RunId, RunStatus
-from substrate.kernel.runtime.supervisor import RunHandle, RunResult
+from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus
+from substrate.kernel.abstractions.runtime.supervisor import RunHandle, RunResult
 
 
 class AskOutcome(BaseModel):
@@ -44,6 +44,16 @@ class AskOutcome(BaseModel):
     last_seq: int = -1  # target's EventLogProtocol progress
 
     model_config = {"frozen": True}
+
+    @model_validator(mode="after")
+    def _fields_match_kind(self) -> "AskOutcome":
+        if self.kind == "replied" and self.result is None:
+            raise ValueError("a 'replied' outcome needs a result")
+        if self.kind == "timed_out" and self.handle is None:
+            raise ValueError("a 'timed_out' outcome needs the still-live run's handle")
+        if self.kind in ("target_failed", "target_cancelled") and self.result is not None:
+            raise ValueError(f"a {self.kind!r} outcome has no reply")
+        return self
 
 
 class RunStatusSummary(BaseModel):

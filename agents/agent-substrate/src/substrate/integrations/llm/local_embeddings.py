@@ -9,7 +9,7 @@ needs the least infrastructure the Protocol can possibly need.
 
 Usage::
 
-    from substrate.agents.llm import SentenceTransformersEmbeddingClient
+    from substrate.integrations.llm import SentenceTransformersEmbeddingClient
 
     # Default: all-MiniLM-L6-v2 (384-dim, fast on CPU)
     client = SentenceTransformersEmbeddingClient()
@@ -30,9 +30,9 @@ import asyncio
 import logging
 from collections.abc import Sequence
 
-from substrate.kernel.core.content import ContentBlock, MediaBlock, TextBlock
-from substrate.kernel.exceptions import UnsupportedContentError
-from substrate.kernel.llm import EmbeddingResult
+from substrate.kernel.abstractions.core.content import ContentBlock, MediaBlock, TextBlock
+from substrate.kernel.abstractions.exceptions import UnsupportedContentError
+from substrate.kernel.abstractions.llm import EmbeddingResult
 
 logger = logging.getLogger(__name__)
 

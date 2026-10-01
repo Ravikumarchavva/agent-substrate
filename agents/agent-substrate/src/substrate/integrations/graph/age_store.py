@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 import asyncpg
 
-from substrate.kernel.storage.graph import Entity, Relationship, SubGraph
+from substrate.kernel.abstractions.storage.graph import Entity, Relationship, SubGraph
 
 logger = setup_logging()
 

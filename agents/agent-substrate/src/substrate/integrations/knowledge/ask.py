@@ -43,8 +43,8 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from substrate.kernel.llm.llm import LLMClient
-    from substrate.kernel.storage.vector import SearchResult, VectorStore
+    from substrate.kernel.abstractions.llm.llm import LLMClient
+    from substrate.kernel.abstractions.storage.vector import SearchResult, VectorStore
     from substrate.runtimes.embedding_reranker.service.embedding import (
         EmbeddingReranker,
     )
@@ -146,8 +146,8 @@ async def _decide_kb_filter(
     if not catalog:
         return None
 
-    from substrate.kernel.core.content import ChatMessage, TextBlock
-    from substrate.kernel.llm.llm import GenerationOptions
+    from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
+    from substrate.kernel.abstractions.llm.llm import GenerationOptions
 
     catalog_text = "\n".join(
         f"- {c['source']} ({c['total_pages']} pages)" for c in catalog
@@ -183,7 +183,7 @@ async def _decide_kb_filter(
             extra={"chat_template_kwargs": {"enable_thinking": False}},
         ),
     )
-    from substrate.kernel.core.content import content_blocks_to_str
+    from substrate.kernel.abstractions.core.content import content_blocks_to_str
 
     text = content_blocks_to_str(response.content).strip()
     try:
@@ -261,12 +261,12 @@ async def ask(
     with just the durable refs (``image_key``/``pdf_key``) and resolve them
     yourself, e.g. from a serving layer closer to the actual response.
     """
-    from substrate.kernel.core.content import (
+    from substrate.kernel.abstractions.core.content import (
         ChatMessage,
         TextBlock,
         content_blocks_to_str,
     )
-    from substrate.kernel.llm.llm import GenerationOptions
+    from substrate.kernel.abstractions.llm.llm import GenerationOptions
     from substrate.runtimes.embedding_reranker.service.embedding import (
         EmbeddingServiceError,
     )

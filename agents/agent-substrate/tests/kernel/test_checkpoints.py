@@ -3,14 +3,14 @@
 from datetime import datetime, timezone
 import pytest
 
-from substrate.agents.context.builder import DefaultContextBuilder
-from substrate.agents.storage.history import (
+from substrate.kernel.context.builder import DefaultContextBuilder
+from substrate.kernel.storage.history import (
     AncestryCheckpointResolver,
     InMemoryHistoryProvider,
 )
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.exceptions import DAGIntegrityError
-from substrate.kernel.storage.history import HistoryCheckpoint, MessageNode
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.exceptions import DAGIntegrityError
+from substrate.kernel.abstractions.storage.history import HistoryCheckpoint, MessageNode
 
 
 def _msg(text: str, role: Role = Role.USER) -> ChatMessage:

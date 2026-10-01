@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from substrate.kernel.runtime.log_entry import RunLogEntry, RunLogKind
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
 
 _PG_URL = os.environ.get(
     "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb"
@@ -25,6 +25,8 @@ def test_core_kind_values_are_the_persisted_strings() -> None:
         "RUN_FAILED": "run.failed",
         "RUN_CANCELLED": "run.cancelled",
         "RUN_TRUNCATED": "run.truncated",
+        "RUN_RETRYING": "run.retrying",
+        "EFFECT_INTENT": "effect.intent",
         "EFFECT_RESULT": "effect.result",
         "LLM_CALL": "llm.call",
         "TOOL_CALL": "tool.call",

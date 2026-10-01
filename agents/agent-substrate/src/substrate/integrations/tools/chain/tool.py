@@ -29,12 +29,12 @@ import time
 import uuid
 from typing import Any
 
-from substrate.agents.tools.invoker import InvokerSession, ToolInvoker
+from substrate.kernel.tools.invoker import InvokerSession, ToolInvoker
 from substrate.integrations.tools.chain.bridge import BridgeSession, ChainBridgeRegistry
 from substrate.integrations.tools.chain.prelude import build_prelude
-from substrate.kernel.tools.chain import ChainRunResult
-from substrate.kernel.core.content import MediaBlock, TextBlock
-from substrate.kernel.tools import ToolExecutionResult, ToolRisk
+from substrate.kernel.abstractions.tools.chain import ChainRunResult
+from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
 from substrate.logger import setup_logging
 
 logger = setup_logging("substrate.integrations.tools.chain.tool")

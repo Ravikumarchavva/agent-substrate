@@ -27,7 +27,7 @@ from tests.eval.metrics import ndcg_at_k, recall_at_k
 
 if TYPE_CHECKING:
     from substrate.integrations.vector.pgvector_store import PgVectorStore
-    from substrate.kernel.llm import EmbeddingClient
+    from substrate.kernel.abstractions.llm import EmbeddingClient
 
 
 @dataclass(slots=True)

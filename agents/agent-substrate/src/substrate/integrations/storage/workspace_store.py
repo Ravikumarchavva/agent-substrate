@@ -23,8 +23,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from substrate.kernel.exceptions import SnapshotConflictError
-from substrate.kernel.storage.snapshots import (
+from substrate.kernel.abstractions.exceptions import SnapshotConflictError
+from substrate.kernel.abstractions.storage.snapshots import (
     WorkspaceManifest,
     WorkspaceSnapshot,
     WorkspaceStore,

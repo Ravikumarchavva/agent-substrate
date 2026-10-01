@@ -4,11 +4,11 @@ import asyncio
 import random
 from typing import Callable, Awaitable, ClassVar
 
-from substrate.agents.llm.errors import classify_llm_error
-from substrate.kernel.exceptions import KernelError, PermanentError, TransientError
+from substrate.kernel.llm.errors import classify_llm_error
+from substrate.kernel.abstractions.exceptions import KernelError, PermanentError, TransientError
 from substrate.logger import setup_logging
-from substrate.agents.middleware._contracts import MiddlewareContext
-from substrate.kernel.agent.middleware import MiddlewareStage
+from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
 
 logger = setup_logging()
 

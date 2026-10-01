@@ -82,7 +82,7 @@ settings = SubstrateConfig()
 #
 # ### Write a custom tool
 # ```python
-# from substrate.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
+# from substrate.kernel.abstractions.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
 # from substrate.kernel.messages.content import TextBlock
 #
 # class MyTool(BaseTool):

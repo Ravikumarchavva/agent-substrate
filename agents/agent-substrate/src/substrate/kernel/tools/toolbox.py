@@ -8,7 +8,7 @@ pass a plain list[AnyTool] to the agent constructor.
 
 from __future__ import annotations
 
-from substrate.kernel.tools import AnyTool, ToolRisk
+from substrate.kernel.abstractions.tools import AnyTool, ToolRisk
 
 
 class Toolbox:

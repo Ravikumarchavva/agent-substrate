@@ -14,29 +14,29 @@ storage Protocols (``HistoryProvider``, ``GraphStore``, ``VectorStore``,
 in-memory storage, not yet standardized against a contract.
 """
 
-from substrate.agents.storage.history import (
+from substrate.kernel.storage.history import (
     AncestryCheckpointResolver,
     DefaultHistoryResolver,
     HistoryProvider,
     InMemoryHistoryProvider,
     project_messages,
 )
-from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
-from substrate.agents.storage.graph import InMemoryGraphStore
-from substrate.agents.storage.local_graph import LocalFilesystemGraphStore
-from substrate.agents.storage.memory import InMemoryFileStore
-from substrate.agents.storage.local_object_store import (
+from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
+from substrate.kernel.storage.graph import InMemoryGraphStore
+from substrate.kernel.storage.local_graph import LocalFilesystemGraphStore
+from substrate.kernel.storage.memory import InMemoryFileStore
+from substrate.kernel.storage.local_object_store import (
     WorkspaceFileStore,
     WorkspacePathError,
     WorkspaceQuotaExceededError,
 )
-from substrate.agents.storage.local_short_term_memory import (
+from substrate.kernel.storage.local_short_term_memory import (
     LocalFilesystemShortTermMemory,
 )
-from substrate.agents.storage.local_memory_store import LocalFilesystemMemoryStore
-from substrate.agents.storage.tasks import TaskStore
-from substrate.agents.storage.vector import InMemoryVectorStore, cosine_similarity
-from substrate.agents.storage.local_vector import LocalFilesystemVectorStore
+from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
+from substrate.kernel.storage.tasks import TaskStore
+from substrate.kernel.storage.vector import InMemoryVectorStore, cosine_similarity
+from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore
 
 __all__ = [
     "AncestryCheckpointResolver",

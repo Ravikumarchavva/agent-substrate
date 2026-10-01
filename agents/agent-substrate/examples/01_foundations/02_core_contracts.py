@@ -1,5 +1,5 @@
 """Example 1-2: Core Contracts
-Module: substrate.kernel, substrate.kernel.stream, substrate.kernel.content
+Module: substrate.kernel.abstractions, substrate.kernel.stream, substrate.kernel.content
 
 Demonstrates the new kernel data model — all offline, no external services
 required. Covers: ChatMessage, ContentBlock subtypes, Tool Protocol, stream
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 
-from substrate.kernel import (
+from substrate.kernel.abstractions import (
     AgentId,
     ChatMessage,
     TextBlock,

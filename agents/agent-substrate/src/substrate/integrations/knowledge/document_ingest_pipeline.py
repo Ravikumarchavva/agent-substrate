@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from substrate.kernel.storage.vector import VectorStore
+    from substrate.kernel.abstractions.storage.vector import VectorStore
     from substrate.runtimes.document_intelligence.client import (
         ExtractionClient,
         ExtractResponse,
@@ -242,8 +242,8 @@ class DocumentIngestPipeline:
         back to inlining the bytes as ``ImageBlock(data=...)`` — degrade,
         never drop.
         """
-        from substrate.kernel.core.content import MediaBlock, TextBlock
-        from substrate.kernel.storage.vector import Document
+        from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
+        from substrate.kernel.abstractions.storage.vector import Document
         from substrate.runtimes.embedding_reranker.service.embedding import (
             EmbeddingServiceError,
         )

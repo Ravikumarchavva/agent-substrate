@@ -1,8 +1,8 @@
-"""substrate.kernel.document — document intelligence, extraction, chunking, and storage contracts."""
+"""substrate.kernel.abstractions.document — document intelligence, extraction, chunking, and storage contracts."""
 
 from __future__ import annotations
 
-from substrate.kernel.document.models import (
+from substrate.kernel.abstractions.document.models import (
     DocumentChunk,
     DocumentMetadata,
     ExtractedImage,
@@ -10,7 +10,7 @@ from substrate.kernel.document.models import (
     ExtractedPage,
     ExtractionResult,
 )
-from substrate.kernel.document.protocols import (
+from substrate.kernel.abstractions.document.protocols import (
     DocumentChunker,
     DocumentExtractor,
     DocumentStore,

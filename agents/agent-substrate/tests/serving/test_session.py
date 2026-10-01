@@ -9,11 +9,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from typing import Any
-from substrate.agents.runtime.context import RunContext
-from substrate.agents.runtime.runtime import Runtime
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import ChatPayload, Message
+from substrate.kernel.runtime.context import RunContext
+from substrate.kernel.runtime.runtime import Runtime
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 from substrate.serving.monolith.sse.bridge import BRIDGE_DONE
 from substrate.serving.protocol import (
     HelloEvent,
@@ -253,8 +253,8 @@ async def test_durable_cancel_ends_session() -> None:
     with no session-owned cancel Event/registry involved at all. This is
     what makes cancel work correctly even when POST /cancel lands on a
     different replica than the one running the SSE stream."""
-    from substrate.kernel.core.identity import Actor as _Actor
-    from substrate.kernel.runtime.supervisor import RunHandle
+    from substrate.kernel.abstractions.core.identity import Actor as _Actor
+    from substrate.kernel.abstractions.runtime.supervisor import RunHandle
 
     @dataclass
     class HangingAgent:

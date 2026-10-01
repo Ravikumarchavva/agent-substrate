@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 from uuid import uuid4
 
-from substrate.kernel.storage.tasks import Task, TaskList, TaskStatus
+from substrate.kernel.abstractions.storage.tasks import Task, TaskList, TaskStatus
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker

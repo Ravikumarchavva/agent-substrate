@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import os
 import asyncio
-import uuid
 from typing import TYPE_CHECKING
 
 import pytest
+
+from substrate.kernel.abstractions.ids import new_id
 
 pytestmark = [pytest.mark.requires_postgres]
 
@@ -53,8 +54,8 @@ async def pg_pool():
 
 async def test_pg_event_log_append_and_read(pg_pool) -> None:
     from substrate.integrations.runtime import EventLog
-    from substrate.kernel.runtime.log_entry import RunLogEntry
-    from substrate.kernel.runtime.ids import new_run_id
+    from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
+    from substrate.kernel.abstractions.runtime.ids import new_run_id
 
     log = EventLog(pg_pool)
     await log.setup()
@@ -72,9 +73,9 @@ async def test_pg_event_log_append_and_read(pg_pool) -> None:
 
 async def test_pg_event_log_occ_raises(pg_pool) -> None:
     from substrate.integrations.runtime import EventLog
-    from substrate.kernel.runtime.log_entry import RunLogEntry
-    from substrate.kernel.exceptions import ConcurrentAppendError
-    from substrate.kernel.runtime.ids import new_run_id
+    from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
+    from substrate.kernel.abstractions.exceptions import ConcurrentAppendError
+    from substrate.kernel.abstractions.runtime.ids import new_run_id
 
     log = EventLog(pg_pool)
     await log.setup()
@@ -90,8 +91,8 @@ async def test_pg_event_log_occ_raises(pg_pool) -> None:
 
 async def test_pg_event_log_last_seq(pg_pool) -> None:
     from substrate.integrations.runtime import EventLog
-    from substrate.kernel.runtime.log_entry import RunLogEntry
-    from substrate.kernel.runtime.ids import new_run_id
+    from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
+    from substrate.kernel.abstractions.runtime.ids import new_run_id
 
     log = EventLog(pg_pool)
     await log.setup()
@@ -106,8 +107,8 @@ async def test_pg_event_log_last_seq(pg_pool) -> None:
 
 async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
     from substrate.integrations.runtime import EventLog
-    from substrate.kernel.runtime.log_entry import RunLogEntry
-    from substrate.kernel.runtime.ids import new_run_id
+    from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
+    from substrate.kernel.abstractions.runtime.ids import new_run_id
 
     log = EventLog(pg_pool)
     await log.setup()
@@ -136,11 +137,11 @@ async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
 
 async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
     from substrate.integrations.runtime import Inbox
-    from substrate.kernel.core.identity import Actor
-    from substrate.kernel.messaging.message import Message
-    from substrate.kernel.core.content import TextBlock
-    from substrate.kernel.core.content import ChatMessage, Role
-    from substrate.kernel.messaging.message import ChatPayload
+    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.messaging.message import Message
+    from substrate.kernel.abstractions.core.content import TextBlock
+    from substrate.kernel.abstractions.core.content import ChatMessage, Role
+    from substrate.kernel.abstractions.messaging.message import ChatPayload
 
     inbox = Inbox(pg_pool)
     await inbox.setup()
@@ -170,11 +171,11 @@ async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
 
 async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
     from substrate.integrations.runtime import Inbox
-    from substrate.kernel.core.identity import Actor
-    from substrate.kernel.messaging.message import Message
-    from substrate.kernel.core.content import TextBlock
-    from substrate.kernel.core.content import ChatMessage, Role
-    from substrate.kernel.messaging.message import ChatPayload
+    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.messaging.message import Message
+    from substrate.kernel.abstractions.core.content import TextBlock
+    from substrate.kernel.abstractions.core.content import ChatMessage, Role
+    from substrate.kernel.abstractions.messaging.message import ChatPayload
 
     inbox = Inbox(pg_pool, max_retries=2)
     await inbox.setup()
@@ -206,8 +207,8 @@ async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
 
 async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
     from substrate.integrations.runtime import Scheduler
-    from substrate.kernel.runtime.ids import new_run_id, RunStatus
-    from substrate.kernel.core.identity import Actor
+    from substrate.kernel.abstractions.runtime.ids import new_run_id, RunStatus
+    from substrate.kernel.abstractions.core.identity import Actor
 
     sched = Scheduler(pg_pool)
     await sched.setup()
@@ -227,8 +228,8 @@ async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
 
 async def test_pg_scheduler_coalescing(pg_pool) -> None:
     from substrate.integrations.runtime import Scheduler
-    from substrate.kernel.runtime.ids import new_run_id
-    from substrate.kernel.core.identity import Actor
+    from substrate.kernel.abstractions.runtime.ids import new_run_id
+    from substrate.kernel.abstractions.core.identity import Actor
 
     sched = Scheduler(pg_pool)
     await sched.setup()
@@ -246,8 +247,8 @@ async def test_pg_scheduler_coalescing(pg_pool) -> None:
 
 async def test_pg_scheduler_release_completed(pg_pool) -> None:
     from substrate.integrations.runtime import Scheduler
-    from substrate.kernel.runtime.ids import new_run_id, RunStatus
-    from substrate.kernel.core.identity import Actor
+    from substrate.kernel.abstractions.runtime.ids import new_run_id, RunStatus
+    from substrate.kernel.abstractions.core.identity import Actor
 
     sched = Scheduler(pg_pool)
     await sched.setup()
@@ -302,7 +303,7 @@ async def test_pg_task_store_persist_and_reload() -> None:
         pytest.skip("Postgres not reachable")
 
     from substrate.integrations.storage.pg_task_store import PgTaskStore
-    from substrate.kernel.storage.tasks import TaskStatus
+    from substrate.kernel.abstractions.storage.tasks import TaskStatus
 
     conv_id = f"conv-{id(object())}"
 
@@ -396,7 +397,7 @@ async def test_pg_vector_store_custom_table_name_is_isolated_from_default() -> N
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
     from substrate.integrations.vector.pgvector_store import PgVectorStore
-    from substrate.kernel.storage.vector import Document
+    from substrate.kernel.abstractions.storage.vector import Document
 
     engine = await _pg_async_engine()
     if engine is None:
@@ -455,7 +456,7 @@ async def test_pg_vector_store_rename_collection_rekeys_rows() -> None:
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
     from substrate.integrations.vector.pgvector_store import PgVectorStore
-    from substrate.kernel.storage.vector import Document
+    from substrate.kernel.abstractions.storage.vector import Document
 
     engine = await _pg_async_engine()
     if engine is None:
@@ -517,8 +518,8 @@ async def test_pg_vector_store_rename_collection_noop_when_nothing_matches() -> 
 
 async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:
     from substrate.integrations.runtime import Scheduler
-    from substrate.kernel.runtime.ids import new_run_id, RunStatus
-    from substrate.kernel.core.identity import Actor
+    from substrate.kernel.abstractions.runtime.ids import new_run_id, RunStatus
+    from substrate.kernel.abstractions.core.identity import Actor
 
     sched = Scheduler(pg_pool)
     await sched.setup()
@@ -570,7 +571,7 @@ def _vec384(*nonzero: tuple[int, float]) -> list[float]:
 
 
 async def test_pg_vector_store_lexical_search_ranks_by_ts_rank() -> None:
-    from substrate.kernel.storage.vector import Document
+    from substrate.kernel.abstractions.storage.vector import Document
 
     store = await _hybrid_test_store()
     if store is None:
@@ -601,7 +602,7 @@ async def test_pg_vector_store_hybrid_search_fuses_dense_and_lexical_rank() -> N
     that's an exact lexical match AND a decent semantic match should outrank
     a document that's only a semantic-adjacent match, which should in turn
     outrank a document that's neither."""
-    from substrate.kernel.storage.vector import Document
+    from substrate.kernel.abstractions.storage.vector import Document
 
     store = await _hybrid_test_store()
     if store is None:
@@ -634,7 +635,7 @@ async def test_pg_vector_store_hybrid_search_fuses_dense_and_lexical_rank() -> N
 
 
 async def test_pg_vector_store_hybrid_search_applies_filter() -> None:
-    from substrate.kernel.storage.vector import Document
+    from substrate.kernel.abstractions.storage.vector import Document
 
     store = await _hybrid_test_store()
     if store is None:
@@ -669,7 +670,7 @@ async def test_pg_vector_store_add_spans_multiple_insert_batches() -> None:
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
     from substrate.integrations.vector.pgvector_store import PgVectorStore
-    from substrate.kernel.storage.vector import Document
+    from substrate.kernel.abstractions.storage.vector import Document
 
     engine = await _pg_async_engine()
     if engine is None:
@@ -707,7 +708,7 @@ async def test_pg_vector_store_upsert_dedupes_repeated_id_within_a_chunk() -> No
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
     from substrate.integrations.vector.pgvector_store import PgVectorStore
-    from substrate.kernel.storage.vector import Document
+    from substrate.kernel.abstractions.storage.vector import Document
 
     engine = await _pg_async_engine()
     if engine is None:
@@ -721,7 +722,7 @@ async def test_pg_vector_store_upsert_dedupes_repeated_id_within_a_chunk() -> No
     await store.ensure_table()
 
     collection = f"upsert-dedup-test-{id(object())}"
-    shared_id = str(uuid.uuid4())
+    shared_id = new_id()
     docs = [
         Document.from_text("first", id=shared_id, embedding=_vec384((0, 1.0))),
         Document.from_text(

@@ -1,83 +1,78 @@
-"""kernel.runtime — durable runtime contracts (L0).
+"""kernel.abstractions.runtime — the durable runtime's port and its value types.
 
-All items here are Protocols, dataclasses, or value types.
-No I/O, no concrete implementations, no external dependencies beyond pydantic.
-
-File map
---------
-ids.py            RunId, RunStatus, new_run_id
-log_entry.py      RunLogKind, RunLogEntry, EventLogProtocol  (the append-only durable spine)
-effects.py        Effect, EffectResult  (at-most-once external effects)
-inbox.py          InboxProtocol, DeadLetterEntry, DeadLetterReason  (durable mailbox)
-follow_graph.py   FollowGraph  (social follow-graph — NOT the RAG knowledge graph)
-fanout.py         FanoutStrategy  (how an emit reaches all followers)
-wakeup.py         Wakeup, SignalBusProtocol  (what resumes a dormant run)
-scheduler.py      Lease, RunRetryPolicy, SchedulerProtocol, RunRegistryProtocol
-                  (work-queue + leasing; registry lookups + wake control)
-supervisor.py     RunHandle, RunResult, SupervisorProtocol  (spawn/join/cancel subagents)
-agent.py          AgentRunContext, Agent  (the agent contract)
-communication.py  AskOutcome, RunStatusSummary  (ask/reply value types)
+The port is ``RuntimeStore`` (see ``store.py``): everything the engine persists,
+behind one interface whose every method is one transaction. The rest of this
+package is the vocabulary that crosses it.
 """
 
 from __future__ import annotations
 
-from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
-from substrate.kernel.runtime.log_entry import EventLogProtocol, RunLogEntry, RunLogKind
-from substrate.kernel.runtime.effects import Effect, EffectResult
-from substrate.kernel.runtime.inbox import (
-    DeadLetterEntry,
-    DeadLetterReason,
-    InboxProtocol,
-)
-from substrate.kernel.runtime.follow_graph import FollowGraph
-from substrate.kernel.runtime.fanout import FanoutStrategy
-from substrate.kernel.runtime.wakeup import SignalBusProtocol, Wakeup
-from substrate.kernel.runtime.scheduler import (
+from substrate.kernel.abstractions.runtime.agent import Agent, AgentRunContext
+from substrate.kernel.abstractions.runtime.communication import AskOutcome, RunStatusSummary
+from substrate.kernel.abstractions.runtime.effects import Effect, EffectResult
+from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus, new_run_id
+from substrate.kernel.abstractions.runtime.inbox import DeadLetterEntry, DeadLetterReason
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
+from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
+from substrate.kernel.abstractions.runtime.store import (
+    Cancel,
+    Commit,
+    CommitResult,
+    Complete,
+    DeliverResult,
+    Delivery,
+    Fail,
+    HeartbeatResult,
     Lease,
-    RunRegistryProtocol,
-    RunRetryPolicy,
-    SchedulerProtocol,
+    Nack,
+    NewEntry,
+    Retry,
+    RunRecord,
+    RunSpec,
+    RuntimeStore,
+    SignalSpec,
+    SpawnSpec,
+    StoreStats,
+    Suspend,
 )
-from substrate.kernel.runtime.supervisor import RunHandle, RunResult, SupervisorProtocol
-from substrate.kernel.runtime.agent import Agent, AgentRunContext
-from substrate.kernel.runtime.communication import AskOutcome, RunStatusSummary
+from substrate.kernel.abstractions.runtime.supervisor import RunHandle, RunResult
+from substrate.kernel.abstractions.runtime.wakeup import Wakeup
 
 __all__ = [
-    # ids
-    "RunId",
-    "RunStatus",
-    "new_run_id",
-    # log
-    "RunLogEntry",
-    "RunLogKind",
-    "EventLogProtocol",
-    # effects
+    "Agent",
+    "AgentRunContext",
+    "AskOutcome",
+    "Cancel",
+    "Commit",
+    "CommitResult",
+    "Complete",
+    "DeadLetterEntry",
+    "DeadLetterReason",
+    "DeliverResult",
+    "Delivery",
     "Effect",
     "EffectResult",
-    # inbox
-    "DeadLetterReason",
-    "DeadLetterEntry",
-    "InboxProtocol",
-    # follow graph
-    "FollowGraph",
-    # fanout
-    "FanoutStrategy",
-    # wakeup
-    "Wakeup",
-    "SignalBusProtocol",
-    # scheduler
-    "RunRetryPolicy",
+    "Fail",
+    "HeartbeatResult",
     "Lease",
-    "SchedulerProtocol",
-    "RunRegistryProtocol",
-    # supervisor
+    "Nack",
+    "NewEntry",
+    "Retry",
     "RunHandle",
+    "RunId",
+    "RunLogEntry",
+    "RunLogKind",
+    "RunRecord",
     "RunResult",
-    "SupervisorProtocol",
-    # agent
-    "AgentRunContext",
-    "Agent",
-    # communication
-    "AskOutcome",
+    "RunRetryPolicy",
+    "RunSpec",
+    "RunStatus",
     "RunStatusSummary",
+    "RuntimeStore",
+    "SignalSpec",
+    "SpawnSpec",
+    "StoreStats",
+    "Suspend",
+    "Wakeup",
+    "new_run_id",
 ]

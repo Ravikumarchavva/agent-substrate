@@ -1,15 +1,11 @@
-"""Architecture invariants that keep the kernel frozen.
+"""Purity of ``kernel.abstractions`` — what an adapter author depends on.
 
-These checks supplement the ``import-linter`` contracts in ``pyproject.toml``
-with cheap heuristics that catch regressions early:
+The abstractions are the engine's boundary with the outside: ports plus the
+value types in their signatures. They stay importable by anyone who implements
+a port, so they must stay free of I/O, of the engine, and of every layer above.
 
-* No upward imports — the kernel (L0) must not import any layer above it
-  (agents, integrations) nor the orthogonal module (serving).
-* LOC and file-count ceilings — catch accidental feature additions.
-* Flat layout — kernel contains no subdirectories.
-* No vendor strings — kernel must not reference any specific LLM provider name
-  or proprietary API schema in source code.
-* Round-trip serialization — core wire types must serialize/deserialize cleanly.
+(Whether the *engine* keeps to its own third-party set is a separate row in
+``tests/invariants/test_structure.py``.)
 """
 
 from __future__ import annotations
@@ -18,7 +14,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-KERNEL_DIR = REPO_ROOT / "src" / "substrate" / "kernel"
+KERNEL_DIR = REPO_ROOT / "src" / "substrate" / "kernel" / "abstractions"
 
 # Kernel guardrails: the foundation stays contract-only and provider-neutral.
 
@@ -47,40 +43,22 @@ def _strip_docstrings(text: str) -> str:
     return text
 
 
-_KERNEL_PERMITTED_SUBDIRS = {
-    "runtime",  # durable-runtime contracts (EventLogProtocol, InboxProtocol, SchedulerProtocol, SupervisorProtocol, …)
-    "core",
-    "messaging",
-    "llm",
-    "storage",
-    "tools",
-    "agent",
-    "document",
-}
-
-
-def test_kernel_is_flat() -> None:
-    """Kernel must not contain unexpected subdirectories (other than __pycache__).
-
-    ``kernel/runtime/`` is the one permitted subpackage — it groups the 10
-    durable-runtime contract files (EventLogProtocol, InboxProtocol, SchedulerProtocol, SupervisorProtocol, …)
-    that together form a coherent L0 sub-domain.  Any new subdirectory must be
-    explicitly added to ``_KERNEL_PERMITTED_SUBDIRS``.
-    """
-    unexpected = [
-        p
-        for p in KERNEL_DIR.iterdir()
-        if p.is_dir() and p.name not in ("__pycache__", *_KERNEL_PERMITTED_SUBDIRS)
-    ]
-    assert not unexpected, (
-        "Kernel must be a flat collection of contract files — no unexpected subdirectories. "
-        "Either add to _KERNEL_PERMITTED_SUBDIRS (with justification) or move to a layer above:\n  "
-        + "\n  ".join(str(d.relative_to(REPO_ROOT)) for d in unexpected)
-    )
-
-
 _FORBIDDEN_PREFIXES = (
-    "substrate.agents",
+    "substrate.kernel.agents",
+    "substrate.kernel.context",
+    "substrate.kernel.document",
+    "substrate.kernel.evals",
+    "substrate.kernel.exceptions",
+    "substrate.kernel.flows",
+    "substrate.kernel.hooks",
+    "substrate.kernel.limits",
+    "substrate.kernel.llm",
+    "substrate.kernel.middleware",
+    "substrate.kernel.runtime",
+    "substrate.kernel.safety",
+    "substrate.kernel.storage",
+    "substrate.kernel.tools",
+    "substrate.kernel.workspace",
     "substrate.integrations",
     "substrate.serving",
     "substrate.config",
@@ -140,38 +118,23 @@ def test_kernel_requires_only_pydantic_as_third_party_dependency() -> None:
     while flagging actual third-party dependencies that would couple the
     contract layer to runtime infrastructure.
     """
+    # Deliberately the measured set, not a generous one: nothing here does I/O.
+    # Adding a module is a decision to make in review, not a default.
     stdlib_prefixes = (
         "__future__",
-        "abc",
-        "asyncio",
         "base64",
         "collections",
-        "copy",
         "dataclasses",
         "datetime",
-        "decimal",
         "enum",
-        "functools",
         "hashlib",
-        "inspect",
-        "itertools",
         "json",
-        "logging",
-        "math",
-        "os",
-        "pathlib",
-        "platform",
-        "random",
         "re",
-        "secrets",
-        "statistics",
-        "sys",
-        "tempfile",
+        "secrets",  # entropy for ids
+        "threading",  # the id generator's monotonic counter
         "time",
-        "types",
         "typing",
         "uuid",
-        "warnings",
     )
 
     illegal: list[str] = []
@@ -185,7 +148,7 @@ def test_kernel_requires_only_pydantic_as_third_party_dependency() -> None:
                 continue
             if "pydantic" in line or "typing_extensions" in line:
                 continue
-            if line.startswith("from substrate.kernel.") or line.startswith("import substrate.kernel."):
+            if line.startswith("from substrate.kernel.abstractions") or line.startswith("import substrate.kernel.abstractions"):
                 continue
             if line.startswith("from .") or line.startswith("from .."):
                 continue
@@ -197,9 +160,9 @@ def test_kernel_requires_only_pydantic_as_third_party_dependency() -> None:
 
 def test_message_round_trip() -> None:
     """Message must serialize/deserialize cleanly via model_dump_json()."""
-    from substrate.kernel.core.identity import Actor
-    from substrate.kernel.core.content import TextBlock, ChatMessage
-    from substrate.kernel.messaging.message import Message, ChatPayload
+    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.core.content import TextBlock, ChatMessage
+    from substrate.kernel.abstractions.messaging.message import Message, ChatPayload
 
     agent = Actor(type="agent", key="assistant")
     chat = ChatMessage(role="user", content=[TextBlock(text="hello")])
@@ -217,17 +180,17 @@ def test_message_round_trip() -> None:
 
 def test_content_block_unknown_preserved() -> None:
     """Unknown block types must be preserved as UnknownBlock, not silently mangled."""
-    from substrate.kernel.core.content import UnknownBlock, parse_content_block
+    from substrate.kernel.abstractions.core.content import UnknownBlock, parse_content_block
 
     raw = {"type": "future_block_v99", "some_field": "some_value"}
-    result = parse_content_block(raw)  # type: ignore[arg-type]
+    result = parse_content_block(raw, forward_compatible=True)  # type: ignore[arg-type]
     assert isinstance(result, UnknownBlock)
     assert result.raw["type"] == "future_block_v99"
 
 
 def test_content_block_invalid_raises() -> None:
     """Invalid data for a known block type must raise BlockValidationError."""
-    from substrate.kernel.core.content import (
+    from substrate.kernel.abstractions.core.content import (
         BlockValidationError,
         parse_content_block,
     )
@@ -244,8 +207,8 @@ def test_message_requires_sender() -> None:
     """Message must enforce non-anonymous provenance — omitting sender raises ValidationError."""
     import pytest
     from pydantic import ValidationError
-    from substrate.kernel.core.identity import Actor
-    from substrate.kernel.messaging.message import Message, DataPayload
+    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.messaging.message import Message, DataPayload
 
     target = Actor(type="agent", key="worker")
 
@@ -264,7 +227,7 @@ def test_message_requires_sender() -> None:
 
 def test_actor_factory_helpers() -> None:
     """Actor factory classmethods must provide canonical standard addresses."""
-    from substrate.kernel.core.identity import Actor
+    from substrate.kernel.abstractions.core.identity import Actor
 
     system_default = Actor.system()
     assert system_default == Actor(type="system", key="bootstrap")

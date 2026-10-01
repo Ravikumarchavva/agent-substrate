@@ -6,14 +6,14 @@ multimodal document chunks, and document metadata.
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Sequence
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from substrate.kernel.core.content import ContentBlock, JsonObject, KernelModel, TextBlock
+from substrate.kernel.abstractions.ids import new_id
+from substrate.kernel.abstractions.core.content import ContentBlock, JsonObject, KernelModel, TextBlock
 
 
 class ExtractedImageLabel(StrEnum):
@@ -64,11 +64,19 @@ class ExtractionResult(KernelModel):
     error: str | None = None
     degraded_from: str | None = None
 
+    @model_validator(mode="after")
+    def _success_excludes_error(self) -> "ExtractionResult":
+        if self.success and self.error:
+            raise ValueError("a successful extraction cannot carry an error")
+        if not self.success and not self.error:
+            raise ValueError("a failed extraction must say why")
+        return self
+
 
 class DocumentMetadata(KernelModel):
     """Catalog metadata describing a stored document."""
 
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(default_factory=lambda: new_id())
     filename: str = ""
     content_type: str = "application/octet-stream"
     byte_size: int = 0
@@ -81,7 +89,7 @@ class DocumentMetadata(KernelModel):
 class DocumentChunk(KernelModel):
     """A discrete passage or multimodal section of a document prepared for retrieval."""
 
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(default_factory=lambda: new_id())
     document_id: str = ""
     text: str = ""
     content: Sequence[ContentBlock] = Field(default_factory=list)
@@ -105,7 +113,7 @@ class DocumentChunk(KernelModel):
         metadata: dict[str, Any] | None = None,
     ) -> "DocumentChunk":
         return cls(
-            id=id or str(uuid.uuid4()),
+            id=id or new_id(),
             document_id=document_id,
             text=text,
             content=[TextBlock(text=text)],

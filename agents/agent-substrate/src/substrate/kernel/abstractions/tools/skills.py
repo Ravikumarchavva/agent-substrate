@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from substrate.kernel.core.content import KernelModel
+from substrate.kernel.abstractions.core.content import KernelModel
 
 
 class Skill(KernelModel):
@@ -17,7 +17,7 @@ class Skill(KernelModel):
 
     Example::
 
-        from substrate.kernel import Skill
+        from substrate.kernel.abstractions import Skill
 
         summarise = Skill(
             name="summarisation",

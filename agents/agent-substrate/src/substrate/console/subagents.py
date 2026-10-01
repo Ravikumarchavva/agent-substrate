@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from rich.text import Text
 from rich.tree import Tree
 
-from substrate.kernel.messaging.stream import AgentProgress, AgentStep
+from substrate.kernel.abstractions.messaging.stream import AgentProgress, AgentStep
 
 from .theme import ConsoleTheme
 

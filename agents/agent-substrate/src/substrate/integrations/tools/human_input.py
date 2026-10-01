@@ -26,7 +26,7 @@ Usage::
 """
 
 from __future__ import annotations
-from substrate.kernel.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 
 import asyncio
@@ -36,12 +36,12 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List
 from uuid import uuid4
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.context import RunContext
+    from substrate.kernel.runtime.context import RunContext
 
 from pydantic import BaseModel, Field
 
-from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions import TextBlock
 
 logger = setup_logging()
 

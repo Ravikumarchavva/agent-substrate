@@ -3,7 +3,7 @@
 Provides ``ModelProfile`` and a pre-populated ``MODEL_REGISTRY`` so the
 framework (and users) can query any model's capabilities:
 
-    from substrate.agents.llm.models import get_model_profile, estimate_cost
+    from substrate.kernel.llm.models import get_model_profile, estimate_cost
 
     profile = get_model_profile("claude-sonnet-4-20250514")
     assert profile.context_length == 200_000
@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from substrate.kernel.core.usage import Usage
-from substrate.kernel.llm import ModelCapabilities, Modality
+from substrate.kernel.abstractions.core.usage import Usage
+from substrate.kernel.abstractions.llm import ModelCapabilities, Modality
 
 
 @dataclass(frozen=True)

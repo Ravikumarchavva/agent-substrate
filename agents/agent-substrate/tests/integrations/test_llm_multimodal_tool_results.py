@@ -9,7 +9,7 @@ from substrate.integrations.llm.anthropic.anthropic_client import AnthropicClien
 from substrate.integrations.llm.encoders import openai as openai_enc
 from substrate.integrations.llm.gemini.gemini_client import GeminiClient
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     MediaBlock,
     Role,

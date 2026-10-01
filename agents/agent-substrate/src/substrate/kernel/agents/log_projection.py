@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from substrate.kernel.runtime.log_entry import RunLogKind
-from substrate.kernel import (
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions import (
     ChatMessage,
     ContentBlock,
     TextBlock,
@@ -23,8 +23,8 @@ from substrate.kernel import (
 )
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.log_entry import EventLogProtocol
-    from substrate.agents.runtime._scheduling import SchedulerBackend
+    from substrate.kernel.abstractions.runtime.log_entry import EventLogProtocol
+    from substrate.kernel.runtime._scheduling import SchedulerBackend
 
 
 async def rebuild_messages_from_steps(

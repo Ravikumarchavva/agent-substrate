@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 from substrate.integrations.knowledge.loaders.pdf_loader import PDFLoader
-from substrate.kernel.document import ExtractedPage, ExtractionResult
+from substrate.kernel.abstractions.document import ExtractedPage, ExtractionResult
 
 _FIXTURE = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
 

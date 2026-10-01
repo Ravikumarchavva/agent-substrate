@@ -10,10 +10,10 @@ Run:
 
 import asyncio
 
-from substrate.agents.core import ReActAgent
+from substrate.kernel.agents import ReActAgent
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.agents.storage import LocalFilesystemHistoryProvider
+from substrate.kernel.storage import LocalFilesystemHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable (read automatically by OpenAIClient)
 

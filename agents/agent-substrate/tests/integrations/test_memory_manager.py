@@ -6,8 +6,8 @@ import pytest
 
 from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
 from substrate.integrations.memory.manager import MemoryManager
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.storage.memory import (
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.storage.memory import (
     MemoryCategory,
     MemoryNamespace,
     MemoryProvenance,

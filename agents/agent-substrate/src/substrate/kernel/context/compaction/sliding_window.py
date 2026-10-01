@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from substrate.agents.context.compaction._window import drop_orphaned_tool_results
-from substrate.kernel.core.content import ChatMessage
+from substrate.kernel.context.compaction._window import drop_orphaned_tool_results
+from substrate.kernel.abstractions.core.content import ChatMessage
 
 
 class SlidingWindowCompaction:

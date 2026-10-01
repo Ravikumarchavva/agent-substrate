@@ -8,14 +8,14 @@ construction, so it belongs beside the compaction strategies it presets.
 
 from __future__ import annotations
 
-from substrate.agents.context.compaction.pipeline import CompactionPipeline
+from substrate.kernel.context.compaction.pipeline import CompactionPipeline
 
 
 def build_token_budget_pipeline(*, token_budget: int = 50_000) -> CompactionPipeline:
     """Compaction pipeline used by chat-facing agents: trims tool results and
     older tool-call groups before truncating outright, keeping recent
     context intact until the token budget is actually under pressure."""
-    from substrate.agents.context.compaction import (
+    from substrate.kernel.context.compaction import (
         SelectiveToolCallCompactionStrategy,
         TokenBudgetComposedStrategy,
         ToolResultCompactionStrategy,

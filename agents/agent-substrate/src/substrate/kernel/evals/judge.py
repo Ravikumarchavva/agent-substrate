@@ -20,10 +20,10 @@ import logging
 import re
 from typing import List, Optional
 
-from substrate.agents.evals.criteria import EvalCriterion
-from substrate.agents.evals.models import EvalScore
-from substrate.kernel.llm import LLMClient
-from substrate.kernel import ChatMessage
+from substrate.kernel.evals.criteria import EvalCriterion
+from substrate.kernel.evals.models import EvalScore
+from substrate.kernel.abstractions.llm import LLMClient
+from substrate.kernel.abstractions import ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -145,9 +145,9 @@ class LLMJudge:
         # Call judge LLM with retries
         for attempt in range(self.max_retries + 1):
             try:
-                from substrate.kernel import TextBlock
+                from substrate.kernel.abstractions import TextBlock
 
-                from substrate.kernel.llm import GenerationOptions
+                from substrate.kernel.abstractions.llm import GenerationOptions
 
                 response = await self.model_client.generate(
                     messages=[

@@ -43,7 +43,7 @@ import contextlib
 import json
 from typing import Any, AsyncIterator, Awaitable, Callable
 
-from substrate.kernel.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 from substrate.serving.monolith.sse.bridge import (
     BRIDGE_DONE,
@@ -110,7 +110,7 @@ class AgentStreamSession:
 
     async def _agent_worker(self) -> str:
         """Register agent, submit message, tail EventLogProtocol. Returns terminal reason."""
-        from substrate.kernel.exceptions import ThreadBusyError
+        from substrate.kernel.abstractions.exceptions import ThreadBusyError
 
         try:
             # pinned=False must match the caller's own registration (see

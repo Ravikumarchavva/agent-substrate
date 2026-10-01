@@ -19,19 +19,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.runtime.log_entry import RunLogKind
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     Role,
     TextBlock,
     content_blocks_to_str,
 )
-from substrate.kernel.core.identity import Actor, Topic
-from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
+from substrate.kernel.abstractions.core.identity import Actor, Topic
+from substrate.kernel.abstractions.messaging.message import ChatPayload, DataPayload, Message
 
 if TYPE_CHECKING:
-    from substrate.agents.context.context import ContextConfig
-    from substrate.agents.runtime.context import RunContext
+    from substrate.kernel.context.context import ContextConfig
+    from substrate.kernel.runtime.context import RunContext
 
 
 def message_to_chat(msg: Message) -> ChatMessage:
@@ -89,7 +89,7 @@ async def load_history(
     branch_id: str = "main",
 ) -> list[ChatMessage]:
     """The session branch's history as LLM-ready messages (see ``project_messages``)."""
-    from substrate.agents.storage.history import project_messages
+    from substrate.kernel.storage.history import project_messages
 
     return await project_messages(
         ctx_cfg.history,
@@ -121,7 +121,7 @@ async def persist_turns(
     branch's workspace per turn) is responsible for actually producing the
     snapshot id; this function only threads it onto the right node.
     """
-    from substrate.kernel.storage.history import MessageNode
+    from substrate.kernel.abstractions.storage.history import MessageNode
 
     for i, turn in enumerate(new_turns):
         branch = await ctx_cfg.history.get_branch(session_id, branch_id)

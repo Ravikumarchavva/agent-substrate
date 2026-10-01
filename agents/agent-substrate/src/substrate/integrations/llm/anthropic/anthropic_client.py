@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, cast
 
 from anthropic import AsyncAnthropic
 
-from substrate.agents.llm.chat_client import parse_tool_arguments
-from substrate.agents.llm.modalities import fit_to_capabilities
-from substrate.agents.llm.models import resolve_capabilities
-from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.kernel.llm import (
+from substrate.kernel.llm.tool_arguments import parse_tool_arguments
+from substrate.kernel.llm.modalities import fit_to_capabilities
+from substrate.kernel.llm.models import resolve_capabilities
+from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+from substrate.kernel.abstractions.llm import (
     GenerationOptions,
     LLMClient,
     LLMResponse,
@@ -20,15 +20,15 @@ from substrate.kernel.llm import (
     ReasoningEffort,
     Usage,
 )
-from substrate.kernel import ChatMessage, ContentBlock
-from substrate.kernel.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions import ChatMessage, ContentBlock
+from substrate.kernel.abstractions.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
+from substrate.kernel.abstractions.core.content import (
     TextBlock,
     ToolUseBlock,
     DataBlock,
     ReasoningBlock,
 )
-from substrate.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
+from substrate.kernel.abstractions.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
 from substrate.integrations.llm.encoders.anthropic import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,

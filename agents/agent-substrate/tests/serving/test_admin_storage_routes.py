@@ -10,7 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from substrate.agents.storage.local_object_store import WorkspaceFileStore
+from substrate.kernel.storage.local_object_store import WorkspaceFileStore
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.models import WorkspaceQuota
 from substrate.serving.monolith.security.deps import get_current_user
@@ -172,7 +172,7 @@ async def test_set_quota_persists_and_takes_effect_immediately(tmp_path) -> None
 async def test_storage_routes_501_for_non_workspace_backend() -> None:
     """S3FileStore/InMemoryFileStore don't support per-user quota overrides
     or list_all_users — the admin storage API is explicitly local-only."""
-    from substrate.agents.storage.memory import InMemoryFileStore
+    from substrate.kernel.storage.memory import InMemoryFileStore
 
     async with app.router.lifespan_context(app):
         app.state.ctx.file_store = InMemoryFileStore()

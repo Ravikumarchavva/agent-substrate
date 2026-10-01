@@ -5,12 +5,12 @@ reachable.
 
 Run with infra up:
     make infra-up
-    uv run pytest tests/agents/test_runtime_postgres.py -v
+    uv run pytest tests/kernel/test_runtime_postgres.py -v
 """
 
 from __future__ import annotations
 
-from substrate.kernel.llm import ModelCapabilities
+from substrate.kernel.abstractions.llm import ModelCapabilities
 import asyncio
 import os
 import types
@@ -18,9 +18,9 @@ import uuid
 
 import pytest
 
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import DataPayload, Message
-from substrate.kernel.runtime.communication import AskOutcome
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import DataPayload, Message
+from substrate.kernel.abstractions.runtime.communication import AskOutcome
 
 pytestmark = [pytest.mark.requires_postgres]
 
@@ -214,7 +214,7 @@ async def test_pg_spawn_join(pg_runtime) -> None:
     """ctx.join() suspends the parent (durably) and resumes when the child
     finishes — the Supervisor.finish_run() -> child:{run_id} signal
     path, replacing the old asyncio.Event()-blocking SupervisorProtocol.join()."""
-    from substrate.kernel.runtime.ids import RunStatus
+    from substrate.kernel.abstractions.runtime.ids import RunStatus
 
     child_id = _agent_id("pg-join-child")
     parent_id = _agent_id("pg-join-parent")
@@ -239,7 +239,7 @@ class CrashingChildAgent:
         self.id = agent_id
 
     async def run(self, ctx: object, inbox: list[Message]) -> None:
-        from substrate.kernel.exceptions import PermanentError
+        from substrate.kernel.abstractions.exceptions import PermanentError
 
         raise PermanentError("child deliberately crashes")
 
@@ -261,7 +261,7 @@ class ParentJoinCrashAgent:
 async def test_pg_join_crash_fast_path(pg_runtime) -> None:
     """A crashed child wakes the joining parent immediately via its FAILED
     finish_run() signal — the parent must not depend on any timeout."""
-    from substrate.kernel.runtime.ids import RunStatus
+    from substrate.kernel.abstractions.runtime.ids import RunStatus
 
     child_id = _agent_id("pg-join-crash-child")
     parent_id = _agent_id("pg-join-crash-parent")
@@ -324,8 +324,8 @@ class StreamingAgent:
 async def test_pg_streaming_session(pg_runtime) -> None:
     """A run streamed through AgentStreamSession over the Postgres event log:
     wire events come out in order AND the entries are persisted in Postgres."""
-    from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-    from substrate.kernel.messaging.message import ChatPayload
+    from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+    from substrate.kernel.abstractions.messaging.message import ChatPayload
     from substrate.serving.protocol import (
         HelloEvent,
         RunCompletedEvent,
@@ -477,7 +477,7 @@ async def test_pg_cold_resume() -> None:
 
     from substrate.integrations.runtime import build_postgres_runtime
     from substrate.integrations.runtime.scheduler import Scheduler
-    from substrate.agents.factory import rebuild_agent
+    from substrate.kernel.agents.factory import rebuild_agent
 
     done_a = asyncio.Event()
 
@@ -700,9 +700,9 @@ async def test_pg_spawn_denied_once_headcount_cap_reached() -> None:
     from substrate.integrations.runtime.scheduler import Scheduler
     from substrate.integrations.runtime.signal_bus import SignalBus
     from substrate.integrations.runtime.supervisor import Supervisor
-    from substrate.kernel.agent.supervision import Supervision, SpawnBudget
-    from substrate.kernel.exceptions import BudgetExhaustedError
-    from substrate.kernel.runtime.effects import Effect
+    from substrate.kernel.abstractions.agent.supervision import Supervision, SpawnBudget
+    from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
+    from substrate.kernel.abstractions.runtime.effects import Effect
 
     pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
     root_agent = _agent_id("spawn-budget-root")
@@ -789,22 +789,22 @@ async def test_pg_tool_approval_survives_full_pool_close_and_reopen() -> None:
     Python object."""
     import asyncpg
 
-    from substrate.agents.runtime.backends._fanout import PushAllFanout
-    from substrate.agents.runtime.backends._follow_graph import InMemoryFollowGraph
-    from substrate.agents.runtime.cancellation import CancellationToken
-    from substrate.agents.runtime.context import RunContext
-    from substrate.agents.runtime.effect_cache import EffectCache
-    from substrate.agents.tools.invoker import ToolInvoker
-    from substrate.agents.tools.toolbox import Toolbox
+    from substrate.kernel.runtime.backends._fanout import PushAllFanout
+    from substrate.kernel.runtime.backends._follow_graph import InMemoryFollowGraph
+    from substrate.kernel.runtime.cancellation import CancellationToken
+    from substrate.kernel.runtime.context import RunContext
+    from substrate.kernel.runtime.effect_cache import EffectCache
+    from substrate.kernel.tools.invoker import ToolInvoker
+    from substrate.kernel.tools.toolbox import Toolbox
     from substrate.integrations.runtime.event_log import EventLog
     from substrate.integrations.runtime.inbox import Inbox
     from substrate.integrations.runtime.scheduler import Scheduler
     from substrate.integrations.runtime.signal_bus import SignalBus
     from substrate.integrations.runtime.supervisor import Supervisor
-    from substrate.kernel.agent.runtime_context import RunMeta
-    from substrate.kernel.exceptions import SuspendInterrupt
-    from substrate.kernel.tools import ToolExecutionResult, ToolRisk
-    from substrate.kernel.tools.approval import ApprovalRequest, ApprovalResult
+    from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+    from substrate.kernel.abstractions.exceptions import SuspendInterrupt
+    from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
+    from substrate.kernel.abstractions.tools.approval import ApprovalRequest, ApprovalResult
 
     class SendEmailTool:
         name = "send_email"
@@ -816,7 +816,7 @@ async def test_pg_tool_approval_survives_full_pool_close_and_reopen() -> None:
         }
 
         async def execute(self, *, ctx=None, **kwargs) -> ToolExecutionResult:
-            from substrate.kernel.core.content import TextBlock
+            from substrate.kernel.abstractions.core.content import TextBlock
 
             return ToolExecutionResult(
                 content=[TextBlock(text=f"email sent to {kwargs.get('to')}")]
@@ -950,7 +950,7 @@ async def test_pg_cancel_cascade(pg_runtime) -> None:
     """Cancelling the root of a 2-deep spawn tree of suspended runs marks
     the entire subtree cancelled — the recursive CTE in
     Supervisor.cancel(), exercised through the public Runtime."""
-    from substrate.kernel.runtime.supervisor import RunHandle
+    from substrate.kernel.abstractions.runtime.supervisor import RunHandle
 
     grandchild_id = _agent_id("pg-cancel-grandchild")
     child_id = _agent_id("pg-cancel-child")
@@ -1152,7 +1152,7 @@ async def test_pg_ask_crash_fast_path(pg_runtime) -> None:
             self.id = agent_id
 
         async def run(self, ctx: object, inbox: list[Message]) -> None:
-            from substrate.kernel.exceptions import PermanentError
+            from substrate.kernel.abstractions.exceptions import PermanentError
 
             raise PermanentError("target deliberately crashes")
 
@@ -1279,7 +1279,7 @@ async def test_pg_thread_single_flight(pg_runtime) -> None:
     """A second submit() for the same thread_id, while the first run is still
     active, raises ThreadBusyError — durably, via a unique partial index on
     run_queue, not a per-process lock (see routes/chat.py)."""
-    from substrate.kernel.exceptions import ThreadBusyError
+    from substrate.kernel.abstractions.exceptions import ThreadBusyError
 
     agent_id = _agent_id("pg-singleflight")
     agent = SleepForeverAgent(agent_id)
@@ -1501,7 +1501,7 @@ async def test_pg_spawn_inherits_execution_budget(pg_runtime) -> None:
     run_tree.supervision and rehydrated by a (potentially different)
     worker leasing the grandchild — proving inheritance survives the
     process boundary, not just a shared in-memory dict."""
-    from substrate.kernel.agent.supervision import ExecutionBudget, Supervision
+    from substrate.kernel.abstractions.agent.supervision import ExecutionBudget, Supervision
 
     class GrandchildAgent:
         def __init__(self, agent_id: Actor) -> None:
@@ -1561,7 +1561,7 @@ async def test_pg_spawn_inherits_execution_budget(pg_runtime) -> None:
 async def test_pg_flaky_retry_genuinely_re_executes(pg_runtime) -> None:
     """A retryable failure must re-run the agent, not replay a cached error
     from EffectCache.fold() forever — the fix for the sticky-error bug."""
-    from substrate.kernel.runtime.scheduler import RunRetryPolicy
+    from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 
     class FlakyAgent:
         def __init__(self, agent_id: Actor) -> None:
@@ -1593,8 +1593,8 @@ async def test_pg_flaky_retry_genuinely_re_executes(pg_runtime) -> None:
 async def test_pg_permanent_error_skips_retry(pg_runtime) -> None:
     """PermanentError terminal-fails on the first attempt against the real
     Scheduler — no backoff, no retry_count increment wasted."""
-    from substrate.kernel.exceptions import PermanentError
-    from substrate.kernel.runtime.scheduler import RunRetryPolicy
+    from substrate.kernel.abstractions.exceptions import PermanentError
+    from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 
     class AlwaysCrashingAgent:
         def __init__(self, agent_id: Actor) -> None:
@@ -1633,10 +1633,10 @@ async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
     between them — the single-flight index only blocks a SECOND concurrent
     run, not a later one after the first went terminal) and project_thread()
     must see both runs' turns, in order, with no steps table involved."""
-    from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-    from substrate.kernel.core.usage import Usage
-    from substrate.kernel.messaging.message import ChatPayload
-    from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+    from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+    from substrate.kernel.abstractions.core.usage import Usage
+    from substrate.kernel.abstractions.messaging.message import ChatPayload
+    from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
     from substrate.serving.protocol.events import TextDeltaEvent, UserMessageEvent
     from substrate.serving.stream.history import project_thread
 
@@ -1650,7 +1650,7 @@ async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
             yield TextDelta(text=self._answer)
             yield CompletionEvent(content=[TextBlock(text=self._answer)], usage=Usage())
 
-    from substrate.agents.core.react import ReActAgent
+    from substrate.kernel.agents.react import ReActAgent
 
     agent1 = ReActAgent("pg-crash-resume-agent", model=ScriptedLLM("first answer"))
     thread_id = f"thread-crash-resume-{_agent_id('x').key}"

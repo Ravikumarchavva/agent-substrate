@@ -7,19 +7,102 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Self, Union
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     BeforeValidator,
+    ConfigDict,
     Field,
     TypeAdapter,
+    ValidationInfo,
     model_validator,
 )
-from substrate.kernel.exceptions import BlockValidationError
+from substrate.kernel.abstractions.exceptions import BlockValidationError
 
 JsonObject = dict[str, Any]
+
+
+class FrozenDict(dict[str, Any]):
+    """A dict that cannot be changed, and can be hashed.
+
+    ``frozen=True`` on a pydantic model only stops attribute assignment; a dict
+    or list inside it stays mutable, so a "frozen" message could be edited by
+    whoever held a reference, and could not be hashed at all. Content passes
+    between agents, is cached and is journaled; one consumer editing another's
+    copy is exactly the bug immutability is supposed to rule out.
+    """
+
+    __slots__ = ()
+
+    def _immutable(self, *_args: object, **_kwargs: object) -> None:
+        raise TypeError("this mapping is immutable; copy it with dict(...) to change it")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+    __ior__ = _immutable  # type: ignore[assignment]
+
+    def __hash__(self) -> int:  # type: ignore[override]
+        return hash(frozenset(self.items()))
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        # Rebuild from a plain dict: the default dict-subclass protocol sets
+        # items one by one, which an immutable mapping refuses.
+        return (FrozenDict, (dict(self),))
+
+
+class FrozenList(tuple[Any, ...]):
+    """An immutable sequence that still compares equal to the list it came from.
+
+    JSON has lists, not tuples; a tool argument ``{"ids": [1, 2]}`` should equal
+    ``{"ids": [1, 2]}`` after it has been frozen, or every comparison against a
+    literal has to change.
+    """
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, list):
+            return tuple.__eq__(self, tuple(other))
+        return tuple.__eq__(self, other)
+
+    def __ne__(self, other: object) -> bool:
+        result = self.__eq__(other)
+        return result if result is NotImplemented else not result
+
+    __hash__ = tuple.__hash__
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        return (FrozenList, (tuple(self),))
+
+
+def freeze(value: Any) -> Any:
+    """Recursively turn dicts into ``FrozenDict`` and lists into ``FrozenList``."""
+    if isinstance(value, dict):
+        return FrozenDict({k: freeze(v) for k, v in value.items()})
+    if isinstance(value, (list, tuple)):
+        return FrozenList(freeze(v) for v in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(freeze(v) for v in value)
+    return value
+
+
+FrozenJson = Annotated[dict[str, Any], AfterValidator(freeze)]
+"""A JSON object that is deeply immutable once validated."""
+
+
+def _json_default(value: object) -> str:
+    """What ``str(block)`` shows for values JSON cannot encode. Rendering a block
+    into a prompt must never raise."""
+    if isinstance(value, (bytes, bytearray)):
+        return f"<{len(value)} bytes>"
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, (set, frozenset)):
+        return str(sorted(map(str, value)))
+    return str(value)
 
 
 class Role(StrEnum):
@@ -34,7 +117,7 @@ class Role(StrEnum):
 class KernelModel(BaseModel):
     """Base model for all kernel content structures — immutable with standard string representation."""
 
-    model_config = {"frozen": True}
+    model_config = ConfigDict(frozen=True)
 
 
 # ---------------------------------------------------------------------------
@@ -56,11 +139,11 @@ class DataBlock(KernelModel):
     """Structured JSON payload for rich tool results or artifacts."""
 
     type: Literal["data"] = "data"
-    data: JsonObject
+    data: FrozenJson
     schema_id: str | None = None
 
     def __str__(self) -> str:
-        return json.dumps(self.data)
+        return json.dumps(self.data, default=_json_default)
 
 
 class ErrorBlock(KernelModel):
@@ -69,7 +152,7 @@ class ErrorBlock(KernelModel):
     type: Literal["error"] = "error"
     error_type: str
     message: str
-    details: JsonObject | None = None
+    details: FrozenJson | None = None
     recoverable: bool = True
 
     def __str__(self) -> str:
@@ -204,7 +287,7 @@ class ToolUseBlock(KernelModel):
     type: Literal["tool_use"] = "tool_use"
     call_id: str
     tool_name: str
-    arguments: JsonObject = Field(default_factory=dict)
+    arguments: FrozenJson = Field(default_factory=FrozenDict)
     # Set by an LLM client when the model's arguments weren't valid JSON —
     # the harness reports it back to the model instead of running the tool.
     arguments_error: str | None = None
@@ -217,23 +300,31 @@ class UnknownBlock(KernelModel):
     """Lossless carrier for forward-compatibility with future provider types."""
 
     type: Literal["unknown"] = "unknown"
-    raw: JsonObject = Field(default_factory=dict)
+    raw: FrozenJson = Field(default_factory=FrozenDict)
 
     def __str__(self) -> str:
         return f"[UnknownBlock: {self.raw.get('type', '?')}]"
 
 
-def _coerce_blocks(v: Any) -> list[Any]:
+def _coerce_blocks(v: Any, info: ValidationInfo) -> Any:
+    # Persisted and wire data (JSON) may carry block types a newer version
+    # wrote; code constructing blocks in Python may not invent them.
+    forward_compatible = info.mode == "json" or bool((info.context or {}).get("forward_compatible"))
     if isinstance(v, str):
-        return [TextBlock(text=v)]
+        return (TextBlock(text=v),)
     if isinstance(v, (BaseModel, dict)):
         v = [v]
-    if isinstance(v, list):
-        return [parse_content_block(item) if isinstance(item, dict) else item for item in v]
+    if isinstance(v, (list, tuple)):
+        return tuple(
+            parse_content_block(item, forward_compatible=forward_compatible)
+            if isinstance(item, dict)
+            else item
+            for item in v
+        )
     return v
 
 
-BlockList = Annotated[list["ContentBlock"], BeforeValidator(_coerce_blocks)]
+BlockList = Annotated[tuple["ContentBlock", ...], BeforeValidator(_coerce_blocks)]
 
 
 class ToolResultBlock(KernelModel):
@@ -242,7 +333,7 @@ class ToolResultBlock(KernelModel):
     type: Literal["tool_result"] = "tool_result"
     call_id: str
     name: str = ""
-    content: BlockList = Field(default_factory=list)
+    content: BlockList = Field(default_factory=tuple)
     is_error: bool = False
 
     @property
@@ -292,10 +383,27 @@ ContentBlockAdapter: TypeAdapter[ContentBlock] = TypeAdapter(ContentBlock)
 """The single, canonical, Rust-powered TypeAdapter for ContentBlock."""
 
 
-def parse_content_block(data: Any) -> ContentBlock:
-    """The single efficient way to parse any dict or object into a ContentBlock."""
-    if isinstance(data, dict) and str(data.get("type")) not in _KNOWN_BLOCK_TAGS:
-        return UnknownBlock(raw=dict(data))
+def parse_content_block(data: Any, *, forward_compatible: bool = False) -> ContentBlock:
+    """The single way to parse a dict or object into a ``ContentBlock``.
+
+    ``UnknownBlock`` carries a block type this version does not know, so data
+    written by a newer version can still be read. That is a property of
+    *persisted or wire* data. Everywhere else a block with no ``type``, or a
+    type that is not one of ours, is a bug — a typo silently becoming an
+    ``UnknownBlock`` that every encoder then drops is lost content — so it
+    raises unless the caller says it is reading data that may come from the
+    future (``forward_compatible=True``).
+    """
+    if isinstance(data, dict):
+        tag = data.get("type")
+        if tag is None:
+            raise BlockValidationError(f"content block has no 'type': {sorted(data)}")
+        if tag not in _KNOWN_BLOCK_TAGS:
+            if forward_compatible:
+                return UnknownBlock(raw=dict(data))
+            raise BlockValidationError(
+                f"unknown content block type {tag!r}; known: {sorted(_KNOWN_BLOCK_TAGS)}"
+            )
     try:
         return ContentBlockAdapter.validate_python(data)
     except Exception as exc:
@@ -317,9 +425,9 @@ class ChatMessage(KernelModel):
     """A role-tagged conversation turn containing multimodal blocks."""
 
     role: Role
-    content: BlockList = Field(default_factory=list)
+    content: BlockList = Field(default_factory=tuple)
     name: str | None = None
-    metadata: JsonObject = Field(default_factory=dict)
+    metadata: FrozenJson = Field(default_factory=FrozenDict)
 
     @property
     def text(self) -> str:

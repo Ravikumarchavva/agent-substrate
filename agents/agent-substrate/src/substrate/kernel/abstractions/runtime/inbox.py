@@ -32,16 +32,14 @@ on failure ``nack(msg_id, error=...)`` → SchedulerProtocol re-enqueues wakeup.
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Protocol, runtime_checkable
-
+from enum import StrEnum
 from pydantic import BaseModel
 
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import Message
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import Message
 
 
-class DeadLetterReason(str, Enum):
+class DeadLetterReason(StrEnum):
     """Why a message ended up in the dead-letter queue."""
 
     MAX_RETRIES = "max_retries"
@@ -65,65 +63,4 @@ class DeadLetterEntry(BaseModel):
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
 
-@runtime_checkable
-class InboxProtocol(Protocol):
-    """Durable per-agent mailbox.
-
-    Implementations: in-memory dict of deques (Stage 0), Postgres table with
-    ``(agent_id, msg_id)`` PK and retry counter (Stage 1), Redis Streams
-    consumer group (Stage 2+).
-    """
-
-    async def deliver(
-        self, agent_id: Actor, msg: Message, *, notify: bool = True
-    ) -> bool:
-        """Deliver ``msg`` to ``agent_id``'s inbox.
-
-        Returns ``True`` when the message was appended.  Returns ``False``
-        when ``msg.id`` was already in the inbox (idempotent re-delivery).
-
-        When ``notify`` is ``True`` (the default), implementations MUST trigger
-        the deliver-hook so a dormant agent gets a run spawned. Callers that
-        enqueue their own run (e.g. ``Runtime.submit``) pass ``notify=False`` to
-        suppress the hook and avoid spawning a duplicate run.
-        """
-        ...
-
-    async def drain(self, agent_id: Actor, *, max: int = 100) -> list[Message]:
-        """Return up to ``max`` pending messages in per-sender FIFO order.
-
-        Does not ack them — the caller must call ``ack`` or ``nack`` for
-        each message after processing.  Messages that have been drained but
-        not yet acked remain in the inbox and are re-drained on the next call.
-        """
-        ...
-
-    async def ack(self, agent_id: Actor, msg_id: str) -> None:
-        """Mark ``msg_id`` as successfully processed and remove it from the inbox."""
-        ...
-
-    async def nack(
-        self,
-        agent_id: Actor,
-        msg_id: str,
-        *,
-        error: str = "",
-    ) -> None:
-        """Record a delivery failure for ``msg_id``.
-
-        Increments the attempt counter.  When the counter reaches the
-        implementation's ``max_retries``, the message is moved to the
-        dead-letter queue and removed from the live inbox.
-        """
-        ...
-
-    async def dead_letters(self, agent_id: Actor) -> list[DeadLetterEntry]:
-        """Return all dead-lettered messages for ``agent_id``."""
-        ...
-
-    async def pending_count(self, agent_id: Actor) -> int:
-        """Return the number of unacked messages in ``agent_id``'s inbox."""
-        ...
-
-
-__all__ = ["DeadLetterReason", "DeadLetterEntry", "InboxProtocol"]
+__all__ = ["DeadLetterReason", "DeadLetterEntry"]

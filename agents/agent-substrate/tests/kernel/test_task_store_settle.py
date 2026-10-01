@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from substrate.agents.storage.tasks import TaskStore
-from substrate.kernel.storage.tasks import TaskStatus
+from substrate.kernel.storage.tasks import TaskStore
+from substrate.kernel.abstractions.storage.tasks import TaskStatus
 
 
 async def test_settle_flips_in_progress_to_succeeded() -> None:

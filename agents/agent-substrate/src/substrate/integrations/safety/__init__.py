@@ -14,6 +14,6 @@ reverse). Re-exported here for convenience since callers reaching into
 
 from __future__ import annotations
 
-from substrate.agents.safety.normalize import NormalizedText, normalize
+from substrate.kernel.safety.normalize import NormalizedText, normalize
 
 __all__ = ["NormalizedText", "normalize"]

@@ -8,7 +8,7 @@ GET /hitl/status/{thread_id} – check for pending HITL requests
 """
 
 from __future__ import annotations
-from substrate.kernel.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 
 import uuid
@@ -90,7 +90,7 @@ async def hitl_status(
 
 
 async def _durable_pending_hitl(ctx: ServerDependencies, thread_id: str) -> list[dict]:
-    from substrate.kernel.runtime.ids import RunStatus
+    from substrate.kernel.abstractions.runtime.ids import RunStatus
 
     runtime = getattr(ctx, "runtime", None)
     if runtime is None:

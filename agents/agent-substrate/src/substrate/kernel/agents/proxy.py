@@ -10,13 +10,13 @@ to a ``ReActAgent`` via ``Runtime.submit()``.
 
 from __future__ import annotations
 
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import ChatPayload, Message
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.context import RunContext
+    from substrate.kernel.runtime.context import RunContext
 
 
 class UserProxyAgent:
@@ -82,7 +82,7 @@ class UserProxyAgent:
     def _extract_text(self, msg: Message) -> str:
         payload = msg.payload
         if isinstance(payload, ChatPayload):
-            from substrate.kernel.core.content import content_blocks_to_str
+            from substrate.kernel.abstractions.core.content import content_blocks_to_str
 
             return content_blocks_to_str(payload.message.content)  # type: ignore[arg-type]
         return str(getattr(payload, "data", payload))

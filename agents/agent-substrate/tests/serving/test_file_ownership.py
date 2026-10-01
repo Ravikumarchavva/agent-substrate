@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from substrate.agents.storage.memory import InMemoryFileStore
+from substrate.kernel.storage.memory import InMemoryFileStore
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import FileMetadata, Thread, User

@@ -12,18 +12,18 @@ nothing outside this package constructs a workspace object-storage key.
 
 from __future__ import annotations
 
-from substrate.agents.workspace.branching import (
+from substrate.kernel.workspace.branching import (
     delete_branch_workspace,
     fork_branch,
     resolve_workspace_snapshot_id,
 )
-from substrate.agents.workspace.cas import BlobCAS
-from substrate.agents.workspace.local_workspace_store import LocalFilesystemWorkspaceStore
-from substrate.agents.workspace.scope import (
+from substrate.kernel.workspace.cas import BlobCAS
+from substrate.kernel.workspace.local_workspace_store import LocalFilesystemWorkspaceStore
+from substrate.kernel.workspace.scope import (
     WorkspaceScope,
     workspace_scope,
 )
-from substrate.agents.workspace.snapshots import checkout_branch, commit_turn
+from substrate.kernel.workspace.snapshots import checkout_branch, commit_turn
 
 __all__ = [
     "WorkspaceScope",

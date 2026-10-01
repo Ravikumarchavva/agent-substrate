@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.context.builder import DefaultContextBuilder
+from substrate.kernel.context.builder import DefaultContextBuilder
 from substrate.integrations.memory.policy import DefaultMemoryExposurePolicy
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.storage.history import MessageNode
-from substrate.kernel.storage.memory import (
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.storage.history import MessageNode
+from substrate.kernel.abstractions.storage.memory import (
     MemoryCategory,
     MemoryMatch,
     MemoryNamespace,

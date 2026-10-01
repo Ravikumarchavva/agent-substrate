@@ -6,9 +6,9 @@ import pytest
 @pytest.mark.asyncio
 async def test_runtime_agent_registration():
     """Runtime: register + submit routes message to the agent inbox."""
-    from substrate.agents.runtime import Runtime
-    from substrate.kernel.core.identity import Actor
-    from substrate.kernel.messaging.message import Message, DataPayload
+    from substrate.kernel.runtime import Runtime
+    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.messaging.message import Message, DataPayload
 
     received: list = []
 

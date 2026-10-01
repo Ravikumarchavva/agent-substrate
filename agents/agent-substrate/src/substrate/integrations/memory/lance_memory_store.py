@@ -18,12 +18,12 @@ import time
 from pathlib import Path
 from typing import Any, Sequence
 
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.core.content import (
     TextBlock,
     content_blocks_to_str,
     parse_content_block,
 )
-from substrate.kernel.storage.memory import (
+from substrate.kernel.abstractions.storage.memory import (
     MemoryCategory,
     MemoryMatch,
     MemoryNamespace,
@@ -255,7 +255,7 @@ def _row_to_memory(row: dict[str, Any]) -> MemoryRecord:
     meta = json.loads(row["metadata_json"]) if isinstance(row["metadata_json"], str) else dict(row["metadata_json"])
     blocks_raw = meta.pop("_blocks", None) if isinstance(meta, dict) else None
     if blocks_raw:
-        blocks = [parse_content_block(b) for b in blocks_raw]
+        blocks = [parse_content_block(b, forward_compatible=True) for b in blocks_raw]
     else:
         blocks = [TextBlock(text=row["content"])]
 

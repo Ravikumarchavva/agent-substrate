@@ -1,4 +1,4 @@
-"""substrate.kernel — frozen contracts layer.
+"""substrate.kernel.abstractions — frozen contracts layer.
 
 Everything here is a Protocol, pure dataclass, or value type.
 No I/O, no concrete implementations, no external dependencies beyond pydantic.
@@ -6,7 +6,7 @@ No I/O, no concrete implementations, no external dependencies beyond pydantic.
 
 from __future__ import annotations
 
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.core.content import (
     JsonObject,
     Role,
     KernelModel,
@@ -24,7 +24,7 @@ from substrate.kernel.core.content import (
     parse_content_block,
     content_blocks_to_str,
 )
-from substrate.kernel.exceptions import (
+from substrate.kernel.abstractions.exceptions import (
     KernelError,
     ControlSignal,
     TransientError,
@@ -44,19 +44,32 @@ from substrate.kernel.exceptions import (
     BranchNotFoundError,
     BranchAlreadyExistsError,
     DAGIntegrityError,
+    RateLimitedError,
+    ContextLengthError,
+    ContentFilterError,
+    AuthError,
+    LeaseLostError,
+    NonDeterminismError,
+    OrphanedEffectError,
+    ObjectNotFoundError,
 )
-from substrate.kernel.core.identity import (
+from substrate.kernel.abstractions.core.error_info import ErrorInfo
+from substrate.kernel.abstractions.core.trace import TraceContext
+from substrate.kernel.abstractions.ids import (
+    BranchId, MessageId, TenantId, ThreadId, UserId, new_id,
+)
+from substrate.kernel.abstractions.core.identity import (
     Actor,
     Topic,
 )
-from substrate.kernel.agent.supervision import (
+from substrate.kernel.abstractions.agent.supervision import (
     Supervision,
     HistoryRetention,
     Priority,
     SpawnBudget,  
     ExecutionBudget,
 )
-from substrate.kernel.tools.tools import (
+from substrate.kernel.abstractions.tools.tools import (
     PayloadBase,
     ToolRisk,
     ToolType,
@@ -72,16 +85,16 @@ from substrate.kernel.tools.tools import (
     is_provider_defined_tool,
     ToolRegistry,
 )
-from substrate.kernel.messaging.message import (
+from substrate.kernel.abstractions.messaging.message import (
     ChatPayload,
     DataPayload,
     Payload,
     Message,
     Subscription,
 )
-from substrate.kernel.tools.skills import Skill
-from substrate.kernel.core.usage import Usage
-from substrate.kernel.llm.llm import (
+from substrate.kernel.abstractions.tools.skills import Skill
+from substrate.kernel.abstractions.core.usage import Usage
+from substrate.kernel.abstractions.llm.llm import (
     GenerationOptions,
     LLMClient,
     LLMResponse,
@@ -90,14 +103,15 @@ from substrate.kernel.llm.llm import (
     Modality,
     ReasoningEffort,
     ModelCapabilities,
+    FinishReason,
 )
-from substrate.kernel.storage.history import (
+from substrate.kernel.abstractions.storage.history import (
     Branch,
     HistoryCheckpoint,
     HistoryProvider,
     MessageNode,
 )
-from substrate.kernel.agent.context import (
+from substrate.kernel.abstractions.agent.context import (
     CompactionStrategy,
     CompactionPhase,
     CompactionContext,
@@ -105,36 +119,33 @@ from substrate.kernel.agent.context import (
     ContextBuilder,
     ContextWindow,
 )
-from substrate.kernel.agent.manifest import AgentManifest
-from substrate.kernel.agent.middleware import MiddlewareStage
-from substrate.kernel.agent.safety import (
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.abstractions.agent.safety import (
     Severity,
     max_severity,
     SafetyVerdict,
     TextSafetyClassifier,
     ImageSafetyClassifier,
 )
-from substrate.kernel.messaging.stream import (
+from substrate.kernel.abstractions.messaging.stream import (
     TextDelta,
     ReasoningDelta,
-    AudioDelta,
-    ImageDelta,
     CompletionEvent,
     StreamDone,
     AgentProgress,
     AgentStep,
 )
-from substrate.kernel.storage.blob import BlobStore
-from substrate.kernel.storage.objects import ObjectStore
-from substrate.kernel.storage.vector import Document, SearchResult, VectorStore
-from substrate.kernel.storage.graph import (
+from substrate.kernel.abstractions.storage.blob import BlobStore
+from substrate.kernel.abstractions.storage.objects import ObjectStore
+from substrate.kernel.abstractions.storage.vector import Document, SearchResult, VectorStore
+from substrate.kernel.abstractions.storage.graph import (
     Entity,
     Relationship,
     SubGraph,
     GraphStore,
     CypherCapable,
 )
-from substrate.kernel.storage.memory import (
+from substrate.kernel.abstractions.storage.memory import (
     ContextMemoryInjection,
     ExtractionMethod,
     MemoryCategory,
@@ -147,8 +158,8 @@ from substrate.kernel.storage.memory import (
     MemoryStore,
     ShortTermMemory,
 )
-from substrate.kernel.storage.tasks import Task, TaskList, TaskStatus, TaskStore
-from substrate.kernel.document import (
+from substrate.kernel.abstractions.storage.tasks import Task, TaskList, TaskStatus, TaskStore
+from substrate.kernel.abstractions.document import (
     DocumentChunk,
     DocumentChunker,
     DocumentExtractor,
@@ -159,59 +170,53 @@ from substrate.kernel.document import (
     ExtractedPage,
     ExtractionResult,
 )
-from substrate.kernel.storage.snapshots import (
+from substrate.kernel.abstractions.storage.snapshots import (
     ContentRef,
     WorkspaceFileEntry,
     WorkspaceManifest,
     WorkspaceSnapshot,
     WorkspaceStore,
 )
-from substrate.kernel.agent.runtime_context import (
+from substrate.kernel.abstractions.agent.runtime_context import (
     CancellationTokenProtocol,
     RunMeta,
     RunScope,
     scope_of,
 )
-from substrate.kernel.tools.approval import (
+from substrate.kernel.abstractions.tools.approval import (
     ApprovalDecision,
     ApprovalRequest,
     ApprovalResult,
     ApprovalHandler,
 )
-from substrate.kernel.tools.chain import (
+from substrate.kernel.abstractions.tools.chain import (
     ChainPolicy,
     ChainFile,
     InvocationResult,
     ChainCallRecord,
     ChainRunResult,
 )
-from substrate.kernel.runtime import (
+from substrate.kernel.abstractions.runtime import (
     RunId,
     RunStatus,
     new_run_id,
     RunLogEntry,
     RunLogKind,
-    EventLogProtocol,
     Effect,
     EffectResult,
     DeadLetterReason,
     DeadLetterEntry,
-    InboxProtocol,
-    FollowGraph,
-    FanoutStrategy,
     Wakeup,
-    SignalBusProtocol,
     RunRetryPolicy,
-    Lease,
-    SchedulerProtocol,
-    RunRegistryProtocol,
     RunHandle,
     RunResult,
-    SupervisorProtocol,
     AgentRunContext,
     Agent,
     AskOutcome,
     RunStatusSummary,
+    Cancel, Commit, CommitResult, Complete, DeliverResult, Delivery, Fail, HeartbeatResult,
+    Lease, Nack, NewEntry, Retry, RunRecord, RunSpec, RuntimeStore, SignalSpec, SpawnSpec,
+    StoreStats, Suspend,
 )
 
 __all__ = [
@@ -252,9 +257,25 @@ __all__ = [
     "BranchNotFoundError",
     "BranchAlreadyExistsError",
     "DAGIntegrityError",
+    "RateLimitedError",
+    "ContextLengthError",
+    "ContentFilterError",
+    "AuthError",
+    "LeaseLostError",
+    "NonDeterminismError",
+    "OrphanedEffectError",
+    "ObjectNotFoundError",
     # Identity
     "Actor",
     "Topic",
+    "ErrorInfo",
+    "TraceContext",
+    "TenantId",
+    "UserId",
+    "ThreadId",
+    "BranchId",
+    "MessageId",
+    "new_id",
     # Supervision
     "Supervision",
     "HistoryRetention",
@@ -294,6 +315,7 @@ __all__ = [
     "Modality",
     "ReasoningEffort",
     "ModelCapabilities",
+    "FinishReason",
     "Usage",
     # History
     "HistoryProvider",
@@ -307,7 +329,6 @@ __all__ = [
     "CompactionResult",
     "ContextBuilder",
     "ContextWindow",
-    "AgentManifest",
     # Middleware
     "MiddlewareStage",
     # Safety
@@ -319,8 +340,6 @@ __all__ = [
     # Token stream
     "TextDelta",
     "ReasoningDelta",
-    "AudioDelta",
-    "ImageDelta",
     "CompletionEvent",
     "StreamDone",
     # Progress stream
@@ -393,25 +412,19 @@ __all__ = [
     "new_run_id",
     "RunLogEntry",
     "RunLogKind",
-    "EventLogProtocol",
     "Effect",
     "EffectResult",
     "DeadLetterReason",
     "DeadLetterEntry",
-    "InboxProtocol",
-    "FollowGraph",
-    "FanoutStrategy",
     "Wakeup",
-    "SignalBusProtocol",
     "RunRetryPolicy",
-    "Lease",
-    "SchedulerProtocol",
-    "RunRegistryProtocol",
     "RunHandle",
     "RunResult",
-    "SupervisorProtocol",
     "AgentRunContext",
     "Agent",
     "AskOutcome",
     "RunStatusSummary",
+    "Cancel", "Commit", "CommitResult", "Complete", "DeliverResult", "Delivery", "Fail",
+    "HeartbeatResult", "Lease", "Nack", "NewEntry", "Retry", "RunRecord", "RunSpec",
+    "RuntimeStore", "SignalSpec", "SpawnSpec", "StoreStats", "Suspend",
 ]

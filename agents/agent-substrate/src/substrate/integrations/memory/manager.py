@@ -13,8 +13,8 @@ from __future__ import annotations
 import re
 from typing import Sequence
 
-from substrate.kernel.core.content import ChatMessage, Role
-from substrate.kernel.storage.memory import (
+from substrate.kernel.abstractions.core.content import ChatMessage, Role
+from substrate.kernel.abstractions.storage.memory import (
     MemoryCategory,
     MemoryNamespace,
     MemoryProvenance,

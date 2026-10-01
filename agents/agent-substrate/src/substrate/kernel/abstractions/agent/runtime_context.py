@@ -18,13 +18,13 @@ token from that layer, never conjured here.
 
 from __future__ import annotations
 
-import uuid as _uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Mapping, Protocol, runtime_checkable
 
-from substrate.kernel.exceptions import CancellationError
-from substrate.kernel.agent.supervision import Supervision
+from substrate.kernel.abstractions.exceptions import CancellationError
+from substrate.kernel.abstractions.agent.supervision import Supervision
+from substrate.kernel.abstractions.core.trace import TraceContext
 
 
 @runtime_checkable
@@ -146,10 +146,8 @@ def scope_of(ctx: object | None) -> RunScope:
 class RunMeta:
     """Execution-scoped metadata threaded through every kernel call.
 
-    ``run_id``       — globally unique identifier for this run; first-class so
-                       every layer can key logs, effects, and EventLogProtocol entries
-                       without digging into ``supervision``.  Populated from
-                       ``supervision.run_id`` when supervision is provided.
+    ``run_id``       — this durable run's own id; keys its log and effects. (Not
+                       ``supervision.run_id``, which names the whole execution tree.)
     ``cancellation`` — cooperative cancellation; call ``check()`` at yield points.
     ``supervision``  — agent position in the execution tree; ``None`` for standalone runs.
     ``deadline``     — wall-clock expiry; agents and tools should honour it. Resolved
@@ -158,7 +156,8 @@ class RunMeta:
                        this is the one absolute cutoff every ``check()`` call enforces;
                        ``SchedulerProtocol.enqueue``'s own ``deadline`` parameter is a
                        distinct, scheduler-level lease/queueing cutoff, not this one.
-    ``trace_id``     — distributed trace identifier for observability.
+    ``trace``        — the trace this run belongs to; persisted with the run so every
+                       lease, replay and child continues it. ``None`` when untraced.
     ``tenant_id``    — tenant namespace; ``None`` for single-tenant deployments.
     ``scope``        — who/where the message being handled belongs to; see ``RunScope``.
 
@@ -171,9 +170,16 @@ class RunMeta:
     cancellation: CancellationTokenProtocol
     supervision: Supervision | None = None
     deadline: datetime | None = None
-    trace_id: str = field(default_factory=lambda: _uuid.uuid4().hex)
+    trace: TraceContext | None = None
     tenant_id: str | None = None
     scope: RunScope = field(default_factory=RunScope)
+
+    def __post_init__(self) -> None:
+        # A naive deadline makes every ``check()`` raise TypeError when compared
+        # with an aware "now" — and ``check()`` runs at every cooperative yield
+        # point, so one naive datetime would disable cancellation everywhere.
+        if self.deadline is not None and self.deadline.tzinfo is None:
+            raise ValueError("RunMeta.deadline must be timezone-aware (use UTC)")
 
     def check(self) -> None:
         """Raise CancellationError if cancelled or deadline expired."""
@@ -193,4 +199,4 @@ class RunMeta:
         return self.cancellation.child()
 
 
-__all__ = ["CancellationTokenProtocol", "RunMeta"]
+__all__ = ["CancellationTokenProtocol", "RunMeta", "RunScope", "scope_of"]

@@ -5,45 +5,45 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     Role,
     TextBlock,
     ToolResultBlock,
     ToolUseBlock,
 )
-from substrate.kernel.agent.context import CompactionContext, CompactionPhase
-from substrate.kernel.agent.runtime_context import RunScope
-from substrate.kernel.core.identity import Actor, Topic
-from substrate.kernel.exceptions import BudgetExhaustedError
-from substrate.kernel.llm.llm import GenerationOptions, LLMResponse, ReasoningEffort
-from substrate.kernel.messaging.message import Message
-from substrate.kernel.runtime.log_entry import RunLogKind
-from substrate.kernel.storage.history import HistoryProvider
-from substrate.kernel.tools import ToolRegistry, is_concurrency_safe
-from substrate.kernel.tools.chain import ChainPolicy
-from substrate.kernel.tools.approval import ApprovalHandler
-from substrate.kernel.tools.tools import ToolRisk
+from substrate.kernel.abstractions.agent.context import CompactionContext, CompactionPhase
+from substrate.kernel.abstractions.agent.runtime_context import RunScope
+from substrate.kernel.abstractions.core.identity import Actor, Topic
+from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
+from substrate.kernel.abstractions.llm.llm import GenerationOptions, LLMResponse, ReasoningEffort
+from substrate.kernel.abstractions.messaging.message import Message
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.storage.history import HistoryProvider
+from substrate.kernel.abstractions.tools import ToolRegistry, is_concurrency_safe
+from substrate.kernel.abstractions.tools.chain import ChainPolicy
+from substrate.kernel.abstractions.tools.approval import ApprovalHandler
+from substrate.kernel.abstractions.tools.tools import ToolRisk
 
-from substrate.agents.context.context import ContextConfig
-from substrate.agents.limits.execution import ExecutionTracker
-from substrate.agents.hooks.manager import HookEvent, HookManager
-from substrate.agents.middleware._contracts import (
+from substrate.kernel.context.context import ContextConfig
+from substrate.kernel.limits.execution import ExecutionTracker
+from substrate.kernel.hooks.manager import HookEvent, HookManager
+from substrate.kernel.middleware._contracts import (
     AgentRunResult,
     MiddlewareContext,
     ToolCallRecord,
 )
-from substrate.agents.middleware.pipeline import MiddlewarePipeline
-from substrate.kernel.agent.middleware import MiddlewareStage
-from substrate.agents.core.base import BaseAgent
+from substrate.kernel.middleware.pipeline import MiddlewarePipeline
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.agents.base import BaseAgent
 from substrate.logger import setup_logging
 
 logger = setup_logging()
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.context import RunContext
-    from substrate.kernel.llm.llm import LLMClient
-    from substrate.kernel.tools.chain import InvocationResult
+    from substrate.kernel.runtime.context import RunContext
+    from substrate.kernel.abstractions.llm.llm import LLMClient
+    from substrate.kernel.abstractions.tools.chain import InvocationResult
 
 
 class ReActAgent(BaseAgent):
@@ -90,7 +90,7 @@ class ReActAgent(BaseAgent):
         self.model = model
 
         if isinstance(tools, list):
-            from substrate.agents.tools.toolbox import Toolbox
+            from substrate.kernel.tools.toolbox import Toolbox
 
             tb = Toolbox()
             for t in tools:

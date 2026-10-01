@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import uuid
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import Field
 
-from substrate.kernel.core.content import JsonObject, KernelModel
+from substrate.kernel.abstractions.ids import new_id
+from substrate.kernel.abstractions.core.content import JsonObject, KernelModel
 
 
 class Entity(KernelModel):
@@ -15,7 +15,7 @@ class Entity(KernelModel):
 
     label: str
     properties: JsonObject = Field(default_factory=dict)
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(default_factory=lambda: new_id())
 
 
 class Relationship(KernelModel):
@@ -25,7 +25,7 @@ class Relationship(KernelModel):
     target_id: str
     type: str
     properties: JsonObject = Field(default_factory=dict)
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(default_factory=lambda: new_id())
 
 
 class SubGraph(KernelModel):

@@ -16,8 +16,8 @@ from substrate.runtimes.document_intelligence.client import (
     ExtractedPageText,
     ExtractResponse,
 )
-from substrate.kernel.core.content import MediaBlock, TextBlock
-from substrate.kernel.storage.vector import Document, SearchResult
+from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
+from substrate.kernel.abstractions.storage.vector import Document, SearchResult
 
 
 class StubImageStore:

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from substrate.kernel.exceptions import BlockValidationError, KernelError
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.exceptions import BlockValidationError, KernelError
+from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     DataBlock,
     ErrorBlock,
@@ -155,7 +155,7 @@ def test_parse_content_block():
     assert block.text == "hello dict"
 
     raw_unknown = {"type": "future_block", "some_data": "123"}
-    block_unknown = parse_content_block(raw_unknown)
+    block_unknown = parse_content_block(raw_unknown, forward_compatible=True)
     assert isinstance(block_unknown, UnknownBlock)
     assert block_unknown.raw == raw_unknown
 

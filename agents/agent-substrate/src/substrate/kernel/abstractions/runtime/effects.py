@@ -35,15 +35,45 @@ semantics instead.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
-from typing import Literal
+from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from substrate.kernel.core.content import JsonObject
-from substrate.kernel.runtime.ids import RunId
+from substrate.kernel.abstractions.core.content import JsonObject
+from substrate.kernel.abstractions.runtime.ids import RunId
 
+
+def _canonical_default(value: Any) -> Any:
+    """Encode the non-JSON values tool arguments routinely contain, deterministically.
+
+    ``json.dumps`` raises on bytes and datetimes, and effect identity is computed
+    from arguments before every call. Anything not listed here is refused rather
+    than stringified, because a ``repr`` embedding an object address would give
+    the same call a different identity on every replay.
+    """
+    if isinstance(value, (bytes, bytearray)):
+        return {"__bytes__": base64.b64encode(bytes(value)).decode()}
+    if isinstance(value, datetime):
+        return {"__datetime__": value.isoformat()}
+    if isinstance(value, (set, frozenset)):
+        return {"__set__": sorted(value, key=repr)}
+    raise TypeError(f"{type(value).__name__} has no canonical encoding for effect identity")
+
+
+def canonical_json(value: Any) -> str:
+    """Stable JSON: sorted keys, no whitespace, deterministic for any supported value."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=_canonical_default)
+
+
+def args_digest(args: Any) -> str:
+    """A short digest of a call's arguments, journaled with the effect so a replay
+    that arrives with different arguments is detected instead of served the old
+    call's result."""
+    return hashlib.sha256(canonical_json(args).encode()).hexdigest()[:32]
 
 class Effect(BaseModel):
     """A description of an external side-effect to be executed at-most-once.
@@ -88,10 +118,8 @@ class Effect(BaseModel):
         Canonical: sorts dict keys before hashing so argument order doesn't
         matter.  Returns a 16-char hex prefix of SHA-256.
         """
-        raw = json.dumps(
-            {"run_id": run_id, "path": path, "kind": kind, "args": args},
-            sort_keys=True,
-            separators=(",", ":"),
+        raw = canonical_json(
+            {"run_id": run_id, "path": path, "kind": kind, "args": args}
         ).encode()
         return hashlib.sha256(raw).hexdigest()[:16]
 
@@ -116,4 +144,4 @@ class EffectResult(BaseModel):
     model_config = {"frozen": True}
 
 
-__all__ = ["Effect", "EffectResult"]
+__all__ = ["Effect", "EffectResult", "args_digest", "canonical_json"]

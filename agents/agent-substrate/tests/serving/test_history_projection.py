@@ -8,13 +8,13 @@ depends on any run being the "currently active" one.
 
 from __future__ import annotations
 
-from substrate.kernel.llm import ModelCapabilities
-from substrate.agents.core.react import ReActAgent
-from substrate.agents.runtime import Runtime
-from substrate.kernel.core.content import TextBlock
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.core.usage import Usage
-from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+from substrate.kernel.abstractions.llm import ModelCapabilities
+from substrate.kernel.agents.react import ReActAgent
+from substrate.kernel.runtime import Runtime
+from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.core.usage import Usage
+from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
 from substrate.serving.protocol.events import (
     RunCompletedEvent,
     TextDeltaEvent,
@@ -39,8 +39,8 @@ async def test_project_thread_returns_one_runs_full_conversation() -> None:
     thread_id = "thread-1"
     async with Runtime() as rt:
         await rt.register(agent)
-        from substrate.kernel.core.content import ChatMessage, Role
-        from substrate.kernel.messaging.message import ChatPayload, Message
+        from substrate.kernel.abstractions.core.content import ChatMessage, Role
+        from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 
         msg = Message(
             target=agent.id,
@@ -67,8 +67,8 @@ async def test_project_thread_spans_multiple_runs_in_order() -> None:
     between them) both appear, oldest first."""
     agent = ReActAgent("assistant", model=_StubLLM("second answer"))
     thread_id = "thread-multi"
-    from substrate.kernel.core.content import ChatMessage, Role
-    from substrate.kernel.messaging.message import ChatPayload, Message
+    from substrate.kernel.abstractions.core.content import ChatMessage, Role
+    from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 
     async with Runtime() as rt:
         await rt.register(agent)
@@ -109,8 +109,8 @@ async def test_project_thread_skips_non_streaming_log_kinds() -> None:
     """run.started/effect.result/llm.call never leak into the projection."""
     agent = ReActAgent("assistant", model=_StubLLM("ok"))
     thread_id = "thread-filter"
-    from substrate.kernel.core.content import ChatMessage, Role
-    from substrate.kernel.messaging.message import ChatPayload, Message
+    from substrate.kernel.abstractions.core.content import ChatMessage, Role
+    from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 
     async with Runtime() as rt:
         await rt.register(agent)

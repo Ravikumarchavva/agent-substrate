@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.llm.models import (
+from substrate.kernel.llm.models import (
     ModelProfile,
     estimate_cost,
     get_model_profile,

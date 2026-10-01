@@ -3,18 +3,18 @@ spawned sub-agent inherits it."""
 
 from __future__ import annotations
 
-from substrate.agents.context import ContextConfig
-from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-from substrate.agents.core.react import ReActAgent
-from substrate.agents.runtime.runtime import Runtime
-from substrate.agents.storage.history import InMemoryHistoryProvider
-from substrate.kernel.agent.runtime_context import RunScope, scope_of
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock, ToolUseBlock
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import ChatPayload, Message
-from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.context import ContextConfig
+from substrate.kernel.agents.orchestrator import OrchestratorAgent, SubAgentConfig
+from substrate.kernel.agents.react import ReActAgent
+from substrate.kernel.runtime.runtime import Runtime
+from substrate.kernel.storage.history import InMemoryHistoryProvider
+from substrate.kernel.abstractions.agent.runtime_context import RunScope, scope_of
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock, ToolUseBlock
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.kernel.abstractions.tools import ToolExecutionResult
 
-from tests.agents.test_react_harness import ScriptedLLM  # noqa: E402
+from tests.kernel.test_react_harness import ScriptedLLM  # noqa: E402
 
 
 class ProbeTool:

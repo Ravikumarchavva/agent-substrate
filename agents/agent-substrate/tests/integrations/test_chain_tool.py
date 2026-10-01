@@ -8,10 +8,10 @@ import pytest
 
 from substrate.integrations.tools.chain.bridge import BridgeSession, ChainBridgeRegistry
 from substrate.integrations.tools.chain.prelude import build_prelude
-from substrate.agents.tools.invoker import ToolInvoker
-from substrate.agents.tools.toolbox import Toolbox
-from substrate.kernel.core.content import TextBlock
-from substrate.kernel.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
+from substrate.kernel.tools.invoker import ToolInvoker
+from substrate.kernel.tools.toolbox import Toolbox
+from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.kernel.abstractions.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
 
 
 # ---------------------------------------------------------------------------

@@ -12,9 +12,9 @@ import json
 import logging
 from pathlib import Path
 
-from substrate.agents.storage.fs import atomic_write_json, safe_name
-from substrate.kernel.exceptions import SnapshotConflictError
-from substrate.kernel.storage.snapshots import (
+from substrate.kernel.storage.fs import atomic_write_json, safe_name
+from substrate.kernel.abstractions.exceptions import SnapshotConflictError
+from substrate.kernel.abstractions.storage.snapshots import (
     WorkspaceFileEntry,
     WorkspaceManifest,
     WorkspaceSnapshot,

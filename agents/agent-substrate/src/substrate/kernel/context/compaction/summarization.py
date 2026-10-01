@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from substrate.agents.context.tokens import (
+from substrate.kernel.context.tokens import (
     DEFAULT_CHARS_PER_TOKEN,
     estimate_message_tokens,
     estimate_tokens,
 )
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.llm import GenerationOptions
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.llm import GenerationOptions
 from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
-    from substrate.kernel.llm import LLMClient
+    from substrate.kernel.abstractions.llm import LLMClient
 
 logger = setup_logging()
 

@@ -6,16 +6,16 @@ from sqlalchemy.exc import OperationalError
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from substrate.kernel import ChatMessage
-from substrate.kernel.core.content import TextBlock
-from substrate.kernel.storage.vector import Document
-from substrate.kernel.storage.memory import MemoryNamespace, MemoryQuery, MemoryRecord
-from substrate.kernel.tools import ToolExecutionResult, ToolCallRequest
+from substrate.kernel.abstractions import ChatMessage
+from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.kernel.abstractions.storage.vector import Document
+from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery, MemoryRecord
+from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolCallRequest
 
 from substrate.integrations.memory import DurableMemoryStore
-from substrate.agents.storage.history import project_messages
+from substrate.kernel.storage.history import project_messages
 from substrate.integrations.history import DurableHistoryProvider
-from substrate.kernel.storage.history import MessageNode
+from substrate.kernel.abstractions.storage.history import MessageNode
 from substrate.integrations.vector import PgVectorStore
 from substrate.integrations.graph import AGEGraphStore
 
@@ -171,7 +171,7 @@ async def test_durable_memory_store_multimodal():
     if not await check_db_available():
         pytest.skip("PostgreSQL database not available")
 
-    from substrate.kernel.core.content import DataBlock, MediaBlock, TextBlock
+    from substrate.kernel.abstractions.core.content import DataBlock, MediaBlock, TextBlock
 
     db_url = get_db_url()
     store = DurableMemoryStore(db_url)
@@ -278,12 +278,12 @@ async def test_pgvector_store_conformance():
         # Create documents with embeddings populated
         doc1 = Document.from_text(
             "multimodal text doc 1",
-            id="00000000-0000-0000-0000-000000000001",
+            id="00000000000000000000000000000001",
             embedding=emb1,
         )
         doc2 = Document.from_text(
             "multimodal text doc 2",
-            id="00000000-0000-0000-0000-000000000002",
+            id="00000000000000000000000000000002",
             embedding=emb2,
         )
 

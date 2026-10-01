@@ -41,7 +41,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from substrate.kernel.storage.graph import Entity, Relationship, SubGraph
+from substrate.kernel.abstractions.storage.graph import Entity, Relationship, SubGraph
 
 _CYPHER_MATCH_ALL = re.compile(
     r"^\s*MATCH\s*\(\s*n\s*\)\s*RETURN\s+n(?:\s+LIMIT\s+(\d+))?\s*;?\s*$", re.IGNORECASE

@@ -5,11 +5,11 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.agents.llm import OpenAIChatCompletionClient
-from substrate.agents.llm.chat_client import parse_tool_arguments
-from substrate.agents.llm.modalities import fit_to_capabilities
-from substrate.agents.llm.models import estimate_cost, resolve_capabilities
-from substrate.kernel.core.content import (
+from substrate.integrations.llm import OpenAICompatibleClient
+from substrate.kernel.llm.tool_arguments import parse_tool_arguments
+from substrate.kernel.llm.modalities import fit_to_capabilities
+from substrate.kernel.llm.models import estimate_cost, resolve_capabilities
+from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     MediaBlock,
     Role,
@@ -17,8 +17,8 @@ from substrate.kernel.core.content import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from substrate.kernel.core.usage import Usage
-from substrate.kernel.llm import Modality, ModelCapabilities
+from substrate.kernel.abstractions.core.usage import Usage
+from substrate.kernel.abstractions.llm import Modality, ModelCapabilities
 
 PNG = b"\x89PNG" + b"\x00" * 16
 
@@ -115,7 +115,7 @@ def test_parse_tool_arguments(raw, expected_args, has_error):
 def test_chat_completions_sends_tool_images_after_the_whole_tool_run():
     """Tool messages are text-only in this API, so a tool's image goes in one
     user message placed after ALL the tool messages — never between them."""
-    client = OpenAIChatCompletionClient(model="gpt-4o", api_key="x")
+    client = OpenAICompatibleClient(model="gpt-4o", api_key="x")
     out = client._serialize_messages(_tool_turn(_plot("c1"), _plot("c2")))
 
     roles = [m["role"] for m in out]
@@ -126,7 +126,7 @@ def test_chat_completions_sends_tool_images_after_the_whole_tool_run():
 
 
 def test_chat_completions_text_only_model_never_gets_an_image_part():
-    client = OpenAIChatCompletionClient(model="llama3.2", api_key="x", base_url="http://x/v1")
+    client = OpenAICompatibleClient(model="llama3.2", api_key="x", base_url="http://x/v1")
     out = client._serialize_messages(_tool_turn(_plot("c1")))
 
     assert [m["role"] for m in out] == ["assistant", "tool"]
@@ -135,14 +135,14 @@ def test_chat_completions_text_only_model_never_gets_an_image_part():
 
 def test_chat_completions_flags_tool_errors():
     err = ToolResultBlock(call_id="c1", name="t", is_error=True, content=[TextBlock(text="boom")])
-    out = OpenAIChatCompletionClient(model="gpt-4o", api_key="x")._serialize_messages(_tool_turn(err))
+    out = OpenAICompatibleClient(model="gpt-4o", api_key="x")._serialize_messages(_tool_turn(err))
     assert out[1]["content"] == "Error: boom"
 
 
 def test_chat_completions_documents_use_file_parts():
     doc = MediaBlock(type="document", data=b"%PDF", media_type="application/pdf", filename="a.pdf")
     msg = ChatMessage(role=Role.USER, content=[TextBlock(text="read"), doc])
-    out = OpenAIChatCompletionClient(model="gpt-4o", api_key="x")._serialize_messages([msg])
+    out = OpenAICompatibleClient(model="gpt-4o", api_key="x")._serialize_messages([msg])
     (file_part,) = [p for p in out[0]["content"] if p["type"] == "file"]
     assert file_part["file"]["filename"] == "a.pdf"
 
@@ -155,5 +155,5 @@ def test_chat_completions_skips_an_empty_assistant_reply():
         ChatMessage(role=Role.ASSISTANT, content=[]),
         ChatMessage(role=Role.USER, content=[TextBlock(text="hello?")]),
     ]
-    out = OpenAIChatCompletionClient(model="gpt-4o", api_key="x")._serialize_messages(msgs)
+    out = OpenAICompatibleClient(model="gpt-4o", api_key="x")._serialize_messages(msgs)
     assert [m["role"] for m in out] == ["user", "user"]

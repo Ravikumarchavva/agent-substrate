@@ -15,21 +15,21 @@ through ``build_agent_for_thread()`` itself.
 
 from __future__ import annotations
 
-from substrate.kernel.llm import ModelCapabilities
+from substrate.kernel.abstractions.llm import ModelCapabilities
 import asyncio
 import uuid
 from typing import Any
 
-from substrate.agents.storage import InMemoryHistoryProvider
-from substrate.agents.runtime import Runtime
+from substrate.kernel.storage import InMemoryHistoryProvider
+from substrate.kernel.runtime import Runtime
 from substrate.config import SubstrateConfig
 from substrate.serving.factory import build_agent_for_thread
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock, ToolUseBlock
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.core.usage import Usage
-from substrate.kernel.messaging.message import ChatPayload, Message
-from substrate.kernel.messaging.stream import CompletionEvent
-from substrate.kernel.tools import ToolExecutionResult, ToolRisk
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock, ToolUseBlock
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.core.usage import Usage
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.kernel.abstractions.messaging.stream import CompletionEvent
+from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
 from substrate.serving.monolith.sse.bridge import WebHITLBridge
 
 

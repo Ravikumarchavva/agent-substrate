@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from substrate.kernel.llm import ModelCapabilities
+from substrate.kernel.abstractions.llm import ModelCapabilities
 from typing import AsyncIterator
 
-from substrate.agents.storage.history import project_messages
-from substrate.agents.context import (
+from substrate.kernel.storage.history import project_messages
+from substrate.kernel.context import (
     ContextConfig,
     SlidingWindowCompaction,
     CompactionPipeline,
 )
-from substrate.agents.storage import (
+from substrate.kernel.storage import (
     InMemoryHistoryProvider,
 )
-from substrate.agents.core import ReActAgent
-from substrate.agents.runtime import Runtime
-from substrate.kernel import (
+from substrate.kernel.agents import ReActAgent
+from substrate.kernel.runtime import Runtime
+from substrate.kernel.abstractions import (
     ChatMessage,
     ContentBlock,
     TextBlock,
@@ -24,11 +24,11 @@ from substrate.kernel import (
     ToolRisk,
     ToolUseBlock,
 )
-from substrate.kernel.core.content import Role
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
-from substrate.kernel.messaging.message import ChatPayload, Message
-from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+from substrate.kernel.abstractions.core.content import Role
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.llm import GenerationOptions, LLMResponse, Usage
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
 
 
 # ---------------------------------------------------------------------------

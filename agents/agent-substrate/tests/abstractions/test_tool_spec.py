@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 
-from substrate.kernel.tools import (
+from substrate.kernel.abstractions.tools import (
     AnyTool,
     ToolExecutionResult,
     is_hosted_tool,
     is_provider_defined_tool,
 )
-from substrate.kernel import PayloadBase
-from substrate.kernel.core.content import TextBlock
+from substrate.kernel.abstractions import PayloadBase
+from substrate.kernel.abstractions.core.content import TextBlock
 
 
 # ---------------------------------------------------------------------------

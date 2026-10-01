@@ -15,14 +15,14 @@ from __future__ import annotations
 
 import time
 
-from substrate.agents.runtime import Runtime
-from substrate.agents.runtime.backends._event_log import InMemoryEventLog
-from substrate.agents.runtime.effect_cache import EffectCache
-from substrate.kernel.exceptions import PermanentError
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import DataPayload, Message
-from substrate.kernel.runtime.log_entry import RunLogEntry
-from substrate.kernel.runtime.scheduler import RunRetryPolicy
+from substrate.kernel.runtime import Runtime
+from substrate.kernel.runtime.backends._event_log import InMemoryEventLog
+from substrate.kernel.runtime.effect_cache import EffectCache
+from substrate.kernel.abstractions.exceptions import PermanentError
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import DataPayload, Message
+from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
+from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 
 
 def _agent_id(name: str) -> Actor:
@@ -204,7 +204,7 @@ async def test_retry_and_suspension_are_reflected_in_otel_counters() -> None:
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
-    from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
+    from substrate.kernel.runtime.backends._scheduler import InMemoryScheduler
 
     reader = InMemoryMetricReader()
     provider = MeterProvider(metric_readers=[reader])
@@ -223,7 +223,7 @@ async def test_retry_and_suspension_are_reflected_in_otel_counters() -> None:
 
         # A plain SUSPENDED release (not via retry) — exercise the other counter.
         sched = InMemoryScheduler()
-        from substrate.kernel.runtime.ids import RunStatus, new_run_id
+        from substrate.kernel.abstractions.runtime.ids import RunStatus, new_run_id
 
         suspend_run_id = new_run_id()
         sched.register_run(suspend_run_id, _agent_id("suspend-metrics"))

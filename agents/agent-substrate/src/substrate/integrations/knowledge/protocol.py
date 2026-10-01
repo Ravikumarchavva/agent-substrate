@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Protocol
-from substrate.kernel.storage.vector import SearchResult
+from substrate.kernel.abstractions.storage.vector import SearchResult
 
 
 class RAGProvider(Protocol):

@@ -36,9 +36,9 @@ from __future__ import annotations
 
 import threading
 
-from substrate.kernel.exceptions import BudgetExhaustedError
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.agent.supervision import Priority, SpawnBudget
+from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.agent.supervision import Priority, SpawnBudget
 
 
 class SpawnTracker:

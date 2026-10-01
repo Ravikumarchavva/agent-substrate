@@ -1,25 +1,20 @@
-"""substrate.agents.llm — kernel LLMClient/EmbeddingClient contracts, model
-metadata, and the one default implementation of each.
+"""substrate.kernel.llm — vendor-free LLM logic: the model registry and
+capability resolution, modality fitting and error classification.
 
-``OpenAIChatCompletionClient`` and ``SentenceTransformersEmbeddingClient``
-are the L1 defaults — the same "one implementation needing the least
-infrastructure the Protocol can possibly need" rule every other storage
-Protocol already follows. Additional vendor-native clients and provider
-auto-detection live in ``integrations/llm/`` for L2.
+Vendor clients (OpenAI-compatible, Responses, Anthropic, Gemini) and local
+embedding models live in ``integrations/llm``.
 """
 
 from __future__ import annotations
 
-from substrate.agents.llm.client import LLMClient, EmbeddingClient
-from substrate.agents.llm.models import (
+from substrate.kernel.llm.client import LLMClient, EmbeddingClient
+from substrate.kernel.llm.models import (
     ModelProfile,
     MODEL_REGISTRY,
     get_model_profile,
     estimate_cost,
     list_models,
 )
-from substrate.agents.llm.chat_client import OpenAIChatCompletionClient
-from substrate.agents.llm.embedding_client import SentenceTransformersEmbeddingClient
 
 __all__ = [
     "LLMClient",
@@ -29,6 +24,4 @@ __all__ = [
     "get_model_profile",
     "estimate_cost",
     "list_models",
-    "OpenAIChatCompletionClient",
-    "SentenceTransformersEmbeddingClient",
 ]

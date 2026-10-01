@@ -11,10 +11,10 @@ and MCP tools (like filesystem) together in a single agent.
 """
 
 import asyncio
-from substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from substrate.kernel.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from substrate.integrations.tools.mcp import MCPClient, MCPTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.agents.storage import LocalFilesystemHistoryProvider
+from substrate.kernel.storage import LocalFilesystemHistoryProvider
 from substrate.kernel.messages.client_messages import (
     UserMessage,
     SystemMessage,

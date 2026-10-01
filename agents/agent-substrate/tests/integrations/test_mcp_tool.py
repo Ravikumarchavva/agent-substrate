@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, Mock
 from substrate.integrations.tools.mcp.tool import MCPTool
-from substrate.kernel.core.content import TextBlock
+from substrate.kernel.abstractions.core.content import TextBlock
 
 
 @pytest.mark.asyncio

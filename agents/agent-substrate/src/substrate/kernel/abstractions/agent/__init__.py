@@ -10,7 +10,6 @@ from .context import (
     ContextBuilder,
     ContextWindow,
 )
-from .manifest import AgentManifest
 from .middleware import MiddlewareStage
 from .runtime_context import CancellationTokenProtocol, RunMeta, RunScope, scope_of
 from .safety import (
@@ -30,7 +29,6 @@ __all__ = [
     "CompactionStrategy",
     "ContextBuilder",
     "ContextWindow",
-    "AgentManifest",
     "MiddlewareStage",
     "CancellationTokenProtocol",
     "RunMeta",

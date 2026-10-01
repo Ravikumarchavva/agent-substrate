@@ -10,7 +10,7 @@ only for tests and throwaway scratch runs.
 All three implement the same conversation-DAG HistoryProvider contract
 (``append_node`` / ``append_and_advance`` / ``get_branch`` / ...) — a linear
 transcript is a *projection* of one branch, read via
-``substrate.agents.storage.project_messages``, not stored separately.
+``substrate.kernel.storage.project_messages``, not stored separately.
 
 Demonstrates using:
   - InMemoryHistoryProvider (non-durable — tests / throwaway scratch only)
@@ -24,14 +24,14 @@ import asyncio
 import os
 import tempfile
 
-from substrate.agents.storage import (
+from substrate.kernel.storage import (
     InMemoryHistoryProvider,
     LocalFilesystemHistoryProvider,
     project_messages,
 )
 from substrate.integrations.history import DurableHistoryProvider
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.storage.history import MessageNode
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.storage.history import MessageNode
 
 DB_URL = os.getenv(
     "DATABASE_URL",

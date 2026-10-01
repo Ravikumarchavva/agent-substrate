@@ -45,7 +45,7 @@ from pathlib import Path
 from sqlalchemy import text
 
 from substrate.capabilities.storage.s3 import S3FileStore
-from substrate.kernel.core.content import ImageBlock, TextBlock, content_block_from_dict
+from substrate.kernel.abstractions.core.content import ImageBlock, TextBlock, content_block_from_dict
 
 # ServerSettings, not SubstrateConfig: only the server layer loads `.env`, and
 # this script is run from the same directory as `uv run start`.

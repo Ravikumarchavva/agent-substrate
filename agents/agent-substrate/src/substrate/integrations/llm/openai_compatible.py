@@ -26,18 +26,19 @@ from typing import Any, AsyncIterator, Optional
 
 from openai import AsyncOpenAI
 
-from substrate.agents.llm.modalities import fit_to_capabilities
-from substrate.agents.llm.models import resolve_capabilities
-from substrate.kernel import ChatMessage, ContentBlock
-from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.kernel.llm import (
+from substrate.kernel.llm.modalities import fit_to_capabilities
+from substrate.kernel.llm.tool_arguments import parse_tool_arguments
+from substrate.kernel.llm.models import resolve_capabilities
+from substrate.kernel.abstractions import ChatMessage, ContentBlock
+from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+from substrate.kernel.abstractions.llm import (
     GenerationOptions,
     LLMResponse,
     ModelCapabilities,
     ReasoningEffort,
     Usage,
 )
-from substrate.kernel.core.content import (
+from substrate.kernel.abstractions.core.content import (
     DataBlock,
     ErrorBlock,
     MediaBlock,
@@ -46,29 +47,12 @@ from substrate.kernel.core.content import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from substrate.kernel.messaging.stream import CompletionEvent, ReasoningDelta, TextDelta
+from substrate.kernel.abstractions.messaging.stream import CompletionEvent, ReasoningDelta, TextDelta
 from substrate.logger import setup_logging
 
 logger = setup_logging()
 
 _AUDIO_FORMATS = {"audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "audio/mp3": "mp3"}
-
-
-def parse_tool_arguments(raw: Any) -> tuple[dict[str, Any], str | None]:
-    """Parse a model's tool-call arguments. Malformed JSON — common from
-    smaller/local models — becomes an error to report back to the model,
-    not an exception that kills the run."""
-    if isinstance(raw, dict):
-        return raw, None
-    if not raw:
-        return {}, None
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        return {}, f"arguments were not valid JSON ({exc.msg}): {raw[:500]}"
-    if not isinstance(parsed, dict):
-        return {}, f"arguments must be a JSON object, got: {raw[:500]}"
-    return parsed, None
 
 
 def _data_uri(block: MediaBlock) -> str:
@@ -215,25 +199,25 @@ def _strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
 # ── Client ────────────────────────────────────────────────────────────────────
 
 
-class OpenAIChatCompletionClient:
+class OpenAICompatibleClient:
     """Universal LLM client for any OpenAI Chat Completions-compatible provider.
 
     Point it at any server that speaks ``POST /v1/chat/completions``::
 
         # Ollama (local)
-        client = OpenAIChatCompletionClient(
+        client = OpenAICompatibleClient(
             model="llama3.2", api_key="ollama",
             base_url="http://localhost:11434/v1",
         )
 
         # Groq (cloud)
-        client = OpenAIChatCompletionClient(
+        client = OpenAICompatibleClient(
             model="llama-3.3-70b-versatile", api_key=groq_key,
             base_url="https://api.groq.com/openai/v1",
         )
 
         # DeepSeek
-        client = OpenAIChatCompletionClient(
+        client = OpenAICompatibleClient(
             model="deepseek-chat", api_key=deepseek_key,
             base_url="https://api.deepseek.com/v1",
         )

@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from substrate.agents.context.builder import DefaultContextBuilder
-from substrate.agents.context.compaction import (
+from substrate.kernel.context.builder import DefaultContextBuilder
+from substrate.kernel.context.compaction import (
     CompactionCoordinator,
     CompactionPipeline,
     SlidingWindowCompaction,
 )
-from substrate.agents.storage.history import project_messages
-from substrate.kernel.agent.context import ContextBuilder
-from substrate.kernel.agent.supervision import HistoryRetention
-from substrate.kernel.core.content import ChatMessage
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.storage.history import HistoryProvider
+from substrate.kernel.storage.history import project_messages
+from substrate.kernel.abstractions.agent.context import ContextBuilder
+from substrate.kernel.abstractions.agent.supervision import HistoryRetention
+from substrate.kernel.abstractions.core.content import ChatMessage
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.storage.history import HistoryProvider
 from substrate.logger import setup_logging
 
 logger = setup_logging()
@@ -33,7 +33,7 @@ class ContextConfig:
 
     Pass a :class:`CompactionPipeline` configured with one or more strategies::
 
-        from substrate.agents.context import CompactionPipeline, ToolResultCompactionStrategy, SlidingWindowCompaction
+        from substrate.kernel.context import CompactionPipeline, ToolResultCompactionStrategy, SlidingWindowCompaction
 
         ctx = ContextConfig(
             InMemoryHistoryProvider(),
@@ -80,7 +80,7 @@ class ContextConfig:
     @classmethod
     def default(cls) -> "ContextConfig":
         """Return a durable local filesystem context with default sliding-window compaction."""
-        from substrate.agents.storage.local_history import LocalFilesystemHistoryProvider
+        from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
 
         return cls(LocalFilesystemHistoryProvider())
 

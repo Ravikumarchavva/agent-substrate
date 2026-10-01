@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from substrate.agents.context.builder import DefaultContextBuilder
-from substrate.agents.storage.history import DefaultHistoryResolver, InMemoryHistoryProvider
-from substrate.kernel.agent.context import ContextWindow
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.storage.history import MessageNode
+from substrate.kernel.context.builder import DefaultContextBuilder
+from substrate.kernel.storage.history import DefaultHistoryResolver, InMemoryHistoryProvider
+from substrate.kernel.abstractions.agent.context import ContextWindow
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.storage.history import MessageNode
 
 
 def _msg(text: str, role: str = "user") -> ChatMessage:

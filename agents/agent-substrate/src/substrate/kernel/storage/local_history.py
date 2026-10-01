@@ -27,14 +27,14 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from substrate.agents.storage.fs import atomic_write_json, safe_name
-from substrate.kernel.exceptions import (
+from substrate.kernel.storage.fs import atomic_write_json, safe_name
+from substrate.kernel.abstractions.exceptions import (
     BranchAlreadyExistsError,
     BranchHeadConflictError,
     BranchNotFoundError,
     DAGIntegrityError,
 )
-from substrate.kernel.storage.history import (
+from substrate.kernel.abstractions.storage.history import (
     Branch,
     HistoryCheckpoint,
     MessageNode,

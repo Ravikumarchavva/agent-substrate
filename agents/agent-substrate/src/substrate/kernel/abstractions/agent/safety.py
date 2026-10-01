@@ -15,19 +15,34 @@ of that lives in ``integrations/safety/``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Mapping, Protocol, runtime_checkable
 
 
-class Severity(str, Enum):
-    """How serious a safety verdict is. Ordered low → high — comparisons use
-    ``_ORDER.index(...)``, not enum identity, so callers can rank verdicts."""
+class Severity(StrEnum):
+    """How serious a safety verdict is, ordered ``NONE < LOW < MEDIUM < HIGH < CRITICAL``."""
 
     NONE = "none"
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
+
+    @property
+    def rank(self) -> int:
+        return _ORDER.index(self)
+
+    def __lt__(self, other: object) -> bool:
+        return self.rank < other.rank if isinstance(other, Severity) else NotImplemented
+
+    def __le__(self, other: object) -> bool:
+        return self.rank <= other.rank if isinstance(other, Severity) else NotImplemented
+
+    def __gt__(self, other: object) -> bool:
+        return self.rank > other.rank if isinstance(other, Severity) else NotImplemented
+
+    def __ge__(self, other: object) -> bool:
+        return self.rank >= other.rank if isinstance(other, Severity) else NotImplemented
 
 
 _ORDER = [
@@ -42,7 +57,7 @@ _ORDER = [
 def max_severity(a: Severity, b: Severity) -> Severity:
     """The more severe of two verdicts — used to aggregate across modalities
     (text + image in one turn) and across document chunks."""
-    return a if _ORDER.index(a) >= _ORDER.index(b) else b
+    return a if a >= b else b
 
 
 @dataclass(frozen=True)

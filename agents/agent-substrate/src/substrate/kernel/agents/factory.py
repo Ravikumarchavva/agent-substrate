@@ -6,30 +6,30 @@ from substrate.logger import setup_logging
 
 from typing import TYPE_CHECKING
 
-from substrate.agents.storage.local_history import (
+from substrate.kernel.storage.local_history import (
     LocalFilesystemHistoryProvider,
 )
-from substrate.agents.context import (
+from substrate.kernel.context import (
     SlidingWindowCompaction,
     CompactionPipeline,
 )
-from substrate.agents.storage import (
+from substrate.kernel.storage import (
     HistoryProvider,
 )
-from substrate.kernel.llm import LLMClient
-from substrate.kernel import Tool
-from substrate.kernel.tools.approval import ApprovalHandler
-from substrate.kernel.tools.tools import ToolRisk
-from substrate.agents.middleware._contracts import Middleware
-from substrate.agents.middleware.observability import (
+from substrate.kernel.abstractions.llm import LLMClient
+from substrate.kernel.abstractions import Tool
+from substrate.kernel.abstractions.tools.approval import ApprovalHandler
+from substrate.kernel.abstractions.tools.tools import ToolRisk
+from substrate.kernel.middleware._contracts import Middleware
+from substrate.kernel.middleware.observability import (
     AgentTracingMiddleware,
     ChatTracingMiddleware,
     FunctionTracingMiddleware,
 )
-from substrate.agents.middleware.pipeline import MiddlewarePipeline
+from substrate.kernel.middleware.pipeline import MiddlewarePipeline
 
 if TYPE_CHECKING:
-    from substrate.agents.core import ReActAgent
+    from substrate.kernel.agents import ReActAgent
 
 logger = setup_logging()
 
@@ -59,9 +59,9 @@ def rebuild_agent(
     attached. A cold-resumed agent that needs more must be paired with a
     spec that records which ones to reattach; not needed by any caller today.
     """
-    from substrate.agents.core import ReActAgent
-    from substrate.agents.tools.toolbox import Toolbox
-    from substrate.agents.context import ContextConfig
+    from substrate.kernel.agents import ReActAgent
+    from substrate.kernel.tools.toolbox import Toolbox
+    from substrate.kernel.context import ContextConfig
 
     session_id = spec.get("session_id", "resumed")
     max_iterations = spec.get("max_iterations", 30)
@@ -162,9 +162,9 @@ def create_assistant_agent(
             leaves ``ToolInvoker``'s own default (see
             ``worker.py::_build_tool_invoker``).
     """
-    from substrate.agents.core import ReActAgent
-    from substrate.agents.tools.toolbox import Toolbox
-    from substrate.agents.context import ContextConfig
+    from substrate.kernel.agents import ReActAgent
+    from substrate.kernel.tools.toolbox import Toolbox
+    from substrate.kernel.context import ContextConfig
 
     pipeline = model_context or CompactionPipeline(
         [SlidingWindowCompaction(max_messages=model_context_window)]

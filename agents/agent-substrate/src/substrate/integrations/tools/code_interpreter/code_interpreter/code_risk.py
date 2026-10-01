@@ -16,11 +16,11 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING
 
-from substrate.kernel.tools.tools import ToolRisk
+from substrate.kernel.abstractions.tools.tools import ToolRisk
 from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
-    from substrate.kernel.llm.llm import LLMClient
+    from substrate.kernel.abstractions.llm.llm import LLMClient
 
 logger = setup_logging()
 
@@ -190,8 +190,8 @@ def templated_summary(reasons: list[str]) -> str:
 
 async def _llm_summary(code: str, model_client: LLMClient) -> str:
     """One-sentence natural-language summary of what dangerous code does."""
-    from substrate.kernel import ChatMessage, TextBlock
-    from substrate.kernel.llm import GenerationOptions
+    from substrate.kernel.abstractions import ChatMessage, TextBlock
+    from substrate.kernel.abstractions.llm import GenerationOptions
 
     messages = [
         ChatMessage(role="user", content=[TextBlock(text=f"```python\n{code}\n```")])

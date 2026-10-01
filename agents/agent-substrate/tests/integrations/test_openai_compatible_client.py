@@ -1,4 +1,4 @@
-"""OpenAIChatCompletionClient — the client every self-hosted server (vLLM,
+"""OpenAICompatibleClient — the client every self-hosted server (vLLM,
 SGLang, llama.cpp's llama-server) actually gets routed through by
 LLMFactory (see tests/integrations/test_llm_factory_routing.py). No real
 server involved: an httpx.MockTransport injected via AsyncOpenAI's own
@@ -17,13 +17,13 @@ from typing import Any
 import httpx
 import pytest
 
-from substrate.agents.llm.chat_client import OpenAIChatCompletionClient
-from substrate.kernel import ChatMessage, TextBlock
-from substrate.kernel.llm import GenerationOptions
+from substrate.integrations.llm.openai_compatible import OpenAICompatibleClient
+from substrate.kernel.abstractions import ChatMessage, TextBlock
+from substrate.kernel.abstractions.llm import GenerationOptions
 
 
-def _client(handler, **kwargs) -> OpenAIChatCompletionClient:
-    return OpenAIChatCompletionClient(
+def _client(handler, **kwargs) -> OpenAICompatibleClient:
+    return OpenAICompatibleClient(
         model="qwen3.5-0.8b",
         api_key="local",
         base_url="http://localhost:8080/v1",
@@ -153,7 +153,7 @@ async def test_generate_stream_yields_text_deltas_then_completion() -> None:
     async for event in client.generate_stream(_user_message("hi")):
         deltas.append(event)
 
-    from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+    from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
 
     text_deltas = [e for e in deltas if isinstance(e, TextDelta)]
     completions = [e for e in deltas if isinstance(e, CompletionEvent)]

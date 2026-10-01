@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from substrate.kernel.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 
 from substrate.serving.factory import (
@@ -11,11 +11,11 @@ from substrate.serving.factory import (
 )
 from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
-from substrate.kernel.core.content import ChatMessage, Role
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import ChatPayload, Message
-from substrate.kernel.storage.history import HistoryProvider
-from substrate.kernel import TextBlock
+from substrate.kernel.abstractions.core.content import ChatMessage, Role
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.kernel.abstractions.storage.history import HistoryProvider
+from substrate.kernel.abstractions import TextBlock
 
 logger = setup_logging()
 

@@ -11,8 +11,8 @@ from substrate.integrations.knowledge.citations import (
     filter_by_score,
     suppress_near_duplicates,
 )
-from substrate.kernel.core.content import TextBlock
-from substrate.kernel.storage.vector import SearchResult
+from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.kernel.abstractions.storage.vector import SearchResult
 
 
 def _result(

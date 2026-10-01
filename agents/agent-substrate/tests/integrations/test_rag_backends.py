@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from substrate.kernel.storage.vector import Document, SearchResult
-from substrate.kernel.llm import EmbeddingResult, LLMResponse
-from substrate.kernel.core.content import TextBlock
+from substrate.kernel.abstractions.storage.vector import Document, SearchResult
+from substrate.kernel.abstractions.llm import EmbeddingResult, LLMResponse
+from substrate.kernel.abstractions.core.content import TextBlock
 from substrate.integrations.knowledge.backends import (
     RagBackendUnavailableError,
     build_rag_backend,
@@ -85,7 +85,7 @@ class StubLLMClient:
         self.responses = responses
 
     async def generate(self, messages, *, options=None) -> LLMResponse:
-        from substrate.kernel.core.usage import Usage
+        from substrate.kernel.abstractions.core.usage import Usage
 
         text = self.responses.pop(0) if self.responses else "stub response"
         return LLMResponse(content=[TextBlock(text=text)], usage=Usage())

@@ -20,9 +20,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from substrate.kernel.agent_catalog._catalog import AgentCatalog
-from substrate.agents.core import ReActAgent
+from substrate.kernel.agents import ReActAgent
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from substrate.kernel.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from substrate.integrations.tools.human_input.tool import (
     AskHumanTool,
     HumanInputResponse,

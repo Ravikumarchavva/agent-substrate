@@ -21,11 +21,11 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from substrate.kernel.core.content import JsonObject, KernelModel
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.tools.tools import ToolCallRequest, ToolRisk
+from substrate.kernel.abstractions.core.content import JsonObject, KernelModel
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.tools.tools import ToolCallRequest, ToolRisk
 
 
 class ApprovalDecision(StrEnum):
@@ -66,6 +66,14 @@ class ApprovalResult(KernelModel):
 
     decision: ApprovalDecision
     modified_args: JsonObject | None = None
+
+    @model_validator(mode="after")
+    def _args_only_when_modified(self) -> "ApprovalResult":
+        if self.decision == ApprovalDecision.MODIFIED and self.modified_args is None:
+            raise ValueError("a MODIFIED decision needs `modified_args`")
+        if self.decision != ApprovalDecision.MODIFIED and self.modified_args is not None:
+            raise ValueError("`modified_args` is only meaningful for a MODIFIED decision")
+        return self
 
 
 @runtime_checkable

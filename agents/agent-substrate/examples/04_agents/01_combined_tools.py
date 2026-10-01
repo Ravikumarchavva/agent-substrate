@@ -17,13 +17,13 @@ settings = SubstrateConfig()
 
 import asyncio
 import uuid
-from substrate.agents import ReActAgent, Runtime
-from substrate.agents.context import (
+from substrate.kernel import ReActAgent, Runtime
+from substrate.kernel.context import (
     ContextConfig,
     SlidingWindowCompaction,
     CompactionPipeline,
 )
-from substrate.agents.storage import (
+from substrate.kernel.storage import (
     LocalFilesystemHistoryProvider,
 )
 from substrate.integrations.llm import (
@@ -32,10 +32,10 @@ from substrate.integrations.llm import (
     has_provider_api_key,
 )
 from substrate.integrations.tools import CalculatorTool, CurrentTimeTool
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.core.identity import AgentId
-from substrate.kernel.messaging.message import Message, ChatPayload
-from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.core.identity import AgentId
+from substrate.kernel.abstractions.messaging.message import Message, ChatPayload
+from substrate.kernel.abstractions.tools import ToolExecutionResult
 
 
 async def run_agent(

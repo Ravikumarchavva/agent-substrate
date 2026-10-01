@@ -20,11 +20,11 @@ from __future__ import annotations
 
 from substrate.integrations.knowledge.citations import CitationLedgerStore
 from substrate.integrations.knowledge.result_rendering import render_search_results
-from substrate.kernel import TextBlock
-from substrate.kernel.agent.runtime_context import scope_of
-from substrate.kernel.llm import EmbeddingClient, LLMClient
-from substrate.kernel.storage.vector import SearchResult
-from substrate.kernel.tools import ToolExecutionResult, ToolType
+from substrate.kernel.abstractions import TextBlock
+from substrate.kernel.abstractions.agent.runtime_context import scope_of
+from substrate.kernel.abstractions.llm import EmbeddingClient, LLMClient
+from substrate.kernel.abstractions.storage.vector import SearchResult
+from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
 
 logger = setup_logging()

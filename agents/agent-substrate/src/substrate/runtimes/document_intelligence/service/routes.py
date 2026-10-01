@@ -95,7 +95,7 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
     # runtimes/document_intelligence/security_scan.py for what's actually
     # verified working here (not just wired up).
     if getattr(cfg, "enable_document_security_scan", True):
-        from substrate.kernel.agent.safety import Severity
+        from substrate.kernel.abstractions.agent.safety import Severity
         from substrate.runtimes.document_intelligence.security_scan import scan_document
 
         scan_verdict = await asyncio.to_thread(
@@ -194,7 +194,7 @@ async def _validate_batch_item(
         return None, f"File exceeds maximum size of {cfg.max_upload_bytes} bytes"
 
     if getattr(cfg, "enable_document_security_scan", True):
-        from substrate.kernel.agent.safety import Severity
+        from substrate.kernel.abstractions.agent.safety import Severity
         from substrate.runtimes.document_intelligence.security_scan import scan_document
 
         scan_verdict = await asyncio.to_thread(

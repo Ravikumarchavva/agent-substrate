@@ -22,7 +22,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from substrate.kernel.document import ExtractedPage, ExtractionResult
+from substrate.kernel.abstractions.document import ExtractedPage, ExtractionResult
 from substrate.logger import setup_logging
 
 logger = setup_logging("substrate.document_intelligence.convert")

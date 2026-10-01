@@ -27,12 +27,17 @@ class Usage:
     ``reasoning_tokens`` counts tokens used for extended thinking / chain-of-
     thought (Anthropic extended thinking, OpenAI o-series). These are included
     in ``output_tokens`` — broken out for cost attribution.
+
+    ``cache_write_tokens`` counts tokens the provider wrote into its prompt cache
+    (Anthropic cache creation). They are included in ``input_tokens`` too, but are
+    billed above the input rate, so cost is underestimated without them.
     """
 
     input_tokens: int = 0
     cached_tokens: int = 0
     output_tokens: int = 0
     reasoning_tokens: int = 0
+    cache_write_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
@@ -44,7 +49,14 @@ class Usage:
             cached_tokens=self.cached_tokens + other.cached_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
             reasoning_tokens=self.reasoning_tokens + other.reasoning_tokens,
+            cache_write_tokens=self.cache_write_tokens + other.cache_write_tokens,
         )
+
+    def __radd__(self, other: object) -> "Usage":
+        # Lets ``sum(usages)`` work: sum starts from the integer 0.
+        if other == 0:
+            return self
+        return NotImplemented
 
 
 __all__ = ["Usage"]

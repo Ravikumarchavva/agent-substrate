@@ -9,8 +9,8 @@ on every tool call that returned it.
 
 from __future__ import annotations
 
-from substrate.agents.runtime.context.tool import _attachment_url
-from substrate.kernel.core.content import MediaBlock
+from substrate.kernel.runtime.context.tool import _attachment_url
+from substrate.kernel.abstractions.core.content import MediaBlock
 
 
 def test_image_with_storage_key_becomes_a_bare_object_scheme():

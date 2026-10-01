@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
-from substrate.kernel.core.content import ChatMessage, ContentBlock, KernelModel
-from substrate.kernel.storage.history import HistoryCheckpoint, MessageNode
+from substrate.kernel.abstractions.core.content import ChatMessage, ContentBlock, KernelModel
+from substrate.kernel.abstractions.storage.history import HistoryCheckpoint, MessageNode
 
 if TYPE_CHECKING:
-    from substrate.kernel.storage.memory import ContextMemoryInjection
+    from substrate.kernel.abstractions.storage.memory import ContextMemoryInjection
 
 
 class ContextWindow(KernelModel):
@@ -56,7 +56,7 @@ class CompactionStrategy(Protocol):
         ...
 
 
-class CompactionPhase(str, Enum):
+class CompactionPhase(StrEnum):
     """Execution phases in the agent context lifecycle where compaction can occur."""
 
     PRE_LLM = "pre_llm"      # Prompt window optimization before generation

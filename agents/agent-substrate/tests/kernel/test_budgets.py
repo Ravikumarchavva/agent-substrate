@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from substrate.kernel.llm import ModelCapabilities
+from substrate.kernel.abstractions.llm import ModelCapabilities
 import pytest
 
-from substrate.agents.limits.execution import ExecutionTracker
-from substrate.agents.limits.spawn import SpawnTracker
-from substrate.kernel.agent.supervision import Priority, SpawnBudget
-from substrate.kernel.exceptions import BudgetExhaustedError
-from substrate.kernel.core.identity import Actor
+from substrate.kernel.limits.execution import ExecutionTracker
+from substrate.kernel.limits.spawn import SpawnTracker
+from substrate.kernel.abstractions.agent.supervision import Priority, SpawnBudget
+from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
+from substrate.kernel.abstractions.core.identity import Actor
 
 
 # ---------------------------------------------------------------------------
@@ -96,13 +96,13 @@ def test_spawn_tracker_priority_of_tracks_active_agents() -> None:
 
 
 async def test_react_agent_respects_execution_budget() -> None:
-    from substrate.agents.core.react import ReActAgent
-    from substrate.agents.runtime import Runtime
-    from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-    from substrate.kernel.core.identity import Actor
-    from substrate.kernel.core.usage import Usage
-    from substrate.kernel.messaging.message import Message, ChatPayload
-    from substrate.kernel.messaging.stream import CompletionEvent
+    from substrate.kernel.agents.react import ReActAgent
+    from substrate.kernel.runtime import Runtime
+    from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.core.usage import Usage
+    from substrate.kernel.abstractions.messaging.message import Message, ChatPayload
+    from substrate.kernel.abstractions.messaging.stream import CompletionEvent
 
     class MockLLMClient:
         model = "mock-model"
@@ -156,14 +156,14 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
     and docs/claude_docs/kernel's audit): Supervision.execution_budget flowed
     through ctx.spawn()/spawn_child() but nothing ever converted it into an
     enforced ExecutionTracker for the spawned run."""
-    from substrate.agents.core.react import ReActAgent
-    from substrate.agents.runtime import Runtime
-    from substrate.kernel.agent.supervision import ExecutionBudget, Supervision
-    from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-    from substrate.kernel.core.identity import Actor
-    from substrate.kernel.core.usage import Usage
-    from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
-    from substrate.kernel.messaging.stream import CompletionEvent
+    from substrate.kernel.agents.react import ReActAgent
+    from substrate.kernel.runtime import Runtime
+    from substrate.kernel.abstractions.agent.supervision import ExecutionBudget, Supervision
+    from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.core.usage import Usage
+    from substrate.kernel.abstractions.messaging.message import ChatPayload, DataPayload, Message
+    from substrate.kernel.abstractions.messaging.stream import CompletionEvent
 
     class MockLLMClient:
         model = "mock-model"

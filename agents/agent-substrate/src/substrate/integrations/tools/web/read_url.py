@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from substrate.kernel import TextBlock
-from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.abstractions import TextBlock
+from substrate.kernel.abstractions.tools import ToolExecutionResult
 
 _MAX_CHARS = 6_000
 

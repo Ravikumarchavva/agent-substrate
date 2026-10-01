@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from substrate.kernel.document import ExtractionResult
+from substrate.kernel.abstractions.document import ExtractionResult
 
 
 @runtime_checkable

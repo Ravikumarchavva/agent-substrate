@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from substrate.agents.runtime.context import RunContext
-from substrate.agents.runtime.runtime import Runtime
-from substrate.kernel.core.identity import Actor
-from substrate.kernel.messaging.message import Message
+from substrate.kernel.runtime.context import RunContext
+from substrate.kernel.runtime.runtime import Runtime
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import Message
 from substrate.serve import add_routes
 
 

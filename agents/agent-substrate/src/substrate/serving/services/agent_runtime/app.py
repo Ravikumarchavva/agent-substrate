@@ -40,7 +40,7 @@ async def _runtime_cm(backend: str, pg_url: str):
             logger.info("Agent Runtime: durable (Postgres EventLogProtocol)")
             yield rt
     else:
-        from substrate.agents.runtime import Runtime
+        from substrate.kernel.runtime import Runtime
 
         async with Runtime() as rt:
             logger.info("Agent Runtime: in-memory (no durability)")
@@ -59,8 +59,8 @@ async def _cancel_listener(runtime: object, event_bus: object) -> None:
     ``cancel_requested`` flag the owning replica's own heartbeat observes,
     same as the monolith's ``POST /chat/{id}/cancel`` (see routes/cancel.py).
     """
-    from substrate.kernel.core.identity import Actor
-    from substrate.kernel.runtime.supervisor import RunHandle
+    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.runtime.supervisor import RunHandle
 
     try:
         async for envelope in event_bus.subscribe(  # type: ignore[union-attr]

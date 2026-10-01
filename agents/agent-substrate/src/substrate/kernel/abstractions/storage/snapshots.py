@@ -13,12 +13,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Literal, Protocol, runtime_checkable
-from uuid import uuid4
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
 
-from substrate.kernel.core.content import JsonObject, KernelModel
+from substrate.kernel.abstractions.ids import new_id
+from substrate.kernel.abstractions.core.content import JsonObject, KernelModel
 
 
 class ContentRef(KernelModel):
@@ -44,6 +44,20 @@ class WorkspaceFileEntry(KernelModel):
     mode: int = 0o644
     metadata: JsonObject = Field(default_factory=dict)
 
+    @field_validator("path")
+    @classmethod
+    def _stay_inside_the_workspace(cls, path: str) -> str:
+        """A manifest path comes from tool output and names a file to materialise.
+        It must be a plain relative POSIX path that cannot climb out of the
+        workspace."""
+        if not path or "\x00" in path or "\\" in path:
+            raise ValueError(f"invalid workspace path {path!r}")
+        if path.startswith("/"):
+            raise ValueError(f"workspace paths are relative, got {path!r}")
+        if any(part in ("", ".", "..") for part in path.split("/")):
+            raise ValueError(f"workspace path {path!r} has an empty or traversing component")
+        return path
+
 
 class WorkspaceManifest(KernelModel):
     """Manifest mapping paths to file records in an isolated workspace snapshot.
@@ -61,6 +75,16 @@ class WorkspaceManifest(KernelModel):
     files: dict[str, WorkspaceFileEntry] = Field(default_factory=dict)
     metadata: JsonObject = Field(default_factory=dict)
 
+    @field_validator("files")
+    @classmethod
+    def _canonical_order(cls, files: dict[str, WorkspaceFileEntry]) -> dict[str, WorkspaceFileEntry]:
+        """Sorted by path, always: two manifests with the same content must
+        serialise identically or dedup by hash silently fails."""
+        for key, entry in files.items():
+            if key != entry.path:
+                raise ValueError(f"manifest key {key!r} does not match its entry path {entry.path!r}")
+        return dict(sorted(files.items()))
+
 
 class WorkspaceSnapshot(KernelModel):
     """Point-in-time snapshot of an agent workspace on a specific branch.
@@ -69,7 +93,7 @@ class WorkspaceSnapshot(KernelModel):
     are strictly mutually exclusive — exactly one must be provided.
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
+    id: str = Field(default_factory=lambda: new_id())
     session_id: str
     branch_id: str
     parent_snapshot_id: str | None = None

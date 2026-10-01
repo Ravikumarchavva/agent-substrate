@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from substrate.kernel.exceptions import (
+from substrate.kernel.abstractions.exceptions import (
     BudgetExhaustedError,
     ConcurrentAppendError,
     KernelError,

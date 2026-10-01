@@ -41,12 +41,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import AsyncIterator, Protocol, runtime_checkable
-
 from pydantic import BaseModel, Field
 
-from substrate.kernel.core.content import JsonObject
-from substrate.kernel.runtime.ids import RunId
+from substrate.kernel.abstractions.core.content import JsonObject
+from substrate.kernel.abstractions.runtime.ids import RunId
 
 
 class RunLogKind(StrEnum):
@@ -61,8 +59,13 @@ class RunLogKind(StrEnum):
     RUN_CANCELLED = "run.cancelled"
     # Completed, but cut short (out of steps): the final answer is best-effort.
     RUN_TRUNCATED = "run.truncated"
+    # An attempt failed and the run will be tried again after a backoff.
+    RUN_RETRYING = "run.retrying"
 
     # Journaled effects (replayed from cache, never re-executed)
+    # Committed before an effect runs; its outcome is EFFECT_RESULT. An intent with
+    # no outcome means the effect is in doubt (the worker died mid-flight).
+    EFFECT_INTENT = "effect.intent"
     EFFECT_RESULT = "effect.result"
     LLM_CALL = "llm.call"
     TOOL_CALL = "tool.call"
@@ -104,75 +107,4 @@ class RunLogEntry(BaseModel):
     model_config = {"frozen": True}
 
 
-@runtime_checkable
-class EventLogProtocol(Protocol):
-    """Append-only, ordered log of ``RunLogEntry`` objects per run.
-
-    Implementations: in-memory (Stage 0), Postgres append-only table with
-    ``(run_id, seq)`` PK (Stage 1), NATS JetStream / Kafka (Stage 2+).
-
-    Semantic guarantees all implementations must honour
-    ---------------------------------------------------
-    - Entries within a run are ordered by ``seq`` and never reordered.
-    - ``append`` is atomic and serialised per run_id — no two appends to the
-      same run succeed concurrently (optimistic-concurrency fencing via
-      ``expected_seq``).
-    - ``read`` is consistent: a reader sees entries in ``seq`` order with no gaps.
-    - ``tail`` is a live view: after exhausting existing entries it waits for
-      new ones indefinitely (until the caller cancels the iteration).
-    """
-
-    async def append(
-        self,
-        run_id: RunId,
-        entry: RunLogEntry,
-        *,
-        expected_seq: int,
-    ) -> int:
-        """Append ``entry`` to run's log atomically.
-
-        Returns the new sequence number assigned to the entry.
-
-        Raises ``ConcurrentAppendError`` (from ``kernel/exceptions.py``) when
-        the log's current ``last_seq`` differs from ``expected_seq`` — meaning
-        another writer raced ahead.  Callers must reload and retry.
-        """
-        ...
-
-    def read(
-        self,
-        run_id: RunId,
-        *,
-        from_seq: int = 0,
-    ) -> AsyncIterator[RunLogEntry]:
-        """Yield all entries for ``run_id`` starting at ``from_seq`` (inclusive).
-
-        Completes when the log is exhausted (run reached a terminal state or
-        the impl has no more buffered entries).  Use ``tail`` for live streaming.
-        """
-        ...
-
-    def tail(
-        self,
-        run_id: RunId,
-        *,
-        from_seq: int = 0,
-    ) -> AsyncIterator[RunLogEntry]:
-        """Live-tail the log: yield existing entries then wait for new ones.
-
-        Never completes on its own — cancel the enclosing async task to stop.
-        Used by the Gateway for real-time "watch this agent" streaming and for
-        VOD replay (``from_seq=0`` replays from the beginning).
-        """
-        ...
-
-    async def last_seq(self, run_id: RunId) -> int:
-        """Return the current last sequence number for ``run_id``.
-
-        Returns ``-1`` when the log has no entries for that run yet
-        (i.e. the run does not exist or has not written its first entry).
-        """
-        ...
-
-
-__all__ = ["RunLogKind", "RunLogEntry", "EventLogProtocol"]
+__all__ = ["RunLogKind", "RunLogEntry"]

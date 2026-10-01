@@ -21,7 +21,7 @@ from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.wakeup import SignalBusProtocol
+    from substrate.kernel.abstractions.runtime.wakeup import SignalBusProtocol
 
 logger = setup_logging()
 

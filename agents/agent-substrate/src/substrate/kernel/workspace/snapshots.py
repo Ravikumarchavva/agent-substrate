@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from substrate.kernel.storage.snapshots import WorkspaceSnapshot, WorkspaceStore
+from substrate.kernel.abstractions.storage.snapshots import WorkspaceSnapshot, WorkspaceStore
 
 from .cas import BlobCAS
 from .materialize import commit as _commit_dir

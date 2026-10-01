@@ -11,11 +11,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Protocol, runtime_checkable
-from uuid import uuid4
 
 from pydantic import Field
 
-from substrate.kernel.core.content import ChatMessage, JsonObject, KernelModel
+from substrate.kernel.abstractions.ids import new_id
+from substrate.kernel.abstractions.core.content import ChatMessage, JsonObject, KernelModel
 
 
 class MessageNode(KernelModel):
@@ -32,7 +32,7 @@ class MessageNode(KernelModel):
     workspace snapshotting or never touched a workspace (e.g. a root node).
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
+    id: str = Field(default_factory=lambda: new_id())
     parent_id: str | None = None  # None for session root node
     session_id: str
     run_id: str = ""
@@ -59,7 +59,7 @@ class HistoryCheckpoint(KernelModel):
     Valid for any descendant branch that has anchor_message_id in its ancestry chain.
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
+    id: str = Field(default_factory=lambda: new_id())
     session_id: str
     anchor_message_id: str        # Boundary node covered by this summary
     summary: str                  # Consolidated natural language / structured summary

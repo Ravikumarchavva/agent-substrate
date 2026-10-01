@@ -1,5 +1,5 @@
 """Example 1-4: Tools — Complete Guide
-Module: substrate.agents.tools.toolbox.Toolbox, substrate.kernel.tools.ToolRisk
+Module: substrate.kernel.tools.toolbox.Toolbox, substrate.kernel.abstractions.tools.ToolRisk
 
 Covers the tools system:
 
@@ -28,20 +28,20 @@ settings = SubstrateConfig()
 
 import asyncio
 import random
-from substrate.agents import ReActAgent, Runtime
-from substrate.agents.context import ContextConfig, SlidingWindowCompaction, CompactionPipeline
-from substrate.agents.storage import LocalFilesystemHistoryProvider
-from substrate.agents.tools.toolbox import Toolbox
+from substrate.kernel import ReActAgent, Runtime
+from substrate.kernel.context import ContextConfig, SlidingWindowCompaction, CompactionPipeline
+from substrate.kernel.storage import LocalFilesystemHistoryProvider
+from substrate.kernel.tools.toolbox import Toolbox
 from substrate.integrations.llm import (
     create_model_client,
     detect_provider,
     has_provider_api_key,
 )
-from substrate.kernel import TextBlock, ToolExecutionResult
-from substrate.kernel.core.content import ChatMessage, Role
-from substrate.kernel.core.identity import AgentId
-from substrate.kernel.messaging.message import Message, ChatPayload
-from substrate.kernel.tools import ToolRisk
+from substrate.kernel.abstractions import TextBlock, ToolExecutionResult
+from substrate.kernel.abstractions.core.content import ChatMessage, Role
+from substrate.kernel.abstractions.core.identity import AgentId
+from substrate.kernel.abstractions.messaging.message import Message, ChatPayload
+from substrate.kernel.abstractions.tools import ToolRisk
 
 
 # ===========================================================================

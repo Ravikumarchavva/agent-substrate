@@ -36,7 +36,7 @@ from typing import Any, Literal, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from apscheduler import AsyncScheduler
-    from substrate.agents.runtime import Runtime
+    from substrate.kernel.runtime import Runtime
 
 logger = setup_logging()
 
@@ -253,8 +253,8 @@ class TriggerScheduler:
         )
 
         if self._runtime is not None:
-            from substrate.kernel.core.identity import Actor
-            from substrate.kernel.messaging.message import Message, DataPayload
+            from substrate.kernel.abstractions.core.identity import Actor
+            from substrate.kernel.abstractions.messaging.message import Message, DataPayload
 
             agent_id = Actor(type=trigger.target_type, key=trigger.target_name)
             msg = Message(

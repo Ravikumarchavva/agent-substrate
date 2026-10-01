@@ -6,7 +6,7 @@ import pytest
 
 from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
 from substrate.integrations.tools.memory import MemoryTool
-from substrate.kernel.core.identity import Actor
+from substrate.kernel.abstractions.core.identity import Actor
 
 
 class FakeShortTermMemory:

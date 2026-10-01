@@ -31,6 +31,7 @@ from substrate.kernel.llm.tool_arguments import parse_tool_arguments
 from substrate.kernel.llm.models import resolve_capabilities
 from substrate.kernel.abstractions import ChatMessage, ContentBlock
 from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+from substrate.kernel.abstractions.core.finish_reason import FinishReason
 from substrate.kernel.abstractions.llm import (
     GenerationOptions,
     LLMResponse,
@@ -197,6 +198,25 @@ def _strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 # ── Client ────────────────────────────────────────────────────────────────────
+
+
+_CHAT_FINISH = {
+    "stop": FinishReason.STOP,
+    "tool_calls": FinishReason.TOOL_CALLS,
+    "function_call": FinishReason.TOOL_CALLS,
+    "length": FinishReason.LENGTH,
+    "content_filter": FinishReason.CONTENT_FILTER,
+}
+
+
+def chat_finish_reason(reason: str | None, *, has_tool_calls: bool) -> FinishReason:
+    """A chat-completions ``finish_reason`` as ours. A stream that ended without one is
+    reported as unspecified rather than assumed to have finished cleanly."""
+    if reason is None:
+        return FinishReason.UNSPECIFIED
+    if reason == "stop" and has_tool_calls:
+        return FinishReason.TOOL_CALLS  # some servers say "stop" for a turn that ended in a tool call
+    return _CHAT_FINISH.get(reason, FinishReason.OTHER)
 
 
 class OpenAICompatibleClient:
@@ -612,7 +632,13 @@ class OpenAICompatibleClient:
         blocks.extend(
             self._structured_block(options.response_format, msg.content or "", bool(calls))
         )
-        return LLMResponse(content=blocks, usage=self._usage(getattr(response, "usage", None)))
+        return LLMResponse(
+            content=blocks,
+            usage=self._usage(getattr(response, "usage", None)),
+            finish_reason=chat_finish_reason(response.choices[0].finish_reason, has_tool_calls=bool(calls)),
+            response_id=getattr(response, "id", None),
+            served_model=getattr(response, "model", None),
+        )
 
     def generate_stream(
         self,
@@ -634,6 +660,9 @@ class OpenAICompatibleClient:
         collected_reasoning = ""
         collected_tool_calls: dict[int, dict[str, Any]] = {}
         usage = Usage()
+        finish: str | None = None
+        response_id: str | None = None
+        served_model: str | None = None
 
         try:
             stream = await self.client.chat.completions.create(**params)
@@ -647,8 +676,11 @@ class OpenAICompatibleClient:
                 # With include_usage the final chunk has no choices, only usage.
                 if getattr(chunk, "usage", None):
                     usage = self._usage(chunk.usage)
+                response_id = response_id or getattr(chunk, "id", None)
+                served_model = served_model or getattr(chunk, "model", None)
                 if not chunk.choices:
                     continue
+                finish = chunk.choices[0].finish_reason or finish
 
                 delta = chunk.choices[0].delta
                 # DeepSeek/Qwen-style servers (vLLM, Ollama) stream reasoning here.
@@ -694,7 +726,13 @@ class OpenAICompatibleClient:
         blocks.extend(
             self._structured_block(options.response_format, collected_content, bool(calls))
         )
-        yield CompletionEvent(content=blocks, usage=usage)
+        yield CompletionEvent(
+            content=blocks,
+            usage=usage,
+            finish_reason=chat_finish_reason(finish, has_tool_calls=bool(calls)),
+            response_id=response_id,
+            served_model=served_model,
+        )
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
         """Estimate token count using tiktoken (cl100k_base for unknown models)."""

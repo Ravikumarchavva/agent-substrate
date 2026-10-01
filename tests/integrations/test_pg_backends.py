@@ -1,4 +1,6 @@
-"""Integration tests for Stage 1 Postgres backends.
+"""Integration tests for the Postgres-backed stores (task store, vector store).
+
+The runtime store has its own suite: ``test_postgres_runtime_store.py``.
 
 Requires running Postgres.
 Skip automatically when DATABASE_URL is not reachable.
@@ -11,7 +13,6 @@ Run with infra up:
 from __future__ import annotations
 
 import os
-import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
@@ -45,225 +46,6 @@ async def pg_pool():
         pytest.skip("Postgres not reachable")
     yield pool
     await pool.close()
-
-
-# ---------------------------------------------------------------------------
-# EventLog
-# ---------------------------------------------------------------------------
-
-
-async def test_pg_event_log_append_and_read(pg_pool) -> None:
-    from substrate.integrations.runtime import EventLog
-    from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
-    from substrate.kernel.abstractions.runtime.ids import new_run_id
-
-    log = EventLog(pg_pool)
-    await log.setup()
-
-    run_id = new_run_id()
-    entry = RunLogEntry(run_id=run_id, seq=0, kind="run.started", payload={"msg": "hi"})
-    seq = await log.append(run_id, entry, expected_seq=-1)
-    assert seq == 0
-
-    entries = [e async for e in log.read(run_id)]
-    assert len(entries) == 1
-    assert entries[0].kind == "run.started"
-    assert entries[0].payload == {"msg": "hi"}
-
-
-async def test_pg_event_log_occ_raises(pg_pool) -> None:
-    from substrate.integrations.runtime import EventLog
-    from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
-    from substrate.kernel.abstractions.exceptions import ConcurrentAppendError
-    from substrate.kernel.abstractions.runtime.ids import new_run_id
-
-    log = EventLog(pg_pool)
-    await log.setup()
-
-    run_id = new_run_id()
-    e0 = RunLogEntry(run_id=run_id, seq=0, kind="run.started", payload={})
-    await log.append(run_id, e0, expected_seq=-1)
-
-    e1 = RunLogEntry(run_id=run_id, seq=1, kind="msg.received", payload={})
-    with pytest.raises(ConcurrentAppendError):
-        await log.append(run_id, e1, expected_seq=-1)  # wrong expected_seq
-
-
-async def test_pg_event_log_last_seq(pg_pool) -> None:
-    from substrate.integrations.runtime import EventLog
-    from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
-    from substrate.kernel.abstractions.runtime.ids import new_run_id
-
-    log = EventLog(pg_pool)
-    await log.setup()
-
-    run_id = new_run_id()
-    assert await log.last_seq(run_id) == -1
-
-    e = RunLogEntry(run_id=run_id, seq=0, kind="run.started", payload={})
-    await log.append(run_id, e, expected_seq=-1)
-    assert await log.last_seq(run_id) == 0
-
-
-async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
-    from substrate.integrations.runtime import EventLog
-    from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
-    from substrate.kernel.abstractions.runtime.ids import new_run_id
-
-    log = EventLog(pg_pool)
-    await log.setup()
-
-    run_id = new_run_id()
-    for i in range(3):
-        e = RunLogEntry(run_id=run_id, seq=i, kind=f"step.{i}", payload={})
-        await log.append(run_id, e, expected_seq=i - 1)
-
-    collected: list[str] = []
-
-    async def drain():
-        async for entry in log.tail(run_id):
-            collected.append(entry.kind)
-            if entry.kind == "step.2":
-                break
-
-    await asyncio.wait_for(drain(), timeout=2.0)
-    assert collected == ["step.0", "step.1", "step.2"]
-
-
-# ---------------------------------------------------------------------------
-# Inbox
-# ---------------------------------------------------------------------------
-
-
-async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
-    from substrate.integrations.runtime import Inbox
-    from substrate.kernel.abstractions.core.identity import Actor
-    from substrate.kernel.abstractions.messaging.message import Message
-    from substrate.kernel.abstractions.core.content import TextBlock
-    from substrate.kernel.abstractions.core.content import ChatMessage, Role
-    from substrate.kernel.abstractions.messaging.message import ChatPayload
-
-    inbox = Inbox(pg_pool)
-    await inbox.setup()
-
-    agent_id = Actor(type="agent", key=f"test-inbox-agent-{id(object())}")
-    msg = Message(
-        target=agent_id,
-        sender=Actor.user(),
-        payload=ChatPayload(
-            message=ChatMessage(role=Role.USER, content=[TextBlock(text="hello")])
-        ),
-    )
-
-    delivered = await inbox.deliver(agent_id, msg)
-    assert delivered is True
-
-    duplicate = await inbox.deliver(agent_id, msg)
-    assert duplicate is False
-
-    msgs = await inbox.drain(agent_id)
-    assert len(msgs) == 1
-    assert msgs[0].id == msg.id
-
-    await inbox.ack(agent_id, msg.id)
-    assert await inbox.pending_count(agent_id) == 0
-
-
-async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
-    from substrate.integrations.runtime import Inbox
-    from substrate.kernel.abstractions.core.identity import Actor
-    from substrate.kernel.abstractions.messaging.message import Message
-    from substrate.kernel.abstractions.core.content import TextBlock
-    from substrate.kernel.abstractions.core.content import ChatMessage, Role
-    from substrate.kernel.abstractions.messaging.message import ChatPayload
-
-    inbox = Inbox(pg_pool, max_retries=2)
-    await inbox.setup()
-
-    agent_id = Actor(type="agent", key=f"test-nack-agent-{id(object())}")
-    msg = Message(
-        target=agent_id,
-        sender=Actor.user(),
-        payload=ChatPayload(
-            message=ChatMessage(role=Role.USER, content=[TextBlock(text="fail-me")])
-        ),
-    )
-    await inbox.deliver(agent_id, msg)
-
-    await inbox.nack(agent_id, msg.id, error="err1")
-    await inbox.nack(agent_id, msg.id, error="err2")  # hits max_retries → dead-letter
-
-    assert await inbox.pending_count(agent_id) == 0
-    dead = await inbox.dead_letters(agent_id)
-    assert len(dead) == 1
-    assert dead[0].msg.id == msg.id
-    assert dead[0].last_error == "err2"
-
-
-# ---------------------------------------------------------------------------
-# Scheduler
-# ---------------------------------------------------------------------------
-
-
-async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
-    from substrate.integrations.runtime import Scheduler
-    from substrate.kernel.abstractions.runtime.ids import new_run_id, RunStatus
-    from substrate.kernel.abstractions.core.identity import Actor
-
-    sched = Scheduler(pg_pool)
-    await sched.setup()
-
-    run_id = new_run_id()
-    agent_id = Actor(type="agent", key="sched-test")
-    sched.register_run(run_id, agent_id)
-    await sched.enqueue(run_id, priority=5, tenant="test")
-
-    leases = await sched.lease(worker_id="w1", capacity=100)
-    our_lease = next((lease for lease in leases if lease.run_id == run_id), None)
-    assert our_lease is not None
-
-    status = await sched.get_status(run_id)
-    assert status == RunStatus.RUNNING
-
-
-async def test_pg_scheduler_coalescing(pg_pool) -> None:
-    from substrate.integrations.runtime import Scheduler
-    from substrate.kernel.abstractions.runtime.ids import new_run_id
-    from substrate.kernel.abstractions.core.identity import Actor
-
-    sched = Scheduler(pg_pool)
-    await sched.setup()
-
-    run_id = new_run_id()
-    agent_id = Actor(type="agent", key=f"coalesce-{id(object())}")
-    sched.register_run(run_id, agent_id)
-    await sched.enqueue(run_id, priority=5, tenant="test")
-    await sched.enqueue(run_id, priority=5, tenant="test")  # no-op
-
-    leases = await sched.lease(worker_id="w1", capacity=10)
-    run_ids = [lease.run_id for lease in leases if lease.run_id == run_id]
-    assert len(run_ids) == 1
-
-
-async def test_pg_scheduler_release_completed(pg_pool) -> None:
-    from substrate.integrations.runtime import Scheduler
-    from substrate.kernel.abstractions.runtime.ids import new_run_id, RunStatus
-    from substrate.kernel.abstractions.core.identity import Actor
-
-    sched = Scheduler(pg_pool)
-    await sched.setup()
-
-    run_id = new_run_id()
-    agent_id = Actor(type="agent", key=f"release-{id(object())}")
-    sched.register_run(run_id, agent_id)
-    await sched.enqueue(run_id, priority=5, tenant="test")
-    leases = await sched.lease(worker_id="w1", capacity=100)
-    matching = [lease for lease in leases if lease.run_id == run_id]
-    assert matching, f"run_id {run_id} not found in leases"
-    target = matching[0]
-
-    await sched.release(target, status=RunStatus.COMPLETED)
-    assert await sched.get_status(run_id) == RunStatus.COMPLETED
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +199,7 @@ async def test_pg_vector_store_custom_table_name_is_isolated_from_default() -> N
         session_factory=session_factory,
         engine=engine,
         dimensions=3,
-        table_name="vector_documents_test_images",
+        table_name="vector_records_test_images",
     )
     await default_store.ensure_table()
     await custom_store.ensure_table()
@@ -514,26 +296,6 @@ async def test_pg_vector_store_rename_collection_noop_when_nothing_matches() -> 
         f"nonexistent-{id(object())}", f"also-nonexistent-{id(object())}"
     )
     assert moved == 0
-
-
-async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:
-    from substrate.integrations.runtime import Scheduler
-    from substrate.kernel.abstractions.runtime.ids import new_run_id, RunStatus
-    from substrate.kernel.abstractions.core.identity import Actor
-
-    sched = Scheduler(pg_pool)
-    await sched.setup()
-
-    agent_id = Actor(type="agent", key="find-agent-test")
-    run_id = new_run_id()
-    sched.register_run(run_id, agent_id)
-    await sched.enqueue(run_id, priority=5, tenant="test")
-
-    result = await sched.find_run_for_agent(agent_id)
-    assert result is not None
-    rid, status = result
-    assert rid == run_id
-    assert status == RunStatus.PENDING
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from substrate.kernel.abstractions.storage.tasks import Task, TaskList, TaskStatus
 
+
 class TaskStore:
     """Thread-safe in-memory task store."""
 

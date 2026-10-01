@@ -33,6 +33,7 @@ on failure ``nack(msg_id, error=...)`` → SchedulerProtocol re-enqueues wakeup.
 from __future__ import annotations
 
 from enum import StrEnum
+
 from pydantic import BaseModel
 
 from substrate.kernel.abstractions.core.identity import Actor

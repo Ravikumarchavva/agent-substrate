@@ -2,36 +2,30 @@
 
 from __future__ import annotations
 
-from substrate.logger import setup_logging
-
+import logging
 from typing import TYPE_CHECKING
 
-from substrate.kernel.storage.local_history import (
-    LocalFilesystemHistoryProvider,
-)
+from substrate.kernel.abstractions import Tool
+from substrate.kernel.abstractions.llm import LLMClient
+from substrate.kernel.abstractions.tools.approval import ApprovalHandler
+from substrate.kernel.abstractions.tools.tools import ToolRisk
 from substrate.kernel.context import (
-    SlidingWindowCompaction,
     CompactionPipeline,
+    SlidingWindowCompaction,
 )
+from substrate.kernel.middleware._contracts import Middleware
+from substrate.kernel.middleware.pipeline import MiddlewarePipeline
 from substrate.kernel.storage import (
     HistoryProvider,
 )
-from substrate.kernel.abstractions.llm import LLMClient
-from substrate.kernel.abstractions import Tool
-from substrate.kernel.abstractions.tools.approval import ApprovalHandler
-from substrate.kernel.abstractions.tools.tools import ToolRisk
-from substrate.kernel.middleware._contracts import Middleware
-from substrate.kernel.middleware.observability import (
-    AgentTracingMiddleware,
-    ChatTracingMiddleware,
-    FunctionTracingMiddleware,
+from substrate.kernel.storage.local_history import (
+    LocalFilesystemHistoryProvider,
 )
-from substrate.kernel.middleware.pipeline import MiddlewarePipeline
 
 if TYPE_CHECKING:
     from substrate.kernel.agents import ReActAgent
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -60,8 +54,8 @@ def rebuild_agent(
     spec that records which ones to reattach; not needed by any caller today.
     """
     from substrate.kernel.agents import ReActAgent
-    from substrate.kernel.tools.toolbox import Toolbox
     from substrate.kernel.context import ContextConfig
+    from substrate.kernel.tools.toolbox import Toolbox
 
     session_id = spec.get("session_id", "resumed")
     max_iterations = spec.get("max_iterations", 30)
@@ -87,13 +81,6 @@ def rebuild_agent(
         system_instructions=system_instructions,
         context=ctx,
         max_iterations=max_iterations,
-        middleware=MiddlewarePipeline(
-            [
-                AgentTracingMiddleware(),
-                ChatTracingMiddleware(),
-                FunctionTracingMiddleware(),
-            ]
-        ),
     )
 
 
@@ -145,11 +132,6 @@ def create_assistant_agent(
             ``RetryMiddleware``/``LLMJudgeMiddleware`` (CHAT),
             ``PIIDetectionMiddleware``/``ToolCallValidationMiddleware``/
             ``CacheMiddleware``/``ContentTruncatorMiddleware`` (TOOL).
-            Appended after the built-in tracing middlewares
-            (``AgentTracingMiddleware``/``ChatTracingMiddleware``/
-            ``FunctionTracingMiddleware``), which stay outermost so a
-            ``MiddlewareTermination`` from a caller-supplied middleware
-            still produces an ERROR-tagged span.
         initial_tool_choice: Forces this exact tool name on the agent's
             first LLM call only; dropped after (see ``ReActAgent``).
         approval_handler: Satisfies ``kernel.tools.approval.ApprovalHandler``
@@ -163,8 +145,8 @@ def create_assistant_agent(
             ``worker.py::_build_tool_invoker``).
     """
     from substrate.kernel.agents import ReActAgent
-    from substrate.kernel.tools.toolbox import Toolbox
     from substrate.kernel.context import ContextConfig
+    from substrate.kernel.tools.toolbox import Toolbox
 
     pipeline = model_context or CompactionPipeline(
         [SlidingWindowCompaction(max_messages=model_context_window)]
@@ -190,13 +172,6 @@ def create_assistant_agent(
         initial_tool_choice=initial_tool_choice,
         approval_handler=approval_handler,
         approval_required_risk=approval_required_risk,
-        middleware=MiddlewarePipeline(
-            [
-                AgentTracingMiddleware(),
-                ChatTracingMiddleware(),
-                FunctionTracingMiddleware(),
-                *(middleware or []),
-            ]
-        ),
+        middleware=MiddlewarePipeline(list(middleware or [])),
     )
 

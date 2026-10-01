@@ -42,7 +42,7 @@ class EventLogAgent:
 
 
 async def main() -> None:
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         # --- Section 2: point-to-point messaging ---
         print("=== 1. Point-to-point submit ===")
         echo_id = AgentId(type="echo", key="demo")
@@ -54,7 +54,7 @@ async def main() -> None:
         print(f"  Submitted message to echo_agent (run_id: {run_id})")
 
         # Wait for run to complete by tailing log
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                 break
         print("  Run completed.")

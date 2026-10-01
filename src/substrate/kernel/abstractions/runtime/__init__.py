@@ -8,10 +8,16 @@ package is the vocabulary that crosses it.
 from __future__ import annotations
 
 from substrate.kernel.abstractions.runtime.agent import Agent, AgentRunContext
-from substrate.kernel.abstractions.runtime.communication import AskOutcome, RunStatusSummary
+from substrate.kernel.abstractions.runtime.communication import (
+    AskOutcome,
+    RunStatusSummary,
+)
 from substrate.kernel.abstractions.runtime.effects import Effect, EffectResult
 from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus, new_run_id
-from substrate.kernel.abstractions.runtime.inbox import DeadLetterEntry, DeadLetterReason
+from substrate.kernel.abstractions.runtime.inbox import (
+    DeadLetterEntry,
+    DeadLetterReason,
+)
 from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
 from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 from substrate.kernel.abstractions.runtime.store import (
@@ -32,6 +38,7 @@ from substrate.kernel.abstractions.runtime.store import (
     RuntimeStore,
     SignalSpec,
     SpawnSpec,
+    Spend,
     StoreStats,
     Suspend,
 )
@@ -71,6 +78,7 @@ __all__ = [
     "RuntimeStore",
     "SignalSpec",
     "SpawnSpec",
+    "Spend",
     "StoreStats",
     "Suspend",
     "Wakeup",

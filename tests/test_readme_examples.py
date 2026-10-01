@@ -66,7 +66,7 @@ async def test_your_first_agent_example() -> None:
         model=_StubLLM("Here is a Fibonacci function."),
         system_instructions="You are a helpful assistant.",
     )
-    async with Runtime() as runtime:
+    async with Runtime.local(":memory:") as runtime:
         result = await runtime.run(
             agent, "Write a Python function to compute Fibonacci numbers."
         )
@@ -81,7 +81,7 @@ async def test_agent_with_tools_example() -> None:
         tools=[CalculatorTool()],
         system_instructions="Always use the calculator tool to solve math problems.",
     )
-    async with Runtime() as runtime:
+    async with Runtime.local(":memory:") as runtime:
         result = await runtime.run(agent, "Calculate 1234 * 5678.")
     assert result.output == "7006652"
 
@@ -102,7 +102,7 @@ async def test_orchestrator_example() -> None:
             SubAgentConfig(agent=writer, description="Content writing"),
         ],
     )
-    async with Runtime() as runtime:
+    async with Runtime.local(":memory:") as runtime:
         result = await runtime.run(
             orchestrator, "Research and draft a blog post about Rust vs Go."
         )
@@ -129,7 +129,7 @@ async def test_sequential_flow_example() -> None:
     fetch, analyze = FetchStep(), AnalyzeStep()
     pipeline = SequentialFlow(steps=[fetch, analyze], name="demo_pipeline")
 
-    async with Runtime() as runtime:
+    async with Runtime.local(":memory:") as runtime:
         await runtime.register(fetch)
         await runtime.register(analyze)
         result = await runtime.ask(pipeline, "Process the latest dataset.")
@@ -157,7 +157,7 @@ async def test_parallel_flow() -> None:
         FixedReply("c", "OK: grammar"),
     )
     flow = ParallelFlow(branches=[a, b, c], name="review", merge="concat")
-    async with Runtime() as runtime:
+    async with Runtime.local(":memory:") as runtime:
         for step in (a, b, c):
             await runtime.register(step)
         result = await runtime.ask(flow, "Review this PR.")
@@ -182,7 +182,7 @@ async def test_conditional_flow() -> None:
         if_false=general,
         name="router",
     )
-    async with Runtime() as runtime:
+    async with Runtime.local(":memory:") as runtime:
         await runtime.register(bug)
         await runtime.register(general)
         result = await runtime.ask(flow, "There is a bug in login")

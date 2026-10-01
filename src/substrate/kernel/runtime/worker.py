@@ -27,6 +27,7 @@ What stops a run
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
@@ -41,11 +42,11 @@ from substrate.kernel.abstractions.exceptions import (
     LeaseLostError,
     MiddlewareTermination,
     NonDeterminismError,
-    PermanentError,
+    RateLimitedError,
     SuspendInterrupt,
 )
-from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 from substrate.kernel.abstractions.runtime.store import (
     Cancel,
     Commit,
@@ -63,12 +64,11 @@ from substrate.kernel.runtime.cancellation import CancellationToken
 from substrate.kernel.runtime.context import RunContext
 from substrate.kernel.runtime.journal import Journal
 from substrate.kernel.telemetry import instruments, semconv, span
-from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
     from substrate.kernel.runtime.resolver import ActorResolver
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 # A heartbeat that fails this many times in a row is treated as a lost lease: the
 # store is unreachable, so this worker can no longer prove it still owns the run.
@@ -90,10 +90,10 @@ def classify_failure(exc: BaseException, *, run_id: str, agent_id: Any) -> tuple
         return ErrorInfo(code="guardrail_tripped", message=f"Request blocked: {exc.message or exc}"), False
     if isinstance(exc, BudgetExhaustedError):
         return ErrorInfo(code="budget_exhausted", message=str(exc)), False
-    if isinstance(exc, (PermanentError, NonDeterminismError)):
-        return ErrorInfo(code="permanent_error", message=str(exc)), False
     if isinstance(exc, KernelError):
-        return exc.to_info().model_copy(update={"code": "agent_crashed"}), exc.retryable
+        # Keeps the error's own stable code (``context_length``, ``auth``, ``rate_limited``…),
+        # so what failed is readable from the record without knowing a Python class name.
+        return exc.to_info(), exc.retryable
     crash = AgentCrashError(str(exc), run_id=run_id, agent_id=agent_id)
     return ErrorInfo(code="agent_crashed", message=str(crash), retryable=True), True
 
@@ -265,15 +265,18 @@ class Worker:
                         tenant_id=lease.tenant,
                     )
                     version = str(getattr(agent, "version", "0"))
-                    if lease.agent_version != version:
+                    events = await self._store.read_events(run_id, durable_only=True)
+                    # The version a run started under is recorded in its own journal, so it
+                    # is whatever agent actually ran it — however the run was created.
+                    pinned = next((e.payload.get("agent_version") for e in events if e.kind == RunLogKind.RUN_STARTED), None)
+                    if pinned is not None and pinned != version:
                         raise NonDeterminismError(
-                            f"run {run_id} was started by agent version {lease.agent_version!r} but this worker has "
+                            f"run {run_id} was started by agent version {pinned!r} but this worker has "
                             f"{version!r}; replaying it could attach old results to new code",
                             path="",
-                            expected=lease.agent_version,
+                            expected=str(pinned),
                             actual=version,
                         )
-                    events = await self._store.read_events(run_id, durable_only=True)
 
                     async def commit(entries: Any) -> Any:
                         return await self._store.commit(lease, Commit(entries=tuple(entries)))
@@ -425,6 +428,8 @@ class Worker:
         if retryable and lease.retry_count < lease.retry_policy.max_retries:
             # The messages stay in the inbox: the retry will find the same input.
             delay = backoff(lease.retry_policy, lease.retry_count)
+            if isinstance(exc, RateLimitedError) and exc.retry_after is not None:
+                delay = max(delay, exc.retry_after)  # the provider said when to come back
             await self._commit_end(lease, Commit(outcome=Retry(error=error, delay_s=delay)))
             instruments().retries.add(1)
             return "retrying"

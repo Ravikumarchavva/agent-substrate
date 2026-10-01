@@ -21,7 +21,7 @@ async def test_runtime_agent_registration():
             received.extend(inbox)
 
     agent = EchoAgent()
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
         msg = Message(
             target=agent.id,

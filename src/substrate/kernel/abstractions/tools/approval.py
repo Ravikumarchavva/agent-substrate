@@ -17,9 +17,10 @@ the concrete web implementation).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import Field, model_validator
 
@@ -62,10 +63,36 @@ class ApprovalResult(KernelModel):
     ``modified_args`` is only meaningful when ``decision == MODIFIED`` — the
     edited arguments to execute the call with instead of the originally
     requested ones. ``None`` for every other decision.
+
+    ``decided_by`` / ``decided_at`` / ``reason`` make the decision attributable: who made
+    it, when, and why. The serving layer stamps the first two from the authenticated caller —
+    never from anything the client sent — and the invoker journals all three, because an
+    approval nobody can be held to is not a control.
     """
 
     decision: ApprovalDecision
     modified_args: JsonObject | None = None
+    decided_by: str | None = None
+    decided_at: datetime | None = None
+    reason: str | None = None
+
+    @classmethod
+    def from_response(cls, data: Mapping[str, Any]) -> "ApprovalResult":
+        """Read the response a front end (or a timeout) delivered. ``{action: approve|modify|deny}``,
+        plus the stamped ``decided_by`` / ``decided_at``; a disconnect or timeout is a denial."""
+        stamp: dict[str, Any] = {"decided_by": data.get("decided_by"), "reason": data.get("reason") or None}
+        decided_at = data.get("decided_at")
+        if isinstance(decided_at, str):
+            decided_at = datetime.fromisoformat(decided_at)
+        stamp["decided_at"] = decided_at if isinstance(decided_at, datetime) else None
+        if data.get("session_disconnected") or data.get("timed_out"):
+            return cls(decision=ApprovalDecision.DENIED, **stamp)
+        action = data.get("action", "deny")
+        if action == "modify":
+            return cls(decision=ApprovalDecision.MODIFIED, modified_args=data.get("modified_arguments") or {}, **stamp)
+        if action == "approve":
+            return cls(decision=ApprovalDecision.APPROVED, **stamp)
+        return cls(decision=ApprovalDecision.DENIED, **stamp)
 
     @model_validator(mode="after")
     def _args_only_when_modified(self) -> "ApprovalResult":

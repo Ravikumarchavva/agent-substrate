@@ -31,7 +31,7 @@ load_dotenv()  # walks up to find the repo-root .env
 from substrate.kernel import ReActAgent
 from substrate.kernel.context import ContextConfig
 from substrate.kernel.llm import OpenAICompatibleClient
-from substrate.kernel.runtime import build_local_runtime
+from substrate.kernel.runtime import Runtime
 from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
@@ -63,10 +63,10 @@ async def main() -> None:
         max_iterations=4,
     )
 
-    # build_local_runtime() — SQLite-durable scheduler/event-log/inbox/etc.
-    # under one file, zero Docker/Postgres/Redis. A bare Runtime() (pure
-    # in-memory, gone on exit) also works if durability isn't needed here.
-    async with build_local_runtime(path="./data/db/standalone_demo.sqlite3") as rt:
+    # Runtime.local() — one SQLite file holds the whole durable runtime:
+    # runs, journal, inbox, signals. Zero Docker/Postgres/Redis. Pass ":memory:" for a
+    # throwaway one that is gone on exit.
+    async with Runtime.local("./data/db/standalone_demo.sqlite3") as rt:
         await rt.register(agent)
 
         msg = Message(
@@ -81,7 +81,7 @@ async def main() -> None:
         )
         run_id = await rt.submit(agent.id, msg)
 
-        async for entry in rt.event_log.tail(run_id):
+        async for entry in rt.tail(run_id):
             if entry.kind == "text.delta":
                 print(entry.payload.get("text", ""), end="", flush=True)
             elif entry.kind in ("run.completed", "run.failed", "run.cancelled"):

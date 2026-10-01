@@ -27,7 +27,6 @@ import asyncio
 import json
 import re
 import time
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -40,17 +39,6 @@ from substrate.kernel.abstractions.ids import new_id
 from substrate.logger import setup_logging
 
 logger = setup_logging()
-
-
-def _doc_id(value: object) -> str:
-    """The canonical spelling of a document id: 32 lowercase hex characters.
-
-    The column is a Postgres ``UUID``, which hands ids back dashed; the kernel
-    mints them undashed. Normalising both ways means the id a caller stored is
-    the id they read back.
-    """
-    return uuid.UUID(str(value)).hex
-
 
 
 def _blocks_to_json(doc: Document) -> str:
@@ -85,7 +73,7 @@ class PgVectorStore:
         engine: The underlying ``AsyncEngine`` — used for DDL and writes.
         dimensions: Embedding vector dimensions (must match the embed model).
         table_name: Table to store documents in. Defaults to
-            ``vector_documents``. A second table (different name) is how two
+            ``vector_records``. A second table (different name) is how two
             ``PgVectorStore`` instances with different ``dimensions`` coexist
             — one Postgres column can't hold two vector widths, e.g. the
             local RAG backend's text store (1536, OpenAI) and its image
@@ -97,7 +85,7 @@ class PgVectorStore:
         session_factory: async_sessionmaker[AsyncSession],
         engine: Any,
         dimensions: int = 1536,
-        table_name: str = "vector_documents",
+        table_name: str = "vector_records",
         insert_batch_size: int = _INSERT_BATCH_SIZE,
     ) -> None:
         if not _TABLE_NAME_RE.match(table_name):
@@ -135,13 +123,14 @@ class PgVectorStore:
             await conn.execute(
                 text(f"""
                 CREATE TABLE IF NOT EXISTS {self._table} (
-                    id          UUID PRIMARY KEY,
+                    id          TEXT NOT NULL,
                     collection  VARCHAR(255) NOT NULL,
                     text        TEXT NOT NULL,
                     content_json JSONB,
                     embedding   {self._vector_type}({self._dimensions}) NOT NULL,
                     metadata    JSONB NOT NULL DEFAULT '{{}}',
-                    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+                    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    PRIMARY KEY (collection, id)
                 )
             """)
             )
@@ -187,7 +176,7 @@ class PgVectorStore:
     def _row_params(
         self, doc: Document, collection: str, now: datetime
     ) -> dict[str, Any]:
-        doc_id = _doc_id(doc.id) if doc.id else new_id()
+        doc_id = doc.id or new_id()
         if doc.embedding is None:
             raise ValueError(
                 f"Document {doc_id} is missing embedding required by PgVectorStore"
@@ -271,7 +260,7 @@ class PgVectorStore:
 
         async with self._engine.begin() as conn:
             await self._insert_rows(
-                conn, rows, on_conflict_sql="ON CONFLICT (id) DO NOTHING"
+                conn, rows, on_conflict_sql="ON CONFLICT (collection, id) DO NOTHING"
             )
 
         return [row["id"] for row in rows]
@@ -291,7 +280,7 @@ class PgVectorStore:
                 text(f"""
                     SELECT id, text, content_json, embedding, metadata
                     FROM {self._table}
-                    WHERE id = ANY(CAST(:ids AS UUID[])) AND collection = :collection
+                    WHERE id = ANY(:ids) AND collection = :collection
                 """),
                 {"ids": ids, "collection": collection},
             )
@@ -312,7 +301,7 @@ class PgVectorStore:
 
             documents.append(
                 Document(
-                    id=_doc_id(row.id),
+                    id=row.id,
                     content=_blocks_from_json(row.content_json),
                     embedding=emb,
                     metadata=row.metadata or {},
@@ -346,7 +335,7 @@ class PgVectorStore:
                 conn,
                 list(deduped.values()),
                 on_conflict_sql="""
-                    ON CONFLICT (id) DO UPDATE SET
+                    ON CONFLICT (collection, id) DO UPDATE SET
                         text = EXCLUDED.text,
                         content_json = EXCLUDED.content_json,
                         embedding = EXCLUDED.embedding,
@@ -369,7 +358,7 @@ class PgVectorStore:
             result = await conn.execute(
                 text(f"""
                     DELETE FROM {self._table}
-                    WHERE id = ANY(CAST(:ids AS UUID[])) AND collection = :collection
+                    WHERE id = ANY(:ids) AND collection = :collection
                 """),
                 {"ids": ids, "collection": collection},
             )
@@ -389,12 +378,20 @@ class PgVectorStore:
         """Re-key every row from collection *old* to *new* — a cheap
         re-labeling, no re-embedding. Used to "promote" a staged document
         (ingested under a temporary collection at upload time) into a
-        thread's real collection once the user actually sends it. Safe even
-        if *new* already has rows: ``id`` is a globally unique UUID
-        regardless of collection, so no collision is possible."""
+        thread's real collection once the user actually sends it. If *new*
+        already has a row with the same id, the moved row replaces it."""
         await self.ensure_table()
 
         async with self._engine.begin() as conn:
+            # An id is unique within a collection, so rows of *old* may share an id with rows
+            # already in *new*; the ones being moved win, as they would on an upsert.
+            await conn.execute(
+                text(
+                    f"DELETE FROM {self._table} n USING {self._table} o "
+                    "WHERE n.collection = :new AND o.collection = :old AND n.id = o.id"
+                ),
+                {"new": new, "old": old},
+            )
             result = await conn.execute(
                 text(
                     f"UPDATE {self._table} SET collection = :new WHERE collection = :old"
@@ -416,7 +413,9 @@ class PgVectorStore:
         if filter:
             for i, (key, value) in enumerate(filter.items()):
                 param_key = f"filter_{i}"
-                clauses.append(f"metadata->>'{key}' = :{param_key}")
+                name_key = f"filter_name_{i}"
+                clauses.append(f"metadata->>:{name_key} = :{param_key}")
+                params[name_key] = str(key)  # bound, never spliced into the SQL
                 params[param_key] = str(value)
         return clauses
 
@@ -457,7 +456,7 @@ class PgVectorStore:
 
         return [
             SearchResult(
-                id=_doc_id(row.id),
+                id=row.id,
                 content=_blocks_from_json(row.content_json),
                 score=float(row.similarity),
                 metadata=row.metadata or {},
@@ -507,7 +506,7 @@ class PgVectorStore:
 
         return [
             SearchResult(
-                id=_doc_id(row.id),
+                id=row.id,
                 content=_blocks_from_json(row.content_json),
                 score=float(row.rank),
                 metadata=row.metadata or {},
@@ -579,7 +578,7 @@ class PgVectorStore:
             FROM {self._table} t
             LEFT JOIN dense d ON d.id = t.id
             LEFT JOIN lexical l ON l.id = t.id
-            WHERE d.id IS NOT NULL OR l.id IS NOT NULL
+            WHERE t.collection = :collection AND (d.id IS NOT NULL OR l.id IS NOT NULL)
             ORDER BY rrf_score DESC
             LIMIT :fused_k
         """)
@@ -590,7 +589,7 @@ class PgVectorStore:
 
         return [
             SearchResult(
-                id=_doc_id(row.id),
+                id=row.id,
                 content=_blocks_from_json(row.content_json),
                 score=float(row.rrf_score),
                 metadata=row.metadata or {},

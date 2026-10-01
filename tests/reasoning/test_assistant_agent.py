@@ -86,6 +86,8 @@ class MockLLMClient:
 
 
 class EchoTool:
+    risk = ToolRisk.SAFE
+    idempotent = True
     name = "echo"
     description = "Echo input back."
     input_schema: dict[str, object] = {
@@ -99,6 +101,7 @@ class EchoTool:
 
 
 class RiskyTool:
+    idempotent = True
     name = "risky"
     description = "Dangerous side-effect tool."
     risk = ToolRisk.HIGH
@@ -135,7 +138,7 @@ async def run_agent(
     status = "success"
     error = None
     truncated = False
-    async for entry in rt.event_log.tail(run_id):
+    async for entry in rt.tail(run_id):
         if entry.kind == "run.truncated":
             truncated = True
         elif entry.kind == "run.completed":
@@ -190,7 +193,7 @@ def make_agent(
 
 async def test_run_plain_text():
     """Agent returns the LLM's text response."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = make_agent([[TextBlock(text="hello world")]])
         result = await run_agent(rt, agent, "hi")
         assert result["status"] == "success"
@@ -199,7 +202,7 @@ async def test_run_plain_text():
 
 async def test_run_with_tool_call():
     """Agent executes a tool when the LLM returns a ToolUseBlock."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         tool_use = ToolUseBlock(
             call_id="c1", tool_name="echo", arguments={"text": "pong"}
         )
@@ -217,7 +220,7 @@ async def test_run_with_tool_call():
 
 async def test_run_unknown_tool_returns_error_and_continues():
     """Calling an unregistered tool gives an error result; agent continues."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         tool_use = ToolUseBlock(call_id="c1", tool_name="ghost", arguments={})
         agent = make_agent([[tool_use], [TextBlock(text="ok")]])
         result = await run_agent(rt, agent, "use ghost tool")
@@ -226,7 +229,7 @@ async def test_run_unknown_tool_returns_error_and_continues():
 
 async def test_multi_turn_history():
     """History accumulates across multiple submissions with the same session."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = make_agent(
             [
                 [TextBlock(text="I am fine.")],
@@ -247,7 +250,7 @@ async def test_multi_turn_history():
 async def test_max_iterations_wraps_up_instead_of_failing():
     """Out of steps, the agent makes one last tool-free call and the turn is
     saved and flagged ``run.truncated`` rather than crashing and losing it."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         tool_use = ToolUseBlock(call_id="c1", tool_name="echo", arguments={"text": "x"})
         agent = make_agent(
             [[tool_use]] * 5 + [[TextBlock(text="Here is what I found so far.")]],
@@ -260,7 +263,7 @@ async def test_max_iterations_wraps_up_instead_of_failing():
 
 
 async def test_max_iterations_falls_back_when_wrap_up_still_calls_tools():
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         tool_use = ToolUseBlock(call_id="c1", tool_name="echo", arguments={"text": "x"})
         agent = make_agent([[tool_use]] * 6, tools=[EchoTool()])
         result = await run_agent(rt, agent, "loop forever")
@@ -270,7 +273,7 @@ async def test_max_iterations_falls_back_when_wrap_up_still_calls_tools():
 
 async def test_multiple_tool_calls_in_one_turn():
     """Two tool uses in a single assistant turn are both executed."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         tc1 = ToolUseBlock(call_id="c1", tool_name="echo", arguments={"text": "a"})
         tc2 = ToolUseBlock(call_id="c2", tool_name="echo", arguments={"text": "b"})
         agent = make_agent(
@@ -292,7 +295,7 @@ async def test_multiple_tool_calls_in_one_turn():
 
 async def test_hitl_approval_granted():
     """When approval_handler approves, the tool executes and agent succeeds."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         approved_calls: list[str] = []
 
         async def handler(tool_name: str, args: dict) -> bool:
@@ -313,7 +316,7 @@ async def test_hitl_approval_granted():
 
 async def test_hitl_approval_denied():
     """When approval_handler denies, tool call produces an error and agent continues."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
 
         async def handler(tool_name: str, args: dict) -> bool:
             return False
@@ -332,7 +335,7 @@ async def test_hitl_approval_denied():
 
 async def test_hitl_safe_tool_skips_approval():
     """SAFE-risk tools bypass the approval handler entirely."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         calls: list[str] = []
 
         async def handler(tool_name: str, args: dict) -> bool:
@@ -358,7 +361,7 @@ async def test_hitl_safe_tool_skips_approval():
 
 async def test_agent_context_config():
     """ContextConfig accepts a CompactionPipeline."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         pipeline = CompactionPipeline([SlidingWindowCompaction(max_messages=10)])
         ctx = ContextConfig(
             InMemoryHistoryProvider(),
@@ -376,7 +379,7 @@ async def test_agent_context_config():
 
 async def test_agent_context_config_pipeline():
     """ContextConfig with a CompactionPipeline chains multiple strategies in sequence."""
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         pipeline = CompactionPipeline(
             [
                 SlidingWindowCompaction(max_messages=20),

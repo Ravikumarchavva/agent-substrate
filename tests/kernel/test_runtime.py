@@ -17,6 +17,7 @@ import asyncio
 from substrate.kernel.abstractions.core.identity import Actor, Topic
 from substrate.kernel.abstractions.messaging.message import DataPayload, Message
 from substrate.kernel.abstractions.runtime.communication import AskOutcome
+from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 from substrate.kernel.runtime import Runtime, RunContext
 
 
@@ -53,7 +54,7 @@ async def test_fire_and_forget_delivery() -> None:
     agent_id = _agent_id("recorder")
     agent = RecorderAgent(agent_id)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
         await rt.submit(agent_id, _msg(agent_id, {"hello": "world"}))
         await asyncio.wait_for(agent.done.wait(), timeout=2.0)
@@ -102,7 +103,7 @@ async def test_ask_reply_round_trip() -> None:
     echo = EchoAgent(echo_id)
     asker = AskerAgent(asker_id, echo_id)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(echo)
         await rt.register(asker)
         # Submit asker first — it will ask the echo agent.
@@ -140,7 +141,7 @@ async def test_social_fanout() -> None:
     listener1 = FanoutListenerAgent(listener1_id)
     listener2 = FanoutListenerAgent(listener2_id)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(listener1)
         await rt.register(listener2)
 
@@ -209,7 +210,7 @@ async def test_spawn_child_receives_boot() -> None:
     child = ChildAgent(child_id)
     parent = SpawnParentAgent(parent_id, child_id)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(child)
         await rt.register(parent)
         await rt.submit(parent_id, _msg(parent_id, {"start": True}))
@@ -265,7 +266,7 @@ async def test_spawn_child_derives_distinct_addresses_for_same_type() -> None:
     data_analyst = SpawnsAssistantByType(data_analyst_id)
     researcher = SpawnsAssistantByType(researcher_id)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         rt.register_factory("assistant", lambda actor: RecordingChild(actor))
         await rt.register(data_analyst)
         await rt.register(researcher)
@@ -320,7 +321,7 @@ async def test_ask_timeout_is_not_target_failed() -> None:
     slow = SlowAgent(slow_id)
     asker = TimeoutAskerAgent(asker_id, slow_id)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(slow)
         await rt.register(asker)
         # Boot the slow agent first so it's RUNNING when asker asks it
@@ -342,46 +343,33 @@ async def test_ask_timeout_is_not_target_failed() -> None:
 
 
 async def test_journal_dedup_via_context() -> None:
-    """_journaled() does not re-execute fn if the effect_id is already cached."""
+    """A journaled call is not re-executed when the run replays: the retry gets the
+    recorded value back, not a fresh one."""
 
-    class CountingAgent:
+    class ReplayedAgent:
         def __init__(self, agent_id: Actor) -> None:
             self.id = agent_id
-            self.call_count = 0
-            self.done = asyncio.Event()
+            self.attempts: list[tuple[str, str]] = []
 
         async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-            async def _side_effect() -> dict:
-                self.call_count += 1
-                return {"n": self.call_count}
-
-            # Snapshot the path stack as run() sees it (Worker's own journaled
-            # effects before calling run(), e.g. inbox.drain, may have already
-            # consumed earlier indices — this test only cares about relative
-            # position, not absolute index 0).
-            start_stack = list(ctx._path_stack)
-
-            # First journaled call
-            result1 = await ctx._journaled("count", {}, _side_effect)
-            # Second call with a DIFFERENT path → different effect_id → executes
-            result2 = await ctx._journaled("count", {}, _side_effect)
-            # Reset the path stack to simulate replay: same path/effect_id as result1
-            ctx._path_stack = start_stack
-            result1_replay = await ctx._journaled("count", {}, _side_effect)
-
-            assert result1 == {"n": 1}
-            assert result2 == {"n": 2}
-            assert result1_replay == {"n": 1}  # replayed from journal, not re-executed
-            assert self.call_count == 2  # fn only ran twice, not three times
-            self.done.set()
+            self.attempts.append((await ctx.uuid(), await ctx.uuid()))
+            if len(self.attempts) == 1:
+                raise RuntimeError("transient failure after the effects were journaled")
 
     agent_id = _agent_id("counter")
-    agent = CountingAgent(agent_id)
+    agent = ReplayedAgent(agent_id)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
-        await rt.submit(agent_id, _msg(agent_id, {}))
-        await asyncio.wait_for(agent.done.wait(), timeout=2.0)
+        run_id = await rt.submit(agent_id, _msg(agent_id, {}), retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.0))
+        async for entry in rt.tail(run_id):
+            if entry.kind in ("run.completed", "run.failed"):
+                assert entry.kind == "run.completed"
+                break
+
+    first, replay = agent.attempts
+    assert first[0] != first[1], "two journaled calls in one run must not share an effect id"
+    assert replay == first, "the replay must be served from the journal, not re-executed"
 
 
 async def test_nested_effect_inside_journal_hit_tool_stays_replay_safe() -> None:
@@ -406,6 +394,7 @@ async def test_nested_effect_inside_journal_hit_tool_stays_replay_safe() -> None
         name = "nested_uuid_tool"
         description = "Journals its own uuid() call inside execute()."
         risk = ToolRisk.SAFE
+        idempotent = True
         input_schema: dict = {"type": "object", "properties": {}}
         call_count = 0
 
@@ -420,39 +409,29 @@ async def test_nested_effect_inside_journal_hit_tool_stays_replay_safe() -> None
             self.id = agent_id
             self.tools = Toolbox()
             self.tools.add(NestedUuidTool())
-            self.done = asyncio.Event()
             self.sibling_ids: list[str] = []
 
         async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-            # Snapshot the path stack as run() sees it (Worker's own journaled
-            # effects before calling run(), e.g. inbox.drain, may have already
-            # consumed earlier indices).
-            start_stack = list(ctx._path_stack)
-
-            # Live run: tool call (opens a child scope, journals a nested
-            # uuid() inside it), then a top-level sibling uuid() call.
+            # Live attempt: the tool call (a child scope holding a nested uuid()), then a
+            # top-level sibling uuid().
             await ctx.tool("nested_uuid_tool")
-            sibling_live = await ctx.uuid()
-            self.sibling_ids.append(sibling_live)
-
-            # Simulate replay: reset to run()'s own starting path, same
-            # journal/run_id — the tool call is now a journal hit (its body
-            # must NOT re-execute, so no child scope is entered and
-            # NestedUuidTool.call_count must not increase).
-            ctx._path_stack = start_stack
-            await ctx.tool("nested_uuid_tool")
-            sibling_replay = await ctx.uuid()
-            self.sibling_ids.append(sibling_replay)
-
-            self.done.set()
+            self.sibling_ids.append(await ctx.uuid())
+            if len(self.sibling_ids) == 1:
+                # Fail after journaling, so the retry replays: the tool call is now a journal
+                # hit and its body must NOT run again.
+                raise RuntimeError("transient failure after the effects were journaled")
 
     agent_id = _agent_id("nested-effect")
     agent = NestedEffectAgent(agent_id)
+    NestedUuidTool.call_count = 0
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
-        await rt.submit(agent_id, _msg(agent_id, {}))
-        await asyncio.wait_for(agent.done.wait(), timeout=2.0)
+        run_id = await rt.submit(agent_id, _msg(agent_id, {}), retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.0))
+        async for entry in rt.tail(run_id):
+            if entry.kind in ("run.completed", "run.failed"):
+                assert entry.kind == "run.completed"
+                break
 
     assert NestedUuidTool.call_count == 1, (
         "Tool body must execute exactly once — the replayed call is a "
@@ -497,7 +476,7 @@ async def test_supervisor_join() -> None:
     child = ChildJoinAgent(child_id)
     parent = ParentJoinAgent(parent_id, child_id)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(child)
         await rt.register(parent)
         await rt.submit(parent_id, _msg(parent_id, {"start": True}))
@@ -558,7 +537,7 @@ async def test_spawn_inherits_execution_budget_transitively() -> None:
     child = ChildAgent(child_id, grandchild_id)
     root = RootAgent(root_id, child_id)
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(grandchild)
         await rt.register(child)
         await rt.register(root)
@@ -580,7 +559,7 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
 
     ctx.log_once() must append its entry exactly once no matter how many
     times the surrounding tool body re-executes."""
-    from substrate.kernel.abstractions.tools import ToolExecutionResult
+    from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
     from substrate.kernel.abstractions.core.content import TextBlock
 
     log_call_count = 0
@@ -589,6 +568,8 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
         name = "suspending_tool"
         description = "suspends once via signal, logs once before doing so"
         input_schema: dict = {"type": "object", "properties": {}}
+        risk = ToolRisk.SAFE
+        idempotent = True
 
         async def execute(self, *, ctx=None, **kwargs):
             nonlocal log_call_count
@@ -615,32 +596,25 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
     toolbox.add(SuspendingTool())
     agent.tools = toolbox
 
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent_id, _msg(agent_id, {}))
 
         for _ in range(100):
-            status = await rt.scheduler.get_status(run_id)
-            if status is not None and status.value == "suspended":
+            status = (await rt.get_run(run_id)).status
+            if status == "suspended":
                 break
             await asyncio.sleep(0.02)
-        assert status is not None and status.value == "suspended"
+        assert status == "suspended"
 
-        input_requested_count = 0
-        request_id = None
-        async for entry in rt.event_log.read(run_id):
-            if entry.kind == "input.requested":
-                input_requested_count += 1
-                request_id = entry.payload["request_id"]
-        assert input_requested_count == 1
+        requests = [e for e in await rt.read(run_id) if e.kind == "input.requested"]
+        assert len(requests) == 1
+        request_id = requests[0].payload["request_id"]
 
-        await rt.signal_bus.signal(run_id, f"hitl:{request_id}", {"answer": "yes"})
+        await rt.store.signal(run_id, f"hitl:{request_id}", {"answer": "yes"})
         await asyncio.wait_for(agent.done.wait(), timeout=3.0)
 
-        final_count = 0
-        async for entry in rt.event_log.read(run_id):
-            if entry.kind == "input.requested":
-                final_count += 1
+        final_count = len([e for e in await rt.read(run_id) if e.kind == "input.requested"])
         assert final_count == 1, (
             f"input.requested duplicated across suspend/resume: {final_count} entries"
         )
@@ -650,39 +624,3 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
             f"— got {log_call_count}. If this is 1, the test setup is wrong "
             "and isn't exercising the replay path log_once is meant to guard."
         )
-
-
-# ---------------------------------------------------------------------------
-# SchedulerProtocol.cancel_pending() — the gate Worker.cancel() relies on
-# ---------------------------------------------------------------------------
-
-
-async def test_inmemory_cancel_pending_transitions_pending_run() -> None:
-    from substrate.kernel.runtime.backends._scheduler import InMemoryScheduler
-    from substrate.kernel.abstractions.runtime.ids import RunStatus, new_run_id
-
-    sched = InMemoryScheduler()
-    run_id = new_run_id()
-    sched.register_run(run_id, _agent_id("cancel-pending-a"))
-    await sched.enqueue(run_id, priority=5, tenant="default")
-
-    assert await sched.get_status(run_id) == RunStatus.PENDING
-    changed = await sched.cancel_pending(run_id)
-    assert changed is True
-    assert await sched.get_status(run_id) == RunStatus.CANCELLED
-
-
-async def test_inmemory_cancel_pending_leaves_running_run_alone() -> None:
-    from substrate.kernel.runtime.backends._scheduler import InMemoryScheduler
-    from substrate.kernel.abstractions.runtime.ids import RunStatus, new_run_id
-
-    sched = InMemoryScheduler()
-    run_id = new_run_id()
-    sched.register_run(run_id, _agent_id("cancel-pending-b"))
-    await sched.enqueue(run_id, priority=5, tenant="default")
-    await sched.lease(worker_id="w1", capacity=10)  # PENDING -> RUNNING
-
-    assert await sched.get_status(run_id) == RunStatus.RUNNING
-    changed = await sched.cancel_pending(run_id)
-    assert changed is False, "a RUNNING run must not be cancel_pending-eligible"
-    assert await sched.get_status(run_id) == RunStatus.RUNNING

@@ -1,4 +1,9 @@
-"""Single orchestration point for tenant-scoped personal-data erasure."""
+"""Single orchestration point for tenant-scoped personal-data erasure.
+
+A deletion request has to reach every place the person's data lives — the relational rows,
+the file store, Redis, the session index, the long-term memory, and the run journal that holds
+the raw conversation. Leaving out any one of them means the request was not satisfied.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +14,7 @@ from typing import Any
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from substrate.kernel.abstractions.storage.memory import MemoryNamespace
 from substrate.kernel.workspace.layout import tenant_prefix, user_prefix
 from substrate.integrations.storage.session_index_erasure import (
     erase_session_index,
@@ -26,6 +32,8 @@ class ErasureSummary:
     objects_deleted: int
     redis_keys_deleted: int
     session_index_tables_deleted: int
+    memories_deleted: int = 0
+    runs_deleted: int = 0
 
     def as_dict(self) -> dict[str, int | str | None]:
         return asdict(self)
@@ -60,6 +68,8 @@ async def erase_user(
     user_id: str,
     cfg: Any,
     pending_store: Any = None,
+    memory_store: Any = None,
+    runtime_store: Any = None,
 ) -> ErasureSummary:
     threads = list(
         (
@@ -110,6 +120,11 @@ async def erase_user(
         objects += await pending_store.delete_prefix(user_prefix(tenant_id, user_id))
     redis_deleted = await _redis_sweep(redis, {user_id, *thread_ids})
     session_index_tables = await erase_session_index(cfg, tenant_id, user_id)
+    memories = await memory_store.erase(MemoryNamespace(tenant_id=tenant_id, user_id=user_id)) if memory_store else 0
+    runs = 0
+    if runtime_store is not None:
+        for thread_id in thread_ids:
+            runs += await runtime_store.erase(tenant=tenant_id, thread_id=thread_id)
     return ErasureSummary(
         tenant_id,
         user_id,
@@ -118,6 +133,8 @@ async def erase_user(
         objects,
         redis_deleted,
         session_index_tables,
+        memories,
+        runs,
     )
 
 
@@ -129,6 +146,8 @@ async def erase_tenant(
     tenant_id: str,
     cfg: Any,
     pending_store: Any = None,
+    memory_store: Any = None,
+    runtime_store: Any = None,
 ) -> ErasureSummary:
     threads = list(
         (
@@ -147,6 +166,8 @@ async def erase_tenant(
         objects += await pending_store.delete_prefix(tenant_prefix(tenant_id))
     redis_deleted = await _redis_sweep(redis, thread_ids | users)
     session_index_tables = await erase_session_index_for_tenant(cfg, tenant_id, users)
+    memories = await memory_store.erase(MemoryNamespace(tenant_id=tenant_id)) if memory_store else 0
+    runs = await runtime_store.erase(tenant=tenant_id) if runtime_store is not None else 0
     return ErasureSummary(
         tenant_id,
         None,
@@ -155,4 +176,6 @@ async def erase_tenant(
         objects,
         redis_deleted,
         session_index_tables,
+        memories,
+        runs,
     )

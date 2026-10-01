@@ -13,14 +13,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.kernel.abstractions import (
     ChatMessage,
     ContentBlock,
     TextBlock,
-    ToolUseBlock,
     ToolResultBlock,
+    ToolUseBlock,
 )
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 
 if TYPE_CHECKING:
     from substrate.kernel.abstractions.runtime.store import RuntimeStore

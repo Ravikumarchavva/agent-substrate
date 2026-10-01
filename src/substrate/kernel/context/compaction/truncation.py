@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from substrate.kernel.abstractions.core.content import ChatMessage
 from substrate.kernel.context.compaction._window import drop_orphaned_tool_results
 from substrate.kernel.context.tokens import estimate_message_chars
-from substrate.kernel.abstractions.core.content import ChatMessage
 
 
 class TruncationStrategy:

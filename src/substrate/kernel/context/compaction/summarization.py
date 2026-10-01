@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
+from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.abstractions.llm import GenerationOptions
 from substrate.kernel.context.tokens import (
     DEFAULT_CHARS_PER_TOKEN,
     estimate_message_tokens,
     estimate_tokens,
 )
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.llm import GenerationOptions
-from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
     from substrate.kernel.abstractions.llm import LLMClient
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
     "You are a conversation summarizer. "

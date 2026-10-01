@@ -10,25 +10,30 @@ to a ``ReActAgent`` via ``Runtime.submit()``.
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-
 from typing import TYPE_CHECKING
+
+from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.messaging.message import (
+    ChatPayload,
+    DataPayload,
+    Message,
+)
+from substrate.kernel.agents.routed import RoutedAgent, handle
 
 if TYPE_CHECKING:
     from substrate.kernel.runtime.context import RunContext
 
 
-class UserProxyAgent:
+class UserProxyAgent(RoutedAgent):
     """HITL agent.
 
     When another agent sends a message with ``reply_to`` set (via
     ``ctx.ask``), this proxy suspends until a human sends a reply signal
-    ``human_reply:<correlation_id>`` via the signal bus.
+    ``human_reply:<correlation_id>`` via a signal.
 
     The serving layer is responsible for:
     1. Surfacing the question to the human (via SSE or notification).
-    2. Calling ``SignalBusProtocol.signal(run_id, "human_reply:<cid>", {text: ...})``
+    2. Calling ``RuntimeStore.signal(run_id, "human_reply:<cid>", {text: ...})``
        when the human replies.
 
     Parameters
@@ -45,18 +50,10 @@ class UserProxyAgent:
         self.tools = None  # no tools needed
 
     # ------------------------------------------------------------------
-    # Agent contract
-    # ------------------------------------------------------------------
-
-    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-        for msg in inbox:
-            ctx.check()
-            await self._handle_message(ctx, msg)
-
-    # ------------------------------------------------------------------
     # HITL suspend/resume
     # ------------------------------------------------------------------
 
+    @handle(ChatPayload, DataPayload)
     async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
         cid = msg.correlation_id
 

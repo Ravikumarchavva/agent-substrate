@@ -73,7 +73,6 @@ class RunSpec(KernelModel):
     deadline: datetime | None = None
     supervision: Supervision | None = None
     trace: TraceContext | None = None
-    agent_version: str = "0"
     # Opaque to the engine: what a host needs to rebuild this run's agent after a restart.
     recipe: JsonObject | None = None
 
@@ -101,7 +100,6 @@ class RunRecord(KernelModel):
     cancel_requested: bool = False
     supervision: Supervision | None = None
     trace: TraceContext | None = None
-    agent_version: str = "0"
     enqueued_at: datetime | None = None
     started_at: datetime | None = None
     terminated_at: datetime | None = None
@@ -128,7 +126,6 @@ class Lease(KernelModel):
     retry_policy: RunRetryPolicy = Field(default_factory=RunRetryPolicy)
     supervision: Supervision | None = None
     trace: TraceContext | None = None
-    agent_version: str = "0"
     deadline: datetime | None = None
     started_at: datetime | None = None
     parent_run_id: RunId | None = None
@@ -149,6 +146,14 @@ class HeartbeatResult(StrEnum):
 # ---------------------------------------------------------------------------
 
 
+class Spend(KernelModel):
+    """What a stretch of work cost: LLM tokens, dollars and round-trips."""
+
+    tokens: int = Field(default=0, ge=0)
+    cost_usd: float = Field(default=0.0, ge=0)
+    turns: int = Field(default=0, ge=0)
+
+
 class NewEntry(KernelModel):
     """A journal entry to append. The store assigns ``seq``.
 
@@ -159,12 +164,17 @@ class NewEntry(KernelModel):
 
     ``ephemeral`` entries are live output (streamed tokens), not replay state: they
     are visible to a tail, never to a replay, and are removed when the run ends.
+
+    ``spend`` is added to the run's execution tree's running total in the same transaction
+    that writes the entry — and only if the entry is actually written, so a deduplicated repeat
+    adds nothing and a replay can never count a call twice.
     """
 
     kind: str
     payload: JsonObject = Field(default_factory=dict)
     dedup_key: str | None = None
     ephemeral: bool = False
+    spend: Spend | None = None
 
 
 class Nack(KernelModel):
@@ -426,6 +436,11 @@ class RuntimeStore(Protocol):
 
     async def stats(self) -> StoreStats: ...
 
+    async def tree_spend(self, run_id: RunId) -> Spend:
+        """Everything spent so far by the execution tree ``run_id`` belongs to — that run, its
+        parent and siblings, and every descendant. What a tree-wide budget is checked against."""
+        ...
+
     async def erase(self, *, tenant: str, thread_id: str | None = None) -> int:
         """Delete every run, log entry, message and signal belonging to a tenant
         (or one of its threads). Returns the number of runs removed."""
@@ -455,6 +470,7 @@ __all__ = [
     "RuntimeStore",
     "SignalSpec",
     "SpawnSpec",
+    "Spend",
     "StoreStats",
     "Suspend",
 ]

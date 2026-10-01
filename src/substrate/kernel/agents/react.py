@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import TYPE_CHECKING
 
+from substrate.kernel.abstractions.agent.context import (
+    CompactionContext,
+    CompactionPhase,
+)
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.abstractions.agent.runtime_context import RunScope
+from substrate.kernel.abstractions.agent.supervision import ExecutionBudget
 from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     Role,
@@ -12,21 +20,33 @@ from substrate.kernel.abstractions.core.content import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from substrate.kernel.abstractions.agent.context import CompactionContext, CompactionPhase
-from substrate.kernel.abstractions.agent.runtime_context import RunScope
+from substrate.kernel.abstractions.core.finish_reason import FinishReason
 from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
-from substrate.kernel.abstractions.llm.llm import GenerationOptions, LLMResponse, ReasoningEffort
-from substrate.kernel.abstractions.messaging.message import Message
+from substrate.kernel.abstractions.exceptions import (
+    BudgetExhaustedError,
+    ContentFilterError,
+    ContextLengthError,
+)
+from substrate.kernel.abstractions.llm.llm import (
+    GenerationOptions,
+    LLMResponse,
+    ReasoningEffort,
+)
+from substrate.kernel.abstractions.messaging.message import (
+    ChatPayload,
+    DataPayload,
+    Message,
+)
 from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.kernel.abstractions.storage.history import HistoryProvider
 from substrate.kernel.abstractions.tools import ToolRegistry, is_concurrency_safe
-from substrate.kernel.abstractions.tools.chain import ChainPolicy
 from substrate.kernel.abstractions.tools.approval import ApprovalHandler
+from substrate.kernel.abstractions.tools.chain import ChainPolicy
 from substrate.kernel.abstractions.tools.tools import ToolRisk
-
+from substrate.kernel.agents.base import BaseAgent
+from substrate.kernel.agents.routed import handle
+from substrate.kernel.context.compaction.sliding_window import SlidingWindowCompaction
 from substrate.kernel.context.context import ContextConfig
-from substrate.kernel.limits.execution import ExecutionTracker
 from substrate.kernel.hooks.manager import HookEvent, HookManager
 from substrate.kernel.middleware._contracts import (
     AgentRunResult,
@@ -34,16 +54,13 @@ from substrate.kernel.middleware._contracts import (
     ToolCallRecord,
 )
 from substrate.kernel.middleware.pipeline import MiddlewarePipeline
-from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.agents.base import BaseAgent
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.context import RunContext
     from substrate.kernel.abstractions.llm.llm import LLMClient
     from substrate.kernel.abstractions.tools.chain import InvocationResult
+    from substrate.kernel.runtime.context import RunContext
 
 
 class ReActAgent(BaseAgent):
@@ -77,7 +94,7 @@ class ReActAgent(BaseAgent):
         output_topic: Topic | None = None,
         approval_handler: ApprovalHandler | None = None,
         approval_required_risk: ToolRisk | None = None,
-        execution_budget: ExecutionTracker | None = None,
+        execution_budget: ExecutionBudget | None = None,
         hooks: HookManager | None = None,
         middleware: MiddlewarePipeline | None = None,
         initial_tool_choice: str | None = None,
@@ -105,7 +122,7 @@ class ReActAgent(BaseAgent):
         self._output_topic = output_topic
         self.approval_handler = approval_handler
         self.approval_required_risk = approval_required_risk
-        self._execution_budget = execution_budget
+        self.execution_budget = execution_budget  # what the engine enforces when no budget was inherited
         self.hooks = hooks
         self.middleware = middleware or MiddlewarePipeline()
         self._initial_tool_choice = initial_tool_choice
@@ -117,11 +134,7 @@ class ReActAgent(BaseAgent):
     def history(self) -> HistoryProvider:
         return self._context.history
 
-    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-        for msg in inbox:
-            ctx.check()
-            await self._handle_message(ctx, msg)
-
+    @handle(ChatPayload, DataPayload)
     async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
         session_id = msg.correlation_id or ctx.run_id
         # Who this message belongs to — tenant/user/branch come from its
@@ -166,37 +179,11 @@ class ReActAgent(BaseAgent):
 
         await self.middleware.execute(call_ctx, _final)
 
-    def _resolve_execution_budget(self, ctx: RunContext) -> ExecutionTracker | None:
-        """Effective budget for this run: the run's inherited ``Supervision.
-        execution_budget`` (set when this agent was ``ctx.spawn()``'d under a
-        budget, propagated via ``Supervision.spawn_child()``) takes priority
-        over the constructor-supplied default.
-
-        Built fresh per call rather than cached on ``self`` — an ``Agent``
-        instance is registered once and reused across every run of its
-        ``agent_id`` (see ``Runtime.register()``); a shared, mutating
-        ``ExecutionTracker`` on ``self`` would let concurrent runs of the same
-        registered agent corrupt each other's usage counters. Rebuilding per
-        call is also replay-safe: a resumed run re-enters this loop from the
-        top and reprocesses every prior turn (cache hits included), so a
-        fresh tracker still ends up with the correct cumulative total.
-        """
-        supervision = ctx.meta.supervision
-        budget = supervision.execution_budget if supervision else None
-        if budget is not None:
-            return ExecutionTracker(
-                max_tokens=budget.max_tokens,
-                max_cost_usd=budget.max_cost_usd,
-                max_turns=budget.max_turns,
-            )
-        return self._execution_budget
-
     async def _generate_turn(
         self,
         ctx: RunContext,
         messages: list[ChatMessage],
         options: GenerationOptions,
-        tracker: ExecutionTracker | None,
     ) -> LLMResponse:
         """One LLM call for the loop: dispatch hooks, compact, call, track budget."""
         if self.hooks:
@@ -207,15 +194,21 @@ class ReActAgent(BaseAgent):
         # context unboundedly across iterations.  We compact a *view* of
         # messages here and keep the full list intact for persistence.
         llm_messages = await self._context.pipeline.compact(messages)
-        resp = await ctx.llm(llm_messages, options=options)
+        try:
+            resp = await ctx.llm(llm_messages, options=options)
+        except ContextLengthError:
+            # The prompt did not fit. Say so to the pipeline's own strategies is not enough —
+            # they already ran — so halve what is sent (oldest first, never splitting a tool
+            # call from its result) and try once more. A second overflow is real and propagates.
+            smaller = await SlidingWindowCompaction(max_messages=max(2, len(llm_messages) // 2)).compact(llm_messages)
+            if len(smaller) >= len(llm_messages):
+                raise
+            logger.warning("context window exceeded; retrying with %d of %d messages", len(smaller), len(llm_messages))
+            resp = await ctx.llm(smaller, options=options)
         if self.hooks:
             await self.hooks.dispatch(
                 HookEvent.LLM_END,
                 {"agent_name": self.name, "run_id": ctx.run_id, "usage": resp.usage},
-            )
-        if tracker is not None:
-            tracker.consume(
-                tokens=resp.usage.total_tokens, cost=resp.cost_usd, turns=1
             )
         return resp
 
@@ -290,7 +283,6 @@ class ReActAgent(BaseAgent):
         ctx: RunContext,
         messages: list[ChatMessage],
         tool_list: list,
-        tracker: ExecutionTracker | None,
     ) -> ChatMessage:
         """Out of steps: one last call with tools disabled so the user gets an
         answer from what was gathered instead of nothing. The nudge is sent
@@ -313,7 +305,7 @@ class ReActAgent(BaseAgent):
             tools=tool_list or None,
             tool_choice="none" if tool_list else None,
         )
-        resp = await self._generate_turn(ctx, [*messages, nudge], options, tracker)
+        resp = await self._generate_turn(ctx, [*messages, nudge], options)
         content = [b for b in resp.content if not isinstance(b, ToolUseBlock)]
         if not any(isinstance(b, TextBlock) and b.text.strip() for b in content):
             content.append(
@@ -391,31 +383,36 @@ class ReActAgent(BaseAgent):
             if self._initial_tool_choice
             else base_options
         )
-        tracker = self._resolve_execution_budget(ctx)
-
         tool_call_records: list[ToolCallRecord] = []
         status = "success"
 
         try:
             for _ in range(self._max_iterations):
                 ctx.check()
-                resp = await self._generate_turn(ctx, messages, options, tracker)
+                resp = await self._generate_turn(ctx, messages, options)
                 # Drop the forced tool_choice after the first call so subsequent
                 # iterations can freely choose to respond with text or more tools.
                 options = base_options
+
+                if resp.finish_reason == FinishReason.CONTENT_FILTER:
+                    raise ContentFilterError("the provider withheld the response on content grounds")
 
                 assistant_turn = ChatMessage(role=Role.ASSISTANT, content=resp.content)
                 messages.append(assistant_turn)
 
                 tool_calls = [b for b in resp.content if isinstance(b, ToolUseBlock)]
                 if not tool_calls:
+                    if resp.finish_reason == FinishReason.LENGTH:
+                        # A reply cut off at the token limit reads like a finished one. Say so.
+                        status = "truncated"
+                        await ctx.log_once(RunLogKind.RUN_TRUNCATED, {"reason": "max_tokens"})
                     break
 
                 results, records = await self._execute_tool_calls(ctx, tool_calls)
                 tool_call_records.extend(records)
                 messages.append(ChatMessage(role=Role.TOOL, content=results))  # type: ignore[arg-type]
             else:
-                messages.append(await self._wrap_up(ctx, messages, tool_list, tracker))
+                messages.append(await self._wrap_up(ctx, messages, tool_list))
                 status = "max_iterations"
                 await ctx.log_once(
                     RunLogKind.RUN_TRUNCATED,

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
 from substrate.integrations.tools.memory import MemoryTool
-from substrate.kernel.abstractions.core.identity import Actor
+from substrate.kernel.abstractions.agent.runtime_context import RunScope
 
 
 class FakeShortTermMemory:
@@ -34,8 +36,7 @@ def short_term() -> FakeShortTermMemory:
 
 
 async def test_memory_tool_short_term_ops(short_term: FakeShortTermMemory) -> None:
-    agent = Actor(type="agent", key="test-agent")
-    tool = MemoryTool(agent, "sess-1", short_term=short_term)
+    tool = MemoryTool("sess-1", short_term=short_term)
 
     # Set
     res = await tool.execute(action="set", key="user_goal", value="Learn Rust")
@@ -59,33 +60,33 @@ async def test_memory_tool_short_term_ops(short_term: FakeShortTermMemory) -> No
 
 
 async def test_memory_tool_long_term_ops(memory_store: LanceMemoryStore) -> None:
-    agent = Actor(type="user", key="user-123")
-    tool = MemoryTool(agent, "sess-1", long_term=memory_store)
+    tool = MemoryTool("sess-1", long_term=memory_store)
+    ctx = SimpleNamespace(scope=RunScope(tenant_id="acme", user_id="user-123", thread_id="sess-1"))
 
     # Remember
-    res = await tool.execute(action="remember", value="User prefers dark theme")
+    res = await tool.execute(ctx=ctx, action="remember", value="User prefers dark theme")
     assert not res.is_error
     mem_id = res.structured_content["memory_id"]
     assert mem_id
 
     # Recall
-    res = await tool.execute(action="recall", query="dark theme")
+    res = await tool.execute(ctx=ctx, action="recall", query="dark theme")
     assert not res.is_error
     assert "User prefers dark theme" in res.content[0].text
     assert mem_id[:8] in res.content[0].text
 
     # Recall non-matching
-    res = await tool.execute(action="recall", query="light mode")
+    res = await tool.execute(ctx=ctx, action="recall", query="light mode")
     assert not res.is_error
     assert "No relevant memories found" in res.content[0].text
 
     # Forget
-    res = await tool.execute(action="forget", memory_id=mem_id)
+    res = await tool.execute(ctx=ctx, action="forget", memory_id=mem_id)
     assert not res.is_error
     assert f"Deleted memory {mem_id}" in res.content[0].text
 
     # Forget again (not found)
-    res = await tool.execute(action="forget", memory_id=mem_id)
+    res = await tool.execute(ctx=ctx, action="forget", memory_id=mem_id)
     assert res.is_error
     assert f"Memory {mem_id} not found" in res.content[0].text
 

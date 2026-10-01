@@ -33,11 +33,18 @@ from substrate.kernel.abstractions.agent.supervision import Priority, Supervisio
 from substrate.kernel.abstractions.core.error_info import ErrorInfo
 from substrate.kernel.abstractions.core.identity import Actor, Topic
 from substrate.kernel.abstractions.core.trace import TraceContext
-from substrate.kernel.abstractions.exceptions import BudgetExhaustedError, LeaseLostError, ThreadBusyError
+from substrate.kernel.abstractions.exceptions import (
+    BudgetExhaustedError,
+    LeaseLostError,
+    ThreadBusyError,
+)
 from substrate.kernel.abstractions.ids import new_id
 from substrate.kernel.abstractions.messaging.message import Message
 from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus
-from substrate.kernel.abstractions.runtime.inbox import DeadLetterEntry, DeadLetterReason
+from substrate.kernel.abstractions.runtime.inbox import (
+    DeadLetterEntry,
+    DeadLetterReason,
+)
 from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
 from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
 from substrate.kernel.abstractions.runtime.store import (
@@ -55,6 +62,7 @@ from substrate.kernel.abstractions.runtime.store import (
     RunRecord,
     RunSpec,
     SpawnSpec,
+    Spend,
     StoreStats,
     Suspend,
 )
@@ -124,7 +132,6 @@ CREATE TABLE IF NOT EXISTS rt_runs (
     cancel_requested INTEGER NOT NULL DEFAULT 0,
     supervision_json TEXT,
     trace TEXT,
-    agent_version TEXT NOT NULL DEFAULT '0',
     recipe_json TEXT,
     enqueued_at DOUBLE PRECISION NOT NULL,
     started_at DOUBLE PRECISION,
@@ -203,6 +210,13 @@ CREATE TABLE IF NOT EXISTS rt_signal_claims (
 CREATE TABLE IF NOT EXISTS rt_spawns (
     effect_id TEXT PRIMARY KEY,
     child_run_id TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rt_spend (
+    tree_id TEXT PRIMARY KEY,
+    tokens BIGINT NOT NULL DEFAULT 0,
+    cost_micros BIGINT NOT NULL DEFAULT 0,
+    turns BIGINT NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS rt_edges (
@@ -300,7 +314,6 @@ class SqlRuntimeStore:
             cancel_requested=bool(row["cancel_requested"]),
             supervision=Supervision.from_dict(json.loads(row["supervision_json"])) if row["supervision_json"] else None,
             trace=TraceContext.from_traceparent(row["trace"]) if row["trace"] else None,
-            agent_version=row["agent_version"],
             enqueued_at=_dt(row["enqueued_at"]),
             started_at=_dt(row["started_at"]),
             terminated_at=_dt(row["terminated_at"]),
@@ -323,7 +336,6 @@ class SqlRuntimeStore:
             retry_policy=record.retry_policy,
             supervision=record.supervision,
             trace=record.trace,
-            agent_version=record.agent_version,
             deadline=record.deadline,
             started_at=record.started_at,
             parent_run_id=record.parent_run_id,
@@ -351,6 +363,17 @@ class SqlRuntimeStore:
             int(entry.ephemeral),
             entry.dedup_key,
         )
+        if entry.spend is not None:
+            await tx.execute(
+                "INSERT INTO rt_spend (tree_id, tokens, cost_micros, turns) "
+                "SELECT tree_id, ?, ?, ? FROM rt_runs WHERE run_id = ? "
+                "ON CONFLICT (tree_id) DO UPDATE SET tokens = rt_spend.tokens + EXCLUDED.tokens, "
+                "cost_micros = rt_spend.cost_micros + EXCLUDED.cost_micros, turns = rt_spend.turns + EXCLUDED.turns",
+                entry.spend.tokens,
+                round(entry.spend.cost_usd * 1_000_000),
+                entry.spend.turns,
+                run_id,
+            )
         return seq
 
     async def _make_pending(self, tx: Tx, run_id: str) -> None:
@@ -384,8 +407,8 @@ class SqlRuntimeStore:
         try:
             await tx.execute(
                 "INSERT INTO rt_runs (run_id, agent, tenant, thread_id, parent_run_id, tree_id, status, priority, "
-                "retry_policy, deadline, supervision_json, trace, agent_version, recipe_json, enqueued_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)",
+                "retry_policy, deadline, supervision_json, trace, recipe_json, enqueued_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)",
                 run_id,
                 str(spec.agent),
                 spec.tenant,
@@ -397,7 +420,6 @@ class SqlRuntimeStore:
                 _ts(spec.deadline) if spec.deadline else None,
                 json.dumps(spec.supervision.to_dict()) if spec.supervision else None,
                 spec.trace.to_traceparent() if spec.trace else None,
-                spec.agent_version,
                 json.dumps(spec.recipe) if spec.recipe is not None else None,
                 _ts(self._clock()),
             )
@@ -1006,6 +1028,18 @@ class SqlRuntimeStore:
 
         return await self._tx(do)
 
+    async def tree_spend(self, run_id: RunId) -> Spend:
+        async def do(tx: Tx) -> Spend:
+            row = await tx.fetchone(
+                "SELECT s.tokens, s.cost_micros, s.turns FROM rt_spend s JOIN rt_runs r ON r.tree_id = s.tree_id WHERE r.run_id = ?",
+                str(run_id),
+            )
+            if row is None:
+                return Spend()
+            return Spend(tokens=int(row["tokens"]), cost_usd=int(row["cost_micros"]) / 1_000_000, turns=int(row["turns"]))
+
+        return await self._tx(do)
+
     async def erase(self, *, tenant: str, thread_id: str | None = None) -> int:
         async def do(tx: Tx) -> int:
             where, args = "tenant = ?", [tenant]
@@ -1020,6 +1054,7 @@ class SqlRuntimeStore:
                     await tx.execute(f"DELETE FROM {table} WHERE run_id = ?", run_id)
                 await tx.execute("DELETE FROM rt_spawns WHERE child_run_id = ?", run_id)
             await tx.execute(f"DELETE FROM rt_runs WHERE {where}", *args)
+            await tx.execute("DELETE FROM rt_spend WHERE tree_id NOT IN (SELECT tree_id FROM rt_runs)")
             for agent in agents:
                 if await tx.fetchone("SELECT 1 AS x FROM rt_runs WHERE agent = ? LIMIT 1", agent) is None:
                     for table in ("rt_inbox", "rt_inbox_processed", "rt_dead_letters"):
@@ -1038,6 +1073,7 @@ class SqlRuntimeStore:
                 for table in ("rt_events", "rt_run_wake", "rt_signals"):
                     await tx.execute(f"DELETE FROM {table} WHERE run_id = ?", r["run_id"])
                 await tx.execute("DELETE FROM rt_runs WHERE run_id = ?", r["run_id"])
+            await tx.execute("DELETE FROM rt_spend WHERE tree_id NOT IN (SELECT tree_id FROM rt_runs)")
             return len(old)
 
         return await self._tx(do)

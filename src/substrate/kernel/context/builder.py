@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from substrate.kernel.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
 from substrate.kernel.abstractions.agent.context import ContextBuilder, ContextWindow
 from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.abstractions.storage.history import HistoryCheckpoint, MessageNode
 from substrate.kernel.abstractions.storage.memory import ContextMemoryInjection
+from substrate.kernel.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
+
 
 class DefaultContextBuilder(ContextBuilder):
     """Reference implementation of ContextBuilder.

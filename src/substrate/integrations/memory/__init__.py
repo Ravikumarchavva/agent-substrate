@@ -16,7 +16,7 @@ from substrate.integrations.memory.redis_session_store import RedisSessionStore
 from substrate.integrations.memory.durable_session_store import DurableSessionStore
 from substrate.integrations.memory.cached_session_store import CachedShortTermMemory
 from substrate.integrations.memory.durable_memory_store import DurableMemoryStore
-from substrate.integrations.memory.lance_memory_store import LanceMemoryStore, LanceLongTermMemory
+from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
 from substrate.integrations.memory.factory import (
     build_short_term_memory,
     build_memory_store,
@@ -34,7 +34,6 @@ __all__ = [
     "CachedShortTermMemory",
     "DurableMemoryStore",
     "LanceMemoryStore",
-    "LanceLongTermMemory",
     "build_short_term_memory",
     "build_memory_store",
     "build_long_term_memory",

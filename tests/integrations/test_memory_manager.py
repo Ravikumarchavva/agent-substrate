@@ -67,13 +67,13 @@ async def test_promote_candidate(manager: MemoryManager, store: LanceMemoryStore
     await store.save(cand)
 
     # Promote to ACTIVE
-    promoted = await manager.promote(cand.id)
+    promoted = await manager.promote(ns, cand.id)
     assert promoted is not None
     assert promoted.status == MemoryStatus.ACTIVE
     assert promoted.id == cand.id
 
     # Verify in store
-    rec = await store.get(cand.id)
+    rec = await store.get(ns, cand.id)
     assert rec is not None
     assert rec.status == MemoryStatus.ACTIVE
 
@@ -93,12 +93,12 @@ async def test_reconcile_contradiction_supersedes(
     new_id = await manager.reconcile_and_save(new_record, supersedes_id=old_record.id)
 
     # Old record should now be SUPERSEDED
-    old_fetched = await store.get(old_record.id)
+    old_fetched = await store.get(ns, old_record.id)
     assert old_fetched is not None
     assert old_fetched.status == MemoryStatus.SUPERSEDED
 
     # New record should have provenance pointing to old_record.id
-    new_fetched = await store.get(new_id)
+    new_fetched = await store.get(ns, new_id)
     assert new_fetched is not None
     assert new_fetched.status == MemoryStatus.ACTIVE
     assert new_fetched.provenance.supersedes_id == old_record.id
@@ -128,8 +128,8 @@ async def test_discard_branch(manager: MemoryManager, store: LanceMemoryStore) -
     assert discarded == 1
 
     # Candidate should be gone
-    assert await store.get(c_branch.id) is None
+    assert await store.get(ns, c_branch.id) is None
 
     # Main active memory remains
-    assert await store.get(active_main.id) is not None
+    assert await store.get(ns, active_main.id) is not None
 

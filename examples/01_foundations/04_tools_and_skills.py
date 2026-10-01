@@ -142,7 +142,7 @@ async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: st
         correlation_id=session_id,
     )
     run_id = await rt.submit(agent.id, msg)
-    async for entry in rt.event_log.tail(run_id):
+    async for entry in rt.tail(run_id):
         if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
             break
     history = await agent.history.get_messages(agent.id, session_id=session_id)
@@ -177,7 +177,7 @@ async def demo_agent_session() -> None:
         max_iterations=6,
     )
 
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         await rt.register(agent)
         output = await run_agent(rt, agent, "What is the weather in Tokyo?", session_id="tool-demo")
     print(f"\n  Q: What is the weather in Tokyo?")

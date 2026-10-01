@@ -317,6 +317,7 @@ async def chat(
             short_term_memory=ctx.short_term_memory,
             long_term_memory=ctx.long_term_memory,
             user_id=user.sub,
+            tenant_id=user.tenant_id,
             model_context_window=settings.MODEL_CONTEXT_WINDOW,
             runtime=deps["runtime"],
             initial_tool_choice=initial_tool_choice or None,

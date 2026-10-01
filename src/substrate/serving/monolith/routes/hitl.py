@@ -12,6 +12,7 @@ from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.logger import setup_logging
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +36,7 @@ async def respond_to_hitl(
     request_id: str,
     resp: HITLResponse,
     ctx: ServerDependencies = Depends(get_ctx),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Resolve a pending HITL request (tool approval or human input).
 
@@ -44,6 +46,9 @@ async def respond_to_hitl(
     rework (Phase 2), which gives resolution a request→thread mapping.
     """
     data = resp.model_dump(exclude_none=True)
+    # Who approved, and when, is what the server saw — never a value the client sent.
+    data["decided_by"] = user.sub
+    data["decided_at"] = datetime.now(timezone.utc).isoformat()
     resolved = await ctx.bridge_registry.resolve(request_id, data)
 
     if not resolved:

@@ -30,13 +30,13 @@ async def test_save_get_delete_round_trip(tmp_path: Path) -> None:
     rid = await store.save(rec)
     assert rid == rec.id
 
-    got = await store.get(rid)
+    got = await store.get(rec.namespace, rid)
     assert got is not None
     assert got.content[0].text == "likes pizza"  # type: ignore[union-attr]
 
-    assert await store.delete(rid) is True
-    assert await store.get(rid) is None
-    assert await store.delete(rid) is False
+    assert await store.delete(rec.namespace, rid) is True
+    assert await store.get(rec.namespace, rid) is None
+    assert await store.delete(rec.namespace, rid) is False
 
 
 async def test_tenant_isolation(tmp_path: Path) -> None:
@@ -89,30 +89,32 @@ async def test_touch_updates_access_metadata(tmp_path: Path) -> None:
     rec = _record("hi")
     rid = await store.save(rec)
 
-    before = await store.get(rid)
+    before = await store.get(rec.namespace, rid)
     assert before.access_count == 0  # type: ignore[union-attr]
 
-    await store.touch([rid])
-    after = await store.get(rid)
+    await store.touch(rec.namespace, [rid])
+    after = await store.get(rec.namespace, rid)
     assert after.access_count == 1  # type: ignore[union-attr]
     assert after.last_accessed_at is not None  # type: ignore[union-attr]
 
 
-async def test_clear_purges_namespace(tmp_path: Path) -> None:
+async def test_erase_purges_only_what_is_under_the_namespace(tmp_path: Path) -> None:
     store = LocalFilesystemMemoryStore(root=tmp_path)
+    ns1, ns2 = MemoryNamespace(tenant_id="t1", user_id="u1"), MemoryNamespace(tenant_id="t1", user_id="u2")
     r1 = await store.save(_record("a", user="u1"))
     r2 = await store.save(_record("b", user="u2"))
 
-    await store.clear(MemoryNamespace(tenant_id="t1", user_id="u1"))
-    assert await store.get(r1) is None
-    assert await store.get(r2) is not None
+    assert await store.erase(ns1) == 1
+    assert await store.get(ns1, r1) is None
+    assert await store.get(ns2, r2) is not None
 
 
 async def test_records_survive_restart(tmp_path: Path) -> None:
     store1 = LocalFilesystemMemoryStore(root=tmp_path)
-    rid = await store1.save(_record("persisted"))
+    rec = _record("persisted")
+    rid = await store1.save(rec)
 
     store2 = LocalFilesystemMemoryStore(root=tmp_path)
-    got = await store2.get(rid)
+    got = await store2.get(rec.namespace, rid)
     assert got is not None
     assert got.content[0].text == "persisted"  # type: ignore[union-attr]

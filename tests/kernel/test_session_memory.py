@@ -95,7 +95,7 @@ async def run_agent(
 
     status = "success"
     error = None
-    async for entry in rt.event_log.tail(run_id):
+    async for entry in rt.tail(run_id):
         if entry.kind == "run.completed":
             break
         elif entry.kind == "run.failed":
@@ -128,7 +128,7 @@ async def run_agent(
 async def test_standalone_session_accumulates_across_runs():
     """History accumulates across multiple submissions with the same session_id."""
     shared_history = InMemoryHistoryProvider()
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = ReActAgent(
             "bot",
             model=MockLLMClient(
@@ -159,7 +159,7 @@ async def test_standalone_session_accumulates_across_runs():
 async def test_session_isolation_across_different_sessions():
     """Two sessions of the same agent don't bleed into each other."""
     shared_history = InMemoryHistoryProvider()
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = ReActAgent(
             "agent",
             model=MockLLMClient(
@@ -190,7 +190,7 @@ async def test_session_isolation_across_different_sessions():
 async def test_cross_run_memory_same_session():
     """Agent sees prior turns when submitted with the same correlation_id."""
     shared_history = InMemoryHistoryProvider()
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         agent = ReActAgent(
             "mem-bot",
             model=MockLLMClient(

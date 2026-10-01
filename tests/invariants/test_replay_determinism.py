@@ -176,3 +176,89 @@ def test_i06_the_allocator_returns_to_its_starting_depth(program: list[Call]) ->
     assert len(allocator._path_stack) == 1, (
         f"path stack ended at depth {len(allocator._path_stack)}: {allocator._path_stack}"
     )
+
+
+# ---------------------------------------------------------------------------
+# I14 — replay equivalence, through a real runtime
+# ---------------------------------------------------------------------------
+
+_OPS = st.sampled_from(["uuid", "now", "random", "tool"])
+
+
+@settings(max_examples=25, deadline=None)
+@given(program=st.lists(_OPS, min_size=1, max_size=6), crash_after=st.integers(min_value=0, max_value=6))
+def test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect(program: list[str], crash_after: int) -> None:
+    """Run a program of journaled operations, kill the attempt after an arbitrary prefix, and
+    let the retry replay. The retry must see exactly the values the first attempt saw for the
+    prefix, and a tool must have run once per call in the program — never again for a call the
+    journal already held."""
+    from substrate.kernel.abstractions.core.content import TextBlock
+    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.kernel.abstractions.messaging.message import DataPayload, Message
+    from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+    from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
+    from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
+    from substrate.kernel.runtime import Runtime
+    from substrate.kernel.tools.toolbox import Toolbox
+
+    cut = min(crash_after, len(program))
+    executed: list[int] = []
+
+    class Counter:
+        name = "count"
+        description = "counts executions"
+        input_schema: dict = {"type": "object", "properties": {"i": {"type": "integer"}}}
+        risk = ToolRisk.SAFE
+        idempotent = True
+
+        async def execute(self, *, ctx: object = None, i: int = 0, **_: object) -> ToolExecutionResult:
+            executed.append(i)
+            return ToolExecutionResult(name=self.name, content=[TextBlock(text=f"ran {i}")])
+
+    class Prog:
+        def __init__(self) -> None:
+            self.id = Actor("agent", "prog")
+            self.tools = Toolbox()
+            self.tools.add(Counter())
+            self.attempts: list[list[object]] = []
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            seen: list[object] = []
+            self.attempts.append(seen)
+            for i, op in enumerate(program):
+                if len(self.attempts) == 1 and i == cut:
+                    raise RuntimeError("killed mid-run")
+                if op == "uuid":
+                    seen.append(await ctx.uuid())  # type: ignore[attr-defined]
+                elif op == "now":
+                    seen.append((await ctx.now()).isoformat())  # type: ignore[attr-defined]
+                elif op == "random":
+                    seen.append(await ctx.random())  # type: ignore[attr-defined]
+                else:
+                    result = await ctx.tool("count", {"i": i})  # type: ignore[attr-defined]
+                    seen.append(result.text)
+
+    async def scenario() -> Prog:
+        agent = Prog()
+        async with Runtime.local(":memory:") as rt:
+            await rt.register(agent)
+            run_id = await rt.submit(
+                agent.id,
+                Message(target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})),
+                retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.0),
+            )
+            async for entry in rt.tail(run_id):
+                if entry.kind in (RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED):
+                    assert entry.kind == RunLogKind.RUN_COMPLETED, entry.payload
+                    break
+        return agent
+
+    agent = asyncio.run(asyncio.wait_for(scenario(), 30))
+
+    if cut >= len(program):
+        assert len(agent.attempts) == 1  # nothing killed it
+        return
+    first, replay = agent.attempts
+    assert replay[: len(first)] == first, "the replay saw different values than the first attempt did for the same calls"
+    tool_calls = [i for i, op in enumerate(program) if op == "tool"]
+    assert sorted(executed) == tool_calls, f"a tool ran {executed} for program {program}: once per call, never again on replay"

@@ -14,6 +14,7 @@ storage Protocols (``HistoryProvider``, ``GraphStore``, ``VectorStore``,
 in-memory storage, not yet standardized against a contract.
 """
 
+from substrate.kernel.storage.graph import InMemoryGraphStore
 from substrate.kernel.storage.history import (
     AncestryCheckpointResolver,
     DefaultHistoryResolver,
@@ -21,10 +22,9 @@ from substrate.kernel.storage.history import (
     InMemoryHistoryProvider,
     project_messages,
 )
-from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
-from substrate.kernel.storage.graph import InMemoryGraphStore
 from substrate.kernel.storage.local_graph import LocalFilesystemGraphStore
-from substrate.kernel.storage.memory import InMemoryFileStore
+from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
+from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
 from substrate.kernel.storage.local_object_store import (
     WorkspaceFileStore,
     WorkspacePathError,
@@ -33,10 +33,10 @@ from substrate.kernel.storage.local_object_store import (
 from substrate.kernel.storage.local_short_term_memory import (
     LocalFilesystemShortTermMemory,
 )
-from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
+from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore
+from substrate.kernel.storage.memory import InMemoryFileStore
 from substrate.kernel.storage.tasks import TaskStore
 from substrate.kernel.storage.vector import InMemoryVectorStore, cosine_similarity
-from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore
 
 __all__ = [
     "AncestryCheckpointResolver",

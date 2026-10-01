@@ -26,6 +26,7 @@ from substrate.kernel.abstractions.llm import EmbeddingClient, LLMClient
 from substrate.kernel.abstractions.storage.vector import SearchResult
 from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
+from substrate.kernel.abstractions.tools import ToolRisk
 
 logger = setup_logging()
 
@@ -38,6 +39,8 @@ class SessionDocumentSearchTool:
 
     tool_type = ToolType.KNOWLEDGE
     name: str = "session_document_search"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description: str = (
         "Search documents the user has uploaded in chat (this session or "
         "recent ones) — NOT the project's standing knowledge base (use "

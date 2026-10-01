@@ -9,43 +9,69 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**31 enforced · 15 pending · 46 total**
+**84 enforced · 1 pending · 85 total**
+
+## approvals
+
+- ✅ **i23 an approval is journaled with who when and why**
+  `test_i23_an_approval_is_journaled_with_who_when_and_why`
+- ✅ **i23 a denial is journaled too**
+  `test_i23_a_denial_is_journaled_too`
+- ✅ **the result carries the attribution it was given**
+  `test_the_result_carries_the_attribution_it_was_given`
+- ✅ **a disconnect or timeout is a denial**
+  `test_a_disconnect_or_timeout_is_a_denial`
+- ✅ **The route stamps ``decided_by`` / ``decided_at`` from the authenticated caller. A client that puts someone else's name in its body is not believed.**
+  `test_i23_the_server_names_the_approver_not_the_client`
+
+## budgets
+
+- ✅ **i20 total spend never exceeds the cap by more than the calls in flight**
+  `test_i20_total_spend_never_exceeds_the_cap_by_more_than_the_calls_in_flight`
+- ✅ **The same budget, split across many children, stops the tree as one agent would.**
+  `test_i20_spawning_more_agents_is_not_a_way_around_a_cap`
 
 ## durable execution
 
-- ✅ **The baseline: with no injected failure the card is charged exactly once and the run completes. If this breaks, every other row is meaningless.**
+- ✅ **The baseline: with no failure the card is charged once and the run completes.**
   `test_the_clean_run_is_correct`
-- ⏳ **A journaled call must record its intent before executing, so a replay can tell 'never ran' from 'ran, outcome unknown'.**
+- ✅ **A journaled call records its intent before it runs, so a replay can tell 'never started' from 'started, outcome unknown'.**
   `test_i07_intent_is_journaled_before_execution`
-  _Pending — I7: no effect.intent entry exists — an effect is journaled only after it runs, so the crash window is invisible. Fixed in step 3._
-- ⏳ **However the runtime fails and recovers, a non-idempotent tool that has already run must never run again.**
+- ✅ **However the runtime fails and recovers, a tool that is not safe to run twice never runs twice.**
   `test_i09_a_completed_effect_never_re_executes`
-  _Pending — I9: a durable-write failure after the tool ran re-executes it — the card is charged twice. Fixed in step 3 (intent/outcome + idempotent)._
-- ⏳ **Liveness half of the atomic-commit invariant: one failed durable write must not strand a run forever. A run that never terminates holds its thread's single-flight slot and never reports to its caller.**
+- ✅ **One failed write must not strand a run. A run that never ends holds its thread's single-flight slot forever and never reports to its caller.**
   `test_i10_a_single_durable_failure_still_reaches_a_terminal_state`
-  _Pending — I10: a failure while appending run.started or the first effect leaves the run with no terminal state at all. Fixed in step 3._
-- ⏳ **A run log is the source of truth for history, billing and projection. Two terminal entries make all three wrong.**
+- ✅ **A run's record is the source of truth for history, billing and projection. Two terminal entries make all three wrong.**
   `test_i11_at_most_one_terminal_entry_per_run`
-  _Pending — I11: the terminal transition spans journal, queue and inbox non-atomically, so recovery appends run.completed a second time. Fixed in step 3 (single commit)._
-- ⏳ **A child's body is as side-effecting as a tool. Recovery must not re-run it, and the parent must still be woken exactly once.**
-  `test_i09_spawned_children_run_their_body_once`
-  _Pending — I9/I10 for the supervision path: a failure in the terminal window re-runs the child body and duplicates its terminal entry. Fixed in step 3._
+- ✅ **A dropped connection, not a crash: the work was done, only a record failed, so the run completes — retrying the record rather than failing the run.**
+  `test_a_failure_the_worker_can_handle_never_loses_the_run`
+- ✅ **If the worker dies after starting a tool that is not safe to run twice, nothing can say whether it took effect. The run fails rather than guess; the journaled intent is what a person compensates from.**
+  `test_i08_a_killed_worker_leaves_an_effect_in_doubt_and_the_run_says_so`
+- ✅ **A child's side effects are as protected as a parent's, and the parent is woken exactly once.**
+  `test_i09_spawned_children_run_their_journaled_effects_once`
+- ✅ **i11 a parent run ends exactly once even when its child does**
+  `test_i11_a_parent_run_ends_exactly_once_even_when_its_child_does`
+- ✅ **i10 a parent waiting on a child is never stranded**
+  `test_i10_a_parent_waiting_on_a_child_is_never_stranded`
 - ✅ **Guards the harness itself: a matrix that silently stopped injecting would make every row above pass for the wrong reason.**
   `test_the_matrix_actually_injected_every_point`
 
 ## inbox
 
-- ✅ **The half that works: while a message is in flight, redelivering it is a no-op rather than a duplicate.**
+- ✅ **While a message is in flight, redelivering it is a no-op rather than a duplicate.**
   `test_redelivery_before_ack_is_deduplicated`
-- ⏳ **At-least-once transports redeliver after the consumer has committed — that is the normal case, not an edge case. The inbox is what absorbs it.**
+- ✅ **The consumer committed (acked) the message; a later redelivery of the same id must not reach the agent again.**
   `test_i12_redelivery_after_ack_is_rejected`
-  _Pending — I12: ack deletes the dedup record, so a transport redelivering an already-processed message id gets it accepted and the agent handles it twice. Fixed in step 3 (processed watermark in the commit)._
 
 ## journal
 
-- ⏳ **Two replies differing only in length must journal the same number of rows: the durable record of a turn is the finished message.**
+- ✅ **Two replies differing only in length must journal the same number of rows: the durable record of a turn is the finished message.**
   `test_journal_size_does_not_grow_with_token_count`
-  _Pending — Journal/stream split: one durable row is appended per streamed token, so the log grows with reply length and every fold() re-reads it. Fixed in step 3 (ephemeral stream channel + append_many)._
+
+## liveness
+
+- ✅ **i13 a run longer than its lease completes once**
+  `test_i13_a_run_longer_than_its_lease_completes_once`
 
 ## model boundary
 
@@ -62,6 +88,37 @@ and the marker has to come off. That is what keeps this document honest.
 - ✅ **Cost drives the budget that stops a runaway agent. A negative or non-monotonic cost disables it.**
   `test_i19_cost_is_never_negative_and_rises_with_usage`
 
+## provider outcomes
+
+- ✅ **a rate limit carries the providers retry after**
+  `test_a_rate_limit_carries_the_providers_retry_after`
+- ✅ **retry after in milliseconds is understood**
+  `test_retry_after_in_milliseconds_is_understood`
+- ✅ **a rate limit without a hint still types as rate limited**
+  `test_a_rate_limit_without_a_hint_still_types_as_rate_limited`
+- ✅ **a context overflow is distinguishable from any other bad request**
+  `test_a_context_overflow_is_distinguishable_from_any_other_bad_request`
+- ✅ **Clients wrap the SDK's exception in their own; the status and headers live on the cause.**
+  `test_a_wrapped_sdk_error_is_still_classified`
+- ✅ **credentials content filter and other client errors are typed**
+  `test_credentials_content_filter_and_other_client_errors_are_typed`
+- ✅ **a server error stays transient**
+  `test_a_server_error_stays_transient`
+- ✅ **every vendor reports why the model stopped**
+  `test_every_vendor_reports_why_the_model_stopped`
+- ✅ **i21 a reply cut off at the token limit is marked truncated**
+  `test_i21_a_reply_cut_off_at_the_token_limit_is_marked_truncated`
+- ✅ **i21 a finished reply is not marked truncated**
+  `test_i21_a_finished_reply_is_not_marked_truncated`
+- ✅ **i21 a content filter stop fails the run with its own code**
+  `test_i21_a_content_filter_stop_fails_the_run_with_its_own_code`
+- ✅ **i21 a context overflow is retried once with a smaller prompt**
+  `test_i21_a_context_overflow_is_retried_once_with_a_smaller_prompt`
+- ✅ **i21 a second overflow is real and fails the run**
+  `test_i21_a_second_overflow_is_real_and_fails_the_run`
+- ✅ **i21 a rate limit is retried not failed**
+  `test_i21_a_rate_limit_is_retried_not_failed`
+
 ## register is current
 
 - ✅ **the register document matches the tests**
@@ -77,47 +134,65 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i06_no_two_calls_share_a_path`
 - ✅ **Scope push/pop must balance. An unbalanced stack silently shifts every subsequent path in the run.**
   `test_i06_the_allocator_returns_to_its_starting_depth`
+- ✅ **Run a program of journaled operations, kill the attempt after an arbitrary prefix, and let the retry replay. The retry must see exactly the values the first attempt saw for the prefix, and a tool must have run once per call in the program — never again for a call the journal already held.**
+  `test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect`
 
 ## structure
 
 - ✅ **The kernel is the engine, so it has to be installable and importable without a vendor SDK, a model runtime, or a database driver.**
   `test_i26_the_kernel_imports_only_its_allowed_third_party_set`
+- ✅ **``kernel/testing`` holds conformance suites and doubles. Production code that imported it would make pytest a runtime dependency of the engine.**
+  `test_the_kernel_never_imports_its_own_test_support`
 - ✅ **``abstractions`` is what an adapter author depends on. If it reaches back into the engine, implementing a port drags the whole engine along.**
   `test_i27_abstractions_never_imports_the_engine`
 - ✅ **Every addition or removal in the public API shows up as a diff in ``public_api.json``, so it is reviewed rather than noticed later.**
   `test_i28_the_public_api_matches_its_snapshot`
-- ⏳ **The row that keeps the other rows honest.**
-  `test_i30_every_port_has_a_conformance_suite_and_every_impl_runs_it`
-  _Pending — I30: no port has a conformance suite yet — they land with their ports in steps 3-6._
+- ✅ **The row that keeps the other rows honest. A file once promised "the same suite is run against those implementations" and never was, while three backends drifted apart.**
+  `test_i30_every_implementation_of_a_port_with_a_suite_runs_it`
+- ⏳ **i30 every port has a conformance suite**
+  `test_i30_every_port_has_a_conformance_suite`
+  _Pending — I30: RuntimeStore, MemoryStore and VectorStore have conformance suites; the other storage, LLM and extractor ports get theirs in step 5 of the kernel rewrite._
+- ✅ **The engine instruments itself through ``opentelemetry-api``, which does nothing until a host configures an SDK. The SDK, the exporter and the web-framework instrumentation are the host's choice — the reference server installs them through its extra — so a plain install of the engine does not pull them in.**
+  `test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports`
+- ✅ **The AST check above sees what each file names; this one sees what actually loads. A module that reached a vendor SDK, a logging stack or a database driver through a helper would pass the first and fail this.**
+  `test_i26_importing_the_whole_engine_loads_only_the_allowed_third_party_set`
 
 ## telemetry
 
-- ⏳ **A trace that is four traces cannot answer 'what did this run do', which is the only question it exists to answer.**
+- ✅ **A trace that is four traces cannot answer 'what did this run do', which is the only question it exists to answer.**
   `test_i24_one_turn_is_one_trace`
-  _Pending — I24: spans are started without being made current, so each one is its own root and a turn produces several disconnected traces. Fixed in step 2 (one telemetry module)._
-- ⏳ **i24 only the run span is a root**
+- ✅ **i24 only the run span is a root**
   `test_i24_only_the_run_span_is_a_root`
-  _Pending — I24: only the agent-turn span has no parent; the llm and tool spans are roots too. Fixed in step 2._
-- ⏳ **A span with no outcome recorded is a timing bar and nothing more.**
+- ✅ **A span with no outcome recorded is a timing bar and nothing more.**
   `test_i24_spans_carry_their_outcome`
-  _Pending — I24: outcome attributes are set after the span is ended, where OpenTelemetry discards them ('Setting attribute on ended span'). Fixed in step 2._
 - ✅ **Telemetry leaves the erasure boundary: it is sampled, exported to third parties and retained on their schedule. Content goes in it only when a deployment explicitly opts in.**
   `test_i25_no_prompt_or_tool_content_appears_in_span_attributes`
 
 ## tenancy
 
-- ⏳ **Ids come from request bodies and model output. An id alone must never be enough to address a record.**
+- ✅ **Ids come from request bodies and model output. An id alone must never be enough to address a record.**
   `test_i03_a_record_is_not_readable_from_another_tenant`
-  _Pending — I3: MemoryStore.get/delete/touch take a bare id, so one tenant can read another's record by guessing or reusing an id. Fixed in step 5 (scope-bound handles)._
-- ⏳ **``save`` is an upsert keyed by id, and the id is caller-supplied.**
+- ✅ **``save`` is an upsert keyed by id, and the id is caller-supplied.**
   `test_i03_one_tenant_cannot_overwrite_another_tenants_record`
-  _Pending — I3: an id supplied by a caller overwrites an existing record belonging to a different tenant. Fixed in step 5._
-- ⏳ **The dangerous default: forgetting a field widens the query instead of narrowing it, and nothing in the type system notices.**
+- ✅ **The dangerous default: forgetting a field widens the query instead of narrowing it, and nothing in the type system notices.**
   `test_i03_omitting_a_scope_field_is_not_a_wildcard`
-  _Pending — I3: MemoryNamespace treats user_id=None as a wildcard, so a query that merely omits the user reads every user in the tenant. Fixed in step 5 (no implicit wildcard; tenant_wide must be explicit)._
-- ⏳ **A deletion request has to reach every store, including the journal that holds the raw conversation. Today the GDPR eraser touches neither memory nor the event log.**
+- ✅ **A deletion request has to reach every store, including the journal that holds the raw conversation. Today the GDPR eraser touches neither memory nor the event log.**
   `test_i04_a_scope_can_be_erased_completely`
-  _Pending — I4: no store exposes erase(scope) and the run journal is never erased at all, so a deletion request cannot be satisfied. Fixed in step 5._
+
+## tool safety
+
+- ✅ **i22 a tool without a risk is refused**
+  `test_i22_a_tool_without_a_risk_is_refused`
+- ✅ **i22 a tool without an idempotency declaration is refused**
+  `test_i22_a_tool_without_an_idempotency_declaration_is_refused`
+- ✅ **``"sensitive"`` is not a level. A string that merely looks right is how a tool ends up outside the approval ordering.**
+  `test_i22_a_risk_that_is_not_a_tool_risk_is_refused`
+- ✅ **i22 a fully declared tool is accepted**
+  `test_i22_a_fully_declared_tool_is_accepted`
+- ✅ **i22 every shipped tool declares its risk and idempotency**
+  `test_i22_every_shipped_tool_declares_its_risk_and_idempotency`
+- ✅ **i22 a tool from an mcp server needs approval unless the operator says otherwise**
+  `test_i22_a_tool_from_an_mcp_server_needs_approval_unless_the_operator_says_otherwise`
 
 ## type safety
 
@@ -147,3 +222,10 @@ and the marker has to come off. That is what keeps this document honest.
   `test_effect_identity_handles_any_json_encodable_argument`
 - ✅ **Time-sortable ids are what make a log or inbox orderable without a separate sequence column.**
   `test_ids_are_time_sortable`
+
+## versioning
+
+- ✅ **i15 a run continues under the version that started it**
+  `test_i15_a_run_continues_under_the_version_that_started_it`
+- ✅ **i15 a run is refused by a different version**
+  `test_i15_a_run_is_refused_by_a_different_version`

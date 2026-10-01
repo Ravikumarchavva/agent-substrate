@@ -11,6 +11,7 @@ import re
 from substrate.kernel.abstractions.tools import ToolExecutionResult
 from substrate.kernel.abstractions import TextBlock
 from substrate.logger import setup_logging
+from substrate.kernel.abstractions.tools import ToolRisk
 
 logger = setup_logging()
 
@@ -21,6 +22,8 @@ class EmailSenderTool:
     """Send emails via SMTP — requires human approval for every send."""
 
     name = "email_sender"
+    risk = ToolRisk.HIGH
+    idempotent = False
     description = (
         "Send an email to a recipient via SMTP. Requires human approval before sending."
     )

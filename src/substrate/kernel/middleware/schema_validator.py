@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Callable, Awaitable, ClassVar
+import logging
+from typing import Awaitable, Callable, ClassVar
 
-from substrate.logger import setup_logging
-from substrate.kernel.middleware._contracts import MiddlewareContext
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
 from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.kernel.middleware._contracts import MiddlewareContext
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class SchemaValidatorMiddleware:

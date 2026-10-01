@@ -50,7 +50,7 @@ async def run_agent(
         correlation_id=session_id,
     )
     run_id = await rt.submit(agent.id, msg)
-    async for entry in rt.event_log.tail(run_id):
+    async for entry in rt.tail(run_id):
         if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
             break
     history = await agent.history.get_messages(agent.id, session_id=session_id)
@@ -86,7 +86,7 @@ async def main() -> None:
         max_iterations=5,
     )
 
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         await rt.register(agent)
 
         # ---

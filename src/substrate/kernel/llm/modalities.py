@@ -16,7 +16,7 @@ from substrate.kernel.abstractions.core.content import (
     TextBlock,
     ToolResultBlock,
 )
-from substrate.kernel.abstractions.llm import ModelCapabilities, Modality
+from substrate.kernel.abstractions.llm import Modality, ModelCapabilities
 
 
 def _placeholder(block: MediaBlock, caps: ModelCapabilities) -> TextBlock:

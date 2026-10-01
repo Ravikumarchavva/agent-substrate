@@ -6,6 +6,7 @@ from typing import Any
 
 from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
 from substrate.kernel.abstractions import TextBlock
+from substrate.kernel.abstractions.tools import ToolRisk
 
 
 class PipelineManagerTool:
@@ -13,6 +14,8 @@ class PipelineManagerTool:
 
     tool_type = ToolType.PIPELINE
     name: str = "pipeline_manager"
+    risk = ToolRisk.HIGH
+    idempotent = False
     description: str = (
         "Manage saved adapter pipelines: run, save, list, or delete "
         "reusable chains of adapter steps."

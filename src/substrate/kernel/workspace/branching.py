@@ -20,7 +20,10 @@ from __future__ import annotations
 
 from substrate.kernel.abstractions.storage.history import HistoryProvider
 from substrate.kernel.abstractions.storage.objects import ObjectStore
-from substrate.kernel.abstractions.storage.snapshots import WorkspaceSnapshot, WorkspaceStore
+from substrate.kernel.abstractions.storage.snapshots import (
+    WorkspaceSnapshot,
+    WorkspaceStore,
+)
 
 from .layout import conversation_workspace_prefix
 

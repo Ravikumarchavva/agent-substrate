@@ -12,6 +12,7 @@ import uuid
 from substrate.kernel.llm.modalities import fit_to_capabilities
 from substrate.kernel.llm.models import resolve_capabilities
 from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+from substrate.kernel.abstractions.core.finish_reason import FinishReason
 from substrate.kernel.abstractions.llm import (
     GenerationOptions,
     LLMClient,
@@ -58,6 +59,28 @@ def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str,
         for t in local_tools
     ]
 
+
+
+_GEMINI_BLOCKED = frozenset(
+    {"SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "RECITATION", "IMAGE_SAFETY", "LANGUAGE"}
+)
+
+
+def gemini_finish_reason(reason: object, *, has_tool_calls: bool) -> FinishReason:
+    """A Gemini candidate ``finish_reason`` (an enum or its name) as ours. Gemini reports a
+    plain ``STOP`` for a turn that ended in a function call, so the content decides that."""
+    if reason is None:
+        return FinishReason.UNSPECIFIED
+    name = str(getattr(reason, "name", reason)).rsplit(".", 1)[-1].upper()
+    if name == "STOP":
+        return FinishReason.TOOL_CALLS if has_tool_calls else FinishReason.STOP
+    if name == "MAX_TOKENS":
+        return FinishReason.LENGTH
+    if name in _GEMINI_BLOCKED:
+        return FinishReason.CONTENT_FILTER
+    if name in ("MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL", "OTHER"):
+        return FinishReason.ERROR if name != "OTHER" else FinishReason.OTHER
+    return FinishReason.OTHER
 
 class GeminiClient(LLMClient):
     """Google Gemini API client — text and vision.
@@ -342,7 +365,15 @@ class GeminiClient(LLMClient):
 
         usage = self._usage(response.usage_metadata)
 
-        return LLMResponse(content=final_blocks, usage=usage)
+        return LLMResponse(
+            content=final_blocks,
+            usage=usage,
+            finish_reason=gemini_finish_reason(
+                getattr(response.candidates[0], "finish_reason", None) if response.candidates else None, has_tool_calls=has_tool_calls
+            ),
+            response_id=getattr(response, "response_id", None),
+            served_model=getattr(response, "model_version", None),
+        )
 
     def generate_stream(
         self,
@@ -367,6 +398,7 @@ class GeminiClient(LLMClient):
         reasoning_parts: list[str] = []
         collected_tool_calls: list[ToolUseBlock] = []
         usage_metadata: Any = None
+        finish: Any = None
 
         async for chunk in await self.client.aio.models.generate_content_stream(
             model=self.model, contents=cast(Any, contents), config=config
@@ -375,6 +407,7 @@ class GeminiClient(LLMClient):
                 usage_metadata = chunk.usage_metadata  # cumulative; the last one wins
             if chunk.candidates:
                 candidate = chunk.candidates[0]
+                finish = getattr(candidate, "finish_reason", None) or finish
                 if candidate.content and candidate.content.parts:
                     for part in candidate.content.parts:
                         if part.text and part.thought:
@@ -419,7 +452,9 @@ class GeminiClient(LLMClient):
                 )
 
         yield CompletionEvent(
-            content=final_blocks, usage=self._usage(usage_metadata)
+            content=final_blocks,
+            usage=self._usage(usage_metadata),
+            finish_reason=gemini_finish_reason(finish, has_tool_calls=has_tool_calls),
         )
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:

@@ -27,7 +27,7 @@ class _StubLLM:
 
 async def test_run_returns_final_text() -> None:
     agent = ReActAgent("assistant", model=_StubLLM("42 is the answer"))
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         result = await rt.run(agent, "What is 6 times 7?")
     assert result.status == RunStatus.COMPLETED
     assert result.output == "42 is the answer"
@@ -44,7 +44,7 @@ async def test_run_reports_failure() -> None:
             yield  # pragma: no cover - makes this an async generator
 
     agent = ReActAgent("assistant", model=_BoomLLM())
-    async with Runtime() as rt:
+    async with Runtime.local(":memory:") as rt:
         result = await rt.run(agent, "hi")
     assert result.status == RunStatus.FAILED
     assert "model exploded" in (result.error or "")

@@ -7,7 +7,7 @@ import pytest
 from dataclasses import dataclass
 
 from substrate.kernel.runtime.context import RunContext
-from substrate.kernel.evals import (
+from substrate.evals import (
     EvalCase,
     EvalDataset,
     EvalRunner,
@@ -15,7 +15,7 @@ from substrate.kernel.evals import (
     CORRECTNESS,
     TOOL_USAGE,
 )
-from substrate.kernel.evals.judge import LLMJudge
+from substrate.evals.judge import LLMJudge
 from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.messaging.message import Message
 
@@ -73,12 +73,12 @@ class TracingAgent:
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
-            await ctx._log("llm.call", {"model": "fake", "tokens": 100})
-            await ctx._log("tool.call", {"tool_name": "calculator", "args": {}})
-            await ctx._log("tool.result", {"tool_name": "calculator", "ok": True})
-            await ctx._log("llm.call", {"model": "fake", "tokens": 50})
-            await ctx._log("tool.call", {"tool_name": "calculator", "args": {}})
-            await ctx._log("tool.result", {"tool_name": "calculator", "ok": True})
+            await ctx.log("llm.call", {"model": "fake", "tokens": 100})
+            await ctx.log("tool.call", {"tool_name": "calculator", "args": {}})
+            await ctx.log("tool.result", {"tool_name": "calculator", "ok": True})
+            await ctx.log("llm.call", {"model": "fake", "tokens": 50})
+            await ctx.log("tool.call", {"tool_name": "calculator", "args": {}})
+            await ctx.log("tool.result", {"tool_name": "calculator", "ok": True})
             await ctx.reply(msg, {"text": "done"})
 
 

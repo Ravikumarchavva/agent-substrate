@@ -18,6 +18,7 @@ from substrate.integrations.knowledge.result_rendering import render_search_resu
 from substrate.kernel.abstractions import TextBlock
 from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
+from substrate.kernel.abstractions.tools import ToolRisk
 
 logger = setup_logging()
 
@@ -27,6 +28,8 @@ class KnowledgeSearchTool:
 
     tool_type = ToolType.KNOWLEDGE
     name: str = "knowledge_search"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description: str = (
         "Search or ingest into the project's STANDING knowledge base — "
         "curated documents shared across every user, not anything from "

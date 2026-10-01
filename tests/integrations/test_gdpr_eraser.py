@@ -273,3 +273,53 @@ async def test_erase_tenant_deletes_every_thread_in_that_tenant_only(
             if row is not None:
                 await db.delete(row)
         await db.commit()
+
+
+@pytest.mark.requires_postgres
+async def test_erasure_reaches_long_term_memory_and_the_run_journal(db: AsyncSession, db_factory, cfg, tmp_path):
+    """A deletion request must reach the raw conversation in the run journal and the person's
+    long-term memory, not only the relational rows: the journal is where the text actually lives."""
+    from substrate.kernel.abstractions.core.identity import Actor
+    from datetime import datetime, timezone
+
+    from substrate.kernel.abstractions.runtime.store import Commit, Complete, NewEntry, RunSpec
+    from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryRecord
+    from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
+    from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
+
+    tenant = f"tenant-{uuid.uuid4()}"
+    thread = Thread(id=uuid.uuid4(), user_identifier="alice", tenant_id=tenant)
+    other = Thread(id=uuid.uuid4(), user_identifier="bob", tenant_id=tenant)
+    db.add_all([thread, other])
+    await db.commit()
+
+    memory = LocalFilesystemMemoryStore(tmp_path / "mem")
+    await memory.save(MemoryRecord.from_text("alice-secret-fact", namespace=MemoryNamespace(tenant_id=tenant, user_id="alice")))
+    await memory.save(MemoryRecord.from_text("bob-fact", namespace=MemoryNamespace(tenant_id=tenant, user_id="bob")))
+
+    runtime = SqliteRuntimeStore(tmp_path / "rt.sqlite3")
+    await runtime.start()
+    try:
+        agent = Actor("agent", "a")
+        for t, text in ((thread, "alice-secret-message"), (other, "bob-message")):
+            await runtime.create_run(RunSpec(agent=agent, tenant=tenant, thread_id=str(t.id)))
+            (lease,) = await runtime.lease(worker_id="w", capacity=1, lease_s=30, now=datetime.now(timezone.utc))
+            await runtime.commit(lease, Commit(entries=(NewEntry(kind="user.message", payload={"text": text}),), outcome=Complete()))
+
+        summary = await erase_user(
+            db, store=FakeStore(), redis=None, tenant_id=tenant, user_id="alice", cfg=cfg, memory_store=memory, runtime_store=runtime
+        )
+
+        assert summary.memories_deleted == 1 and summary.runs_deleted == 1
+        remaining = [str(e.payload) for run in await runtime.find_runs(active_only=False) for e in await runtime.read_events(run.run_id)]
+        assert not any("alice-secret-message" in r for r in remaining), "the raw conversation survived erasure"
+        assert any("bob-message" in r for r in remaining), "someone else's conversation was erased"
+        raw = b"".join(p.read_bytes() for p in (tmp_path).rglob("*") if p.is_file() and "mem" in str(p))
+        assert b"alice-secret-fact" not in raw and b"bob-fact" in raw
+    finally:
+        await runtime.aclose()
+        for tid in (thread.id, other.id):
+            row = await db.get(Thread, tid)
+            if row is not None:
+                await db.delete(row)
+        await db.commit()

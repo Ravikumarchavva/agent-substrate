@@ -46,6 +46,8 @@ class ToolSearchTool:
     """
 
     name = "tool_search"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description = (
         "Search available tools by keyword. "
         "Returns name, description, and parameters for each match. "
@@ -70,7 +72,6 @@ class ToolSearchTool:
         "required": ["query"],
         "additionalProperties": False,
     }
-    risk = ToolRisk.SAFE
 
     def __init__(self, tools: list[Tool]) -> None:
         self._tools: dict[str, Tool] = {t.name: t for t in tools}

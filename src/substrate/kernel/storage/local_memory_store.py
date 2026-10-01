@@ -11,11 +11,11 @@ Layout::
     <root>/
       records/<tenant_id>/<record_id>.json   — one file per MemoryRecord
 
-Partitioned by ``tenant_id`` only (the one namespace field every record
-always has) — ``query()`` loads a tenant's records and filters/scores the
-rest (``user_id``/``agent_id``/``session_id``/``categories``/``statuses``/
-``metadata_filter``) in memory, same "brute force is correct at local
-scale" reasoning as ``local_vector.py``'s ``search()``.
+Partitioned by ``tenant_id``, and a record is addressed by ``(tenant, id)``: a bare id
+never finds anything, so one tenant cannot reach another's record by guessing or reusing
+an id. ``query()`` loads one tenant's records and filters/scores them (visibility,
+``categories``/``statuses``/``metadata_filter``) in memory, same "brute force is correct at
+local scale" reasoning as ``local_vector.py``'s ``search()``.
 
 Scoring matches ``integrations/memory/durable_memory_store.py`` (the
 Postgres reference implementation) exactly: substring/keyword match against
@@ -32,15 +32,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
-from urllib.parse import unquote
-
-from substrate.kernel.storage.fs import atomic_write_json, safe_name
+from substrate.kernel.abstractions.exceptions import ScopeViolationError
 from substrate.kernel.abstractions.storage.memory import (
     MemoryMatch,
     MemoryNamespace,
     MemoryQuery,
     MemoryRecord,
 )
+from substrate.kernel.storage.fs import atomic_write_json, safe_name
 
 
 class LocalFilesystemMemoryStore:
@@ -57,24 +56,16 @@ class LocalFilesystemMemoryStore:
     def _record_path(self, tenant_id: str, record_id: str) -> Path:
         return self._tenant_dir(tenant_id) / f"{safe_name(record_id)}.json"
 
-    def _find_record(self, record_id: str) -> tuple[str, Path] | None:
-        """Locate a record by id without knowing its tenant up front —
-        record ids are globally unique (uuid4), so a scan across tenant
-        dirs is correct; at local scale this is fine (same reasoning as
-        every other brute-force local store)."""
-        records_dir = self._root / "records"
-        if not records_dir.exists():
-            return None
-        for tenant_dir in records_dir.iterdir():
-            if not tenant_dir.is_dir():
-                continue
-            p = tenant_dir / f"{safe_name(record_id)}.json"
-            if p.exists():
-                return unquote(tenant_dir.name), p
-        return None
-
     def _load(self, path: Path) -> MemoryRecord:
         return MemoryRecord.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def _visible(self, caller: MemoryNamespace, record_id: str) -> tuple[Path, MemoryRecord] | None:
+        """The record at ``(caller's tenant, id)``, if the caller may see it."""
+        path = self._record_path(caller.tenant_id, record_id)
+        if not path.exists():
+            return None
+        record = self._load(path)
+        return (path, record) if record.namespace.visible_from(caller) else None
 
     def _save(self, record: MemoryRecord) -> None:
         path = self._record_path(record.namespace.tenant_id, record.id)
@@ -92,21 +83,9 @@ class LocalFilesystemMemoryStore:
         for p in tenant_dir.glob("*.json"):
             try:
                 records.append((self._load(p), p.stat().st_mtime))
-            except Exception:
+            except (OSError, ValueError):
                 pass
         return records
-
-    @staticmethod
-    def _matches_namespace(record: MemoryRecord, ns: MemoryNamespace) -> bool:
-        if record.namespace.tenant_id != ns.tenant_id:
-            return False
-        if ns.user_id is not None and record.namespace.user_id != ns.user_id:
-            return False
-        if ns.agent_id is not None and record.namespace.agent_id != ns.agent_id:
-            return False
-        if ns.session_id is not None and record.namespace.session_id != ns.session_id:
-            return False
-        return True
 
     @staticmethod
     def _matches_metadata(record: MemoryRecord, filter: dict | None) -> bool:
@@ -126,29 +105,32 @@ class LocalFilesystemMemoryStore:
     # ── MemoryStore Protocol ─────────────────────────────────────────────
 
     async def save(self, record: MemoryRecord) -> str:
+        path = self._record_path(record.namespace.tenant_id, record.id)
+        if path.exists() and self._load(path).namespace != record.namespace:
+            raise ScopeViolationError(
+                f"record {record.id!r} already belongs to a different namespace in tenant {record.namespace.tenant_id!r}",
+                record_id=record.id,
+            )
         self._save(record)
         return record.id
 
-    async def get(self, record_id: str) -> MemoryRecord | None:
-        found = self._find_record(record_id)
-        if found is None:
-            return None
-        _, path = found
-        return self._load(path)
+    async def get(self, caller: MemoryNamespace, record_id: str) -> MemoryRecord | None:
+        found = self._visible(caller, record_id)
+        return found[1] if found else None
 
-    async def delete(self, record_id: str) -> bool:
-        found = self._find_record(record_id)
-        if found is None:
+    async def delete(self, caller: MemoryNamespace, record_id: str) -> bool:
+        found = self._visible(caller, record_id)
+        if found is None or not found[1].namespace.owned_by(caller):
             return False
-        _, path = found
-        path.unlink()
+        found[0].unlink()
         return True
 
     async def query(self, spec: MemoryQuery) -> list[MemoryMatch]:
+        caller = spec.namespace
         candidates = [
             (r, mtime)
-            for r, mtime in self._load_tenant_records(spec.namespace.tenant_id)
-            if self._matches_namespace(r, spec.namespace)
+            for r, mtime in self._load_tenant_records(caller.tenant_id)
+            if (spec.tenant_wide is not None or r.namespace.visible_from(caller))
             and r.status in spec.statuses
             and (spec.categories is None or r.category in spec.categories)
             and self._matches_metadata(r, spec.metadata_filter)
@@ -175,27 +157,24 @@ class LocalFilesystemMemoryStore:
             for i, (score, _mtime, record) in enumerate(scored[: spec.limit])
         ]
 
-    async def touch(self, record_ids: Sequence[str]) -> None:
+    async def touch(self, caller: MemoryNamespace, record_ids: Sequence[str]) -> None:
         now = datetime.now(tz=timezone.utc)
         for record_id in record_ids:
-            found = self._find_record(record_id)
+            found = self._visible(caller, record_id)
             if found is None:
                 continue
-            _, path = found
-            record = self._load(path)
-            updated = record.model_copy(
-                update={
-                    "last_accessed_at": now,
-                    "access_count": record.access_count + 1,
-                }
+            record = found[1]
+            self._save(
+                record.model_copy(update={"last_accessed_at": now, "access_count": record.access_count + 1})
             )
-            self._save(updated)
 
-    async def clear(self, namespace: MemoryNamespace) -> None:
-        for record, _mtime in self._load_tenant_records(namespace.tenant_id):
-            if self._matches_namespace(record, namespace):
-                path = self._record_path(record.namespace.tenant_id, record.id)
-                path.unlink(missing_ok=True)
+    async def erase(self, within: MemoryNamespace) -> int:
+        erased = 0
+        for record, _mtime in self._load_tenant_records(within.tenant_id):
+            if record.namespace.within(within):
+                self._record_path(record.namespace.tenant_id, record.id).unlink(missing_ok=True)
+                erased += 1
+        return erased
 
 
 __all__ = ["LocalFilesystemMemoryStore"]

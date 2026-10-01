@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from substrate.kernel.abstractions.tools import ToolExecutionResult
 from substrate.kernel.abstractions import ContentBlock, MediaBlock, TextBlock
+from substrate.kernel.abstractions.tools import ToolRisk
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, Page, Playwright
@@ -42,6 +43,8 @@ class WebSurferTool:
     """
 
     name: str = "web_surfer"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description: str = (
         "Advanced web browsing tool for agents. Supports navigation, content extraction, "
         "screenshots, element interaction, and form filling. Maintains browser session "
@@ -122,7 +125,6 @@ class WebSurferTool:
         },
         "required": ["action"],
     }
-    risk: str = "sensitive"  # external network reads
 
     def __init__(
         self,

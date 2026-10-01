@@ -9,6 +9,11 @@ connection, one lock and one ``BEGIN IMMEDIATE`` — which is also why ``lock`` 
 nothing to do. Statements run on a worker thread so a slow disk never blocks the
 event loop.
 
+Every statement runs on one dedicated thread. A task cancelled while awaiting a
+statement does not stop the statement — the thread finishes it — so closing the
+connection has to queue behind that thread's work rather than race it (closing a
+SQLite connection another thread is using is a crash, not an exception).
+
 ``:memory:`` goes through the same code, which is what tests use.
 """
 
@@ -17,34 +22,44 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from collections.abc import AsyncIterator, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from substrate.kernel.runtime.sql_store import Tx
 
+T = TypeVar("T")
+
+
+class _Connection:
+    """A SQLite connection and the one thread allowed to touch it."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+        self._thread = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlite-runtime")
+
+    def call(self, fn: Callable[[], T]) -> asyncio.Future[T]:
+        return asyncio.get_running_loop().run_in_executor(self._thread, fn)
+
+    async def close(self) -> None:
+        """Close after everything already queued has finished."""
+        await self.call(self.conn.close)
+        self._thread.shutdown(wait=True)
+
 
 class _SqliteTx:
-    def __init__(self, conn: sqlite3.Connection) -> None:
-        self._conn = conn
+    def __init__(self, db: _Connection) -> None:
+        self._db = db
 
     async def execute(self, sql: str, *params: Any) -> int:
-        def run() -> int:
-            return self._conn.execute(sql, params).rowcount
-
-        return await asyncio.to_thread(run)
+        return await self._db.call(lambda: self._db.conn.execute(sql, params).rowcount)
 
     async def fetchone(self, sql: str, *params: Any) -> Mapping[str, Any] | None:
-        def run() -> Any:
-            return self._conn.execute(sql, params).fetchone()
-
-        return await asyncio.to_thread(run)
+        return await self._db.call(lambda: self._db.conn.execute(sql, params).fetchone())
 
     async def fetchall(self, sql: str, *params: Any) -> list[Mapping[str, Any]]:
-        def run() -> Any:
-            return self._conn.execute(sql, params).fetchall()
-
-        return await asyncio.to_thread(run)
+        return await self._db.call(lambda: self._db.conn.execute(sql, params).fetchall())
 
     async def lock(self, key: str) -> None:
         """One writer at a time already serialises every transaction."""
@@ -55,7 +70,7 @@ class SqliteDatabase:
 
     def __init__(self, path: str | Path = "./data/db/runtime.sqlite3") -> None:
         self._path = str(path)
-        self._conn: sqlite3.Connection | None = None
+        self._conn: _Connection | None = None
         self._lock = asyncio.Lock()
 
     async def start(self) -> None:
@@ -69,31 +84,32 @@ class SqliteDatabase:
         if self._path != ":memory:":
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
-        self._conn = conn
+        self._conn = _Connection(conn)
 
     async def aclose(self) -> None:
         if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+            conn, self._conn = self._conn, None
+            await conn.close()
 
     async def script(self, ddl: str) -> None:
         assert self._conn is not None, "database not started"
-        await asyncio.to_thread(self._conn.executescript, ddl)
+        db = self._conn
+        await db.call(lambda: db.conn.executescript(ddl))
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[Tx]:
         assert self._conn is not None, "database not started"
-        conn = self._conn
+        db = self._conn
         async with self._lock:
-            await asyncio.to_thread(conn.execute, "BEGIN IMMEDIATE")
+            await db.call(lambda: db.conn.execute("BEGIN IMMEDIATE"))
             try:
-                yield _SqliteTx(conn)
+                yield _SqliteTx(db)
             except BaseException:
                 # Shielded: a cancelled task must still leave the transaction closed.
-                await asyncio.shield(asyncio.to_thread(conn.execute, "ROLLBACK"))
+                await asyncio.shield(db.call(lambda: db.conn.execute("ROLLBACK")))
                 raise
             else:
-                await asyncio.shield(asyncio.to_thread(conn.execute, "COMMIT"))
+                await asyncio.shield(db.call(lambda: db.conn.execute("COMMIT")))
 
     def is_unique_violation(self, exc: BaseException) -> bool:
         return isinstance(exc, sqlite3.IntegrityError)

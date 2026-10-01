@@ -16,7 +16,7 @@ see [`roadmap.md`](../roadmap.md).
 1. `AskHumanTool.execute()` checks `getattr(self.handler, "suspends_via_signal", False)`.
    If true: logs `input.requested` to the EventLog, then calls
    `await ctx.sleep_until_signal(f"hitl:{request_id}")` — this **suspends the
-   asyncio coroutine** (see [`runtime-stages.md`](runtime-stages.md) for what
+   asyncio coroutine** (see [`kernel.md`](kernel.md) for what
    "suspend" actually means and its durability gap).
 2. The frontend renders a card the moment `input.requested` streams through
    the normal event-log tail (`STREAMING_KINDS` in `serving/protocol/from_log.py`).

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import time
 from collections.abc import Sequence
 from dataclasses import replace
@@ -39,12 +40,29 @@ from substrate.kernel.abstractions.core.content import (
 from substrate.kernel.abstractions.core.identity import Actor, Topic
 from substrate.kernel.abstractions.core.trace import TraceContext
 from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.exceptions import ControlSignal, SuspendInterrupt
+from substrate.kernel.abstractions.exceptions import (
+    BudgetExhaustedError,
+    ControlSignal,
+    SuspendInterrupt,
+)
 from substrate.kernel.abstractions.ids import new_id, new_run_id
-from substrate.kernel.abstractions.llm.llm import FinishReason, GenerationOptions, LLMClient, LLMResponse
+from substrate.kernel.abstractions.llm.llm import (
+    FinishReason,
+    GenerationOptions,
+    LLMClient,
+    LLMResponse,
+)
 from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent, ReasoningDelta, TextDelta
-from substrate.kernel.abstractions.runtime.communication import AskOutcome, RunStatusSummary
+from substrate.kernel.abstractions.messaging.stream import (
+    CompletionEvent,
+    ReasoningDelta,
+    TextDelta,
+)
+from substrate.kernel.abstractions.runtime.agent import Agent as _KernelAgent
+from substrate.kernel.abstractions.runtime.communication import (
+    AskOutcome,
+    RunStatusSummary,
+)
 from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus
 from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.kernel.abstractions.runtime.store import (
@@ -56,19 +74,18 @@ from substrate.kernel.abstractions.runtime.store import (
     RunSpec,
     RuntimeStore,
     SpawnSpec,
+    Spend,
 )
-from substrate.kernel.abstractions.runtime.agent import Agent as _KernelAgent
 from substrate.kernel.abstractions.runtime.supervisor import RunHandle, RunResult
 from substrate.kernel.abstractions.runtime.wakeup import Wakeup
 from substrate.kernel.abstractions.tools.chain import InvocationResult
 from substrate.kernel.runtime.journal import Journal, current_idempotency_key
 from substrate.kernel.telemetry import instruments, semconv, span
-from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
     from substrate.kernel.tools.invoker import InvokerSession, ToolInvoker
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 # Live tokens are appended to the run's record in batches, not one row each.
 _STREAM_FLUSH_CHARS = 96
@@ -183,6 +200,12 @@ class RunContext:
         result = await self._commit([NewEntry(kind=kind, payload=payload or {}, dedup_key=f"once:{path}:{kind}")])
         return result.seqs[0]
 
+    async def live(self, kind: str, payload: JsonObject | None = None) -> None:
+        """Publish output to whoever is watching the run right now — text as it is produced,
+        say. It is not part of the run's record: a replay never sees it and it is dropped
+        after the run ends, so an agent that wants a durable answer must also ``log`` it."""
+        await self._live([NewEntry(kind=kind, payload=payload or {})])
+
     async def _live(self, entries: Sequence[NewEntry]) -> None:
         """Live output: visible to a tail, never part of replay state. Losing some is
         harmless, so a store blip here must not fail the call that produced it."""
@@ -228,6 +251,9 @@ class RunContext:
             raise RuntimeError("no LLM client: set agent.model before registering the agent")
 
         async def run() -> JsonObject:
+            # Checked only when the call is really about to be made: a replay serves the recorded
+            # response, and that call is already part of the total it would be checked against.
+            await self._enforce_budget(strict=False)
             return _serialize(await self._generate(client, messages, options))
 
         outcome = await self._journal.effect(
@@ -243,21 +269,50 @@ class RunContext:
                 dedup_key=f"assistant.message:{outcome.effect_id}",
             )
         ]
-        if not outcome.replayed:
-            entries.append(
-                NewEntry(
-                    kind=RunLogKind.LLM_CALL,
-                    payload={
-                        "model": client.model,
-                        "tokens": response.usage.total_tokens,
-                        "cost_usd": response.cost_usd,
-                        "finish_reason": response.finish_reason.value,
-                    },
-                    dedup_key=f"llm.call:{outcome.effect_id}",
-                )
+        # Also written on a replay (deduplicated): the call's cost joins the tree's total in the
+        # same write as this entry, so it is counted exactly once however the run was interrupted.
+        entries.append(
+            NewEntry(
+                kind=RunLogKind.LLM_CALL,
+                payload={
+                    "model": client.model,
+                    "tokens": response.usage.total_tokens,
+                    "cost_usd": response.cost_usd,
+                    "finish_reason": response.finish_reason.value,
+                },
+                dedup_key=f"llm.call:{outcome.effect_id}",
+                spend=Spend(tokens=response.usage.total_tokens, cost_usd=response.cost_usd or 0.0, turns=1),
             )
+        )
         await self._commit(entries)
+        await self._enforce_budget(strict=True)
         return response
+
+    async def _enforce_budget(self, *, strict: bool) -> None:
+        """Stop when the execution tree has spent its budget.
+
+        The budget is the run's inherited ``Supervision.execution_budget`` or, for a root run,
+        its agent's own. Spend is the whole tree's — parent, siblings and every descendant — so
+        spawning more agents cannot be a way around the cap. Checked before each model call
+        (``>=``: no new call once the cap is reached) and after it (``>``: a call that took the
+        tree over fails the run), so total spend can exceed the cap only by calls already in
+        flight when it was reached.
+        """
+        supervision = self._meta.supervision
+        budget = supervision.execution_budget if supervision else getattr(self.agent, "execution_budget", None)
+        if budget is None or (budget.max_tokens is None and budget.max_cost_usd is None and budget.max_turns is None):
+            return
+        spent = await self._store.tree_spend(RunId(self.run_id))
+
+        def over(used: float, cap: float | None) -> bool:
+            return cap is not None and (used > cap if strict else used >= cap)
+
+        if over(spent.tokens, budget.max_tokens):
+            raise BudgetExhaustedError(f"Token budget exceeded: {spent.tokens} {'>' if strict else '>='} {budget.max_tokens}")
+        if over(spent.cost_usd, budget.max_cost_usd):
+            raise BudgetExhaustedError(f"Cost budget exceeded: ${spent.cost_usd:.4f} {'>' if strict else '>='} ${budget.max_cost_usd:.4f}")
+        if over(spent.turns, budget.max_turns):
+            raise BudgetExhaustedError(f"Turn limit exceeded: {spent.turns} {'>' if strict else '>='} {budget.max_turns}")
 
     async def _generate(self, client: LLMClient, messages: list[ChatMessage], options: GenerationOptions) -> LLMResponse:
         from substrate.kernel.llm.errors import classify_llm_error
@@ -356,6 +411,13 @@ class RunContext:
             size = sum(len(v) for v in buffered.values())
             if size >= _STREAM_FLUSH_CHARS or (size and time.monotonic() - last_flush >= _STREAM_FLUSH_S):
                 await flush()
+        if done is not None and not text:
+            # A client that streams nothing and returns one completion: live viewers see
+            # the answer as a single chunk, as they would have token by token.
+            answer = "".join(b.text for b in done.content if isinstance(b, TextBlock))
+            if answer:
+                text.append(answer)
+                buffered[RunLogKind.TEXT_DELTA] += answer
         await flush()
 
         usage = done.usage if done else Usage()
@@ -640,7 +702,6 @@ class RunContext:
                 supervision=sup,
                 priority=sup.priority,
                 trace=self._trace_child(),
-                agent_version=self._lease.agent_version,
             )
             value = {"run_id": str(child_run), "agent": str(child_agent), "correlation_id": correlation_id}
             return value, lambda entries: self._commit(

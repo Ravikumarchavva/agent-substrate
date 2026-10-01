@@ -1,8 +1,6 @@
 from .blob import BlobStore
-from .objects import ObjectStore
+from .graph import CypherCapable, Entity, GraphStore, Relationship, SubGraph
 from .history import HistoryProvider
-from .vector import Document, SearchResult, VectorStore
-from .graph import Entity, Relationship, SubGraph, GraphStore, CypherCapable
 from .memory import (
     ContextMemoryInjection,
     ExtractionMethod,
@@ -15,8 +13,9 @@ from .memory import (
     MemoryStatus,
     MemoryStore,
     ShortTermMemory,
+    TenantWide,
 )
-from .tasks import Task, TaskList, TaskStatus, TaskStore
+from .objects import ObjectStore
 from .snapshots import (
     ContentRef,
     WorkspaceFileEntry,
@@ -24,6 +23,8 @@ from .snapshots import (
     WorkspaceSnapshot,
     WorkspaceStore,
 )
+from .tasks import Task, TaskList, TaskStatus, TaskStore
+from .vector import Document, SearchResult, VectorStore
 
 __all__ = [
     "ContentRef",
@@ -53,6 +54,7 @@ __all__ = [
     "ContextMemoryInjection",
     "ShortTermMemory",
     "MemoryStore",
+    "TenantWide",
     "Task",
     "TaskList",
     "TaskStatus",

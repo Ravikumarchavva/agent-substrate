@@ -27,14 +27,14 @@ Design decisions:
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import defaultdict
 from enum import Enum
 from typing import Awaitable, Callable
 
 from substrate.kernel.abstractions.core.content import JsonObject
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

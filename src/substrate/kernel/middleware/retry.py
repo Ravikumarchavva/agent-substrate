@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
-from typing import Callable, Awaitable, ClassVar
+from typing import Awaitable, Callable, ClassVar
 
-from substrate.kernel.llm.errors import classify_llm_error
-from substrate.kernel.abstractions.exceptions import KernelError, PermanentError, TransientError
-from substrate.logger import setup_logging
-from substrate.kernel.middleware._contracts import MiddlewareContext
 from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.abstractions.exceptions import (
+    KernelError,
+    PermanentError,
+    TransientError,
+)
+from substrate.kernel.llm.errors import classify_llm_error
+from substrate.kernel.middleware._contracts import MiddlewareContext
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def _worth_retrying(exc: Exception) -> bool:

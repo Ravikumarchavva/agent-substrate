@@ -34,7 +34,7 @@ broken, patched-over, or missing.
 
 ## Related docs (don't duplicate, cross-reference)
 
-- [`../architecture/runtime-stages.md`](../architecture/runtime-stages.md) — the Stage 0/1/2 backend roadmap this audit series checks against.
+- [`../architecture/kernel.md`](../architecture/kernel.md) — the Stage 0/1/2 backend roadmap this audit series checks against.
 - [`../architecture/hitl.md`](../architecture/hitl.md) — HITL-specific detail; the audit's `ask_human` finding is the deep-dive behind that doc's durability caveat.
 - [`../decisions.md`](../decisions.md) — architecture decisions; an audit finding sometimes becomes a decision once acted on.
 - [`../roadmap.md`](../roadmap.md) — the prioritized fix list; an audit's "what needs to be done" section feeds directly into roadmap priorities.

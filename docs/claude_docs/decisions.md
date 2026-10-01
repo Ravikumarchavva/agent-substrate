@@ -1,5 +1,59 @@
 # Decisions — Check Here Before Re-litigating
 
+## The kernel is the engine, not a layer of contracts (2026-10-02)
+
+**Decision:** `substrate.kernel` does the work of running an agent — routed agents, the durable
+runtime, journal, telemetry, budgets, tool invocation — and declares what it needs from outside in
+`kernel/abstractions`. Vendor clients, databases and HTTP live above it (`integrations/`, `serving/`).
+The old L0/L1/L2 stack (frozen contracts / default implementations / adapters) and the `agents/` layer
+are gone; `grep -r substrate.agents` is empty by test.
+
+**Why:** the audit found ~40 defects that were not carelessness but what a pure-contracts kernel
+produces: guarantees written as docstrings that nothing executed, three runtime backends that drifted,
+safety and identity as optional defaulted parameters, cross-cutting concerns with no owner. Making the
+kernel the engine gives each concern one owner; the invariant register (`architecture/invariants.md`)
+makes each guarantee a test.
+
+**Ruled out:** a thin kernel plus a swappable "runtime layer" (what we had) — the swap point was never
+used and the seam is where the defects lived.
+
+## One RuntimeStore port, written once over a Database protocol (2026-10-02)
+
+The three per-protocol runtime backends (event log, inbox, scheduler, signals, supervisor × in-memory /
+SQLite / Postgres, ~3.2k lines) are replaced by one command-oriented `RuntimeStore` whose `commit` is a
+single transaction, implemented once as `SqlRuntimeStore` over a small `Database` protocol (SQLite in
+the kernel, asyncpg in `integrations/runtime`). There is deliberately no in-memory store: tests use
+`:memory:` SQLite through the same code. **Consequence accepted:** SQLite is the zero-infra floor, so a
+process always has a real database file or `:memory:` connection.
+
+## Tools declare risk and idempotency; MCP defaults to deny (2026-10-02)
+
+`Toolbox.add` refuses a tool without a `ToolRisk` and an `idempotent` bool. `idempotent` decides what a
+crash window means: re-run under the same idempotency key, or fail the run keeping the intent for
+compensation. A tool from an MCP server is `HIGH` / not idempotent unless its operator says otherwise —
+a server's own claims about its tools are not trusted.
+
+## Memory is addressed by scope, and omission narrows (2026-10-02)
+
+`MemoryStore` reads and deletes take the caller's `MemoryNamespace`; a record is visible when the
+caller shares each owner field the record sets, so leaving a field out can only narrow a query.
+Deleting requires owning the record (same user), so a user cannot delete an organisation-wide fact.
+Cross-user reads need `TenantWide(reason=…)`. Postgres memory moved to a new `memory_records` table
+keyed `(tenant_id, id)` — **no migration from `agent_memories`** (no backward compatibility, by decision).
+
+## Budgets are the engine's, and count the whole tree (2026-10-02)
+
+`ExecutionTracker` is deleted. Token/cost/turn budgets are enforced in `RunContext.llm` against the
+execution tree's total spend (`RuntimeStore.tree_spend`), checked before and after each model call.
+Spend rides on the `llm.call` journal entry, so it is counted exactly once. A cap can be exceeded only by
+calls already in flight when it was reached.
+
+## OpenTelemetry: the engine takes the API only (2026-10-02)
+
+Core dependencies carry `opentelemetry-api`; the SDK, OTLP exporter and FastAPI instrumentation moved to
+the `server` extra (and the SDK to the `dev` group for tests). The engine instruments itself
+unconditionally and costs nothing until a host configures an SDK.
+
 ## Text-input safety model: Prompt Guard 2 86M, not Opir-edge-multilang
 
 **Decision:** the live-chat-turn jailbreak/prompt-attack classifier is
@@ -80,7 +134,7 @@ closed — `SignalBus` + `SuspendInterrupt`-based suspend/resume
 (Phase 1 PR4-PR5, see [`roadmap.md`](roadmap.md) "Recently shipped") means a
 suspended run's `ravi_run_queue.status` row is genuinely `'suspended'` and
 survives a process restart. See
-[`architecture/runtime-stages.md`](architecture/runtime-stages.md) for the
+[`architecture/kernel.md`](architecture/kernel.md) for the
 current state and the one remaining boundary case (durable `deadline`
 column has no writer yet).
 

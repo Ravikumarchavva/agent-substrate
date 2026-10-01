@@ -23,10 +23,18 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from substrate.kernel.abstractions.agent.supervision import Priority, SpawnBudget, Supervision
+from substrate.kernel.abstractions.agent.supervision import (
+    Priority,
+    SpawnBudget,
+    Supervision,
+)
 from substrate.kernel.abstractions.core.error_info import ErrorInfo
 from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.exceptions import BudgetExhaustedError, LeaseLostError, ThreadBusyError
+from substrate.kernel.abstractions.exceptions import (
+    BudgetExhaustedError,
+    LeaseLostError,
+    ThreadBusyError,
+)
 from substrate.kernel.abstractions.messaging.message import DataPayload, Message
 from substrate.kernel.abstractions.runtime.ids import RunStatus
 from substrate.kernel.abstractions.runtime.store import (
@@ -43,6 +51,7 @@ from substrate.kernel.abstractions.runtime.store import (
     RuntimeStore,
     SignalSpec,
     SpawnSpec,
+    Spend,
     Suspend,
 )
 from substrate.kernel.abstractions.runtime.wakeup import Wakeup
@@ -570,6 +579,61 @@ class RuntimeStoreConformance:
         await store.commit(lease, Commit(outcome=Complete()))
         follow_up = await store.find_runs(agent=AGENT)
         assert len(follow_up) == 1 and follow_up[0].run_id != lease.run_id
+
+    # ======================================================================
+    # tree-wide spend (I20)
+    # ======================================================================
+
+    async def test_spend_on_an_entry_is_added_to_the_trees_total(self, store: RuntimeStore) -> None:
+        await store.create_run(RunSpec(agent=AGENT))
+        lease = await self.lease_one(store)
+        assert await store.tree_spend(lease.run_id) == Spend()
+        await store.commit(lease, Commit(entries=(NewEntry(kind="llm.call", spend=Spend(tokens=100, cost_usd=0.25, turns=1)),)))
+        await store.commit(lease, Commit(entries=(NewEntry(kind="llm.call", spend=Spend(tokens=50, cost_usd=0.5, turns=1)),)))
+        total = await store.tree_spend(lease.run_id)
+        assert (total.tokens, total.turns) == (150, 2) and total.cost_usd == pytest.approx(0.75)
+
+    async def test_a_repeated_entry_counts_its_spend_once(self, store: RuntimeStore) -> None:
+        """A replayed run writes the same entry again. The cost is joined to the entry, so the
+        repeat — skipped by its dedup key — must not charge the tree twice."""
+        await store.create_run(RunSpec(agent=AGENT))
+        lease = await self.lease_one(store)
+        entry = NewEntry(kind="llm.call", dedup_key="llm.call:e1", spend=Spend(tokens=100, turns=1))
+        await store.commit(lease, Commit(entries=(entry,)))
+        await store.commit(lease, Commit(entries=(entry,)))
+        assert (await store.tree_spend(lease.run_id)).tokens == 100
+
+    async def test_a_childs_spend_counts_toward_its_parents_tree(self, store: RuntimeStore) -> None:
+        supervision = Supervision.root(AGENT)
+        await store.create_run(RunSpec(agent=AGENT, supervision=supervision))
+        parent = await self.lease_one(store, worker="p")
+        result = await store.commit(
+            parent,
+            Commit(
+                entries=(NewEntry(kind="llm.call", spend=Spend(tokens=10, turns=1)),),
+                spawns=(SpawnSpec(effect_id="e", child=RunSpec(agent=OTHER, supervision=supervision), boot=msg(OTHER)),),
+            ),
+        )
+        child = await self.lease_one(store, worker="c")
+        await store.commit(child, Commit(entries=(NewEntry(kind="llm.call", spend=Spend(tokens=90, turns=1)),)))
+        child_id = result.spawned["e"].run_id
+        assert (await store.tree_spend(parent.run_id)).tokens == 100, "the parent does not see its child's spend"
+        assert (await store.tree_spend(child_id)).tokens == 100, "the child does not see its parent's spend"
+
+    async def test_unrelated_runs_do_not_share_a_total(self, store: RuntimeStore) -> None:
+        await store.create_run(RunSpec(agent=AGENT))
+        await store.create_run(RunSpec(agent=OTHER))
+        first = await self.lease_one(store, worker="a")
+        second = await self.lease_one(store, worker="b")
+        await store.commit(first, Commit(entries=(NewEntry(kind="llm.call", spend=Spend(tokens=7)),)))
+        assert (await store.tree_spend(second.run_id)).tokens == 0
+
+    async def test_erasing_a_tenant_forgets_what_its_runs_spent(self, store: RuntimeStore) -> None:
+        await store.create_run(RunSpec(agent=AGENT, tenant="acme"))
+        lease = await self.lease_one(store)
+        await store.commit(lease, Commit(entries=(NewEntry(kind="llm.call", spend=Spend(tokens=5)),)))
+        await store.erase(tenant="acme")
+        assert (await store.tree_spend(lease.run_id)).tokens == 0
 
     async def test_stats_count_runs_by_state(self, store: RuntimeStore) -> None:
         await store.create_run(RunSpec(agent=Actor("agent", "1")))

@@ -113,6 +113,46 @@ def _blocks_from_json(raw: str) -> list:
     return [parse_content_block(item, forward_compatible=True) for item in json.loads(raw)]
 
 
+
+
+_PLAIN = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
+
+
+def _table_name(collection: str) -> str:
+    """The Lance table that holds ``collection``. Lance table names may only contain letters, digits,
+    ``_``, ``-`` and ``.``, and a collection name comes from a caller, so each other character — and
+    ``_`` itself, which marks an escape — becomes ``_`` plus two hex digits per UTF-8 byte. Injective, so
+    two collections never share a table, and no name can climb out of the store's directory."""
+    if not collection:
+        raise ValueError("a collection needs a name")
+    return "".join(c if c in _PLAIN else "".join(f"_{b:02x}" for b in c.encode()) for c in collection)
+
+
+def _collection_name(table: str) -> str:
+    """Inverse of ``_table_name``."""
+    out = bytearray()
+    i = 0
+    while i < len(table):
+        if table[i] == "_" and i + 2 < len(table) + 0 and all(h in "0123456789abcdef" for h in table[i + 1 : i + 3]):
+            out.append(int(table[i + 1 : i + 3], 16))
+            i += 3
+        else:
+            out.extend(table[i].encode())
+            i += 1
+    return out.decode(errors="replace")
+
+def _lit(value: str) -> str:
+    """A SQL string literal for ``value``. Lance filters take no parameters, so this is the only
+    way a caller-supplied id reaches one: quotes doubled, NUL refused."""
+    if "\x00" in value:
+        raise ValueError("NUL is not allowed in a document id")
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _id_in(ids: list[str]) -> str:
+    return "id IN (" + ", ".join(_lit(i) for i in ids) + ")"
+
+
 class LanceDBVectorStore:
     """``VectorStore`` backed by LanceDB — one table per collection, local
     file or remote Lance Namespace catalog.
@@ -206,11 +246,11 @@ class LanceDBVectorStore:
 
     async def _open_or_create(self, collection: str, rows: list[dict]):
         db = await self._connection()
-        if collection in await self._table_names(db):
-            table = await db.open_table(collection, **self._table_kwargs())
+        if _table_name(collection) in await self._table_names(db):
+            table = await db.open_table(_table_name(collection), **self._table_kwargs())
             await table.add(rows)
         else:
-            table = await db.create_table(collection, data=rows, **self._table_kwargs())
+            table = await db.create_table(_table_name(collection), data=rows, **self._table_kwargs())
         return table
 
     # ── Write ────────────────────────────────────────────────────────────
@@ -252,12 +292,11 @@ class LanceDBVectorStore:
         # LanceDB's own upsert primitive is merge_insert; simplest correct
         # approach here (dev-scale data) is delete-then-add.
         db = await self._connection()
-        if collection in await self._table_names(db):
-            table = await db.open_table(collection, **self._table_kwargs())
+        if _table_name(collection) in await self._table_names(db):
+            table = await db.open_table(_table_name(collection), **self._table_kwargs())
             ids = [doc.id for doc in documents]
             if ids:
-                id_list = ", ".join(f"'{i}'" for i in ids)
-                await table.delete(f"id IN ({id_list})")
+                await table.delete(_id_in(ids))
         return await self.add(documents, collection=collection)
 
     # ── Read ─────────────────────────────────────────────────────────────
@@ -271,9 +310,9 @@ class LanceDBVectorStore:
         filter: dict[str, Any] | None = None,
     ) -> list[SearchResult]:
         db = await self._connection()
-        if collection not in await self._table_names(db):
+        if _table_name(collection) not in await self._table_names(db):
             return []
-        table = await db.open_table(collection, **self._table_kwargs())
+        table = await db.open_table(_table_name(collection), **self._table_kwargs())
         query = await table.search(query_embedding)
         rows = await query.distance_type("cosine").limit(_FETCH_CAP).to_list()
 
@@ -304,11 +343,10 @@ class LanceDBVectorStore:
         collection: str = "default",
     ) -> list[Document]:
         db = await self._connection()
-        if not ids or collection not in await self._table_names(db):
+        if not ids or _table_name(collection) not in await self._table_names(db):
             return []
-        table = await db.open_table(collection, **self._table_kwargs())
-        id_list = ", ".join(f"'{i}'" for i in ids)
-        rows = await table.query().where(f"id IN ({id_list})").to_list()
+        table = await db.open_table(_table_name(collection), **self._table_kwargs())
+        rows = await table.query().where(_id_in(ids)).to_list()
         by_id = {
             row["id"]: Document(
                 content=_blocks_from_json(row["content_json"]),
@@ -327,12 +365,11 @@ class LanceDBVectorStore:
         collection: str = "default",
     ) -> int:
         db = await self._connection()
-        if not ids or collection not in await self._table_names(db):
+        if not ids or _table_name(collection) not in await self._table_names(db):
             return 0
-        table = await db.open_table(collection, **self._table_kwargs())
+        table = await db.open_table(_table_name(collection), **self._table_kwargs())
         before = await table.count_rows()
-        id_list = ", ".join(f"'{i}'" for i in ids)
-        await table.delete(f"id IN ({id_list})")
+        await table.delete(_id_in(ids))
         after = await table.count_rows()
         return before - after
 
@@ -340,15 +377,15 @@ class LanceDBVectorStore:
 
     async def list_collections(self) -> list[str]:
         db = await self._connection()
-        return await self._table_names(db)
+        return [_collection_name(name) for name in await self._table_names(db)]
 
     async def delete_collection(self, collection: str) -> int:
         db = await self._connection()
-        if collection not in await self._table_names(db):
+        if _table_name(collection) not in await self._table_names(db):
             return 0
-        table = await db.open_table(collection, **self._table_kwargs())
+        table = await db.open_table(_table_name(collection), **self._table_kwargs())
         count = await table.count_rows()
-        await db.drop_table(collection, **self._ns_kwargs())
+        await db.drop_table(_table_name(collection), **self._ns_kwargs())
         self._fts_indexed.discard(collection)
         return count
 
@@ -357,13 +394,13 @@ class LanceDBVectorStore:
         # confirmed limitation, not assumed. Copy all rows into a new table
         # under `new`, then drop `old`.
         db = await self._connection()
-        if old not in await self._table_names(db):
+        if _table_name(old) not in await self._table_names(db):
             return 0
-        old_table = await db.open_table(old, **self._table_kwargs())
+        old_table = await db.open_table(_table_name(old), **self._table_kwargs())
         rows = await old_table.query().to_list()
         if rows:
-            await db.create_table(new, data=rows, mode="overwrite", **self._table_kwargs())
-        await db.drop_table(old, **self._ns_kwargs())
+            await db.create_table(_table_name(new), data=rows, mode="overwrite", **self._table_kwargs())
+        await db.drop_table(_table_name(old), **self._ns_kwargs())
         self._fts_indexed.discard(old)
         return len(rows)
 
@@ -386,9 +423,9 @@ class LanceDBVectorStore:
         requires a registered embedding function, which doesn't fit
         externally-computed embeddings)."""
         db = await self._connection()
-        if collection not in await self._table_names(db):
+        if _table_name(collection) not in await self._table_names(db):
             return []
-        table = await db.open_table(collection, **self._table_kwargs())
+        table = await db.open_table(_table_name(collection), **self._table_kwargs())
         await self._ensure_fts_index(table, collection)
 
         from lancedb.rerankers import RRFReranker

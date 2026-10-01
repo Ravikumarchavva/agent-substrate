@@ -221,6 +221,42 @@ class AgentCrashError(PermanentError):
         return f"[{self.agent_id} in run {self.run_id}] {super().__str__()}"
 
 
+class ScopeViolationError(PermanentError):
+    """A write tried to take over a record that belongs to a different scope.
+
+    Record ids are chosen by callers — often copied from a request body or a model's
+    output — so an id colliding with someone else's record must be refused rather than
+    resolved by overwriting it."""
+
+    def __init__(self, message: str, *, record_id: str) -> None:
+        super().__init__(message)
+        self.record_id = record_id
+
+
+class ToolDeclarationError(PermanentError, ValueError):
+    """A tool did not say how dangerous it is or whether it is safe to run twice.
+
+    Both facts decide what the engine does — whether to ask a human first, whether a call
+    that may or may not have happened can be repeated — so a tool that leaves them out is
+    refused when it is registered, not guessed about when it is called."""
+
+    def __init__(self, tool: str, problems: tuple[str, ...]) -> None:
+        super().__init__(f"tool {tool!r} is not fit to register: " + "; ".join(problems))
+        self.tool = tool
+        self.problems = problems
+
+
+class UnroutableMessageError(PermanentError):
+    """A message arrived that no handler of the receiving agent accepts. Redelivering it
+    cannot change that, so the run fails with the reason instead of retrying a poison message."""
+
+    def __init__(self, message: str, *, agent: str, payload_type: str, accepts: tuple[str, ...]) -> None:
+        super().__init__(message)
+        self.agent = agent
+        self.payload_type = payload_type
+        self.accepts = accepts
+
+
 class BlockValidationError(PermanentError, ValueError):
     """A content block failed validation."""
 
@@ -330,5 +366,8 @@ __all__ = [
     "SuspendInterrupt",
     "ThreadBusyError",
     "TransientError",
+    "ScopeViolationError",
+    "ToolDeclarationError",
+    "UnroutableMessageError",
     "UnsupportedContentError",
 ]

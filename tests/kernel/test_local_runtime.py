@@ -15,7 +15,7 @@ from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBl
 from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.core.usage import Usage
 from substrate.kernel.abstractions.llm import ModelCapabilities
-from substrate.kernel.abstractions.messaging.message import ChatPayload, DataPayload, Message
+from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
 from substrate.kernel.abstractions.messaging.stream import CompletionEvent
 from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.kernel.abstractions.runtime.store import Delivery
@@ -77,7 +77,7 @@ async def test_a_run_submitted_before_a_restart_is_picked_up_after_it(tmp_path: 
 
     store = SqliteRuntimeStore(path)
     await store.start()
-    run = await store.create_run(RunSpec(agent=agent.id, agent_version=agent.version), deliveries=[Delivery(agent=agent.id, msg=_chat(agent.id, "hi"))])
+    run = await store.create_run(RunSpec(agent=agent.id), deliveries=[Delivery(agent=agent.id, msg=_chat(agent.id, "hi"))])
     await store.aclose()
 
     async with Runtime.local(path) as rt:

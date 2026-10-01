@@ -9,9 +9,10 @@ complete or the budget is exhausted.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.kernel.abstractions.agent.runtime_context import RunScope
+from substrate.kernel.abstractions.agent.supervision import Priority, SpawnBudget
 from substrate.kernel.abstractions.core.content import (
     ChatMessage,
     Role,
@@ -21,20 +22,23 @@ from substrate.kernel.abstractions.core.content import (
 )
 from substrate.kernel.abstractions.core.identity import Actor
 from substrate.kernel.abstractions.llm.llm import GenerationOptions
-from substrate.kernel.abstractions.messaging.message import ChatPayload, DataPayload, Message
+from substrate.kernel.abstractions.messaging.message import (
+    ChatPayload,
+    DataPayload,
+    Message,
+)
+from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
 from substrate.kernel.abstractions.tools import AnyTool
-from substrate.kernel.abstractions.tools.tools import ToolExecutionResult
-
-from substrate.kernel.abstractions.agent.runtime_context import RunScope
-from substrate.kernel.abstractions.agent.supervision import Priority, SpawnBudget
+from substrate.kernel.abstractions.tools.tools import ToolExecutionResult, ToolRisk
+from substrate.kernel.agents.base import BaseAgent
+from substrate.kernel.agents.routed import handle
 from substrate.kernel.context.context import ContextConfig
 from substrate.kernel.limits.spawn import SpawnTracker
-from substrate.kernel.agents.base import BaseAgent
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.context import Agent, RunContext
     from substrate.kernel.abstractions.llm.llm import LLMClient
     from substrate.kernel.abstractions.storage.history import HistoryProvider
+    from substrate.kernel.runtime.context import Agent, RunContext
 
 
 @dataclass
@@ -45,6 +49,9 @@ class _DelegateTool:
     encode the routing correctly.  ``execute()`` is never called — the
     orchestrator handles dispatch via ``ctx.spawn`` + ``ctx.ask``.
     """
+
+    risk: ClassVar[ToolRisk] = ToolRisk.SAFE
+    idempotent: ClassVar[bool] = False
 
     name: str
     description: str
@@ -107,11 +114,7 @@ class OrchestratorAgent(BaseAgent):
     def history(self) -> HistoryProvider:
         return self._context.history
 
-    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-        for msg in inbox:
-            ctx.check()
-            await self._handle_message(ctx, msg)
-
+    @handle(ChatPayload, DataPayload)
     async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
         session_id = msg.correlation_id or ctx.run_id
         # See ReActAgent._handle_message.

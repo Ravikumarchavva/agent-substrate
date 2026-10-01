@@ -55,7 +55,7 @@ async def main() -> None:
         max_iterations=8,
     )
 
-    async with Runtime() as rt:
+    async with Runtime.local() as rt:
         await rt.register(agent)
         con = Console(agent, runtime=rt)
         await con.interactive(stream=True)

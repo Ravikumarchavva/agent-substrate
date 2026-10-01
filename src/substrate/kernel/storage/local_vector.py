@@ -22,12 +22,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-
 from urllib.parse import unquote
 
+from substrate.kernel.abstractions.storage.vector import Document, SearchResult
 from substrate.kernel.storage.fs import atomic_write_json, safe_name
 from substrate.kernel.storage.vector import cosine_similarity
-from substrate.kernel.abstractions.storage.vector import Document, SearchResult
 
 if TYPE_CHECKING:
     from substrate.kernel.abstractions.llm import EmbeddingClient

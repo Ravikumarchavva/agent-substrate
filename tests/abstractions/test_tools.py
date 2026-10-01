@@ -10,6 +10,7 @@ from substrate.kernel.abstractions.core.content import TextBlock
 
 
 class MockToolImpl:
+    idempotent = True
     name = "mock_tool"
     description = "A mock tool for testing."
     risk = ToolRisk.HIGH

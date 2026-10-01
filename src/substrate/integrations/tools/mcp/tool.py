@@ -6,6 +6,7 @@ from typing import Any
 from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
 from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
 from substrate.integrations.tools.mcp.client import MCPClient
+from substrate.kernel.abstractions.tools import ToolRisk
 
 
 class MCPTool:
@@ -53,6 +54,9 @@ class MCPTool:
         name: str,
         description: str,
         input_schema: dict[str, Any],
+        *,
+        risk: ToolRisk = ToolRisk.HIGH,
+        idempotent: bool = False,
     ):
         """Initialize MCP tool adapter.
 
@@ -61,11 +65,17 @@ class MCPTool:
             name: Tool name from MCP server
             description: Tool description from MCP server
             input_schema: JSON Schema for tool parameters from MCP server
+            risk: How dangerous a call is. A server's own claims about its tools are not
+                trusted, so a tool from an external server needs approval unless the
+                operator who connected it says otherwise here.
+            idempotent: Whether a call may safely be repeated. Unknown, so ``False``.
         """
         self.tool_type = ToolType.MCP
         self.name = name
         self.description = description
         self.input_schema = input_schema
+        self.risk = risk
+        self.idempotent = idempotent
         self.client = client
 
     async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:  # type: ignore[override]
@@ -146,7 +156,9 @@ class MCPTool:
             )
 
     @classmethod
-    async def from_mcp_client(cls, client: MCPClient) -> list["MCPTool"]:
+    async def from_mcp_client(
+        cls, client: MCPClient, *, risk: ToolRisk = ToolRisk.HIGH, idempotent: bool = False
+    ) -> list["MCPTool"]:
         """Create MCPTool instances for all tools from an MCP server.
 
         This is a convenience method to automatically discover and wrap
@@ -154,6 +166,9 @@ class MCPTool:
 
         Args:
             client: Connected MCPClient instance
+            risk: Applied to every tool from this server; ``HIGH`` (needs approval) unless the
+                operator who connected it vouches for it.
+            idempotent: Applied to every tool from this server.
 
         Returns:
             List of MCPTool instances, one for each tool on the server
@@ -186,6 +201,8 @@ class MCPTool:
                 name=tool["name"],
                 description=tool["description"],
                 input_schema=tool["inputSchema"],
+                risk=risk,
+                idempotent=idempotent,
             )
             for tool in tools_list
         ]

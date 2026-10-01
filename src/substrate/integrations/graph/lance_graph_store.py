@@ -89,7 +89,7 @@ class LanceGraphStore:
     """``GraphStore`` (+ narrow ``CypherCapable``) backed by two Lance
     tables (``entities``, ``relationships``), local file or remote Lance
     Namespace catalog — same dual connection mode as
-    ``LanceDBVectorStore``/``LanceLongTermMemory``.
+    ``LanceDBVectorStore``/``LanceMemoryStore``.
     """
 
     def __init__(

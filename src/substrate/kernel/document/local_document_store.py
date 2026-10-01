@@ -14,8 +14,8 @@ import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
-from substrate.kernel.storage.fs import atomic_write_json, safe_name
 from substrate.kernel.abstractions.document import DocumentChunk, DocumentMetadata
+from substrate.kernel.storage.fs import atomic_write_json, safe_name
 
 
 class LocalFilesystemDocumentStore:

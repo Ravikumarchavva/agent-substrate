@@ -28,6 +28,7 @@ def test_core_kind_values_are_the_persisted_strings() -> None:
         "MCP_APP_CONTEXT": "mcp_app_context",
         "INPUT_REQUESTED": "input.requested",
         "APPROVAL_REQUESTED": "approval.requested",
+        "APPROVAL_DECIDED": "approval.decided",
         "CHILD_SPAWNED": "child.spawned",
         "SUBAGENT_START": "subagent.start",
         "SUBAGENT_DONE": "subagent.done",

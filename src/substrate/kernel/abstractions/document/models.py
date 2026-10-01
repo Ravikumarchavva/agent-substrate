@@ -12,8 +12,13 @@ from typing import Any, Sequence
 
 from pydantic import Field, model_validator
 
+from substrate.kernel.abstractions.core.content import (
+    ContentBlock,
+    JsonObject,
+    KernelModel,
+    TextBlock,
+)
 from substrate.kernel.abstractions.ids import new_id
-from substrate.kernel.abstractions.core.content import ContentBlock, JsonObject, KernelModel, TextBlock
 
 
 class ExtractedImageLabel(StrEnum):

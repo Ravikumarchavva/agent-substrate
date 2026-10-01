@@ -110,7 +110,7 @@ async def test_history_still_round_trips_with_a_hostile_branch_and_session(tmp_p
     assert not list(tmp_path.glob("*.json")) and not (tmp_path.parent / "b.json").exists()
 
 
-async def test_memory_store_finds_records_across_tenants_with_unusual_ids(tmp_path: Path):
+async def test_memory_store_keeps_records_of_tenants_with_unusual_names_inside_its_root(tmp_path: Path):
     from substrate.kernel.abstractions.storage.memory import (
         MemoryNamespace,
         MemoryRecord,
@@ -121,5 +121,5 @@ async def test_memory_store_finds_records_across_tenants_with_unusual_ids(tmp_pa
     record = MemoryRecord(namespace=ns, content=[TextBlock(text="likes tea")])
     await store.save(record)
 
-    assert (await store.get(record.id)) is not None
+    assert (await store.get(ns, record.id)) is not None
     assert all(_inside(p, tmp_path) for p in tmp_path.rglob("*"))

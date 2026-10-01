@@ -22,9 +22,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Mapping, Protocol, runtime_checkable
 
-from substrate.kernel.abstractions.exceptions import CancellationError
 from substrate.kernel.abstractions.agent.supervision import Supervision
 from substrate.kernel.abstractions.core.trace import TraceContext
+from substrate.kernel.abstractions.exceptions import CancellationError
 
 
 @runtime_checkable
@@ -152,7 +152,7 @@ class RunMeta:
     ``supervision``  — agent position in the execution tree; ``None`` for standalone runs.
     ``deadline``     — wall-clock expiry; agents and tools should honour it. Resolved
                        from ``supervision.execution_budget.deadline_s`` at run start
-                       (see ``agents/core/react.py::_resolve_execution_budget``) —
+                       (see ``Worker._deadline``) —
                        this is the one absolute cutoff every ``check()`` call enforces;
                        ``SchedulerProtocol.enqueue``'s own ``deadline`` parameter is a
                        distinct, scheduler-level lease/queueing cutoff, not this one.

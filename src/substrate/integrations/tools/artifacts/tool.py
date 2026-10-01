@@ -20,6 +20,7 @@ from substrate.kernel.abstractions import TextBlock
 from substrate.kernel.abstractions.agent.runtime_context import RunScope, scope_of
 from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
+from substrate.kernel.abstractions.tools import ToolRisk
 
 logger = setup_logging("substrate.integrations.tools.artifacts")
 
@@ -35,6 +36,8 @@ class ArtifactsTool:
 
     tool_type = ToolType.KNOWLEDGE
     name: str = "artifacts"
+    risk = ToolRisk.SAFE
+    idempotent = False
     description: str = (
         "Store and retrieve durable knowledge as artifacts. "
         "action=save: record something worth keeping (a user preference, a "

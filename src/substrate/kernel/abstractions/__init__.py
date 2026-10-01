@@ -6,144 +6,186 @@ No I/O, no concrete implementations, no external dependencies beyond pydantic.
 
 from __future__ import annotations
 
+from substrate.kernel.abstractions.agent.context import (
+    CompactionContext,
+    CompactionPhase,
+    CompactionResult,
+    CompactionStrategy,
+    ContextBuilder,
+    ContextWindow,
+)
+from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
+from substrate.kernel.abstractions.agent.runtime_context import (
+    CancellationTokenProtocol,
+    RunMeta,
+    RunScope,
+    scope_of,
+)
+from substrate.kernel.abstractions.agent.safety import (
+    ImageSafetyClassifier,
+    SafetyVerdict,
+    Severity,
+    TextSafetyClassifier,
+    max_severity,
+)
+from substrate.kernel.abstractions.agent.supervision import (
+    ExecutionBudget,
+    HistoryRetention,
+    Priority,
+    SpawnBudget,
+    Supervision,
+)
 from substrate.kernel.abstractions.core.content import (
-    JsonObject,
-    Role,
-    KernelModel,
-    MediaBlock,
-    TextBlock,
-    DataBlock,
-    ErrorBlock,
-    ReasoningBlock,
-    ToolUseBlock,
-    ToolResultBlock,
-    UnknownBlock,
     ChatMessage,
     ContentBlock,
     ContentBlockAdapter,
-    parse_content_block,
+    DataBlock,
+    ErrorBlock,
+    JsonObject,
+    KernelModel,
+    MediaBlock,
+    ReasoningBlock,
+    Role,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UnknownBlock,
     content_blocks_to_str,
-)
-from substrate.kernel.abstractions.exceptions import (
-    KernelError,
-    ControlSignal,
-    TransientError,
-    PermanentError,
-    PolicyTermination,
-    BlockValidationError,
-    UnsupportedContentError,
-    AgentCrashError,
-    BudgetExhaustedError,
-    MiddlewareTermination,
-    CancellationError,
-    SuspendInterrupt,
-    ConcurrentAppendError,
-    ThreadBusyError,
-    BranchHeadConflictError,
-    SnapshotConflictError,
-    BranchNotFoundError,
-    BranchAlreadyExistsError,
-    DAGIntegrityError,
-    RateLimitedError,
-    ContextLengthError,
-    ContentFilterError,
-    AuthError,
-    LeaseLostError,
-    NonDeterminismError,
-    OrphanedEffectError,
-    ObjectNotFoundError,
+    parse_content_block,
 )
 from substrate.kernel.abstractions.core.error_info import ErrorInfo
-from substrate.kernel.abstractions.core.trace import TraceContext
-from substrate.kernel.abstractions.ids import (
-    BranchId, MessageId, TenantId, ThreadId, UserId, new_id,
-)
 from substrate.kernel.abstractions.core.identity import (
     Actor,
     Topic,
 )
-from substrate.kernel.abstractions.agent.supervision import (
-    Supervision,
-    HistoryRetention,
-    Priority,
-    SpawnBudget,  
-    ExecutionBudget,
+from substrate.kernel.abstractions.core.trace import TraceContext
+from substrate.kernel.abstractions.core.usage import Usage
+from substrate.kernel.abstractions.document import (
+    DocumentChunk,
+    DocumentChunker,
+    DocumentExtractor,
+    DocumentMetadata,
+    DocumentStore,
+    ExtractedImage,
+    ExtractedImageLabel,
+    ExtractedPage,
+    ExtractionResult,
 )
-from substrate.kernel.abstractions.tools.tools import (
-    PayloadBase,
-    ToolRisk,
-    ToolType,
-    ToolUI,
-    ToolCallRequest,
-    ToolExecutionResult,
-    Tool,
-    HostedTool,
-    ProviderDefinedTool,
-    AnyTool,
-    is_hosted_tool,
-    is_concurrency_safe,
-    is_provider_defined_tool,
-    ToolRegistry,
+from substrate.kernel.abstractions.exceptions import (
+    AgentCrashError,
+    AuthError,
+    BlockValidationError,
+    BranchAlreadyExistsError,
+    BranchHeadConflictError,
+    BranchNotFoundError,
+    BudgetExhaustedError,
+    CancellationError,
+    ConcurrentAppendError,
+    ContentFilterError,
+    ContextLengthError,
+    ControlSignal,
+    DAGIntegrityError,
+    KernelError,
+    LeaseLostError,
+    MiddlewareTermination,
+    NonDeterminismError,
+    ObjectNotFoundError,
+    OrphanedEffectError,
+    PermanentError,
+    PolicyTermination,
+    RateLimitedError,
+    SnapshotConflictError,
+    SuspendInterrupt,
+    ThreadBusyError,
+    TransientError,
+    UnsupportedContentError,
+)
+from substrate.kernel.abstractions.ids import (
+    BranchId,
+    MessageId,
+    TenantId,
+    ThreadId,
+    UserId,
+    new_id,
+)
+from substrate.kernel.abstractions.llm.llm import (
+    EmbeddingClient,
+    EmbeddingResult,
+    FinishReason,
+    GenerationOptions,
+    LLMClient,
+    LLMResponse,
+    Modality,
+    ModelCapabilities,
+    ReasoningEffort,
 )
 from substrate.kernel.abstractions.messaging.message import (
     ChatPayload,
     DataPayload,
-    Payload,
     Message,
+    Payload,
     Subscription,
 )
-from substrate.kernel.abstractions.tools.skills import Skill
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm.llm import (
-    GenerationOptions,
-    LLMClient,
-    LLMResponse,
-    EmbeddingClient,
-    EmbeddingResult,
-    Modality,
-    ReasoningEffort,
-    ModelCapabilities,
-    FinishReason,
+from substrate.kernel.abstractions.messaging.stream import (
+    AgentProgress,
+    AgentStep,
+    CompletionEvent,
+    ReasoningDelta,
+    StreamDone,
+    TextDelta,
+)
+from substrate.kernel.abstractions.runtime import (
+    Agent,
+    AgentRunContext,
+    AskOutcome,
+    Cancel,
+    Commit,
+    CommitResult,
+    Complete,
+    DeadLetterEntry,
+    DeadLetterReason,
+    DeliverResult,
+    Delivery,
+    Effect,
+    EffectResult,
+    Fail,
+    HeartbeatResult,
+    Lease,
+    Nack,
+    NewEntry,
+    Retry,
+    RunHandle,
+    RunId,
+    RunLogEntry,
+    RunLogKind,
+    RunRecord,
+    RunResult,
+    RunRetryPolicy,
+    RunSpec,
+    RunStatus,
+    RunStatusSummary,
+    RuntimeStore,
+    SignalSpec,
+    SpawnSpec,
+    Spend,
+    StoreStats,
+    Suspend,
+    Wakeup,
+    new_run_id,
+)
+from substrate.kernel.abstractions.storage.blob import BlobStore
+from substrate.kernel.abstractions.storage.graph import (
+    CypherCapable,
+    Entity,
+    GraphStore,
+    Relationship,
+    SubGraph,
 )
 from substrate.kernel.abstractions.storage.history import (
     Branch,
     HistoryCheckpoint,
     HistoryProvider,
     MessageNode,
-)
-from substrate.kernel.abstractions.agent.context import (
-    CompactionStrategy,
-    CompactionPhase,
-    CompactionContext,
-    CompactionResult,
-    ContextBuilder,
-    ContextWindow,
-)
-from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.abstractions.agent.safety import (
-    Severity,
-    max_severity,
-    SafetyVerdict,
-    TextSafetyClassifier,
-    ImageSafetyClassifier,
-)
-from substrate.kernel.abstractions.messaging.stream import (
-    TextDelta,
-    ReasoningDelta,
-    CompletionEvent,
-    StreamDone,
-    AgentProgress,
-    AgentStep,
-)
-from substrate.kernel.abstractions.storage.blob import BlobStore
-from substrate.kernel.abstractions.storage.objects import ObjectStore
-from substrate.kernel.abstractions.storage.vector import Document, SearchResult, VectorStore
-from substrate.kernel.abstractions.storage.graph import (
-    Entity,
-    Relationship,
-    SubGraph,
-    GraphStore,
-    CypherCapable,
 )
 from substrate.kernel.abstractions.storage.memory import (
     ContextMemoryInjection,
@@ -157,19 +199,9 @@ from substrate.kernel.abstractions.storage.memory import (
     MemoryStatus,
     MemoryStore,
     ShortTermMemory,
+    TenantWide,
 )
-from substrate.kernel.abstractions.storage.tasks import Task, TaskList, TaskStatus, TaskStore
-from substrate.kernel.abstractions.document import (
-    DocumentChunk,
-    DocumentChunker,
-    DocumentExtractor,
-    DocumentMetadata,
-    DocumentStore,
-    ExtractedImage,
-    ExtractedImageLabel,
-    ExtractedPage,
-    ExtractionResult,
-)
+from substrate.kernel.abstractions.storage.objects import ObjectStore
 from substrate.kernel.abstractions.storage.snapshots import (
     ContentRef,
     WorkspaceFileEntry,
@@ -177,46 +209,46 @@ from substrate.kernel.abstractions.storage.snapshots import (
     WorkspaceSnapshot,
     WorkspaceStore,
 )
-from substrate.kernel.abstractions.agent.runtime_context import (
-    CancellationTokenProtocol,
-    RunMeta,
-    RunScope,
-    scope_of,
+from substrate.kernel.abstractions.storage.tasks import (
+    Task,
+    TaskList,
+    TaskStatus,
+    TaskStore,
+)
+from substrate.kernel.abstractions.storage.vector import (
+    Document,
+    SearchResult,
+    VectorStore,
 )
 from substrate.kernel.abstractions.tools.approval import (
     ApprovalDecision,
+    ApprovalHandler,
     ApprovalRequest,
     ApprovalResult,
-    ApprovalHandler,
 )
 from substrate.kernel.abstractions.tools.chain import (
-    ChainPolicy,
-    ChainFile,
-    InvocationResult,
     ChainCallRecord,
+    ChainFile,
+    ChainPolicy,
     ChainRunResult,
+    InvocationResult,
 )
-from substrate.kernel.abstractions.runtime import (
-    RunId,
-    RunStatus,
-    new_run_id,
-    RunLogEntry,
-    RunLogKind,
-    Effect,
-    EffectResult,
-    DeadLetterReason,
-    DeadLetterEntry,
-    Wakeup,
-    RunRetryPolicy,
-    RunHandle,
-    RunResult,
-    AgentRunContext,
-    Agent,
-    AskOutcome,
-    RunStatusSummary,
-    Cancel, Commit, CommitResult, Complete, DeliverResult, Delivery, Fail, HeartbeatResult,
-    Lease, Nack, NewEntry, Retry, RunRecord, RunSpec, RuntimeStore, SignalSpec, SpawnSpec,
-    StoreStats, Suspend,
+from substrate.kernel.abstractions.tools.skills import Skill
+from substrate.kernel.abstractions.tools.tools import (
+    AnyTool,
+    HostedTool,
+    PayloadBase,
+    ProviderDefinedTool,
+    Tool,
+    ToolCallRequest,
+    ToolExecutionResult,
+    ToolRegistry,
+    ToolRisk,
+    ToolType,
+    ToolUI,
+    is_concurrency_safe,
+    is_hosted_tool,
+    is_provider_defined_tool,
 )
 
 __all__ = [
@@ -369,6 +401,7 @@ __all__ = [
     "ContextMemoryInjection",
     "ShortTermMemory",
     "MemoryStore",
+    "TenantWide",
     # Tasks
     "Task",
     "TaskList",
@@ -426,5 +459,5 @@ __all__ = [
     "RunStatusSummary",
     "Cancel", "Commit", "CommitResult", "Complete", "DeliverResult", "Delivery", "Fail",
     "HeartbeatResult", "Lease", "Nack", "NewEntry", "Retry", "RunRecord", "RunSpec",
-    "RuntimeStore", "SignalSpec", "SpawnSpec", "StoreStats", "Suspend",
+    "RuntimeStore", "SignalSpec", "SpawnSpec", "Spend", "StoreStats", "Suspend",
 ]

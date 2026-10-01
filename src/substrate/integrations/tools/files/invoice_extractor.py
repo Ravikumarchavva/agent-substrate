@@ -22,6 +22,7 @@ from typing import Any
 
 from substrate.kernel.abstractions.tools import ToolExecutionResult
 from substrate.kernel.abstractions import TextBlock
+from substrate.kernel.abstractions.tools import ToolRisk
 
 logger = setup_logging()
 
@@ -31,6 +32,9 @@ _PDF_SUFFIXES = {".pdf"}
 
 class InvoiceExtractorTool:
     """Extract text and tables from invoice PDFs or scanned image files."""
+
+    risk = ToolRisk.SAFE
+    idempotent = True
 
     def __init__(self) -> None:
         pass

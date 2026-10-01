@@ -1,18 +1,15 @@
-"""substrate.kernel.limits — enforce numeric run-time budgets, raise on breach.
+"""substrate.kernel.limits — the headcount budget for an orchestrator's sub-agent spawns.
 
-Two trackers, same shape: ``ExecutionTracker`` (token/cost/turn budget for a
-single agent's execution loop) and ``SpawnTracker`` (headcount budget for an
-orchestrator's sub-agent spawns). Neither earned a standalone top-level
-package on its own.
+Token, cost and turn budgets are not here: they are enforced by the engine itself against the
+whole execution tree's spend (``RunContext.llm`` and ``RuntimeStore.tree_spend``), so no agent can
+forget to check one and none can get around it by spawning more agents.
 
 Durable, backed-off run retry lives in ``RunRetryPolicy``
-(``kernel/runtime/scheduler.py``) + ``SchedulerProtocol.release()`` — the real
-mechanism the runtime actually exercises on a failed run.
+(``kernel/abstractions/runtime/scheduler.py``) and the worker's failure handling.
 """
 
 from __future__ import annotations
 
-from substrate.kernel.limits.execution import ExecutionTracker
 from substrate.kernel.limits.spawn import SpawnTracker
 
-__all__ = ["ExecutionTracker", "SpawnTracker"]
+__all__ = ["SpawnTracker"]

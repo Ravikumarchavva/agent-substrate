@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from substrate.kernel.abstractions import TextBlock
 from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.kernel.abstractions.tools import ToolRisk
 
 _MAX_CHARS = 6_000
 
@@ -56,6 +57,8 @@ class ReadUrlTool:
     """
 
     name = "read_url"
+    risk = ToolRisk.SAFE
+    idempotent = True
     description = (
         "Fetch a web page or article and return its most relevant content. "
         "Pass the 'query' parameter (what you're looking for) to get a focused extract "

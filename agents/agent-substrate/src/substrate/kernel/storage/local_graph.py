@@ -11,11 +11,7 @@ Layout::
       relationships/<relationship_id>.json — one file per Relationship (+ "namespace" field)
 
 ``get_neighbors`` loads every entity/relationship file and runs the same
-breadth-first traversal as :class:`InMemoryGraphStore` — this is a durability
-upgrade, not a redesign of the traversal algorithm.
-
-This store is intentionally a drop-in replacement for ``InMemoryGraphStore``
-for local dev / experimentation — it does NOT require Postgres/AGE.
+breadth-first traversal. It is the zero-infra default ``GraphStore`` — it does NOT require Postgres/AGE.
 """
 
 from __future__ import annotations
@@ -35,7 +31,7 @@ class LocalFilesystemGraphStore:
     running Postgres/AGE instance. Every entity/relationship remembers the
     namespace it was written under: ``namespace=""`` sees the whole graph, a
     non-empty namespace sees only what was written under it — same contract
-    as :class:`InMemoryGraphStore`.
+    as the other graph stores.
 
     Args:
         root: Path to the storage root directory. Created automatically on

@@ -31,9 +31,9 @@ def _load_default_tools(code_interpreter_tool=None, task_store=None) -> list:
 
     try:
         from substrate.integrations.tools.task_manager.tool import TaskManagerTool
-        from substrate.kernel.storage.tasks import TaskStore
+        from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
 
-        tools.append(TaskManagerTool(store=task_store or TaskStore()))
+        tools.append(TaskManagerTool(store=task_store or LocalFilesystemTaskStore()))
     except Exception:
         logger.debug("TaskManagerTool not available")
 
@@ -97,9 +97,9 @@ async def lifespan(app):
     app.state.artifact_url = artifact_url.rstrip("/")
 
     # Tool Registry
-    from substrate.kernel.storage.tasks import TaskStore
+    from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
 
-    task_store = TaskStore()
+    task_store = LocalFilesystemTaskStore()
     registry = ToolRegistry()
     registry.register_many(
         _load_default_tools(code_interpreter_tool=code_interpreter_tool, task_store=task_store)

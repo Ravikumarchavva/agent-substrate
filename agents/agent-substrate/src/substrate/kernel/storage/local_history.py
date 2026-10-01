@@ -16,7 +16,7 @@ Thread-safety: a single asyncio.Lock per (session_id, branch_id) pair guards
 branch head pointer updates (optimistic CAS). Node writes are idempotent and
 file-atomic (write-tmp-then-rename).
 
-This provider is intentionally a drop-in replacement for InMemoryHistoryProvider
+This provider is the zero-infra default HistoryProvider
 for local dev / experimentation — it does NOT require Postgres or Redis.
 """
 
@@ -359,6 +359,17 @@ class LocalFilesystemHistoryProvider:
                 )
 
             current_head = branch.head_message_id
+
+            # The new node must extend the head: advancing past a node that is not its parent
+            # would silently orphan whatever the head pointed at.
+            if node.parent_id != current_head:
+                raise BranchHeadConflictError(
+                    f"Cannot advance branch '{branch_id}': node parent '{node.parent_id}' does not match current head '{current_head}'",
+                    session_id=node.session_id,
+                    branch_id=branch_id,
+                    expected=current_head,
+                    actual=node.parent_id,
+                )
 
             if expected_head_id is not _UNSET:
                 if current_head != expected_head_id:

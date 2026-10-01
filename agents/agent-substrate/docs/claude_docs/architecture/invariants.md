@@ -151,7 +151,7 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i30_every_implementation_of_a_port_with_a_suite_runs_it`
 - ⏳ **i30 every port has a conformance suite**
   `test_i30_every_port_has_a_conformance_suite`
-  _Pending — I30: RuntimeStore, MemoryStore and VectorStore have conformance suites; the other storage, LLM and extractor ports get theirs in step 5 of the kernel rewrite._
+  _Pending — I30: every store port has a conformance suite; the LLM-client, embedding-client and document-extractor ports do not yet._
 - ✅ **The engine instruments itself through ``opentelemetry-api``, which does nothing until a host configures an SDK. The SDK, the exporter and the web-framework instrumentation are the host's choice — the reference server installs them through its extra — so a plain install of the engine does not pull them in.**
   `test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports`
 - ✅ **The AST check above sees what each file names; this one sees what actually loads. A module that reached a vendor SDK, a logging stack or a database driver through a helper would pass the first and fail this.**

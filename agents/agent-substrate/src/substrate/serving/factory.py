@@ -280,9 +280,9 @@ async def init_infrastructure(
         await task_store.setup()
         logger.info("Task store: durable (Postgres JSONB)")
     else:
-        from substrate.kernel.storage.tasks import TaskStore
+        from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
 
-        task_store = TaskStore()
+        task_store = LocalFilesystemTaskStore(f"{cfg.MEMORY_STORAGE_PATH}/tasks")
 
     vector_store = PgVectorStore(
         session_factory=session_factory,
@@ -425,7 +425,7 @@ async def init_tool_registry(
     no way to discover or read a skill's instructions, so a skill existing on
     disk does nothing.
     """
-    from substrate.kernel.storage.tasks import TaskStore
+    from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
     from substrate.kernel.tools.toolbox import Toolbox
     from substrate.integrations.tools import (
         CalculatorTool,
@@ -458,7 +458,7 @@ async def init_tool_registry(
         )
 
     task_tool = TaskManagerTool(
-        store=task_store or TaskStore(), event_sink=_board_event_sink
+        store=task_store or LocalFilesystemTaskStore(), event_sink=_board_event_sink
     )
     ask_tool = AskHumanTool(handler=None, max_requests_per_run=5)  # type: ignore[arg-type]
 
@@ -804,7 +804,6 @@ async def build_agent_for_thread(
     this is the one real implementation of kernel's ``ApprovalHandler``
     Protocol; see ``serving/monolith/sse/approval.py``.
     """
-    from substrate.kernel.storage import InMemoryHistoryProvider
     from substrate.kernel.context.compaction.presets import build_token_budget_pipeline
     from substrate.kernel.agents.factory import create_assistant_agent
     from substrate.serving.research_orchestrator import build_research_orchestrator
@@ -829,7 +828,6 @@ async def build_agent_for_thread(
         system_instructions = system_instructions.rstrip() + "\n\n" + memory_context
 
     if history is None:
-        history = InMemoryHistoryProvider()
         from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
 
         history = LocalFilesystemHistoryProvider()
@@ -1325,12 +1323,10 @@ async def build_cached_history_for_thread(
     conversation_service_url: str,
 ) -> Any:
     """Return the history provider for this thread."""
-    from substrate.kernel.storage import InMemoryHistoryProvider
     if history is not None:
         return history
     from substrate.kernel.storage import LocalFilesystemHistoryProvider
 
-    return history if history is not None else InMemoryHistoryProvider()
     provider = LocalFilesystemHistoryProvider()
     await provider.connect()
     return provider

@@ -913,7 +913,7 @@ async def get_file_url(
     db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> FileUrlResponse:
-    """Return a presigned URL (or download URL for InMemoryFileStore/not-yet-
+    """Return a presigned URL (or download URL for a store with no direct URL, or a not-yet-
     promoted pending attachments — the pending store has no presign
     capability, so it always falls back to the redirect-through-us form)."""
     meta = await _get_meta(file_id, db, claims)

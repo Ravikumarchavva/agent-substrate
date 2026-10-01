@@ -30,9 +30,6 @@ if TYPE_CHECKING:
         ContextConfig,
         SlidingWindowCompaction,
     )
-    from substrate.kernel.storage import (
-        InMemoryHistoryProvider,
-    )
     from substrate.kernel.middleware import (
         AgentRunResult,
         MiddlewareContext,
@@ -88,7 +85,6 @@ __all__ = [
     # supporting types
     "AgentRunResult",
     "Skill",
-    "InMemoryHistoryProvider",
     "AgentContext",
     "ContextConfig",
     "SlidingWindowCompaction",
@@ -168,10 +164,6 @@ _LAZY: dict[str, tuple[str, str]] = {
     # supporting
     "AgentRunResult": ("substrate.kernel.middleware", "AgentRunResult"),
     "Skill": ("substrate.kernel.abstractions.tools", "Skill"),
-    "InMemoryHistoryProvider": (
-        "substrate.kernel.storage.local_history",
-        "LocalFilesystemHistoryProvider",
-    ),
     "AgentContext": ("substrate.kernel.context", "AgentContext"),
     "ContextConfig": ("substrate.kernel.context", "ContextConfig"),
     "SlidingWindowCompaction": ("substrate.kernel.context", "SlidingWindowCompaction"),

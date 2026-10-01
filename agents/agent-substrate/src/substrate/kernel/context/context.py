@@ -37,7 +37,7 @@ class ContextConfig:
         from substrate.kernel.context import CompactionPipeline, ToolResultCompactionStrategy, SlidingWindowCompaction
 
         ctx = ContextConfig(
-            InMemoryHistoryProvider(),
+            LocalFilesystemHistoryProvider(),
             CompactionPipeline([
                 ToolResultCompactionStrategy(),
                 SlidingWindowCompaction(max_messages=40),

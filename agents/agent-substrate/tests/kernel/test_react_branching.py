@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 from substrate.kernel.abstractions.llm import ModelCapabilities
 from typing import AsyncIterator
 import pytest
 
 from substrate.kernel.context import ContextConfig
-from substrate.kernel.storage.history import InMemoryHistoryProvider
 from substrate.kernel.agents.react import ReActAgent
 from substrate.kernel.runtime.runtime import Runtime
 from substrate.kernel.abstractions.core.content import ChatMessage, ContentBlock, Role, TextBlock
@@ -68,7 +69,7 @@ async def wait_run(rt: Runtime, run_id: str) -> None:
 
 @pytest.mark.asyncio
 async def test_react_agent_branching_and_dag_history():
-    history = InMemoryHistoryProvider()
+    history = fs_history()
     ctx_cfg = ContextConfig(history=history)
 
     llm = MockLLMClient([

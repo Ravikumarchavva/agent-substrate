@@ -10,14 +10,16 @@ Layout::
       documents/<collection>/<doc_id>.json   — one file per Document (incl. embedding)
 
 ``search`` loads every document in the requested collection and ranks them
-with the same brute-force cosine similarity as :class:`InMemoryVectorStore` —
+with brute-force cosine similarity —
 fine at local/dev scale; this is a durability upgrade, not an ANN index.
 
-This store is intentionally a drop-in replacement for ``InMemoryVectorStore``
+This store is the zero-infra default ``VectorStore``;
 for local dev / experimentation — it does NOT require Postgres/pgvector.
 """
 
 from __future__ import annotations
+
+import math
 
 import os
 from pathlib import Path
@@ -26,17 +28,28 @@ from urllib.parse import unquote
 
 from substrate.kernel.abstractions.storage.vector import Document, SearchResult
 from substrate.kernel.storage.fs import atomic_write_json, safe_name
-from substrate.kernel.storage.vector import cosine_similarity
 
 if TYPE_CHECKING:
     from substrate.kernel.abstractions.llm import EmbeddingClient
 
 
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Cosine similarity of two equal-length vectors (0.0 if either is zero)."""
+    if len(a) != len(b):
+        return 0.0
+    dot: float = sum(x * y for x, y in zip(a, b))
+    norm_a: float = math.sqrt(sum(x * x for x in a))
+    norm_b: float = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
 class LocalFilesystemVectorStore:
     """Filesystem-backed VectorStore — stores documents as JSON files.
 
     Suitable for local development and experimentation without requiring a
-    running Postgres/pgvector instance. Mirrors :class:`InMemoryVectorStore`'s
+    running Postgres/pgvector instance. Mirrors the pgvector store's
     contract exactly, including embedding-client fallback behavior.
 
     Args:

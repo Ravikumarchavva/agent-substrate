@@ -1,19 +1,17 @@
-"""Example 2-1: Memory Backends — raw history operations across all three storage tiers.
+"""Example 2-1: Memory Backends — raw history operations across the storage tiers.
 
 DurableHistoryProvider (Postgres) is the real default — conversation history
 that survives a restart. LocalFilesystemHistoryProvider is the no-infra
 durable floor: still survives a restart, no Docker/Postgres required, just a
-folder on disk. InMemoryHistoryProvider is the one non-durable exception —
-gone the moment the process exits — which is why its name says so; use it
-only for tests and throwaway scratch runs.
+folder on disk. There is no in-memory provider: one that forgets on exit
+is not something an agent's conversation can rest on.
 
-All three implement the same conversation-DAG HistoryProvider contract
+Both implement the same conversation-DAG HistoryProvider contract
 (``append_node`` / ``append_and_advance`` / ``get_branch`` / ...) — a linear
 transcript is a *projection* of one branch, read via
 ``substrate.kernel.storage.project_messages``, not stored separately.
 
 Demonstrates using:
-  - InMemoryHistoryProvider (non-durable — tests / throwaway scratch only)
   - LocalFilesystemHistoryProvider (durable, no infra — the default floor)
   - DurableHistoryProvider (Postgres — the production default, requires DB)
 """
@@ -25,7 +23,6 @@ import os
 import tempfile
 
 from substrate.kernel.storage import (
-    InMemoryHistoryProvider,
     LocalFilesystemHistoryProvider,
     project_messages,
 )
@@ -69,31 +66,23 @@ async def _demo(label: str, provider, session_id: str) -> None:
 
 
 async def main() -> None:
-    # 1. InMemoryHistoryProvider — non-durable, no infra needed. The
-    # exception, not the default: use this only for tests and scratch runs.
-    await _demo(
-        "1. InMemoryHistoryProvider (non-durable, testing only)",
-        InMemoryHistoryProvider(),
-        session_id="demo-session-mem",
-    )
-
-    # 2. LocalFilesystemHistoryProvider — durable across restarts, zero
+    # 1. LocalFilesystemHistoryProvider — durable across restarts, zero
     # external infra: "a folder and everything dumps there." The floor
     # every deployment gets even with no Docker/Postgres available.
     with tempfile.TemporaryDirectory() as tmp:
         await _demo(
-            "2. LocalFilesystemHistoryProvider (durable, no infra required)",
+            "1. LocalFilesystemHistoryProvider (durable, no infra required)",
             LocalFilesystemHistoryProvider(root=tmp),
             session_id="demo-session-local",
         )
 
-    # 3. DurableHistoryProvider — the production default. Postgres-backed,
+    # 2. DurableHistoryProvider — the production default. Postgres-backed,
     # survives a restart, and scales to multiple worker processes.
     try:
         pg_provider = DurableHistoryProvider(DB_URL)
         await pg_provider.connect()
         await _demo(
-            "3. DurableHistoryProvider (durable default, requires PostgreSQL)",
+            "2. DurableHistoryProvider (durable default, requires PostgreSQL)",
             pg_provider,
             session_id="demo-session-pg",
         )

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 import pytest
 from pydantic import ValidationError
 
-from substrate.kernel.storage.history import DefaultHistoryResolver, InMemoryHistoryProvider
+from substrate.kernel.storage.history import DefaultHistoryResolver
 from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
 from substrate.kernel.abstractions.exceptions import (
     BranchAlreadyExistsError,
@@ -55,7 +57,7 @@ def test_branch_immutability():
 
 @pytest.mark.asyncio
 async def test_append_node_root_and_child():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     root = MessageNode(id="root", session_id="s1", payload=_msg("root"))
     await provider.append_node(root)
 
@@ -76,7 +78,7 @@ async def test_append_node_root_and_child():
 
 @pytest.mark.asyncio
 async def test_append_node_self_loop_rejected():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     loop_node = MessageNode(id="self1", parent_id="self1", session_id="s1", payload=_msg("loop"))
     with pytest.raises(DAGIntegrityError, match="cannot have itself as parent"):
         await provider.append_node(loop_node)
@@ -84,7 +86,7 @@ async def test_append_node_self_loop_rejected():
 
 @pytest.mark.asyncio
 async def test_append_node_missing_parent_rejected():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     orphan = MessageNode(id="c1", parent_id="nonexistent", session_id="s1", payload=_msg("orphan"))
     with pytest.raises(DAGIntegrityError, match="Parent node 'nonexistent' does not exist"):
         await provider.append_node(orphan)
@@ -92,7 +94,7 @@ async def test_append_node_missing_parent_rejected():
 
 @pytest.mark.asyncio
 async def test_append_node_cross_session_rejected():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     root_s1 = MessageNode(id="root1", session_id="s1", payload=_msg("root 1"))
     await provider.append_node(root_s1)
 
@@ -105,7 +107,7 @@ async def test_append_node_cross_session_rejected():
 
 @pytest.mark.asyncio
 async def test_append_node_idempotency():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     node = MessageNode(id="n1", session_id="s1", run_id="r1", payload=_msg("msg 1"))
     await provider.append_node(node)
 
@@ -126,7 +128,7 @@ async def test_append_node_idempotency():
 
 @pytest.mark.asyncio
 async def test_resolve_ancestry_linear():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     n0 = MessageNode(id="n0", session_id="s1", payload=_msg("turn 0"))
     n1 = MessageNode(id="n1", parent_id="n0", session_id="s1", payload=_msg("turn 1"))
     n2 = MessageNode(id="n2", parent_id="n1", session_id="s1", payload=_msg("turn 2"))
@@ -141,7 +143,7 @@ async def test_resolve_ancestry_linear():
 
 @pytest.mark.asyncio
 async def test_resolve_ancestry_with_stop_at_node():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     n0 = MessageNode(id="n0", session_id="s1", payload=_msg("turn 0"))
     n1 = MessageNode(id="n1", parent_id="n0", session_id="s1", payload=_msg("turn 1"))
     n2 = MessageNode(id="n2", parent_id="n1", session_id="s1", payload=_msg("turn 2"))
@@ -162,7 +164,7 @@ async def test_resolve_ancestry_with_stop_at_node():
 
 @pytest.mark.asyncio
 async def test_fork_empty_branch():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     await provider.ensure_branch("s1", "main")
 
     forked = await provider.fork_branch("s1", "main", "feature")
@@ -177,7 +179,7 @@ async def test_fork_empty_branch():
 
 @pytest.mark.asyncio
 async def test_fork_branch_non_empty_default_head():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     n0 = MessageNode(id="n0", session_id="s1", payload=_msg("turn 0"))
     await provider.append_node(n0)
     await provider.ensure_branch("s1", "main", head_message_id="n0")
@@ -190,7 +192,7 @@ async def test_fork_branch_non_empty_default_head():
 
 @pytest.mark.asyncio
 async def test_fork_branch_from_specific_ancestor():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     n0 = MessageNode(id="n0", session_id="s1", payload=_msg("turn 0"))
     n1 = MessageNode(id="n1", parent_id="n0", session_id="s1", payload=_msg("turn 1"))
     n2 = MessageNode(id="n2", parent_id="n1", session_id="s1", payload=_msg("turn 2"))
@@ -210,7 +212,7 @@ async def test_fork_branch_from_specific_ancestor():
 
 @pytest.mark.asyncio
 async def test_fork_branch_invalid_ancestor_rejected():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     n0 = MessageNode(id="n0", session_id="s1", payload=_msg("turn 0"))
     n1 = MessageNode(id="n1", parent_id="n0", session_id="s1", payload=_msg("turn 1"))
     # Unrelated node
@@ -227,7 +229,7 @@ async def test_fork_branch_invalid_ancestor_rejected():
 
 @pytest.mark.asyncio
 async def test_fork_branch_errors():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     await provider.ensure_branch("s1", "main")
 
     # Source branch not found
@@ -246,7 +248,7 @@ async def test_fork_branch_errors():
 
 @pytest.mark.asyncio
 async def test_set_branch_head_cas_success():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     n0 = MessageNode(id="n0", session_id="s1", payload=_msg("turn 0"))
     n1 = MessageNode(id="n1", parent_id="n0", session_id="s1", payload=_msg("turn 1"))
     await provider.append_node(n0)
@@ -265,7 +267,7 @@ async def test_set_branch_head_cas_success():
 
 @pytest.mark.asyncio
 async def test_set_branch_head_cas_conflicts():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
     n0 = MessageNode(id="n0", session_id="s1", payload=_msg("turn 0"))
     n1 = MessageNode(id="n1", parent_id="n0", session_id="s1", payload=_msg("turn 1"))
     await provider.append_node(n0)
@@ -289,7 +291,7 @@ async def test_set_branch_head_cas_conflicts():
 
 @pytest.mark.asyncio
 async def test_append_and_advance_success_chain():
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
 
     # Turn 0 on empty branch (parent_id must be None)
     n0 = MessageNode(id="n0", session_id="s1", parent_id=None, payload=_msg("turn 0"))
@@ -312,7 +314,7 @@ async def test_append_and_advance_success_chain():
 @pytest.mark.asyncio
 async def test_append_and_advance_parent_head_mismatch_rejected():
     """Reviewer Rule 1: node.parent_id must equal current branch head."""
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
 
     n0 = MessageNode(id="n0", session_id="s1", parent_id=None, payload=_msg("turn 0"))
     await provider.append_and_advance(n0, "main")
@@ -331,7 +333,7 @@ async def test_append_and_advance_parent_head_mismatch_rejected():
 @pytest.mark.asyncio
 async def test_independent_branch_advancement():
     """Verify branching isolation: advancing branch B does not affect branch A."""
-    provider = InMemoryHistoryProvider()
+    provider = fs_history()
 
     # Root turn on main
     n0 = MessageNode(id="n0", session_id="s1", parent_id=None, payload=_msg("root"))

@@ -15,12 +15,13 @@ through ``build_agent_for_thread()`` itself.
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 from substrate.kernel.abstractions.llm import ModelCapabilities
 import asyncio
 import uuid
 from typing import Any
 
-from substrate.kernel.storage import InMemoryHistoryProvider
 from substrate.kernel.runtime import Runtime
 from substrate.config import SubstrateConfig
 from substrate.serving.factory import build_agent_for_thread
@@ -81,7 +82,7 @@ async def test_critical_tool_call_pauses_for_approval_and_resumes():
             tools=[_DropDatabaseTool()],
             system_instructions="",
             cfg=SubstrateConfig(),
-            history=InMemoryHistoryProvider(),
+            history=fs_history(),
             runtime=rt,
             bridge=bridge,
         )
@@ -131,7 +132,7 @@ async def test_critical_tool_call_denied_does_not_execute():
             tools=[_DropDatabaseTool()],
             system_instructions="",
             cfg=SubstrateConfig(),
-            history=InMemoryHistoryProvider(),
+            history=fs_history(),
             runtime=rt,
             bridge=bridge,
         )

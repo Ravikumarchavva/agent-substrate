@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 from substrate.kernel.abstractions.llm import ModelCapabilities
 from typing import AsyncIterator
 
@@ -10,9 +12,6 @@ from substrate.kernel.context import (
     ContextConfig,
     SlidingWindowCompaction,
     CompactionPipeline,
-)
-from substrate.kernel.storage import (
-    InMemoryHistoryProvider,
 )
 from substrate.kernel.agents import ReActAgent
 from substrate.kernel.runtime import Runtime
@@ -127,7 +126,7 @@ async def run_agent(
 
 async def test_standalone_session_accumulates_across_runs():
     """History accumulates across multiple submissions with the same session_id."""
-    shared_history = InMemoryHistoryProvider()
+    shared_history = fs_history()
     async with Runtime.local(":memory:") as rt:
         agent = ReActAgent(
             "bot",
@@ -158,7 +157,7 @@ async def test_standalone_session_accumulates_across_runs():
 
 async def test_session_isolation_across_different_sessions():
     """Two sessions of the same agent don't bleed into each other."""
-    shared_history = InMemoryHistoryProvider()
+    shared_history = fs_history()
     async with Runtime.local(":memory:") as rt:
         agent = ReActAgent(
             "agent",
@@ -189,7 +188,7 @@ async def test_session_isolation_across_different_sessions():
 
 async def test_cross_run_memory_same_session():
     """Agent sees prior turns when submitted with the same correlation_id."""
-    shared_history = InMemoryHistoryProvider()
+    shared_history = fs_history()
     async with Runtime.local(":memory:") as rt:
         agent = ReActAgent(
             "mem-bot",

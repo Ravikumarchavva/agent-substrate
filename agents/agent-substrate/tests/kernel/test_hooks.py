@@ -8,6 +8,8 @@ Covers all three dispatch points added in the audit:
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 from substrate.kernel.abstractions.llm import ModelCapabilities
 from typing import Any, AsyncIterator
 
@@ -15,9 +17,6 @@ from substrate.kernel.context import (
     CompactionPipeline,
     ContextConfig,
     SlidingWindowCompaction,
-)
-from substrate.kernel.storage import (
-    InMemoryHistoryProvider,
 )
 from substrate.kernel.agents import ReActAgent
 from substrate.kernel.hooks.manager import HookEvent, HookManager
@@ -226,7 +225,7 @@ async def test_llm_start_end_fire() -> None:
         "llm-hook-test",
         model=_StubLLM("done"),
         context=ContextConfig(
-            InMemoryHistoryProvider(),
+            fs_history(),
             pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=10)]),
         ),
         hooks=hooks,

@@ -31,10 +31,6 @@ class StubAgent:
         self.seen.extend(inbox)
 
 
-class _InMemoryHistoryProvider:
-    """Name-matched stand-in — the resolver treats this type as lossy to evict."""
-
-
 async def test_unknown_type_resolves_to_none() -> None:
     """No instance, no factory — the Worker needs None so it can hold the lease."""
     r = ActorResolver()
@@ -164,39 +160,6 @@ async def test_unpinned_instance_is_evictable() -> None:
         await r.resolve(Actor(type="assistant", key=f"filler{i}"))
 
     assert addr not in r, "unpinned instance must be evictable like a factory actor"
-
-
-async def test_in_memory_history_actor_is_not_evicted() -> None:
-    """The dev/prod divergence guard: evicting an actor whose history lives
-    in the object itself would silently drop the conversation."""
-    r = ActorResolver(max_live=2, idle_ttl=0)
-    r.register_factory(
-        "conversation",
-        lambda a: StubAgent(a, history=_InMemoryHistoryProvider()),
-    )
-
-    lossy = Actor(type="conversation", key="s1")
-    agent = await r.resolve(lossy)
-    for i in range(20):
-        await r.resolve(Actor(type="conversation", key=f"filler{i}"))
-
-    assert lossy in r, "in-memory-history actor must be pinned, not evicted"
-    assert await r.resolve(lossy) is agent
-
-
-async def test_unsafe_eviction_opt_in_allows_reclaiming_in_memory_history() -> None:
-    r = ActorResolver(max_live=2, idle_ttl=0, allow_unsafe_eviction=True)
-    r.register_factory(
-        "conversation",
-        lambda a: StubAgent(a, history=_InMemoryHistoryProvider()),
-    )
-
-    lossy = Actor(type="conversation", key="s1")
-    await r.resolve(lossy)
-    for i in range(20):
-        await r.resolve(Actor(type="conversation", key=f"filler{i}"))
-
-    assert lossy not in r
 
 
 async def test_factories_are_selected_by_type() -> None:

@@ -3,10 +3,11 @@
 from datetime import datetime, timezone
 import pytest
 
+from tests._stores import fs_history
+
 from substrate.kernel.context.builder import DefaultContextBuilder
 from substrate.kernel.storage.history import (
     AncestryCheckpointResolver,
-    InMemoryHistoryProvider,
 )
 from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.abstractions.exceptions import DAGIntegrityError
@@ -49,7 +50,7 @@ class TestCheckpointModel:
 class TestCheckpointStorage:
     @pytest.mark.asyncio
     async def test_save_requires_existing_anchor(self) -> None:
-        provider = InMemoryHistoryProvider()
+        provider = fs_history()
         cp = HistoryCheckpoint(
             session_id="sess-1",
             anchor_message_id="non-existent",
@@ -60,7 +61,7 @@ class TestCheckpointStorage:
 
     @pytest.mark.asyncio
     async def test_save_requires_same_session_anchor(self) -> None:
-        provider = InMemoryHistoryProvider()
+        provider = fs_history()
         node = _node("node-1", None, "hello", session_id="sess-1")
         await provider.append_node(node)
 
@@ -74,7 +75,7 @@ class TestCheckpointStorage:
 
     @pytest.mark.asyncio
     async def test_get_and_list_checkpoints(self) -> None:
-        provider = InMemoryHistoryProvider()
+        provider = fs_history()
         node1 = _node("n1", None, "first", session_id="s1")
         node2 = _node("n2", None, "other", session_id="s2")
         await provider.append_node(node1)
@@ -100,7 +101,7 @@ class TestCheckpointStorage:
 class TestAncestryCheckpointResolver:
     @pytest.mark.asyncio
     async def test_shared_ancestor_checkpoint_valid_for_descendants(self) -> None:
-        provider = InMemoryHistoryProvider()
+        provider = fs_history()
         resolver = AncestryCheckpointResolver(provider)
 
         # Root -> N1 -> N2 on main
@@ -140,7 +141,7 @@ class TestAncestryCheckpointResolver:
 
     @pytest.mark.asyncio
     async def test_divergent_sibling_checkpoint_rejected(self) -> None:
-        provider = InMemoryHistoryProvider()
+        provider = fs_history()
         resolver = AncestryCheckpointResolver(provider)
 
         n1 = _node("n1", None, "root")
@@ -183,7 +184,7 @@ class TestAncestryCheckpointResolver:
 
     @pytest.mark.asyncio
     async def test_nearest_anchor_chosen_by_topological_depth(self) -> None:
-        provider = InMemoryHistoryProvider()
+        provider = fs_history()
         resolver = AncestryCheckpointResolver(provider)
 
         n1 = _node("n1", None, "root")
@@ -219,7 +220,7 @@ class TestAncestryCheckpointResolver:
 
     @pytest.mark.asyncio
     async def test_leaf_anchor_checkpoint_applicable(self) -> None:
-        provider = InMemoryHistoryProvider()
+        provider = fs_history()
         resolver = AncestryCheckpointResolver(provider)
 
         n1 = _node("n1", None, "root")
@@ -236,7 +237,7 @@ class TestAncestryCheckpointResolver:
 
     @pytest.mark.asyncio
     async def test_no_applicable_checkpoint_returns_none(self) -> None:
-        provider = InMemoryHistoryProvider()
+        provider = fs_history()
         resolver = AncestryCheckpointResolver(provider)
 
         n1 = _node("n1", None, "root")
@@ -247,7 +248,7 @@ class TestAncestryCheckpointResolver:
 
     @pytest.mark.asyncio
     async def test_non_existent_leaf_raises_error(self) -> None:
-        provider = InMemoryHistoryProvider()
+        provider = fs_history()
         resolver = AncestryCheckpointResolver(provider)
 
         with pytest.raises(DAGIntegrityError, match="not found"):

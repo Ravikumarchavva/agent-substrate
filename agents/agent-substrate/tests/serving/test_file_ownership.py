@@ -14,6 +14,8 @@ route-level pass proving the ``Depends`` chain is actually wired.
 
 from __future__ import annotations
 
+from tests._stores import fs_files
+
 import uuid
 from datetime import datetime, timezone
 
@@ -26,7 +28,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from substrate.kernel.storage.memory import InMemoryFileStore
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import FileMetadata, Thread, User
@@ -204,7 +205,7 @@ async def test_conversation_key_allowed_for_the_owning_thread(database_url: str)
 def object_route_app():
     app = FastAPI()
     app.include_router(router)
-    file_store = InMemoryFileStore()
+    file_store = fs_files()
     app.dependency_overrides[get_ctx] = lambda: ServerDependencies(
         model_client=None,
         history=None,
@@ -419,7 +420,7 @@ def app_with_overrides():
     app = FastAPI()
     app.include_router(router)
 
-    file_store = InMemoryFileStore()
+    file_store = fs_files()
     app.dependency_overrides[get_ctx] = lambda: ServerDependencies(
         model_client=None,
         history=None,

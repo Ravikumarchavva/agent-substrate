@@ -11,8 +11,8 @@ from typing import Protocol
 import pytest
 
 import substrate.kernel.abstractions as kernel_pkg
-from substrate.kernel.storage.graph import InMemoryGraphStore
-from substrate.kernel.storage.tasks import TaskStore as InMemoryTaskStore
+from substrate.kernel.storage.local_graph import LocalFilesystemGraphStore
+from tests._stores import folder, fs_tasks
 from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
 from substrate.kernel.abstractions.exceptions import UnsupportedContentError
 from substrate.kernel.abstractions.llm.llm import EmbeddingClient, EmbeddingResult
@@ -113,7 +113,7 @@ async def test_text_only_embedding_clients_reject_media_content() -> None:
 
 
 async def test_task_branches_do_not_touch_main() -> None:
-    store = InMemoryTaskStore()
+    store = fs_tasks()
     assert isinstance(store, TaskStore)
 
     main = await store.create_task_list("conv", ["ship it"])
@@ -133,7 +133,7 @@ async def test_task_branches_do_not_touch_main() -> None:
 
 
 async def test_graph_namespaces_do_not_leak() -> None:
-    store = InMemoryGraphStore()
+    store = LocalFilesystemGraphStore(folder())
     assert isinstance(store, GraphStore)
 
     a, b = Entity(label="P", id="a"), Entity(label="P", id="b")

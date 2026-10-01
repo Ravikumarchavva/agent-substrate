@@ -203,25 +203,32 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
     suites = _suite_classes()
     assert "RuntimeStore" in suites, "the runtime-store conformance suite has gone missing"
     assert "MemoryStore" in suites, "the memory-store conformance suite has gone missing"
+    assert "HistoryProvider" in suites, "the history-provider conformance suite has gone missing"
+    assert "ObjectStore" in suites, "the ObjectStore conformance suite has gone missing"
+    assert "TaskStore" in suites, "the TaskStore conformance suite has gone missing"
+    assert "GraphStore" in suites, "the GraphStore conformance suite has gone missing"
     assert "VectorStore" in suites, "the vector-store conformance suite has gone missing"
     shipped = {
         "RuntimeStore": ("SqliteRuntimeStore", "PostgresRuntimeStore"),
         "MemoryStore": ("LocalFilesystemMemoryStore", "DurableMemoryStore", "LanceMemoryStore"),
-        "VectorStore": ("InMemoryVectorStore", "LocalFilesystemVectorStore", "LanceDBVectorStore", "PgVectorStore"),
+        "HistoryProvider": ("LocalFilesystemHistoryProvider", "DurableHistoryProvider"),
+        "ObjectStore": ("WorkspaceFileStore", "S3FileStore"),
+        "TaskStore": ("LocalFilesystemTaskStore", "PgTaskStore"),
+        "GraphStore": ("LocalFilesystemGraphStore", "LanceGraphStore"),
+        "VectorStore": ("LocalFilesystemVectorStore", "LanceDBVectorStore", "PgVectorStore"),
     }
     for port, implementations in shipped.items():
         runners = " ".join(_classes_running(suites[port]))
         for implementation in implementations:
-            token = implementation.removesuffix(port)  # "Sqlite" / "Postgres" / "LocalFilesystem" / ...
-            assert token.lower() in runners.lower(), (
+            assert implementation.lower() in runners.lower(), (
                 f"{implementation} is a {port} but no test class runs {suites[port]} against it; runners: {runners or 'none'}"
             )
 
 
 @pytest.mark.xfail(
     strict=True,
-    reason="I30: RuntimeStore, MemoryStore and VectorStore have conformance suites; the other storage, LLM "
-    "and extractor ports get theirs in step 5 of the kernel rewrite.",
+    reason="I30: every store port has a conformance suite; the LLM-client, embedding-client "
+    "and document-extractor ports do not yet.",
 )
 def test_i30_every_port_has_a_conformance_suite() -> None:
     missing = [port for port in _PORTS if port not in _suite_classes()]

@@ -1,25 +1,18 @@
-"""In-process and local-filesystem default implementations of general-purpose
-kernel storage Protocols (L1).
+"""The kernel's own default storage: every store here keeps its data in a folder on the local
+filesystem, so it survives a restart. That folder is the least infrastructure a durable agent can
+run on; Postgres, Redis, S3 and Lance versions of the same ports live in ``integrations/``.
 
-Consolidates what were previously three homes for "in-memory default impl of
-a kernel Protocol" (``storage/``, and history providers that used to live
-under ``context/``) into one — ``runtime/backends/`` stays separate since it
-implements ``runtime/``-internal Protocols (``InboxProtocol``,
-``SchedulerProtocol``, etc.), a different concern from these general kernel
-storage Protocols (``HistoryProvider``, ``GraphStore``, ``VectorStore``,
-``TaskStore``).
-
-``InMemoryFileStore`` has no kernel Protocol counterpart today (no
-``FileStore`` Protocol exists under ``kernel/storage/``) — it's general
-in-memory storage, not yet standardized against a contract.
+There is deliberately no in-memory store: a store that forgets on exit cannot be what an agent's
+history, memory or tasks rest on, and a test that needs one uses a ``tmp_path`` folder like any
+other caller would.
 """
 
-from substrate.kernel.storage.graph import InMemoryGraphStore
+from __future__ import annotations
+
 from substrate.kernel.storage.history import (
     AncestryCheckpointResolver,
     DefaultHistoryResolver,
     HistoryProvider,
-    InMemoryHistoryProvider,
     project_messages,
 )
 from substrate.kernel.storage.local_graph import LocalFilesystemGraphStore
@@ -33,25 +26,19 @@ from substrate.kernel.storage.local_object_store import (
 from substrate.kernel.storage.local_short_term_memory import (
     LocalFilesystemShortTermMemory,
 )
-from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore
-from substrate.kernel.storage.memory import InMemoryFileStore
-from substrate.kernel.storage.tasks import TaskStore
-from substrate.kernel.storage.vector import InMemoryVectorStore, cosine_similarity
+from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
+from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore, cosine_similarity
 
 __all__ = [
     "AncestryCheckpointResolver",
     "DefaultHistoryResolver",
     "HistoryProvider",
-    "InMemoryFileStore",
-    "InMemoryGraphStore",
-    "InMemoryHistoryProvider",
-    "InMemoryVectorStore",
     "LocalFilesystemGraphStore",
     "LocalFilesystemHistoryProvider",
     "LocalFilesystemMemoryStore",
     "LocalFilesystemShortTermMemory",
+    "LocalFilesystemTaskStore",
     "LocalFilesystemVectorStore",
-    "TaskStore",
     "WorkspaceFileStore",
     "WorkspacePathError",
     "WorkspaceQuotaExceededError",

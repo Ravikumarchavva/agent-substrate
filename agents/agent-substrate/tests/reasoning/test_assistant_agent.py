@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests._stores import fs_history
+
 from substrate.kernel.abstractions.llm import ModelCapabilities
 from typing import AsyncIterator
 
@@ -10,9 +12,6 @@ from substrate.kernel.context import (
     ContextConfig,
     SlidingWindowCompaction,
     CompactionPipeline,
-)
-from substrate.kernel.storage import (
-    InMemoryHistoryProvider,
 )
 from substrate.kernel.agents import ReActAgent
 from substrate.kernel.runtime import Runtime
@@ -179,7 +178,7 @@ def make_agent(
         approval_handler=approval_handler,
         approval_required_risk=approval_required_risk,
         context=ContextConfig(
-            InMemoryHistoryProvider(),
+            fs_history(),
             SlidingWindowCompaction(max_messages=20),
         ),
         max_iterations=5,
@@ -364,7 +363,7 @@ async def test_agent_context_config():
     async with Runtime.local(":memory:") as rt:
         pipeline = CompactionPipeline([SlidingWindowCompaction(max_messages=10)])
         ctx = ContextConfig(
-            InMemoryHistoryProvider(),
+            fs_history(),
             pipeline,
         )
         agent = ReActAgent(
@@ -387,7 +386,7 @@ async def test_agent_context_config_pipeline():
             ]
         )
         ctx = ContextConfig(
-            InMemoryHistoryProvider(),
+            fs_history(),
             pipeline,
         )
         assert ctx.pipeline is pipeline

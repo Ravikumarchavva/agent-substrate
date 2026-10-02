@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 
 from substrate.workspace.layout import conversation_workspace_prefix
-from substrate.stores import WorkspaceFileStore, WorkspaceQuotaExceededError
+from substrate.stores import Store, WorkspaceQuotaExceededError
 
 
 @pytest.mark.asyncio
@@ -13,8 +13,7 @@ async def test_workspace_branch_file_synchronization_and_isolation(tmp_path: Pat
     outside conversation-branch forking (e.g. duplicating a workspace) even
     after Phase 3 switches branch forking itself to the O(1) CAS-manifest
     fork instead of copying bytes."""
-    store = WorkspaceFileStore(tmp_path, user_quota_bytes=100_000)
-    await store.connect()
+    store = Store.at(tmp_path, file_quota_bytes=100_000).files
 
     tenant_id = "tenant-1"
     user_id = "user-1"
@@ -52,8 +51,7 @@ async def test_workspace_branch_file_synchronization_and_isolation(tmp_path: Pat
 @pytest.mark.asyncio
 async def test_workspace_copy_prefix_quota_enforcement(tmp_path: Path):
     # Quota is only 50 bytes
-    store = WorkspaceFileStore(tmp_path, user_quota_bytes=50)
-    await store.connect()
+    store = Store.at(tmp_path, file_quota_bytes=50).files
 
     tenant_id = "tenant-quota"
     user_id = "user-quota"

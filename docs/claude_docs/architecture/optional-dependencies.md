@@ -32,10 +32,8 @@ keep them out of the engine.
 
 ## `rag`
 
-`PDFLoader` (the local, no-extraction-service fallback path) plus
-`LanceDBVectorStore` (embedded, file-based vector store —
-`integrations/vector/lancedb_store.py`). ~110MB combined (`lancedb` +
-`pyarrow`) — not needed unless you actually use either.
+`PDFLoader` (the local, no-extraction-service fallback path). Vectors, memory and the graph need no extra: they are
+the folder store (`Store.vectors`, `.memory`, `.graph`), which uses SQLite from the standard library.
 
 ## `ocr`
 

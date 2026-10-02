@@ -47,8 +47,8 @@ runtime = Runtime(store)                            # Runtime.open(folder) opens
 
 ```
 .substrate/
-  substrate.db   the source of truth: runs + journal, threads (the conversation DAG), long-term memory (+ full-text index), session state; tasks, graph, vectors move in next
-  files/         file contents — written whole and synced before the row that names them commits
+  substrate.db   the source of truth: runs + journal, threads (the conversation DAG), long-term memory (+ full-text index), session state, task boards, the knowledge graph (recursive-query traversal), vectors (exact + full-text + hybrid search), file names + metadata, workspace snapshots, the document catalog; tenancy and a Postgres backend move in next
+  files/         file contents — written whole and flushed to disk before the row that names them commits; never modified in place (copying a prefix is a hard link per file); `Store.files.collect_garbage()` removes what a crash left unreferenced
   index/         indexes derived from substrate.db; deleting them loses nothing, they are rebuilt
 ```
 

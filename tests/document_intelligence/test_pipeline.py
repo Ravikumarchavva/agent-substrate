@@ -15,6 +15,8 @@ from substrate.runtimes.document_intelligence.service.engines.paddle_classic imp
     _score_lookup,
 )
 
+pytestmark = pytest.mark.heavy
+
 _CHART_FIXTURE = Path(__file__).parent.parent / "fixtures" / "chart_page.pdf"
 
 

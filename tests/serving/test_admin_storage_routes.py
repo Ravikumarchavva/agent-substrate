@@ -11,7 +11,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from substrate.stores import WorkspaceFileStore
+from substrate.stores import Store
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.models import WorkspaceQuota
 from substrate.serving.monolith.security.deps import get_current_user
@@ -57,9 +57,7 @@ async def _no_quota_row(tenant_id: str):
 @pytest.mark.requires_postgres
 async def test_storage_routes_require_admin_role(tmp_path) -> None:
     async with app.router.lifespan_context(app):
-        app.state.ctx.file_store = WorkspaceFileStore(
-            root=tmp_path, user_quota_bytes=1000
-        )
+        app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=1000).files
         app.dependency_overrides[get_current_user] = lambda: _user_claims("u1")
         try:
             async with AsyncClient(
@@ -74,8 +72,7 @@ async def test_storage_routes_require_admin_role(tmp_path) -> None:
 @pytest.mark.requires_postgres
 async def test_list_storage_tenants_and_conversations(tmp_path) -> None:
     async with app.router.lifespan_context(app):
-        store = WorkspaceFileStore(root=tmp_path, user_quota_bytes=1000)
-        await store.connect()
+        store = Store.at(tmp_path, file_quota_bytes=1000).files
         app.state.ctx.file_store = store
 
         # c1 and c2 belong to different users under the same tenant —
@@ -129,8 +126,7 @@ async def test_list_storage_tenants_and_conversations(tmp_path) -> None:
 @pytest.mark.requires_postgres
 async def test_set_quota_persists_and_takes_effect_immediately(tmp_path) -> None:
     async with app.router.lifespan_context(app):
-        store = WorkspaceFileStore(root=tmp_path, user_quota_bytes=1000)
-        await store.connect()
+        store = Store.at(tmp_path, file_quota_bytes=1000).files
         app.state.ctx.file_store = store
 
         app.dependency_overrides[get_current_user] = lambda: _admin_claims()

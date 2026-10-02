@@ -108,6 +108,11 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers",
+        "heavy: loads a real model or document engine into memory (several GB, tens of seconds) — "
+        "not run by a plain `pytest`; `make test-ci` and `pytest -m ''` run everything",
+    )
+    config.addinivalue_line(
+        "markers",
         "requires_model_download: downloads a real model from the HF Hub "
         "(100MB+) — skip in offline/constrained CI via SKIP_MODEL_DOWNLOAD_TESTS=1",
     )

@@ -1,7 +1,7 @@
 """FileStore — keyed byte store contract.
 
 The generic key/value object-storage shape every workspace/file-store
-backend already informally implements (``WorkspaceFileStore``,
+backend already informally implements (``Files``,
 ``S3FileStore`` in ``integrations/storage/``) — made an explicit kernel
 Protocol so callers can depend on the shape instead of duck-typing it with
 ``hasattr(store, "copy_prefix")`` at each call site.
@@ -17,6 +17,22 @@ does not interpret them — key construction and parsing is an L1 concern
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
+
+
+class WorkspaceQuotaExceededError(Exception):
+    """Raised when a write would push a tenant's usage past their quota."""
+
+    def __init__(self, tenant_id: str, used_bytes: int, quota_bytes: int) -> None:
+        self.tenant_id = tenant_id
+        self.used_bytes = used_bytes
+        self.quota_bytes = quota_bytes
+        super().__init__(
+            f"Storage quota exceeded for tenant {tenant_id!r}: {used_bytes} bytes used, {quota_bytes} byte quota"
+        )
+
+
+class WorkspacePathError(ValueError):
+    """Raised for a key that is empty, absolute, or climbs out of its prefix."""
 
 
 @runtime_checkable
@@ -68,4 +84,4 @@ class FileStore(Protocol):
         ...
 
 
-__all__ = ["FileStore"]
+__all__ = ["FileStore", "WorkspacePathError", "WorkspaceQuotaExceededError"]

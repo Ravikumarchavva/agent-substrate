@@ -15,10 +15,7 @@ factory. Construct-and-pass, exactly like an LLM client::
 
 ``LocalRagBackend`` is the only backend now — a managed-service backend
 (``PineconeRagBackend``) existed briefly but was removed: real dead weight,
-never the standard path, and this project's per-user session-document
-index already uses LanceDB (``integrations/vector/lancedb_store.py``) as
-its own embedded/self-hosted vector store where a second backend was
-actually needed.
+never the standard path.
 """
 
 from __future__ import annotations

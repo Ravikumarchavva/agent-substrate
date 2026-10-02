@@ -9,7 +9,7 @@ from typing import Protocol
 
 import pytest
 
-from substrate.stores import LocalFilesystemGraphStore
+from substrate.stores import Store
 from tests._layout import contract_files, module_name
 from tests._stores import folder, fs_tasks
 from substrate.types import MediaBlock, TextBlock
@@ -132,7 +132,7 @@ async def test_task_branches_do_not_touch_main() -> None:
 
 
 async def test_graph_namespaces_do_not_leak() -> None:
-    store = LocalFilesystemGraphStore(folder())
+    store = Store.at(folder()).graph
     assert isinstance(store, GraphStore)
 
     a, b = Entity(label="P", id="a"), Entity(label="P", id="b")

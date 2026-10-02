@@ -11,12 +11,9 @@ One explicit switch, mirroring
 * **Server default** — ``serving_factory.py`` calls this with ``cfg.RAG_BACKEND``
   and the pieces it already constructs (embedding client, vector store, ...).
 
-``"local"`` (``LocalRagBackend``, backed by ``PgVectorStore``) is the only
+``"local"`` (``LocalRagBackend``, backed by a ``VectorStore``) is the only
 backend today. A managed-service backend (Pinecone Assistant) existed
-briefly but was removed as dead weight — never the standard path, and this
-project's own per-user session-document index already uses LanceDB
-(``integrations/vector/lancedb_store.py``) where a second, self-hosted
-backend was actually needed.
+briefly but was removed as dead weight — never the standard path.
 """
 
 from __future__ import annotations

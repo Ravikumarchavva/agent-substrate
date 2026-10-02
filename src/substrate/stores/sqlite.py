@@ -16,10 +16,11 @@ than race it (closing a SQLite connection another thread is using is a crash, no
 from __future__ import annotations
 
 import asyncio
+import queue
 import sqlite3
+import threading
 import weakref
 from collections.abc import AsyncGenerator, Mapping
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable, TypeVar
@@ -29,12 +30,46 @@ from substrate.stores.database import Tx
 T = TypeVar("T")
 
 
-def _release(conn: sqlite3.Connection, thread: ThreadPoolExecutor) -> None:
-    """Close a connection nobody closed — a store that was simply dropped — on its own thread, then stop it."""
-    try:
-        thread.submit(conn.close).add_done_callback(lambda _: thread.shutdown(wait=False))
-    except RuntimeError:  # the interpreter is exiting and the thread pool is already gone: nothing else is using it
-        conn.close()
+Job = tuple[
+    Callable[[], Any], "asyncio.AbstractEventLoop | None", "asyncio.Future[Any] | None"
+]
+
+
+def _settle(
+    future: "asyncio.Future[Any]", result: Any, error: BaseException | None
+) -> None:
+    if future.cancelled():
+        return
+    if error is not None:
+        future.set_exception(error)
+    else:
+        future.set_result(result)
+
+
+def _serve(jobs: "queue.SimpleQueue[Job | None]") -> None:
+    while (job := jobs.get()) is not None:
+        fn, loop, future = job
+        result, error = None, None
+        try:
+            result = fn()
+        except BaseException as exc:  # noqa: BLE001 — handed to the awaiting task
+            error = exc
+        if loop is None or future is None:  # a close nobody awaits
+            continue
+        try:
+            loop.call_soon_threadsafe(_settle, future, result, error)
+        except RuntimeError:  # the awaiting loop is closed: nobody is waiting for this
+            pass
+
+
+def _release(conn: sqlite3.Connection, jobs: "queue.SimpleQueue[Job | None]") -> None:
+    """Close a connection nobody closed — a store that was simply dropped — on its own thread, then stop it.
+
+    Runs from the garbage collector, which can fire anywhere (even inside another thread pool's ``submit``, holding
+    its global lock), so it may only ``put`` on a ``SimpleQueue`` — never submit to an executor or take a lock.
+    """
+    jobs.put((conn.close, None, None))
+    jobs.put(None)
 
 
 class _Connection:
@@ -42,17 +77,25 @@ class _Connection:
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
-        self._thread = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlite-store")
-        self._finalizer = weakref.finalize(self, _release, conn, self._thread)
+        self._jobs: queue.SimpleQueue[Job | None] = queue.SimpleQueue()
+        self._thread = threading.Thread(
+            target=_serve, args=(self._jobs,), name="sqlite-store", daemon=True
+        )
+        self._thread.start()
+        self._finalizer = weakref.finalize(self, _release, conn, self._jobs)
 
     def call(self, fn: Callable[[], T]) -> asyncio.Future[T]:
-        return asyncio.get_running_loop().run_in_executor(self._thread, fn)
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[T] = loop.create_future()
+        self._jobs.put((fn, loop, future))
+        return future
 
     async def close(self) -> None:
         """Close after everything already queued has finished."""
         self._finalizer.detach()
         await self.call(self.conn.close)
-        self._thread.shutdown(wait=True)
+        self._jobs.put(None)
+        self._thread.join()
 
 
 class _SqliteTx:
@@ -63,10 +106,14 @@ class _SqliteTx:
         return await self._db.call(lambda: self._db.conn.execute(sql, params).rowcount)
 
     async def fetchone(self, sql: str, *params: Any) -> Mapping[str, Any] | None:
-        return await self._db.call(lambda: self._db.conn.execute(sql, params).fetchone())
+        return await self._db.call(
+            lambda: self._db.conn.execute(sql, params).fetchone()
+        )
 
     async def fetchall(self, sql: str, *params: Any) -> list[Mapping[str, Any]]:
-        return await self._db.call(lambda: self._db.conn.execute(sql, params).fetchall())
+        return await self._db.call(
+            lambda: self._db.conn.execute(sql, params).fetchall()
+        )
 
     async def lock(self, key: str) -> None:
         """One writer at a time already serialises every transaction."""
@@ -85,7 +132,9 @@ class SqliteDatabase:
             return
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         # autocommit mode: transactions are explicit, so ``BEGIN IMMEDIATE`` means what it says.
-        conn = sqlite3.connect(self._path, check_same_thread=False, timeout=30, isolation_level=None)
+        conn = sqlite3.connect(
+            self._path, check_same_thread=False, timeout=30, isolation_level=None
+        )
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         # A deleted row's bytes are overwritten with zeros rather than left in a free page: erasure has to mean it.
@@ -125,13 +174,17 @@ class SqliteDatabase:
         assert self._conn is not None, "database not started"
         db = self._conn
         async with self._lock:  # no transaction may be open
-            await db.call(lambda: db.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall())
+            await db.call(
+                lambda: db.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
+            )
 
     def is_unique_violation(self, exc: BaseException) -> bool:
         return isinstance(exc, sqlite3.IntegrityError)
 
     def is_retryable(self, exc: BaseException) -> bool:
-        return isinstance(exc, sqlite3.OperationalError) and "locked" in str(exc).lower()
+        return (
+            isinstance(exc, sqlite3.OperationalError) and "locked" in str(exc).lower()
+        )
 
 
 __all__ = ["SqliteDatabase"]

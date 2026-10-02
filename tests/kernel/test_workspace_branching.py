@@ -8,26 +8,26 @@ from pathlib import Path
 
 import pytest
 
-from substrate.workspace import LocalFilesystemWorkspaceStore
+from substrate.workspace import Workspaces
 from substrate.workspace import fork_branch
 from substrate.workspace import BlobCAS
 from substrate.workspace.materialize import commit, materialize
 from substrate.workspace import checkout_branch, commit_turn
-from substrate.stores import WorkspaceFileStore
+from substrate.stores import Store
+from substrate.stores.file_tables import Files
 from substrate.types import SnapshotConflictError
 
 TENANT = "tenant-a"
 USER = "user-a"
 
 
-def _cas(store: WorkspaceFileStore, cache_dir: Path | None = None) -> BlobCAS:
+def _cas(store: Files, cache_dir: Path | None = None) -> BlobCAS:
     return BlobCAS(store, tenant_id=TENANT, user_id=USER, local_cache_dir=cache_dir)
 
 
 @pytest.mark.asyncio
 async def test_cas_dedups_identical_content(tmp_path: Path) -> None:
-    store = WorkspaceFileStore(tmp_path / "store", user_quota_bytes=1_000_000)
-    await store.connect()
+    store = Store.at(tmp_path / "store", file_quota_bytes=1_000_000).files
     cas = _cas(store)
 
     ref1 = await cas.put(b"hello world")
@@ -46,8 +46,7 @@ async def test_cas_dedups_identical_content(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_cas_get_round_trips(tmp_path: Path) -> None:
-    store = WorkspaceFileStore(tmp_path / "store", user_quota_bytes=1_000_000)
-    await store.connect()
+    store = Store.at(tmp_path / "store", file_quota_bytes=1_000_000).files
     cas = _cas(store)
 
     ref = await cas.put(b"some file content")
@@ -57,8 +56,7 @@ async def test_cas_get_round_trips(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_commit_and_materialize_round_trip(tmp_path: Path) -> None:
-    store = WorkspaceFileStore(tmp_path / "store", user_quota_bytes=1_000_000)
-    await store.connect()
+    store = Store.at(tmp_path / "store", file_quota_bytes=1_000_000).files
     cas = _cas(store, cache_dir=tmp_path / "cache")
 
     src = tmp_path / "src"
@@ -83,10 +81,9 @@ async def test_fork_is_o1_and_copies_zero_bytes(tmp_path: Path) -> None:
     """The headline fix: forking must not touch object storage at all —
     only a branch-head pointer moves. Confirmed by asserting the object
     store's write methods are never called during fork."""
-    store = WorkspaceFileStore(tmp_path / "store", user_quota_bytes=1_000_000)
-    await store.connect()
+    store = Store.at(tmp_path / "store", file_quota_bytes=1_000_000).files
     cas = _cas(store)
-    ws_store = LocalFilesystemWorkspaceStore(root=tmp_path / "ws_store")
+    ws_store = Workspaces(Store.at(tmp_path / "ws_store"))
 
     root = tmp_path / "main_workspace"
     root.mkdir()
@@ -124,10 +121,9 @@ async def test_fork_is_o1_and_copies_zero_bytes(tmp_path: Path) -> None:
 async def test_fork_then_write_on_fork_does_not_mutate_parent_branch(tmp_path: Path) -> None:
     """The actual bug this package fixes: writing on a forked branch must
     never be visible on the branch it was forked from."""
-    store = WorkspaceFileStore(tmp_path / "store", user_quota_bytes=1_000_000)
-    await store.connect()
+    store = Store.at(tmp_path / "store", file_quota_bytes=1_000_000).files
     cas = _cas(store)
-    ws_store = LocalFilesystemWorkspaceStore(root=tmp_path / "ws_store")
+    ws_store = Workspaces(Store.at(tmp_path / "ws_store"))
 
     main_root = tmp_path / "main"
     main_root.mkdir()
@@ -167,10 +163,9 @@ async def test_fork_then_write_on_fork_does_not_mutate_parent_branch(tmp_path: P
 async def test_concurrent_commit_to_same_branch_conflicts_not_silently_lost(
     tmp_path: Path,
 ) -> None:
-    store = WorkspaceFileStore(tmp_path / "store", user_quota_bytes=1_000_000)
-    await store.connect()
+    store = Store.at(tmp_path / "store", file_quota_bytes=1_000_000).files
     cas = _cas(store)
-    ws_store = LocalFilesystemWorkspaceStore(root=tmp_path / "ws_store")
+    ws_store = Workspaces(Store.at(tmp_path / "ws_store"))
 
     root = tmp_path / "root"
     root.mkdir()
@@ -199,8 +194,7 @@ async def test_materialize_hardlinks_from_local_cache_on_second_checkout(
 ) -> None:
     """The materialization optimization: a blob already in the local cache
     is hardlinked, not re-downloaded, on a second checkout."""
-    store = WorkspaceFileStore(tmp_path / "store", user_quota_bytes=1_000_000)
-    await store.connect()
+    store = Store.at(tmp_path / "store", file_quota_bytes=1_000_000).files
     cache_dir = tmp_path / "cache"
     cas = _cas(store, cache_dir=cache_dir)
 

@@ -1,7 +1,4 @@
-"""Erasure for the per-user session-document index — local-path mode
-(namespace-catalog mode was verified separately against a real SeaweedFS
-Lance Catalog spike; see the module docstring in ``session_index_erasure.py``
-for that finding)."""
+"""Erasure for the per-user session-document index: removing the user's (or tenant's) folder."""
 
 from __future__ import annotations
 
@@ -71,7 +68,19 @@ async def test_erase_session_index_for_tenant_erases_every_known_user(tmp_path):
 def _cfg(tmp_path: Path):
     class _Cfg:
         SESSION_INDEX_LOCAL_PATH = str(tmp_path)
-        SESSION_INDEX_NAMESPACE_URI = ""
-        SESSION_INDEX_BUCKET = "substrate-index"
 
     return _Cfg()
+
+
+async def test_erasing_a_tenant_also_reaches_a_user_nobody_listed(tmp_path):
+    """A user whose only trace is an uploaded document has no row to name them. The tenant's folder is removed whole."""
+    stranger = tmp_path / user_index_prefix("tenant-a", "stranger")
+    stranger.mkdir(parents=True)
+    (stranger / "substrate.db").write_bytes(b"x")
+    neighbour = tmp_path / user_index_prefix("tenant-b", "someone")
+    neighbour.mkdir(parents=True)
+
+    removed = await erase_session_index_for_tenant(_cfg(tmp_path), "tenant-a", set())
+
+    assert removed == 1 and not stranger.exists() and not (tmp_path / "tenants" / "tenant-a").exists()
+    assert neighbour.exists()

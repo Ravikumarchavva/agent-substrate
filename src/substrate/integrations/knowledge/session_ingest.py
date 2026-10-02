@@ -148,9 +148,7 @@ async def ingest_session_document(
         page_texts, collection="documents", title=filename, strategy="flat"
     )
 
-    graph_store = build_session_graph_store(
-        cfg, tenant_id, user_id, session_id=session_id
-    )
+    graph_store = build_session_graph_store(cfg, tenant_id, user_id)
     # rag_pipeline arg is required by GraphRAGPipeline's constructor but
     # unused here — we call _extract_and_store_graph directly (see module
     # docstring) instead of ingest_with_graph, which would re-chunk raw

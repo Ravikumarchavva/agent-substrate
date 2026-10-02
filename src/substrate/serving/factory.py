@@ -183,11 +183,12 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
 # ── Infrastructure ────────────────────────────────────────────────────────────
 
 
-def _init_file_store(cfg: SubstrateConfig) -> Any:
+async def _init_file_store(cfg: SubstrateConfig, store: Any) -> Any:
+    """The ``FileStore``: S3-compatible object storage when ``FILE_STORE_BACKEND=s3``, else the store's own ``files``."""
     if cfg.FILE_STORE_BACKEND == "s3":
         from substrate.integrations.storage.s3 import S3FileStore
 
-        return S3FileStore(
+        s3 = S3FileStore(
             endpoint_url=cfg.FILE_STORE_ENDPOINT or "",
             access_key=cfg.FILE_STORE_ACCESS_KEY or "",
             secret_key=cfg.FILE_STORE_SECRET_KEY or "",
@@ -195,14 +196,9 @@ def _init_file_store(cfg: SubstrateConfig) -> Any:
             region=cfg.FILE_STORE_REGION,
             user_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES,
         )
-    # Default: "local" — a per-user directory tree on server-side storage
-    # (local dir in dev, docker volume in compose, RWX PVC in k8s).
-    from substrate.stores import WorkspaceFileStore
-
-    return WorkspaceFileStore(
-        root=cfg.FILE_STORE_ROOT,
-        user_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES,
-    )
+        await s3.connect()
+        return s3
+    return store.files
 
 
 def _init_pending_file_store(cfg: SubstrateConfig) -> Any:
@@ -239,12 +235,11 @@ async def init_infrastructure(
 
     from substrate.stores import Store
 
-    store = Store.at(cfg.STORE_PATH)
+    store = Store.at(cfg.STORE_PATH, file_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES)
     history = store.threads
-    workspace_store = await build_workspace_store(
-        database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
-        local_path=cfg.WORKSPACE_SNAPSHOT_STORAGE_PATH,
-    )
+    from substrate.workspace import Workspaces
+
+    workspace_store = Workspaces(store)
 
     short_term_memory = await build_short_term_memory(store=store, redis_url=cfg.REDIS_URL, ttl=cfg.REDIS_SESSION_TTL)
     # User-scoped standing facts/preferences ("always answer in French") —
@@ -261,16 +256,7 @@ async def init_infrastructure(
 
     runtime, runtime_stack = await init_runtime(cfg)
 
-    if cfg.RUNTIME_BACKEND.lower() == "postgres":
-        from substrate.integrations.storage.pg_task_store import PgTaskStore
-
-        task_store: Any = PgTaskStore(session_factory)
-        await task_store.setup()
-        logger.info("Task store: durable (Postgres JSONB)")
-    else:
-        from substrate.stores import LocalFilesystemTaskStore
-
-        task_store = LocalFilesystemTaskStore(f"{cfg.MEMORY_STORAGE_PATH}/tasks")
+    task_store: Any = store.tasks
 
     vector_store = PgVectorStore(
         session_factory=session_factory,
@@ -291,8 +277,7 @@ async def init_infrastructure(
     )
     # Built before the RAG backend, which takes it: extracted chart/table
     # images are written here rather than inlined into the image vector rows.
-    file_store = _init_file_store(cfg)
-    await file_store.connect()
+    file_store = await _init_file_store(cfg, store)
     pending_file_store = _init_pending_file_store(cfg)
     # Curated OKF bundles ride on the same object store as files (one
     # bucket, one erasure path, one quota) but under their own key prefix,
@@ -302,7 +287,7 @@ async def init_infrastructure(
     artifact_store = ArtifactStore(file_store)
     if hasattr(file_store, "set_quota_override"):
         # Per-tenant quota overrides (admin storage API) are held in-memory
-        # on the store (see WorkspaceFileStore.set_quota_override) — seed
+        # on the store (see Files.set_quota_override) — seed
         # them from their durable copy on every startup. WorkspaceQuota.user_id
         # actually holds a tenant_id (see that model's docstring).
         from sqlalchemy import select
@@ -414,7 +399,7 @@ async def init_tool_registry(
     no way to discover or read a skill's instructions, so a skill existing on
     disk does nothing.
     """
-    from substrate.stores import LocalFilesystemTaskStore
+    from substrate.stores import Store
     from substrate.tools import Toolbox
     from substrate.integrations.tools import (
         CalculatorTool,
@@ -447,7 +432,7 @@ async def init_tool_registry(
         )
 
     task_tool = TaskManagerTool(
-        store=task_store or LocalFilesystemTaskStore(), event_sink=_board_event_sink
+        store=task_store or Store.at().tasks, event_sink=_board_event_sink
     )
     ask_tool = AskHumanTool(handler=None, max_requests_per_run=5)  # type: ignore[arg-type]
 
@@ -951,33 +936,6 @@ def build_chat_tools(toolbox: Any, bridge: Any) -> list[Any]:
     return tools
 
 
-async def build_workspace_store(
-    *,
-    database_url: str = "",
-    local_path: str = "./data/db/workspaces",
-) -> Any:
-    """Build the shared WorkspaceStore (branch-isolated workspace snapshots).
-
-    Same backend-selection rule as the history store: Postgres
-    when ``database_url`` is given, else durable local-filesystem JSON —
-    never the in-memory reference implementation in production, which
-    exists only for tests (see ``agents/context/workspace.py``).
-    """
-    if database_url:
-        from substrate.integrations.storage.workspace_store import PostgresWorkspaceStore
-
-        store = PostgresWorkspaceStore(database_url)
-        await store.connect()
-        return store
-
-    from substrate.workspace import LocalFilesystemWorkspaceStore
-
-    store = LocalFilesystemWorkspaceStore(root=local_path)
-    await store.connect()
-    logger.info("Workspace snapshot backend: local filesystem at %s", local_path)
-    return store
-
-
 async def build_short_term_memory(*, store: Any, redis_url: str, ttl: int = 3600) -> Any:
     """Per-session state: the store's ``session_state``, with a Redis cache in front when ``redis_url`` is set."""
     primary = store.session_state
@@ -991,46 +949,21 @@ async def build_short_term_memory(*, store: Any, redis_url: str, ttl: int = 3600
     return CachedShortTermMemory(primary=primary, cache=cache)
 
 
-def build_session_index_vector_store(
-    cfg: SubstrateConfig, tenant_id: str, user_id: str
-) -> Any:
-    """Build the per-user session-document vector store (Lance) — the
-    vector half of the per-user index bundle at
-    ``agents/workspace/layout.py::user_index_prefix``.
+def build_session_index_vector_store(cfg: SubstrateConfig, tenant_id: str, user_id: str) -> Any:
+    """The per-user session-document vector store — the vector half of the per-user index bundle at
+    ``workspace/layout.py::user_index_prefix``, beside the PageIndex trees and the knowledge graph.
 
-    Deliberately a per-(tenant, user) *factory*, not a single shared
-    instance built once in ``init_infrastructure()`` the way
-    ``PgVectorStore`` is: a Lance Namespace table identifier is
-    ``(name, namespace_path)``, and the namespace path here is
-    ``[bucket, tenant_id, user_id]`` — those two ids aren't known until a
-    real request/session exists, so construction happens per-call, called
-    from wherever a request's ``tenant_id``/``user_id`` are already
-    resolved (see the chat/upload routes). Cheap: the constructor does no
-    I/O itself, only the first real table operation connects.
-
-    Local-dev fallback (``cfg.SESSION_INDEX_NAMESPACE_URI`` empty): a
-    per-tenant-per-user subdirectory under ``cfg.SESSION_INDEX_LOCAL_PATH``
-    — mirrors the namespace-mode path's tenant/user split, just as
-    directory nesting instead of a namespace path.
+    A store of its own in the user's index folder, so erasing a user's index is removing that one folder. A per-(tenant,
+    user) *factory*, not a single shared instance built at startup: the folder depends on both ids, which are only known
+    once a request exists. Cheap — nothing is opened until the first read or write. ``user_index_prefix`` validates both
+    ids (they come from request-scoped auth claims, not trusted input), so neither can be a path separator or traversal.
     """
-    from substrate.workspace.layout import user_index_prefix
-    from substrate.integrations.vector.lancedb_store import LanceDBVectorStore
-
-    # user_index_prefix() validates tenant_id/user_id (rejects path
-    # separators/traversal — these ids ultimately come from request-scoped
-    # auth claims, not trusted input); reused here for validation in both
-    # branches even though the namespace-mode branch doesn't need its
-    # returned string, and to keep local-dev mode on the same tree shape as
-    # the rest of the per-user index bundle.
-    key = user_index_prefix(tenant_id, user_id)
-    if cfg.SESSION_INDEX_NAMESPACE_URI:
-        return LanceDBVectorStore(
-            namespace_uri=cfg.SESSION_INDEX_NAMESPACE_URI,
-            namespace_path=[cfg.SESSION_INDEX_BUCKET, tenant_id, user_id],
-        )
     from pathlib import Path
 
-    return LanceDBVectorStore(path=Path(cfg.SESSION_INDEX_LOCAL_PATH) / key)
+    from substrate.stores import Store
+    from substrate.workspace.layout import user_index_prefix
+
+    return Store.at(Path(cfg.SESSION_INDEX_LOCAL_PATH) / user_index_prefix(tenant_id, user_id)).vectors
 
 
 def build_session_rag_backend(
@@ -1145,39 +1078,21 @@ def build_page_index_memory(cfg: SubstrateConfig, tenant_id: str, user_id: str) 
     return Store.at(Path(cfg.SESSION_INDEX_LOCAL_PATH) / user_index_prefix(tenant_id, user_id)).memory
 
 
-def build_session_graph_store(
-    cfg: SubstrateConfig, tenant_id: str, user_id: str, *, session_id: str = ""
-) -> Any:
-    """Build the per-user knowledge-graph store backing
-    ``GraphRAGPipeline`` — the graph third of the per-user index bundle,
-    alongside ``build_session_index_vector_store``/``build_page_index_memory``
-    above. Same per-(tenant, user) factory shape and same reason (the
-    namespace/path needs both ids). Deliberately separate from the shared
-    tenant-level ``AGEGraphStore`` (``integrations/graph/age_store.py``)
-    used for any standing, cross-user knowledge graph — different scale,
-    different lifecycle.
+def build_session_graph_store(cfg: SubstrateConfig, tenant_id: str, user_id: str) -> Any:
+    """The per-user knowledge-graph store backing ``GraphRAGPipeline`` — the graph third of the per-user index bundle,
+    alongside ``build_session_index_vector_store``/``build_page_index_memory`` above.
 
-    ``session_id``, when given, tags every row this instance writes (see
-    ``LanceGraphStore.__init__``) — pass it when *ingesting* so entities/
-    relationships can later be filtered per-session; omit it (default) for
-    a user-wide read instance, e.g. ``get_neighbors`` across everything a
-    user has ever uploaded.
+    A store of its own in the user's index folder (``user_index_prefix``), so erasing a user's index is still removing
+    that one folder. Deliberately separate from the shared tenant-level ``AGEGraphStore``
+    (``integrations/graph/age_store.py``) used for any standing, cross-user knowledge graph — different scale,
+    different lifecycle. Reads span everything the user has ever had extracted.
     """
-    from substrate.integrations.graph.lance_graph_store import LanceGraphStore
-    from substrate.workspace.layout import user_index_prefix
-
-    key = user_index_prefix(tenant_id, user_id)
-    if cfg.SESSION_INDEX_NAMESPACE_URI:
-        return LanceGraphStore(
-            namespace_uri=cfg.SESSION_INDEX_NAMESPACE_URI,
-            namespace_path=[cfg.SESSION_INDEX_BUCKET, tenant_id, user_id],
-            session_id=session_id,
-        )
     from pathlib import Path
 
-    return LanceGraphStore(
-        path=Path(cfg.SESSION_INDEX_LOCAL_PATH) / key, session_id=session_id
-    )
+    from substrate.stores import Store
+    from substrate.workspace.layout import user_index_prefix
+
+    return Store.at(Path(cfg.SESSION_INDEX_LOCAL_PATH) / user_index_prefix(tenant_id, user_id)).graph
 
 
 def build_safety_middleware(cfg: SubstrateConfig) -> Any:

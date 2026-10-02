@@ -1,16 +1,17 @@
-"""LocalFilesystemDocumentStore — the L1 default DocumentStore."""
+"""The store's document catalog."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from substrate.documents import LocalFilesystemDocumentStore
+from substrate.documents import Documents
+from substrate.stores import Store
 from substrate.documents import DocumentChunk, DocumentMetadata
 from substrate.documents import DocumentStore
 
 
 async def test_round_trip_list_and_delete(tmp_path: Path):
-    store = LocalFilesystemDocumentStore(tmp_path)
+    store = Documents(Store.at(tmp_path))
     assert isinstance(store, DocumentStore)
 
     meta = DocumentMetadata(
@@ -42,25 +43,25 @@ async def test_round_trip_list_and_delete(tmp_path: Path):
 
 async def test_survives_a_restart(tmp_path: Path):
     meta = DocumentMetadata(id="d1", filename="a.txt")
-    await LocalFilesystemDocumentStore(tmp_path).save_document(
+    await Documents(Store.at(tmp_path)).save_document(
         meta, [DocumentChunk.from_text("hello", document_id="d1")]
     )
 
-    reopened = LocalFilesystemDocumentStore(tmp_path)
+    reopened = Documents(Store.at(tmp_path))
     assert (await reopened.get_document("d1")).filename == "a.txt"  # type: ignore[union-attr]
     assert [c.text for c in await reopened.get_chunks("d1")] == ["hello"]
 
 
 async def test_listing_is_paged_oldest_first(tmp_path: Path):
-    store = LocalFilesystemDocumentStore(tmp_path)
+    store = Documents(Store.at(tmp_path))
     for i in range(5):
         await store.save_document(DocumentMetadata(id=f"d{i}", filename=f"{i}.txt"), [])
 
     assert [d.id for d in await store.list_documents(limit=2, offset=1)] == ["d1", "d2"]
 
 
-async def test_a_hostile_document_id_stays_inside_the_root(tmp_path: Path):
-    store = LocalFilesystemDocumentStore(tmp_path / "store")
+async def test_a_hostile_document_id_is_just_a_name(tmp_path: Path):
+    store = Documents(Store.at(tmp_path / "store"))
     await store.save_document(DocumentMetadata(id="../../evil", filename="x"), [])
 
     assert (await store.get_document("../../evil")) is not None

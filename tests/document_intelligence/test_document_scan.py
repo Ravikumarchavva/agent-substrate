@@ -10,6 +10,8 @@ requirement.
 
 from __future__ import annotations
 
+import pytest
+
 import base64
 import io
 import time
@@ -23,6 +25,8 @@ from substrate.runtimes.document_intelligence.service.pipeline import (
     ExtractionResult,
 )
 from substrate.runtimes.document_intelligence.service.routes import router
+
+pytestmark = pytest.mark.heavy
 
 
 @dataclass

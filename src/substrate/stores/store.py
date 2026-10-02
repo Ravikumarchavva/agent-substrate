@@ -25,7 +25,15 @@ from typing import TypeVar
 
 from substrate.stores.database import Database, Tx, migrate
 from substrate.stores.sqlite import SqliteDatabase
+from substrate.stores.file_tables import SCHEMA as FILE_SCHEMA
+from substrate.stores.file_tables import Files
+from substrate.stores.graph_tables import SCHEMA as GRAPH_SCHEMA
+from substrate.stores.graph_tables import Graph
 from substrate.stores.memory_tables import MEMORY_SCHEMA, Memory, SessionState
+from substrate.stores.task_tables import SCHEMA as TASK_SCHEMA
+from substrate.stores.task_tables import Tasks
+from substrate.stores.vector_tables import SCHEMA as VECTOR_SCHEMA
+from substrate.stores.vector_tables import Vectors
 from substrate.stores.thread_tables import SCHEMA as THREAD_SCHEMA
 from substrate.stores.thread_tables import Threads
 from substrate.version import __version__
@@ -52,12 +60,26 @@ class Store:
     while the files and indexes stay in ``root``.
     """
 
-    def __init__(self, database: Database, root: str | Path) -> None:
+    def __init__(self, database: Database, root: str | Path, *, file_quota_bytes: int | None = None) -> None:
         self.database = database
         self.root = Path(root)
+        self.file_quota_bytes = file_quota_bytes
+        """Bytes a tenant may store in ``files`` (``None``: unlimited)."""
+        self.file_quota_overrides: dict[str, int] = {}
+        """Per-tenant quotas that replace the default (``Files.set_quota_override``)."""
         self.files_dir = self.root / FILES_DIR
         self.index_dir = self.root / INDEX_DIR
         self._started = False
+        self._ensured: set[str] = set()
+
+    async def ensure(self, component: str, schema: list[str]) -> None:
+        """Create or upgrade the tables of a part that lives above ``stores`` (workspaces, documents) the first time it
+        is used. ``schema`` is that part's ordered migrations, as for ``stores.database.migrate``. Idempotent."""
+        if component in self._ensured:
+            return
+        await self.start()
+        await migrate(self.database, component, schema)
+        self._ensured.add(component)
 
     @property
     def threads(self) -> Threads:
@@ -77,11 +99,31 @@ class Store:
         """Small key/value state a conversation keeps across runs (a ``ShortTermMemory``)."""
         return SessionState(self)
 
+    @property
+    def tasks(self) -> Tasks:
+        """Each agent's Kanban board (a ``TaskStore``)."""
+        return Tasks(self)
+
+    @property
+    def graph(self) -> Graph:
+        """Entities and relationships (a ``GraphStore``), traversed by recursive query."""
+        return Graph(self)
+
+    @property
+    def vectors(self) -> Vectors:
+        """Document chunks and their embeddings (a ``VectorStore``): exact search, full-text search, and both fused."""
+        return Vectors(self)
+
+    @property
+    def files(self) -> Files:
+        """Keyed bytes (a ``FileStore``): rows here, contents under ``files/``, written to disk before the row commits."""
+        return Files(self)
+
     @classmethod
-    def at(cls, location: str | Path = "./.substrate") -> Store:
+    def at(cls, location: str | Path = "./.substrate", *, file_quota_bytes: int | None = None) -> Store:
         """The store in the folder ``location``, not yet opened: ``start()`` (or ``async with``) opens it."""
         root = Path(location).expanduser()
-        return cls(SqliteDatabase(root / DATABASE_FILE), root)
+        return cls(SqliteDatabase(root / DATABASE_FILE), root, file_quota_bytes=file_quota_bytes)
 
     async def start(self) -> None:
         """Open it, creating whatever is missing. Idempotent."""
@@ -92,6 +134,10 @@ class Store:
         await migrate(self.database, "store", _LAYOUT)
         await migrate(self.database, "threads", THREAD_SCHEMA)
         await migrate(self.database, "memory", MEMORY_SCHEMA)
+        await migrate(self.database, "tasks", TASK_SCHEMA)
+        await migrate(self.database, "graph", GRAPH_SCHEMA)
+        await migrate(self.database, "vectors", VECTOR_SCHEMA)
+        await migrate(self.database, "files", FILE_SCHEMA)
         async with self.database.transaction() as tx:
             await tx.execute(
                 "INSERT INTO substrate_info (key, value) VALUES ('created_with', ?) ON CONFLICT DO NOTHING",

@@ -100,7 +100,7 @@ class SubstrateConfig(BaseSettings):
     DISABLE_TOOL_APPROVALS: bool = False
 
     # ── File storage ─────────────────────────────────────────────────────────
-    # "local" (WorkspaceFileStore) | "s3" (SeaweedFS/S3)
+    # "local" (Files) | "s3" (SeaweedFS/S3)
     FILE_STORE_BACKEND: str = "local"
     FILE_STORE_ROOT: str = ""
     FILE_STORE_BUCKET: str = "agent-files"
@@ -138,11 +138,8 @@ class SubstrateConfig(BaseSettings):
     EMBEDDING_RERANKER_TIMEOUT_S: int = 30
 
     # ── RAG backend & retrieval ──────────────────────────────────────────────
-    # "local" (LocalRagBackend, PgVectorStore) is the only real backend --
-    # Pinecone support was removed as dead weight (never the standard
-    # path); the per-user session-document index already uses LanceDB as
-    # this project's own self-hosted alternative where a second backend
-    # was actually needed (integrations/vector/lancedb_store.py).
+    # "local" (LocalRagBackend over a VectorStore) is the only backend --
+    # Pinecone support was removed as dead weight (never the standard path).
     RAG_BACKEND: str = "local"
     RAG_TEXT_EMBEDDING_DIM: int = 1536
     RAG_IMAGE_EMBEDDING_DIM: int = 2048
@@ -162,17 +159,9 @@ class SubstrateConfig(BaseSettings):
     RAG_FINAL_K: int = 5
     RAG_MIN_RERANK_SCORE: float = 0.1
 
-    # ── Session document index (per-user vector/tree/graph — LanceDB) ─────────
-    # Empty (default): the vector/pageindex/graph store use a local, embedded
-    # LanceDB directory under SESSION_INDEX_LOCAL_PATH — no server needed.
-    # Set SESSION_INDEX_NAMESPACE_URI to point at a Lance Namespace REST
-    # catalog instead (e.g. SeaweedFS's Lance Catalog,
-    # `weed server -s3.port.lance=9101`) — see
-    # integrations/vector/lancedb_store.py's module docstring for what was
-    # verified about that mode (namespace_path shape, credential handling).
+    # ── Session document index (per-user vector/tree/graph) ────────────────────
+    # Each user's index is a store of its own, in a folder under SESSION_INDEX_LOCAL_PATH.
     SESSION_INDEX_LOCAL_PATH: str = ""
-    SESSION_INDEX_NAMESPACE_URI: str = ""
-    SESSION_INDEX_BUCKET: str = "agent-files"
 
     # ── Local database paths (PostgreSQL & Redis replacements under DATA_DIR) ──
     HISTORY_STORAGE_PATH: str = ""

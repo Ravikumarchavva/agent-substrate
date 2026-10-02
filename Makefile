@@ -5,9 +5,9 @@ TEST_OPENAI_API_KEY ?= sk-test-placeholder
 TEST_JWT_SECRET ?= test-jwt-secret-not-for-production-use-0000000000
 
 ifeq ($(OS),Windows_NT)
-RUN_TEST_CI = cmd /C "set VIRTUAL_ENV=&&set DATABASE_URL=$(TEST_DATABASE_URL)&&set REDIS_URL=$(TEST_REDIS_URL)&&set OPENAI_API_KEY=$(TEST_OPENAI_API_KEY)&&set JWT_SECRET=$(TEST_JWT_SECRET)&&uv run python -m pytest --tb=short -q --junitxml=test-results.xml"
+RUN_TEST_CI = cmd /C "set VIRTUAL_ENV=&&set DATABASE_URL=$(TEST_DATABASE_URL)&&set REDIS_URL=$(TEST_REDIS_URL)&&set OPENAI_API_KEY=$(TEST_OPENAI_API_KEY)&&set JWT_SECRET=$(TEST_JWT_SECRET)&&uv run python -m pytest -m \"\" --tb=short -q --junitxml=test-results.xml"
 else
-RUN_TEST_CI = DATABASE_URL=$(TEST_DATABASE_URL) REDIS_URL=$(TEST_REDIS_URL) OPENAI_API_KEY=$(TEST_OPENAI_API_KEY) JWT_SECRET=$(TEST_JWT_SECRET) uv run pytest --tb=short -q --junitxml=test-results.xml
+RUN_TEST_CI = DATABASE_URL=$(TEST_DATABASE_URL) REDIS_URL=$(TEST_REDIS_URL) OPENAI_API_KEY=$(TEST_OPENAI_API_KEY) JWT_SECRET=$(TEST_JWT_SECRET) uv run pytest -m '' --tb=short -q --junitxml=test-results.xml
 endif
 
 .PHONY: sync lint lint-apply lint-imports protocol-schema format-check typecheck typecheck-soft test test-ci build security security-soft ci help start start-reload infra-up infra-up-all infra-up-document-intelligence infra-up-embedding-reranker infra-up-onlyoffice infra-down infra-down-all docker-up docker-down observability-up observability-down

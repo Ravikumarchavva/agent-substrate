@@ -20,7 +20,7 @@ import pytest
 
 from substrate.safety import Severity
 
-pytestmark = pytest.mark.requires_model_download
+pytestmark = [pytest.mark.requires_model_download, pytest.mark.heavy]
 
 
 @pytest.fixture(scope="module")

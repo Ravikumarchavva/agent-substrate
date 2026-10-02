@@ -18,11 +18,7 @@ from substrate.types import ChatMessage, Role
 from substrate.stores import Entity, Relationship
 from substrate.stores import HistoryCheckpoint, MessageNode
 from substrate.stores import Document
-from substrate.stores import LocalFilesystemGraphStore
 from substrate.stores import Store
-from substrate.stores import WorkspaceFileStore
-from substrate.stores import LocalFilesystemTaskStore
-from substrate.stores import LocalFilesystemVectorStore
 from substrate.stores import bind_graph, bind_threads, bind_files, bind_tasks, bind_vector
 from substrate.testing.conformance.graph_store import GraphStoreConformance
 from substrate.testing.conformance.thread_store import ThreadStoreConformance
@@ -52,19 +48,19 @@ class TestBoundHistoryConforms(ThreadStoreConformance):
 class TestBoundVectorConforms(VectorStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
-        return bind_vector(LocalFilesystemVectorStore(tmp_path), A)
+        return bind_vector(Store.at(tmp_path).vectors, A)
 
 
 class TestBoundTasksConform(TaskStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
-        return bind_tasks(LocalFilesystemTaskStore(tmp_path), A)
+        return bind_tasks(Store.at(tmp_path).tasks, A)
 
 
 class TestBoundGraphConforms(GraphStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
-        return bind_graph(LocalFilesystemGraphStore(tmp_path), A)
+        return bind_graph(Store.at(tmp_path).graph, A)
 
 
 # ------------------------------------------------------------------ and they are walls
@@ -105,7 +101,7 @@ async def test_i03_ids_returned_to_the_caller_carry_no_tenant_prefix(tmp_path) -
 
 
 async def test_i03_vector_collections_are_per_tenant_and_erasable(tmp_path) -> None:
-    raw = LocalFilesystemVectorStore(tmp_path)
+    raw = Store.at(tmp_path).vectors
     mine, theirs = bind_vector(raw, A), bind_vector(raw, B)
     await mine.add([Document.from_text("mine", id="d", embedding=[1.0, 0.0])], collection="kb")
     await theirs.add([Document.from_text("theirs", id="d", embedding=[1.0, 0.0])], collection="kb")
@@ -117,7 +113,7 @@ async def test_i03_vector_collections_are_per_tenant_and_erasable(tmp_path) -> N
 
 
 async def test_i03_graph_namespaces_cannot_be_escaped(tmp_path) -> None:
-    raw = LocalFilesystemGraphStore(tmp_path)
+    raw = Store.at(tmp_path).graph
     mine, theirs = bind_graph(raw, A), bind_graph(raw, B)
     await mine.add_entities([Entity(id="a", label="P"), Entity(id="b", label="P")])
     await mine.add_relationships([Relationship(id="r", source_id="a", target_id="b", type="K")])
@@ -129,7 +125,7 @@ async def test_i03_graph_namespaces_cannot_be_escaped(tmp_path) -> None:
 
 
 async def test_i03_tasks_of_another_tenant_cannot_be_touched_by_board_id(tmp_path) -> None:
-    raw = LocalFilesystemTaskStore(tmp_path)
+    raw = Store.at(tmp_path).tasks
     mine, theirs = bind_tasks(raw, A), bind_tasks(raw, B)
     board = await mine.create_task_list("c", ["t"])
     tid = board.tasks[0].id
@@ -143,7 +139,7 @@ async def test_i03_tasks_of_another_tenant_cannot_be_touched_by_board_id(tmp_pat
 
 
 async def test_i03_object_keys_cannot_climb_out_of_the_tenant(tmp_path) -> None:
-    raw = WorkspaceFileStore(tmp_path, user_quota_bytes=10**9)
+    raw = Store.at(tmp_path, file_quota_bytes=10**9).files
     mine, theirs = bind_files(raw, A), bind_files(raw, B)
     await theirs.upload("secret.txt", b"keep me")
     for hostile in ("../evilcorp/secret.txt", "a/../../evilcorp/secret.txt", "/etc/passwd", "..", "a\\..\\b", ""):
@@ -158,7 +154,7 @@ async def test_i03_object_keys_cannot_climb_out_of_the_tenant(tmp_path) -> None:
 
 
 async def test_i03_object_stores_are_per_tenant_with_their_own_usage_and_erase(tmp_path) -> None:
-    raw = WorkspaceFileStore(tmp_path, user_quota_bytes=10**9)
+    raw = Store.at(tmp_path, file_quota_bytes=10**9).files
     mine, theirs = bind_files(raw, A), bind_files(raw, B)
     await mine.upload("docs/a.bin", b"x" * 100)
     await theirs.upload("docs/a.bin", b"y" * 7)
@@ -185,7 +181,7 @@ async def test_i03_a_tenant_whose_name_looks_like_another_tenants_prefix_gets_it
 async def test_i03_a_fenced_store_keeps_absolute_keys_but_only_inside_its_tenant(tmp_path) -> None:
     from substrate.stores import fence_objects
 
-    raw = WorkspaceFileStore(tmp_path, user_quota_bytes=10**9)
+    raw = Store.at(tmp_path, file_quota_bytes=10**9).files
     mine = fence_objects(raw, A)
     await mine.upload("tenants/acme/users/u/uploads/a.bin", b"ok")
     await raw.upload("tenants/evilcorp/secret", b"keep me")

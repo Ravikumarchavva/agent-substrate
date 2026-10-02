@@ -81,7 +81,7 @@ async def test_quota_rejects_a_write_past_the_limit(store):
 
 async def test_overwrite_is_charged_its_delta_not_its_full_size(store):
     """Re-uploading a key replaces it, so it must not be counted as
-    existing + new — the same rule WorkspaceFileStore.upload follows."""
+    existing + new — the same rule Files.upload follows."""
     key = "tenants/t1/users/u1/uploads/a.bin"
     await store.upload(key, b"x" * 900)
     await store.upload(key, b"y" * 900)  # would be 1800 if double-counted

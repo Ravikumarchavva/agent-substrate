@@ -49,7 +49,7 @@ async def pg_pool():
 
 
 # ---------------------------------------------------------------------------
-# PgTaskStore
+# Session factory
 # ---------------------------------------------------------------------------
 
 
@@ -76,69 +76,6 @@ async def _pg_session_factory() -> "async_sessionmaker | None":
     except Exception:
         return None
 
-
-async def test_pg_task_store_persist_and_reload() -> None:
-    """Create a task list, mutate it, then reload through a fresh PgTaskStore instance
-    (simulating a restart) — board should survive."""
-    factory = await _pg_session_factory()
-    if factory is None:
-        pytest.skip("Postgres not reachable")
-
-    from substrate.integrations.storage.pg_task_store import PgTaskStore
-    from substrate.stores import TaskStatus
-
-    conv_id = f"conv-{id(object())}"
-
-    store1 = PgTaskStore(factory)
-    await store1.setup()
-
-    tl = await store1.create_task_list(conv_id, ["plan", "code", "test"], max_retries=2)
-    await store1.update_status(tl.id, tl.tasks[0].id, TaskStatus.IN_PROGRESS)
-    await store1.update_status(tl.id, tl.tasks[0].id, TaskStatus.SUCCEEDED)
-
-    # Fresh store — simulates restart
-    store2 = PgTaskStore(factory)
-    reloaded = await store2.get_by_conversation(conv_id)
-    assert reloaded is not None
-    assert reloaded.conversation_id == conv_id
-    assert len(reloaded.tasks) == 3
-    done_tasks = [t for t in reloaded.tasks if t.status == TaskStatus.SUCCEEDED]
-    assert len(done_tasks) == 1
-    assert done_tasks[0].title == "plan"
-
-    # Verify get_task_list by id also works
-    by_id = await store2.get_task_list(tl.id)
-    assert by_id is not None
-    assert by_id.id == tl.id
-
-
-async def test_pg_task_store_add_and_delete() -> None:
-    """add_tasks and delete_task persist across store instances."""
-    factory = await _pg_session_factory()
-    if factory is None:
-        pytest.skip("Postgres not reachable")
-
-    from substrate.integrations.storage.pg_task_store import PgTaskStore
-
-    conv_id = f"conv-add-{id(object())}"
-    store = PgTaskStore(factory)
-    await store.setup()
-
-    tl = await store.create_task_list(conv_id, ["alpha"], max_retries=1)
-    added = await store.add_tasks(tl.id, ["beta", "gamma"])
-    assert len(added) == 2
-
-    fresh = PgTaskStore(factory)
-    reloaded = await fresh.get_by_conversation(conv_id)
-    assert reloaded is not None
-    assert len(reloaded.tasks) == 3
-
-    deleted = await fresh.delete_task(tl.id, added[0].id)
-    assert deleted is True
-
-    after_delete = await fresh.get_task_list(tl.id)
-    assert after_delete is not None
-    assert len(after_delete.tasks) == 2
 
 
 # ---------------------------------------------------------------------------

@@ -538,12 +538,12 @@ class WorkspaceQuota(Base):
     ``tenant_id`` claim (``AuthClaims.tenant_id``) despite the column's
     name — kept as-is to avoid a rename migration; a plain string, not a
     FK: the same opaque identity already used to key every
-    ``WorkspaceFileStore`` path (``tenants/{tenant_id}/...``). Quota is
+    ``Files`` path (``tenants/{tenant_id}/...``). Quota is
     metered per tenant, not per user, because a conversation's files carry
     no user segment in their key at all (ownership lives in Postgres'
     ``threads`` table, not the key) — see
-    ``WorkspaceFileStore``'s module docstring. Absence of a row means "use
-    the default" — see ``WorkspaceFileStore.effective_quota``.
+    ``Files``'s module docstring. Absence of a row means "use
+    the default" — see ``Files.effective_quota``.
     """
 
     __tablename__ = "workspace_quotas"

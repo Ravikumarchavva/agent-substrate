@@ -28,7 +28,7 @@ from substrate.types import CompletionEvent, TextDelta
 # ---------------------------------------------------------------------------
 
 
-class MockLLMClient:
+class MockChatModel:
     """Scripted LLM: each generate() call pops the next response from the queue."""
 
     def __init__(self, responses: list[list[ContentBlock]]) -> None:
@@ -42,7 +42,7 @@ class MockLLMClient:
         *,
         options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
-        assert self._queue, "MockLLMClient: no more scripted responses"
+        assert self._queue, "MockChatModel: no more scripted responses"
         return LLMResponse(content=self._queue.pop(0), usage=Usage())
 
     def generate_stream(
@@ -166,7 +166,7 @@ def make_agent(
 ) -> ReActAgent:
     return ReActAgent(
         "TestBot",
-        model=MockLLMClient(responses),
+        model=MockChatModel(responses),
         tools=tools,
         approval_handler=approval_handler,
         approval_required_risk=approval_required_risk,
@@ -361,7 +361,7 @@ async def test_agent_context_config():
         )
         agent = ReActAgent(
             "CtxBot",
-            model=MockLLMClient([[TextBlock(text="ok")]]),
+            model=MockChatModel([[TextBlock(text="ok")]]),
             context=ctx,
         )
         result = await run_agent(rt, agent, "hello")
@@ -385,7 +385,7 @@ async def test_agent_context_config_pipeline():
         assert ctx.pipeline is pipeline
         agent = ReActAgent(
             "PipelineBot",
-            model=MockLLMClient([[TextBlock(text="piped")]]),
+            model=MockChatModel([[TextBlock(text="piped")]]),
             context=ctx,
         )
         result = await run_agent(rt, agent, "hi")

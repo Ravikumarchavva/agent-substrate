@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from substrate.agents import OrchestratorAgent, SubAgentConfig
     from substrate.agents import UserProxyAgent
     from substrate.config import SubstrateConfig
-    from substrate.stores import LocalFilesystemHistoryProvider
+    from substrate.stores import LocalFilesystemThreadStore
     from substrate.workspace import LocalFilesystemWorkspaceStore
     from substrate.stores import LocalFilesystemShortTermMemory
     from substrate.stores import WorkspaceFileStore
@@ -63,8 +63,8 @@ __all__ = [
     # config
     "SubstrateConfig",
     # native durable storage
-    "LocalFilesystemHistoryProvider",
-    "LocalHistoryProvider",
+    "LocalFilesystemThreadStore",
+    "LocalThreadStore",
     "LocalFilesystemWorkspaceStore",
     "LocalWorkspaceStore",
     "LocalFilesystemShortTermMemory",
@@ -121,13 +121,13 @@ _LAZY: dict[str, tuple[str, str]] = {
     # config
     "SubstrateConfig": ("substrate.config", "SubstrateConfig"),
     # native durable storage
-    "LocalFilesystemHistoryProvider": (
+    "LocalFilesystemThreadStore": (
         "substrate.stores.local.threads",
-        "LocalFilesystemHistoryProvider",
+        "LocalFilesystemThreadStore",
     ),
-    "LocalHistoryProvider": (
+    "LocalThreadStore": (
         "substrate.stores.local.threads",
-        "LocalFilesystemHistoryProvider",
+        "LocalFilesystemThreadStore",
     ),
     "LocalFilesystemWorkspaceStore": (
         "substrate.workspace.local_store",

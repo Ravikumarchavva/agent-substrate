@@ -27,7 +27,7 @@ from .base import RagBackend, RagBackendUnavailableError
 from .local import LocalRagBackend
 
 if TYPE_CHECKING:
-    from substrate.models import EmbeddingClient, LLMClient
+    from substrate.models import EmbeddingModel, ChatModel
     from substrate.stores import VectorStore
 
 
@@ -65,14 +65,14 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
     if name == "local":
         from substrate.integrations.knowledge.pipeline import RAGPipeline
 
-        embedding_client: EmbeddingClient | None = kwargs.get("embedding_client")
+        embedding_client: EmbeddingModel | None = kwargs.get("embedding_client")
         vector_store: VectorStore | None = kwargs.get("vector_store")
         if embedding_client is None or vector_store is None:
             raise RagBackendUnavailableError(
                 "build_rag_backend('local', ...) requires embedding_client "
                 "and vector_store."
             )
-        model_client: LLMClient | None = kwargs.get("model_client")
+        model_client: ChatModel | None = kwargs.get("model_client")
         image_store: VectorStore | None = kwargs.get("image_store")
         extraction_service_url = kwargs.get("extraction_service_url", "")
         extraction_auth_token = kwargs.get("extraction_auth_token", "")

@@ -4,7 +4,7 @@ import os
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from substrate.integrations.history import DurableHistoryProvider
+from substrate.integrations.history import DurableThreadStore
 from substrate.types import ChatMessage
 from substrate.types import TextBlock
 
@@ -26,7 +26,7 @@ async def test_legacy_linear_sessions_are_chained_into_the_dag_on_connect():
     db_url = os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
     )
-    provider = DurableHistoryProvider(db_url, echo=False)
+    provider = DurableThreadStore(db_url, echo=False)
     try:
         await provider.connect()
     except (OperationalError, Exception) as e:
@@ -83,7 +83,7 @@ async def test_postgres_history_dag_node_append_and_retrieval():
     db_url = os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
     )
-    provider = DurableHistoryProvider(db_url, echo=False)
+    provider = DurableThreadStore(db_url, echo=False)
     try:
         await provider.connect()
     except (OperationalError, Exception) as e:
@@ -167,7 +167,7 @@ async def test_postgres_history_dag_append_and_advance_and_cas():
     db_url = os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
     )
-    provider = DurableHistoryProvider(db_url, echo=False)
+    provider = DurableThreadStore(db_url, echo=False)
     try:
         await provider.connect()
     except (OperationalError, Exception) as e:
@@ -229,7 +229,7 @@ async def test_postgres_history_dag_forking_and_checkpoints():
     db_url = os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
     )
-    provider = DurableHistoryProvider(db_url, echo=False)
+    provider = DurableThreadStore(db_url, echo=False)
     try:
         await provider.connect()
     except (OperationalError, Exception) as e:

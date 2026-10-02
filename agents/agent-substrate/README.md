@@ -12,7 +12,7 @@
 
 *   **🤖 ReAct Agent Loop**: Production-grade Reasoning + Action loop with HITL gates, supervision budgets, and priority preemption.
 *   **🔧 Safe Tool Execution**: JSON-schema-validated tools, risk-tiered approval gating, sandboxed code-mode chaining, and MCP integration.
-*   **💾 Pluggable Memory**: `DurableHistoryProvider` (PostgreSQL DAG-based history with branching, forking, and compaction checkpoints) is the production default; `InMemoryHistoryProvider` is available for lightweight in-process execution. Sliding-window, token-budget, and compaction anchor strategies included.
+*   **💾 Pluggable Memory**: `DurableThreadStore` (PostgreSQL DAG-based history with branching, forking, and compaction checkpoints) is the production default; `InMemoryThreadStore` is available for lightweight in-process execution. Sliding-window, token-budget, and compaction anchor strategies included.
 *   **🎯 Multi-Provider LLM**: OpenAI, Anthropic, Gemini, Groq, Ollama — auto-detected from model name prefix via `LLMFactory`.
 *   **📊 Guardrails & Middleware**: Async tripwire pipeline evaluating inputs, outputs, and tool calls with mutation policies.
 *   **🕷️ Composable Flows**: `SequentialFlow`, `ParallelFlow`, and `ConditionalFlow` nest recursively in `fabric/`.

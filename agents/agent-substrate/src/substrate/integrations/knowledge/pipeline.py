@@ -24,7 +24,7 @@ from substrate.integrations.knowledge.chunking import get_chunker
 from substrate.stores import Document, SearchResult, VectorStore
 
 if TYPE_CHECKING:
-    from substrate.models import LLMClient, EmbeddingClient as BaseEmbeddingClient
+    from substrate.models import ChatModel, EmbeddingModel as BaseEmbeddingClient
 
 logger = setup_logging()
 
@@ -180,7 +180,7 @@ class RAGPipeline:
         question: str,
         *,
         collection: str = "default",
-        model_client: LLMClient,
+        model_client: ChatModel,
         limit: int = 5,
         system: str | None = None,
         filter: dict[str, Any] | None = None,

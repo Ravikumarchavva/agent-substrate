@@ -16,7 +16,7 @@ import asyncio
 from substrate.integrations.tools.mcp.client import MCPClient
 from substrate.integrations.tools.mcp.tool import MCPTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.context import project_messages
 from substrate.types import ChatMessage, Role, TextBlock, ToolUseBlock
 from substrate.models import GenerationOptions
@@ -52,7 +52,7 @@ async def main():
             model=settings.CHAT_MODEL.split("/")[-1], api_key=settings.OPENAI_API_KEY
         )
         session_id = "mcp-tools-demo"
-        memory = LocalFilesystemHistoryProvider()
+        memory = LocalFilesystemThreadStore()
 
         # Record the user's turn as a DAG node (the system prompt goes on
         # GenerationOptions below, not into history — see ReActAgent for the

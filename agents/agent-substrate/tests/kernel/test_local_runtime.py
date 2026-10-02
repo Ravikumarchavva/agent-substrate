@@ -25,7 +25,7 @@ from substrate.runtime import Runtime
 TERMINAL = (RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED)
 
 
-class MockLLMClient:
+class MockChatModel:
     model = "mock-model"
     capabilities = ModelCapabilities(model_id="mock-model")
 
@@ -55,7 +55,7 @@ async def _terminal(rt: Runtime, run_id: str) -> str:
 
 
 async def test_react_agent_runs_end_to_end_on_local_runtime(tmp_path: Path) -> None:
-    agent = ReActAgent("LocalBot", model=MockLLMClient(), max_iterations=3)
+    agent = ReActAgent("LocalBot", model=MockChatModel(), max_iterations=3)
 
     async with Runtime.local(tmp_path / "rt.db") as rt:
         await rt.register(agent)
@@ -70,7 +70,7 @@ async def test_a_run_submitted_before_a_restart_is_picked_up_after_it(tmp_path: 
     accepted it. The run is created while no worker exists, then a fresh runtime on the
     same file runs it."""
     path = tmp_path / "rt.db"
-    agent = ReActAgent("LocalBot", model=MockLLMClient(), max_iterations=3)
+    agent = ReActAgent("LocalBot", model=MockChatModel(), max_iterations=3)
 
     from substrate.runtime import SqliteRuntimeStore
     from substrate.runtime import RunSpec

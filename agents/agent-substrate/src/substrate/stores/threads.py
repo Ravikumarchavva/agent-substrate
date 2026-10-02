@@ -69,7 +69,7 @@ class HistoryCheckpoint(KernelModel):
 
 
 @runtime_checkable
-class HistoryProvider(Protocol):
+class ThreadStore(Protocol):
     """Durable storage for a session's conversation DAG, branch heads and checkpoints."""
 
     # ── DAG Node & Branch Operations ──────────────────────────────────────────
@@ -206,5 +206,5 @@ __all__ = [
     "MessageNode",
     "Branch",
     "HistoryCheckpoint",
-    "HistoryProvider",
+    "ThreadStore",
 ]

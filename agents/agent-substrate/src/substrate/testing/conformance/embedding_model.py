@@ -1,4 +1,4 @@
-"""Conformance suite for ``EmbeddingClient``.
+"""Conformance suite for ``EmbeddingModel``.
 
 Like the LLM-client suite, a client is driven through a scripted transport so the vendor's real SDK or
 HTTP code runs. A ``Provider`` says how to build the client around a handler and how that vendor's
@@ -21,7 +21,7 @@ import pytest
 
 from substrate.types.content import MediaBlock, TextBlock
 from substrate.types.errors import UnsupportedContentError
-from substrate.models.protocols import EmbeddingClient
+from substrate.models.protocols import EmbeddingModel
 
 WIDTH = 4
 
@@ -39,7 +39,7 @@ class Provider(Protocol):
     max_batch: int | None
     """The most texts the vendor accepts in one request; the client must split larger batches."""
 
-    def client(self, handler: Handler) -> EmbeddingClient: ...
+    def client(self, handler: Handler) -> EmbeddingModel: ...
 
     def texts_in(self, request: httpx.Request) -> list[str]:
         """The texts the vendor's request body carries, in order."""
@@ -55,12 +55,12 @@ class Calls:
     texts: list[list[str]] = field(default_factory=list)
 
 
-class EmbeddingClientConformance:
+class EmbeddingModelConformance:
     @pytest.fixture
     def provider(self) -> Provider:  # pragma: no cover - supplied by subclasses
         raise NotImplementedError
 
-    def build(self, provider: Provider, *, fail_with: int | None = None) -> tuple[EmbeddingClient, Calls]:
+    def build(self, provider: Provider, *, fail_with: int | None = None) -> tuple[EmbeddingModel, Calls]:
         calls = Calls()
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -132,4 +132,4 @@ class EmbeddingClientConformance:
             await client.embed(["a"])
 
 
-__all__ = ["EmbeddingClientConformance", "Provider", "vector_of", "WIDTH", "Any"]
+__all__ = ["EmbeddingModelConformance", "Provider", "vector_of", "WIDTH", "Any"]

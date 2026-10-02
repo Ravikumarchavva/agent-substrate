@@ -28,7 +28,7 @@ from substrate.stores import Entity, Relationship
 from substrate.stores import SearchResult
 
 if TYPE_CHECKING:
-    from substrate.models import LLMClient
+    from substrate.models import ChatModel
     from substrate.stores import GraphStore
     from substrate.integrations.knowledge.pipeline import RAGPipeline
 
@@ -47,7 +47,7 @@ class GraphRAGPipeline:
         self,
         rag_pipeline: RAGPipeline,
         graph_store: GraphStore,
-        model_client: LLMClient,
+        model_client: ChatModel,
     ) -> None:
         self._rag = rag_pipeline
         self._graph = graph_store

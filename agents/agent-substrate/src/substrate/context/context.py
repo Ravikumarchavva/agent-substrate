@@ -8,7 +8,7 @@ from substrate.context.protocols import ContextBuilder
 from substrate.types.supervision import HistoryRetention
 from substrate.types.content import ChatMessage
 from substrate.types.identity import Actor
-from substrate.stores.threads import HistoryProvider
+from substrate.stores.threads import ThreadStore
 from substrate.context.builder import DefaultContextBuilder
 from substrate.context.compaction.coordinator import CompactionCoordinator
 from substrate.context.compaction.pipeline import CompactionPipeline
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class ContextConfig:
     """User-facing config bag — pass to agent constructors via ``context=...``.
 
-    Bundles a ``HistoryProvider``, a ``CompactionPipeline``, and a
+    Bundles a ``ThreadStore``, a ``CompactionPipeline``, and a
     ``HistoryRetention`` policy together so callers don't have to pass them
     as separate arguments.
 
@@ -35,7 +35,7 @@ class ContextConfig:
         from substrate.context import CompactionPipeline, ToolResultCompactionStrategy, SlidingWindowCompaction
 
         ctx = ContextConfig(
-            LocalFilesystemHistoryProvider(),
+            LocalFilesystemThreadStore(),
             CompactionPipeline([
                 ToolResultCompactionStrategy(),
                 SlidingWindowCompaction(max_messages=40),
@@ -47,7 +47,7 @@ class ContextConfig:
 
     def __init__(
         self,
-        history: HistoryProvider,
+        history: ThreadStore,
         pipeline: CompactionPipeline | None = None,
         *,
         retention: HistoryRetention = HistoryRetention.PERMANENT,
@@ -79,15 +79,15 @@ class ContextConfig:
     @classmethod
     def default(cls) -> "ContextConfig":
         """Return a durable local filesystem context with default sliding-window compaction."""
-        from substrate.stores.local.threads import LocalFilesystemHistoryProvider
+        from substrate.stores.local.threads import LocalFilesystemThreadStore
 
-        return cls(LocalFilesystemHistoryProvider())
+        return cls(LocalFilesystemThreadStore())
 
 
 class AgentContext:
     """Concrete implementation of ``AgentContextProtocol`` for in-process use.
 
-    Wraps a ``HistoryProvider`` and a ``CompactionPipeline`` into the full
+    Wraps a ``ThreadStore`` and a ``CompactionPipeline`` into the full
     runtime context that agents drive. All history reads and writes are
     scoped to ``session_id`` so one agent instance can participate in
     multiple sequential runs without history leaking between them.
@@ -96,7 +96,7 @@ class AgentContext:
     def __init__(
         self,
         agent_id: Actor,
-        history: HistoryProvider,
+        history: ThreadStore,
         pipeline: CompactionPipeline,
         builder: ContextBuilder | None = None,
     ) -> None:
@@ -110,7 +110,7 @@ class AgentContext:
         return self._agent_id
 
     @property
-    def history(self) -> HistoryProvider:
+    def history(self) -> ThreadStore:
         return self._history
 
     async def get_prompt_window(

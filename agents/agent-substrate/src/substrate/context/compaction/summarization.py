@@ -10,7 +10,7 @@ from substrate.models.protocols import GenerationOptions
 from substrate.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_message_tokens, estimate_tokens
 
 if TYPE_CHECKING:
-    from substrate.models.protocols import LLMClient
+    from substrate.models.protocols import ChatModel
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class SummarizationCompaction:
     windows and to conversations where message sizes vary widely.
 
     Args:
-        model:               Any LLMClient — a cheap/fast model is sufficient.
+        model:               Any ChatModel — a cheap/fast model is sufficient.
         recent_token_budget: Tokens to keep verbatim in the recent window.
         min_old_tokens:      Skip compaction when the old slice is smaller than this.
         chars_per_token:     Estimation ratio. Default 4.0 for English text.
@@ -51,7 +51,7 @@ class SummarizationCompaction:
 
     def __init__(
         self,
-        model: LLMClient,
+        model: ChatModel,
         recent_token_budget: int = 32_000,
         min_old_tokens: int = 1_000,
         chars_per_token: float = DEFAULT_CHARS_PER_TOKEN,

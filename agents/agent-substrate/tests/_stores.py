@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import tempfile
 
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.stores import WorkspaceFileStore
 from substrate.stores import LocalFilesystemTaskStore
 
@@ -19,8 +19,8 @@ def folder() -> str:
     return tempfile.mkdtemp(dir=_ROOT.name)
 
 
-def fs_history() -> LocalFilesystemHistoryProvider:
-    return LocalFilesystemHistoryProvider(folder())
+def fs_history() -> LocalFilesystemThreadStore:
+    return LocalFilesystemThreadStore(folder())
 
 
 def fs_tasks() -> LocalFilesystemTaskStore:

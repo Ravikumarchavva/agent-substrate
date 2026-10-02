@@ -28,7 +28,7 @@ retried safely — at enterprise scale.
 | **0** | Audit record; IDOR fix (thread ownership); stable advisory-lock key; rate-limiter fail-closed | **Done** (2026-07-02) — `get_owned_thread` + ownership on chat/cancel/hitl-status/threads/tasks/mcp-context; ownership stamped at creation; list scoped per user; legacy NULL-owner threads claim-on-first-access; sha256 `_lock_key`; `RATE_LIMIT_FAIL_OPEN=False` default (503 when Redis down); tests in `tests/serving/test_thread_ownership.py` |
 | **1** | Durable coordination core: hierarchical effect paths (**PR2 done**) → event-log-as-journal + fold (**PR3 done**) → SignalBus + scheduler columns (**PR4 done**) → durable suspend/resume via `SuspendInterrupt` (**PR5 done**) → Supervisor (**PR6 done**) → cancel cascade + deadlines + crash fast-path (**PR7 done**) → cleanup/GC/docs (**PR8 done**) | **Done** (2026-07-03) — all 7 PRs shipped; Phase 2 (horizontally scalable serving) is next |
 | **2** | Horizontally scalable serving: scheduler-enforced single-flight (kill `thread_locks`); cancel via durable signal (kill `cancel_registry`); HITL cross-replica via SignalBus; SSE-from-any-replica verification; memory-seed idempotency | **Done** (2026-07-03) — see "Recently shipped". Tool-approval durability/wiring: see the "Explicitly deferred" entries below — the 2026-07-12 kernel audit found this was worse than "Future-based," it wasn't wired to a live agent at all; now wired (kernel-Protocol-based), still Future-based (signal migration still open) |
-| **3** | Full multi-tenancy: `tenant_id` through thread ownership + `RunMeta`; per-tenant fair scheduling in `lease()`; wire `Supervision.execution_budget`/`spawn_child()` (was dead code) | **Done** (2026-07-03) — see "Recently shipped". `RedisHistoryProvider`/`GlobalTaskStore` tenant-keying and tenant-level quota aggregation/rate limits explicitly deferred (see below). **Correction (2026-07-12, kernel audit):** "wire execution_budget" here only ever meant the *propagation* half (`Supervision.spawn_child()` correctly threading the field through) — the *enforcement* half (actually building an `ExecutionTracker` from it for the spawned child) was still dead code until the kernel audit's Tier B fixed it. See `docs/claude_docs/kernel/2026-07-12-audit.md`. |
+| **3** | Full multi-tenancy: `tenant_id` through thread ownership + `RunMeta`; per-tenant fair scheduling in `lease()`; wire `Supervision.execution_budget`/`spawn_child()` (was dead code) | **Done** (2026-07-03) — see "Recently shipped". `RedisThreadStore`/`GlobalTaskStore` tenant-keying and tenant-level quota aggregation/rate limits explicitly deferred (see below). **Correction (2026-07-12, kernel audit):** "wire execution_budget" here only ever meant the *propagation* half (`Supervision.spawn_child()` correctly threading the field through) — the *enforcement* half (actually building an `ExecutionTracker` from it for the spawned child) was still dead code until the kernel audit's Tier B fixed it. See `docs/claude_docs/kernel/2026-07-12-audit.md`. |
 | **4** | Microservices as the scale path: converge `human_gate` onto the Phase-1 signal bus | **Partially done** (2026-07-03) — signal convergence shipped; wiring `agent_runtime` to actually run an HITL-capable tool against it is deferred (see below). Feature-parity porting (files/RAG → triggers/scheduled → pipelines → MCP apps) and k8s replica policy tuning not started — long tail, out of this program's architecture-remediation scope |
 | **5** | Enterprise hardening: tracing spans on agent runs/LLM calls/tool calls; webhook idempotency keys + HMAC; agent versioning guard on replay; event-log retention/compaction | **Done** (2026-07-04) — see "Recently shipped". `ChatTracingMiddleware` deleted rather than installed (see below); most of the pre-existing guardrail/infra middleware family found unwireable in its current form (see below) |
 
@@ -157,12 +157,12 @@ so the decision is visible, not silently dropped.
   markers removed from the three risk-gated tools that prompted this —
   they needed no code changes themselves, since the fix lives entirely in
   the invoker/bridge layer.
-- **`DurableHistoryProvider`/`GlobalTaskStore` tenant-namespacing.**
+- **`DurableThreadStore`/`GlobalTaskStore` tenant-namespacing.**
   Evaluated and scoped out: both are keyed by `session_id`/`conversation_id`,
   which are UUIDs in every real call path — two different tenants can never
   collide on the same key by construction, so the actual cross-tenant risk
   is negligible. Formally threading `tenant_id` through would require a
-  kernel `HistoryProvider` Protocol change rippling through all 3
+  kernel `ThreadStore` Protocol change rippling through all 3
   implementations (InMemory/Redis/Postgres) for that marginal gain. Revisit
   only if a call path is ever found constructing a `session_id` from
   non-UUID, potentially-colliding input.
@@ -707,8 +707,8 @@ so the decision is visible, not silently dropped.
     `BridgeRegistry.resolve()` fall back to a durable lookup
     (`ravi_run_queue.wake_signals`) when no local bridge owns a
     `request_id` — the cross-replica case. Memory-seed race:
-    `RedisHistoryProvider.try_acquire_seed_lock()` (atomic `SET NX EX`)
-    guards the seed inside `CachedHistoryProvider._ensure_seeded()`
+    `RedisThreadStore.try_acquire_seed_lock()` (atomic `SET NX EX`)
+    guards the seed inside `CachedThreadStore._ensure_seeded()`
     (`capabilities/history/cached_history.py`, formerly
     `agents/factory.py::load_session_memory()`, since removed) — closes the
     double-seed-truncates-older-messages bug at the root (prevents the race

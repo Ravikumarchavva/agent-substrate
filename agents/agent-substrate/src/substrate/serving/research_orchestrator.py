@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING
 
 from substrate.context import build_token_budget_pipeline
 from substrate.agents.factory import create_assistant_agent
-from substrate.stores import LocalFilesystemHistoryProvider
-from substrate.models import LLMClient
+from substrate.stores import LocalFilesystemThreadStore
+from substrate.models import ChatModel
 from substrate.tools import Tool
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ class ResearchOrchestrator:
 
 def build_research_orchestrator(
     *,
-    model_client: LLMClient,
+    model_client: ChatModel,
     researcher_tools: list[Tool],
     calculator_tools: list[Tool],
     clock_tools: list[Tool],
@@ -100,7 +100,7 @@ def build_research_orchestrator(
         ],
         max_iterations=15,
         context=ContextConfig(
-            LocalFilesystemHistoryProvider(), pipeline=build_token_budget_pipeline()
+            LocalFilesystemThreadStore(), pipeline=build_token_budget_pipeline()
         ),
     )
     # Display names only — Actor routing keys stay lowercase (unchanged

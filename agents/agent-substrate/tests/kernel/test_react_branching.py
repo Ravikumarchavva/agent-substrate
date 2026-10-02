@@ -16,7 +16,7 @@ from substrate.models import GenerationOptions, LLMResponse
 from substrate.runtime import ChatPayload, Message
 
 
-class MockLLMClient:
+class MockChatModel:
     def __init__(self, responses: list[list[ContentBlock]]) -> None:
         self._queue = list(responses)
         self.model = "mock-model"
@@ -28,7 +28,7 @@ class MockLLMClient:
         *,
         options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
-        assert self._queue, "MockLLMClient: no more scripted responses"
+        assert self._queue, "MockChatModel: no more scripted responses"
         return LLMResponse(content=self._queue.pop(0), usage=Usage())
 
     async def _do_stream(
@@ -67,7 +67,7 @@ async def test_react_agent_branching_and_dag_history():
     history = fs_history()
     ctx_cfg = ContextConfig(history=history)
 
-    llm = MockLLMClient([
+    llm = MockChatModel([
         [TextBlock(text="Hello Alice! Pleased to meet you.")],
         [TextBlock(text="Your name is Alice, and this is an experiment branch.")],
         [TextBlock(text="Your name is Alice on the main branch.")],

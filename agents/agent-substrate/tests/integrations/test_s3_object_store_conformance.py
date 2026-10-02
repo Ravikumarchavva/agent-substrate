@@ -8,7 +8,7 @@ import botocore.exceptions
 import pytest
 
 from substrate.integrations.storage.s3 import S3FileStore
-from substrate.testing.conformance.object_store import ObjectStoreConformance
+from substrate.testing.conformance.file_store import FileStoreConformance
 from tests.integrations.test_s3_file_store import FakeConnector
 
 
@@ -39,7 +39,7 @@ class Bucket(FakeConnector):
         yield _Client(self.objects)
 
 
-class TestS3FileStore(ObjectStoreConformance):
+class TestS3FileStore(FileStoreConformance):
     @pytest.fixture
     async def store(self):
         fs = S3FileStore(endpoint_url="http://localhost:9000", access_key="k", secret_key="s", bucket="test", user_quota_bytes=10**9)

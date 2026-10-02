@@ -36,7 +36,7 @@ from substrate.models import EmbeddingResult, GenerationOptions, LLMResponse
 FIXTURE_PDF = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
 
 
-class StubLLMClient:
+class StubChatModel:
     def __init__(self, response_text: str) -> None:
         self._response_text = response_text
         self.calls: list[list[ChatMessage]] = []
@@ -84,7 +84,7 @@ async def test_ingest_session_document_writes_to_all_three_stores(
     local_rag_backend: LocalRagBackend,
 ) -> None:
     data = FIXTURE_PDF.read_bytes()
-    model_client = StubLLMClient(
+    model_client = StubChatModel(
         '{"entities": [{"label": "Company", "properties": {"name": "Acme"}}], '
         '"relationships": []}'
     )

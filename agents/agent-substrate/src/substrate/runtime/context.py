@@ -43,7 +43,7 @@ from substrate.types.trace import TraceContext
 from substrate.types.usage import Usage
 from substrate.types.errors import BudgetExhaustedError, ControlSignal, SuspendInterrupt
 from substrate.types.ids import new_id, new_run_id
-from substrate.models.protocols import FinishReason, GenerationOptions, LLMClient, LLMResponse
+from substrate.models.protocols import FinishReason, GenerationOptions, ChatModel, LLMResponse
 from substrate.runtime.message import DataPayload, Message
 from substrate.types.stream import CompletionEvent, ReasoningDelta, TextDelta
 from substrate.runtime.agent import Agent as _KernelAgent
@@ -113,7 +113,7 @@ class RunContext:
         store: RuntimeStore,
         journal: Journal,
         blob_store: Any | None = None,
-        llm_client: LLMClient | None = None,
+        llm_client: ChatModel | None = None,
         tool_invoker: ToolInvoker | None = None,
         agent: Any | None = None,
     ) -> None:
@@ -143,7 +143,7 @@ class RunContext:
 
     @property
     def store_scope(self) -> Scope:
-        """The tenant this run's store handles are bound to: ``bind_history(store, ctx.store_scope)`` and
+        """The tenant this run's store handles are bound to: ``bind_threads(store, ctx.store_scope)`` and
         its siblings in ``kernel.storage``. Taken from the run's authenticated scope, never an argument."""
         return Scope.of(self.scope)
 
@@ -307,7 +307,7 @@ class RunContext:
         if over(spent.turns, budget.max_turns):
             raise BudgetExhaustedError(f"Turn limit exceeded: {spent.turns} {'>' if strict else '>='} {budget.max_turns}")
 
-    async def _generate(self, client: LLMClient, messages: list[ChatMessage], options: GenerationOptions) -> LLMResponse:
+    async def _generate(self, client: ChatModel, messages: list[ChatMessage], options: GenerationOptions) -> LLMResponse:
         from substrate.models.errors import classify_llm_error
 
         started = time.monotonic()
@@ -347,7 +347,7 @@ class RunContext:
             return response
 
     async def _through_middleware(
-        self, client: LLMClient, messages: list[ChatMessage], options: GenerationOptions
+        self, client: ChatModel, messages: list[ChatMessage], options: GenerationOptions
     ) -> LLMResponse:
         middleware = getattr(self.agent, "middleware", None)
         if middleware is None:
@@ -372,7 +372,7 @@ class RunContext:
             raise RuntimeError("the middleware pipeline finished without producing a chat result")
         return chat_ctx.chat_result
 
-    async def _stream(self, client: LLMClient, messages: list[ChatMessage], options: GenerationOptions) -> LLMResponse:
+    async def _stream(self, client: ChatModel, messages: list[ChatMessage], options: GenerationOptions) -> LLMResponse:
         """Consume the client's stream, publishing live tokens in batches."""
         text: list[str] = []
         reasoning: list[str] = []

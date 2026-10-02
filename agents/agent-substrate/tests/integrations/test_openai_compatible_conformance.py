@@ -10,7 +10,7 @@ import pytest
 
 from substrate.integrations.llm.openai_compatible import OpenAICompatibleClient
 from substrate.models import ModelCapabilities
-from substrate.testing.conformance.llm_client import LLMClientConformance
+from substrate.testing.conformance.chat_model import ChatModelConformance
 
 CAPS = ModelCapabilities(model_id="conformance-model", input_modalities=frozenset({"text", "image"}))
 
@@ -75,7 +75,7 @@ def _build(handler, capabilities):
     return client
 
 
-class TestOpenAICompatibleClient(LLMClientConformance):
+class TestOpenAICompatibleClient(ChatModelConformance):
     @pytest.fixture
     def provider(self):
         return ChatCompletions()

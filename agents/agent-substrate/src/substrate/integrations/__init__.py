@@ -18,7 +18,7 @@ Directory layout::
     ├── knowledge/    ← RAG pipeline, chunkers, loaders, reranker
     ├── pipeline/     ← declarative pipeline execution engine + DataRefStore/ArtifactStore
     ├── memory/       ← Postgres/Redis/Lance MemoryStore implementations
-    ├── history/      ← Postgres HistoryProvider implementation
+    ├── history/      ← Postgres ThreadStore implementation
     ├── vector/       ← Postgres/LanceDB VectorStore implementations
     ├── graph/        ← Apache AGE/LanceDB GraphStore implementations
     ├── storage/      ← S3FileStore, PostgresWorkspaceStore

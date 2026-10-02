@@ -25,7 +25,7 @@ from substrate.runtime import Runtime
 from substrate.context import ContextConfig
 from substrate.context import SlidingWindowCompaction
 from substrate.context import CompactionPipeline
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.integrations.llm import (
     create_model_client,
     detect_provider,
@@ -48,7 +48,7 @@ async def main() -> None:
         "DemoBot",
         model=model,
         tools=[CalculatorTool(), CurrentTimeTool()],
-        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
+        context=ContextConfig(LocalFilesystemThreadStore(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
         system_instructions=(
             "You are a helpful assistant with access to tools. "
             "Use a tool when it helps (e.g. calculations or the current time); "

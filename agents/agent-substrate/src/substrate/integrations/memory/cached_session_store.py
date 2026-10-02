@@ -1,7 +1,7 @@
 """CachedShortTermMemory — durable-primary + fast-cache for session state.
 
 Composes two real ``ShortTermMemory`` peers — a durable ``primary`` and a
-fast ``cache`` — the way ``CachedModelClient`` composes an ``LLMClient`` and
+fast ``cache`` — the way ``CachedModelClient`` composes an ``ChatModel`` and
 a ``SemanticCache``: writes go to ``primary`` first (that's the durability
 guarantee), then best-effort to ``cache``; reads check ``cache`` first and
 fall back to ``primary`` on a miss, repopulating ``cache``.

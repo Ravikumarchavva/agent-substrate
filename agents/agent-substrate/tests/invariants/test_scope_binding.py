@@ -19,13 +19,13 @@ from substrate.stores import Entity, Relationship
 from substrate.stores import HistoryCheckpoint, MessageNode
 from substrate.stores import Document
 from substrate.stores import LocalFilesystemGraphStore
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.stores import WorkspaceFileStore
 from substrate.stores import LocalFilesystemTaskStore
 from substrate.stores import LocalFilesystemVectorStore
-from substrate.stores import bind_graph, bind_history, bind_objects, bind_tasks, bind_vector
+from substrate.stores import bind_graph, bind_threads, bind_files, bind_tasks, bind_vector
 from substrate.testing.conformance.graph_store import GraphStoreConformance
-from substrate.testing.conformance.history_provider import HistoryProviderConformance
+from substrate.testing.conformance.thread_store import ThreadStoreConformance
 from substrate.testing.conformance.task_store import TaskStoreConformance
 from substrate.testing.conformance.vector_store import VectorStoreConformance
 
@@ -43,10 +43,10 @@ def test_a_scope_needs_a_tenant() -> None:
 # ------------------------------------------------------------------ bound handles still conform
 
 
-class TestBoundHistoryConforms(HistoryProviderConformance):
+class TestBoundHistoryConforms(ThreadStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
-        return bind_history(LocalFilesystemHistoryProvider(tmp_path), A)
+        return bind_threads(LocalFilesystemThreadStore(tmp_path), A)
 
 
 class TestBoundVectorConforms(VectorStoreConformance):
@@ -75,8 +75,8 @@ def _node(session: str, text: str, parent: MessageNode | None = None) -> Message
 
 
 async def test_i03_history_of_one_tenant_is_invisible_to_another(tmp_path) -> None:
-    raw = LocalFilesystemHistoryProvider(tmp_path)
-    mine, theirs = bind_history(raw, A), bind_history(raw, B)
+    raw = LocalFilesystemThreadStore(tmp_path)
+    mine, theirs = bind_threads(raw, A), bind_threads(raw, B)
     n = _node("s", "secret")
     await mine.append_node(n)
     await mine.ensure_branch("s", "main")
@@ -98,7 +98,7 @@ async def test_i03_history_of_one_tenant_is_invisible_to_another(tmp_path) -> No
 
 
 async def test_i03_ids_returned_to_the_caller_carry_no_tenant_prefix(tmp_path) -> None:
-    h = bind_history(LocalFilesystemHistoryProvider(tmp_path), A)
+    h = bind_threads(LocalFilesystemThreadStore(tmp_path), A)
     n = _node("s", "x")
     await h.append_node(n)
     assert (await h.get_node(n.id)).session_id == "s"
@@ -144,7 +144,7 @@ async def test_i03_tasks_of_another_tenant_cannot_be_touched_by_board_id(tmp_pat
 
 async def test_i03_object_keys_cannot_climb_out_of_the_tenant(tmp_path) -> None:
     raw = WorkspaceFileStore(tmp_path, user_quota_bytes=10**9)
-    mine, theirs = bind_objects(raw, A), bind_objects(raw, B)
+    mine, theirs = bind_files(raw, A), bind_files(raw, B)
     await theirs.upload("secret.txt", b"keep me")
     for hostile in ("../evilcorp/secret.txt", "a/../../evilcorp/secret.txt", "/etc/passwd", "..", "a\\..\\b", ""):
         with pytest.raises(ValueError):
@@ -159,7 +159,7 @@ async def test_i03_object_keys_cannot_climb_out_of_the_tenant(tmp_path) -> None:
 
 async def test_i03_object_stores_are_per_tenant_with_their_own_usage_and_erase(tmp_path) -> None:
     raw = WorkspaceFileStore(tmp_path, user_quota_bytes=10**9)
-    mine, theirs = bind_objects(raw, A), bind_objects(raw, B)
+    mine, theirs = bind_files(raw, A), bind_files(raw, B)
     await mine.upload("docs/a.bin", b"x" * 100)
     await theirs.upload("docs/a.bin", b"y" * 7)
     assert await mine.download("docs/a.bin") == b"x" * 100
@@ -172,8 +172,8 @@ async def test_i03_object_stores_are_per_tenant_with_their_own_usage_and_erase(t
 
 
 async def test_i03_a_tenant_whose_name_looks_like_another_tenants_prefix_gets_its_own_wall(tmp_path) -> None:
-    raw = LocalFilesystemHistoryProvider(tmp_path)
-    plain, tricky = bind_history(raw, Scope(tenant_id="a")), bind_history(raw, Scope(tenant_id="a/b"))
+    raw = LocalFilesystemThreadStore(tmp_path)
+    plain, tricky = bind_threads(raw, Scope(tenant_id="a")), bind_threads(raw, Scope(tenant_id="a/b"))
     n = _node("s", "x")
     await plain.append_node(n)
     assert await tricky.get_node(n.id) is None

@@ -1,13 +1,13 @@
 """BlobStore — content-addressed object/binary store contract.
 
-``BlobStore`` and ``ObjectStore`` (``kernel/storage/objects.py``) are
+``BlobStore`` and ``FileStore`` (``kernel/storage/objects.py``) are
 deliberately different shapes over the same S3-compatible substrate:
 
 - ``BlobStore`` is *content-addressed* — you hand it bytes, it hands back an
   opaque ``ref`` (the caller never picks the ref). Concrete implementation:
   ``DataRefArtifactStore`` (``integrations/pipeline/data_ref.py``), backed by
   Redis/S3 with TTL-based expiry.
-- ``ObjectStore`` is *keyed* — the caller picks the key (a path-shaped
+- ``FileStore`` is *keyed* — the caller picks the key (a path-shaped
   string), and can list/copy/delete by prefix. Concrete implementations:
   ``WorkspaceFileStore`` (local filesystem) and ``S3FileStore``.
 

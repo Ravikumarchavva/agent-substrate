@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from substrate.types import ChatMessage, TextBlock
-from substrate.models import LLMClient, GenerationOptions
+from substrate.models import ChatModel, GenerationOptions
 from substrate.stores import SearchResult
 from substrate.stores import MemoryCategory, MemoryNamespace, MemoryQuery, MemoryRecord, MemoryStore
 from substrate.types import Actor
@@ -77,7 +77,7 @@ class PageIndexRAGPipeline:
 
     def __init__(
         self,
-        model_client: LLMClient,
+        model_client: ChatModel,
         memory_store: Optional[MemoryStore] = None,
         agent_id: str | Actor = "system",
     ) -> None:

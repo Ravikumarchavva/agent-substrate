@@ -1,4 +1,4 @@
-"""ObjectStore — keyed byte store contract.
+"""FileStore — keyed byte store contract.
 
 The generic key/value object-storage shape every workspace/file-store
 backend already informally implements (``WorkspaceFileStore``,
@@ -20,7 +20,7 @@ from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
-class ObjectStore(Protocol):
+class FileStore(Protocol):
     """Contract every keyed byte-storage backend must satisfy."""
 
     async def upload(
@@ -68,4 +68,4 @@ class ObjectStore(Protocol):
         ...
 
 
-__all__ = ["ObjectStore"]
+__all__ = ["FileStore"]

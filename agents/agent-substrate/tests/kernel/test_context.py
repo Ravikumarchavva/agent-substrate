@@ -39,9 +39,9 @@ async def test_context_config():
     assert cfg.pipeline is pipeline
 
     default_cfg = ContextConfig.default()
-    from substrate.stores import LocalFilesystemHistoryProvider
+    from substrate.stores import LocalFilesystemThreadStore
 
-    assert isinstance(default_cfg.history, LocalFilesystemHistoryProvider)
+    assert isinstance(default_cfg.history, LocalFilesystemThreadStore)
     assert isinstance(default_cfg.pipeline, CompactionPipeline)
     assert isinstance(default_cfg.pipeline._strategies[0], SlidingWindowCompaction)
 
@@ -80,7 +80,7 @@ def _make_msg(role: str, text: str) -> ChatMessage:
 
 
 class _FakeModel:
-    """Minimal LLMClient stub that returns a fixed response."""
+    """Minimal ChatModel stub that returns a fixed response."""
 
     def __init__(self, response: str = "summary text") -> None:
         self._response = response

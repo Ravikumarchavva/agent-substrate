@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.models import ModelCapabilities
-from substrate.testing.conformance.llm_client import LLMClientConformance
+from substrate.testing.conformance.chat_model import ChatModelConformance
 
 CAPS = ModelCapabilities(model_id="conformance-gpt", input_modalities=frozenset({"text", "image"}))
 
@@ -63,7 +63,7 @@ class Responses:
         return httpx.Response(status, json={"error": {"message": message, "type": "error", "code": None, "param": None}}, headers=headers)
 
 
-class TestOpenAIClient(LLMClientConformance):
+class TestOpenAIClient(ChatModelConformance):
     @pytest.fixture
     def provider(self):
         return Responses()

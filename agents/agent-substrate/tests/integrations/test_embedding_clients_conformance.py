@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 
 from substrate.integrations.llm.local_embeddings import SentenceTransformersEmbeddingClient
 from substrate.integrations.llm.openai.openai_embedding_client import OpenAIEmbeddingClient
-from substrate.testing.conformance.embedding_client import EmbeddingClientConformance, vector_of
+from substrate.testing.conformance.embedding_model import EmbeddingModelConformance, vector_of
 
 
 class OpenAIEmbeddings:
@@ -38,7 +38,7 @@ class OpenAIEmbeddings:
         return httpx.Response(status, json={"error": {"message": message, "type": "error", "code": None}})
 
 
-class TestOpenAIEmbeddingClient(EmbeddingClientConformance):
+class TestOpenAIEmbeddingClient(EmbeddingModelConformance):
     @pytest.fixture
     def provider(self):
         return OpenAIEmbeddings()
@@ -91,7 +91,7 @@ class LocalModel:
         return httpx.Response(status, json={"error": message})
 
 
-class TestSentenceTransformersEmbeddingClient(EmbeddingClientConformance):
+class TestSentenceTransformersEmbeddingClient(EmbeddingModelConformance):
     @pytest.fixture
     def provider(self):
         return LocalModel()
@@ -135,7 +135,7 @@ def _SyncBridge(handler):  # noqa: N802
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
-class TestGeminiEmbeddingClient(EmbeddingClientConformance):
+class TestGeminiEmbeddingClient(EmbeddingModelConformance):
     @pytest.fixture
     def provider(self):
         return GeminiEmbeddings()
@@ -169,7 +169,7 @@ class RerankerService:
         return httpx.Response(status, json={"detail": message})
 
 
-class TestEmbeddingRerankerTextEmbeddingClient(EmbeddingClientConformance):
+class TestEmbeddingRerankerTextEmbeddingClient(EmbeddingModelConformance):
     @pytest.fixture
     def provider(self):
         return RerankerService()

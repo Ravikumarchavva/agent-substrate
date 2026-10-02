@@ -17,8 +17,8 @@ from substrate.integrations.knowledge.backends.local import LocalRagBackend
 from substrate.integrations.knowledge.reranker import LLMReranker
 
 
-class StubEmbeddingClient:
-    """Deterministic stub EmbeddingClient — same shape as an OpenAI client."""
+class StubEmbeddingModel:
+    """Deterministic stub EmbeddingModel — same shape as an OpenAI client."""
 
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
@@ -78,7 +78,7 @@ class StubVectorStore:
         return len(self.documents)
 
 
-class StubLLMClient:
+class StubChatModel:
     """Same stub shape used in tests/integrations/test_rag_pipelines.py."""
 
     def __init__(self, responses: list[str]) -> None:
@@ -95,7 +95,7 @@ class StubLLMClient:
 
 
 def test_build_rag_backend_derives_chunk_size_from_embedding_model_when_unset():
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     backend = build_rag_backend(
         "local",
@@ -108,7 +108,7 @@ def test_build_rag_backend_derives_chunk_size_from_embedding_model_when_unset():
 
 
 def test_build_rag_backend_explicit_chunk_size_wins_over_embedding_model():
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     backend = build_rag_backend(
         "local",
@@ -123,7 +123,7 @@ def test_build_rag_backend_explicit_chunk_size_wins_over_embedding_model():
 
 
 def test_build_rag_backend_with_no_embedding_model_still_works():
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     backend = build_rag_backend("local", embedding_client=embed, vector_store=store)
     assert backend._pipeline._default_chunk_size > 0
@@ -134,7 +134,7 @@ def test_build_rag_backend_with_no_embedding_model_still_works():
 
 
 async def test_local_backend_ingest_chunks_embeds_stores(tmp_path: Path):
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     backend = build_rag_backend("local", embedding_client=embed, vector_store=store)
     assert backend.name == "local"
@@ -150,7 +150,7 @@ async def test_local_backend_ingest_chunks_embeds_stores(tmp_path: Path):
 
 
 async def test_local_backend_ingest_bytes_with_filename_metadata():
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     backend = build_rag_backend("local", embedding_client=embed, vector_store=store)
 
@@ -163,7 +163,7 @@ async def test_local_backend_ingest_bytes_with_filename_metadata():
 
 
 async def test_local_backend_query_returns_search_results():
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     store.documents.append(Document.from_text("stored chunk"))
     backend = build_rag_backend("local", embedding_client=embed, vector_store=store)
@@ -175,7 +175,7 @@ async def test_local_backend_query_returns_search_results():
 
 
 async def test_local_backend_query_reranks_when_configured():
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     store.documents.append(Document.from_text("chunk A"))
     store.documents.append(Document.from_text("chunk B"))
@@ -183,7 +183,7 @@ async def test_local_backend_query_reranks_when_configured():
     # LLMReranker only calls the LLM when more candidates than top_k are
     # fetched (else it short-circuits) — fetch_limit=limit*3=6, store has 3,
     # top_k=2, so 3 > 2 candidates actually get reranked.
-    llm = StubLLMClient(responses=["[2, 0]"])
+    llm = StubChatModel(responses=["[2, 0]"])
     reranker = LLMReranker(llm)
     backend = LocalRagBackend(
         pipeline=__import__(
@@ -199,7 +199,7 @@ async def test_local_backend_query_reranks_when_configured():
 
 
 async def test_local_backend_query_with_context_requires_model_client():
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     backend = build_rag_backend("local", embedding_client=embed, vector_store=store)
 
@@ -208,10 +208,10 @@ async def test_local_backend_query_with_context_requires_model_client():
 
 
 async def test_local_backend_query_with_context_uses_pipeline():
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     store.documents.append(Document.from_text("chunk"))
-    llm = StubLLMClient(responses=["the answer"])
+    llm = StubChatModel(responses=["the answer"])
     backend = build_rag_backend(
         "local", embedding_client=embed, vector_store=store, model_client=llm
     )
@@ -222,7 +222,7 @@ async def test_local_backend_query_with_context_uses_pipeline():
 
 
 async def test_local_backend_no_loader_raises_rag_load_error():
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     backend = build_rag_backend("local", embedding_client=embed, vector_store=store)
 
@@ -231,7 +231,7 @@ async def test_local_backend_no_loader_raises_rag_load_error():
 
 
 async def test_local_backend_list_and_delete_collections():
-    embed = StubEmbeddingClient()
+    embed = StubEmbeddingModel()
     store = StubVectorStore()
     backend = build_rag_backend("local", embedding_client=embed, vector_store=store)
 

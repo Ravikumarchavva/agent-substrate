@@ -14,7 +14,7 @@ from tests._layout import contract_files, module_name
 from tests._stores import folder, fs_tasks
 from substrate.types import MediaBlock, TextBlock
 from substrate.types import UnsupportedContentError
-from substrate.models import EmbeddingClient, EmbeddingResult
+from substrate.models import EmbeddingModel, EmbeddingResult
 from substrate.stores import Entity, GraphStore, Relationship
 from substrate.stores import TaskStatus, TaskStore
 
@@ -68,7 +68,7 @@ class _RecordingEmbedder:
 
 async def test_embed_blocks_accepts_text_and_media() -> None:
     client = _RecordingEmbedder()
-    assert isinstance(client, EmbeddingClient)
+    assert isinstance(client, EmbeddingModel)
 
     vec = await client.embed_blocks(
         [TextBlock(text="a cat"), MediaBlock(type="image", url="http://x/cat.png")]

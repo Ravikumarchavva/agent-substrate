@@ -33,7 +33,7 @@ from substrate.runtime import Runtime
 from substrate.context import ContextConfig
 from substrate.context import SlidingWindowCompaction
 from substrate.context import CompactionPipeline
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.tools import Toolbox
 from substrate.integrations.llm import (
     create_model_client,
@@ -176,7 +176,7 @@ async def demo_agent_session() -> None:
         "ToolBot",
         model=model,
         tools=registry.all(),
-        context=ContextConfig(LocalFilesystemHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
+        context=ContextConfig(LocalFilesystemThreadStore(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
         system_instructions="You are a helpful assistant. Use the available tools to answer questions.",
         max_iterations=6,
     )

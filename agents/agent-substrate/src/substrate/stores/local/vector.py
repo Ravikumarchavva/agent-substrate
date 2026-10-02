@@ -1,7 +1,7 @@
 """LocalFilesystemVectorStore — JSON-file-backed vector store for RAG.
 
 Stores data in a local directory tree (default: ``./data/db/vector``), mirroring
-``LocalFilesystemHistoryProvider``'s convention of creating a folder on first
+``LocalFilesystemThreadStore``'s convention of creating a folder on first
 use instead of requiring an external database.
 
 Layout::
@@ -30,7 +30,7 @@ from substrate.stores.vector import Document, SearchResult
 from substrate.stores.local.fs import atomic_write_json, safe_name
 
 if TYPE_CHECKING:
-    from substrate.models.protocols import EmbeddingClient
+    from substrate.models.protocols import EmbeddingModel
 
 
 
@@ -63,10 +63,10 @@ class LocalFilesystemVectorStore:
     def __init__(
         self,
         root: str | Path = "./data/db/vector",
-        embedding_client: EmbeddingClient | None = None,
+        embedding_client: EmbeddingModel | None = None,
     ) -> None:
         self._root = Path(root)
-        self._embedding: EmbeddingClient | None = embedding_client
+        self._embedding: EmbeddingModel | None = embedding_client
 
     # ── Internal helpers ─────────────────────────────────────────────────
 

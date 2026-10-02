@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from substrate.models.client import (
-    EmbeddingClient,
-    LLMClient,
+    EmbeddingModel,
+    ChatModel,
 )
 from substrate.models.protocols import (
     EmbeddingResult,
@@ -24,11 +24,11 @@ from substrate.models.registry import (
 )
 
 __all__ = [
-    "EmbeddingClient",
+    "EmbeddingModel",
     "EmbeddingResult",
     "FinishReason",
     "GenerationOptions",
-    "LLMClient",
+    "ChatModel",
     "LLMResponse",
     "MODEL_REGISTRY",
     "Modality",

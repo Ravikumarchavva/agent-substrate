@@ -20,7 +20,7 @@ from substrate.tools import ToolRisk
 from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
-    from substrate.models import LLMClient
+    from substrate.models import ChatModel
 
 logger = setup_logging()
 
@@ -188,7 +188,7 @@ def templated_summary(reasons: list[str]) -> str:
     return f"This code {body}."
 
 
-async def _llm_summary(code: str, model_client: LLMClient) -> str:
+async def _llm_summary(code: str, model_client: ChatModel) -> str:
     """One-sentence natural-language summary of what dangerous code does."""
     from substrate.types import ChatMessage, TextBlock
     from substrate.models import GenerationOptions
@@ -203,7 +203,7 @@ async def _llm_summary(code: str, model_client: LLMClient) -> str:
 
 
 async def classify_and_summarize(
-    code: str, model_client: LLMClient | None = None
+    code: str, model_client: ChatModel | None = None
 ) -> tuple[ToolRisk, str | None]:
     """Hybrid classifier: static AST decision (fast, every call) plus, only on
     the CRITICAL path, an LLM-written summary for the approval card — falling

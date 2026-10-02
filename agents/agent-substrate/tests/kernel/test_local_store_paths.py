@@ -9,7 +9,7 @@ import pytest
 
 from substrate.stores.local.fs import safe_name
 from substrate.stores import LocalFilesystemGraphStore
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.stores import LocalFilesystemMemoryStore
 from substrate.stores import LocalFilesystemShortTermMemory
 from substrate.stores import LocalFilesystemVectorStore
@@ -47,10 +47,10 @@ def test_every_local_store_keeps_paths_inside_its_root(tmp_path: Path, identifie
     root = tmp_path / "store"
     paths = [
         LocalFilesystemShortTermMemory(root)._path(identifier),
-        LocalFilesystemHistoryProvider(root)._node_path(identifier),
-        LocalFilesystemHistoryProvider(root)._branch_path(identifier, identifier),
-        LocalFilesystemHistoryProvider(root)._checkpoint_path(identifier, identifier),
-        LocalFilesystemHistoryProvider(root)._session_dir(identifier),
+        LocalFilesystemThreadStore(root)._node_path(identifier),
+        LocalFilesystemThreadStore(root)._branch_path(identifier, identifier),
+        LocalFilesystemThreadStore(root)._checkpoint_path(identifier, identifier),
+        LocalFilesystemThreadStore(root)._session_dir(identifier),
         LocalFilesystemVectorStore(root)._doc_path(identifier, identifier),
         LocalFilesystemGraphStore(root)._entity_path(identifier),
         LocalFilesystemGraphStore(root)._relationship_path(identifier),
@@ -83,7 +83,7 @@ async def test_deleting_a_hostile_session_id_removes_nothing_it_should_not(
     victim.mkdir()
     (victim / "precious.txt").write_text("keep me")
     root = tmp_path / "store"
-    history = LocalFilesystemHistoryProvider(root)
+    history = LocalFilesystemThreadStore(root)
     await history.connect()
     (root / "sessions").mkdir()
     (root / "marker.txt").write_text("the store's own data")
@@ -95,7 +95,7 @@ async def test_deleting_a_hostile_session_id_removes_nothing_it_should_not(
 
 
 async def test_history_still_round_trips_with_a_hostile_branch_and_session(tmp_path: Path):
-    history = LocalFilesystemHistoryProvider(tmp_path / "store")
+    history = LocalFilesystemThreadStore(tmp_path / "store")
     await history.connect()
     node = MessageNode(
         session_id="../s",

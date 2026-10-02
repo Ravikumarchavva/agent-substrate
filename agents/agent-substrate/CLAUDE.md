@@ -93,24 +93,26 @@ agent-substrate/                         ← repo root
 
 ```
 src/substrate/
-├── kernel/       the ENGINE — everything needed to run a durable agent (see
-│   │             docs/claude_docs/architecture/kernel.md). Third-party imports: pydantic,
-│   │             opentelemetry-api, confusable_homoglyphs, typing_extensions only.
-│   ├── abstractions/     what the engine needs from outside — ports + value types, pure:
-│   │   ├── core/         content blocks (deep-immutable), Actor/Topic, Usage, ErrorInfo,
-│   │   │                 FinishReason, TraceContext
-│   │   ├── runtime/      RuntimeStore (the one durable port), RunLogEntry, Wakeup, effects
-│   │   ├── tools/        Tool/HostedTool/ProviderDefinedTool, ToolRisk, approval
-│   │   ├── llm/ storage/ agent/ messaging/ document/   LLMClient, History/Memory/Vector/Graph/
-│   │   │                 Object stores, Supervision/budgets, Message, DocumentExtractor
-│   │   └── exceptions.py typed errors (stable `code`, `retryable`)
-│   ├── agents/           RoutedAgent + @handle, ReActAgent, OrchestratorAgent, UserProxyAgent
-│   ├── runtime/          Runtime, Worker, Journal, RunContext, SqlRuntimeStore (+ SQLite adapter)
-│   ├── telemetry/        spans/metrics at every chokepoint; GenAI + substrate.* conventions
-│   ├── llm/ context/ tools/ middleware/ limits/ safety/ storage/ workspace/ flows/ document/
-│   └── testing/          conformance suites + doubles (never imported by production code)
+├── types/ telemetry/ tools/ models/ stores/ documents/ workspace/ safety/ context/ middleware/ runtime/ agents/ testing/
+│                 THE CORE — the engine, one folder per concept, contracts beside their built-in implementation
+│                 (docs/claude_docs/architecture/kernel.md). Third-party imports: pydantic,
+│                 opentelemetry-api, confusable_homoglyphs, typing_extensions only. Bottom-up order:
+│   ├── types/        content blocks (deep-immutable), Actor/Topic, ids, Usage, errors (stable `code`,
+│   │                 `retryable`), RunScope, supervision/budgets, RunLogEntry, Wakeup, streaming events
+│   ├── tools/        Tool/HostedTool/ProviderDefinedTool (protocols.py), ToolRisk, approval, chain, Toolbox
+│   ├── models/       ChatModel/EmbeddingModel (protocols.py), capability registry, modality fitting,
+│   │                 error classification (`classify_llm_error`), tool-argument parsing
+│   ├── stores/       History/Memory/Vector/Graph/Object/Task contracts + local/ (the folder
+│   │                 implementations: the durable floor) + scoped.py (tenant binding)
+│   ├── documents/ workspace/ safety/    DocumentExtractor, branching/snapshots/CAS files, text normalisation
+│   ├── context/      context window, compaction, `history.py` (the linear view of a thread)
+│   ├── middleware/   Middleware contract + built-ins + guardrails
+│   ├── runtime/      RuntimeStore (the one durable port), Runtime, Worker, Journal, RunContext, SQLite store
+│   ├── agents/       RoutedAgent + @handle, ReActAgent, OrchestratorAgent, UserProxyAgent, flows, spawn limits
+│   ├── telemetry/    spans/metrics at every chokepoint; GenAI + substrate.* conventions
+│   └── testing/      conformance suites + doubles (never imported by production code)
 │
-├── evals/        eval harness (EvalCase, EvalDataset, LLMJudge, EvalRunner) — a client of the kernel
+├── evals/        eval harness (EvalCase, EvalDataset, LLMJudge, EvalRunner) — a client of the core
 │
 ├── integrations/ adapters — everything that reaches outside the process: more storage backends,
 │   │             more LLM vendors, tools, RAG, MCP, sandboxed code execution — everything
@@ -134,10 +136,10 @@ src/substrate/
 │   ├── tts/              text-to-speech provider adapters
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore, DurableMemoryStore
-│   ├── history/          RedisHistoryProvider, DurableHistoryProvider
+│   ├── history/          RedisThreadStore, DurableThreadStore
 │   ├── vector/           PgVectorStore, LanceDB  (implement VectorStore Protocol)
 │   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
-│   ├── storage/          S3Connector (raw client) + S3FileStore (ObjectStore Protocol
+│   ├── storage/          S3Connector (raw client) + S3FileStore (FileStore Protocol
 │   │                     impl built on top), PgTaskStore, PostgresWorkspaceStore
 │   ├── database/         PostgresConnector (asyncpg pool — engine's own DB)
 │   ├── cache/            RedisConnector
@@ -158,7 +160,7 @@ src/substrate/
 │   │                     `from_log.wire_from_log(kind, payload)` converts log entries to WireEvents
 │   ├── stream/           AgentStreamSession — tails EventLog, maps entries via wire_from_log
 │   ├── factory.py        constructs agents, tools, and runtime for the HTTP shell —
-│   │                     the primary place serving/, the kernel and the integrations meet
+│   │                     the primary place serving/, the core and the integrations meet
 │   └── research_orchestrator.py  fixed researcher/calculator/clock/coordinator topology
 │                         used when AGENT_MODE=orchestrator
 │
@@ -209,38 +211,43 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 ## Architecture — an engine, its ports, and the adapters around it
 
 ```
-kernel/abstractions   ports + value types (pure)            ← what adapters implement
-kernel/               the engine, built on those ports      ← almost all the behaviour
-integrations/ runtimes/   adapters: vendors, databases, MCP, tools
-serving/ console/ cli     wiring: FastAPI apps, the REPL, the CLI
-evals/                    the eval harness (a client of the kernel)
+substrate/{types … agents}   the core: the engine, one folder per concept, contracts beside implementations
+integrations/ runtimes/      adapters: vendors, databases, MCP, tools
+serving/ console/ cli        wiring: FastAPI apps, the REPL, the CLI
+evals/                       the eval harness (a client of the core)
 ```
 
-The kernel is **not** a layer of contracts: it routes messages, runs and replays durable agents,
-enforces budgets and approvals, and instruments itself. `abstractions` is the seam — it names what the
-engine needs from outside (an LLM client, a runtime store, a memory store…) and carries no behaviour.
-The full rationale, the runtime-store/journal design and the invariants are in
+The core is **not** a layer of contracts: it routes messages, runs and replays durable agents,
+enforces budgets and approvals, and instruments itself. Each concept's `protocols.py` (or its contract
+modules) names what the engine needs from outside — an LLM client, a runtime store, a memory store… — and
+carries no behaviour. The full rationale, the runtime-store/journal design and the invariants are in
 [`docs/claude_docs/architecture/kernel.md`](docs/claude_docs/architecture/kernel.md); the guarantees that
 are *executed* (not just described) are in `docs/claude_docs/architecture/invariants.md`, generated from
 `tests/invariants/` — a test fails if it is stale.
+
+Concepts, bottom-up (`tests/_layout.py`): `types · telemetry · tools · models · stores · documents · workspace ·
+safety · context · middleware · runtime · agents`. A concept imports only the ones before it. Import a public
+name from its concept package (`from substrate.runtime import Runtime`); reach into a submodule only for
+something the package does not export.
 
 **Import-linter contracts** (`pyproject.toml`; `uv run lint-imports`, CI fails if violated):
 
 | Contract | Rule |
 |---|---|
-| `the kernel imports nothing above it` | `kernel` never imports integrations/runtimes/serving/evals/console/cli/config-wiring |
-| `abstractions are independent of the engine` | `kernel/abstractions` imports no engine package |
-| `adapters depend on abstractions and the engine's support libraries, not its internals` | integrations/runtimes may use `abstractions` plus `llm/workspace/storage/safety/tools/runtime/telemetry`, never `agents/context/flows/middleware/limits` |
+| `the core imports nothing outside it` | the core never imports integrations/runtimes/serving/evals/console/cli/config-wiring |
+| `the core's concepts only import downward` | the `layers` order above; imports made only under `TYPE_CHECKING` are exempt |
+| `adapters depend on the contracts and the engine's support libraries, not how it runs an agent` | integrations/runtimes may use the contracts plus `models/workspace/stores/safety/tools/runtime/telemetry`, never `agents`, the context window internals, or middleware implementations |
 | `serving cannot import agents or integrations-that-were-capabilities` | serving/'s routes and services don't reach past its `factory.py`/`research_orchestrator.py` composition root |
 
-**Structure rows** (`tests/invariants/test_structure.py`): kernel third-party imports are exactly the allowed
-set; `kernel/testing` is never imported by production code; the public API of `kernel.abstractions` matches
-`tests/invariants/public_api.json` (change it in the same commit as an intended API change); the core install
-carries `opentelemetry-api` only (the SDK/exporter belong to the `server` extra).
+**Structure rows** (`tests/invariants/test_structure.py`): the core's third-party imports are exactly the allowed
+set; concepts only import downward; the contracts never import the engine (I27); `substrate.testing` is never imported by
+production code; the public API of every concept package matches `tests/invariants/public_api.json` (change it in the
+same commit as an intended API change); the core install carries `opentelemetry-api` only (the SDK/exporter belong
+to the `server` extra).
 
-New agent behaviour goes in `kernel/agents/` (declare handlers with `@handle(PayloadType)` on a `RoutedAgent`),
-new orchestration in `kernel/flows/`, a new port in `kernel/abstractions/` **with a conformance suite** in
-`kernel/testing/conformance/`, and a new vendor/backend/tool in `integrations/`.
+New agent behaviour goes in `agents/` (declare handlers with `@handle(PayloadType)` on a `RoutedAgent`),
+new orchestration in `agents/flows.py`, a new port in the concept that owns it **with a conformance suite** in
+`testing/conformance/`, and a new vendor/backend/tool in `integrations/`.
 
 ---
 
@@ -250,18 +257,18 @@ new orchestration in `kernel/flows/`, a new port in `kernel/abstractions/` **wit
 
 | You want to add… | Write it in… |
 |---|---|
-| A new agent type | `kernel/agents/<name>.py` — subclass `RoutedAgent`, declare handlers with `@handle(PayloadType)` |
-| A new guardrail | `kernel/middleware/guardrails/<name>.py` — implement the middleware contract |
-| A new LLM provider | `integrations/llm/<provider>/` — implement `LLMClient` (`kernel/abstractions/llm/`); report a `FinishReason` and let `classify_llm_error` type its failures |
+| A new agent type | `agents/<name>.py` — subclass `RoutedAgent`, declare handlers with `@handle(PayloadType)` |
+| A new guardrail | `middleware/guardrails/<name>.py` — implement the middleware contract |
+| A new LLM provider | `integrations/llm/<provider>/` — implement `ChatModel` (`models/protocols.py`); report a `FinishReason` and let `classify_llm_error` type its failures |
 | A new memory backend | `integrations/memory/<name>.py` — implement `MemoryStore` and run `MemoryStoreConformance` against it |
-| A new history backend | `integrations/history/<name>.py` — implement `HistoryProvider` (`stores/threads.py`) |
+| A new history backend | `integrations/history/<name>.py` — implement `ThreadStore` (`stores/threads.py`) |
 | A new vector store | `integrations/vector/<name>.py` — implement `VectorStore` (`stores/vector.py`) |
 | A new graph store | `integrations/graph/<name>.py` — implement `GraphStore` (`stores/graph.py`) |
 | A new runtime store | implement `RuntimeStore` (`runtime/store.py`) — or a new `Database` adapter for `SqlRuntimeStore` — and run `RuntimeStoreConformance` against it |
-| A new document extractor | `integrations/document/<name>.py` — implement `DocumentExtractor` (`kernel/abstractions/document/`) |
+| A new document extractor | `integrations/document/<name>.py` — implement `DocumentExtractor` (`documents/protocols.py`) |
 | A new tool | `integrations/tools/<name>/tool.py` — implement `Tool`, **declaring `risk` and `idempotent`** (auto-scanned, no registration needed) |
 | A new skill | `integrations/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
-| A new agent flow | `kernel/flows/` — SequentialFlow / ParallelFlow / ConditionalFlow are `RoutedAgent`s |
+| A new agent flow | `agents/flows.py` — SequentialFlow / ParallelFlow / ConditionalFlow are `RoutedAgent`s |
 
 ### Tool creation
 
@@ -290,21 +297,21 @@ A tool declares `concurrency_safe = True` when several calls to it can run at th
 time (pure reads); a turn's tool calls then run concurrently and are journaled replay-safely
 (`ctx.tool_batch`). Anything that doesn't declare it runs one call at a time. A tool that
 needs to know whose work it is reads `scope_of(ctx)` (tenant/user/thread/branch/agent —
-`kernel.abstractions.agent.runtime_context.RunScope`), never a global and never a model-supplied argument.
+`substrate.types.RunScope`), never a global and never a model-supplied argument.
 
 `substrate.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
 `HostedTool` (provider-executed, `provider_specs`), `ProviderDefinedTool`
 (provider call-shape + local `handle_call()`). Use `is_hosted_tool` /
 `is_provider_defined_tool` to branch at dispatch. Wire-dict encoding for each
 provider lives in `integrations/llm/<provider>_client.py::_tools_from_options`
-+ `integrations/llm/encoders/<provider>.py::encode_tools` — no shared kernel
++ `integrations/llm/encoders/<provider>.py::encode_tools` — no shared core
 encoder type; each provider client builds its own dicts.
 
 Placed at `integrations/tools/my_tool/tool.py` — `CatalogScanner` discovers it automatically.
 
 ### LLM client
 
-Every `LLMClient` exposes `capabilities: ModelCapabilities` (input modalities, context window,
+Every `ChatModel` exposes `capabilities: ModelCapabilities` (input modalities, context window,
 prices; resolved from the model registry, or pass `capabilities=` for an unlisted local model).
 It never sends content outside `capabilities.input_modalities` — unsupported media becomes a
 short text note. `GenerationOptions.reasoning` (`ReasoningEffort`) is the one typed control
@@ -378,16 +385,16 @@ All shared objects (LLM clients, tool registry, event bus, HITL bridge) are wire
 
 ```python
 # zero-infra default — one JSON file per session
-from substrate.stores.local.threads import LocalFilesystemHistoryProvider
+from substrate.stores.local.threads import LocalFilesystemThreadStore
 
 # Redis-backed
-from substrate.integrations.history import RedisHistoryProvider
+from substrate.integrations.history import RedisThreadStore
 
 # Postgres-backed
-from substrate.integrations.history import DurableHistoryProvider
+from substrate.integrations.history import DurableThreadStore
 ```
 
-All `HistoryProvider` methods are `async def`. Always `await` them.
+All `ThreadStore` methods are `async def`. Always `await` them.
 
 ### Long-term memory (`MemoryStore`)
 
@@ -410,14 +417,14 @@ await store.erase(MemoryNamespace(tenant_id="acme", user_id="alice"))   # everyt
 Ids are tenant-qualified (another tenant's same id is a different record); saving over another namespace's id in the
 same tenant raises `ScopeViolationError`; deleting requires owning the record (same user). Implementations:
 `LocalFilesystemMemoryStore` (default), `DurableMemoryStore` (Postgres, table `memory_records`), `LanceMemoryStore`;
-all three run `MemoryStoreConformance` (`kernel/testing/conformance/memory_store.py`). The memory *tool* takes tenant
+all three run `MemoryStoreConformance` (`testing/conformance/memory_store.py`). The memory *tool* takes tenant
 and user from the run's `scope_of(ctx)`, never from model arguments.
 ## Knowledge / RAG
 
-Vector and graph store contracts live in the kernel. Concrete implementations live in `integrations/`; `integrations/knowledge/` wires them into pipelines.
+Vector and graph store contracts live in the core (`stores/`). Concrete implementations live in `integrations/`; `integrations/knowledge/` wires them into pipelines.
 
 ```python
-# Contracts (kernel)
+# Contracts (core)
 from substrate.stores.vector import VectorStore, Document, SearchResult
 from substrate.stores.graph import GraphStore, Entity, Relationship, SubGraph
 
@@ -520,11 +527,11 @@ Logging convention:
 from substrate.logger import setup_logging
 logger = setup_logging("substrate.my_module")
 
-# the kernel is a library: it only emits, and the host decides where it goes
+# the core is a library: it only emits, and the host decides where it goes
 import logging
 logger = logging.getLogger(__name__)
 ```
-`kernel/` must not import `substrate.logger` — importing the engine configures nothing and loads no logging stack
+The core must not import `substrate.logger` — importing the engine configures nothing and loads no logging stack
 (row I26 loads the whole engine in a subprocess and checks what came in).
 
 ---

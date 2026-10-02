@@ -156,14 +156,14 @@ def test_i28_the_public_api_matches_its_snapshot() -> None:
 # (``substrate/testing/conformance/``). A port with no suite is a promise nothing checks.
 _PORTS = (
     "RuntimeStore",
-    "HistoryProvider",
+    "ThreadStore",
     "MemoryStore",
     "VectorStore",
     "GraphStore",
-    "ObjectStore",
+    "FileStore",
     "TaskStore",
-    "LLMClient",
-    "EmbeddingClient",
+    "ChatModel",
+    "EmbeddingModel",
     "DocumentExtractor",
 )
 _SUITES_DIR = SRC / "testing" / "conformance"
@@ -203,22 +203,22 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
     suites = _suite_classes()
     assert "RuntimeStore" in suites, "the runtime-store conformance suite has gone missing"
     assert "MemoryStore" in suites, "the memory-store conformance suite has gone missing"
-    assert "HistoryProvider" in suites, "the history-provider conformance suite has gone missing"
-    assert "ObjectStore" in suites, "the ObjectStore conformance suite has gone missing"
+    assert "ThreadStore" in suites, "the history-provider conformance suite has gone missing"
+    assert "FileStore" in suites, "the FileStore conformance suite has gone missing"
     assert "TaskStore" in suites, "the TaskStore conformance suite has gone missing"
     assert "GraphStore" in suites, "the GraphStore conformance suite has gone missing"
-    for port in ("LLMClient", "EmbeddingClient", "DocumentExtractor"):
+    for port in ("ChatModel", "EmbeddingModel", "DocumentExtractor"):
         assert port in suites, f"the {port} conformance suite has gone missing"
     assert "VectorStore" in suites, "the vector-store conformance suite has gone missing"
     shipped = {
         "RuntimeStore": ("SqliteRuntimeStore", "PostgresRuntimeStore"),
         "MemoryStore": ("LocalFilesystemMemoryStore", "DurableMemoryStore", "LanceMemoryStore"),
-        "HistoryProvider": ("LocalFilesystemHistoryProvider", "DurableHistoryProvider"),
-        "ObjectStore": ("WorkspaceFileStore", "S3FileStore"),
+        "ThreadStore": ("LocalFilesystemThreadStore", "DurableThreadStore"),
+        "FileStore": ("WorkspaceFileStore", "S3FileStore"),
         "TaskStore": ("LocalFilesystemTaskStore", "PgTaskStore"),
         "GraphStore": ("LocalFilesystemGraphStore", "LanceGraphStore"),
-        "LLMClient": ("OpenAICompatibleClient", "OpenAIClient", "AnthropicClient", "GeminiClient"),
-        "EmbeddingClient": ("OpenAIEmbeddingClient", "GeminiEmbeddingClient", "SentenceTransformersEmbeddingClient", "EmbeddingRerankerTextEmbeddingClient"),
+        "ChatModel": ("OpenAICompatibleClient", "OpenAIClient", "AnthropicClient", "GeminiClient"),
+        "EmbeddingModel": ("OpenAIEmbeddingClient", "GeminiEmbeddingClient", "SentenceTransformersEmbeddingClient", "EmbeddingRerankerTextEmbeddingClient"),
         "DocumentExtractor": ("LocalDocumentExtractor", "ServiceBackedDocumentExtractor"),
         "VectorStore": ("LocalFilesystemVectorStore", "LanceDBVectorStore", "PgVectorStore"),
     }

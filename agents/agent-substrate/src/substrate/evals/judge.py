@@ -22,7 +22,7 @@ from typing import List, Optional
 
 from substrate.evals.criteria import EvalCriterion
 from substrate.evals.models import EvalScore
-from substrate.models import LLMClient
+from substrate.models import ChatModel
 from substrate.types import ChatMessage
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class LLMJudge:
 
     def __init__(
         self,
-        model_client: LLMClient,
+        model_client: ChatModel,
         criteria: List[EvalCriterion],
         *,
         parallel: bool = True,

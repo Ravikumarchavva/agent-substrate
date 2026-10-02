@@ -30,7 +30,7 @@ from substrate.integrations.tools.invoice_extractor.tool import InvoiceExtractor
 from substrate.agents import ReActAgent
 from substrate.integrations.llm.factory import create_model_client
 from substrate.agent_catalog import AgentCatalog
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 
 # Infrastructure: none required for direct tool calls.
 #   For the agent sections, set OPENAI_API_KEY (or another provider key).
@@ -132,7 +132,7 @@ async def section_2_agent_extraction(tool: InvoiceExtractorTool) -> None:
         "primary",
         create_model_client(settings.CHAT_MODEL, api_keys=api_keys),
     )
-    catalog.register_memory("memory", LocalFilesystemHistoryProvider())
+    catalog.register_memory("memory", LocalFilesystemThreadStore())
     catalog.register_tool(tool)
 
     agent = ReActAgent(

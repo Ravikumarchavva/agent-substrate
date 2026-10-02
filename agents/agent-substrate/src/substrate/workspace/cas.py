@@ -1,4 +1,4 @@
-"""BlobCAS — content-addressed blob storage over an ObjectStore.
+"""BlobCAS — content-addressed blob storage over an FileStore.
 
 Whole-file sha256 addressing (see ``kernel/storage/snapshots.py::ContentRef``
 for why this is the deliberate v1 choice, and the escape hatch for adding
@@ -19,27 +19,27 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from substrate.stores.files import ObjectStore
+from substrate.stores.files import FileStore
 from substrate.workspace.protocols import ContentRef
 
 from .layout import blob_key
 
 
 class BlobCAS:
-    """Content-addressed blob store for one user, backed by an ``ObjectStore``.
+    """Content-addressed blob store for one user, backed by an ``FileStore``.
 
     ``local_cache_dir``, if given, is a local scratch directory this CAS
     also writes every blob into (keyed by hash) — populated on both ``put``
     and ``get``. ``materialize.py`` hardlinks from this cache instead of
     copying bytes when checking out a snapshot, which is what makes
     materialization near-instant after the first time a blob is touched,
-    regardless of whether the backing ``ObjectStore`` is local disk or S3.
+    regardless of whether the backing ``FileStore`` is local disk or S3.
     Optional: without it, ``get`` just downloads every time.
     """
 
     def __init__(
         self,
-        store: ObjectStore,
+        store: FileStore,
         *,
         tenant_id: str,
         user_id: str,

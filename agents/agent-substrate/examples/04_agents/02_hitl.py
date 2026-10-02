@@ -24,7 +24,7 @@ from substrate.runtime import Runtime
 from substrate.context import ContextConfig
 from substrate.context import SlidingWindowCompaction
 from substrate.context import CompactionPipeline
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.integrations.tools import CalculatorTool
 from substrate.integrations.llm import (
     create_model_client,
@@ -92,7 +92,7 @@ async def main() -> None:
         model=model,
         tools=[ask_tool, CalculatorTool()],
         context=ContextConfig(
-            LocalFilesystemHistoryProvider(),
+            LocalFilesystemThreadStore(),
             pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
         ),
         system_instructions=(

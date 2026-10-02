@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 from substrate.stores import SearchResult
 
 if TYPE_CHECKING:
-    from substrate.models import LLMClient
+    from substrate.models import ChatModel
 
 logger = setup_logging()
 
@@ -62,7 +62,7 @@ class LLMReranker:
     each document's relevance to the query, return top-K by relevance.
     """
 
-    def __init__(self, model_client: LLMClient) -> None:
+    def __init__(self, model_client: ChatModel) -> None:
         self._client = model_client
 
     async def rerank(

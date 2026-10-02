@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.stores import LocalFilesystemHistoryProvider
-from substrate.testing.conformance.history_provider import HistoryProviderConformance
+from substrate.stores import LocalFilesystemThreadStore
+from substrate.testing.conformance.thread_store import ThreadStoreConformance
 
 
-class TestLocalFilesystemHistoryProvider(HistoryProviderConformance):
+class TestLocalFilesystemThreadStore(ThreadStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
-        return LocalFilesystemHistoryProvider(tmp_path)
+        return LocalFilesystemThreadStore(tmp_path)

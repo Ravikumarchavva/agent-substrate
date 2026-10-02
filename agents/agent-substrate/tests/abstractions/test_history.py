@@ -9,7 +9,7 @@ import pytest
 
 from substrate.context import project_messages
 from substrate.types import ChatMessage, TextBlock
-from substrate.stores import HistoryProvider, MessageNode
+from substrate.stores import ThreadStore, MessageNode
 
 
 def _msg(text: str) -> ChatMessage:
@@ -31,7 +31,7 @@ async def _append(provider, session_id: str, text: str, *, run_id: str = "", bra
 @pytest.mark.asyncio
 async def test_history_provider_contract():
     provider = fs_history()
-    assert isinstance(provider, HistoryProvider)
+    assert isinstance(provider, ThreadStore)
 
     assert await project_messages(provider, "session-abc") == []
 

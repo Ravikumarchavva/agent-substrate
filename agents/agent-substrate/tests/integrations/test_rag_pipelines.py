@@ -14,8 +14,8 @@ from substrate.integrations.knowledge.graph_rag import GraphRAGPipeline
 from substrate.integrations.knowledge.pipeline import RAGPipeline
 
 
-class StubLLMClient:
-    """A stub LLMClient that returns pre-configured responses."""
+class StubChatModel:
+    """A stub ChatModel that returns pre-configured responses."""
 
     def __init__(self, responses: list[str]) -> None:
         self.responses = responses
@@ -134,7 +134,7 @@ async def test_page_index_flat_traversal():
     # 3. Answer index '0' (second query in query_with_context)
     # 4. Answer 'retrieve' (second query in query_with_context)
     # 5. Final generation answer
-    stub_llm = StubLLMClient(
+    stub_llm = StubChatModel(
         responses=["0", "retrieve", "0", "retrieve", "Navigated response"]
     )
 
@@ -170,7 +170,7 @@ async def test_page_index_flat_traversal():
 
 @pytest.mark.asyncio
 async def test_page_index_markdown_headers():
-    stub_llm = StubLLMClient(responses=["retrieve"])
+    stub_llm = StubChatModel(responses=["retrieve"])
     pipeline = PageIndexRAGPipeline(model_client=stub_llm)
 
     markdown_text = """# Introduction
@@ -239,7 +239,7 @@ async def test_graph_rag_enrichment():
             ],
         }
     )
-    stub_llm = StubLLMClient(responses=[extraction_json, "Final Graph RAG answer"])
+    stub_llm = StubChatModel(responses=[extraction_json, "Final Graph RAG answer"])
 
     # Setup stubs
     embed_client = OpenAIEmbeddingClient(api_key="mock")

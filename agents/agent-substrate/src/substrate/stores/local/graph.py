@@ -1,7 +1,7 @@
 """LocalFilesystemGraphStore — JSON-file-backed knowledge graph store.
 
 Stores data in a local directory tree (default: ``./data/db/graph``), mirroring
-``LocalFilesystemHistoryProvider``'s convention of creating a folder on first
+``LocalFilesystemThreadStore``'s convention of creating a folder on first
 use instead of requiring an external database.
 
 Layout::

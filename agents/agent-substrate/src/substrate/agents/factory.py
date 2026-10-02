@@ -6,15 +6,15 @@ import logging
 from typing import TYPE_CHECKING
 
 from substrate.tools.protocols import Tool
-from substrate.models.protocols import LLMClient
+from substrate.models.protocols import ChatModel
 from substrate.tools.approval import ApprovalHandler
 from substrate.tools.protocols import ToolRisk
 from substrate.context.compaction.pipeline import CompactionPipeline
 from substrate.context.compaction.sliding_window import SlidingWindowCompaction
 from substrate.middleware._contracts import Middleware
 from substrate.middleware.pipeline import MiddlewarePipeline
-from substrate.context.history import HistoryProvider
-from substrate.stores.local.threads import LocalFilesystemHistoryProvider
+from substrate.context.history import ThreadStore
+from substrate.stores.local.threads import LocalFilesystemThreadStore
 
 if TYPE_CHECKING:
     from substrate.agents.react import ReActAgent
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 def rebuild_agent(
     spec: dict,
     *,
-    model_client: LLMClient,
+    model_client: ChatModel,
     tools: list[Tool] | None = None,
 ) -> ReActAgent:
     """Reconstruct an agent from a persisted spec (used for cold resume).
@@ -57,7 +57,7 @@ def rebuild_agent(
     system_instructions = spec.get("system_instructions", "")
 
     ctx = ContextConfig(
-        LocalFilesystemHistoryProvider(),
+        LocalFilesystemThreadStore(),
         pipeline=CompactionPipeline(
             [SlidingWindowCompaction(max_messages=model_context_window)]
         ),
@@ -80,10 +80,10 @@ def rebuild_agent(
 
 def create_assistant_agent(
     *,
-    model_client: LLMClient,
+    model_client: ChatModel,
     tools: list[Tool] | None = None,
     system_instructions: str = "",
-    memory: HistoryProvider | None = None,
+    memory: ThreadStore | None = None,
     model_context: CompactionPipeline | None = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
@@ -106,7 +106,7 @@ def create_assistant_agent(
         model_client: The LLM client to drive the ReAct loop.
         tools: Optional list of Tool instances to expose.
         system_instructions: System prompt prepended to every conversation.
-        memory: Shared history provider; an ``InMemoryHistoryProvider`` is used
+        memory: Shared history provider; an ``InMemoryThreadStore`` is used
             when ``None``.
         model_context: Explicit compaction pipeline; if ``None`` a
             ``CompactionPipeline([SlidingWindowCompaction(max_messages=model_context_window)])`` is
@@ -147,7 +147,7 @@ def create_assistant_agent(
     )
 
     ctx = ContextConfig(
-        memory if memory is not None else LocalFilesystemHistoryProvider(),
+        memory if memory is not None else LocalFilesystemThreadStore(),
         pipeline=pipeline,
     )
 

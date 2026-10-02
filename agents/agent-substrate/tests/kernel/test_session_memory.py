@@ -27,7 +27,7 @@ from substrate.types import CompletionEvent, TextDelta
 # ---------------------------------------------------------------------------
 
 
-class MockLLMClient:
+class MockChatModel:
     def __init__(self, responses: list[list[ContentBlock]]) -> None:
         self._queue = list(responses)
         self.model = "mock-model"
@@ -39,7 +39,7 @@ class MockLLMClient:
         *,
         options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
-        assert self._queue, "MockLLMClient: no more scripted responses"
+        assert self._queue, "MockChatModel: no more scripted responses"
         return LLMResponse(content=self._queue.pop(0), usage=Usage())
 
     def generate_stream(
@@ -129,7 +129,7 @@ async def test_standalone_session_accumulates_across_runs():
     async with Runtime.local(":memory:") as rt:
         agent = ReActAgent(
             "bot",
-            model=MockLLMClient(
+            model=MockChatModel(
                 [
                     [TextBlock(text="I am fine.")],
                     [TextBlock(text="You said hi earlier.")],
@@ -160,7 +160,7 @@ async def test_session_isolation_across_different_sessions():
     async with Runtime.local(":memory:") as rt:
         agent = ReActAgent(
             "agent",
-            model=MockLLMClient(
+            model=MockChatModel(
                 [
                     [TextBlock(text="Session A response.")],
                     [TextBlock(text="Session B response.")],
@@ -191,7 +191,7 @@ async def test_cross_run_memory_same_session():
     async with Runtime.local(":memory:") as rt:
         agent = ReActAgent(
             "mem-bot",
-            model=MockLLMClient(
+            model=MockChatModel(
                 [
                     [TextBlock(text="Stored.")],
                     [TextBlock(text="The answer was 42.")],

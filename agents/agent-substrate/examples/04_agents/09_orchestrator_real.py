@@ -35,7 +35,7 @@ import asyncio
 from substrate.context import ContextConfig
 from substrate.context import SlidingWindowCompaction
 from substrate.context import CompactionPipeline
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.agents import ReActAgent
 from substrate.agents import OrchestratorAgent, SubAgentConfig
 from substrate.runtime import Runtime
@@ -61,7 +61,7 @@ def _model():
 
 def _context() -> ContextConfig:
     return ContextConfig(
-        LocalFilesystemHistoryProvider(),
+        LocalFilesystemThreadStore(),
         pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)]),
     )
 

@@ -346,7 +346,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from substrate.context import CompactionPipeline
     from substrate.context import ContextConfig
     from substrate.context import SlidingWindowCompaction
-    from substrate.stores import LocalFilesystemHistoryProvider
+    from substrate.stores import LocalFilesystemThreadStore
 
     # Build tools
     tools = []
@@ -362,7 +362,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
             toolbox = Toolbox()
             for t in tools:
                 toolbox.add(t)
-        history = LocalFilesystemHistoryProvider(root="./data/history")
+        history = LocalFilesystemThreadStore(root="./data/history")
         await history.connect()
         async with Runtime.local("./data/db/runtime.sqlite3") as rt:
             agent = ReActAgent(

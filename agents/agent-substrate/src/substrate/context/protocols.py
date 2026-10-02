@@ -48,7 +48,7 @@ class CompactionStrategy(Protocol):
 
     Implementations might use sliding windows, token truncation, or
     LLM-based summarisation. Input and output are ``list[ChatMessage]``
-    — the same type used directly by ``LLMClient.generate``.
+    — the same type used directly by ``ChatModel.generate``.
     """
 
     async def compact(self, raw_history: list[ChatMessage]) -> list[ChatMessage]:

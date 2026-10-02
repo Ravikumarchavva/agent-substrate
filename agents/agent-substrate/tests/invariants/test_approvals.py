@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 from substrate.types import TextBlock
@@ -110,25 +109,38 @@ def test_a_disconnect_or_timeout_is_a_denial() -> None:
     assert ApprovalResult.from_response({"session_disconnected": True}).decision is ApprovalDecision.DENIED
 
 
-async def test_i23_the_server_names_the_approver_not_the_client() -> None:
-    """The route stamps ``decided_by`` / ``decided_at`` from the authenticated caller. A client that
-    puts someone else's name in its body is not believed."""
-    from substrate.serving.monolith.routes.hitl import respond_to_hitl
-    from substrate.serving.monolith.schemas import HITLResponse
+async def test_i23_the_server_names_the_approver_not_the_client(tmp_path: Path) -> None:
+    """``create_app`` journals ``decided_by`` from the server's own hook — its auth — and ``decided_at`` from its own clock. A
+    client that puts someone else's name in its body is not believed."""
+    from fastapi.testclient import TestClient
 
-    received: dict[str, Any] = {}
+    from substrate import ReActAgent, tool
+    from substrate.server import create_app
+    from substrate.testing.scripted import ScriptedModel, ToolCall
+    from substrate.tools import DurableApproval
 
-    class Registry:
-        async def resolve(self, request_id: str, data: dict[str, Any]) -> bool:
-            received.update(data)
-            return True
+    @tool(risk=ToolRisk.CRITICAL, idempotent=False)
+    def wire(amount: int) -> str:
+        """Wire money."""
+        return f"wired {amount}"
 
-    ctx = SimpleNamespace(bridge_registry=Registry())
-    claims = SimpleNamespace(sub="the-real-caller")
-    body = HITLResponse.model_validate({"action": "approve", "decided_by": "the-cfo", "reason": "ok"})
+    agent = ReActAgent("t", model=ScriptedModel(ToolCall("wire", {"amount": 5}), "ok"), tools=[wire], approval_handler=DurableApproval())
+    app = create_app(agent, store=tmp_path, identity_of=lambda request: "the-real-caller")
+    with TestClient(app) as client:
+        import threading
 
-    await respond_to_hitl("req-1", body, ctx=ctx, user=claims)  # type: ignore[arg-type]
-
-    assert received["decided_by"] == "the-real-caller"
-    assert received["decided_at"], "the time of the decision is stamped by the server"
-    assert received["action"] == "approve" and received["reason"] == "ok"
+        done = threading.Thread(target=lambda: client.post("/chat", json={"message": "pay", "thread_id": "t"}))
+        done.start()
+        runs: list = []
+        pending: list = []
+        for _ in range(300):
+            runs = client.portal.call(app.state.runtime.runs_for_thread, "t")
+            if runs:
+                pending = client.get(f"/runs/{runs[0].run_id}/approvals").json()
+                if pending:
+                    break
+            threading.Event().wait(0.02)
+        client.post(f"/runs/{runs[0].run_id}/approvals/{pending[0]['request_id']}", json={"decision": "approved", "decided_by": "the-cfo"})
+        done.join(10)
+        decided = [e.payload for e in client.portal.call(app.state.runtime.read, runs[0].run_id) if e.kind == RunLogKind.APPROVAL_DECIDED]
+    assert decided[0]["decided_by"] == "the-real-caller" and decided[0]["decided_at"]

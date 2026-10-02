@@ -43,31 +43,19 @@ class GeminiEmbeddingClient(BaseEmbeddingClient):
         dimensions: Optional[int] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model=model, dimensions=dimensions, **kwargs)
+        super().__init__(model=model, dimensions=dimensions, max_input_tokens=2048, **kwargs)
         self.api_key = api_key
         self.client = genai.Client(api_key=api_key)
 
-    async def embed(
-        self,
-        texts: list[str],
-        *,
-        model: Optional[str] = None,
-        dimensions: Optional[int] = None,
-    ) -> EmbeddingResult:
-        """Embed texts via the Gemini Embeddings API.
-
-        The ``google-genai`` SDK ``embed_content`` is sync-only, so we
-        call it directly (it's a single HTTP round-trip, fast enough).
-        """
-        effective_model = model or self.model
-        effective_dims = dimensions or self.dimensions
-        if not texts:
-            return EmbeddingResult(embeddings=[], model=effective_model)
-
+    async def _embed_texts(self, texts: list[str], *, query: bool) -> EmbeddingResult:
+        """Embed texts via the Gemini Embeddings API (``query`` selects the retrieval-query task type)."""
+        effective_model = self.model
+        effective_dims = self.dimensions
         config_kwargs: dict[str, Any] = {}
         if effective_dims is not None:
             config_kwargs["output_dimensionality"] = effective_dims
-        config = genai.types.EmbedContentConfig(**config_kwargs) if config_kwargs else None
+        config_kwargs["task_type"] = "RETRIEVAL_QUERY" if query else "RETRIEVAL_DOCUMENT"
+        config = genai.types.EmbedContentConfig(**config_kwargs)
 
         embeddings: list[list[float]] = []
         for start in range(0, len(texts), _MAX_INPUTS_PER_REQUEST):
@@ -84,6 +72,8 @@ class GeminiEmbeddingClient(BaseEmbeddingClient):
                 )
             embeddings.extend(vectors)
 
+        if embeddings and self.dimensions is None:
+            self.dimensions = len(embeddings[0])
         return EmbeddingResult(
             embeddings=embeddings,
             model=effective_model,

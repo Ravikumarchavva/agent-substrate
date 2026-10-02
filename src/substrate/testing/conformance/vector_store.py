@@ -21,6 +21,7 @@ import pytest
 
 from substrate.types.content import TextBlock
 from substrate.stores.vector import Document, VectorStore
+from substrate.types.errors import VectorSpaceError
 
 
 class VectorStoreConformance:
@@ -144,11 +145,50 @@ class SearchableVectorStoreConformance(VectorStoreConformance):
 
     async def test_a_collection_holds_one_width_of_vector(self, store) -> None:
         await store.add([Document.from_text("a", id="a", embedding=[1.0, 0.0])], collection="kb")
-        with pytest.raises(ValueError, match="2-wide"):
+        with pytest.raises(VectorSpaceError, match="2-wide"):
             await store.add([Document.from_text("b", id="b", embedding=[1.0, 0.0, 0.0])], collection="kb")
         # the refused write left nothing behind, and another collection is free to use another width
         assert [d.id for d in await store.get(["a", "b"], collection="kb")] == ["a"]
         await store.add([Document.from_text("c", id="c", embedding=[1.0, 0.0, 0.0])], collection="wide")
+
+    async def test_a_collection_holds_one_embedders_vectors(self, store) -> None:
+        await store.add([Document.from_text("a", id="a", embedding=[1.0, 0.0])], collection="kb", space="model-a")
+        await store.add([Document.from_text("b", id="b", embedding=[0.0, 1.0])], collection="kb", space="model-a")  # the same one: fine
+        with pytest.raises(VectorSpaceError, match="model-a"):
+            await store.add([Document.from_text("c", id="c", embedding=[1.0, 1.0])], collection="kb", space="model-b")
+        with pytest.raises(VectorSpaceError):
+            await store.search([1.0, 0.0], collection="kb", space="model-b")
+        with pytest.raises(VectorSpaceError):
+            await store.hybrid_search([1.0, 0.0], "a", collection="kb", space="model-b")
+        assert [r.id for r in await store.search([1.0, 0.0], collection="kb", space="model-a", limit=1)] == ["a"]
+        assert [d.id for d in await store.get(["c"], collection="kb")] == []  # the refused write left nothing behind
+
+    async def test_a_document_may_be_stored_without_an_embedding_and_is_found_by_its_words(self, store) -> None:
+        await store.add(
+            [
+                Document.from_text("invoice settled in full", id="plain"),
+                Document.from_text("invoice with a vector", id="vec", embedding=[1.0, 0.0]),
+            ],
+            collection="kb",
+        )
+        assert {d.id: d.embedding for d in await store.get(["plain", "vec"], collection="kb")} == {"plain": None, "vec": [1.0, 0.0]}
+        assert [r.id for r in await store.search([1.0, 0.0], collection="kb")] == ["vec"], "similarity search must not return what has no vector"
+        assert {r.id for r in await store.lexical_search("invoice", collection="kb")} == {"plain", "vec"}
+        assert {r.id for r in await store.hybrid_search([1.0, 0.0], "invoice", collection="kb")} == {"plain", "vec"}
+        await store.upsert([Document.from_text("invoice settled in full", id="plain", embedding=[0.0, 1.0])], collection="kb")  # embedded later
+        assert (await store.get(["plain"], collection="kb"))[0].embedding == [0.0, 1.0]
+
+    async def test_lexical_search_can_match_any_word_and_ignores_common_ones(self, store) -> None:
+        await store.add(
+            [
+                Document.from_text("refund policy for damaged goods", id="a", embedding=[1.0, 0.0]),
+                Document.from_text("shipping times to Rotterdam", id="b", embedding=[0.0, 1.0]),
+            ],
+            collection="kb",
+        )
+        assert await store.lexical_search("refund Rotterdam", collection="kb") == []  # all words: no passage has both
+        assert {r.id for r in await store.lexical_search("refund Rotterdam", collection="kb", match="any")} == {"a", "b"}
+        assert [r.id for r in await store.lexical_search("what is the refund policy for", collection="kb")] == ["a"]  # the common words are dropped
 
     async def test_adding_does_not_replace_but_upserting_does(self, store) -> None:
         await store.add([Document.from_text("first", id="d", embedding=[1.0, 0.0])], collection="kb")

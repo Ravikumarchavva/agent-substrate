@@ -11,7 +11,7 @@ Usage::
     )
 
     client = OpenAIEmbeddingClient(api_key="sk-...")
-    result = await client.embed(["Hello world"], dimensions=256)
+    result = await client.embed(["Hello world"])
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ class OpenAIEmbeddingClient(BaseEmbeddingClient):
         timeout: Optional[float] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model=model, dimensions=dimensions, **kwargs)
+        super().__init__(model=model, dimensions=dimensions, max_input_tokens=8191, **kwargs)
 
         client_kwargs: dict[str, Any] = {}
         if api_key:
@@ -66,38 +66,23 @@ class OpenAIEmbeddingClient(BaseEmbeddingClient):
 
         self.client = AsyncOpenAI(**client_kwargs)
 
-    async def embed(
-        self,
-        texts: list[str],
-        *,
-        model: Optional[str] = None,
-        dimensions: Optional[int] = None,
-    ) -> EmbeddingResult:
-        """Embed texts via the OpenAI Embeddings API.
-
-        The API accepts a list of strings in a single call (batch-native).
-        """
-        effective_model = model or self.model
-        effective_dims = dimensions or self.dimensions
-        if not texts:
-            return EmbeddingResult(embeddings=[], model=effective_model)  # the API rejects an empty input
-
-        create_kwargs: dict[str, Any] = {
-            "model": effective_model,
-            "input": texts,
-        }
+    async def _embed_texts(self, texts: list[str], *, query: bool) -> EmbeddingResult:
+        """Embed texts via the OpenAI Embeddings API (batch-native: a list of strings per call)."""
+        create_kwargs: dict[str, Any] = {"model": self.model}
         # dimensions param is only supported on text-embedding-3-* models
-        if effective_dims is not None:
-            create_kwargs["dimensions"] = effective_dims
+        if self.dimensions is not None:
+            create_kwargs["dimensions"] = self.dimensions
 
         embeddings: list[list[float]] = []
         usage_tokens = 0
-        served_model = effective_model
+        served_model = self.model
         for start in range(0, len(texts), _MAX_INPUTS_PER_REQUEST):
-            response = await self.client.embeddings.create(**{**create_kwargs, "input": texts[start : start + _MAX_INPUTS_PER_REQUEST]})
+            response = await self.client.embeddings.create(**create_kwargs, input=texts[start : start + _MAX_INPUTS_PER_REQUEST])
             # Sort by index to guarantee order matches input
             embeddings.extend(item.embedding for item in sorted(response.data, key=lambda d: d.index))
             usage_tokens += response.usage.total_tokens if response.usage else 0
             served_model = response.model
 
+        if embeddings and self.dimensions is None:
+            self.dimensions = len(embeddings[0])
         return EmbeddingResult(embeddings=embeddings, model=served_model, usage_tokens=usage_tokens)

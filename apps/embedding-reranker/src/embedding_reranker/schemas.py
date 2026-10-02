@@ -1,45 +1,67 @@
-"""Wire schemas for the embedding-reranker service.
+"""Wire schemas of the embedding-reranker service: the OpenAI embeddings wire and the Jina/Cohere rerank wire.
 
-Re-exports the canonical response shapes from embedding_reranker/client.py
-(single source of truth — mirrors document_intelligence's own
-service/schemas.py, which does the same for its own request/response types)
-and adds the service-local request shapes.
+``POST /v1/embeddings`` takes ``input`` as a list of items, each a string, ``{"image": "<base64>"}``, or ``{"content": [<string or image>, …]}``
+(one vector for the whole mixed item); the model's ``dimensions``, ``max_input_tokens`` and ``modalities`` are at ``GET /v1/models``.
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Any
 
-from substrate.integrations.services.embedding_reranker import (
-    EmbedResponse,
-    HealthResponse,
-    RerankResponse,
-)
-
-__all__ = [
-    "EmbedRequest",
-    "EmbedResponse",
-    "RerankRequest",
-    "RerankResponse",
-    "HealthResponse",
-]
+from pydantic import BaseModel, Field
 
 
-class EmbedRequest(BaseModel):
-    """Three valid shapes: ``text`` alone, ``image_base64`` alone (the
-    single-image case), or ``text`` + ``images_base64`` together — the
-    mixed-multimodal case, embedded as one vector for the whole combined
-    input via a single prompt with the images' dynamic media_marker
-    interleaved server-side. ``image_base64`` is mutually exclusive with
-    both ``text`` and ``images_base64`` — it's the single-image-only
-    shortcut; use ``images_base64`` (even with one entry) alongside
-    ``text`` for anything mixed."""
+class EmbeddingsRequest(BaseModel):
+    input: list[str | dict[str, Any]] = Field(min_length=1)
+    model: str = ""
+    input_type: str = ""
+    """``"query"`` for a search query (the server prepends the model's query instruction); anything else is a passage."""
 
-    image_base64: str | None = None
-    text: str | None = None
-    images_base64: list[str] | None = None
+
+class EmbeddingRow(BaseModel):
+    object: str = "embedding"
+    index: int
+    embedding: list[float]
+
+
+class EmbeddingsResponse(BaseModel):
+    object: str = "list"
+    data: list[EmbeddingRow]
+    model: str
+    usage: dict[str, int] = Field(default_factory=lambda: {"prompt_tokens": 0, "total_tokens": 0})
 
 
 class RerankRequest(BaseModel):
     query: str
-    passages: list[str]
+    documents: list[str]
+    model: str = ""
+    top_n: int | None = None
+
+
+class RerankRow(BaseModel):
+    index: int
+    relevance_score: float
+
+
+class RerankResponse(BaseModel):
+    results: list[RerankRow]
+    model: str
+
+
+class ModelInfo(BaseModel):
+    id: str
+    object: str = "model"
+    dimensions: int
+    max_input_tokens: int
+    modalities: list[str]
+
+
+class ModelsResponse(BaseModel):
+    object: str = "list"
+    data: list[ModelInfo]
+
+
+class HealthResponse(BaseModel):
+    status: str
+    pod_name: str
+    uptime_seconds: float

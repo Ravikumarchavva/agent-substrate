@@ -86,12 +86,10 @@ async def lifespan(app: FastAPI):
     app.state.model_client_kwargs = llm.model_client_kwargs
     app.state.chat_model = llm.chat_model
     app.state.api_keys = llm.api_keys
-    app.state.embedding_client = llm.embedding_client
 
-    # Infrastructure (Redis, runtime, file store, vector store, RAG, data store)
+    # Infrastructure (Redis, runtime, file store, data store)
     infra: Infrastructure = await init_infrastructure(
         settings,
-        llm.embedding_client,
         session_factory=session_factory,
         model_client=llm.model_client,
     )
@@ -103,8 +101,6 @@ async def lifespan(app: FastAPI):
     app.state.redis_client = infra.redis_client
     app.state.runtime = infra.runtime
     app.state.runtime_stack = infra.runtime_stack
-    app.state.vector_store = infra.vector_store
-    app.state.rag_backend = infra.rag_backend
     app.state.data_store = infra.data_store
     app.state.bridge_registry = infra.bridge_registry
     app.state.skill_manager = infra.skill_manager
@@ -130,10 +126,12 @@ async def lifespan(app: FastAPI):
 
     app.state.jwt_secret = settings.JWT_SECRET
 
-    from substrate_cloud.documents_library import build_library
+    from substrate_cloud.documents_library import build_knowledge_library, build_library
 
     library = build_library(infra.store, infra.file_store, settings)
+    knowledge = build_knowledge_library(infra.store, infra.file_store, settings)
     app.state.library = library
+    app.state.knowledge = knowledge
 
     # Tool registry
     tools: ToolboxResult = await init_tool_registry(
@@ -142,14 +140,13 @@ async def lifespan(app: FastAPI):
         bridge_registry=infra.bridge_registry,
         redis_client=infra.redis_client,
         model_client=llm.model_client,
-        embedding_client=llm.embedding_client,
-        rag_backend=infra.rag_backend,
         file_store=infra.file_store,
         artifact_store=infra.artifact_store,
         workspace_store=infra.workspace_store,
         skill_manager=infra.skill_manager,
         task_store=infra.task_store,
         library=library,
+        knowledge=knowledge,
     )
     app.state.tools = tools.registry
     app.state.task_tool = tools.task_tool
@@ -251,9 +248,8 @@ async def lifespan(app: FastAPI):
         safety_middleware=app.state.safety_middleware,
         workspace_user_quota_bytes=settings.WORKSPACE_USER_QUOTA_BYTES,
         workspace_user_delete_allowed=settings.WORKSPACE_USER_DELETE_ALLOWED,
-        rag_backend=app.state.rag_backend,
-        embedding_client=app.state.embedding_client,
         library=app.state.library,
+        knowledge=app.state.knowledge,
     )
 
     from substrate_cloud.monolith.routes.files import sweep_stuck_staging_uploads

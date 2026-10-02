@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 
 from substrate.workspace.layout import (
+    conversation_documents_prefix,
     conversation_shared_key,
     conversation_workspace_prefix,
     knowledge_document_prefix,
-    user_index_prefix,
     user_prefix,
 )
 
@@ -22,8 +22,8 @@ def test_canonical_keys_are_tenant_first() -> None:
     assert knowledge_document_prefix("tenant-a", "kb-a", "doc-a") == (
         "tenants/tenant-a/knowledge/kb-a/documents/doc-a"
     )
-    assert user_index_prefix("tenant-a", "user-a") == (
-        "tenants/tenant-a/users/user-a/index"
+    assert conversation_documents_prefix("tenant-a", "user-a", "thread-a") == (
+        "tenants/tenant-a/users/user-a/conversations/thread-a/documents"
     )
 
 

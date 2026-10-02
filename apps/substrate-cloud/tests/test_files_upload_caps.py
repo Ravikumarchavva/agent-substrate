@@ -6,16 +6,40 @@ as test_chat_context_pdf.py — no full TestClient/DB needed for this logic.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from PIL import Image
 
+from substrate.documents import ExtractedPage, ExtractionResult
 from substrate_cloud.monolith.routes.files import get_doc_quota_status, upload_file
 
 _PDF_CONTENT_TYPE = "application/pdf"
 _THREAD_ID = uuid.uuid4()
+
+
+def _library() -> MagicMock:
+    """The documents library, stubbed: ``add`` records what was filed."""
+    library = MagicMock()
+    library.add = AsyncMock()
+    return library
+
+
+def _read_as(monkeypatch, pages: int = 2) -> None:
+    """Make the upload's one read answer with ``pages`` pages, whatever the bytes are (the reader has its own tests)."""
+    from substrate_cloud.monolith.routes import files as files_module
+
+    class _Reader:
+        async def read(self, data, filename="", *, content_type=None, strategy="auto"):
+            return ExtractionResult(
+                pages=[ExtractedPage(page_number=n, text=f"text of page {n}") for n in range(1, pages + 1)],
+                markdown="\n\n".join(f"<!-- page {n} -->\n\ntext of page {n}" for n in range(1, pages + 1)),
+                engine="test",
+            )
+
+    monkeypatch.setattr(files_module, "document_reader", lambda: _Reader())
 
 
 def _pdf_bytes(pages: int) -> bytes:
@@ -54,7 +78,7 @@ def _db_mock() -> MagicMock:
     return db
 
 
-def _ctx_mock(*, rag_backend=None, redis=None) -> MagicMock:
+def _ctx_mock(*, library=None, redis=None) -> MagicMock:
     ctx = MagicMock()
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
     ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
@@ -67,7 +91,7 @@ def _ctx_mock(*, rag_backend=None, redis=None) -> MagicMock:
     ctx.pending_file_store = MagicMock()
     ctx.pending_file_store.upload = AsyncMock()
     ctx.pending_file_store.exists = AsyncMock(return_value=False)
-    ctx.rag_backend = rag_backend
+    ctx.library = library
     ctx.session_factory = MagicMock()
     return ctx
 
@@ -106,8 +130,7 @@ async def test_upload_rejects_pdf_over_page_limit(monkeypatch):
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_MAX_DOC_PAGES", 20)
-    rag_backend = MagicMock()
-    rag_backend.name = "local"
+    library = _library()
     data = _pdf_bytes(21)
 
     exc = None
@@ -118,7 +141,7 @@ async def test_upload_rejects_pdf_over_page_limit(monkeypatch):
             thread_id=None,
             claims=_claims_mock(),
             db=_db_mock(),
-            ctx=_ctx_mock(rag_backend=rag_backend),
+            ctx=_ctx_mock(library=library),
         )
     except Exception as e:
         exc = e
@@ -131,9 +154,7 @@ async def test_upload_allows_pdf_at_page_limit(monkeypatch):
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_MAX_DOC_PAGES", 20)
-    rag_backend = MagicMock()
-    rag_backend.name = "local"
-    rag_backend.ingest = AsyncMock()
+    library = _library()
     data = _pdf_bytes(20)
 
     result = await upload_file(
@@ -142,7 +163,7 @@ async def test_upload_allows_pdf_at_page_limit(monkeypatch):
         thread_id=None,
         claims=_claims_mock(),
         db=_db_mock(),
-        ctx=_ctx_mock(rag_backend=rag_backend),
+        ctx=_ctx_mock(library=library),
     )
     assert result.name == "doc.pdf"
 
@@ -151,8 +172,7 @@ async def test_upload_rejects_doc_over_size_limit(monkeypatch):
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_MAX_DOC_MB", 1)
-    rag_backend = MagicMock()
-    rag_backend.name = "local"
+    library = _library()
     oversized = b"x" * (2 * 1024 * 1024)  # 2MB, over the 1MB test cap
 
     exc = None
@@ -163,7 +183,7 @@ async def test_upload_rejects_doc_over_size_limit(monkeypatch):
             thread_id=None,
             claims=_claims_mock(),
             db=_db_mock(),
-            ctx=_ctx_mock(rag_backend=rag_backend),
+            ctx=_ctx_mock(library=library),
         )
     except Exception as e:
         exc = e
@@ -179,37 +199,33 @@ async def test_upload_rejects_when_upload_attempt_quota_exhausted(monkeypatch):
         files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
     )
     monkeypatch.setattr(files_module.settings, "RAG_DAILY_UPLOAD_ATTEMPT_LIMIT", 1)
-    rag_backend = MagicMock()
-    rag_backend.name = "local"
+    monkeypatch.setattr(files_module.asyncio, "create_task", lambda coro: coro.close())
+    library = _library()
     redis = _FakeRedis()
     data = _pdf_bytes(1)
 
-    with patch(
-        "substrate_cloud.session_index.ingest.ingest_session_document",
-        new=AsyncMock(),
-    ):
-        # First upload consumes the only slot.
+    # First upload consumes the only slot.
+    await upload_file(
+        request=_request_mock(redis),
+        file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
+        thread_id=_THREAD_ID,
+        claims=_claims_mock(),
+        db=_db_mock(),
+        ctx=_ctx_mock(library=library),
+    )
+
+    exc = None
+    try:
         await upload_file(
             request=_request_mock(redis),
             file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
             thread_id=_THREAD_ID,
             claims=_claims_mock(),
             db=_db_mock(),
-            ctx=_ctx_mock(rag_backend=rag_backend),
+            ctx=_ctx_mock(library=library),
         )
-
-        exc = None
-        try:
-            await upload_file(
-                request=_request_mock(redis),
-                file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
-                thread_id=_THREAD_ID,
-                claims=_claims_mock(),
-                db=_db_mock(),
-                ctx=_ctx_mock(rag_backend=rag_backend),
-            )
-        except Exception as e:
-            exc = e
+    except Exception as e:
+        exc = e
 
     assert exc is not None
     assert getattr(exc, "status_code", None) == 429
@@ -222,8 +238,7 @@ async def test_upload_non_extractable_type_skips_all_new_checks(monkeypatch):
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_MAX_DOC_MB", 1)
-    rag_backend = MagicMock()
-    rag_backend.name = "local"
+    library = _library()
     oversized = b"x" * (5 * 1024 * 1024)  # would fail the 1MB PDF cap, but isn't a PDF
 
     result = await upload_file(
@@ -234,10 +249,10 @@ async def test_upload_non_extractable_type_skips_all_new_checks(monkeypatch):
         thread_id=None,
         claims=_claims_mock(),
         db=_db_mock(),
-        ctx=_ctx_mock(rag_backend=rag_backend),
+        ctx=_ctx_mock(library=library),
     )
     assert result.name == "data.xlsx"
-    rag_backend.ingest.assert_not_called()
+    library.add.assert_not_called()
 
 
 async def test_upload_non_local_backend_skips_upload_attempt_quota(monkeypatch):
@@ -246,8 +261,7 @@ async def test_upload_non_local_backend_skips_upload_attempt_quota(monkeypatch):
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_DAILY_UPLOAD_ATTEMPT_LIMIT", 1)
-    rag_backend = MagicMock()
-    rag_backend.name = "managed"
+    library = None  # nothing to file the document in
     redis = _FakeRedis()
     data = _pdf_bytes(1)
 
@@ -258,16 +272,14 @@ async def test_upload_non_local_backend_skips_upload_attempt_quota(monkeypatch):
             thread_id=None,
             claims=_claims_mock(),
             db=_db_mock(),
-            ctx=_ctx_mock(rag_backend=rag_backend),
+            ctx=_ctx_mock(library=library),
         )
         assert result.name == "doc.pdf"
 
 
-async def test_upload_triggers_eager_staging_for_local_backend(monkeypatch):
-    """A thread_id is known at upload time -> eager staging fires,
-    indexing straight into the caller's per-user session-document index,
-    tagged with that real thread_id (no temporary collection — see
-    integrations/knowledge/session_ingest.py)."""
+async def test_upload_triggers_eager_staging_into_the_conversations_documents(monkeypatch):
+    """A thread_id is known at upload time -> eager staging fires: the document is read once and filed in that conversation's
+    documents (an OKF bundle and a catalog, no embeddings), with the file's id and path kept beside it."""
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
@@ -277,70 +289,59 @@ async def test_upload_triggers_eager_staging_for_local_backend(monkeypatch):
     monkeypatch.setattr(
         files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
     )
-
-    rag_backend = MagicMock()
-    rag_backend.name = "local"
+    _read_as(monkeypatch, pages=2)
+    library = _library()
     data = _pdf_bytes(1)
 
-    with patch(
-        "substrate_cloud.session_index.ingest.ingest_session_document",
-        new=AsyncMock(),
-    ) as mock_ingest:
-        await upload_file(
-            request=_request_mock(_FakeRedis()),
-            file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
-            thread_id=_THREAD_ID,
-            claims=_claims_mock(),
-            db=_db_mock(),
-            ctx=_ctx_mock(rag_backend=rag_backend),
-        )
+    await upload_file(
+        request=_request_mock(_FakeRedis()),
+        file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
+        thread_id=_THREAD_ID,
+        claims=_claims_mock(),
+        db=_db_mock(),
+        ctx=_ctx_mock(library=library),
+    )
 
-        assert len(captured_coros) == 1
-        await captured_coros[0]  # run the staging task synchronously
+    assert len(captured_coros) == 1
+    await captured_coros[0]  # run the staging task synchronously
 
-    mock_ingest.assert_awaited_once()
-    kwargs = mock_ingest.await_args.kwargs
-    assert kwargs["session_id"] == str(_THREAD_ID)
-    assert kwargs["tenant_id"] == "test-tenant"
-    assert kwargs["user_id"] == "test-user"
+    library.add.assert_awaited_once()
+    args, kwargs = library.add.await_args
+    assert isinstance(args[0], ExtractionResult) and args[1] == "doc.pdf"
+    assert kwargs["collection"] == f"tenants/test-tenant/users/test-user/conversations/{_THREAD_ID}/documents"
+    assert kwargs["sha256"] == hashlib.sha256(data).hexdigest()
+    assert kwargs["metadata"]["thread_id"] == str(_THREAD_ID) and kwargs["metadata"]["file_id"]
 
 
 async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
-    """After successful staging, a page-marked `.extracted.md` sidecar is
-    written next to the original object, via the same file_store.upload
-    path — so code_interpreter (which mounts the same session dir) can read
-    it instead of re-parsing the PDF's raw bytes."""
+    """After successful staging, a page-marked `.extracted.md` sidecar is written next to the original object, from the same read the
+    document was filed with — so code_interpreter (which mounts the same session dir) can read it instead of re-parsing the PDF."""
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
         files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
     )
-    monkeypatch.setattr(files_module.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "")
     captured_coros = []
     monkeypatch.setattr(
         files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
     )
+    _read_as(monkeypatch, pages=2)
 
-    rag_backend = MagicMock()
-    rag_backend.name = "local"
+    library = _library()
     data = _pdf_bytes(2)
-    ctx = _ctx_mock(rag_backend=rag_backend)
+    ctx = _ctx_mock(library=library)
 
-    with patch(
-        "substrate_cloud.session_index.ingest.ingest_session_document",
-        new=AsyncMock(),
-    ):
-        await upload_file(
-            request=_request_mock(_FakeRedis()),
-            file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
-            thread_id=_THREAD_ID,
-            claims=_claims_mock(),
-            db=_db_mock(),
-            ctx=ctx,
-        )
+    await upload_file(
+        request=_request_mock(_FakeRedis()),
+        file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
+        thread_id=_THREAD_ID,
+        claims=_claims_mock(),
+        db=_db_mock(),
+        ctx=ctx,
+    )
 
-        assert len(captured_coros) == 1
-        await captured_coros[0]  # run the staging task synchronously
+    assert len(captured_coros) == 1
+    await captured_coros[0]  # run the staging task synchronously
 
     sidecar_calls = [
         call
@@ -353,11 +354,9 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
     ]
     assert len(sidecar_calls) == 1
     sidecar_text = sidecar_calls[0].args[1].decode("utf-8")
-    # Page boundaries are metadata (an HTML comment, invisible when
-    # rendered), never a Markdown heading — a heading here was
-    # indistinguishable from real document structure, and a model asked to
-    # convert the file reproduced "Page 1" / "Page 2" headings that were
-    # never in the source (see _build_extracted_sidecar_text's docstring).
+    # Page boundaries are metadata (an HTML comment, invisible when rendered), never a Markdown heading — a heading here was
+    # indistinguishable from real document structure, and a model asked to convert the file reproduced "Page 1" / "Page 2"
+    # headings that were never in the source.
     assert "<!-- page 1 -->" in sidecar_text
     assert "<!-- page 2 -->" in sidecar_text
     assert "## Page" not in sidecar_text
@@ -365,23 +364,21 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
 
 
 async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
-    """The sidecar write is best-effort — a failure there must not surface
-    as a staging_error on the file."""
+    """The sidecar write is best-effort — a failure there must not surface as a staging_error on the file."""
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
         files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
     )
-    monkeypatch.setattr(files_module.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "")
     captured_coros = []
     monkeypatch.setattr(
         files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
     )
+    _read_as(monkeypatch, pages=1)
 
-    rag_backend = MagicMock()
-    rag_backend.name = "local"
+    library = _library()
     data = _pdf_bytes(1)
-    ctx = _ctx_mock(rag_backend=rag_backend)
+    ctx = _ctx_mock(library=library)
 
     async def _upload_side_effect(key, *_args, **_kwargs):
         if key.endswith(".extracted.md"):
@@ -389,21 +386,17 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
 
     ctx.pending_file_store.upload = AsyncMock(side_effect=_upload_side_effect)
 
-    with patch(
-        "substrate_cloud.session_index.ingest.ingest_session_document",
-        new=AsyncMock(),
-    ):
-        await upload_file(
-            request=_request_mock(_FakeRedis()),
-            file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
-            thread_id=_THREAD_ID,
-            claims=_claims_mock(),
-            db=_db_mock(),
-            ctx=ctx,
-        )
+    await upload_file(
+        request=_request_mock(_FakeRedis()),
+        file=_upload_file_mock(data, _PDF_CONTENT_TYPE),
+        thread_id=_THREAD_ID,
+        claims=_claims_mock(),
+        db=_db_mock(),
+        ctx=ctx,
+    )
 
-        assert len(captured_coros) == 1
-        await captured_coros[0]  # must not raise
+    assert len(captured_coros) == 1
+    await captured_coros[0]  # must not raise
 
 
 async def test_upload_non_local_backend_skips_eager_staging(monkeypatch):
@@ -414,8 +407,7 @@ async def test_upload_non_local_backend_skips_eager_staging(monkeypatch):
         files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
     )
 
-    rag_backend = MagicMock()
-    rag_backend.name = "managed"
+    library = None  # nothing to file the document in
     data = _pdf_bytes(1)
 
     await upload_file(
@@ -424,7 +416,7 @@ async def test_upload_non_local_backend_skips_eager_staging(monkeypatch):
         thread_id=None,
         claims=_claims_mock(),
         db=_db_mock(),
-        ctx=_ctx_mock(rag_backend=rag_backend),
+        ctx=_ctx_mock(library=library),
     )
 
     assert captured_coros == []
@@ -536,7 +528,7 @@ def _session_ctx_mock(rows: list) -> MagicMock:
 
     ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.session_factory = MagicMock(return_value=session_cm)
-    ctx.rag_backend = MagicMock()
+    ctx.library = _library()
     ctx.pending_file_store = MagicMock()
     ctx.pending_file_store.download = AsyncMock(return_value=b"%PDF-1.4 stuck bytes")
     ctx.file_store = MagicMock()
@@ -549,27 +541,22 @@ async def test_sweep_redispatches_a_genuinely_stuck_upload(monkeypatch):
 
     row = _stuck_file_metadata()
     ctx = _session_ctx_mock([row])
+    _read_as(monkeypatch, pages=1)
 
     captured_coros = []
     monkeypatch.setattr(
         files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
     )
 
-    with patch(
-        "substrate_cloud.session_index.ingest.ingest_session_document",
-        new=AsyncMock(),
-    ) as mock_ingest:
-        dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
-        assert dispatched == 1
-        assert len(captured_coros) == 1
-        await captured_coros[0]  # run the re-dispatched staging task
+    dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
+    assert dispatched == 1
+    assert len(captured_coros) == 1
+    await captured_coros[0]  # run the re-dispatched staging task
 
     ctx.pending_file_store.download.assert_awaited_once_with(row.object_key)
-    mock_ingest.assert_awaited_once()
-    kwargs = mock_ingest.await_args.kwargs
-    assert kwargs["session_id"] == str(_THREAD_ID)
-    assert kwargs["tenant_id"] == "test-tenant"
-    assert kwargs["user_id"] == str(row.user_id)
+    ctx.library.add.assert_awaited_once()
+    kwargs = ctx.library.add.await_args.kwargs
+    assert kwargs["collection"] == f"tenants/test-tenant/users/{row.user_id}/conversations/{_THREAD_ID}/documents"
 
 
 async def test_sweep_reads_from_file_store_when_already_promoted(monkeypatch):
@@ -583,11 +570,7 @@ async def test_sweep_reads_from_file_store_when_already_promoted(monkeypatch):
     ctx = _session_ctx_mock([row])
     monkeypatch.setattr(files_module.asyncio, "create_task", lambda coro: coro.close())
 
-    with patch(
-        "substrate_cloud.session_index.ingest.ingest_session_document",
-        new=AsyncMock(),
-    ):
-        dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
+    dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
 
     assert dispatched == 1
     ctx.file_store.download.assert_awaited_once_with(row.object_key)
@@ -611,13 +594,13 @@ async def test_sweep_skips_row_when_bytes_cannot_be_read(monkeypatch):
     assert dispatched == 0
 
 
-async def test_sweep_ignores_no_session_factory_or_rag_backend():
+async def test_sweep_ignores_no_session_factory_or_library():
     ctx = MagicMock()
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
     ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
     ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.session_factory = None
-    ctx.rag_backend = MagicMock()
+    ctx.library = _library()
 
     from substrate_cloud.monolith.routes import files as files_module
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from substrate.models.client import (
     EmbeddingModel,
     ChatModel,
+    Reranker,
 )
 from substrate.models.protocols import (
     EmbeddingResult,
@@ -35,6 +36,7 @@ __all__ = [
     "ModelCapabilities",
     "ModelProfile",
     "ReasoningEffort",
+    "Reranker",
     "estimate_cost",
     "get_model_profile",
     "list_models",

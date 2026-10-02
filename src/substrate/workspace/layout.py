@@ -162,6 +162,14 @@ def conversation_documents_prefix(tenant_id: str, user_id: str, conversation_id:
     return f"{conversation_prefix(tenant_id, user_id, conversation_id)}/documents"
 
 
+def knowledge_collection(tenant_id: str, knowledge_base_id: str) -> str:
+    """A knowledge base's ``Library`` collection — the OKF bundle of its documents, searched by meaning and words.
+
+    A sibling of the originals (``knowledge_document_prefix(...)/original/...``) under the same knowledge base, and always under the
+    tenant's prefix, so a tenant's erasure reaches it and one tenant's collection can never be another's."""
+    return f"{tenant_prefix(tenant_id)}/knowledge/{_id(knowledge_base_id, 'knowledge base id')}/library"
+
+
 def knowledge_document_prefix(
     tenant_id: str, knowledge_base_id: str, document_id: str
 ) -> str:
@@ -184,6 +192,7 @@ __all__ = [
     "user_artifacts_prefix",
     "conversation_artifacts_prefix",
     "conversation_documents_prefix",
+    "knowledge_collection",
     "knowledge_document_prefix",
     "safe_relative_path",
 ]

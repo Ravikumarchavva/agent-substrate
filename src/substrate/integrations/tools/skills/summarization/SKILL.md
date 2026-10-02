@@ -3,7 +3,7 @@ name: summarization
 description: Summarization skill for condensing long texts, documents, and conversations into clear, structured summaries.
 version: "1.0"
 license: MIT
-allowed-tools: document_analyzer
+allowed-tools: documents
 metadata:
   author: agent-framework
 ---

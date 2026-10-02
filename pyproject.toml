@@ -37,8 +37,6 @@ dependencies = [
 [project.optional-dependencies]
 # OpenAI and OpenAI-compatible chat/embedding clients (also vLLM, llama.cpp, Ollama, LM Studio)
 openai = ["openai>=2.15.0", "tiktoken>=0.12.0", "httpx>=0.27.0", "pillow>=10.4.0"]
-# clients for the heavy services you run yourself (document extraction, embedding/reranking) — by URL
-services = ["httpx2>=2.7.0"]
 # the JSON log formatter for `substrate.logger.setup_logging` — what an application (a service) uses to configure logging
 logging = ["python-json-logger>=2.0.7", "msgspec>=0.21.1"]
 # PostgreSQL as the store (integrations.database.postgres_store); vectors also need the pgvector extension
@@ -84,10 +82,6 @@ sandbox = [
     "scikit-learn>=1.5.0",
     "pdfplumber>=0.11.0",
 ]
-# local PDF loading + embedded vector store
-rag = ["pypdf>=6.13.0", "pytesseract>=0.3.10"]  # both go with the old extractors, removed with them
-# model-based sentence segmentation (SaTSegmenter)
-chunking = ["wtpsplit[onnx-cpu]>=2.1.0"]
 # OCR without a system program: RapidOCR (PaddleOCR's own small models on ONNX Runtime, models inside the wheel). Preferred over the
 # `tesseract` program automatically when installed. Pulls opencv-python; on a headless server install opencv-python-headless first.
 ocr = ["rapidocr>=3.0.0", "onnxruntime>=1.20.0"]
@@ -144,6 +138,9 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.15.15",
+    # tests only: an encrypted PDF to build, and a reference YAML parser for the frontmatter codec
+    "pypdf>=6.13.0",
+    "pyyaml>=6.0",
 ]
 docs = [
     "mkdocs-material>=9.5.0",

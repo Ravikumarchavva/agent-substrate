@@ -12,7 +12,7 @@ import pytest
 from tests._layout import contract_files, module_name
 from substrate.types import MediaBlock, TextBlock
 from substrate.types import UnsupportedContentError
-from substrate.models import EmbeddingModel, EmbeddingResult
+from substrate.models import EmbeddingModel, EmbeddingResult, Modality
 
 
 def _kernel_protocols() -> list[type]:
@@ -46,65 +46,37 @@ def test_every_kernel_protocol_is_runtime_checkable(proto: type) -> None:
 
 
 class _RecordingEmbedder:
+    model = "fake"
+    dimensions = 1
+    max_input_tokens = 512
+    modalities = frozenset({Modality.TEXT, Modality.IMAGE})
+
     def __init__(self) -> None:
-        self.texts: list[str] = []
+        self.inputs: list = []
 
-    async def embed(self, texts: list[str]) -> EmbeddingResult:
-        return EmbeddingResult(embeddings=[[0.0] for _ in texts], model="fake")
-
-    async def embed_single(self, text: str) -> list[float]:
-        self.texts.append(text)
-        return [float(len(text))]
-
-    async def embed_blocks(self, blocks) -> list[float]:
-        from substrate.types import content_blocks_to_str
-
-        return await self.embed_single(content_blocks_to_str(blocks))
+    async def embed(self, inputs, *, query: bool = False) -> EmbeddingResult:
+        self.inputs.extend(inputs)
+        return EmbeddingResult(embeddings=[[float(i)] for i, _ in enumerate(inputs)], model="fake")
 
 
-async def test_embed_blocks_accepts_text_and_media() -> None:
+async def test_embed_accepts_a_string_and_blocks_embedded_together_as_one_vector() -> None:
     client = _RecordingEmbedder()
     assert isinstance(client, EmbeddingModel)
 
-    vec = await client.embed_blocks(
-        [TextBlock(text="a cat"), MediaBlock(type="image", url="http://x/cat.png")]
-    )
+    result = await client.embed(["a cat", [TextBlock(text="a cat"), MediaBlock(type="image", url="http://x/cat.png")]])
 
-    assert vec and "a cat" in client.texts[0]
-
-
-async def test_sentence_transformers_and_base_clients_expose_embed_blocks() -> None:
-    from substrate.integrations.llm.local_embeddings import (
-        SentenceTransformersEmbeddingClient,
-    )
-    from substrate.integrations.llm.base import BaseEmbeddingClient
-
-    assert hasattr(SentenceTransformersEmbeddingClient, "embed_blocks")
-    assert hasattr(BaseEmbeddingClient, "embed_blocks")
+    assert len(result.embeddings) == 2 and client.inputs[0] == "a cat"
 
 
 async def test_text_only_embedding_clients_reject_media_content() -> None:
-    from substrate.integrations.llm.local_embeddings import (
-        SentenceTransformersEmbeddingClient,
-    )
     from substrate.integrations.llm.base import BaseEmbeddingClient
 
     class _TextOnlyClient(BaseEmbeddingClient):
-        async def embed(self, texts: list[str]) -> EmbeddingResult:
+        async def _embed_texts(self, texts: list[str], *, query: bool) -> EmbeddingResult:
             return EmbeddingResult(embeddings=[[0.0] for _ in texts], model="fake")
 
+    client = _TextOnlyClient(model="fake")
+    assert isinstance(client, EmbeddingModel) and client.modalities == frozenset({Modality.TEXT})
     with pytest.raises(UnsupportedContentError):
-        await _TextOnlyClient(model="fake").embed_blocks(
-            [TextBlock(text="hello"), MediaBlock(type="image", data=b"abc")]
-        )
-
-    with pytest.raises(UnsupportedContentError):
-        await SentenceTransformersEmbeddingClient(
-            model="sentence-transformers/all-MiniLM-L6-v2"
-        ).embed_blocks([MediaBlock(type="image", data=b"abc")])
-
-
-# ── Branch-isolated tasks ───────────────────────────────────────────────────
-
-
-# ── Graph namespacing ───────────────────────────────────────────────────────
+        await client.embed([[TextBlock(text="hello"), MediaBlock(type="image", data=b"abc")]])
+    assert (await client.embed(["a", [TextBlock(text="b"), TextBlock(text="c")]])).embeddings == [[0.0], [0.0]]

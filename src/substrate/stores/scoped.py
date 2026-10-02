@@ -30,8 +30,8 @@ def _tenant(scope: Scope) -> str:
 class _Prefixer:
     """Names under ``<tenant>/`` and back."""
 
-    def __init__(self, scope: Scope | None = None, *, prefix: str | None = None) -> None:
-        self.prefix = prefix if prefix is not None else _tenant(scope) + "/"  # type: ignore[arg-type]
+    def __init__(self, scope: Scope) -> None:
+        self.prefix = _tenant(scope) + "/"
 
     def add(self, name: str) -> str:
         return self.prefix + name
@@ -135,23 +135,32 @@ class _ScopedThreadStore:
 
 
 class _ScopedVectorStore:
-    """A ``VectorStore`` whose collections all live inside its tenant."""
+    """A ``VectorStore`` whose collections all live inside its tenant — and, if the store beneath searches by words
+    (``SearchableVectorStore``), a searchable one: ``lexical_search`` and ``hybrid_search`` are confined the same way."""
 
-    def __init__(self, inner: VectorStore, scope: Scope | None = None, *, prefix: str | None = None) -> None:
+    def __init__(self, inner: VectorStore, scope: Scope) -> None:
         self._inner = inner
-        self._p = _Prefixer(scope, prefix=prefix)
+        self._p = _Prefixer(scope)
 
-    async def add(self, documents: list[Document], *, collection: str = "default") -> list[str]:
-        return await self._inner.add(documents, collection=self._p.add(collection))
+    async def add(self, documents: list[Document], *, collection: str = "default", space: str | None = None) -> list[str]:
+        return await self._inner.add(documents, collection=self._p.add(collection), space=space)
 
-    async def search(self, query_embedding: list[float], *, collection: str = "default", limit: int = 5, filter: dict[str, Any] | None = None) -> list[SearchResult]:
-        return await self._inner.search(query_embedding, collection=self._p.add(collection), limit=limit, filter=filter)
+    async def search(self, query_embedding: list[float], *, collection: str = "default", limit: int = 5, filter: dict[str, Any] | None = None, space: str | None = None) -> list[SearchResult]:
+        return await self._inner.search(query_embedding, collection=self._p.add(collection), limit=limit, filter=filter, space=space)
+
+    async def lexical_search(self, query_text: str, *, collection: str = "default", limit: int = 5, filter: dict[str, Any] | None = None, match: str = "all") -> list[SearchResult]:
+        return await self._inner.lexical_search(query_text, collection=self._p.add(collection), limit=limit, filter=filter, match=match)  # type: ignore[attr-defined]
+
+    async def hybrid_search(self, query_embedding: list[float], query_text: str, *, collection: str = "default", dense_k: int = 50, lexical_k: int = 50, fused_k: int = 50, rrf_k: int = 60, filter: dict[str, Any] | None = None, space: str | None = None) -> list[SearchResult]:
+        return await self._inner.hybrid_search(  # type: ignore[attr-defined]
+            query_embedding, query_text, collection=self._p.add(collection), dense_k=dense_k, lexical_k=lexical_k, fused_k=fused_k, rrf_k=rrf_k, filter=filter, space=space
+        )
 
     async def get(self, ids: list[str], *, collection: str = "default") -> list[Document]:
         return await self._inner.get(ids, collection=self._p.add(collection))
 
-    async def upsert(self, documents: list[Document], *, collection: str = "default") -> list[str]:
-        return await self._inner.upsert(documents, collection=self._p.add(collection))
+    async def upsert(self, documents: list[Document], *, collection: str = "default", space: str | None = None) -> list[str]:
+        return await self._inner.upsert(documents, collection=self._p.add(collection), space=space)
 
     async def delete(self, ids: list[str], *, collection: str = "default") -> int:
         return await self._inner.delete(ids, collection=self._p.add(collection))
@@ -330,12 +339,6 @@ def bind_vector(store: VectorStore, scope: Scope) -> VectorStore:
     return _ScopedVectorStore(store, scope)
 
 
-def vector_namespace(store: VectorStore, name: str) -> VectorStore:
-    """``store``'s collections kept apart under ``name`` (e.g. image embeddings beside text ones in one store). The
-    prefix starts with a character a tenant's is never allowed (tenants are percent-encoded), so it cannot meet one."""
-    return _ScopedVectorStore(store, prefix=f"!{name}/")
-
-
 def bind_graph(store: GraphStore, scope: Scope) -> GraphStore:
     return _ScopedGraphStore(store, scope)
 
@@ -348,4 +351,4 @@ def bind_tasks(store: TaskStore, scope: Scope) -> TaskStore:
     return _ScopedTaskStore(store, scope)
 
 
-__all__ = ["bind_graph", "bind_tasks", "bind_threads", "bind_vector", "fence_objects", "vector_namespace"]
+__all__ = ["bind_graph", "bind_tasks", "bind_threads", "bind_vector", "fence_objects"]

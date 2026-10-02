@@ -47,13 +47,10 @@ class ServerDependencies:
     long_term_memory: Optional[Any] = None
     workspace_user_quota_bytes: int = 1024 * 1024 * 1024
     workspace_user_delete_allowed: bool = True
-    rag_backend: Optional[Any] = None
     safety_middleware: Optional[Any] = None
-    # Shared with rag_backend's own internal RAGPipeline — reused (not
-    # duplicated) by the per-user session-document index
-    # (integrations/knowledge/session_ingest.py) so both the tenant-KB flow
-    # and the per-user flow embed through the same configured model.
-    embedding_client: Optional[Any] = None
+    # The organisation's knowledge bases: the same kind of Library, with the configured embedder and reranker (searched by words when
+    # none is configured).
+    knowledge: Optional[Any] = None
     # The documents a conversation was given, filed as an OKF bundle with a catalog (substrate.documents.Library); the model works
     # through them with the `documents` tool. `None` when there is no store or object store to keep them in.
     library: Optional[Any] = None

@@ -3,11 +3,10 @@
 Tools are grouped by domain:
   mcp/          — Model Context Protocol client/tool bridge
   web/          — search, surf, read_url, wikipedia
-  files/        — document_analyzer, invoice_extractor
   communication/— email_sender, http_request
   compute/      — calculator
   utils/        — current_time, tool_search
-  ai/           — image_generator, knowledge_search
+  ai/           — image_generator
   (root)        — memory, human_input
   task_manager/ — Kanban board
   code_interpreter/ — sandboxed code execution
@@ -37,13 +36,10 @@ _LAZY: dict[str, str] = {
     "WikipediaTool": "substrate.integrations.tools.web.wikipedia",
     "WebSurferTool": "substrate.integrations.tools.web.surfer",
     "ToolChainTool": "substrate.integrations.tools.chain",
-    "DocumentAnalyzerTool": "substrate.integrations.tools.files.document_analyzer",
     "EmailSenderTool": "substrate.integrations.tools.communication.email_sender",
     "HttpRequestTool": "substrate.integrations.tools.communication.http_request",
     "AskHumanTool": "substrate.integrations.tools.human_input",
     "ImageGeneratorTool": "substrate.integrations.tools.ai.image_generator",
-    "InvoiceExtractorTool": "substrate.integrations.tools.files.invoice_extractor",
-    "KnowledgeSearchTool": "substrate.integrations.tools.ai.knowledge_search",
     "MemoryTool": "substrate.integrations.tools.memory",
     "PipelineManagerTool": "substrate.integrations.tools.pipeline_manager",
     "TaskManagerTool": "substrate.integrations.tools.task_manager.tool",
@@ -60,13 +56,10 @@ if TYPE_CHECKING:
     from substrate.integrations.tools.web.wikipedia import WikipediaTool
     from substrate.integrations.tools.web.surfer import WebSurferTool
     from substrate.integrations.tools.chain import ToolChainTool
-    from substrate.integrations.tools.files.document_analyzer import DocumentAnalyzerTool
     from substrate.integrations.tools.communication.email_sender import EmailSenderTool
     from substrate.integrations.tools.communication.http_request import HttpRequestTool
     from substrate.integrations.tools.human_input import AskHumanTool
     from substrate.integrations.tools.ai.image_generator import ImageGeneratorTool
-    from substrate.integrations.tools.files.invoice_extractor import InvoiceExtractorTool
-    from substrate.integrations.tools.ai.knowledge_search import KnowledgeSearchTool
     from substrate.integrations.tools.memory import MemoryTool
     from substrate.integrations.tools.pipeline_manager import PipelineManagerTool
     from substrate.integrations.tools.task_manager.tool import TaskManagerTool
@@ -86,13 +79,10 @@ __all__ = [
     "WikipediaTool",
     "WebSurferTool",
     "ToolChainTool",
-    "DocumentAnalyzerTool",
     "EmailSenderTool",
     "HttpRequestTool",
     "AskHumanTool",
     "ImageGeneratorTool",
-    "InvoiceExtractorTool",
-    "KnowledgeSearchTool",
     "MemoryTool",
     "PipelineManagerTool",
     "TaskManagerTool",

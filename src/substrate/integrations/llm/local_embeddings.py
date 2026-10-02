@@ -28,16 +28,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Sequence
 
-from substrate.types import ContentBlock, MediaBlock, TextBlock
-from substrate.types import UnsupportedContentError
+from substrate.integrations.llm.base import BaseEmbeddingClient
 from substrate.models import EmbeddingResult
 
 logger = logging.getLogger(__name__)
 
 
-class SentenceTransformersEmbeddingClient:
+class SentenceTransformersEmbeddingClient(BaseEmbeddingClient):
     """Embedding client backed by sentence-transformers (CPU or CUDA).
 
     Args:
@@ -66,9 +64,11 @@ class SentenceTransformersEmbeddingClient:
         self._model = SentenceTransformer(model, device=device)
         self._batch_size = batch_size
         self._device = device
+        dimensions = getattr(self._model, "get_sentence_embedding_dimension", lambda: None)()
+        super().__init__(model, dimensions, max_input_tokens=int(getattr(self._model, "max_seq_length", 0) or 256))
 
-    async def embed(self, texts: list[str]) -> EmbeddingResult:
-        loop = asyncio.get_event_loop()
+    async def _embed_texts(self, texts: list[str], *, query: bool) -> EmbeddingResult:
+        loop = asyncio.get_running_loop()
         raw = await loop.run_in_executor(
             None,
             lambda: self._model.encode(
@@ -80,23 +80,6 @@ class SentenceTransformersEmbeddingClient:
         )
         model_name = (
             getattr(getattr(self._model, "model_card_data", None), "model_name", None)
-            or "sentence-transformers"
+            or self.model
         )
         return EmbeddingResult(embeddings=raw.tolist(), model=model_name)
-
-    async def embed_single(self, text: str) -> list[float]:
-        result = await self.embed([text])
-        return result.embeddings[0]
-
-    async def embed_blocks(self, blocks: Sequence[ContentBlock]) -> list[float]:
-        for block in blocks:
-            if isinstance(block, MediaBlock):
-                raise UnsupportedContentError(
-                    "SentenceTransformersEmbeddingClient only supports text blocks; media must be resolved before embedding."
-                )
-            if not isinstance(block, TextBlock):
-                raise UnsupportedContentError(
-                    f"Unsupported content type for text-only embedding: {type(block).__name__}"
-                )
-        text = "".join(block.text for block in blocks if isinstance(block, TextBlock))
-        return await self.embed_single(text)

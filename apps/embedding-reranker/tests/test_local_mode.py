@@ -3,7 +3,7 @@
 the shared ``inference_pool`` machinery) deployment modes.
 
 Everything here is mocked: ``hardware.detect``, ``LocalLlamaServerPool``,
-and ``EmbeddingReranker`` itself — no real GPU/subprocess/network access is
+and ``LlamaEngine`` itself — no real GPU/subprocess/network access is
 exercised, same testing philosophy as
 ``tests/document_intelligence/test_factory.py``'s pool/model mocking.
 """
@@ -111,7 +111,7 @@ async def test_remote_mode_never_calls_hardware_detect_or_constructs_pool(
     import inference_pool.hardware as hardware_mod
 
     monkeypatch.setattr(hardware_mod, "detect", _fail_detect)
-    monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
+    monkeypatch.setattr(app_module, "LlamaEngine", _FakeEmbeddingReranker)
 
     import inference_pool.llama_pool as llama_pool_mod
 
@@ -122,7 +122,7 @@ async def test_remote_mode_never_calls_hardware_detect_or_constructs_pool(
     async with app_module.lifespan(fake_app):
         assert fake_app.state.embed_pool is None
         assert fake_app.state.rerank_pool is None
-        reranker = fake_app.state.embedding_reranker
+        reranker = fake_app.state.engine
         assert reranker.embed_server_url == "http://llama-embed:8031"
         assert reranker.rerank_server_url == "http://llama-rerank:8032"
         assert reranker.warmup_called is True
@@ -140,7 +140,7 @@ async def test_local_mode_with_sufficient_vram_constructs_two_pools_and_wires_ur
 
     profile = _FakeHardwareProfile(gpus=[_FakeGpu(index=0, free_mib=8192)])
     monkeypatch.setattr(hardware_mod, "detect", lambda: profile)
-    monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
+    monkeypatch.setattr(app_module, "LlamaEngine", _FakeEmbeddingReranker)
 
     import inference_pool.llama_pool as llama_pool_mod
 
@@ -158,7 +158,7 @@ async def test_local_mode_with_sufficient_vram_constructs_two_pools_and_wires_ur
         assert embed_pool.kwargs["gpu_devices"] == ["gpu:0"]
         assert rerank_pool.kwargs["gpu_devices"] == ["gpu:0"]
 
-        reranker = fake_app.state.embedding_reranker
+        reranker = fake_app.state.engine
         assert reranker.embed_server_url == f"http://127.0.0.1:{embed_pool.kwargs['base_port']}"
         assert reranker.rerank_server_url == f"http://127.0.0.1:{rerank_pool.kwargs['base_port']}"
         assert fake_app.state.embed_pool is embed_pool
@@ -179,7 +179,7 @@ async def test_local_mode_with_insufficient_vram_degrades_to_cpu(
     # 100 MiB free is below both the embed and rerank 2500 MiB budgets.
     profile = _FakeHardwareProfile(gpus=[_FakeGpu(index=0, free_mib=100)])
     monkeypatch.setattr(hardware_mod, "detect", lambda: profile)
-    monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
+    monkeypatch.setattr(app_module, "LlamaEngine", _FakeEmbeddingReranker)
 
     import inference_pool.llama_pool as llama_pool_mod
 
@@ -209,7 +209,7 @@ async def test_local_mode_passes_real_embed_and_rerank_flags_via_extra_args(
 
     profile = _FakeHardwareProfile(gpus=[_FakeGpu(index=0, free_mib=8192)])
     monkeypatch.setattr(hardware_mod, "detect", lambda: profile)
-    monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
+    monkeypatch.setattr(app_module, "LlamaEngine", _FakeEmbeddingReranker)
 
     import inference_pool.llama_pool as llama_pool_mod
 
@@ -255,7 +255,7 @@ async def test_local_mode_with_no_gpu_detected_uses_cpu_without_reserving(
 
     profile = _FakeHardwareProfile(gpus=[])
     monkeypatch.setattr(hardware_mod, "detect", lambda: profile)
-    monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
+    monkeypatch.setattr(app_module, "LlamaEngine", _FakeEmbeddingReranker)
 
     import inference_pool.llama_pool as llama_pool_mod
 

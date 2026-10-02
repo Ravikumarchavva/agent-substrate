@@ -937,30 +937,14 @@ async def delete_file(
     if meta.promoted_at is None and ctx.pending_for(claims.tenant_id) is not None:
         await ctx.pending_for(claims.tenant_id).delete(f"{meta.object_key}.extracted.md")
 
-    # Discarded before ever being sent (rag_ingested_at never set) — clean
-    # up its orphaned staging collection so it doesn't linger forever.
-    # Best-effort: a failure here must not surface as a failed delete, since
-    # the file itself is already gone from the store above.
-    if (
-        ctx.rag_backend is not None
-        and ctx.rag_backend.name == "local"
-        and meta.rag_ingested_at is None
-    ):
-        try:
-            await ctx.rag_backend.delete_collection(f"staging:{file_id}")
-        except Exception as exc:
-            logger.warning(
-                "Failed to clean up staging collection for deleted file %s: %s",
-                file_id,
-                exc,
-            )
-        # The vector rows are gone; their image objects would otherwise linger
-        # in storage against the owner's quota with nothing pointing at them.
-        try:
-            await ctx.rag_backend.delete_file_images(
-                tenant_id=claims.tenant_id, user_id=claims.sub, file_id=str(file_id)
-            )
-        except Exception as exc:
-            logger.warning(
-                "Failed to clean up RAG images for deleted file %s: %s", file_id, exc
-            )
+    # Gone from the conversation's documents too, so the model can no longer open or cite it. Best-effort: a failure here must not
+    # surface as a failed delete, since the file itself is already gone from the store above.
+    if ctx.library is not None and meta.thread_id is not None and meta.checksum_sha256:
+        from substrate_cloud.documents_library import documents_collection
+
+        collection = documents_collection(claims.tenant_id, claims.sub, str(meta.thread_id))
+        if collection is not None:
+            try:
+                await ctx.library.delete(collection=collection, document=ctx.library.document_id(meta.original_name, meta.checksum_sha256))
+            except Exception as exc:
+                logger.warning("Failed to remove deleted file %s from the conversation's documents: %s", file_id, exc)

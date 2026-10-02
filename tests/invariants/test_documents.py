@@ -53,3 +53,57 @@ async def test_a_hostile_document_is_a_failed_result_never_an_exception(make) ->
     """A zip bomb, an entity bomb, an external entity, absurd nesting and a member flood each come back as ``success=False`` with a reason."""
     result = await Reader(limits=ReadLimits(timeout_s=20)).read(make(), "evil.docx")
     assert not result.success and result.error
+
+
+async def test_the_documents_tool_takes_its_collection_from_the_run_scope_and_has_no_way_to_open_a_path(tmp_path) -> None:
+    """A model cannot name a collection, a path or an ingest: the tool's schema has none, extra arguments are ignored, and what it can reach is
+    decided by the authenticated scope alone — so one conversation's documents are invisible to another's, whatever a document tells the model."""
+    from types import SimpleNamespace
+
+    from substrate.documents import DocumentsTool, ExtractedPage, ExtractionResult, Library
+    from substrate.stores import Store
+    from substrate.types.run import RunScope
+
+    store = Store.at(tmp_path / "store")
+    await store.start()
+    try:
+        library = Library(store)
+        doc = ExtractionResult(pages=[ExtractedPage(page_number=1, text="t")], markdown="<!-- page 1 -->\n\n" + "secret " * 300, engine="t")
+        await library.add(doc, "mine.md", collection="tenants/a/conversations/1/documents")
+        await library.add(doc, "theirs.md", collection="tenants/b/conversations/2/documents")
+        tool = DocumentsTool(library, collection=lambda s: f"tenants/{s.tenant_id}/conversations/{s.thread_id}/documents")
+        properties = tool.input_schema["properties"]
+        assert not {"collection", "path", "file", "url", "ingest"} & set(properties) and "ingest" not in properties["action"]["enum"]
+        ctx = SimpleNamespace(scope=RunScope(tenant_id="a", thread_id="1"))
+        listed = await tool.execute(ctx=ctx, action="list", collection="tenants/b/conversations/2/documents", path="/etc/passwd")
+        assert "mine" in listed.text and "theirs" not in listed.text
+        assert (await tool.execute(ctx=ctx, action="read", document="/etc/passwd", section=1)).is_error
+    finally:
+        await store.aclose()
+
+
+async def test_the_catalog_is_derived_from_the_bundle_and_can_be_rebuilt(tmp_path) -> None:
+    """Delete every catalog row and ``reindex`` brings back the same outline and the same search hits from the markdown files alone — the bundle
+    is the source of truth, so a lost or corrupted catalog is a rebuild, not a data loss."""
+    from substrate.documents import Library, Reader
+    from substrate.stores import Store
+
+    store = Store.at(tmp_path / "store")
+    await store.start()
+    try:
+        library = Library(store, reader=Reader(isolate=False))
+        collection = "tenants/a/conversations/1/documents"
+        added = await library.add(fixture("sample.docx"), "q3.docx", collection=collection)
+        before = (await library.outline(collection=collection, document=added.document), await library.find(collection=collection, query="Rotterdam"))
+
+        async def wipe(tx) -> None:
+            for table in ("library_sections", "library_images", "library_documents"):
+                await tx.execute(f"DELETE FROM {table}")
+
+        await library._run(wipe)
+        assert await library.reindex(collection=collection) == 1
+        after = (await library.outline(collection=collection, document=added.document), await library.find(collection=collection, query="Rotterdam"))
+        assert [(s.position, s.title) for s in after[0].sections] == [(s.position, s.title) for s in before[0].sections]
+        assert [h.snippet for h in after[1]] == [h.snippet for h in before[1]]
+    finally:
+        await store.aclose()

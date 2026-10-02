@@ -76,7 +76,9 @@ class SubstrateConfig(BaseSettings):
     # ── Model defaults ───────────────────────────────────────────────────────
     AGENT_MODE: str = "react"  # "react" | "orchestrator"
     CHAT_MODEL: str = "google/gemini-3.1-flash-lite"
-    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    # A knowledge base is searched by meaning when it has an embedder: EMBEDDING_RERANKER_SERVICE_URL (the default stack: Qwen3-VL embedding
+    # and reranking), or EMBEDDING_MODEL (a provider model, e.g. "openai/text-embedding-3-small"). With neither it is searched by words.
+    EMBEDDING_MODEL: str = ""
     STT_MODEL: str = "whisper-1"
     TTS_MODEL: str = "local/kokoro-82m"
     TTS_VOICE: str = "af_heart"
@@ -138,27 +140,12 @@ class SubstrateConfig(BaseSettings):
     EMBEDDING_RERANKER_AUTH_TOKEN: str = ""
     EMBEDDING_RERANKER_TIMEOUT_S: int = 30
 
-    # ── RAG backend & retrieval ──────────────────────────────────────────────
-    # "local" (LocalRagBackend over a VectorStore) is the only backend --
-    # Pinecone support was removed as dead weight (never the standard path).
-    RAG_BACKEND: str = "local"
-    RAG_TEXT_EMBEDDING_DIM: int = 1536
-    RAG_IMAGE_EMBEDDING_DIM: int = 2048
+    # ── Documents ────────────────────────────────────────────────────────────
+    # What an upload may be: read once (substrate.documents.Reader), filed in the conversation's documents.
     RAG_MAX_DOC_PAGES: int = 300
     RAG_MAX_DOC_MB: int = 5
-    # None (default) means "let integrations/knowledge/chunking.py's
-    # recommend_chunk_params(EMBEDDING_MODEL) pick a size informed by the
-    # configured embedding model's real max input token limit" -- an
-    # explicit value here always wins over that (same explicit-always-wins
-    # precedence document_intelligence's autoconfig.py already uses).
-    RAG_CHUNK_SIZE: int | None = None
-    RAG_CHUNK_OVERLAP: int | None = None
-    RAG_DENSE_K: int = 50
-    RAG_LEXICAL_K: int = 50
-    RAG_FUSED_K: int = 50
-    RAG_RERANK_TOP_N: int = 10
-    RAG_FINAL_K: int = 5
-    RAG_MIN_RERANK_SCORE: float = 0.1
+    # The knowledge base the chat's `knowledge` tool searches (one per tenant for now; /rag and /internal/knowledge address any by id).
+    KNOWLEDGE_CHAT_BASE: str = "default"
 
     # ── Local database paths (PostgreSQL & Redis replacements under DATA_DIR) ──
     HISTORY_STORAGE_PATH: str = ""

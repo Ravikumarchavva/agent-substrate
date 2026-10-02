@@ -14,13 +14,17 @@ created the first time a width is stored, so search is approximate-nearest at sc
 pipelines use: ``lexical_search`` (full text, BM25) and ``hybrid_search`` (both, fused by Reciprocal Rank Fusion, which
 looks only at rank positions so the two scores never have to be made comparable).
 
-A collection holds vectors of one width; adding a different one is an error rather than a silent zero score.
+A collection holds vectors of one width — and, when the writer names it (``space=``), of one embedder: adding or searching with another
+raises ``VectorSpaceError`` rather than returning a silent zero score. A document may be stored **without** an embedding (``dims`` 0, nothing
+for dense search to compare, found by its words): the embedder was down when it was written, or there is none. ``unembedded`` lists them so
+they can be embedded later. Above 10,000 documents in a collection the exact scan is slow; a warning says so.
 """
 
 from __future__ import annotations
 
 import heapq
 import json
+import logging
 import math
 import sys
 from array import array
@@ -31,11 +35,17 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from substrate.stores import textsearch
 from substrate.stores.database import Database, Row, Tx, under
 from substrate.stores.vector import Document, SearchResult
+from substrate.types.errors import VectorSpaceError
 
 if TYPE_CHECKING:
     from substrate.stores.store import Store
 
+logger = logging.getLogger(__name__)
+
 T = TypeVar("T")
+
+_SCAN_WARN_ROWS = 10_000
+
 
 def _vector_schema(database: Database) -> str:
     pg = database.dialect == "postgresql"
@@ -59,7 +69,18 @@ CREATE TABLE IF NOT EXISTS vector_docs (
     )
 
 
-SCHEMA = [_vector_schema]
+def _spaces_schema(database: Database) -> str:
+    """Migration 2: which embedder a collection's vectors came from, and (PostgreSQL) a document may have no embedding."""
+    return """
+CREATE TABLE IF NOT EXISTS vector_spaces (
+    collection TEXT PRIMARY KEY,
+    space TEXT NOT NULL,
+    dims INTEGER NOT NULL
+);
+""" + ("ALTER TABLE vector_docs ALTER COLUMN embedding DROP NOT NULL;\n" if database.dialect == "postgresql" else "")
+
+
+SCHEMA = [_vector_schema, _spaces_schema]
 
 # Every column but the embedding (and, on PostgreSQL, the search vector): what a search result is made from.
 _LIGHT = "{a}.seq, {a}.collection, {a}.id, {a}.text, {a}.document_json, {a}.metadata_json, {a}.dims, {a}.norm"
@@ -92,7 +113,9 @@ def _vector_text(vector: list[float]) -> str:
     return "[" + ",".join(repr(float(x)) for x in vector) + "]"
 
 
-def _embedding(row: Row) -> list[float]:
+def _embedding(row: Row) -> list[float] | None:
+    if not row["dims"]:
+        return None  # stored without one
     if "embedding_text" in row.keys():  # PostgreSQL: pgvector's text form, "[0.1,0.2]"
         return [float(x) for x in row["embedding_text"].strip("[]").split(",") if x]
     return list(_unpack(row["embedding"]))
@@ -127,6 +150,7 @@ class Vectors:
 
     def __init__(self, store: Store) -> None:
         self._store = store
+        self._warned: set[str] = set()
 
     @property
     def store(self) -> Store:
@@ -152,29 +176,31 @@ class Vectors:
 
     # ── write ────────────────────────────────────────────────────────────────
 
-    async def add(self, documents: list[Document], *, collection: str = "default") -> list[str]:
+    async def add(self, documents: list[Document], *, collection: str = "default", space: str | None = None) -> list[str]:
         """Insert documents that are not there yet; one already stored under the same id is left as it is."""
-        return await self._write(documents, collection, replace=False)
+        return await self._write(documents, collection, replace=False, space=space)
 
-    async def upsert(self, documents: list[Document], *, collection: str = "default") -> list[str]:
+    async def upsert(self, documents: list[Document], *, collection: str = "default", space: str | None = None) -> list[str]:
         """Insert documents, replacing any stored under the same id."""
-        return await self._write(documents, collection, replace=True)
+        return await self._write(documents, collection, replace=True, space=space)
 
-    async def _write(self, documents: list[Document], collection: str, *, replace: bool) -> list[str]:
-        for doc in documents:
-            if doc.embedding is None:
-                raise ValueError(f"Document {doc.id} is missing an embedding; compute it before storing (the store does not embed)")
-
+    async def _write(self, documents: list[Document], collection: str, *, replace: bool, space: str | None) -> list[str]:
         async def op(tx: Tx) -> list[str]:
-            known = await tx.fetchone("SELECT dims FROM vector_docs WHERE collection = ? LIMIT 1", collection)
+            known = await tx.fetchone("SELECT dims FROM vector_docs WHERE collection = ? AND dims > 0 LIMIT 1", collection)
             width = known["dims"] if known else None
             for doc in documents:
-                vector = list(doc.embedding)  # type: ignore[arg-type]
-                if width is not None and len(vector) != width:
-                    raise ValueError(
-                        f"collection {collection!r} holds {width}-wide vectors; document {doc.id!r} is {len(vector)} wide"
+                if doc.embedding is None:
+                    continue
+                if width is not None and len(doc.embedding) != width:
+                    raise VectorSpaceError(
+                        f"collection {collection!r} holds {width}-wide vectors; document {doc.id!r} is {len(doc.embedding)} wide",
+                        collection=collection,
                     )
-                width = len(vector)
+                width = len(doc.embedding)
+            if space is not None and width is not None:
+                await self._check_space(tx, collection, space, width, record=True)
+            for doc in documents:
+                vector = list(doc.embedding) if doc.embedding is not None else None
                 conflict = (
                     "ON CONFLICT (collection, id) DO UPDATE SET text = excluded.text, document_json = excluded.document_json, "
                     "metadata_json = excluded.metadata_json, embedding = excluded.embedding, dims = excluded.dims, norm = excluded.norm"
@@ -182,24 +208,77 @@ class Vectors:
                     else "ON CONFLICT (collection, id) DO NOTHING"
                 )
                 dumped = doc.model_dump(mode="json")
+                if vector is None:
+                    stored: Any = None if self._pg else b""
+                else:
+                    stored = _vector_text(vector) if self._pg else _pack(vector)
                 await tx.execute(
                     "INSERT INTO vector_docs (collection, id, text, document_json, metadata_json, embedding, dims, norm) "
-                    f"VALUES (?, ?, ?, ?, ?, {'?::text::vector' if self._pg else '?'}, ?, ?) {conflict}",
+                    f"VALUES (?, ?, ?, ?, ?, {'?::text::vector' if self._pg and vector is not None else '?'}, ?, ?) {conflict}",
                     collection,
                     doc.id,
                     doc.to_text(),
                     json.dumps({"content": dumped["content"], "metadata": dumped["metadata"]}),
                     json.dumps(dumped["metadata"]),
-                    _vector_text(vector) if self._pg else _pack(vector),
-                    len(vector),
-                    _norm(vector),
+                    stored,
+                    len(vector) if vector is not None else 0,
+                    _norm(vector) if vector is not None else 0.0,
                 )
             return [doc.id for doc in documents]
 
         written = await self._run(op)
-        if documents:
-            await self._ensure_index(len(documents[0].embedding))  # type: ignore[arg-type]
+        embedded = next((doc.embedding for doc in documents if doc.embedding is not None), None)
+        if embedded is not None:
+            await self._ensure_index(len(embedded))
         return written
+
+    @staticmethod
+    async def _check_space(tx: Tx, collection: str, space: str, width: int, *, record: bool) -> None:
+        row = await tx.fetchone("SELECT space, dims FROM vector_spaces WHERE collection = ?", collection)
+        if row is None:
+            if record:
+                await tx.execute("INSERT INTO vector_spaces (collection, space, dims) VALUES (?, ?, ?)", collection, space, width)
+            return
+        if row["space"] != space or int(row["dims"]) != width:
+            raise VectorSpaceError(
+                f"collection {collection!r} holds {row['dims']}-wide vectors from {row['space']!r}; these are {width}-wide from {space!r} — "
+                "re-embed the collection with one embedder, or use another collection",
+                collection=collection,
+            )
+
+    async def space_of(self, collection: str) -> tuple[str, int] | None:
+        """``(embedder, width)`` the collection's vectors came from, if a writer named it; ``None`` if it never did."""
+
+        async def op(tx: Tx) -> tuple[str, int] | None:
+            row = await tx.fetchone("SELECT space, dims FROM vector_spaces WHERE collection = ?", collection)
+            return (row["space"], int(row["dims"])) if row else None
+
+        return await self._run(op)
+
+    async def unembedded(self, *, collection: str = "default", limit: int = 500) -> list[Document]:
+        """Documents stored without an embedding (the embedder was unavailable), oldest first, ``limit`` at a time."""
+
+        async def op(tx: Tx) -> list[Document]:
+            rows = await tx.fetchall(
+                f"SELECT {_LIGHT.format(a='d')} FROM vector_docs d WHERE d.collection = ? AND d.dims = 0 ORDER BY d.seq LIMIT ?",
+                collection,
+                limit,
+            )
+            return [_document(row) for row in rows]
+
+        return await self._run(op)
+
+    async def delete_where(self, *, collection: str = "default", filter: dict[str, Any]) -> int:
+        """Delete the documents of ``collection`` whose metadata has every key of ``filter`` equal to its value. Returns the count."""
+
+        async def op(tx: Tx) -> int:
+            rows = await tx.fetchall("SELECT id, metadata_json FROM vector_docs WHERE collection = ?", collection)
+            ids = [row["id"] for row in rows if _matches(row, filter)]
+            for doc_id in ids:
+                await tx.execute("DELETE FROM vector_docs WHERE collection = ? AND id = ?", collection, doc_id)
+            return len(ids)
+
+        return await self._run(op)
 
     async def delete(self, ids: list[str], *, collection: str = "default") -> int:
         async def op(tx: Tx) -> int:
@@ -235,10 +314,14 @@ class Vectors:
         collection: str = "default",
         limit: int = 5,
         filter: dict[str, Any] | None = None,
+        space: str | None = None,
     ) -> list[SearchResult]:
-        """The ``limit`` documents whose embeddings are closest (cosine) to ``query_embedding``, best first."""
+        """The ``limit`` documents whose embeddings are closest (cosine) to ``query_embedding``, best first. ``space`` names the embedder
+        the query came from: a collection written by another is refused (``VectorSpaceError``), not searched."""
 
         async def op(tx: Tx) -> list[SearchResult]:
+            if space is not None:
+                await self._check_space(tx, collection, space, len(query_embedding), record=False)
             return [_result(row, score) for score, row in await self._rank(tx, query_embedding, collection, limit, filter)]
 
         return await self._run(op)
@@ -250,7 +333,13 @@ class Vectors:
             return await self._rank_pg(tx, query, collection, limit, filter)
         q = array("f", query)
         q_norm = _norm(query)
-        rows = await tx.fetchall("SELECT * FROM vector_docs WHERE collection = ? ORDER BY seq", collection)
+        rows = await tx.fetchall("SELECT * FROM vector_docs WHERE collection = ? AND dims > 0 ORDER BY seq", collection)
+        if len(rows) > _SCAN_WARN_ROWS and collection not in self._warned:
+            self._warned.add(collection)
+            logger.warning(
+                "collection %r has %d embedded documents: the exact scan takes about %d ms per search; use postgres_store (an HNSW index) for collections this large",
+                collection, len(rows), len(rows) * len(query) // 25_000,
+            )  # fmt: skip
 
         def scored() -> list[tuple[float, int, Row]]:
             out: list[tuple[float, int, Row]] = []
@@ -301,25 +390,32 @@ class Vectors:
         return [(float(row["score"]), row) for row in rows]
 
     async def lexical_search(
-        self, query_text: str, *, collection: str = "default", limit: int = 5, filter: dict[str, Any] | None = None
+        self,
+        query_text: str,
+        *,
+        collection: str = "default",
+        limit: int = 5,
+        filter: dict[str, Any] | None = None,
+        match: str = "all",
     ) -> list[SearchResult]:
-        """Full-text matches (every word must appear; word forms are stemmed), best BM25 first. ``score`` is the raw BM25
-        value — comparable within one query, not across queries."""
+        """Full-text matches, best BM25 first: every word must appear (``match="all"``) or any of them (``"any"``); word forms are
+        stemmed, common words and all but the first 16 distinct words are ignored. ``score`` is the raw BM25 value — comparable within
+        one query, not across queries."""
 
         async def op(tx: Tx) -> list[SearchResult]:
-            return [_result(row, score) for row, score in await self._lexical(tx, query_text, collection, limit, filter)]
+            return [_result(row, score) for row, score in await self._lexical(tx, query_text, collection, limit, filter, match)]
 
         return await self._run(op)
 
     async def _lexical(
-        self, tx: Tx, query_text: str, collection: str, limit: int, filter: dict[str, Any] | None
+        self, tx: Tx, query_text: str, collection: str, limit: int, filter: dict[str, Any] | None, match_mode: str = "all"
     ) -> list[tuple[Row, float]]:
-        query_words = textsearch.words(query_text)
+        query_words = textsearch.terms(query_text)
         if not query_words:
             return []
         dialect = self._store.database.dialect
         source, match, match_params = textsearch.ranked(
-            dialect, index="vector_fts", table="vector_docs", alias="d", query_words=query_words
+            dialect, index="vector_fts", table="vector_docs", alias="d", query_words=query_words, match=match_mode
         )
         score = textsearch.score(dialect, index="vector_fts", alias="d")
         if self._pg:
@@ -352,15 +448,19 @@ class Vectors:
         fused_k: int = 50,
         rrf_k: int = 60,
         filter: dict[str, Any] | None = None,
+        space: str | None = None,
     ) -> list[SearchResult]:
         """Dense search and full-text search fused with Reciprocal Rank Fusion: a document's score is the sum of
         ``1 / (rrf_k + rank)`` over the lists it appears in. Only ranks matter, so cosine similarity and BM25 never have
-        to be calibrated against each other. ``score`` is that fused score — comparable across results of this method,
-        not to a plain ``search``."""
+        to be calibrated against each other. The words leg matches **any** word (a question is not a phrase), so a passage the
+        embedding misses is still found by the words it shares. ``score`` is that fused score — comparable across results of this
+        method, not to a plain ``search``."""
 
         async def op(tx: Tx) -> list[SearchResult]:
+            if space is not None:
+                await self._check_space(tx, collection, space, len(query_embedding), record=False)
             dense = await self._rank(tx, query_embedding, collection, dense_k, filter)
-            lexical = await self._lexical(tx, query_text, collection, lexical_k, filter)
+            lexical = await self._lexical(tx, query_text, collection, lexical_k, filter, "any")
             fused: dict[str, tuple[float, Row]] = {}
             for rank, (_score, row) in enumerate(dense, start=1):
                 fused[row["id"]] = (1.0 / (rrf_k + rank), row)
@@ -382,6 +482,7 @@ class Vectors:
 
     async def delete_collection(self, collection: str) -> int:
         async def op(tx: Tx) -> int:
+            await tx.execute("DELETE FROM vector_spaces WHERE collection = ?", collection)
             return await tx.execute("DELETE FROM vector_docs WHERE collection = ?", collection)
 
         return await self._run(op)
@@ -395,7 +496,10 @@ class Vectors:
                 new,
                 old,
             )
-            return await tx.execute("UPDATE vector_docs SET collection = ? WHERE collection = ?", new, old)
+            moved = await tx.execute("UPDATE vector_docs SET collection = ? WHERE collection = ?", new, old)
+            await tx.execute("DELETE FROM vector_spaces WHERE collection = ?", new)
+            await tx.execute("UPDATE vector_spaces SET collection = ? WHERE collection = ?", new, old)
+            return moved
 
         return await self._run(op)
 
@@ -405,6 +509,7 @@ class Vectors:
 
         async def op(tx: Tx) -> int:
             erased = await tx.execute(f"DELETE FROM vector_docs WHERE {clause}", *params)
+            await tx.execute(f"DELETE FROM vector_spaces WHERE {clause}", *params)
             if erased and (compact := textsearch.compact(self._store.database.dialect, index="vector_fts")):
                 # The delete trigger only marks index entries deleted; rewriting the index drops the words themselves.
                 await tx.execute(compact)

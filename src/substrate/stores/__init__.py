@@ -52,7 +52,6 @@ from substrate.stores.scoped import (
     bind_tasks,
     bind_vector,
     fence_objects,
-    vector_namespace,
 )
 from substrate.stores.tasks import (
     Task,
@@ -119,5 +118,4 @@ __all__ = [
     "bind_tasks",
     "bind_vector",
     "fence_objects",
-    "vector_namespace",
 ]

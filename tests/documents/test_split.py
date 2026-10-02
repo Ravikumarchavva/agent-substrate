@@ -50,3 +50,10 @@ def test_a_hash_inside_a_code_fence_is_not_a_heading():
 
 def test_empty_text_has_no_sections_and_tokens_over_estimates():
     assert split("  \n\n") == [] and tokens("a" * 300) == 101
+
+
+def test_a_page_marker_before_a_heading_goes_with_the_heading():
+    md = f"<!-- page 1 -->\n\n## One\n\n{BODY}\n\n<!-- page 2 -->\n\n## Two\n\n{BODY}"
+    one, two = split(md)
+    assert one.last_page == 1 and two.first_page == 2
+    assert two.markdown.startswith("<!-- page 2 -->") and "<!-- page 2 -->" not in one.markdown

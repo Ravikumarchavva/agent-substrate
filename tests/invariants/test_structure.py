@@ -198,6 +198,7 @@ _PORTS = (
     "EmbeddingModel",
     "DocumentExtractor",
     "Ocr",
+    "Reranker",
 )
 _SUITES_DIR = SRC / "testing" / "conformance"
 
@@ -248,7 +249,7 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
     assert "TaskStore" in suites, "the TaskStore conformance suite has gone missing"
     assert "WorkspaceStore" in suites, "the WorkspaceStore conformance suite has gone missing"
     assert "GraphStore" in suites, "the GraphStore conformance suite has gone missing"
-    for port in ("ChatModel", "EmbeddingModel", "DocumentExtractor", "Ocr"):
+    for port in ("ChatModel", "EmbeddingModel", "DocumentExtractor", "Ocr", "Reranker"):
         assert port in suites, f"the {port} conformance suite has gone missing"
     assert "VectorStore" in suites, "the vector-store conformance suite has gone missing"
     shipped = {
@@ -261,9 +262,10 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
         "WorkspaceStore": ("TestWorkspaces", "TestPostgresWorkspaces"),
         "GraphStore": ("TestGraph", "TestPostgresGraph"),
         "ChatModel": ("OpenAICompatibleClient", "OpenAIClient", "AnthropicClient", "GeminiClient"),
-        "EmbeddingModel": ("OpenAIEmbeddingClient", "GeminiEmbeddingClient", "SentenceTransformersEmbeddingClient", "EmbeddingRerankerTextEmbeddingClient"),
+        "EmbeddingModel": ("OpenAIEmbeddingClient", "GeminiEmbeddingClient", "SentenceTransformersEmbeddingClient", "RemoteEmbedder"),
         "DocumentExtractor": ("TestIsolatedReader", "TestInProcessReader", "TestReaderByUrl"),
         "Ocr": ("TestTesseract", "TestRapidOcr"),
+        "Reranker": ("TestRemoteReranker",),
         "VectorStore": ("TestVectors", "TestPostgresVectors"),
     }
     for port, implementations in shipped.items():

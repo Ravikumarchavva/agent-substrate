@@ -1,4 +1,4 @@
-"""Thin async HTTP client for the llama-embed / llama-rerank sidecars.
+"""The service's engine: a thin async HTTP client for the llama-embed / llama-rerank sidecars.
 
 Both are real ``llama-server`` processes (see ``deployment/docker/docker-compose.yml``)
 serving Qwen3-VL-Embedding-2B (``--embedding --pooling last``, ``POST
@@ -27,7 +27,7 @@ import httpx2 as httpx
 logger = logging.getLogger(__name__)
 
 
-class EmbeddingServiceError(RuntimeError):
+class EngineError(RuntimeError):
     """Raised when the llama-embed/llama-rerank sidecar is unreachable or
     returns a response in an unexpected shape."""
 
@@ -88,7 +88,7 @@ def _downscale_to_pixel_budget(data: bytes, max_pixels: int) -> bytes:
     return buffer.getvalue()
 
 
-class EmbeddingReranker:
+class LlamaEngine:
     def __init__(
         self,
         *,
@@ -106,11 +106,36 @@ class EmbeddingReranker:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    async def embed_batch(self, items: Sequence[str | Sequence[str | bytes]], *, query: bool = False, instruction: str = "") -> list[list[float]]:
+        """One vector per item, in order: an item is a text, or a list of interleaved text and image parts embedded as one point.
+
+        ``query=True`` prefixes each text item with ``instruction`` — Qwen3 embeds a search query as an instruction plus the query,
+        and a passage as itself, so the same words land in different places."""
+        if not items:
+            return []
+        if all(isinstance(item, str) for item in items):
+            texts = [self._as_query(str(item), query, instruction) for item in items]
+            return await self.embed_texts(texts)
+        vectors: list[list[float]] = []
+        for item in items:
+            if isinstance(item, str):
+                vectors.append(await self.embed_text(self._as_query(item, query, instruction)))
+            elif len(item) == 1 and isinstance(item[0], (bytes, bytearray)):
+                vectors.append(await self.embed_image(bytes(item[0])))
+            else:
+                parts = [self._as_query(part, query, instruction) if isinstance(part, str) else part for part in item]
+                vectors.append(await self.embed_mixed(parts))
+        return vectors
+
+    @staticmethod
+    def _as_query(text: str, query: bool, instruction: str) -> str:
+        return f"Instruct: {instruction}\nQuery: {text}" if query and instruction else text
+
     async def warmup(self) -> None:
         try:
             await self.embed_text("warmup")
             await self.rerank("warmup query", ["warmup passage"])
-        except EmbeddingServiceError as exc:
+        except EngineError as exc:
             logger.info("Embedding/rerank sidecar warmup skipped (%s)", exc)
 
     async def embed_image(self, data: bytes) -> list[float]:
@@ -152,7 +177,7 @@ class EmbeddingReranker:
         If ANY image in the batch fails (e.g. exceeds the sidecar's image
         token minimum), the WHOLE request fails with no partial results
         (same behavior as the text batch endpoint) — callers doing
-        heterogeneous batches should catch ``EmbeddingServiceError`` and
+        heterogeneous batches should catch ``EngineError`` and
         fall back to per-item ``embed_image`` calls to isolate the bad one.
         """
         if not images:
@@ -177,7 +202,7 @@ class EmbeddingReranker:
             )
             resp.raise_for_status()
         except httpx.HTTPError as exc:
-            raise EmbeddingServiceError(
+            raise EngineError(
                 f"llama-embed sidecar batch request failed ({self._embed_url}): {exc}"
             ) from exc
         data = resp.json()
@@ -185,7 +210,7 @@ class EmbeddingReranker:
             rows = sorted(data, key=lambda row: row["index"])
             return [list(row["embedding"][0]) for row in rows]
         except (KeyError, IndexError, TypeError) as exc:
-            raise EmbeddingServiceError(
+            raise EngineError(
                 f"Unexpected /embeddings batch response shape: {data!r}"
             ) from exc
 
@@ -197,7 +222,7 @@ class EmbeddingReranker:
                 resp.raise_for_status()
                 marker = str(resp.json()["media_marker"])
             except (httpx.HTTPError, KeyError) as exc:
-                raise EmbeddingServiceError(
+                raise EngineError(
                     f"Could not fetch media_marker from llama-embed /props "
                     f"({self._embed_url}): {exc}"
                 ) from exc
@@ -214,7 +239,7 @@ class EmbeddingReranker:
         the batch exceeds the sidecar's context size, the WHOLE request
         400s with no partial results (verified against the real running
         sidecar) — callers doing large/heterogeneous batches should catch
-        ``EmbeddingServiceError`` and fall back to per-item ``embed_text``
+        ``EngineError`` and fall back to per-item ``embed_text``
         calls to isolate just the offending one, same as
         DocumentIngestPipeline.ingest_file does.
         """
@@ -226,7 +251,7 @@ class EmbeddingReranker:
             )
             resp.raise_for_status()
         except httpx.HTTPError as exc:
-            raise EmbeddingServiceError(
+            raise EngineError(
                 f"llama-embed sidecar batch request failed ({self._embed_url}): {exc}"
             ) from exc
         data = resp.json()
@@ -239,7 +264,7 @@ class EmbeddingReranker:
             rows = sorted(data, key=lambda row: row["index"])
             return [list(row["embedding"][0]) for row in rows]
         except (KeyError, IndexError, TypeError) as exc:
-            raise EmbeddingServiceError(
+            raise EngineError(
                 f"Unexpected /embeddings batch response shape: {data!r}"
             ) from exc
 
@@ -250,7 +275,7 @@ class EmbeddingReranker:
             )
             resp.raise_for_status()
         except httpx.HTTPError as exc:
-            raise EmbeddingServiceError(
+            raise EngineError(
                 f"llama-embed sidecar request failed ({self._embed_url}): {exc}"
             ) from exc
         data = resp.json()
@@ -258,7 +283,7 @@ class EmbeddingReranker:
             # Unwrap pooled vector list [[float, ...]] -> [float, ...]
             return list(data[0]["embedding"][0])
         except (KeyError, IndexError, TypeError) as exc:
-            raise EmbeddingServiceError(
+            raise EngineError(
                 f"Unexpected /embeddings response shape: {data!r}"
             ) from exc
 
@@ -291,14 +316,14 @@ class EmbeddingReranker:
             )
             resp.raise_for_status()
         except httpx.HTTPError as exc:
-            raise EmbeddingServiceError(
+            raise EngineError(
                 f"llama-rerank sidecar request failed ({self._rerank_url}): {exc}"
             ) from exc
         data = resp.json()
         try:
             results = data["results"]
         except (KeyError, TypeError) as exc:
-            raise EmbeddingServiceError(
+            raise EngineError(
                 f"Unexpected /rerank response shape: {data!r}"
             ) from exc
 
@@ -309,10 +334,10 @@ class EmbeddingReranker:
                 if 0 <= index < len(scores):
                     scores[index] = float(result["relevance_score"])
         except (KeyError, TypeError) as exc:
-            raise EmbeddingServiceError(
+            raise EngineError(
                 f"Unexpected /rerank result entry shape: {results!r}"
             ) from exc
         return scores
 
 
-__all__ = ["EmbeddingReranker", "EmbeddingServiceError"]
+__all__ = ["EngineError", "LlamaEngine"]

@@ -8,8 +8,8 @@ Stages measured, in pipeline order:
   1. Dense-only  (``Vectors.search``)                   → Recall@dense_k
   2. Lexical-only (``Vectors.lexical_search``)           → Recall@lexical_k
   3. Hybrid (RRF-fused)  (``Vectors.hybrid_search``) → Recall@fused_k
-  4. Pre-filter  (``reranker.prefilter_candidates``)    → Recall@rerank_top_n
-  5. Reranker    (``CrossEncoderReranker``/``LLMReranker``) → NDCG@final_k
+  4. Candidates  (the best ``rerank_top_n`` of the fused list) → Recall@rerank_top_n
+  5. Reranker    (any ``Reranker``)                      → NDCG@final_k
   6. Final       (whatever rerank produces)             → Recall@final_k
 
 Categories (text→text vs. text→image) are reported separately as well as
@@ -64,13 +64,11 @@ async def run_retrieval_eval(
     rerank_top_n: int = 10,
     final_k: int = 5,
 ) -> EvalReport:
-    from substrate.integrations.knowledge.reranker import prefilter_candidates
-
     per_query: list[tuple[str, dict[str, float]]] = []
 
     for eval_query in dataset.queries:
         relevant = eval_query.relevant_doc_ids
-        query_vec = await embedding_client.embed_single(eval_query.query)
+        query_vec = (await embedding_client.embed([eval_query.query], query=True)).embeddings[0]
 
         dense = await store.search(query_vec, collection=collection, limit=dense_k)
         lexical = await store.lexical_search(
@@ -84,11 +82,12 @@ async def run_retrieval_eval(
             lexical_k=lexical_k,
             fused_k=fused_k,
         )
-        prefiltered = prefilter_candidates(hybrid, top_n=rerank_top_n)
+        prefiltered = sorted(hybrid, key=lambda r: r.score, reverse=True)[:rerank_top_n]
         if reranker is not None and prefiltered:
-            final = await reranker.rerank(eval_query.query, prefiltered, top_k=final_k)
+            scores = await reranker.rerank(eval_query.query, [r.to_text() for r in prefiltered])
+            final = [r for _s, r in sorted(zip(scores, prefiltered, strict=True), key=lambda pair: -pair[0])][:final_k]
         else:
-            final = sorted(prefiltered, key=lambda r: r.score, reverse=True)[:final_k]
+            final = prefiltered[:final_k]
 
         metrics = {
             "dense_recall": recall_at_k([r.id for r in dense], relevant, dense_k),

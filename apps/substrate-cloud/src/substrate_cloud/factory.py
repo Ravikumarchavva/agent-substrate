@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from substrate_cloud.config import SubstrateConfig
 from substrate.types import Actor
-from substrate.models import EmbeddingModel, ChatModel
+from substrate.models import ChatModel
 from substrate.stores import ThreadStore
 from substrate.tools import Tool, ToolRisk, is_hosted_tool, is_provider_defined_tool
 
@@ -47,7 +47,6 @@ class ChatModels:
     model_client_kwargs: dict[str, Any]
     model_client: ChatModel
     chat_model: str
-    embedding_client: EmbeddingModel
 
 
 @dataclass
@@ -56,8 +55,6 @@ class Infrastructure:
     redis_client: Any
     runtime: Any
     session_factory: async_sessionmaker
-    vector_store: Any
-    rag_backend: Any
     data_store: Any
     bridge_registry: Any
     skill_manager: Any
@@ -97,10 +94,9 @@ class RuntimeServices:
 
 
 def init_llm_clients(cfg: SubstrateConfig) -> ChatModels:
-    """Create LLM model client, embedding client, and related config."""
+    """Create LLM model client and related config."""
     from substrate.integrations.llm.factory import (
         CHAT_MODEL_FALLBACKS,
-        create_embedding_client,
         create_model_client,
         resolve_model_for_available_credentials,
     )
@@ -137,13 +133,11 @@ def init_llm_clients(cfg: SubstrateConfig) -> ChatModels:
     model_client = create_model_client(
         startup_chat_model, api_keys=api_keys, **model_client_kwargs
     )
-    embedding_client = create_embedding_client(cfg.EMBEDDING_MODEL, api_keys=api_keys)
     return ChatModels(
         api_keys=api_keys,
         model_client_kwargs=model_client_kwargs,
         model_client=model_client,
         chat_model=startup_chat_model,
-        embedding_client=embedding_client,
     )
 
 
@@ -216,24 +210,19 @@ def _init_pending_file_store(cfg: SubstrateConfig) -> Any:
 
 async def init_infrastructure(
     cfg: SubstrateConfig,
-    embedding_client: EmbeddingModel,
     *,
     session_factory: async_sessionmaker,
     model_client: Any = None,
 ) -> Infrastructure:
-    """Create Redis, runtime, file store, vector store, RAG, and bridge registry.
+    """Create Redis, runtime, file store, and bridge registry.
 
     ``session_factory`` comes from ``init_db()`` called in lifespan.
-    ``model_client`` is optional — only used by the "local" RAG backend for
-    ``query_with_context`` and its optional reranker.
     """
     import redis.asyncio as aioredis
 
-    from substrate.integrations.knowledge.backends import build_rag_backend
     from substrate.integrations.pipeline.data_ref import DataRefStore
     from substrate.integrations.tools.skills._manager import SkillManager
     from substrate_cloud.monolith.sse.bridge import BridgeRegistry
-    from substrate.stores import vector_namespace
 
     store = open_store(cfg)
     history = store.threads
@@ -258,13 +247,6 @@ async def init_infrastructure(
 
     task_store: Any = store.tasks
 
-    vector_store = store.vectors
-    # Chart/table images use a different embedding model (the extraction service's SigLIP-family one), so a different
-    # vector width: kept in their own namespace of the same store, since a collection holds one width. Never populated
-    # when no extraction service is configured.
-    image_store = vector_namespace(store.vectors, "images")
-    # Built before the RAG backend, which takes it: extracted chart/table
-    # images are written here rather than inlined into the image vector rows.
     file_store = await _init_file_store(cfg, store)
     pending_file_store = _init_pending_file_store(cfg)
     # Curated OKF bundles ride on the same object store as files (one
@@ -286,45 +268,6 @@ async def init_infrastructure(
             rows = (await session.execute(select(WorkspaceQuota))).scalars().all()
         for row in rows:
             file_store.set_quota_override(row.user_id, row.quota_bytes)
-    # Fail-closed at construction, degrade gracefully at startup: an
-    # unreachable/misconfigured RAG backend disables RAG rather than
-    # crashing the whole server, matching the code-interpreter sandbox's
-    # degrade pattern below.
-    try:
-        rag_backend = build_rag_backend(
-            cfg.RAG_BACKEND,
-            embedding_client=embedding_client,
-            vector_store=vector_store,
-            image_store=image_store,
-            model_client=model_client,
-            # Only turn reranking on by default when it's free — the local
-            # cross-encoder via the embedding-reranker service costs no LLM
-            # tokens. Without that service configured this stays off, same
-            # default as before (an LLMReranker fallback would burn LLM
-            # tokens/latency on every query, an unannounced cost change to
-            # avoid).
-            rerank=bool(cfg.EMBEDDING_RERANKER_SERVICE_URL),
-            extraction_service_url=cfg.DOCUMENT_INTELLIGENCE_SERVICE_URL,
-            extraction_auth_token=cfg.DOCUMENT_INTELLIGENCE_AUTH_TOKEN,
-            extraction_timeout_s=cfg.DOCUMENT_INTELLIGENCE_TIMEOUT_S,
-            embedding_reranker_service_url=cfg.EMBEDDING_RERANKER_SERVICE_URL,
-            embedding_reranker_auth_token=cfg.EMBEDDING_RERANKER_AUTH_TOKEN,
-            embedding_reranker_timeout_s=cfg.EMBEDDING_RERANKER_TIMEOUT_S,
-            file_store=file_store,
-            dense_k=cfg.RAG_DENSE_K,
-            lexical_k=cfg.RAG_LEXICAL_K,
-            fused_k=cfg.RAG_FUSED_K,
-            rerank_top_n=cfg.RAG_RERANK_TOP_N,
-            chunk_size=cfg.RAG_CHUNK_SIZE,
-            chunk_overlap=cfg.RAG_CHUNK_OVERLAP,
-            embedding_model=cfg.EMBEDDING_MODEL,
-        )
-    except Exception as exc:  # noqa: BLE001 - degrade to "no RAG", never crash startup
-        rag_backend = None
-        logger.warning(
-            "RAG backend disabled: %r unavailable (%s)", cfg.RAG_BACKEND, exc
-        )
-
     data_store = DataRefStore(redis_url=cfg.REDIS_URL)
     await data_store.connect()
 
@@ -339,8 +282,6 @@ async def init_infrastructure(
         redis_client=redis_client,
         runtime=runtime,
         session_factory=session_factory,
-        vector_store=vector_store,
-        rag_backend=rag_backend,
         data_store=data_store,
         bridge_registry=bridge_registry,
         skill_manager=skill_manager,
@@ -367,14 +308,13 @@ async def init_tool_registry(
     bridge_registry: Any,
     redis_client: Any = None,
     model_client: Any = None,
-    embedding_client: Any = None,
-    rag_backend: Any = None,
     file_store: Any = None,
     artifact_store: Any = None,
     workspace_store: Any = None,
     skill_manager: Any = None,
     task_store: Any = None,
     library: Any = None,
+    knowledge: Any = None,
 ) -> ToolboxResult:
     """Create all tools and return a registry.
 
@@ -394,7 +334,6 @@ async def init_tool_registry(
         CalculatorTool,
         CurrentTimeTool,
     )
-    from substrate.integrations.tools.ai.knowledge_search import KnowledgeSearchTool
     from substrate.integrations.tools.code_interpreter import CodeInterpreterTool
     from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.factory import (
         build_runtime,
@@ -520,32 +459,24 @@ async def init_tool_registry(
     registry.add(CurrentTimeTool())
     if code_interpreter_tool:
         registry.add(code_interpreter_tool)
-    if rag_backend:
-        registry.add(
-            KnowledgeSearchTool(
-                rag_backend,
-                final_k=cfg.RAG_FINAL_K,
-                # RAG_MIN_RERANK_SCORE is calibrated for a reranker's
-                # calibrated 0-1 relevance score, not raw hybrid/RRF fusion
-                # scores (real, found-not-assumed: unreranked LanceDB RRF
-                # scores land around 0.01-0.05, so the 0.1 default silently
-                # dropped every result -- "unlabelled" citations with no
-                # obvious cause -- whenever EMBEDDING_RERANKER_SERVICE_URL
-                # isn't configured, which is the common case, since
-                # reranking is opt-in). Only apply it when this backend is
-                # actually reranking; otherwise the existing top-K ordering
-                # (already sorted+limited) is the real signal, not an
-                # absolute score value.
-                min_rerank_score=(
-                    cfg.RAG_MIN_RERANK_SCORE if cfg.EMBEDDING_RERANKER_SERVICE_URL else 0.0
-                ),
-            )
-        )
     if library is not None:
         from substrate.documents import DocumentsTool
-        from substrate_cloud.documents_library import collection_for_scope
+        from substrate_cloud.documents_library import collection_for_scope, knowledge_collection_for_scope
 
         registry.add(DocumentsTool(library, collection=collection_for_scope))
+        if knowledge is not None:
+            registry.add(
+                DocumentsTool(
+                    knowledge,
+                    collection=lambda scope: knowledge_collection_for_scope(scope, cfg.KNOWLEDGE_CHAT_BASE),
+                    name="knowledge",
+                    description=(
+                        "Search and read the organisation's knowledge base: its policies, handbooks and reference documents. "
+                        "find(query) is the way in — it searches by meaning and by words; outline and read open what it finds; "
+                        "view shows a figure. Cite what you read as [n] with its page."
+                    ),
+                )
+            )
     if artifact_store is not None:
         from substrate.integrations.tools.artifacts import ArtifactsTool
 

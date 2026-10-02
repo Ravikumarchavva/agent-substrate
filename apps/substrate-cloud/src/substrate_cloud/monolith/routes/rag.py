@@ -1,10 +1,13 @@
-"""RAG API routes — ingest, query, and collection management.
+"""Knowledge-base API — add documents, search them, list and remove knowledge bases.
 
 Endpoints:
-    POST /rag/ingest      — Ingest text into a collection
-    POST /rag/query       — Query a collection for relevant documents
-    GET  /rag/collections — List all collections
-    DELETE /rag/collections/{name} — Delete a collection
+    POST   /rag/ingest                 — add a document (text) to a knowledge base
+    POST   /rag/query                  — search a knowledge base
+    GET    /rag/collections            — the caller's tenant's knowledge bases
+    DELETE /rag/collections/{name}     — remove one
+
+A knowledge base is named by the caller, but **which tenant's** it is comes from the authenticated claims alone: the collection is always
+``knowledge_collection(claims.tenant_id, name)``, so no request can read, list or delete another tenant's.
 """
 
 from __future__ import annotations
@@ -14,13 +17,13 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from substrate.documents import DocumentError
+from substrate.workspace.layout import tenant_prefix
+from substrate_cloud.documents_library import knowledge_collection_for
 from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.shared.auth.claims import AuthClaims
 
-router = APIRouter(
-    prefix="/rag",
-    tags=["rag"],
-    dependencies=[Depends(get_current_user)],
-)
+router = APIRouter(prefix="/rag", tags=["rag"])
 
 
 # ── Request / Response schemas ────────────────────────────────────────────────
@@ -28,22 +31,25 @@ router = APIRouter(
 
 class IngestRequest(BaseModel):
     content: str
-    collection: str = "default"
+    knowledge_base: str = "default"
     filename: str = "upload.txt"
     metadata: Optional[dict[str, Any]] = None
 
 
 class IngestResponse(BaseModel):
-    chunks_stored: int
-    collection: str
-    document_id: Optional[str] = None
+    knowledge_base: str
+    document_id: str
+    sections: int
+    pages: int
+    duplicate: bool = False
+    warnings: list[str] = []
 
 
 class QueryRequest(BaseModel):
     question: str
-    collection: str = "default"
-    limit: int = Field(default=5, ge=1, le=100)
-    generate_answer: bool = False
+    knowledge_base: str = "default"
+    document: Optional[str] = None
+    limit: int = Field(default=5, ge=1, le=20)
 
 
 class QueryResult(BaseModel):
@@ -55,109 +61,108 @@ class QueryResult(BaseModel):
 
 class QueryResponse(BaseModel):
     results: list[QueryResult]
-    answer: Optional[str] = None
+    note: Optional[str] = None
+
+
+class KnowledgeBase(BaseModel):
+    name: str
+    documents: int
 
 
 class CollectionListResponse(BaseModel):
-    collections: list[str]
+    collections: list[KnowledgeBase]
 
 
 class DeleteCollectionResponse(BaseModel):
     deleted: int
-    collection: str
+    knowledge_base: str
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _get_backend(request: Request):
-    """Get the RagBackend from app state."""
-    backend = getattr(request.app.state, "rag_backend", None)
-    if backend is None:
-        raise HTTPException(
-            status_code=503,
-            detail="RAG backend not configured. Set EMBEDDING_MODEL and ensure pgvector is available.",
-        )
-    return backend
+def _knowledge(request: Request):
+    knowledge = getattr(request.app.state, "knowledge", None)
+    if knowledge is None:
+        raise HTTPException(status_code=503, detail="Knowledge bases are not configured: no store or object storage.")
+    return knowledge
+
+
+def _collection(claims: AuthClaims, name: str) -> str:
+    collection = knowledge_collection_for(claims.tenant_id, name)
+    if collection is None:
+        raise HTTPException(status_code=422, detail="Invalid knowledge base name.")
+    return collection
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
 @router.post("/ingest", response_model=IngestResponse)
-async def ingest(body: IngestRequest, request: Request) -> IngestResponse:
-    """Ingest text content into the knowledge base."""
-    backend = _get_backend(request)
-
+async def ingest(body: IngestRequest, request: Request, claims: AuthClaims = Depends(get_current_user)) -> IngestResponse:
+    """Add text to a knowledge base."""
+    knowledge = _knowledge(request)
     metadata = dict(body.metadata or {})
     metadata.setdefault("filename", body.filename)
-
-    result = await backend.ingest(
-        body.content.encode("utf-8"),
-        collection=body.collection,
-        metadata=metadata,
-    )
-
+    try:
+        added = await knowledge.add(body.content.encode("utf-8"), body.filename, collection=_collection(claims, body.knowledge_base), metadata=metadata)
+    except DocumentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return IngestResponse(
-        chunks_stored=result.chunks_indexed,
-        collection=body.collection,
-        document_id=result.document_id,
+        knowledge_base=body.knowledge_base,
+        document_id=added.document,
+        sections=added.sections,
+        pages=added.pages,
+        duplicate=added.duplicate,
+        warnings=list(added.warnings),
     )
 
 
 @router.post("/query", response_model=QueryResponse)
-async def query(body: QueryRequest, request: Request) -> QueryResponse:
-    """Query the knowledge base for relevant documents."""
-    backend = _get_backend(request)
-
-    results = await backend.query(
-        body.question,
-        collection=body.collection,
-        limit=body.limit,
+async def query(body: QueryRequest, request: Request, claims: AuthClaims = Depends(get_current_user)) -> QueryResponse:
+    """Search a knowledge base: the sections that answer the question, best first."""
+    knowledge = _knowledge(request)
+    hits = await knowledge.find(collection=_collection(claims, body.knowledge_base), query=body.question, document=body.document, limit=body.limit)
+    return QueryResponse(
+        results=[
+            QueryResult(
+                id=f"{hit.document.document}:{hit.section.position}",
+                text=hit.snippet,
+                score=hit.score,
+                metadata={
+                    "document": hit.document.document,
+                    "filename": hit.document.filename,
+                    "title": hit.document.title,
+                    "section": hit.section.position,
+                    "section_title": hit.section.title,
+                    "pages": [hit.section.first_page, hit.section.last_page],
+                    **({"image": hit.image} if hit.image else {}),
+                    **hit.document.meta,
+                },
+            )
+            for hit in hits
+        ],
+        note=getattr(hits, "note", None),
     )
-
-    query_results = [
-        QueryResult(
-            id=r.id,
-            text=r.to_text(),
-            score=r.score,
-            metadata=r.metadata,
-        )
-        for r in results
-    ]
-
-    answer = None
-    if body.generate_answer:
-        answer = await backend.query_with_context(
-            body.question,
-            collection=body.collection,
-            limit=body.limit,
-        )
-
-    return QueryResponse(results=query_results, answer=answer)
 
 
 @router.get("/collections", response_model=CollectionListResponse)
-async def list_collections(request: Request) -> CollectionListResponse:
-    """List all vector store collections. Local backend only."""
-    backend = _get_backend(request)
-    if backend.name != "local":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Collection listing isn't supported by the {backend.name!r} backend.",
-        )
-    collections = await backend.list_collections()
-    return CollectionListResponse(collections=collections)
+async def list_collections(request: Request, claims: AuthClaims = Depends(get_current_user)) -> CollectionListResponse:
+    """The caller's tenant's knowledge bases (and only theirs)."""
+    knowledge = _knowledge(request)
+    root = f"{tenant_prefix(claims.tenant_id)}/knowledge/"
+    found = await knowledge.collections(under=root)
+    return CollectionListResponse(
+        collections=[KnowledgeBase(name=collection[len(root) :].removesuffix("/library"), documents=count) for collection, count in found if collection.endswith("/library")]
+    )
 
 
 @router.delete("/collections/{name}", response_model=DeleteCollectionResponse)
-async def delete_collection(name: str, request: Request) -> DeleteCollectionResponse:
-    """Delete all documents in a collection. Local backend only."""
-    backend = _get_backend(request)
-    if backend.name != "local":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Collection deletion isn't supported by the {backend.name!r} backend.",
-        )
-    deleted = await backend.delete_collection(name)
-    return DeleteCollectionResponse(deleted=deleted, collection=name)
+async def delete_collection(name: str, request: Request, claims: AuthClaims = Depends(get_current_user)) -> DeleteCollectionResponse:
+    """Remove a knowledge base — its documents' bundles, catalog and vectors. Only the caller's tenant's."""
+    knowledge = _knowledge(request)
+    deleted = await knowledge.erase_under(_collection(claims, name))
+    return DeleteCollectionResponse(deleted=deleted, knowledge_base=name)
+
+
+__all__ = ["router"]

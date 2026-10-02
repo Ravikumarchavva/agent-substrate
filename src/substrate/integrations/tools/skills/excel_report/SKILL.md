@@ -3,7 +3,7 @@ name: excel-report
 description: Build a professional, stakeholder-ready Excel workbook (formatted tables, native charts, correct per-row citations) instead of a bare data dump.
 version: "1.0"
 license: MIT
-allowed-tools: code_interpreter knowledge_search
+allowed-tools: code_interpreter documents knowledge
 metadata:
   author: agent-framework
 ---
@@ -22,7 +22,7 @@ higher bar than a CSV dump. If they just want a quick data export, plain
   fact retrieved pasted onto every row, instead of looked up per-fact.
 - **Restating metadata instead of extracting the actual numbers.** Before
   writing a cell, confirm you have real numeric values for every row — if
-  you don't, issue more targeted `knowledge_search` calls.
+  you don't, read or find more of the document with the `documents` tool.
 - **A wall of unstyled cells.** No header distinction, raw floats like
   `39895.0` instead of `$39,895`.
 - **No charts**, even when the data is obviously chart-shaped.
@@ -36,7 +36,7 @@ higher bar than a CSV dump. If they just want a quick data export, plain
 ### Step 1 — Gather real data, with correct per-fact provenance
 
 Before opening a spreadsheet at all, know exactly which fact came from which
-source. If pulling from a document, run targeted `knowledge_search` calls per
+source. If pulling from a document, use the `documents` tool (`find`, then `read`) for each
 section/topic and track which citation backs which number — a dict keyed by
 fact, not one citation reused globally:
 

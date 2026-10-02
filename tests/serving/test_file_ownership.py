@@ -437,7 +437,7 @@ def app_with_overrides():
 
 async def _seed_file(db_session_factory, file_store, *, owner: AuthClaims):
     owner_uuid = uuid.uuid4()
-    object_key = f"anything/secret-{uuid.uuid4()}.pdf"
+    object_key = f"tenants/{owner.tenant_id}/users/{owner.sub}/uploads/secret-{uuid.uuid4()}.pdf"
     await file_store.upload(object_key, b"pdf bytes", content_type="application/pdf")
     async with db_session_factory() as session:
         session.add(User(id=owner_uuid, identifier=f"owner-{owner_uuid}"))

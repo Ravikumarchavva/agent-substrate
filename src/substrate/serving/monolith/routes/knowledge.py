@@ -31,7 +31,7 @@ async def upload_document(
     name = (file.filename or "document").replace("/", "_").replace("\\", "_")
     prefix = knowledge_document_prefix(claims.tenant_id, knowledge_base_id, document_id)
     storage_key = f"{prefix}/original/{name}"
-    await ctx.file_store.upload(
+    await ctx.files_for(claims.tenant_id).upload(
         storage_key, data, content_type=file.content_type or "application/octet-stream"
     )
     return {

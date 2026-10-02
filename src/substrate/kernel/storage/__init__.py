@@ -27,7 +27,7 @@ from substrate.kernel.storage.local_short_term_memory import (
     LocalFilesystemShortTermMemory,
 )
 from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
-from substrate.kernel.storage.scoped import bind_graph, bind_history, bind_objects, bind_tasks, bind_vector
+from substrate.kernel.storage.scoped import bind_graph, fence_objects, bind_history, bind_objects, bind_tasks, bind_vector
 from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore, cosine_similarity
 
 __all__ = [
@@ -49,5 +49,6 @@ __all__ = [
     "bind_tasks",
     "bind_vector",
     "cosine_similarity",
+    "fence_objects",
     "project_messages",
 ]

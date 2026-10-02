@@ -47,6 +47,12 @@ async def _run(meta) -> tuple[str, list, list, list]:
     file_store.download = AsyncMock(return_value=b"pdf bytes")
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = None  # exercises the inline-extraction path
 

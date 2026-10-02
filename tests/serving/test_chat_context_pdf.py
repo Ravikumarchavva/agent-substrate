@@ -105,6 +105,12 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
     file_store.download = AsyncMock(return_value=_FIXTURE.read_bytes())
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     # No RAG backend configured — exercises the old inline-extraction path.
     ctx.rag_backend = None
@@ -151,6 +157,12 @@ async def test_build_file_context_falls_back_to_attachment_on_bad_pdf():
     file_store.download = AsyncMock(return_value=b"not a real pdf")
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     # No RAG backend configured — exercises the old inline-extraction path.
     ctx.rag_backend = None
@@ -201,6 +213,12 @@ async def _run_build_file_context_for_workspace_path(object_key: str):
     db.commit = AsyncMock()
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
 
     body = MagicMock()
@@ -245,6 +263,12 @@ async def test_file_context_includes_thread_files_with_no_file_ids_this_turn(mon
     db.commit = AsyncMock()
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = None  # not extractable, so ingestion never runs
 
@@ -302,6 +326,12 @@ async def test_new_attachments_stays_narrow_while_model_context_stays_broad():
     db.commit = AsyncMock()
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = None
 
@@ -334,6 +364,12 @@ async def test_file_context_still_empty_with_no_file_ids_and_no_thread_files():
     db.execute = AsyncMock(return_value=execute_result)
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
 
     body = MagicMock()
@@ -417,6 +453,12 @@ async def test_attachment_dict_omits_workspace_path_for_extractable_types():
     file_store.download = AsyncMock(return_value=b"not a real pdf")
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = None
 
@@ -457,6 +499,12 @@ async def test_attachment_dict_still_sets_session_path_for_extractable_types():
     file_store.download = AsyncMock(return_value=b"not a real pdf")
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = None
 
@@ -539,6 +587,12 @@ async def test_workspace_path_absent_for_a_pdf_even_with_nsjail_configured(
     db.commit = AsyncMock()
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = None  # exercises the old inline-extraction cache-hit path
 
@@ -578,6 +632,12 @@ async def test_build_file_context_uses_cached_extracted_text_without_download():
     )
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     # No RAG backend configured — exercises the old inline-extraction path.
     ctx.rag_backend = None
@@ -620,6 +680,12 @@ async def test_build_file_context_ingests_pdf_into_rag_backend():
     rag_backend.ingest = AsyncMock()
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = rag_backend
 
@@ -678,6 +744,12 @@ async def test_build_file_context_ingest_metadata_uses_real_session_path():
     rag_backend.ingest = AsyncMock()
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = rag_backend
 
@@ -722,6 +794,12 @@ async def test_build_file_context_skips_reingest_when_already_indexed():
     rag_backend.ingest = AsyncMock()
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = rag_backend
 

@@ -131,7 +131,7 @@ class ArtifactsTool:
             if action == "get":
                 return await self._get(prefix, kwargs)
             if action == "promote":
-                return await self._promote(kwargs)
+                return await self._promote(scope_of(ctx), kwargs)
             if action == "forget":
                 return await self._forget(prefix, kwargs)
         except Exception as exc:  # noqa: BLE001 - surface as a tool error, never crash the run
@@ -193,14 +193,14 @@ class ArtifactsTool:
             content=[TextBlock(text=f"{header}\n\n{concept.body}")]
         )
 
-    async def _promote(self, kw: dict[str, Any]) -> ToolExecutionResult:
+    async def _promote(self, run: RunScope, kw: dict[str, Any]) -> ToolExecutionResult:
         slug = str(kw.get("slug") or "").strip()
         if not slug:
             return _error("promote requires 'slug'.")
-        session_prefix, err = self._prefix("session")
+        session_prefix, err = self._prefix("session", run)
         if err or session_prefix is None:
             return _error(err or "No active conversation to promote from.")
-        global_prefix, err = self._prefix("global")
+        global_prefix, err = self._prefix("global", run)
         if err or global_prefix is None:
             return _error(err or "No user to promote into.")
 

@@ -181,17 +181,23 @@ def _suite_classes() -> dict[str, str]:
     return found
 
 
+def _bases(node: ast.ClassDef) -> set[str]:
+    return {b.id if isinstance(b, ast.Name) else b.attr for b in node.bases if isinstance(b, (ast.Name, ast.Attribute))}
+
+
 def _classes_running(suite: str) -> list[str]:
-    """Test classes under ``tests/`` that subclass ``suite``."""
+    """Test classes under ``tests/`` that subclass ``suite`` — or a suite that extends it (``SearchableVectorStoreConformance``)."""
+    extended = {suite}
+    for path in _SUITES_DIR.glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ClassDef) and suite in _bases(node):
+                extended.add(node.name)
     running: list[str] = []
     for path in (REPO_ROOT / "tests").rglob("*.py"):
         if "__pycache__" in path.parts:
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.ClassDef) and any(
-                (isinstance(b, ast.Name) and b.id == suite) or (isinstance(b, ast.Attribute) and b.attr == suite)
-                for b in node.bases
-            ):
+            if isinstance(node, ast.ClassDef) and _bases(node) & extended:
                 running.append(f"{path.relative_to(REPO_ROOT)}::{node.name}")
     return running
 
@@ -215,18 +221,18 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
         assert port in suites, f"the {port} conformance suite has gone missing"
     assert "VectorStore" in suites, "the vector-store conformance suite has gone missing"
     shipped = {
-        "RuntimeStore": ("SqlRuntimeStoreOnSqlite", "PostgresRuntimeStore"),
-        "MemoryStore": ("TestMemory",),
-        "ShortTermMemory": ("TestSessionState", "TestRedisSessionStore"),
-        "ThreadStore": ("TestThreads",),
-        "FileStore": ("TestFiles", "S3FileStore"),
-        "TaskStore": ("TestTasks",),
-        "WorkspaceStore": ("TestWorkspaces",),
-        "GraphStore": ("TestGraph",),
+        "RuntimeStore": ("SqlRuntimeStoreOnSqlite", "TestPostgresRuntimeStore"),
+        "MemoryStore": ("TestMemory", "TestPostgresMemory"),
+        "ShortTermMemory": ("TestSessionState", "TestPostgresSessionState", "TestRedisSessionStore"),
+        "ThreadStore": ("TestThreads", "TestPostgresThreads"),
+        "FileStore": ("TestFiles", "TestPostgresFiles", "S3FileStore"),
+        "TaskStore": ("TestTasks", "TestPostgresTasks"),
+        "WorkspaceStore": ("TestWorkspaces", "TestPostgresWorkspaces"),
+        "GraphStore": ("TestGraph", "TestPostgresGraph"),
         "ChatModel": ("OpenAICompatibleClient", "OpenAIClient", "AnthropicClient", "GeminiClient"),
         "EmbeddingModel": ("OpenAIEmbeddingClient", "GeminiEmbeddingClient", "SentenceTransformersEmbeddingClient", "EmbeddingRerankerTextEmbeddingClient"),
         "DocumentExtractor": ("LocalDocumentExtractor", "ServiceBackedDocumentExtractor"),
-        "VectorStore": ("TestVectors", "PgVectorStore"),
+        "VectorStore": ("TestVectors", "TestPostgresVectors"),
     }
     for port, implementations in shipped.items():
         runners = " ".join(_classes_running(suites[port]))

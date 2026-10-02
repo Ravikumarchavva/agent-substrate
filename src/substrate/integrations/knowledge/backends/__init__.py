@@ -11,7 +11,7 @@ factory. Construct-and-pass, exactly like an LLM client::
 
 | Backend | What it wraps | Needs |
 |---|---|---|
-| ``LocalRagBackend`` | Existing `RAGPipeline` + `PgVectorStore` + loaders + `LLMReranker` | Postgres/pgvector, an embedding client |
+| ``LocalRagBackend`` | Existing `RAGPipeline` + `Store.vectors` + loaders + `LLMReranker` | Postgres/pgvector, an embedding client |
 
 ``LocalRagBackend`` is the only backend now — a managed-service backend
 (``PineconeRagBackend``) existed briefly but was removed: real dead weight,

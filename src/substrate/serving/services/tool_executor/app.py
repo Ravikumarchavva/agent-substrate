@@ -97,9 +97,11 @@ async def lifespan(app):
     app.state.artifact_url = artifact_url.rstrip("/")
 
     # Tool Registry
-    from substrate.stores import Store
+    from substrate.serving.factory import open_store
+    from substrate.serving.shared.settings import settings
 
-    task_store = Store.at(os.environ.get("STORE_PATH", "./data/store")).tasks
+    store = open_store(settings)
+    task_store = store.tasks
     registry = ToolRegistry()
     registry.register_many(
         _load_default_tools(code_interpreter_tool=code_interpreter_tool, task_store=task_store)
@@ -116,6 +118,7 @@ async def lifespan(app):
     close = getattr(code_interpreter_tool, "close", None)
     if close is not None:
         await close()
+    await store.aclose()
     await app.state.event_bus.disconnect()
     await redis_connector.disconnect()
 

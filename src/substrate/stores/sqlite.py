@@ -120,6 +120,7 @@ class _SqliteTx:
 
 
 class SqliteDatabase:
+    dialect = "sqlite"
     auto_pk = "INTEGER PRIMARY KEY AUTOINCREMENT"
 
     def __init__(self, path: str | Path) -> None:

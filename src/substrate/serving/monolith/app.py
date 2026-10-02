@@ -93,7 +93,6 @@ async def lifespan(app: FastAPI):
     infra: Infrastructure = await init_infrastructure(
         settings,
         llm.embedding_client,
-        engine=engine,
         session_factory=session_factory,
         model_client=llm.model_client,
     )

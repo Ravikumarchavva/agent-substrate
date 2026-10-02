@@ -47,7 +47,7 @@ runtime = Runtime(store)                            # Runtime.open(folder) opens
 
 ```
 .substrate/
-  substrate.db   the source of truth: runs + journal, threads (the conversation DAG), long-term memory (+ full-text index), session state, task boards, the knowledge graph (recursive-query traversal), vectors (exact + full-text + hybrid search), file names + metadata, workspace snapshots, the document catalog; tenancy and a Postgres backend move in next
+  substrate.db   the source of truth: runs + journal, threads (the conversation DAG), long-term memory (+ full-text index), session state, task boards, the knowledge graph (recursive-query traversal), vectors (exact + full-text + hybrid search), file names + metadata, workspace snapshots, the document catalog
   files/         file contents — written whole and flushed to disk before the row that names them commits; never modified in place (copying a prefix is a hard link per file); `Store.files.collect_garbage()` removes what a crash left unreferenced
   index/         indexes derived from substrate.db; deleting them loses nothing, they are rebuilt
 ```
@@ -55,8 +55,12 @@ runtime = Runtime(store)                            # Runtime.open(folder) opens
 `substrate.db` is a relational database (`stores/database.py`: `Database`, `Tx`, `migrate`) opened with a write-ahead
 log and `synchronous=FULL`, so a transaction that returned survives a kill (row: the store's `test_a_committed_transaction_survives…`).
 Each part of the engine owns its tables and ships them as ordered migrations recorded in the database; a folder from a
-newer build is refused (`StoreVersionError`). Every part lives in the same database, so a later step can make one turn commit as one transaction — today each part commits on its own. Workers on one host share the folder; PostgreSQL (later: `connect("postgresql://…")`) is the same
-engine over another `Database`. There is no in-memory store: tests use a folder (`ephemeral_runtime`, `runtime_store`).
+newer build is refused (`StoreVersionError`). Every part lives in the same database, so a later step can make one turn commit as one transaction — today each part commits on its own. Workers on one host share the folder. For workers on several machines the same engine runs over PostgreSQL —
+`integrations.database.postgres_store(dsn)` (a `Database` adapter; its own schema, `substrate` by default) — with the rows in Postgres
+and file contents in the `files` folder (or an `S3FileStore`). The few things SQL spells differently live in one place
+(`stores/textsearch.py`: FTS5 + triggers on SQLite, a generated `tsvector` + GIN on Postgres; the vector column: packed bytes
+on SQLite, a pgvector column with an HNSW index per vector width — `halfvec` above 2,000 dimensions — on Postgres).
+Every facet runs the same conformance suite on both (`tests/integrations/test_postgres_store_conformance.py`). There is no in-memory store: tests use a folder (`ephemeral_runtime`, `runtime_store`).
 
 ## Running an agent
 
@@ -106,9 +110,8 @@ once, as a recoverable error and as a killed worker, and asserts the guarantees 
 A guarantee not yet true is `xfail(strict=True)` naming what fixes it.
 
 Conformance suites live in `testing/conformance/` and are run by every implementation of
-their port: `RuntimeStore` (SQLite, Postgres), `MemoryStore` (local, Postgres, Lance), `VectorStore` (local,
-pgvector, LanceDB), `ThreadStore` (local, Postgres), `FileStore` (workspace folder, S3), `TaskStore` (local,
-Postgres), `GraphStore` (local, Lance), `ChatModel` (OpenAI chat + Responses, Anthropic, Gemini — through each vendor's real SDK over a
+their port: `RuntimeStore`, `MemoryStore`, `VectorStore` (`SearchableVectorStoreConformance` adds word and hybrid search), `ThreadStore`,
+`TaskStore`, `GraphStore`, `ShortTermMemory` and `WorkspaceStore` (each on the folder store and on Postgres), `FileStore` (folder, Postgres, S3), `ChatModel` (OpenAI chat + Responses, Anthropic, Gemini — through each vendor's real SDK over a
 scripted HTTP transport), `EmbeddingModel` (OpenAI, Gemini, local sentence-transformers, embedding-reranker service),
 `DocumentExtractor` (local, document-intelligence service). There is no in-memory store: the minimum a durable agent rests on is a folder.
 Row I30 fails the build if an implementation of a port that has a suite does not run it.

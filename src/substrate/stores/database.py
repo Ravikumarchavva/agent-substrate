@@ -17,7 +17,7 @@ database itself, so a folder written by a newer build is refused rather than mis
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from typing import Any, Protocol
 
@@ -45,6 +45,10 @@ class Tx(Protocol):
 
 class Database(Protocol):
     """What the stores need from a database."""
+
+    dialect: str
+    """``"sqlite"`` or ``"postgresql"`` — only for the few things SQL has no common spelling for (full-text search, the
+    vector column); everything else is written once."""
 
     auto_pk: str
     """DDL for an auto-incrementing integer primary key column."""
@@ -79,7 +83,11 @@ CREATE TABLE IF NOT EXISTS substrate_migrations (
 """
 
 
-async def migrate(database: Database, component: str, scripts: Sequence[str]) -> None:
+Script = str | Callable[["Database"], str]
+"""A migration: SQL, or a function of the database that returns it, for a part whose DDL differs by dialect."""
+
+
+async def migrate(database: Database, component: str, scripts: Sequence[Script]) -> None:
     """Bring ``component``'s tables up to ``len(scripts)``.
 
     ``scripts[i]`` is version ``i + 1``. A script may use ``{pk}`` for the database's auto-increment column
@@ -98,7 +106,9 @@ async def migrate(database: Database, component: str, scripts: Sequence[str]) ->
             f"understands up to {len(scripts)}; it was written by a newer version"
         )
     for version in range(applied + 1, len(scripts) + 1):
-        await database.script(scripts[version - 1].replace("{pk}", database.auto_pk))
+        script = scripts[version - 1]
+        ddl = script(database) if callable(script) else script
+        await database.script(ddl.replace("{pk}", database.auto_pk))
         async with database.transaction() as tx:
             await tx.execute(
                 "INSERT INTO substrate_migrations (component, version, applied_at) VALUES (?, ?, ?) "
@@ -109,4 +119,4 @@ async def migrate(database: Database, component: str, scripts: Sequence[str]) ->
             )
 
 
-__all__ = ["Database", "Row", "StoreVersionError", "Tx", "migrate"]
+__all__ = ["Database", "Row", "Script", "StoreVersionError", "Tx", "migrate"]

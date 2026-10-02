@@ -12,39 +12,19 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
+from substrate.runtime import Runtime
 from substrate.serving.factory import (
     build_runtime_default_tools,
     build_short_term_memory,
+    open_store,
 )
 from substrate.integrations.llm.factory import create_model_client
 from substrate.serving.services.agent_runtime.routes import router
 from substrate.serving.services.base import create_service_app
 from substrate.serving.shared.events.factory import get_event_bus
-from substrate.stores import Store
+from substrate.serving.shared.settings import settings
 
 logger = setup_logging()
-
-
-@asynccontextmanager
-async def _runtime_cm(backend: str, pg_url: str):
-    from substrate.runtime import Runtime
-
-    if backend == "postgres" and pg_url:
-        from substrate.integrations.runtime import PostgresRuntimeStore
-
-        store = PostgresRuntimeStore(
-            pg_url,
-            pool_min_size=int(os.environ.get("RUNTIME_PG_POOL_MIN_SIZE", "2")),
-            pool_max_size=int(os.environ.get("RUNTIME_PG_POOL_MAX_SIZE", "10")),
-        )
-        logger.info("Agent Runtime: durable (Postgres)")
-    else:
-        from substrate.stores import Store
-
-        store = Store.at(os.environ.get("STORE_PATH", "./data/store"))
-        logger.info("Agent Runtime: durable, no infra (store folder)")
-    async with Runtime(store) as rt:
-        yield rt
 
 
 async def _cancel_listener(runtime: object, event_bus: object) -> None:
@@ -81,13 +61,8 @@ async def lifespan(app):
     conversation_url = os.environ.get(
         "CONVERSATION_SERVICE_URL", "http://localhost:8012"
     )
-    backend = os.environ.get("RUNTIME_BACKEND", "postgres").lower()
-    async_pg_url = os.environ.get("DATABASE_URL", "") or os.environ.get(
-        "ASYNC_DATABASE_URL", ""
-    )
-    pg_url = async_pg_url.replace("+asyncpg", "")
-
-    async with _runtime_cm(backend, pg_url) as runtime:
+    store = open_store(settings)
+    async with Runtime(store) as runtime:
         app.state.runtime = runtime
 
         redis_connector = RedisConnector(redis_url)
@@ -98,7 +73,6 @@ async def lifespan(app):
         await event_bus.connect()
         app.state.event_bus = event_bus
 
-        store = Store.at(os.environ.get("STORE_PATH", "./data/store"))
         app.state.history = store.threads
         app.state.short_term_memory = await build_short_term_memory(store=store, redis_url=redis_url)
 

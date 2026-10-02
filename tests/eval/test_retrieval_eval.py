@@ -34,56 +34,31 @@ import pytest
 from tests.eval.dataset import build_starter_dataset
 from tests.eval.runner import run_retrieval_eval
 
-_PG_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb"
-)
 
-
-async def _pg_engine():
-    try:
-        from sqlalchemy.ext.asyncio import create_async_engine
-
-        url = _PG_URL.replace("postgresql://", "postgresql+asyncpg://")
-        engine = create_async_engine(url, pool_pre_ping=True)
-        async with engine.connect():
-            pass
-        return engine
-    except Exception:
-        return None
-
-
-async def test_retrieval_eval_starter_dataset(capsys) -> None:
+async def test_retrieval_eval_starter_dataset(capsys, tmp_path) -> None:
     # conftest.py sets a fake OPENAI_API_KEY by default (see its own comment)
     # so ServerSettings can't silently pick up the real one from .env — this
     # test is the one deliberate exception, opted into by exporting a real
     # key before running pytest, which conftest's setdefault leaves alone.
     if os.environ.get("OPENAI_API_KEY", "").startswith("sk-test-not-a-real-key"):
         pytest.skip("OPENAI_API_KEY not set (export a real key to run this test)")
-    engine = await _pg_engine()
-    if engine is None:
+    from tests._postgres import DSN, schema_store
+
+    try:
+        import asyncpg
+
+        await (await asyncpg.connect(DSN)).close()
+    except Exception:
         pytest.skip("Postgres not reachable")
 
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    async for pg in schema_store(tmp_path):
+        await _run(pg.vectors, capsys)
 
-    from substrate.integrations.vector.pgvector_store import PgVectorStore
+
+async def _run(store, capsys) -> None:
     from substrate.integrations.llm.openai.openai_embedding_client import (
         OpenAIEmbeddingClient,
     )
-
-    session_factory = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-    # A dedicated table, not the shared default one other tests in this
-    # suite reuse — text-embedding-3-small is 1536-dim, and a real
-    # deployment's default table may already exist at a different width
-    # (see test_pg_backends.py's isolation test for why that matters).
-    store = PgVectorStore(
-        session_factory=session_factory,
-        engine=engine,
-        dimensions=1536,
-        table_name="vector_records_eval_test",
-    )
-    await store.ensure_table()
 
     embedding_client = OpenAIEmbeddingClient(model="text-embedding-3-small")
     dataset = build_starter_dataset()

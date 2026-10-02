@@ -20,13 +20,13 @@ Search is full text (SQLite FTS5, porter stemming): a query is its words, all of
 from __future__ import annotations
 
 import json
-import re
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from substrate.stores.database import Row, Tx
+from substrate.stores import textsearch
+from substrate.stores.database import Database, Row, Tx
 from substrate.stores.memory import (
     MemoryMatch,
     MemoryNamespace,
@@ -41,8 +41,9 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
-MEMORY_SCHEMA = [
-    """
+def _memory_schema(database: Database) -> str:
+    return (
+        """
 CREATE TABLE IF NOT EXISTS memory_records (
     seq {pk},
     tenant_id TEXT NOT NULL,
@@ -60,34 +61,24 @@ CREATE TABLE IF NOT EXISTS memory_records (
     UNIQUE (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS memory_records_owner_idx ON memory_records (tenant_id, user_id);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
-    text, content='memory_records', content_rowid='seq', tokenize='porter unicode61'
-);
-CREATE TRIGGER IF NOT EXISTS memory_fts_insert AFTER INSERT ON memory_records BEGIN
-    INSERT INTO memory_fts (rowid, text) VALUES (new.seq, new.text);
-END;
-CREATE TRIGGER IF NOT EXISTS memory_fts_delete AFTER DELETE ON memory_records BEGIN
-    INSERT INTO memory_fts (memory_fts, rowid, text) VALUES ('delete', old.seq, old.text);
-END;
-CREATE TRIGGER IF NOT EXISTS memory_fts_update AFTER UPDATE OF text ON memory_records BEGIN
-    INSERT INTO memory_fts (memory_fts, rowid, text) VALUES ('delete', old.seq, old.text);
-    INSERT INTO memory_fts (rowid, text) VALUES (new.seq, new.text);
-END;
-
+"""
+        + textsearch.ddl(database.dialect, index="memory_fts", table="memory_records")
+        + """
 CREATE TABLE IF NOT EXISTS session_state (
     session_id TEXT PRIMARY KEY,
     state_json TEXT NOT NULL,
     updated_at DOUBLE PRECISION NOT NULL
 );
 """
-]
+    )
+
+
+MEMORY_SCHEMA = [_memory_schema]
 
 _COLUMNS = (
     "tenant_id, id, user_id, agent_id, session_id, category, status, text, record_json, "
     "last_accessed_at, access_count, created_at"
 )
-_WORDS = re.compile(r"\w+", re.UNICODE)
 
 
 def _text_of(record: MemoryRecord) -> str:
@@ -212,16 +203,18 @@ class Memory:
                 params += category_params
 
             if spec.text_query:
-                words = _WORDS.findall(spec.text_query)
+                words = textsearch.words(spec.text_query)
                 if not words:
                     return []
-                # Each word quoted, so the query is only ever words — never FTS5 syntax a caller could smuggle in.
-                match = " ".join('"' + word.replace('"', '""') + '"' for word in words)
-                sql = (
-                    "SELECT r.*, -bm25(memory_fts) AS score FROM memory_fts JOIN memory_records r ON r.seq = memory_fts.rowid "
-                    f"WHERE memory_fts MATCH ? AND {' AND '.join(clauses)} ORDER BY score DESC, r.seq DESC"
+                dialect = self._store.database.dialect
+                source, match, match_params = textsearch.ranked(
+                    dialect, index="memory_fts", table="memory_records", alias="r", query_words=words
                 )
-                params = [match, *params]
+                sql = (
+                    f"SELECT r.*, {textsearch.score(dialect, index='memory_fts', alias='r')} AS score FROM {source} "
+                    f"WHERE {match} AND {' AND '.join(clauses)} ORDER BY score DESC, r.seq DESC"
+                )
+                params = [*match_params, *params]
                 method = "fulltext"
             else:
                 # No words to match: uniform score, most recent first.
@@ -271,9 +264,9 @@ class Memory:
 
         async def op(tx: Tx) -> int:
             erased = await tx.execute(f"DELETE FROM memory_records WHERE {' AND '.join(clauses)}", *params)
-            if erased:
+            if erased and (compact := textsearch.compact(self._store.database.dialect, index="memory_fts")):
                 # The delete trigger only marks index entries deleted; rewriting the index drops the words themselves.
-                await tx.execute("INSERT INTO memory_fts (memory_fts) VALUES ('optimize')")
+                await tx.execute(compact)
             return erased
 
         erased = await self._run(op)

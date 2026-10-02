@@ -41,9 +41,13 @@ async def lifespan(app):
     # The same physical Postgres database agent_runtime's durable runtime uses (both
     # read DATABASE_URL) — this is what lets resolve_request() wake a signal-suspended
     # run directly instead of only publishing on Redis.
-    from substrate.integrations.runtime import PostgresRuntimeStore
+    from substrate.runtime import Runtime
+    from substrate.serving.factory import open_store
+    from substrate.serving.shared.settings import settings
 
-    runtime_store = PostgresRuntimeStore(db_url.replace("+asyncpg", ""), pool_min_size=1, pool_max_size=4)
+    store = open_store(settings)
+    await store.start()
+    runtime_store = Runtime(store).store  # the journal only — no worker is started here
     await runtime_store.start()
     app.state.runtime_store = runtime_store
 
@@ -52,7 +56,7 @@ async def lifespan(app):
 
     await event_bus.disconnect()
     await redis_connector.disconnect()
-    await runtime_store.aclose()
+    await store.aclose()
     await engine.dispose()
 
 

@@ -24,7 +24,7 @@ default) to inline extracted images as ``ImageBlock(data=...)``, exactly as
 a store-free deployment always has. Pass a blob store to instead write each
 image's bytes there and keep only a small ``image_key`` reference in the
 row's metadata — real, measured motivation: inlining serializes straight to
-base64 in ``PgVectorStore``'s ``content_json`` JSONB column, and at
+base64 in the vector row's ``document_json`` column, and at
 benchmark scale that's tens of thousands of multi-KB blobs bloating every
 row. An upload failure degrades to inlining that one image rather than
 losing it, matching ``backends/local.py``'s existing behavior.
@@ -104,7 +104,7 @@ class DocumentIngestPipeline:
         embedder: Pre-built ``EmbeddingReranker`` pointed at the
             llama-embed/llama-rerank sidecars.
         store: Any ``VectorStore`` implementation (``Store.vectors`` for the folder store,
-            ``PgVectorStore`` for production).
+            the same on PostgreSQL, with pgvector).
         blob_store: Optional duck-typed object store (``async upload(key,
             data, *, content_type)`` / ``async download(key)`` — e.g.
             ``S3FileStore``). ``None`` (the default) inlines images instead;

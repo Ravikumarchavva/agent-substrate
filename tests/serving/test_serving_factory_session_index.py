@@ -1,6 +1,6 @@
 """The per-(tenant, user) session-index factories.
 
-A per-user store, not a single shared instance the way PgVectorStore is: the folder depends on tenant_id/user_id, which
+A per-user store, not a single shared instance the way the main store's vectors are: the folder depends on tenant_id/user_id, which
 isn't known until a real request exists. These tests pin where each store lives and that tenant_id/user_id are
 validated the same way every other object-storage key is (layout.py's `_id()`), not accepted as raw path segments.
 """

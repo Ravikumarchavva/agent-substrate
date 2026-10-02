@@ -59,7 +59,7 @@ async def db(db_factory):
 
 @pytest.fixture
 def cfg(tmp_path):
-    return SubstrateConfig(SESSION_INDEX_LOCAL_PATH=str(tmp_path / "session-index"))
+    return SubstrateConfig()
 
 
 @pytest.mark.requires_postgres
@@ -133,7 +133,7 @@ async def test_erase_user_deletes_threads_metadata_and_the_user_row(
         )
         assert summary.conversations_deleted == 1
         assert summary.metadata_rows_deleted == 1
-        assert summary.session_index_tables_deleted == 0
+        assert summary.documents_deleted == 0
         assert own_key not in store.objects
         assert (
             f"tenants/{tenant_id}/users/{user_uuid}/uploads/c.txt"
@@ -264,7 +264,7 @@ async def test_erase_tenant_deletes_every_thread_in_that_tenant_only(
         assert summary.conversations_deleted == 1
         assert key_a not in store.objects
         assert key_b in store.objects  # a different tenant, untouched
-        assert summary.session_index_tables_deleted == 0
+        assert summary.documents_deleted == 0
         async with db_factory() as verify:
             assert await verify.get(Thread, thread_a.id) is None
             assert await verify.get(Thread, thread_b.id) is not None
@@ -376,3 +376,31 @@ async def test_erasure_reaches_the_conversation_history_tasks_vectors_and_graph(
             await db.delete(row)
             await db.commit()
         await folder.aclose()
+
+
+async def test_erasing_a_user_removes_the_documents_their_conversations_were_given(tmp_path):
+    """The catalog rows and the bundles of the user's conversations go; another user's, in the same tenant, stay."""
+    from substrate.documents import ExtractedPage, ExtractionResult, Library
+    from substrate.stores import Store
+    from substrate.workspace.layout import conversation_documents_prefix, user_prefix
+    from substrate_cloud.gdpr.eraser import _erase_documents
+
+    store = Store.at(tmp_path / "store")
+    await store.start()
+    try:
+        library = Library(store)
+        doc = ExtractionResult(pages=[ExtractedPage(page_number=1, text="t")], markdown="<!-- page 1 -->\n\n" + "word " * 400, engine="t")
+        mine = conversation_documents_prefix("t1", "u1", "c1")
+        theirs = conversation_documents_prefix("t1", "u2", "c2")
+        await library.add(doc, "a.md", collection=mine)
+        await library.add(doc, "b.md", collection=theirs)
+
+        assert await _erase_documents(store, store.files, user_prefix("t1", "u1")) == 1
+
+        assert (await library.list(collection=mine)).documents == ()
+        assert len((await library.list(collection=theirs)).documents) == 1
+        assert await store.files.list_prefix(mine + "/") == []
+        assert await store.files.list_prefix(theirs + "/") != []
+        assert await _erase_documents(None, store.files, user_prefix("t1", "u2")) == 0  # no folder store: nothing to erase
+    finally:
+        await store.aclose()

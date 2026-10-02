@@ -5,9 +5,10 @@ HTTP code runs. A ``Provider`` says how to build the client around a handler and
 request carries its texts and its response carries vectors; the suite supplies the vector for each text
 (``vector_of``) so *order* and *pairing* are checked, not just shape.
 
-What every client must do: return exactly one vector per input text, in the input's order, all the same
+What every client must do: return exactly one vector per input, in the input's order, all the same
 width; treat one text, a batch and an empty list consistently; refuse media it cannot embed rather than
-drop it; and survive hostile text.
+drop it; accept ``query=True``; say what model it is (``model``, ``modalities``, ``max_input_tokens``,
+``dimensions``); survive hostile text; and raise — never return wrong vectors — when the provider fails.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import pytest
 
 from substrate.types.content import MediaBlock, TextBlock
 from substrate.types.errors import UnsupportedContentError
-from substrate.models.protocols import EmbeddingModel
+from substrate.models.protocols import EmbeddingModel, Modality
 
 WIDTH = 4
 
@@ -90,9 +91,17 @@ class EmbeddingModelConformance:
         client, _ = self.build(provider)
         assert isinstance((await client.embed(["a"])).model, str)
 
-    async def test_embed_single_is_the_first_of_embed(self, provider: Provider) -> None:
+    async def test_it_says_what_model_it_is(self, provider: Provider) -> None:
         client, _ = self.build(provider)
-        assert await client.embed_single("one text") == vector_of("one text")
+        assert isinstance(client.model, str) and client.max_input_tokens > 0 and Modality.TEXT in client.modalities
+        assert client.dimensions is None or client.dimensions > 0
+        await client.embed(["a"])
+        assert client.dimensions in (None, WIDTH)  # learned from the first vector if it was not known
+
+    async def test_a_query_is_embedded_like_any_text(self, provider: Provider) -> None:
+        client, _ = self.build(provider)
+        result = await client.embed(["what is the refund policy"], query=True)
+        assert len(result.embeddings) == 1 and len(result.embeddings[0]) == WIDTH
 
     async def test_a_large_batch_returns_every_vector_whatever_the_providers_batch_limit(self, provider: Provider) -> None:
         client, _ = self.build(provider)
@@ -106,15 +115,15 @@ class EmbeddingModelConformance:
 
     async def test_text_blocks_are_embedded_as_their_joined_text(self, provider: Provider) -> None:
         client, calls = self.build(provider)
-        vec = await client.embed_blocks([TextBlock(text="hello "), TextBlock(text="world")])
-        assert vec == vector_of("hello world")
+        result = await client.embed([[TextBlock(text="hello "), TextBlock(text="world")]])
+        assert result.embeddings == [vector_of("hello world")]
 
     async def test_media_a_text_only_client_cannot_embed_is_refused_not_silently_dropped(self, provider: Provider) -> None:
         if provider.supports_media:
             pytest.skip("this client embeds media")
         client, calls = self.build(provider)
         with pytest.raises(UnsupportedContentError):
-            await client.embed_blocks([TextBlock(text="caption"), MediaBlock.image(data=b"\x89PNG....", media_type="image/png")])
+            await client.embed([[TextBlock(text="caption"), MediaBlock.image(data=b"\x89PNG....", media_type="image/png")]])
         assert calls.requests == [], "the request was sent with the image silently dropped"
 
     @pytest.mark.parametrize("hostile", ["", " ", "\n\n", "x' OR '1'='1", "a" * 20_000, "ünï-çødé 日本語 🙂", "\x00\x01 control"])

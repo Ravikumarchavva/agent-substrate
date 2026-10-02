@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import time
 from collections.abc import Sequence
@@ -33,15 +34,23 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from substrate.documents import okf
+from substrate.documents.chunking import chunk_section, chunk_size_for
 from substrate.documents.reader import Reader
 from substrate.documents.split import Section, split, tokens
 from substrate.documents.types import ExtractionResult
 from substrate.stores import textsearch
+from substrate.models.protocols import EmbeddingModel, Modality, Reranker
+from substrate.models.remote import RemoteEmbedder, RemoteReranker
 from substrate.stores.database import Database, Tx
+from substrate.stores.vector import Document
+from substrate.types.content import MediaBlock, TextBlock
+from substrate.types.errors import ContextLengthError, ServiceUnavailableError
 
 if TYPE_CHECKING:
     from substrate.stores.files import FileStore
     from substrate.stores.store import Store
+
+logger = logging.getLogger(__name__)
 
 _COMPONENT = "library"
 _CID = re.compile(r"\(cid:([^)\s]+)\)")
@@ -54,6 +63,8 @@ MAX_OUTLINE = 60
 MAX_LIST = 50
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 INDEX_LISTING = 100
+EMBED_BATCH = 64
+RERANK_CANDIDATES = 20
 
 
 def _schema(database: Database) -> str:
@@ -181,6 +192,15 @@ class Hit:
     section: SectionInfo
     snippet: str
     score: float
+    image: str | None = None
+    """For a figure or chart that matched: its id, to ``view``."""
+
+
+class Hits(list[Hit]):
+    """The hits of a ``find``, best first, and ``note`` — what the model should be told about how they were found (the embedding service
+    was down, so only words were matched)."""
+
+    note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -224,10 +244,29 @@ def _headings_in(markdown: str) -> list[tuple[int, str, int]]:
 
 
 class Library:
-    def __init__(self, store: Store, *, files: FileStore | None = None, reader: Reader | None = None) -> None:
+    def __init__(
+        self,
+        store: Store,
+        *,
+        files: FileStore | None = None,
+        reader: Reader | None = None,
+        embedder: EmbeddingModel | str | None = None,
+        reranker: Reranker | str | None = None,
+        chunk_tokens: int | None = None,
+    ) -> None:
+        """``store`` keeps the catalog (and the chunks' vectors); ``files`` the bundle (default ``store.files``); ``reader`` reads what is added.
+
+        With no ``embedder`` the library is lexical: ``find`` matches words in the catalog's full-text index, which is all a conversation's
+        documents need. With an ``embedder`` — an ``EmbeddingModel``, or the URL of an embedding service (``RemoteEmbedder``) — each section is
+        also cut into chunks and embedded (and figures too, if the model takes images), and ``find`` fuses similarity with words, then reranks
+        with ``reranker`` (a ``Reranker`` or a URL) if there is one. A service that is down degrades ``find`` to words and stores chunks
+        without vectors for ``reindex(missing_only=True)`` to embed later; it never fails an ``add``."""
         self._store = store
         self._files: FileStore = files if files is not None else store.files
         self._reader = reader or Reader()
+        self._embedder: EmbeddingModel | None = RemoteEmbedder(embedder) if isinstance(embedder, str) else embedder
+        self._reranker: Reranker | None = RemoteReranker(reranker) if isinstance(reranker, str) else reranker
+        self._chunk_tokens = chunk_tokens
 
     async def _run(self, fn):
         await self._store.ensure(_COMPONENT, SCHEMA)
@@ -289,6 +328,8 @@ class Library:
         sections = split(markdown, title=title) or [Section(title, (title,), 1, max(1, len(result.pages)), "")]
         base = f"{collection}/{document}"
 
+        unembedded = await self._index_vectors(collection, document, title, filename, sections, result, image_ids, metadata or {})
+
         for page in result.pages:
             for k, image in enumerate(page.images):
                 await self._files.upload(f"{base}/images/{image_ids[(page.page_number, k)]}.png", image.data, content_type=image.media_type)
@@ -327,7 +368,13 @@ class Library:
         info = DocumentInfo(document, title, filename, pages, len(sections), len(images), tuple(needs_ocr), result.engine, resource, metadata or {})
         await self._catalog(collection, info, digest, sections, [(image_ids[(p.page_number, k)], p.page_number, i.label.value, i.caption, i.media_type) for p in result.pages for k, i in enumerate(p.images)])
         await self._write_collection_index(collection)
-        return Added(document, title, filename, pages, len(sections), len(images), tuple(needs_ocr), warnings=tuple(result.warnings))
+        warnings = list(result.warnings)
+        if unembedded:
+            warnings.append(
+                f"{unembedded} passage{'s' if unembedded != 1 else ''} could not be embedded (the embedding service was unavailable) and "
+                "will be found by their words only until reindex(missing_only=True) embeds them"
+            )
+        return Added(document, title, filename, pages, len(sections), len(images), tuple(needs_ocr), warnings=tuple(warnings))
 
     async def _exists(self, collection: str, document: str) -> bool:
         async def op(tx: Tx) -> bool:
@@ -428,6 +475,19 @@ class Library:
         documents, last = await self._run(op)
         return Listing(tuple(documents), str(last) if last is not None else None)
 
+    async def collections(self, *, under: str) -> list[tuple[str, int]]:
+        """``(collection, document count)`` for every collection at or under the prefix ``under``, by name."""
+        under = under.strip("/")
+
+        async def op(tx: Tx) -> list[tuple[str, int]]:
+            rows = await tx.fetchall(
+                "SELECT collection, COUNT(*) AS n FROM library_documents WHERE collection = ? OR collection LIKE ? GROUP BY collection ORDER BY collection",
+                under, under + "/%",
+            )  # fmt: skip
+            return [(row["collection"], int(row["n"])) for row in rows]
+
+        return await self._run(op)
+
     async def outline(self, *, collection: str, document: str, section: int | None = None) -> Outline | None:
         """A document's sections — or, with ``section``, the headings inside that one. ``None`` if there is no such document or section."""
         collection = collection.strip("/")
@@ -497,9 +557,28 @@ class Library:
 
         return await self._run(op)
 
-    async def find(self, *, collection: str, query: str, document: str | None = None, limit: int = 8) -> list[Hit]:
-        """Sections matching ``query`` — every word first, relaxing to any word when nothing has them all — best first."""
+    async def find(self, *, collection: str, query: str, document: str | None = None, limit: int = 8) -> Hits:
+        """The sections that answer ``query``, best first.
+
+        By words: every word first, relaxing to any word when no section has them all. With an embedder, similarity and words are fused over the
+        collection's chunks, the best candidates are reranked if there is a reranker, and chunks are folded into their sections (a matching
+        figure is a hit of its own, with its ``image``). If the embedding or rerank service is down the answer is words only, and
+        ``note`` says so."""
         collection, limit = collection.strip("/"), max(1, min(limit, 20))
+        note: str | None = None
+        if self._embedder is not None and textsearch.terms(query):
+            try:
+                hits = await self._find_semantic(collection, query, document, limit)
+                if hits:
+                    return hits
+            except ServiceUnavailableError as exc:
+                logger.warning("semantic search unavailable, matching words only: %s", exc)
+                note = "The embedding service is unavailable, so these were matched by their words only; a relevant passage may be missing."
+        hits = Hits(await self._find_lexical(collection, query, document, limit))
+        hits.note = note
+        return hits
+
+    async def _find_lexical(self, collection: str, query: str, document: str | None, limit: int) -> list[Hit]:
         query_words = textsearch.terms(query)
         if not query_words:
             return []
@@ -526,6 +605,66 @@ class Library:
             return []
 
         return await self._run(op)
+
+    async def _find_semantic(self, collection: str, query: str, document: str | None, limit: int) -> Hits:
+        assert self._embedder is not None
+        vectors = self._store.vectors
+        embedded = await self._embedder.embed([query], query=True)
+        found = await vectors.hybrid_search(
+            embedded.embeddings[0],
+            query,
+            collection=collection,
+            fused_k=RERANK_CANDIDATES,
+            filter={"document": document} if document else None,
+            space=embedded.model or self._embedder.model or None,
+        )
+        note: str | None = None
+        scores = [r.score for r in found]
+        if self._reranker is not None and len(found) > 1:
+            try:
+                scores = await self._reranker.rerank(query, [r.to_text() for r in found])
+            except ServiceUnavailableError as exc:
+                logger.warning("rerank unavailable, keeping the fused order: %s", exc)
+                note = "The reranking service is unavailable, so these are in the order the search found them."
+        ranked = sorted(zip(scores, found, strict=True), key=lambda pair: -pair[0])
+        query_words = textsearch.terms(query)
+        seen: set[tuple[str, int, str]] = set()
+        picked: list[tuple[float, Any, str | None]] = []
+        for score, result in ranked:
+            meta = result.metadata
+            key = (str(meta.get("document", "")), int(meta.get("section", 0) or 0), str(meta.get("image", "")))
+            if key in seen:
+                continue
+            seen.add(key)
+            picked.append((score, result, meta.get("image")))
+            if len(picked) == limit:
+                break
+
+        async def op(tx: Tx) -> list[Hit]:
+            hits: list[Hit] = []
+            for score, result, image in picked:
+                meta = result.metadata
+                doc_row = await tx.fetchone("SELECT * FROM library_documents WHERE collection = ? AND document = ?", collection, meta.get("document"))
+                if doc_row is None:
+                    continue  # a chunk whose document was deleted from the catalog: not a hit
+                if image:
+                    page = int(meta.get("pages", [1])[0])
+                    row = await tx.fetchone(
+                        "SELECT * FROM library_sections WHERE collection = ? AND document = ? AND first_page <= ? AND last_page >= ? ORDER BY position LIMIT 1",
+                        collection, meta.get("document"), page, page,
+                    )  # fmt: skip
+                else:
+                    row = await tx.fetchone(
+                        "SELECT * FROM library_sections WHERE collection = ? AND document = ? AND position = ?",
+                        collection, meta.get("document"), int(meta.get("section", 1)),
+                    )  # fmt: skip
+                if row is not None:
+                    hits.append(Hit(self._doc(doc_row), self._section(row), textsearch.snippet(result.to_text(), query_words), float(score), image=image))
+            return hits
+
+        hits = Hits(await self._run(op))
+        hits.note = note
+        return hits
 
     async def view(self, *, collection: str, image: str | None = None, document: str | None = None, page: int | None = None) -> Picture | None:
         """One picture: by its id, or the first one on ``page`` of ``document``. ``None`` if there is none (or it is too large to show)."""
@@ -563,6 +702,7 @@ class Library:
         collection = collection.strip("/")
         existed = await self._exists(collection, document)
         await self._files.delete_prefix(f"{collection}/{document}/")
+        await self._store.vectors.delete_where(collection=collection, filter={"document": document})
 
         async def op(tx: Tx) -> None:
             for table in ("library_sections", "library_images", "library_documents"):
@@ -588,18 +728,115 @@ class Library:
             return [(r["collection"], r["document"]) for r in rows]
 
         removed = await self._run(op)
+        await self._store.vectors.erase_under(prefix)
         for collection, document in removed:
             await self._files.delete_prefix(f"{collection}/{document}/")
         for collection in {c for c, _d in removed}:
             await self._files.delete(f"{collection}/index.md")
         return len(removed)
 
+    # ----------------------------------------------------------------------------------------------------- the vectors
+
+    async def _index_vectors(
+        self,
+        collection: str,
+        document: str,
+        title: str,
+        filename: str,
+        sections: Sequence[Section],
+        result: ExtractionResult | None,
+        image_ids: dict[tuple[int, int], str],
+        metadata: dict[str, Any],
+    ) -> int:
+        """Cut each section into chunks (and take its figures), embed them, and store them under ``collection``. A chunk whose embedding
+        fails is stored without one. Returns how many were stored without. Nothing here fails the add for a service that is down; a
+        collection written by another embedder raises ``VectorSpaceError``."""
+        embedder = self._embedder
+        if embedder is None:
+            return 0
+        size = self._chunk_tokens or chunk_size_for(embedder.max_input_tokens)
+        base = {"document": document, "title": title, "filename": filename, **{k: v for k, v in metadata.items() if isinstance(v, (str, int, float, bool))}}
+        pending: list[tuple[Document, Any]] = []  # a document, and what to embed for it: a string, or content blocks (a figure)
+        for n, section in enumerate(sections, start=1):
+            for i, chunk in enumerate(chunk_section(section.markdown, heading=section.title, max_tokens=size)):
+                doc = Document.from_text(
+                    chunk.text,
+                    id=f"{document}:{n}:{i}",
+                    metadata={**base, "kind": "text", "section": n, "chunk": i, "pages": [chunk.first_page, chunk.last_page], "heading": section.title, "heading_path": list(section.heading_path)},
+                )
+                pending.append((doc, chunk.embedding_text(title, section.heading_path)))
+        if result is not None and Modality.IMAGE in embedder.modalities:
+            for page in result.pages:
+                for k, image in enumerate(page.images):
+                    ident = image_ids[(page.page_number, k)]
+                    caption = image.caption or ""
+                    doc = Document.from_text(
+                        caption or f"{image.label.value} on page {page.page_number}",
+                        id=f"{document}:img:{ident}",
+                        metadata={**base, "kind": "image", "image": ident, "pages": [page.page_number, page.page_number], "label": image.label.value},
+                    )
+                    blocks: list[Any] = [MediaBlock.image(data=image.data, media_type=image.media_type)]
+                    if caption:
+                        blocks.append(TextBlock(text=caption))
+                    pending.append((doc, blocks))
+        return await self._embed_and_store(collection, pending)
+
+    async def _embed_and_store(self, collection: str, pending: list[tuple[Document, Any]]) -> int:
+        assert self._embedder is not None
+        stored: list[Document] = []
+        for start in range(0, len(pending), EMBED_BATCH):
+            batch = pending[start : start + EMBED_BATCH]
+            vectors = await self._embed_batch([item for _doc, item in batch])
+            stored.extend(doc.model_copy(update={"embedding": vector}) for (doc, _item), vector in zip(batch, vectors, strict=True))
+        embedded = sum(1 for d in stored if d.embedding is not None)
+        if stored:
+            await self._store.vectors.upsert(stored, collection=collection, space=(self._embedder.model or None) if embedded else None)
+        return len(stored) - embedded
+
+    async def _embed_batch(self, inputs: list[Any]) -> list[list[float] | None]:
+        """One vector per input, or ``None`` for an input that could not be embedded: a batch that fails is retried one by one, so a
+        single over-long chunk costs one vector, not the batch; a service that is down costs them all."""
+        assert self._embedder is not None
+        try:
+            return list((await self._embedder.embed(inputs)).embeddings)
+        except ServiceUnavailableError as exc:
+            logger.warning("embedding service unavailable: %d passages stored without vectors (%s)", len(inputs), exc)
+            return [None] * len(inputs)
+        except ContextLengthError:
+            out: list[list[float] | None] = []
+            for item in inputs:
+                try:
+                    out.append((await self._embedder.embed([item])).embeddings[0])
+                except (ContextLengthError, ServiceUnavailableError) as exc:
+                    logger.warning("a passage could not be embedded and is stored without a vector: %s", exc)
+                    out.append(None)
+            return out
+
+    async def embed_missing(self, *, collection: str) -> int:
+        """Embed the chunks that were stored without a vector (the embedding service was down when they were added). Returns how many
+        still have none — 0 when all are done, the rest when the service is still down."""
+        collection = collection.strip("/")
+        if self._embedder is None:
+            raise ValueError("this library has no embedder")
+        vectors = self._store.vectors
+        while True:
+            batch = await vectors.unembedded(collection=collection, limit=EMBED_BATCH * 4)
+            if not batch:
+                return 0
+            if await self._embed_and_store(collection, [(doc, _embedding_input(doc)) for doc in batch]):
+                return len(await vectors.unembedded(collection=collection, limit=1_000_000))  # the service is still down: stop, say how many
+
     # ------------------------------------------------------------------------------------------------------- rebuilding
 
-    async def reindex(self, *, collection: str) -> int:
-        """Rebuild the catalog of ``collection`` from its bundle (after the catalog is lost or the bundle was edited by hand).
-        Returns the number of documents indexed."""
+    async def reindex(self, *, collection: str, missing_only: bool = False) -> int:
+        """Rebuild ``collection``'s catalog from its bundle (after the catalog is lost or the bundle was edited by hand), and with an
+        embedder its chunks and vectors too. Returns the number of documents indexed.
+
+        ``missing_only=True`` changes nothing in the catalog: it only embeds the chunks that were stored without a vector, and returns how
+        many were still without one afterwards."""
         collection = collection.strip("/")
+        if missing_only:
+            return await self.embed_missing(collection=collection)
         entries = await self._files.list_prefix(collection + "/")
         by_doc: dict[str, list[str]] = {}
         for key, _size, _mtime in entries:
@@ -629,10 +866,22 @@ class Library:
                 tuple(int(p) for p in extra.get("needs_ocr", [])), str(extra.get("engine", "")), index.resource, dict(extra.get("metadata") or {}),
             )  # fmt: skip
             await self._catalog(collection, info, str(extra.get("sha256", "")), sections, images)
+            if self._embedder is not None:
+                await self._store.vectors.delete_where(collection=collection, filter={"document": document})
+                await self._index_vectors(collection, document, info.title, info.filename, sections, None, {}, info.meta)
             count += 1
         if count:
             await self._write_collection_index(collection)
         return count
+
+
+def _embedding_input(doc: Document) -> Any:
+    """What to embed for a stored chunk that has no vector: its text under its title and heading trail (a figure's caption alone)."""
+    meta = doc.metadata
+    if meta.get("kind") == "image":
+        return doc.to_text()
+    trail = " › ".join(str(part) for part in (meta.get("title", ""), *meta.get("heading_path", [])) if part)
+    return f"{trail}\n\n{doc.to_text()}" if trail else doc.to_text()
 
 
 def tx_dialect(library: Library) -> str:
@@ -689,6 +938,7 @@ __all__ = [
     "DocumentError",
     "DocumentInfo",
     "Hit",
+    "Hits",
     "Library",
     "Listing",
     "Outline",

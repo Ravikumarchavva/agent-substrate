@@ -191,7 +191,7 @@ class ChatModel(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class EmbeddingResult:
-    """Return value of ``EmbeddingModel.embed()``."""
+    """Return value of ``EmbeddingModel.embed()``: one vector per input, in input order."""
 
     embeddings: list[list[float]]
     model: str
@@ -200,13 +200,37 @@ class EmbeddingResult:
 
 @runtime_checkable
 class EmbeddingModel(Protocol):
-    """Contract every embedding provider adapter must satisfy."""
+    """Contract every embedding provider adapter satisfies — one method, and four facts about the model.
 
-    async def embed(self, texts: list[str]) -> EmbeddingResult: ...
+    ``dimensions`` is the vector width (``None`` until a remote model has said, or has been asked once); ``max_input_tokens`` is the
+    longest input it takes (a chunker sizes to it); ``modalities`` is what it can embed (``{TEXT}``, or ``{TEXT, IMAGE}``).
 
-    async def embed_single(self, text: str) -> list[float]: ...
+    ``embed`` returns exactly one vector per input, in order, all the same width, and **raises** — ``ServiceUnavailableError`` for a
+    service that cannot be reached, ``AuthError``, ``RateLimitedError``, ``ContextLengthError`` — rather than returning ``None`` or a
+    partial answer. An input with a block the model cannot embed (an image, for a text-only model) raises ``UnsupportedContentError``;
+    it is never silently dropped. ``query=True`` says the inputs are search queries, for a model that embeds a query differently from a
+    passage (Qwen3 prepends an instruction to a query); models that do not care ignore it.
+    """
 
-    async def embed_blocks(self, blocks: Sequence[ContentBlock]) -> list[float]: ...
+    model: str
+    dimensions: int | None
+    max_input_tokens: int
+    modalities: frozenset[Modality]
+
+    async def embed(self, inputs: Sequence[str | Sequence[ContentBlock]], *, query: bool = False) -> EmbeddingResult: ...
+
+
+@runtime_checkable
+class Reranker(Protocol):
+    """Contract for a reranker: how relevant each passage is to a query.
+
+    ``rerank`` returns one score per passage, in the passages' order, higher meaning more relevant; scores are comparable within a
+    call, not across calls. It **raises** a typed error for a service that cannot be reached, as ``EmbeddingModel.embed`` does.
+    """
+
+    model: str
+
+    async def rerank(self, query: str, passages: Sequence[str]) -> list[float]: ...
 
 
 __all__ = [
@@ -215,6 +239,7 @@ __all__ = [
     "LLMResponse",
     "EmbeddingModel",
     "EmbeddingResult",
+    "Reranker",
     "Usage",
     "Modality",
     "ReasoningEffort",

@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from openai import AsyncOpenAI
 
+from substrate.integrations.llm.base import BaseEmbeddingClient
 from substrate.integrations.llm.local_embeddings import SentenceTransformersEmbeddingClient
 from substrate.integrations.llm.openai.openai_embedding_client import OpenAIEmbeddingClient
 from substrate.testing.conformance.embedding_model import EmbeddingModelConformance, vector_of
@@ -67,6 +68,7 @@ class LocalModel:
         client = object.__new__(SentenceTransformersEmbeddingClient)
         model = _StubModel()
         client._model, client._batch_size, client._device = model, 64, "cpu"
+        BaseEmbeddingClient.__init__(client, "conformance-embed", 4, max_input_tokens=256)
         self.model = model
         probe = httpx.Request("POST", "http://local.invalid/embed")
 
@@ -141,35 +143,44 @@ class TestGeminiEmbeddingClient(EmbeddingModelConformance):
         return GeminiEmbeddings()
 
 
-# ---------------------------------------------------------------------- embedding-reranker service
+# --------------------------------------------------------------------- a remote embedder, by URL
 
-from substrate.integrations.services.embedding_reranker import (  # noqa: E402
-    EmbeddingRerankerClient,
-    EmbeddingRerankerTextEmbeddingClient,
-)
+from substrate.models.remote import RemoteEmbedder  # noqa: E402
+from tests._http import serve  # noqa: E402
 
 
-class RerankerService:
-    supports_media = True
-    max_batch = None
+class RemoteService:
+    """``RemoteEmbedder`` against a real HTTP server speaking the OpenAI embeddings wire."""
+
+    supports_media = False
+    max_batch = 64
+
+    def __init__(self) -> None:
+        self._stack = []
 
     def client(self, handler):
-        inner = EmbeddingRerankerClient(base_url="http://reranker.invalid")
-        inner._client = httpx.AsyncClient(base_url="http://reranker.invalid", transport=httpx.MockTransport(handler))
-        return EmbeddingRerankerTextEmbeddingClient(inner)
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        self._stack.append(stack)
+        url = stack.enter_context(serve(handler))
+        return RemoteEmbedder(url, model="conformance-embed")
 
     def texts_in(self, request):
         body = json.loads(request.content)
-        return [body["text"]] if "text" in body else [""]
+        return body["input"]
 
     def vectors_response(self, vectors):
-        return httpx.Response(200, json={"embedding": vectors[0]})
+        return httpx.Response(200, json={"object": "list", "data": [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(vectors)]})
 
     def error_response(self, status, message):
-        return httpx.Response(status, json={"detail": message})
+        return httpx.Response(status, json={"error": message})
 
 
-class TestEmbeddingRerankerTextEmbeddingClient(EmbeddingModelConformance):
+class TestRemoteEmbedder(EmbeddingModelConformance):
     @pytest.fixture
     def provider(self):
-        return RerankerService()
+        provider = RemoteService()
+        yield provider
+        for stack in provider._stack:
+            stack.close()

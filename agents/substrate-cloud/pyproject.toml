@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 # Everything the library keeps optional is chosen here, because this is where backends are chosen: the library's extras
 # for the vendors, stores and tools the platform wires up, plus the web, ORM, auth and observability it owns.
 dependencies = [
-    "agent-substrate[serve,openai,anthropic,gemini,postgres,redis,scheduler,mcp,tts,tools,services,logging,web,code,rag,s3,safety,sandbox]",
+    "agent-substrate[serve,openai,anthropic,gemini,postgres,redis,scheduler,mcp,tts,tools,logging,web,code,s3,safety,sandbox]",
     "pydantic-settings>=2.12.0",
     "sqlalchemy>=2.0.46",
     "greenlet>=3.0.0",
@@ -21,6 +21,8 @@ dependencies = [
     "python-multipart>=0.0.9",
     "pyjwt>=2.12.0",
     "cryptography>=46.0.6",
+    # the upload route counts a PDF's pages before accepting it
+    "pypdf>=6.13.0",
 ]
 
 [project.optional-dependencies]

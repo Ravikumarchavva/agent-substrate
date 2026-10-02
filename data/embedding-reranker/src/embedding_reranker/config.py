@@ -30,6 +30,10 @@ class ServiceConfig(BaseSettings):
     embed_server_url: str = "http://llama-embed:8031"
     rerank_server_url: str = "http://llama-rerank:8032"
     embedding_dim: int = 2048
+    embed_model_name: str = "qwen3-vl-embedding"
+    rerank_model_name: str = "qwen3-vl-reranker"
+    # Qwen3 embeds a search query as an instruction plus the query, and a passage as itself — the instruction is the task description.
+    query_instruction: str = "Given a search query, retrieve the passages and figures that answer it"
 
     # ── Deployment mode ──────────────────────────────────────────────────
     # "remote" (default, unchanged behavior) -- embed_server_url/

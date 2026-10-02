@@ -5,7 +5,8 @@ description = "Multimodal embedding and reranking over HTTP: a thin service in f
 requires-python = ">=3.11"
 # No model library in here: the models run in llama-server processes this service talks to (or spawns, in local mode).
 dependencies = [
-    "agent-substrate[services,logging]",
+    "agent-substrate[logging]",
+    "httpx2>=2.7.0",
     "inference-pool",
     "fastapi>=0.128.0",
     "uvicorn[standard]>=0.34.0",

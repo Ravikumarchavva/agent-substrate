@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**120 enforced · 0 pending · 120 total**
+**122 enforced · 0 pending · 122 total**
 
 ## approvals
 
@@ -39,6 +39,10 @@ and the marker has to come off. That is what keeps this document honest.
   `test_an_isolated_read_never_loads_the_parser_or_the_ocr_runtime_into_the_host`
 - ✅ **A zip bomb, an entity bomb, an external entity, absurd nesting and a member flood each come back as ``success=False`` with a reason.**
   `test_a_hostile_document_is_a_failed_result_never_an_exception`
+- ✅ **A model cannot name a collection, a path or an ingest: the tool's schema has none, extra arguments are ignored, and what it can reach is decided by the authenticated scope alone — so one conversation's documents are invisible to another's, whatever a document tells the model.**
+  `test_the_documents_tool_takes_its_collection_from_the_run_scope_and_has_no_way_to_open_a_path`
+- ✅ **Delete every catalog row and ``reindex`` brings back the same outline and the same search hits from the markdown files alone — the bundle is the source of truth, so a lost or corrupted catalog is a rebuild, not a data loss.**
+  `test_the_catalog_is_derived_from_the_bundle_and_can_be_rebuilt`
 
 ## durable execution
 

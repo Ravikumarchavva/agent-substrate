@@ -90,7 +90,12 @@ def _cut_at_level(lines: list[_Line], level: int) -> list[list[_Line]]:
     chunks: list[list[_Line]] = [[]]
     for line in lines:
         if line.level and line.level <= level and any(item.text.strip() and not _PAGE.match(item.text) for item in chunks[-1]):
-            chunks.append([])
+            # A page marker (and the blank lines around it) that precedes the heading belongs to the page the heading starts: it moves
+            # with it, so the new section knows what page it begins on.
+            carried: list[_Line] = []
+            while chunks[-1] and (not chunks[-1][-1].text.strip() or _PAGE.match(chunks[-1][-1].text)):
+                carried.insert(0, chunks[-1].pop())
+            chunks.append([item for item in carried if _PAGE.match(item.text)][-1:])
         chunks[-1].append(line)
     return [c for c in chunks if any(item.text.strip() and not _PAGE.match(item.text) for item in c)]
 

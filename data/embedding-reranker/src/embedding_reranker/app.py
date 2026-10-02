@@ -3,11 +3,11 @@
 Deploy this as its own low-replica service — no local model, just a thin
 httpx proxy to the llama-embed/llama-rerank sidecars, so resource needs are
 much lighter than document_intelligence (see docker-compose.yml's
-`embedding-reranker` profile). The main backend calls
-it via HTTP through EmbeddingRerankerClient
-(integrations/services/embedding_reranker.py), only when
-EMBEDDING_RERANKER_SERVICE_URL is configured; otherwise image ingestion and
-reranking are unavailable.
+`embedding-reranker` profile). The library reaches it with
+``RemoteEmbedder(url)`` / ``RemoteReranker(url)`` (substrate.models.remote) —
+the OpenAI embeddings wire and the Jina/Cohere rerank wire — so the same
+clients also work against llama.cpp, vLLM, Ollama and TEI. Without it, a
+knowledge base is searched by words alone.
 
 Usage::
 
@@ -28,7 +28,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import ServiceConfig
-from substrate.integrations.services.llama_server import EmbeddingReranker
+from .llama import LlamaEngine
 from .routes import router
 
 logging.basicConfig(
@@ -176,19 +176,19 @@ async def lifespan(app: FastAPI):
         embed_url = svc_config.embed_server_url
         rerank_url = svc_config.rerank_server_url
 
-    embedding_reranker = EmbeddingReranker(
+    engine = LlamaEngine(
         embed_server_url=embed_url,
         rerank_server_url=rerank_url,
     )
 
-    app.state.embedding_reranker = embedding_reranker
+    app.state.engine = engine
     app.state.config = svc_config
     app.state.start_time = time.monotonic()
     app.state.embed_pool = embed_pool
     app.state.rerank_pool = rerank_pool
 
     try:
-        await embedding_reranker.warmup()
+        await engine.warmup()
     except Exception as exc:
         # Warmup is best-effort — a failure here must not block startup;
         # real requests still trigger a (slower, one-time) sidecar round-trip.
@@ -198,7 +198,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    await embedding_reranker.aclose()
+    await engine.aclose()
     if svc_config.mode == "local":
         assert embed_pool is not None and rerank_pool is not None
         await embed_pool.aclose()

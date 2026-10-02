@@ -94,12 +94,11 @@ class VectorStore(Protocol):
         documents: list[Document],
         *,
         collection: str = "default",
+        space: str | None = None,
     ) -> list[str]:
-        """Persist *documents* and return their assigned ids.
-
-        If ``document.embedding`` is ``None``, the store is responsible for
-        computing embeddings (e.g. via a server-side embedding model).
-        """
+        """Persist *documents* and return their ids. The store does not embed: a document with no ``embedding`` is stored without one
+        (found by its words, not by similarity). ``space`` names the embedder the vectors came from; a collection holds one embedder's
+        vectors, and another's raises ``VectorSpaceError``."""
         ...
 
     async def search(
@@ -109,6 +108,7 @@ class VectorStore(Protocol):
         collection: str = "default",
         limit: int = 5,
         filter: dict[str, Any] | None = None,
+        space: str | None = None,
     ) -> list[SearchResult]: ...
 
     async def get(
@@ -125,6 +125,7 @@ class VectorStore(Protocol):
         documents: list[Document],
         *,
         collection: str = "default",
+        space: str | None = None,
     ) -> list[str]:
         """Insert or replace documents by id."""
         ...
@@ -145,4 +146,37 @@ class VectorStore(Protocol):
         ...
 
 
-__all__ = ["Document", "SearchResult", "VectorStore"]
+@runtime_checkable
+class SearchableVectorStore(VectorStore, Protocol):
+    """A vector store that also searches by words, and by both: what retrieval over a knowledge base needs."""
+
+    async def lexical_search(
+        self,
+        query_text: str,
+        *,
+        collection: str = "default",
+        limit: int = 5,
+        filter: dict[str, Any] | None = None,
+        match: str = "all",
+    ) -> list[SearchResult]:
+        """Full-text matches, best first: every word (``match="all"``) or any of them (``"any"``)."""
+        ...
+
+    async def hybrid_search(
+        self,
+        query_embedding: list[float],
+        query_text: str,
+        *,
+        collection: str = "default",
+        dense_k: int = 50,
+        lexical_k: int = 50,
+        fused_k: int = 50,
+        rrf_k: int = 60,
+        filter: dict[str, Any] | None = None,
+        space: str | None = None,
+    ) -> list[SearchResult]:
+        """Dense and word search fused by rank (Reciprocal Rank Fusion)."""
+        ...
+
+
+__all__ = ["Document", "SearchResult", "SearchableVectorStore", "VectorStore"]

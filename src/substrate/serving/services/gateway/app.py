@@ -7,7 +7,8 @@ requests go through here and are routed to internal services.
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import os
 import json as _json
@@ -31,7 +32,7 @@ from substrate.serving.services.gateway.routes import (
     thread_router,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager

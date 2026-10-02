@@ -4,7 +4,8 @@ Entry point: uvicorn substrate.serving.services.live_stream.app:app --port 8017
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import asyncio
 import os
@@ -16,7 +17,7 @@ from substrate.serving.services.live_stream.projector import StreamProjector
 from substrate.serving.services.live_stream.routes import router
 from substrate.serving.shared.events.factory import get_event_bus
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager

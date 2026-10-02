@@ -8,7 +8,8 @@ Provides a centralized tool execution service that:
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import asyncio
 from typing import Any, Dict, List, Optional
@@ -17,7 +18,7 @@ from substrate.tools import Tool, ToolExecutionResult
 from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class ToolRegistry:

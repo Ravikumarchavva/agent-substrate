@@ -18,7 +18,8 @@ Routes mirror the public API surface:
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import json
 from typing import AsyncIterator
@@ -33,7 +34,7 @@ from substrate.serving.shared.contracts.conversation import (
 )
 from substrate.serving.shared.contracts.human_gate import HITLResponse
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["gateway"])
 

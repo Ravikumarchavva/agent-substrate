@@ -5,14 +5,17 @@ OpenTelemetry, and standard error handling.
 """
 
 from __future__ import annotations
+
 from substrate.logger import setup_logging
+
+import logging
 
 from typing import Any, Callable, Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def create_service_app(
@@ -30,6 +33,7 @@ def create_service_app(
     - Health and readiness endpoints
     - OpenTelemetry instrumentation (when available)
     """
+    setup_logging(service_name=title.lower().replace(" ", "-"))  # the application, not the library, configures logging
     app = FastAPI(title=title, version=version, lifespan=lifespan)
 
     # CORS

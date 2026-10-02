@@ -26,7 +26,8 @@ since that would silently invalidate the CVE-ignore justification above.
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import uuid
 from collections.abc import Awaitable, Callable
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
     from apscheduler import AsyncScheduler
     from substrate.runtime import Runtime
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 @dataclass

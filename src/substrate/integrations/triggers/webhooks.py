@@ -1,7 +1,8 @@
 """Webhook-based triggers — incoming HTTP requests fire workflows."""
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import hashlib
 import hmac
@@ -14,7 +15,7 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from substrate.runtime import Runtime
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 # Bounds the idempotency-key cache so a flood of distinct keys can't grow it
 # unboundedly; oldest entries are evicted once the cap is exceeded.

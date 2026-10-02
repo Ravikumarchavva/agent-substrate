@@ -6,7 +6,8 @@ POST /threads/{thread_id}/mcp-context – update model context from interactive 
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import json
 import uuid
@@ -26,7 +27,7 @@ from substrate.serving.monolith.security.deps import AuthClaims, get_current_use
 from substrate.serving.monolith.services import get_owned_thread
 from substrate.serving.stream import append_mcp_app_context
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["mcp-apps"], dependencies=[Depends(get_current_user)])
 

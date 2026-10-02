@@ -22,12 +22,13 @@ model, not this one pretending to cover both.
 
 from __future__ import annotations
 
+import logging
+
 import math
 
 from substrate.safety import SafetyVerdict, Severity
-from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.integrations.safety.text_classifier")
+logger = logging.getLogger(__name__)
 
 # Pinned by revision, not "main" — a Hub repo can change underneath us,
 # straight into the security layer (see plan's production-hardening notes).

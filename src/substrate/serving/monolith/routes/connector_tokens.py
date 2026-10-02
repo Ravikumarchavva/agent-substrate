@@ -13,16 +13,17 @@ exposed to the end user.
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from substrate.logger import setup_logging
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/internal/connector", tags=["connector-tokens"])
 

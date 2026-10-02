@@ -19,6 +19,8 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 
+import logging
+
 from substrate.logger import setup_logging
 
 # ------------------------------------------------------------------------------
@@ -26,7 +28,7 @@ from substrate.logger import setup_logging
 # No module-level side effects.
 # ------------------------------------------------------------------------------
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------------------
 # OpenTelemetry (SAFE, SINGLE INIT)

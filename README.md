@@ -49,7 +49,7 @@ The examples below (`Runtime`, `ReActAgent`) run entirely in-process — no
 database, Redis, or Docker required. Extras for specific capabilities
 (web browsing, RAG, S3 storage, the sandboxed code interpreter, PDF
 extraction, ...) are documented in `pyproject.toml`'s
-`[project.optional-dependencies]`, e.g. `uv add "agent-substrate[rag,s3]"`.
+`[project.optional-dependencies]`, e.g. `uv add "agent-substrate[openai,postgres]"`. The base install is the engine alone (`pydantic` and the OpenTelemetry API); each vendor client, database driver and tool stack is an extra.
 
 ### Running the reference server (optional)
 

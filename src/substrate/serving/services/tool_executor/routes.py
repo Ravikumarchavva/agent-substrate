@@ -14,7 +14,8 @@ File output bridge (code_interpreter):
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import base64
 from typing import Any, Dict, List, Optional
@@ -28,7 +29,7 @@ from substrate.serving.services.tool_executor.executor import (
     execute_tool,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 

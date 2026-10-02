@@ -1,7 +1,8 @@
 """Anthropic Claude model client implementation."""
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import json
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, cast
@@ -27,7 +28,7 @@ from substrate.integrations.llm.encoders.anthropic import (
 if TYPE_CHECKING:
     pass
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str, Any]]]:

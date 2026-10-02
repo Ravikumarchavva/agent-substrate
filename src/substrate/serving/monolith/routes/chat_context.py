@@ -5,6 +5,8 @@ Split out of ``chat.py``.
 
 from __future__ import annotations
 
+import logging
+
 from datetime import datetime, timezone
 from typing import Any
 
@@ -23,9 +25,8 @@ from substrate.serving.monolith.routes.chat_wire import _ImagePayload
 from substrate.serving.shared.auth.claims import AuthClaims
 from substrate.serving.shared.doc_quota import check_and_increment, release
 from substrate.serving.shared.settings import settings
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):

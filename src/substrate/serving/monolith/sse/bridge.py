@@ -41,7 +41,8 @@ Usage::
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import asyncio
 from typing import TYPE_CHECKING, Any, Dict, Optional
@@ -57,7 +58,7 @@ from substrate.integrations.tools.human_input import (
     HumanInputHandler,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 # Sentinel used to signal the SSE generator that the agent is done
 _DONE = object()

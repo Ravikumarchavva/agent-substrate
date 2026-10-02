@@ -15,7 +15,8 @@ Tesseract binary is required for image OCR.  Install separately:
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,7 @@ from substrate.tools import ToolExecutionResult
 from substrate.types import TextBlock
 from substrate.tools import ToolRisk
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _IMAGE_SUFFIXES = {".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 _PDF_SUFFIXES = {".pdf"}

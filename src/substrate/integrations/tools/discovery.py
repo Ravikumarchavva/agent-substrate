@@ -11,6 +11,8 @@ Run once at app boot to populate the Toolbox; not LLM-callable.
 
 from __future__ import annotations
 
+import logging
+
 import importlib
 import inspect
 import sys
@@ -18,9 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Set, Type
 
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 ComponentKind = Literal["tool", "skill", "connector", "pipeline_step"]
 

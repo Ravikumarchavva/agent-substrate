@@ -8,7 +8,8 @@ Routes:
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import asyncio  # used by create_task in create_run_endpoint
 import uuid
@@ -28,7 +29,7 @@ from substrate.serving.services.job_controller.service import (
     get_run,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 

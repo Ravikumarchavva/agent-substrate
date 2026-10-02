@@ -6,7 +6,8 @@ Routes:
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import asyncio
 from typing import Optional
@@ -21,7 +22,7 @@ from substrate.serving.services.agent_runtime.service import (
     load_memory_for_thread,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent", tags=["agent-runtime"])
 

@@ -5,7 +5,8 @@ Entry point: uvicorn substrate.serving.services.agent_runtime.app:app --port 801
 
 from __future__ import annotations
 
-from substrate.logger import setup_logging
+import logging
+
 
 import asyncio
 import os
@@ -24,7 +25,7 @@ from substrate.serving.services.base import create_service_app
 from substrate.serving.shared.events.factory import get_event_bus
 from substrate.serving.shared.settings import settings
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 async def _cancel_listener(runtime: object, event_bus: object) -> None:

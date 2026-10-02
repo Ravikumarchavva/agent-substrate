@@ -19,7 +19,8 @@ Usage::
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import json
 from typing import TYPE_CHECKING, Any
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
     from substrate.stores import GraphStore
     from substrate.integrations.knowledge.pipeline import RAGPipeline
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class GraphRAGPipeline:

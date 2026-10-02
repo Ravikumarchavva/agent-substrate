@@ -8,8 +8,9 @@ GET /hitl/status/{thread_id} – check for pending HITL requests
 """
 
 from __future__ import annotations
+
+import logging
 from substrate.types import RunLogKind
-from substrate.logger import setup_logging
 
 import uuid
 from datetime import datetime, timezone
@@ -23,7 +24,7 @@ from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.services import get_owned_thread
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["hitl"],

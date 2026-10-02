@@ -18,7 +18,8 @@ tokens/latency spent on reranking)::
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import json
 from typing import TYPE_CHECKING, Any
@@ -28,7 +29,7 @@ from substrate.stores import SearchResult
 if TYPE_CHECKING:
     from substrate.models import ChatModel
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def prefilter_candidates(

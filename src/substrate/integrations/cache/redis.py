@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from typing import TYPE_CHECKING, Any
 
-from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class RedisConnector:

@@ -26,8 +26,9 @@ Usage::
 """
 
 from __future__ import annotations
+
+import logging
 from substrate.types import RunLogKind
-from substrate.logger import setup_logging
 
 import asyncio
 import json
@@ -41,10 +42,11 @@ if TYPE_CHECKING:
 from pydantic import BaseModel, Field
 
 from substrate.tools import ToolExecutionResult
+from substrate.tools.approval import approval_signal
 from substrate.types import TextBlock
 from substrate.tools import ToolRisk
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -475,7 +477,7 @@ class AskHumanTool:
                 await ctx.log_once(RunLogKind.INPUT_REQUESTED, log_payload)
             except Exception:
                 pass
-            signal_payload = await ctx.sleep_until_signal(f"hitl:{request.request_id}")
+            signal_payload = await ctx.sleep_until_signal(approval_signal(request.request_id))
             self._request_count += 1
             return self._shape_result(request, signal_payload)
 

@@ -7,13 +7,14 @@ from route handlers.
 
 from __future__ import annotations
 
+import logging
+
 from typing import Optional
 
 import httpx2 as httpx
 
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class ServiceClient:

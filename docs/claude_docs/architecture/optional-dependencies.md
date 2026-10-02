@@ -6,6 +6,31 @@ what to `pip install`/`uv add`. This doc holds the full rationale — size
 costs, version-pin reasoning, mutual-exclusivity rules — for when the
 one-liner isn't enough.
 
+## The base install
+
+`pip install agent-substrate` is the engine: `pydantic` and `opentelemetry-api`. Row I31 (`tests/invariants/test_library.py`)
+fails the build if a driver, SDK or framework creeps into `dependencies`, or if importing any core concept package loads one.
+Everything else is an extra named for what it enables, and an adapter package imports nothing until a name is used (I32),
+so asking for one vendor's client needs that vendor's SDK and nothing else.
+
+| Extra | Enables |
+|---|---|
+| `openai` | OpenAI and OpenAI-compatible chat/embedding clients (vLLM, llama.cpp, Ollama, LM Studio) — `openai`, `tiktoken`, `httpx`, `pillow` |
+| `anthropic`, `gemini` | those vendors' clients |
+| `postgres` | `integrations.database.postgres_store` — the whole store on PostgreSQL (`asyncpg`); vectors also need pgvector |
+| `redis` | session cache, event bus |
+| `scheduler` | scheduled/cron triggers (`apscheduler`) |
+| `mcp` | MCP tools |
+| `tts` | text-to-speech |
+| `tools` | skills and curated artifacts (`pyyaml`) |
+| `console` | the interactive console (`rich`, `prompt-toolkit`, `pydantic-settings`) |
+| `serve` | `substrate.serve.add_routes` (`fastapi`) |
+| `testing` | the conformance suites in `substrate.testing` (`pytest`, `pytest-asyncio`, `httpx`) |
+| `server` | the reference monolith and services: all of the above plus SQLAlchemy, uvicorn, JWT, OpenTelemetry SDK |
+
+Logging follows the same rule (I33–I34): the library emits through `logging.getLogger(__name__)` and installs only a
+`NullHandler`; `substrate.logger.setup_logging` is for the application's entry point.
+
 ## `web`
 
 WebSearchTool's DuckDuckGo fallback, ReadUrlTool's crawl4ai fallback,

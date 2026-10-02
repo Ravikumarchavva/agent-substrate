@@ -4,7 +4,8 @@ Platform administration: stats aggregation, tenant management, audit logging.
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import uuid
 from typing import Any, Dict, List, Optional
@@ -14,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.serving.services.admin.models import AuditLog, Tenant
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # ── Audit Log ────────────────────────────────────────────────────────────────

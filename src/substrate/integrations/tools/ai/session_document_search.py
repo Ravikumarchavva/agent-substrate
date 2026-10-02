@@ -18,6 +18,8 @@ documented Worker-isolation gotcha), so no new request-plumbing is needed.
 
 from __future__ import annotations
 
+import logging
+
 from substrate.integrations.knowledge.citations import CitationLedgerStore
 from substrate.integrations.knowledge.result_rendering import render_search_results
 from substrate.types import TextBlock
@@ -25,10 +27,9 @@ from substrate.types import scope_of
 from substrate.models import EmbeddingModel, ChatModel
 from substrate.stores import SearchResult
 from substrate.tools import ToolExecutionResult, ToolType
-from substrate.logger import setup_logging
 from substrate.tools import ToolRisk
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _VECTOR_COLLECTION = "vectors"
 _PAGEINDEX_COLLECTION = "documents"

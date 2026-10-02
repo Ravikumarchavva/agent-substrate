@@ -5,7 +5,8 @@ Every mutating endpoint in the platform calls this before executing side effects
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from substrate.serving.services.policy.models import PolicyRule, WorkspaceGrant
 from substrate.serving.shared.auth.claims import AuthClaims
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 # Default permission matrix (per docs/microservices/02-role-and-responsibility-matrix.md)
 DEFAULT_PERMISSIONS: dict[str, set[str]] = {

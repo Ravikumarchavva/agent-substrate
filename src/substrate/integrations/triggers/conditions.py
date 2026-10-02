@@ -1,7 +1,8 @@
 """Condition-based triggers — monitor EventBus streams and fire workflows."""
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import asyncio
 from dataclasses import dataclass, field
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
     from substrate.runtime import Runtime
     from substrate.integrations.events.redis_event_bus import EventBus
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 @dataclass

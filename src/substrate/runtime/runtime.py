@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -40,6 +41,7 @@ from substrate.runtime.resolver import ActorFactory, ActorResolver
 from substrate.runtime.tail import tail
 from substrate.runtime.worker import Worker
 from substrate.stores import Store
+from substrate.tools.approval import ApprovalDecision, approval_signal
 
 if TYPE_CHECKING:
     from substrate.agents.orchestrator import SubAgentConfig
@@ -47,6 +49,18 @@ if TYPE_CHECKING:
 _TERMINAL_KINDS = frozenset(
     {RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED, RunLogKind.RUN_TRUNCATED}
 )
+
+
+@dataclass(frozen=True, slots=True)
+class PendingApproval:
+    """A tool call a run is waiting for a person to decide (``Runtime.pending_approvals``)."""
+
+    run_id: str
+    request_id: str
+    tool_name: str
+    args: dict[str, Any]
+    risk: str
+    summary: str = ""
 
 
 @dataclass
@@ -252,6 +266,58 @@ class Runtime:
         for affected_id in affected:
             self._worker.cancel_local(str(affected_id), reason)
         return affected
+
+    # ------------------------------------------------------------------ human approval
+
+    async def pending_approvals(self, run_id: RunId | str) -> list[PendingApproval]:
+        """The approvals a run is waiting on: requested in its journal, not yet decided."""
+        requested: dict[str, PendingApproval] = {}
+        for entry in await self.read(run_id):
+            if entry.kind == RunLogKind.APPROVAL_REQUESTED:
+                payload = entry.payload
+                requested[payload["request_id"]] = PendingApproval(
+                    run_id=str(run_id),
+                    request_id=payload["request_id"],
+                    tool_name=payload["tool_name"],
+                    args=payload["args"],
+                    risk=payload["risk"],
+                    summary=payload.get("summary", ""),
+                )
+            elif entry.kind == RunLogKind.APPROVAL_DECIDED:
+                requested.pop(entry.payload["request_id"], None)
+        return list(requested.values())
+
+    async def decide(
+        self,
+        run_id: RunId | str,
+        request_id: str,
+        decision: ApprovalDecision,
+        *,
+        by: str,
+        reason: str | None = None,
+        modified_args: dict[str, Any] | None = None,
+    ) -> None:
+        """Answer an approval a run is waiting on (``DurableApproval``), from any process on the same store.
+
+        ``by`` is journaled with the decision — an approval nobody can be held to is not a control. ``MODIFIED`` runs the
+        call with ``modified_args`` instead of what the model asked for.
+        """
+        action = {ApprovalDecision.APPROVED: "approve", ApprovalDecision.DENIED: "deny", ApprovalDecision.MODIFIED: "modify"}.get(
+            ApprovalDecision(decision)
+        )
+        if action is None:
+            raise ValueError(f"{decision!r} is not a decision a person can make")
+        if action == "modify" and modified_args is None:
+            raise ValueError("a MODIFIED decision needs modified_args")
+        payload: dict[str, Any] = {
+            "action": action,
+            "decided_by": by,
+            "reason": reason,
+            "decided_at": datetime.now(tz=timezone.utc).isoformat(),
+        }
+        if modified_args is not None:
+            payload["modified_arguments"] = modified_args
+        await self._store.signal(RunId(run_id), approval_signal(request_id), payload)
 
     # ------------------------------------------------------------------ lifecycle
 

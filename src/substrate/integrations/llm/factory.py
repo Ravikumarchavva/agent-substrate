@@ -58,13 +58,14 @@ Examples::
 
 from __future__ import annotations
 
+import logging
+
 from typing import ClassVar, Optional, Any
 
 from substrate.models import EmbeddingModel, ChatModel
 from substrate.models import ModelProfile, get_model_profile, list_models
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # ── Provider detection ────────────────────────────────────────────────────────

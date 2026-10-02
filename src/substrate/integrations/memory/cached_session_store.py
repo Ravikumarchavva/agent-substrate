@@ -16,12 +16,13 @@ Usage::
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 from substrate.stores import ShortTermMemory
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class CachedShortTermMemory:

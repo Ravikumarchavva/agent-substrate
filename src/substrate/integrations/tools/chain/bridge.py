@@ -27,15 +27,16 @@ This module contains:
 
 from __future__ import annotations
 
+import logging
+
 import secrets
 from typing import Any
 
 from substrate.runtime.tool_invoker import InvokerSession, ToolInvoker
 from substrate.tools import InvocationResult
 from substrate.tools import ToolCallRequest
-from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.integrations.tools.chain.bridge")
+logger = logging.getLogger(__name__)
 
 
 class BridgeSession:

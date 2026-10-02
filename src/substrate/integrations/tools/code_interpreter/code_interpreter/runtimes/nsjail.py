@@ -94,6 +94,8 @@ with the specific remediation for whichever is missing.
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import os
 import shutil
@@ -102,7 +104,6 @@ import sys
 import textwrap
 from pathlib import Path
 
-from substrate.logger import setup_logging
 
 from ._files import collect_changed, snapshot
 from .base import ExecResult, NetworkPolicy, SandboxSpec, SandboxUnavailableError
@@ -197,7 +198,7 @@ def _sandbox_env() -> dict[str, str]:
         "PYTHONUNBUFFERED": "1",
     }
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 # Max processes per sandbox (cgroup pids.max)
 _DEFAULT_MAX_PIDS = 64

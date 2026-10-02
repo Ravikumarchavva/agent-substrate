@@ -19,12 +19,13 @@ is a drop-in replacement wherever this one is used.
 
 from __future__ import annotations
 
+import logging
+
 import io
 
 from substrate.documents import ExtractedPage, ExtractionResult
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class LocalDocumentExtractor:

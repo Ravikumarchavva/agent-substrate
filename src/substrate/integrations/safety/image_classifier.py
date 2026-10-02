@@ -23,12 +23,13 @@ it, which is exactly the giveaway that it isn't already inside the graph.
 
 from __future__ import annotations
 
+import logging
+
 import io
 
 from substrate.safety import SafetyVerdict, Severity
-from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.integrations.safety.image_classifier")
+logger = logging.getLogger(__name__)
 
 _MODEL_REPO = "OwenElliott/image-safety-classifier-xs"
 _MODEL_REVISION = "54f4560bd9c5ee92d45dc30418a8f8680e80de6d"

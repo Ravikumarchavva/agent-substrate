@@ -34,39 +34,25 @@ name = "agent-substrate"
 version = "0.3.0"
 source = { editable = "." }
 dependencies = [
-    { name = "apscheduler" },
-    { name = "asyncpg" },
-    { name = "fastapi" },
-    { name = "greenlet" },
-    { name = "httpx" },
-    { name = "httpx2" },
-    { name = "kokoro" },
-    { name = "mcp" },
-    { name = "msgspec" },
-    { name = "openai" },
     { name = "opentelemetry-api" },
-    { name = "pillow" },
-    { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "python-json-logger" },
-    { name = "pyyaml" },
-    { name = "redis", extra = ["hiredis"] },
-    { name = "rich" },
-    { name = "soundfile" },
-    { name = "sqlalchemy" },
-    { name = "tiktoken" },
 ]
 
 [package.optional-dependencies]
 anthropic = [
     { name = "anthropic" },
+    { name = "pillow" },
 ]
 chunking = [
     { name = "wtpsplit", extra = ["onnx-cpu"] },
 ]
 code = [
     { name = "k8s-agent-sandbox" },
+]
+console = [
+    { name = "prompt-toolkit" },
+    { name = "pydantic-settings" },
+    { name = "rich" },
 ]
 document-intelligence = [
     { name = "doc-firewall" },
@@ -85,13 +71,29 @@ document-intelligence-gpu = [
 ]
 gemini = [
     { name = "google-genai" },
+    { name = "pillow" },
+]
+mcp = [
+    { name = "mcp" },
 ]
 ocr = [
     { name = "pypdfium2" },
     { name = "pytesseract" },
 ]
+openai = [
+    { name = "httpx" },
+    { name = "openai" },
+    { name = "pillow" },
+    { name = "tiktoken" },
+]
+postgres = [
+    { name = "asyncpg" },
+]
 rag = [
     { name = "pypdf" },
+]
+redis = [
+    { name = "redis", extra = ["hiredis"] },
 ]
 s3 = [
     { name = "aiobotocore" },
@@ -101,6 +103,7 @@ safety = [
     { name = "confusable-homoglyphs" },
     { name = "huggingface-hub" },
     { name = "onnxruntime" },
+    { name = "pillow" },
     { name = "tokenizers" },
 ]
 sandbox = [
@@ -116,48 +119,86 @@ sandbox = [
     { name = "scikit-learn" },
     { name = "seaborn" },
 ]
+scheduler = [
+    { name = "apscheduler" },
+]
 sentence-transformers = [
     { name = "sentence-transformers" },
+]
+serve = [
+    { name = "fastapi" },
 ]
 server = [
     { name = "aiobotocore" },
     { name = "anthropic" },
+    { name = "apscheduler" },
+    { name = "asyncpg" },
     { name = "botocore" },
     { name = "confusable-homoglyphs" },
     { name = "crawl4ai" },
     { name = "cryptography" },
     { name = "ddgs" },
     { name = "exa-py" },
+    { name = "fastapi" },
     { name = "google-genai" },
+    { name = "greenlet" },
+    { name = "httpx" },
+    { name = "httpx2" },
     { name = "huggingface-hub" },
     { name = "k8s-agent-sandbox" },
+    { name = "kokoro" },
     { name = "matplotlib" },
+    { name = "mcp" },
+    { name = "msgspec" },
     { name = "onnxruntime" },
+    { name = "openai" },
     { name = "openpyxl" },
     { name = "opentelemetry-exporter-otlp" },
     { name = "opentelemetry-instrumentation-fastapi" },
     { name = "opentelemetry-sdk" },
     { name = "pandas" },
     { name = "pdfplumber" },
+    { name = "pillow" },
     { name = "playwright" },
     { name = "plotly" },
     { name = "polars" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "pypdf" },
     { name = "python-docx" },
+    { name = "python-json-logger" },
     { name = "python-multipart" },
     { name = "python-pptx" },
+    { name = "pyyaml" },
+    { name = "redis", extra = ["hiredis"] },
     { name = "reportlab" },
     { name = "scikit-learn" },
     { name = "seaborn" },
+    { name = "soundfile" },
+    { name = "sqlalchemy" },
     { name = "tavily-python" },
+    { name = "tiktoken" },
     { name = "tokenizers" },
     { name = "uvicorn", extra = ["standard"] },
+]
+testing = [
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+tools = [
+    { name = "pyyaml" },
+]
+tts = [
+    { name = "kokoro" },
+    { name = "soundfile" },
 ]
 web = [
     { name = "crawl4ai" },
     { name = "ddgs" },
     { name = "exa-py" },
+    { name = "httpx2" },
     { name = "playwright" },
     { name = "tavily-python" },
 ]
@@ -180,11 +221,11 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-substrate", extras = ["web", "code", "rag", "s3", "safety", "sandbox", "anthropic", "gemini"], marker = "extra == 'server'" },
+    { name = "agent-substrate", extras = ["serve", "openai", "anthropic", "gemini", "postgres", "redis", "scheduler", "mcp", "tts", "tools", "web", "code", "rag", "s3", "safety", "sandbox"], marker = "extra == 'server'" },
     { name = "aiobotocore", marker = "extra == 's3'", specifier = ">=3.7.0" },
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.95.0" },
-    { name = "apscheduler", specifier = ">=4.0.0a5" },
-    { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "apscheduler", marker = "extra == 'scheduler'", specifier = ">=4.0.0a5" },
+    { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.30.0" },
     { name = "botocore", marker = "extra == 's3'", specifier = ">=1.43.0" },
     { name = "confusable-homoglyphs", marker = "extra == 'safety'", specifier = ">=3.3.1" },
     { name = "crawl4ai", marker = "extra == 'web'", specifier = ">=0.8.7" },
@@ -193,24 +234,25 @@ requires-dist = [
     { name = "doc-firewall", marker = "extra == 'document-intelligence'", specifier = ">=0.5.1" },
     { name = "doc-firewall", marker = "extra == 'document-intelligence-gpu'", specifier = ">=0.5.1" },
     { name = "exa-py", marker = "extra == 'web'", specifier = ">=2.14.0" },
-    { name = "fastapi", specifier = ">=0.128.0" },
+    { name = "fastapi", marker = "extra == 'serve'", specifier = ">=0.128.0" },
     { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=1.73.0" },
-    { name = "greenlet", specifier = ">=3.0.0" },
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "httpx2", specifier = ">=2.7.0" },
+    { name = "greenlet", marker = "extra == 'server'", specifier = ">=3.0.0" },
+    { name = "httpx", marker = "extra == 'openai'", specifier = ">=0.27.0" },
+    { name = "httpx", marker = "extra == 'testing'", specifier = ">=0.27.0" },
+    { name = "httpx2", marker = "extra == 'web'", specifier = ">=2.7.0" },
     { name = "huggingface-hub", marker = "extra == 'document-intelligence'", specifier = ">=0.24.0" },
     { name = "huggingface-hub", marker = "extra == 'document-intelligence-gpu'", specifier = ">=0.24.0" },
     { name = "huggingface-hub", marker = "extra == 'safety'", specifier = ">=0.25.0" },
     { name = "k8s-agent-sandbox", marker = "extra == 'code'", specifier = ">=0.4.6" },
-    { name = "kokoro", specifier = ">=0.9.4" },
+    { name = "kokoro", marker = "extra == 'tts'", specifier = ">=0.9.4" },
     { name = "markitdown", extras = ["docx", "pptx"], marker = "extra == 'document-intelligence'", specifier = ">=0.1.0" },
     { name = "markitdown", extras = ["docx", "pptx"], marker = "extra == 'document-intelligence-gpu'", specifier = ">=0.1.0" },
     { name = "matplotlib", marker = "extra == 'sandbox'", specifier = ">=3.9.0" },
-    { name = "mcp", specifier = ">=1.0.0" },
-    { name = "msgspec", specifier = ">=0.21.1" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
+    { name = "msgspec", marker = "extra == 'server'", specifier = ">=0.21.1" },
     { name = "nvidia-ml-py", marker = "extra == 'document-intelligence-gpu'", specifier = ">=12.0" },
     { name = "onnxruntime", marker = "extra == 'safety'", specifier = ">=1.20.0" },
-    { name = "openai", specifier = ">=2.15.0" },
+    { name = "openai", marker = "extra == 'openai'", specifier = ">=2.15.0" },
     { name = "openpyxl", marker = "extra == 'sandbox'", specifier = ">=3.1.0" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-otlp", marker = "extra == 'server'" },
@@ -222,37 +264,44 @@ requires-dist = [
     { name = "paddlepaddle-gpu", marker = "extra == 'document-intelligence-gpu'", specifier = "==3.3.0", index = "https://www.paddlepaddle.org.cn/packages/stable/cu130/" },
     { name = "pandas", marker = "extra == 'sandbox'", specifier = ">=2.2.0" },
     { name = "pdfplumber", marker = "extra == 'sandbox'", specifier = ">=0.11.0" },
-    { name = "pillow", specifier = ">=10.4.0" },
+    { name = "pillow", marker = "extra == 'anthropic'", specifier = ">=10.4.0" },
+    { name = "pillow", marker = "extra == 'gemini'", specifier = ">=10.4.0" },
+    { name = "pillow", marker = "extra == 'openai'", specifier = ">=10.4.0" },
+    { name = "pillow", marker = "extra == 'safety'", specifier = ">=10.4.0" },
     { name = "playwright", marker = "extra == 'web'", specifier = ">=1.60.0" },
     { name = "plotly", marker = "extra == 'sandbox'", specifier = ">=5.24.0" },
     { name = "polars", marker = "extra == 'sandbox'", specifier = ">=1.0.0" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0" },
+    { name = "prompt-toolkit", marker = "extra == 'console'", specifier = ">=3.0.0" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'server'", specifier = ">=3.2.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
-    { name = "pydantic-settings", specifier = ">=2.12.0" },
+    { name = "pydantic-settings", marker = "extra == 'console'", specifier = ">=2.12.0" },
+    { name = "pydantic-settings", marker = "extra == 'server'", specifier = ">=2.12.0" },
     { name = "pyjwt", marker = "extra == 'server'", specifier = ">=2.12.0" },
     { name = "pypdf", marker = "extra == 'rag'", specifier = ">=6.13.0" },
     { name = "pypdfium2", marker = "extra == 'ocr'", specifier = ">=4.30.0" },
     { name = "pytesseract", marker = "extra == 'ocr'", specifier = ">=0.3.10" },
+    { name = "pytest", marker = "extra == 'testing'", specifier = ">=9.0.3" },
+    { name = "pytest-asyncio", marker = "extra == 'testing'", specifier = ">=1.4.0" },
     { name = "python-docx", marker = "extra == 'sandbox'", specifier = ">=1.1.0" },
-    { name = "python-json-logger", specifier = ">=2.0.7" },
+    { name = "python-json-logger", marker = "extra == 'server'", specifier = ">=2.0.7" },
     { name = "python-multipart", marker = "extra == 'server'", specifier = ">=0.0.9" },
     { name = "python-pptx", marker = "extra == 'sandbox'", specifier = ">=1.0.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "redis", extras = ["hiredis"], specifier = ">=5.0.0" },
+    { name = "pyyaml", marker = "extra == 'tools'", specifier = ">=6.0" },
+    { name = "redis", extras = ["hiredis"], marker = "extra == 'redis'", specifier = ">=5.0.0" },
     { name = "reportlab", marker = "extra == 'sandbox'", specifier = ">=4.2.0" },
-    { name = "rich", specifier = ">=14.3.2" },
+    { name = "rich", marker = "extra == 'console'", specifier = ">=14.3.2" },
     { name = "scikit-learn", marker = "extra == 'sandbox'", specifier = ">=1.5.0" },
     { name = "seaborn", marker = "extra == 'sandbox'", specifier = ">=0.13.0" },
     { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3.0.0" },
-    { name = "soundfile", specifier = ">=0.12.1" },
-    { name = "sqlalchemy", specifier = ">=2.0.46" },
+    { name = "soundfile", marker = "extra == 'tts'", specifier = ">=0.12.1" },
+    { name = "sqlalchemy", marker = "extra == 'server'", specifier = ">=2.0.46" },
     { name = "tavily-python", marker = "extra == 'web'", specifier = ">=0.7.26" },
-    { name = "tiktoken", specifier = ">=0.12.0" },
+    { name = "tiktoken", marker = "extra == 'openai'", specifier = ">=0.12.0" },
     { name = "tokenizers", marker = "extra == 'safety'", specifier = ">=0.20.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.34.0" },
     { name = "wtpsplit", extras = ["onnx-cpu"], marker = "extra == 'chunking'", specifier = ">=2.1.0" },
 ]
-provides-extras = ["web", "code", "sandbox", "rag", "chunking", "ocr", "anthropic", "gemini", "s3", "safety", "server", "document-intelligence", "document-intelligence-gpu", "sentence-transformers"]
+provides-extras = ["openai", "postgres", "redis", "scheduler", "mcp", "tts", "tools", "console", "serve", "testing", "web", "code", "sandbox", "rag", "chunking", "ocr", "anthropic", "gemini", "s3", "safety", "server", "document-intelligence", "document-intelligence-gpu", "sentence-transformers"]
 
 [package.metadata.requires-dev]
 dev = [

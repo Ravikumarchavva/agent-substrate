@@ -6,7 +6,8 @@ and Stream services via events and direct calls.
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import os
 import uuid
@@ -21,7 +22,7 @@ from substrate.serving.services.job_controller.models import JobRun
 from substrate.integrations.events import EventBus
 from substrate.serving.shared.events.types import workflow_failed, workflow_started
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # ── Run CRUD ─────────────────────────────────────────────────────────────────

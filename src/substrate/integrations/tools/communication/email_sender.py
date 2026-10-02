@@ -6,14 +6,15 @@ explicit human approval since it acts on behalf of the user.
 
 from __future__ import annotations
 
+import logging
+
 import re
 
 from substrate.tools import ToolExecutionResult
 from substrate.types import TextBlock
-from substrate.logger import setup_logging
 from substrate.tools import ToolRisk
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 

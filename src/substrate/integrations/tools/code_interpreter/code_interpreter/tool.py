@@ -20,6 +20,8 @@ there persist and are addressable from chat via the ``sandbox:`` scheme.
 
 from __future__ import annotations
 
+import logging
+
 import shlex
 from typing import Any
 
@@ -27,7 +29,6 @@ from substrate.workspace import workspace_scope
 from substrate.types import scope_of
 from substrate.tools import ToolExecutionResult
 from substrate.tools import ToolRisk
-from substrate.logger import setup_logging
 
 from .code_risk import classify_and_summarize
 from .runtimes.base import NetworkPolicy, SandboxRuntime, SandboxSpec
@@ -37,7 +38,7 @@ from .sandbox_response import (
     sandbox_result_to_tool_result,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _DEFAULT_SESSION = "default"
 _MAX_TIMEOUT = 300

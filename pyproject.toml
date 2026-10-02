@@ -21,52 +21,41 @@ classifiers = [
     "Typing :: Typed",
 ]
 requires-python = ">=3.11"
+# The engine and nothing else: types, stores, runtime, agents, middleware. Everything that talks to a vendor,
+# a database server, or a network — and everything the reference server needs — is an extra named for what it
+# enables (docs/claude_docs/architecture/optional-dependencies.md). Row: importing `substrate` loads no driver or SDK.
 dependencies = [
-    "httpx>=0.27.0",
-    "httpx2>=2.7.0",
-    "mcp>=1.0.0",
-    "openai>=2.15.0",
-    "opentelemetry-api>=1.20.0",
     "pydantic>=2.12.5",
-    "pydantic-settings>=2.12.0",
-    "python-json-logger>=2.0.7",
-    "tiktoken>=0.12.0",
-    "pyyaml>=6.0",
-    "rich>=14.3.2",
-    "msgspec>=0.21.1",
-    # image/audio/video content blocks
-    "pillow>=10.4.0",
-    # Postgres-backed durable runtime + memory/vector stores
-    "sqlalchemy>=2.0.46",
-    "greenlet>=3.0.0",
-    "asyncpg>=0.30.0",
-    "psycopg[binary]>=3.2.0",
-    # Redis-backed session store / event bus / semantic cache
-    "redis[hiredis]>=5.0.0",
-    # scheduled/cron triggers — the monolith registers this router unconditionally
-    "apscheduler>=4.0.0a5",
-    # fastapi itself stays core: substrate.serve.add_routes (the thin,
-    # optional "hand your agent object to a server" adapter) type-hints
-    # against it directly, and integrations/tools/chain/bridge.py already
-    # lazily imports it for tool-chain execution. uvicorn/python-multipart/
-    # pyjwt/cryptography below are a different story -- confirmed via
-    # repo-wide grep to have ZERO usage anywhere in kernel/agents/
-    # integrations -- they exist purely
-    # for the reference `serving/` monolith+microservices (running a real
-    # uvicorn process, parsing multipart file uploads, issuing/verifying
-    # its own JWTs), so they moved to the `server` extra instead of being
-    # forced onto every `agent-substrate` install.
-    "fastapi>=0.128.0",
-    "kokoro>=0.9.4",
-    "soundfile>=0.12.1",
+    "opentelemetry-api>=1.20.0",
 ]
 
 # Full rationale for every extra below — size costs, version-pin reasoning,
 # mutual-exclusivity rules — lives in
 # docs/claude_docs/architecture/optional-dependencies.md, not here.
 [project.optional-dependencies]
+# OpenAI and OpenAI-compatible chat/embedding clients (also vLLM, llama.cpp, Ollama, LM Studio)
+openai = ["openai>=2.15.0", "tiktoken>=0.12.0", "httpx>=0.27.0", "pillow>=10.4.0"]
+# PostgreSQL as the store (integrations.database.postgres_store); vectors also need the pgvector extension
+postgres = ["asyncpg>=0.30.0"]
+# Redis: session cache, event bus
+redis = ["redis[hiredis]>=5.0.0"]
+# scheduled/cron triggers
+scheduler = ["apscheduler>=4.0.0a5"]
+# MCP tools
+mcp = ["mcp>=1.0.0"]
+# text-to-speech
+tts = ["kokoro>=0.9.4", "soundfile>=0.12.1"]
+# skills and curated artifacts (YAML front matter)
+tools = ["pyyaml>=6.0"]
+# the interactive console and CLI chat
+console = ["rich>=14.3.2", "prompt-toolkit>=3.0.0", "pydantic-settings>=2.12.0"]
+# substrate.serve.add_routes: hand an agent object to a FastAPI app
+serve = ["fastapi>=0.128.0"]
+# the conformance suites and test helpers in substrate.testing (what an integration author runs)
+testing = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0"]
 # web search/browsing tools
 web = [
+    "httpx2>=2.7.0",
     "ddgs>=9.14.4",
     "crawl4ai>=0.8.7",
     "playwright>=1.60.0",
@@ -98,13 +87,14 @@ chunking = ["wtpsplit[onnx-cpu]>=2.1.0"]
 ocr = ["pytesseract>=0.3.10", "pypdfium2>=4.30.0"]
 # non-OpenAI LLM providers — LLMFactory lazy-imports each client, so only
 # the provider(s) you actually select need to be installed
-anthropic = ["anthropic>=0.95.0"]
-gemini = ["google-genai>=1.73.0"]
+anthropic = ["anthropic>=0.95.0", "pillow>=10.4.0"]
+gemini = ["google-genai>=1.73.0", "pillow>=10.4.0"]
 # S3-compatible object storage backend (alternative to the default local-disk store)
 s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
 # input-safety guardrail: jailbreak + NSFW classifiers (ONNX models via HF Hub) —
 # degrades gracefully if missing (MultimodalSafetyMiddleware fails open), so not core
 safety = [
+    "pillow>=10.4.0",
     "onnxruntime>=1.20.0",
     "tokenizers>=0.20.0",
     "huggingface-hub>=0.25.0",
@@ -115,7 +105,14 @@ safety = [
 # pyjwt+cryptography for its own auth. None of these are needed to build
 # and run an agent object with substrate/integrations alone.
 server = [
-    "agent-substrate[web,code,rag,s3,safety,sandbox,anthropic,gemini]",
+    "agent-substrate[serve,openai,anthropic,gemini,postgres,redis,scheduler,mcp,tts,tools,web,code,rag,s3,safety,sandbox]",
+    "pydantic-settings>=2.12.0",
+    "sqlalchemy>=2.0.46",
+    "greenlet>=3.0.0",
+    # SQLAlchemy resolves the monolith's `postgresql+psycopg://` DATABASE_URL dynamically — nothing imports it by name
+    "psycopg[binary]>=3.2.0",
+    "python-json-logger>=2.0.7",
+    "msgspec>=0.21.1",
     # The engine only ever imports opentelemetry-api (a no-op until something configures an SDK);
     # the SDK, the OTLP exporter and the FastAPI instrumentation are what the reference server wires up.
     "opentelemetry-sdk>=1.20.0",

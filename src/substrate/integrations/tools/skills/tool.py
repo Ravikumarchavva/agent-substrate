@@ -15,14 +15,15 @@ the full content of any skill when it decides to use one.
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 from substrate.types import TextBlock
 from substrate.tools import ToolExecutionResult, ToolType
-from substrate.logger import setup_logging
 from substrate.tools import ToolRisk
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class SkillTool:

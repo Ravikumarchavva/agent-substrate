@@ -37,7 +37,7 @@ from substrate.tools.protocols import (
     is_hosted_tool,
     is_provider_defined_tool,
 )
-from substrate.tools.approval import ApprovalDecision, ApprovalHandler, ApprovalRequest, ApprovalResult
+from substrate.tools.approval import ApprovalDecision, ApprovalHandler, ApprovalRequest, ApprovalResult, approval_signal
 from substrate.tools.chain import ChainCallRecord, ChainFile, ChainPolicy, InvocationResult
 
 if TYPE_CHECKING:
@@ -243,7 +243,7 @@ class ToolInvoker:
                 except Exception:
                     pass
                 decision_key = request_id
-                signal_payload = await ctx.sleep_until_signal(f"hitl:{request_id}")
+                signal_payload = await ctx.sleep_until_signal(approval_signal(request_id))
                 result: ApprovalResult = ApprovalResult.from_response(signal_payload)
             else:
                 from substrate.types.identity import Actor

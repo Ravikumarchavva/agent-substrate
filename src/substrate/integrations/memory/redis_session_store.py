@@ -18,14 +18,15 @@ Usage::
 
 from __future__ import annotations
 
+import logging
+
 import json
 from typing import Any
 
 import redis.asyncio as aioredis
 
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _KEY_PREFIX = "session:state:"
 

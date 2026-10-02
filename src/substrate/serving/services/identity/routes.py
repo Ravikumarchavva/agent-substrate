@@ -9,7 +9,8 @@ GET  /auth/users/{id}     Get user by ID (service-to-service)
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from datetime import UTC, datetime
 
@@ -26,7 +27,7 @@ from substrate.serving.shared.contracts.auth import (
     TokenResponse,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Redis key prefix for valid refresh-token JTIs

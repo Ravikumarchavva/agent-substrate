@@ -12,6 +12,8 @@ the conversation only.
 
 from __future__ import annotations
 
+import logging
+
 
 from substrate.types import scope_of
 from substrate.stores import (
@@ -24,10 +26,9 @@ from substrate.stores import (
 )
 from substrate.tools import ToolExecutionResult
 from substrate.types import TextBlock
-from substrate.logger import setup_logging
 from substrate.tools import ToolRisk
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class MemoryTool:

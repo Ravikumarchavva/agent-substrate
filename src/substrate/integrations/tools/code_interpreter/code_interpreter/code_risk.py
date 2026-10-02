@@ -13,16 +13,17 @@ Deterministic, free, no LLM call — runs on every code-interpreter execution.
 
 from __future__ import annotations
 
+import logging
+
 import ast
 from typing import TYPE_CHECKING
 
 from substrate.tools import ToolRisk
-from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
     from substrate.models import ChatModel
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _SUMMARY_SYSTEM_PROMPT = (
     "You review Python code a data-analysis agent is about to run in a "

@@ -6,7 +6,8 @@ returns True).
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import uuid
 from typing import Any, Dict, List
@@ -24,7 +25,7 @@ from substrate.serving.monolith.models import Thread, WorkspaceQuota
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.stream import project_thread
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

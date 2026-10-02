@@ -38,13 +38,14 @@ that's gone is the reason it used to matter.
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import contextlib
 import json
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 from substrate.types import RunLogKind
-from substrate.logger import setup_logging
 from substrate.serving.monolith.sse.bridge import (
     BRIDGE_DONE,
     WebHITLBridge,
@@ -62,7 +63,7 @@ from substrate.serving.protocol import (
     wire_from_log,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 DisconnectCheck = Callable[[], Awaitable[bool]]
 

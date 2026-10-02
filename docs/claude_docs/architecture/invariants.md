@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**109 enforced · 0 pending · 109 total**
+**115 enforced · 0 pending · 115 total**
 
 ## approvals
 
@@ -67,6 +67,21 @@ and the marker has to come off. That is what keeps this document honest.
 
 - ✅ **Two replies differing only in length must journal the same number of rows: the durable record of a turn is the finished message.**
   `test_journal_size_does_not_grow_with_token_count`
+
+## library
+
+- ✅ **``pip install agent-substrate`` brings pydantic and the OpenTelemetry API. A driver, an SDK or a web framework in the base dependencies is installed by every user who wanted none of them.**
+  `test_i31_the_core_install_is_the_engine_and_nothing_else`
+- ✅ **Every concept package of the core, imported in a fresh interpreter, loads none of what an extra provides.**
+  `test_i31_importing_the_engine_loads_no_driver_sdk_or_framework`
+- ✅ **``substrate.integrations`` and its vendor packages import nothing until a name is used: asking for the Anthropic client must not require the OpenAI SDK, nor MCP, nor Redis.**
+  `test_i32_an_adapter_package_imports_only_what_it_is_asked_for`
+- ✅ **A library emits (``logging.getLogger(__name__)``); the application decides where the records go. Configuring handlers at import — as 118 modules once did, writing a rotating file into whatever directory the process started in — is a side effect nobody asked for. Only application entry points call ``setup_logging``. ``runtimes/`` (separate services, being rewritten) is outside this row.**
+  `test_i33_a_library_module_never_configures_logging`
+- ✅ **The permitted callers run ``setup_logging`` inside a function, never as a statement of the module.**
+  `test_i33_an_entry_point_configures_logging_when_started_not_when_imported`
+- ✅ **The library owns no handler on the ``substrate`` logger until an application adds one (a ``NullHandler`` keeps Python from printing records the application did not ask to see).**
+  `test_i34_importing_substrate_installs_no_log_handler`
 
 ## liveness
 

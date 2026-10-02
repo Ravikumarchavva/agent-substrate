@@ -5,14 +5,15 @@ Uses asyncpg with read-only transaction mode by default for safety.
 
 from __future__ import annotations
 
+import logging
+
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
     import asyncpg
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class PostgresQueryConnector:

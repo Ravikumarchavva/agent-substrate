@@ -75,7 +75,9 @@ A guarantee not yet true is `xfail(strict=True)` naming what fixes it.
 Conformance suites live in `kernel/testing/conformance/` and are run by every implementation of
 their port: `RuntimeStore` (SQLite, Postgres), `MemoryStore` (local, Postgres, Lance), `VectorStore` (local,
 pgvector, LanceDB), `HistoryProvider` (local, Postgres), `ObjectStore` (workspace folder, S3), `TaskStore` (local,
-Postgres), `GraphStore` (local, Lance). There is no in-memory store: the minimum a durable agent rests on is a folder.
+Postgres), `GraphStore` (local, Lance), `LLMClient` (OpenAI chat + Responses, Anthropic, Gemini — through each vendor's real SDK over a
+scripted HTTP transport), `EmbeddingClient` (OpenAI, Gemini, local sentence-transformers, embedding-reranker service),
+`DocumentExtractor` (local, document-intelligence service). There is no in-memory store: the minimum a durable agent rests on is a folder.
 Row I30 fails the build if an implementation of a port that has a suite does not run it.
 
 ## Safety, tenancy, observability
@@ -109,5 +111,5 @@ Row I30 fails the build if an implementation of a port that has a suite does not
 
 ## Not done yet
 
-Recorded in the register as pending (`xfail(strict=True)`), not forgotten: conformance suites for the
-LLM-client, embedding-client and document-extractor ports (row I30), and the admin routes, which are tenant-wide by design and use the raw stores.
+Nothing is pending in the register (95 enforced, 0 pending). What remains is outside the kernel: the plugin registry and
+host package, the `runtimes/` restructure, and the distribution split (see the plan in `decisions.md`).

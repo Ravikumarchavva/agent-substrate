@@ -47,14 +47,16 @@ def _extract_pdf(data: bytes) -> ExtractionResult:
     """Core PDF text extraction via pypdfium2, shared with ``convert.py``'s
     Tier 2 escalation (LibreOffice's converted-to-PDF bytes get re-run
     through this exact same path). Never raises — a corrupt/unreadable PDF
-    returns zero pages instead of propagating pypdfium2's exception."""
+    comes back as ``success=False`` with the reason instead of propagating pypdfium2's exception."""
     import pypdfium2 as pdfium
 
     try:
         doc = pdfium.PdfDocument(data)
-    except Exception:
-        logger.warning("pypdfium2 could not open document — returning empty result")
-        return ExtractionResult(pages=[], markdown="", engine=RawTextEngine.name)
+    except Exception as exc:
+        logger.warning("pypdfium2 could not open document: %s", exc)
+        # An unreadable file is a failure, not an empty document: callers (and the model) must be
+        # able to tell "nothing to read" from "could not read".
+        return ExtractionResult(success=False, error=f"could not read the document: {exc}", engine=RawTextEngine.name)
 
     try:
         pages: list[ExtractedPage] = []

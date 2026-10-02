@@ -91,8 +91,9 @@ Row I30 fails the build if an implementation of a port that has a suite does not
 * **Every store port has a scope-bound handle.** `bind_history/vector/graph/objects/tasks(store, scope)`
   (`kernel/storage/scoped.py`, written once over the ports so it holds for every implementation) places each
   session, collection, conversation, key and namespace under the tenant (percent-encoded, so no name can look like
-  another tenant's), refuses ids that resolve elsewhere, and rejects object keys that could climb out. A run gets its
-  scope from `ctx.store_scope`; there is no unscoped handle to forget to scope. Rows I1–I3 in `test_scope_binding.py`
+  another tenant's), refuses ids that resolve elsewhere, and rejects object keys that could climb out. Serving binds conversation history (agent
+  build, scheduled runs, branch/checkpoint routes) and task boards (`TaskManagerTool.store_for(tenant)`, task routes);
+  a run gets its scope from `ctx.store_scope`; there is no unscoped handle to forget to scope. Rows I1–I3 in `test_scope_binding.py`
   run the conformance suites *through* a bound handle and then attack the wall.
 * **Identity travels on `ctx.scope`** (`RunScope`), stamped from authenticated transport input;
   tools read it, never a model-supplied argument.
@@ -108,5 +109,6 @@ Row I30 fails the build if an implementation of a port that has a suite does not
 ## Not done yet
 
 Recorded in the register as pending (`xfail(strict=True)`), not forgotten: conformance suites for the
-LLM-client, embedding-client and document-extractor ports (row I30), and wiring the
-serving layer to hand out bound handles instead of raw stores (the handles and their tests exist).
+LLM-client, embedding-client and document-extractor ports (row I30), and binding the object store in
+serving (its callers build absolute `tenants/...` keys through `workspace/layout`, so it needs those call sites rewritten to
+relative keys first).

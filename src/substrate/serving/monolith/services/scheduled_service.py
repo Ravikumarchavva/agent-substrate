@@ -148,6 +148,7 @@ async def execute_scheduled_task(
                 short_term_memory=app_state.short_term_memory,
                 long_term_memory=app_state.long_term_memory,
                 user_id=str(task.user_id) if task.user_id else None,
+                tenant_id=thread.tenant_id,
                 runtime=app_state.runtime,
                 safety_middleware=app_state.safety_middleware,
             )

@@ -14,7 +14,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
+from substrate.kernel.abstractions.core.scope import Scope
 from substrate.kernel.abstractions.storage.history import MessageNode
+from substrate.kernel.storage.scoped import bind_history
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.models import Thread, User
 from substrate.serving.monolith.security.deps import get_current_user
@@ -244,7 +246,7 @@ async def test_branch_messages_ancestry():
                         assert msg_res.json() == []
 
                         # Append two nodes to main branch in history
-                        history = app.state.ctx.history
+                        history = bind_history(app.state.ctx.history, Scope(tenant_id=TENANT))
                         await history.ensure_branch(thread_id, "main")
                         node1_id = f"msg1-{uuid.uuid4().hex[:8]}"
                         node2_id = f"msg2-{uuid.uuid4().hex[:8]}"
@@ -308,7 +310,7 @@ async def test_checkpoints_endpoints():
                     transport = ASGITransport(app=app)
                     async with AsyncClient(transport=transport, base_url="http://test") as client:
                         # Append a node first so we have an anchor
-                        history = app.state.ctx.history
+                        history = bind_history(app.state.ctx.history, Scope(tenant_id=TENANT))
                         anchor_id = f"anchor-{uuid.uuid4().hex[:8]}"
                         node = MessageNode(
                             id=anchor_id,

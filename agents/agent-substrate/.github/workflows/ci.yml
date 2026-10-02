@@ -26,7 +26,7 @@ jobs:
       - name: Lint
         run: make sync lint
 
-  # ── Import Boundaries (core independence + layer contracts) ────────
+  # ── Import Boundaries (kernel independence + layer contracts) ────────
   lint-imports:
     name: "Import Boundaries"
     runs-on: ubuntu-latest

@@ -60,16 +60,6 @@ class Store:
 
     Use ``connect(folder)``; construct one directly only to put the database elsewhere (a PostgreSQL adapter)
     while the files and indexes stay in ``root``.
-
-    When scaling out to multiple hosts, multiple concurrent worker processes, or high-volume
-    vector search (HNSW index), switch to PostgreSQL via::
-
-        from substrate.integrations.database import postgres_store
-        store = await postgres_store("postgresql://user:pass@host/db")
-
-    ``postgres_store`` implements the exact same ``Store`` port and passes identical conformance
-    suites. Construct ``Store`` directly only when wiring custom database adapters while files and
-    indexes stay in ``root``.
     """
 
     def __init__(self, database: Database, root: str | Path, *, file_quota_bytes: int | None = None) -> None:

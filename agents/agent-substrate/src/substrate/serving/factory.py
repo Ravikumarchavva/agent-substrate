@@ -832,7 +832,11 @@ async def build_agent_for_thread(
 
         history = LocalFilesystemHistoryProvider()
         await history.connect()
-    memory = history
+    # Everything the agent reads or writes of the conversation goes through the tenant's bound handle.
+    from substrate.kernel.abstractions.core.scope import Scope
+    from substrate.kernel.storage.scoped import bind_history
+
+    memory = bind_history(history, Scope(tenant_id=tenant_id or "default"))
 
     memory_tool = build_memory_tool(session_id, short_term_memory, long_term_memory)
     if memory_tool is not None:

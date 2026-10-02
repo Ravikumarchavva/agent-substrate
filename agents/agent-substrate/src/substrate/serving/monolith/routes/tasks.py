@@ -49,7 +49,7 @@ async def _authorize_board(
     task_list_id: str, request: Request, db: AsyncSession, user: AuthClaims
 ) -> Any:
     """Return the board if its owning conversation belongs to the caller, else 404."""
-    store = request.app.state.task_tool.store
+    store = request.app.state.task_tool.store_for(user.tenant_id)
     board = await store.get_task_list(task_list_id)
     if board is None:
         raise HTTPException(status_code=404, detail="Task list not found")
@@ -66,7 +66,7 @@ async def get_tasks(
 ):
     """Return all agent boards for a conversation."""
     await _authorize_conversation(conversation_id, db, user)
-    store = request.app.state.task_tool.store
+    store = request.app.state.task_tool.store_for(user.tenant_id)
     boards = await store.get_boards_by_conversation(conversation_id)
     return {"boards": [b.to_dict() for b in boards]}
 
@@ -82,7 +82,7 @@ async def update_task(
 ):
     """Update a task's status, title, or note."""
     await _authorize_board(task_list_id, request, db, user)
-    store = request.app.state.task_tool.store
+    store = request.app.state.task_tool.store_for(user.tenant_id)
 
     result = None
     if req.status:
@@ -116,7 +116,7 @@ async def force_retry_task(
 ):
     """User override: reset retry_count to 0 and reopen failed/abandoned task."""
     await _authorize_board(task_list_id, request, db, user)
-    store = request.app.state.task_tool.store
+    store = request.app.state.task_tool.store_for(user.tenant_id)
     result = await store.force_retry(task_list_id, task_id)
     if not result:
         return {"status": "error", "detail": "Task not found"}
@@ -141,7 +141,7 @@ async def add_tasks(
 ):
     """Append new tasks to an existing board."""
     await _authorize_board(task_list_id, request, db, user)
-    store = request.app.state.task_tool.store
+    store = request.app.state.task_tool.store_for(user.tenant_id)
     new_tasks = await store.add_tasks(task_list_id, req.tasks)
     return {"status": "ok", "added": len(new_tasks)}
 
@@ -156,7 +156,7 @@ async def delete_task(
 ):
     """Delete a task."""
     await _authorize_board(task_list_id, request, db, user)
-    store = request.app.state.task_tool.store
+    store = request.app.state.task_tool.store_for(user.tenant_id)
     deleted = await store.delete_task(task_list_id, task_id)
     if not deleted:
         return {"status": "error", "detail": "Task not found"}

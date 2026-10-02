@@ -238,7 +238,7 @@ async def chat(
         force_new_board = _should_force_task_planning(display_content)
         existing_task_board = None
         if allow_task_planning and not force_new_board:
-            _store = request.app.state.task_tool.store
+            _store = request.app.state.task_tool.store_for(user.tenant_id)
             existing_task_board = await _store.get_by_conversation(str(body.thread_id))
 
         # Check if code interpreter runtime mounts the uploaded workspace bytes
@@ -382,7 +382,7 @@ async def chat(
         """On clean run completion, settle this conversation's plan boards so
         lingering in-progress tasks stop spinning. Returns the updated board
         dicts for the session to push to the client."""
-        store = request.app.state.task_tool.store
+        store = request.app.state.task_tool.store_for(user.tenant_id)
         settled = await store.settle_conversation(str(body.thread_id))
         return [tl.to_dict() for tl in settled]
 

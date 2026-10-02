@@ -21,6 +21,8 @@ from __future__ import annotations
 from typing import Any, Awaitable, Callable, Dict
 
 from substrate.kernel.abstractions.agent.runtime_context import RunMeta, scope_of
+from substrate.kernel.abstractions.core.scope import Scope
+from substrate.kernel.storage.scoped import bind_tasks
 from substrate.kernel.abstractions.storage.tasks import TaskStatus
 from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolUI
 from substrate.kernel.abstractions import TextBlock
@@ -127,9 +129,10 @@ class TaskManagerTool:
         # board updates live — their run's events don't reach the parent stream.
         self._event_sink = event_sink
 
-    @property
-    def store(self) -> Any:
-        return self._store
+    def store_for(self, tenant_id: str | None) -> Any:
+        """The board store as ``tenant_id`` sees it: bound, so one tenant's boards cannot be read or changed
+        by another's, whatever board id it names. There is deliberately no unbound accessor."""
+        return bind_tasks(self._store, Scope(tenant_id=tenant_id or "default"))
 
     def reset(self, ctx: RunMeta | None = None) -> None:
         """Reset the board pointer for the thread/agent *ctx* belongs to."""
@@ -154,8 +157,8 @@ class TaskManagerTool:
         **_: Any,
     ) -> ToolExecutionResult:
 
-        store = self._store
         scope = scope_of(ctx)
+        store = self.store_for(scope.tenant_id)
         conv_id = scope.thread_id or thread_id or "default"
         agent_id = scope.agent_id
         agent_label = scope.agent_label

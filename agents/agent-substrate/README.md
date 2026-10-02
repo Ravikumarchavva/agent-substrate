@@ -1,23 +1,31 @@
 <center><h1>Agent Substrate</h1></center>
 
-**A production-ready, protocol-oriented Python framework for building robust, observable, and composable autonomous AI agents and multi-agent workflows.**
+**A production-ready, protocol-oriented Python framework for building robust, observable, and composable autonomous AI agents and durable multi-agent workflows.**
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docs](https://img.shields.io/badge/docs-docs.agent-substrate.com-teal)](https://docs.agent-substrate.com)
+[![Docs](https://img.shields.io/badge/docs-docs.agent--substrate.com-teal)](https://docs.agent-substrate.com)
 
 ---
 
 ## 🚀 Features
 
-*   **🤖 ReAct Agent Loop**: Production-grade Reasoning + Action loop with HITL gates, supervision budgets, and priority preemption.
-*   **🔧 Safe Tool Execution**: JSON-schema-validated tools, risk-tiered approval gating, sandboxed code-mode chaining, and MCP integration.
-*   **💾 Pluggable Memory**: The store's threads (a durable DAG-based history with branching, forking, and compaction checkpoints, kept in the `.substrate` folder) are the default. Sliding-window, token-budget, and compaction anchor strategies included.
-*   **🎯 Multi-Provider LLM**: OpenAI, Anthropic, Gemini, Groq, Ollama — auto-detected from model name prefix via `LLMFactory`.
-*   **📊 Guardrails & Middleware**: Async tripwire pipeline evaluating inputs, outputs, and tool calls with mutation policies.
-*   **🕷️ Composable Flows**: `SequentialFlow`, `ParallelFlow`, and `ConditionalFlow` nest recursively in `fabric/`.
-*   **📡 Durable Execution**: Postgres-backed event log + inbox + scheduler for at-most-once delivery and crash recovery.
-*   **📊 Observability**: OpenTelemetry traces, structured logging, lifecycle hooks, and a Grafana dashboard out of the box.
+*   **🤖 ReAct & Multi-Agent Loops**: Production-grade Reasoning + Action loop (`ReActAgent`), hub-and-spoke sub-agent delegation (`OrchestratorAgent`), human-in-the-loop gates (`DurableApproval`), supervision token budgets (`SpawnBudget`, `ExecutionBudget`), and priority preemption.
+*   **🔧 Type-Safe Tool System**: `@tool(risk=ToolRisk.SAFE, idempotent=True)` decorator with automated schema reflection, risk-tiered approval gating (`ToolRisk`), MCP client integration, and sandboxed code execution.
+*   **💾 Unified Storage (`substrate.stores`)**: Single `Store` port (`connect("./.substrate")` or `postgres_store`) managing:
+    *   **Threads**: DAG-based conversation history with branching, forking, and compaction checkpoints.
+    *   **Vectors**: Dense similarity, lexical word matching, and hybrid RRF fusion (`SearchableVectorStore`).
+    *   **Memory**: Key-value session state (short-term) and semantic fact extraction (long-term).
+    *   **Tasks**: Per-agent Kanban boards with 6-state lifecycle tracking.
+    *   **Knowledge Graph**: Entity/relationship graph store with Cypher query capability.
+    *   **Files**: Content-addressed blob and workspace file store with quota management.
+*   **📄 Layout-Aware Document Intelligence (`substrate.documents`)**: `Reader` parses PDF, DOCX, PPTX, XLSX, ODF, HTML, Markdown, and CSV into structured markdown. Files into an OKF `Library` where models navigate documents using `DocumentsTool` (outline, read, find, view) without context dumping.
+*   **🛡️ 13 Built-in Middlewares & Safety**: Turn-key guardrails covering PII detection, prompt-injection defense with UTS-39 homoglyph normalization, token limiters, caching, schema validation, rate limiters, and LLM-as-a-judge.
+*   **📡 Deterministic Durability & Replay**: Hierarchical effect journaling (`Effect.make_id`) guaranteeing at-most-once side-effects on replay, lease-based worker scheduling, and verified crash recovery.
+*   **🎯 Multi-Provider LLMs**: Native support for OpenAI, Anthropic, Gemini, Groq, and Ollama via `LLMFactory` and `create_model_client`.
+*   **🕷️ Composable Flows**: Pure coordination primitives (`SequentialFlow`, `ParallelFlow`, `ConditionalFlow`) for deterministic agent pipelines.
+*   **📊 Zero-Overhead Observability**: Built-in OpenTelemetry instrumentation (`opentelemetry-api` with zero runtime overhead), structured logging, and Grafana / Tempo integration.
+*   **🌐 HTTP & SSE Serving (`substrate.server`)**: Turn-key FastAPI integration (`create_app`) with AG-UI wire protocol and Server-Sent Events (SSE).
 
 ---
 
@@ -27,6 +35,8 @@
 *   [Core Architecture](#-core-architecture)
 *   [Key Patterns](#-key-patterns)
 *   [Multi-Agent Workflows](#-multi-agent-workflows)
+*   [Storage & Persistence](#-storage--persistence)
+*   [Document Intelligence](#-document-intelligence)
 *   [Installation & Setup](#-installation--setup)
 *   [Testing](#-testing)
 *   [Documentation](#-documentation)
@@ -37,7 +47,7 @@
 
 ### Installation
 
-Add it to your own project like any other dependency:
+Add it to your project using `uv` (recommended) or `pip`:
 
 ```bash
 uv add agent-substrate
@@ -45,33 +55,15 @@ uv add agent-substrate
 pip install agent-substrate
 ```
 
-The examples below (`Runtime`, `ReActAgent`) run entirely in-process — no
-database, Redis, or Docker required. Extras for specific capabilities
-(web browsing, S3 storage, the sandboxed code interpreter, OCR with RapidOCR, ...) are documented in `pyproject.toml`'s
-`[project.optional-dependencies]`, e.g. `uv add "agent-substrate[openai,postgres]"`. The base install is the engine alone (`pydantic`, the OpenTelemetry API, and PDFium — it reads documents); each vendor client, database driver and tool stack is an extra.
-
-### Running the reference server (optional)
-
-Only needed if you want the full FastAPI monolith (chat API, HITL,
-durable execution, dashboards) rather than importing the framework as a
-library — clone this repo directly:
+The base install contains the complete engine (`pydantic`, `typing_extensions`, `opentelemetry-api`, `pypdfium2`, and `confusable_homoglyphs`). Optional integrations (vendor LLMs, Postgres, Redis, S3, OCR) can be installed as extras:
 
 ```bash
-git clone https://github.com/Ravikumarchavva/agent-substrate
-cd agent-substrate
-
-# Sync dependencies
-uv sync
-
-# Start infrastructure (Postgres, Redis, SeaweedFS, observability)
-make infra-up
+uv add "agent-substrate[openai,postgres]"
 ```
 
 ### Your First Agent
 
-`Runtime.run(agent, prompt)` is the one-shot entry point: it registers the
-agent, submits the prompt, and returns a `RunOutcome` once the agent's final
-answer is available.
+`Runtime.run(agent, prompt)` is the one-shot entry point: it registers the agent, executes the prompt, and returns a `RunOutcome` with the final answer.
 
 ```python
 import asyncio
@@ -87,7 +79,7 @@ async def main():
         system_instructions="You are a helpful assistant.",
     )
 
-    async with Runtime.open() as runtime:
+    async with Runtime.open("./.substrate") as runtime:
         result = await runtime.run(agent, "Write a Python function to compute Fibonacci numbers.")
         print(result.output)
 
@@ -97,11 +89,18 @@ if __name__ == "__main__":
 
 ### Agent with Tools
 
+You can define tools using the `@tool` decorator or reusable tool classes:
+
 ```python
 import asyncio
-from substrate import ReActAgent, Runtime
-from substrate.capabilities.tools.compute.calculator import CalculatorTool
+from substrate import ReActAgent, Runtime, ToolRisk, tool
 from substrate.integrations.llm import LLMFactory
+from substrate.integrations.tools.compute.calculator import CalculatorTool
+
+@tool(risk=ToolRisk.SAFE, idempotent=True)
+def shout(text: str) -> str:
+    """Upper-case the text."""
+    return text.upper()
 
 async def main():
     llm = LLMFactory("gpt-4o", api_key="sk-...").build()
@@ -109,112 +108,141 @@ async def main():
     agent = ReActAgent(
         "math_expert",
         model=llm,
-        tools=[CalculatorTool()],
-        system_instructions="Always use the calculator tool to solve math problems.",
+        tools=[shout, CalculatorTool()],
+        system_instructions="Answer math queries using the calculator.",
     )
 
-    async with Runtime.open() as runtime:
-        result = await runtime.run(agent, "Calculate 1234 * 5678.")
+    async with Runtime.open("./.substrate") as runtime:
+        result = await runtime.run(agent, "Calculate 1234 * 5678 and shout the result.")
         print(result.output)
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`CalculatorTool` evaluates arithmetic via a whitelisted AST walk — no
-`eval()` — so LLM-controlled input can never reach arbitrary code. Writing
-your own tool that evaluates expressions? Reuse `substrate.capabilities.
-tools.compute.calculator.safe_eval` rather than calling `eval()` yourself.
-
 ---
 
 ## 🏛️ Core Architecture
 
-Agent Substrate is partitioned into **four strict dependency layers**. Imports flow strictly downward — lower layers never depend on higher ones:
+Agent Substrate is organized into **13 strictly ordered concept layers** (`tests/_layout.py`). Imports flow strictly downward — a concept can only import from layers below it:
 
 ```
-fabric (L3)        ← Flows (Sequential/Parallel/Conditional), Evals, durable execution
-  capabilities (L2)  ← Tools, Skills, Knowledge/RAG, Memory, Vector/Graph stores, Triggers
-    agents (L1)      ← ReActAgent, OrchestratorAgent, Runtime, Middleware, Guardrails
-      kernel (L0)    ← FROZEN. Protocols, ContentBlock types, AgentId, Tool contracts
+agents         ← ReActAgent, OrchestratorAgent, UserProxyAgent, Flows (Sequential, Parallel, Conditional)
+  runtime        ← Runtime, Worker, Scheduler, Journal, Commit, Effect log
+    middleware   ← 13 built-in middlewares (PII, Prompt Injection, Cache, Retry, Truncation, LLM Judge)
+      context      ← Context window management, sliding-window compaction, token budgeting
+        safety       ← Input safety classifiers, UTS-39 homoglyph normalization
+          workspace    ← Content-addressed workspace filesystems, branching, snapshots
+            documents    ← Layout-aware Reader, OKF Library, DocumentsTool
+              stores       ← Store facade, SQLite WAL database, Threads, Vectors, Memory, Tasks, Graphs
+                models       ← ChatModel / EmbeddingModel protocols, capabilities registry, error classification
+                  tools        ← @tool decorator, Tool protocol, approval gates, chains, skills
+                    telemetry    ← OpenTelemetry spans and metrics (API only, zero runtime overhead)
+                      types        ← ContentBlock union, Message envelope, Actor/Topic IDs, Errors, Usage
 ```
 
-**Orthogonal layers** (implement kernel Protocols, cross-cut all layers):
-
-| Layer | Responsibility |
-|---|---|
-| `integrations/` | Third-party adapters: LLM providers, MCP, event bus, connectors |
-| `infrastructure/` | Engine backends: Postgres, Redis, SeaweedFS, durable runtime |
-| `serving/` | Deployment shells: monolith FastAPI app + 12 microservices |
-
-Import-linter enforces the layer contract on every CI run (`uv run lint-imports`).
-
-**[→ Capability Map](docs/capability-map.md)** — the platform organized by concern: context (the RAM tier), memory (short-term + long-term with pluggable backends), storage, guardrails, governance, evals, observability, and tools. Every item names a real, shipped class.
-
-**[→ Kernel Board](docs/kernel-board.html)** — the contract-level view: every kernel protocol drawn as a socket, traced to the real implementations that plug into it.
-
-**[→ Agent Builder](docs/agent-builder.html)** — pick a memory backend, tools, guardrails, and budgets; get real, accurate `ReActAgent` construction code back, generated from the actual constructor signatures.
+**Outside the Core:**
+*   **`substrate.integrations`**: Out-of-tree adapters for third-party vendors (OpenAI, Anthropic, Gemini, Groq, Ollama), database drivers (`PostgresDatabase`, `postgres_store`), object stores (`S3FileStore`), Redis, and sandboxes (Docker / nsjail).
+*   **`substrate.server`**: Turn-key FastAPI HTTP and Server-Sent Events (SSE) serving layer with AG-UI wire protocol support.
+*   **`tests/invariants`**: An executable invariant register with 221 property tests verifying crash survival, replay determinism, and zero vendor leak.
 
 ---
 
 ## 🔑 Key Patterns
 
-### Adding a Tool
+### Writing Tools
 
-Drop a file at `src/substrate/capabilities/tools/<name>/tool.py` — `CatalogScanner` discovers it automatically, no registration needed:
+#### Function Decorator
+```python
+from substrate import tool, ToolRisk
 
+@tool(risk=ToolRisk.SAFE, idempotent=True)
+def get_user(user_id: str) -> dict:
+    """Look up a user account by ID."""
+    return {"id": user_id, "name": "Alice"}
+```
+
+#### Class-Based Tool
 ```python
 from substrate.tools import ToolExecutionResult
 from substrate.types.content import TextBlock
 
-class MyTool:
-    name = "my_tool"
-    description = "What it does"
-    input_schema = {"type": "object", "properties": {...}, "required": [...]}
+class CustomTool:
+    name = "custom_tool"
+    description = "Perform a custom operation."
+    input_schema = {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+    }
 
     async def execute(self, *, ctx=None, **kwargs) -> ToolExecutionResult:
-        return ToolExecutionResult(content=[TextBlock(text="result")])
+        return ToolExecutionResult(content=[TextBlock(text="Success")])
 ```
 
-### LLM Client
+### Human-in-the-Loop (HITL) Approvals
+
+Risky tools pause execution durably without blocking the worker process:
 
 ```python
-from substrate.integrations.llm import LLMFactory
+from substrate.tools import DurableApproval, ApprovalDecision, tool, ToolRisk
 
-# Provider auto-detected from model name prefix
-client = LLMFactory("gpt-4o", api_key).build()
-client = LLMFactory("claude-opus-4-8", api_key).build()
-client = LLMFactory("groq/llama-3.3-70b-versatile", api_key).build()
-client = LLMFactory("ollama/llama3.2", "ollama").build()   # local, no key
+approval = DurableApproval()
+
+@tool(risk=ToolRisk.HIGH)
+async def transfer_funds(account: str, amount: float) -> str:
+    """Transfer funds to another account."""
+    return f"Transferred ${amount} to {account}"
+
+# In your runtime or HTTP handler, resolve pending decisions:
+# await approval.resolve(request_id, ApprovalDecision.APPROVE)
 ```
 
-### MCP Tools
+---
+
+## 💾 Storage & Persistence
+
+The entire state of an agent (threads, memory, vector embeddings, tasks, and files) is encapsulated in a single `Store`:
 
 ```python
-from substrate.integrations.tools.mcp import MCPClient, MCPTool
+from substrate import Store, connect
 
-client = MCPClient(url="http://localhost:9000/sse")
-tools = await MCPTool.from_mcp_client(client)   # list[MCPTool]
+# Local embedded database (SQLite WAL + files directory):
+store = await connect("./.substrate")
+
+# Scale out across multiple worker processes / hosts:
+from substrate.integrations.database import postgres_store
+store = await postgres_store("postgresql://user:pass@localhost:5432/agentdb")
 ```
 
-### Documents
+### Store Facets
+*   `store.threads`: DAG-based conversation threads with branching, forking, and history checkpoints.
+*   `store.vectors`: Multimodal vector storage supporting exact, lexical, and hybrid Reciprocal Rank Fusion (RRF) search.
+*   `store.memory`: Long-term episodic memory with full-text search + short-term session state.
+*   `store.tasks`: Scoped Kanban task boards with automatic retry tracking.
+*   `store.graph`: Knowledge graph entities and relationships with Cypher query support.
+*   `store.files`: Content-addressed file store with per-tenant quotas.
+
+---
+
+## 📄 Document Intelligence
+
+Read, file, and navigate documents without flooding the LLM context window:
 
 ```python
 from substrate.documents import Reader, Library, DocumentsTool
 from substrate.stores import Store
 
-result = await Reader().read(data, "q3.pdf")      # PDF, DOCX, PPTX, XLSX, ODF, HTML, Markdown, CSV — markdown pages, headings, tables
+# Read PDF, DOCX, PPTX, XLSX, ODF, HTML, Markdown, CSV:
+result = await Reader().read(data, "report.pdf")
 
 store = Store.at("./.substrate")
-library = Library(store)                          # filed as a folder of markdown the model can navigate (no embeddings needed)
-await library.add(data, "q3.pdf", collection="conversations/c1/documents")
-tool = DocumentsTool(library, collection=lambda scope: "conversations/c1/documents")    # list / outline / read / find / view
+library = Library(store)
+await library.add(data, "report.pdf", collection="conversations/c1/documents")
 
-# A knowledge base: the same, searched by meaning and words too, with Qwen3-VL embedding and reranking by URL
-kb = Library(store, embedder="http://embedding-reranker:8080", reranker="http://embedding-reranker:8080")
+# Give the agent a tool to navigate the library (list, outline, read, find, view):
+doc_tool = DocumentsTool(library, collection=lambda scope: "conversations/c1/documents")
 ```
-
-See [`examples/10_documents.py`](examples/10_documents.py), which runs offline.
 
 ---
 
@@ -222,52 +250,45 @@ See [`examples/10_documents.py`](examples/10_documents.py), which runs offline.
 
 ### OrchestratorAgent — Hub & Spoke
 
-`OrchestratorAgent` delegates to sub-agents via an LLM-driven tool call, and
-also works with `Runtime.run()` — its final synthesized answer streams
-through the same mechanism as `ReActAgent`'s.
+`OrchestratorAgent` coordinates specialist sub-agents using dynamic tool delegation:
 
 ```python
-from substrate import OrchestratorAgent, SubAgentConfig, ReActAgent
+from substrate import OrchestratorAgent, SubAgentConfig, ReActAgent, Runtime
 
-researcher = ReActAgent("researcher", model=llm, system_instructions="Research the web.")
-writer = ReActAgent("writer", model=llm, system_instructions="Write content.")
+researcher = ReActAgent("researcher", model=llm, system_instructions="Research topics.")
+writer = ReActAgent("writer", model=llm, system_instructions="Draft articles.")
 
 orchestrator = OrchestratorAgent(
     "coordinator",
     model=llm,
     sub_agents=[
-        SubAgentConfig(agent=researcher, description="Web research"),
-        SubAgentConfig(agent=writer, description="Content writing"),
+        SubAgentConfig(agent=researcher, description="Research technical topics"),
+        SubAgentConfig(agent=writer, description="Write clear blog posts"),
     ],
 )
 
-async with Runtime.open() as runtime:
-    result = await runtime.run(orchestrator, "Research and draft a blog post about Rust vs Go.")
+async with Runtime.open("./.substrate") as runtime:
+    result = await runtime.run(orchestrator, "Research and draft an article on Rust vs Go.")
     print(result.output)
 ```
 
-### Flows — Coordination Primitives
+### Deterministic Flows
 
-`SequentialFlow`, `ParallelFlow`, and `ConditionalFlow` (in `fabric/flows/`)
-are `Agent`-shaped coordinators: instead of streaming text via an LLM call,
-they reply to their caller via `ctx.reply()` — the same mechanism any agent
-uses to answer an `ctx.ask()`. Use **`Runtime.ask()`**, not `Runtime.run()`,
-to invoke one directly and read its result — register each step with the
-`Runtime` first:
+Compose pipelines using `SequentialFlow`, `ParallelFlow`, and `ConditionalFlow`:
 
 ```python
+from substrate.agents import SequentialFlow
 from substrate.runtime import Runtime
-from substrate.fabric.flows import SequentialFlow
-from substrate.types.identity import AgentId
+from substrate.types import Actor
 
 class FetchStep:
-    id = AgentId(type="step", key="fetch")
+    id = Actor(type="agent", key="fetch")
     async def run(self, ctx, inbox):
         for msg in inbox:
             await ctx.reply(msg, {"text": "Fetched 3 records."})
 
 class AnalyzeStep:
-    id = AgentId(type="step", key="analyze")
+    id = Actor(type="agent", key="analyze")
     async def run(self, ctx, inbox):
         for msg in inbox:
             await ctx.reply(msg, {"text": "Analysis: all records valid."})
@@ -276,73 +297,40 @@ async def main():
     fetch, analyze = FetchStep(), AnalyzeStep()
     pipeline = SequentialFlow(steps=[fetch, analyze], name="demo_pipeline")
 
-    async with Runtime.open() as runtime:
+    async with Runtime.open("./.substrate") as runtime:
         await runtime.register(fetch)
         await runtime.register(analyze)
         result = await runtime.ask(pipeline, "Process the latest dataset.")
         print(result.output)
-        # Process the latest dataset.
-        #
-        # Fetched 3 records.
-        #
-        # Analysis: all records valid.
 ```
-
-`SequentialFlow`'s reply is the **full accumulated trace** (input + every
-step's output, joined by blank lines) — not just the last step's output.
-`ParallelFlow` (`branches=[...]`, `merge="concat"|"vote"|callable`) and
-`ConditionalFlow` (`predicate`, `if_true`, `if_false`) follow the same
-`Runtime.ask()` pattern.
-
----
-
-## 🔧 Installation & Setup
-
-### Environment Variables (`.env`)
-
-```bash
-# LLM providers (set at least one)
-OPENAI_API_KEY=sk-proj-...
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Database
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb
-
-# Redis
-REDIS_URL=redis://localhost:6379/0
-
-# Auth (required)
-JWT_SECRET=<32+ char random string>
-
-# Observability
-OTLP_ENDPOINT=http://localhost:4318
-```
-
-The monolith server (`substrate-cloud start`) listens on port **8000** by default.
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-# Run full test suite
+# Run unit & integration test suites
 uv run pytest
 
-# Single file
-uv run pytest tests/test_foo.py
+# Run the 221-test Invariant Register (durability, replay determinism, import boundaries)
+uv run pytest tests/invariants/
 
-# Architecture + import-linter checks
+# Run README and example suites
+uv run pytest tests/test_readme_examples.py tests/test_examples.py
+
+# Check import boundaries and concept layering
 uv run lint-imports
-
-# Full CI preflight (lint → typecheck → test → security)
-make ci
 ```
 
 ---
 
 ## 📖 Documentation
 
-Full architecture reference, layer guides, and API docs at **[agent-substrate.pages.dev](https://docs.agent-substrate.com)**.
+*   [Architecture Deep Dive](docs/claude_docs/architecture/kernel.md) — Concept hierarchy, runtime stores, and design rationale.
+*   [The Invariant Register](docs/claude_docs/architecture/invariants.md) — 221 executable guarantees on durability, safety, and tenancy.
+*   [Document Intelligence](docs/claude_docs/architecture/documents.md) — Multi-format reading, OKF filing, and knowledge base search.
+*   [Human in the Loop](docs/claude_docs/architecture/hitl.md) — Durable approval gates and worker pause/resume.
+*   [Multi-Tenant Isolation](docs/claude_docs/architecture/tenant-isolation-rls.md) — Tenancy scopes and data fencing.
 
 ---
 

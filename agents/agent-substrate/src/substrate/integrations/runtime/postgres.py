@@ -101,6 +101,11 @@ class PostgresDatabase:
             async with conn.transaction():
                 yield _PgTx(conn)
 
+    async def reclaim(self) -> None:
+        assert self._pool is not None, "database not started"
+        async with self._pool.acquire() as conn:
+            await conn.execute("VACUUM")
+
     def is_unique_violation(self, exc: BaseException) -> bool:
         import asyncpg
 

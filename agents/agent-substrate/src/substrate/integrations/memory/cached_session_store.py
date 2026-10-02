@@ -9,7 +9,7 @@ fall back to ``primary`` on a miss, repopulating ``cache``.
 Usage::
 
     memory = CachedShortTermMemory(
-        primary=DurableSessionStore(database_url=db_url),
+        primary=store.session_state,
         cache=RedisSessionStore(redis_url=redis_url),
     )
 """
@@ -75,12 +75,11 @@ class CachedShortTermMemory:
             )
 
     async def disconnect(self) -> None:
-        """Disconnect both backends, best-effort (mirrors the individual
-        stores' own connect/disconnect lifecycle for symmetric shutdown)."""
-        for store in (self._primary, self._cache):
-            disconnect = getattr(store, "disconnect", None)
-            if disconnect is not None:
-                await disconnect()
+        """Disconnect the cache. The durable primary belongs to the store it lives in, which whoever opened that
+        store closes."""
+        disconnect = getattr(self._cache, "disconnect", None)
+        if disconnect is not None:
+            await disconnect()
 
     def __repr__(self) -> str:
         return (

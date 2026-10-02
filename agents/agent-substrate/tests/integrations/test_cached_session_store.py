@@ -1,24 +1,17 @@
 from __future__ import annotations
 
-import os
+import tempfile
 
 import pytest
 
-from substrate.integrations.memory import (
-    CachedShortTermMemory,
-    DurableSessionStore,
-    RedisSessionStore,
-)
+from substrate.integrations.memory import CachedShortTermMemory, RedisSessionStore
+from substrate.stores import Store
 
-pytestmark = [pytest.mark.requires_redis, pytest.mark.requires_postgres]
+pytestmark = [pytest.mark.requires_redis]
 
 
-async def _make_pair() -> tuple[DurableSessionStore, RedisSessionStore]:
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
-    )
-    primary = DurableSessionStore(db_url)
-    await primary.connect()
+async def _make_pair() -> tuple[object, RedisSessionStore]:
+    primary = Store.at(tempfile.mkdtemp(prefix="substrate-cached-")).session_state
     cache = RedisSessionStore(redis_url="redis://localhost:6379/0", ttl=60)
     await cache.connect()
     return primary, cache
@@ -63,7 +56,6 @@ async def test_cache_miss_reads_through_to_primary_and_repopulates():
     finally:
         await primary.clear(session_id)
         await cache.clear(session_id)
-        await primary.disconnect()
         await cache.disconnect()
 
 

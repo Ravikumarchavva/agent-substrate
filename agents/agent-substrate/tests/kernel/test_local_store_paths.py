@@ -9,8 +9,6 @@ import pytest
 
 from substrate.stores.local.fs import safe_name
 from substrate.stores import LocalFilesystemGraphStore
-from substrate.stores import LocalFilesystemMemoryStore
-from substrate.stores import LocalFilesystemShortTermMemory
 from substrate.stores import LocalFilesystemVectorStore
 from substrate.workspace import LocalFilesystemWorkspaceStore
 
@@ -43,24 +41,11 @@ def test_empty_identifiers_are_rejected():
 def test_every_local_store_keeps_paths_inside_its_root(tmp_path: Path, identifier: str):
     root = tmp_path / "store"
     paths = [
-        LocalFilesystemShortTermMemory(root)._path(identifier),
         LocalFilesystemVectorStore(root)._doc_path(identifier, identifier),
         LocalFilesystemGraphStore(root)._entity_path(identifier),
         LocalFilesystemGraphStore(root)._relationship_path(identifier),
-        LocalFilesystemMemoryStore(root)._record_path(identifier, identifier),
         LocalFilesystemWorkspaceStore(root)._snapshot_path(identifier),
         LocalFilesystemWorkspaceStore(root)._head_path(identifier, identifier),
     ]
     for path in paths:
         assert _inside(path, root), path
-
-
-async def test_short_term_memory_sessions_never_share_state(tmp_path: Path):
-    store = LocalFilesystemShortTermMemory(tmp_path)
-    await store.set_state("a/b", {"who": "first"})
-    await store.set_state("c/b", {"who": "second"})
-
-    assert await store.get_state("a/b") == {"who": "first"}
-    assert await store.get_state("c/b") == {"who": "second"}
-    assert await store.get_state("../../evil") == {}
-    assert not (tmp_path.parent / "evil.json").exists()

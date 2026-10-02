@@ -763,5 +763,6 @@ inside, and the public API never names the storage technology. `substrate.connec
 relational database (`substrate.db`: WAL, `synchronous=FULL`, versioned `migrate` scripts per component), `files/`,
 and `index/` (derived, rebuildable). The runtime journal is the first thing on it (`Runtime(store)`,
 `Runtime.open(folder)`); threads, memory, tasks, graph, vectors and files follow, each written once over the same
-`Database`, replacing the per-technology `LocalFilesystem*` / `Durable*` / `Pg*` duplicates. One transaction can span
-them, and tenancy becomes a view of the store (`store.tenant(t)`) instead of `Scoped*` wrappers around each port.
+`Database`, replacing the per-technology `LocalFilesystem*` / `Durable*` / `Pg*` duplicates. Done so far: the runtime
+journal, threads, long-term memory (full-text search, erasure that reaches the index and the database's own files) and
+session state. Because they share a database one transaction can span them (not exposed yet), and tenancy becomes a view of the store (`store.tenant(t)`) instead of `Scoped*` wrappers around each port.

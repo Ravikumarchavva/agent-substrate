@@ -97,6 +97,7 @@ async def lifespan(app: FastAPI):
         session_factory=session_factory,
         model_client=llm.model_client,
     )
+    app.state.store = infra.store
     app.state.history = infra.history
     app.state.short_term_memory = infra.short_term_memory
     app.state.long_term_memory = infra.long_term_memory
@@ -298,12 +299,10 @@ async def lifespan(app: FastAPI):
         await app.state.data_store.disconnect()
     if getattr(app.state, "ci_client", None):
         await app.state.ci_client.close()  # type: ignore[union-attr]
-    if getattr(app.state, "history", None):
-        await app.state.history.store.aclose()
-    if getattr(app.state, "short_term_memory", None):
-        await app.state.short_term_memory.disconnect()
-    if getattr(app.state, "long_term_memory", None):
-        await app.state.long_term_memory.disconnect()
+    if getattr(app.state, "short_term_memory", None) is not None and hasattr(app.state.short_term_memory, "disconnect"):
+        await app.state.short_term_memory.disconnect()  # the Redis cache in front of the store, when there is one
+    if getattr(app.state, "store", None) is not None:
+        await app.state.store.aclose()  # threads, memory and session state share it
     if getattr(app.state, "redis_client", None):
         await app.state.redis_client.aclose()
     if getattr(app.state, "file_store", None):

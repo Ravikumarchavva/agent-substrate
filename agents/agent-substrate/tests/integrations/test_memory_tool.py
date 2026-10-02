@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from substrate.stores.memory_tables import Memory
+
 from types import SimpleNamespace
 
 import pytest
 
-from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
+from substrate.stores import Store
 from substrate.integrations.tools.memory import MemoryTool
 from substrate.types import RunScope
 
@@ -26,8 +28,8 @@ class FakeShortTermMemory:
 
 
 @pytest.fixture
-def memory_store(tmp_path) -> LanceMemoryStore:
-    return LanceMemoryStore(path=tmp_path / "lance_mem")
+def memory_store(tmp_path) -> Memory:
+    return Store.at(tmp_path / "lance_mem").memory
 
 
 @pytest.fixture
@@ -59,7 +61,7 @@ async def test_memory_tool_short_term_ops(short_term: FakeShortTermMemory) -> No
     assert "No value for key 'user_goal'" in res.content[0].text
 
 
-async def test_memory_tool_long_term_ops(memory_store: LanceMemoryStore) -> None:
+async def test_memory_tool_long_term_ops(memory_store: Memory) -> None:
     tool = MemoryTool("sess-1", long_term=memory_store)
     ctx = SimpleNamespace(scope=RunScope(tenant_id="acme", user_id="user-123", thread_id="sess-1"))
 

@@ -141,8 +141,6 @@
     "GraphStore",
     "HistoryCheckpoint",
     "LocalFilesystemGraphStore",
-    "LocalFilesystemMemoryStore",
-    "LocalFilesystemShortTermMemory",
     "LocalFilesystemTaskStore",
     "LocalFilesystemVectorStore",
     "MemoryCategory",

@@ -4,12 +4,13 @@ established pattern for testing durable stores (see test_workspace_routes.py).""
 
 from __future__ import annotations
 
+from substrate.stores.memory_tables import Memory
+
 import uuid
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from substrate.integrations.memory.durable_memory_store import DurableMemoryStore
 from substrate.stores import MemoryNamespace, MemoryRecord
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.security.deps import get_current_user
@@ -27,14 +28,14 @@ def _ns(user_id: str) -> MemoryNamespace:
     return MemoryNamespace(tenant_id=TENANT, user_id=user_id)
 
 
-async def _remember(store: DurableMemoryStore, user_id: str, text: str) -> str:
+async def _remember(store: Memory, user_id: str, text: str) -> str:
     return await store.save(MemoryRecord.from_text(text, namespace=_ns(user_id)))
 
 
 @pytest.mark.requires_postgres
 async def test_list_memories_returns_only_this_users_facts() -> None:
     async with app.router.lifespan_context(app):
-        store: DurableMemoryStore = app.state.ctx.long_term_memory
+        store: Memory = app.state.ctx.long_term_memory
         suffix = uuid.uuid4().hex
         user_a, user_b = f"memroute-user-a-{suffix}", f"memroute-user-b-{suffix}"
         await store.erase(_ns(user_a))
@@ -61,7 +62,7 @@ async def test_list_memories_returns_only_this_users_facts() -> None:
 @pytest.mark.requires_postgres
 async def test_delete_memory_removes_it() -> None:
     async with app.router.lifespan_context(app):
-        store: DurableMemoryStore = app.state.ctx.long_term_memory
+        store: Memory = app.state.ctx.long_term_memory
         user_id = f"memroute-delete-user-{uuid.uuid4().hex}"
         await store.erase(_ns(user_id))
         mem_id = await _remember(store, user_id, "delete me")
@@ -86,7 +87,7 @@ async def test_delete_memory_owned_by_another_user_is_not_found() -> None:
     """A user must not be able to delete another user's memory by id
     (the caller's scope is part of the DELETE's WHERE clause, not just the id)."""
     async with app.router.lifespan_context(app):
-        store: DurableMemoryStore = app.state.ctx.long_term_memory
+        store: Memory = app.state.ctx.long_term_memory
         suffix = uuid.uuid4().hex
         owner, attacker = f"memroute-owner-{suffix}", f"memroute-attacker-{suffix}"
         await store.erase(_ns(owner))

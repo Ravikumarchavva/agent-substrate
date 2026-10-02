@@ -285,7 +285,7 @@ async def test_erasure_reaches_long_term_memory_and_the_run_journal(db: AsyncSes
 
     from substrate.runtime import Commit, Complete, NewEntry, RunSpec
     from substrate.stores import MemoryNamespace, MemoryRecord
-    from substrate.stores import LocalFilesystemMemoryStore
+    from substrate.stores import Store
 
     tenant = f"tenant-{uuid.uuid4()}"
     thread = Thread(id=uuid.uuid4(), user_identifier="alice", tenant_id=tenant)
@@ -293,7 +293,7 @@ async def test_erasure_reaches_long_term_memory_and_the_run_journal(db: AsyncSes
     db.add_all([thread, other])
     await db.commit()
 
-    memory = LocalFilesystemMemoryStore(tmp_path / "mem")
+    memory = Store.at(tmp_path / "mem").memory
     await memory.save(MemoryRecord.from_text("alice-secret-fact", namespace=MemoryNamespace(tenant_id=tenant, user_id="alice")))
     await memory.save(MemoryRecord.from_text("bob-fact", namespace=MemoryNamespace(tenant_id=tenant, user_id="bob")))
 

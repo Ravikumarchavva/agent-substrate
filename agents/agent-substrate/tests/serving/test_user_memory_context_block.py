@@ -4,21 +4,23 @@ background, not as an instruction the model is told to obey unconditionally."""
 
 from __future__ import annotations
 
+from substrate.stores.memory_tables import Memory
+
 import pytest
 
 from substrate.stores import MemoryNamespace, MemoryRecord
-from substrate.stores import LocalFilesystemMemoryStore
+from substrate.stores import Store
 from substrate.serving.factory import build_user_memory_context_block
 
 TENANT = "acme"
 
 
 @pytest.fixture
-def store(tmp_path) -> LocalFilesystemMemoryStore:
-    return LocalFilesystemMemoryStore(tmp_path)
+def store(tmp_path) -> Memory:
+    return Store.at(tmp_path).memory
 
 
-async def _remember(store: LocalFilesystemMemoryStore, text: str, *, user: str = "user-1", tenant: str = TENANT) -> None:
+async def _remember(store: Memory, text: str, *, user: str = "user-1", tenant: str = TENANT) -> None:
     await store.save(MemoryRecord.from_text(text, namespace=MemoryNamespace(tenant_id=tenant, user_id=user)))
 
 

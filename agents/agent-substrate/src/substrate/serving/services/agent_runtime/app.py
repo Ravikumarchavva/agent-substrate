@@ -13,7 +13,6 @@ from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
 from substrate.serving.factory import (
-    build_history_provider,
     build_runtime_default_tools,
     build_short_term_memory,
 )
@@ -21,6 +20,7 @@ from substrate.integrations.llm.factory import create_model_client
 from substrate.serving.services.agent_runtime.routes import router
 from substrate.serving.services.base import create_service_app
 from substrate.serving.shared.events.factory import get_event_bus
+from substrate.stores import Store
 
 logger = setup_logging()
 
@@ -98,16 +98,9 @@ async def lifespan(app):
         await event_bus.connect()
         app.state.event_bus = event_bus
 
-        history = await build_history_provider(store_path=os.environ.get("STORE_PATH", "./data/store"))
-        app.state.history = history
-
-        app.state.short_term_memory = (
-            await build_short_term_memory(
-                redis_url=redis_url, database_url=async_pg_url
-            )
-            if async_pg_url
-            else None
-        )
+        store = Store.at(os.environ.get("STORE_PATH", "./data/store"))
+        app.state.history = store.threads
+        app.state.short_term_memory = await build_short_term_memory(store=store, redis_url=redis_url)
 
         app.state.model_client = create_model_client(
             os.environ.get("MODEL_NAME", "gpt-4o"),
@@ -139,9 +132,9 @@ async def lifespan(app):
         for task in list(app.state.forwarding_tasks.values()):
             task.cancel()
 
-        await history.store.aclose()
-        if app.state.short_term_memory is not None:
+        if hasattr(app.state.short_term_memory, "disconnect"):
             await app.state.short_term_memory.disconnect()
+        await store.aclose()
         await app.state.event_bus.disconnect()
         await redis_connector.disconnect()
 

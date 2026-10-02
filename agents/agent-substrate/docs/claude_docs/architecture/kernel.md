@@ -47,7 +47,7 @@ runtime = Runtime(store)                            # Runtime.open(folder) opens
 
 ```
 .substrate/
-  substrate.db   the source of truth: runs + journal and threads (the conversation DAG); memory, tasks, graph, vectors move in next
+  substrate.db   the source of truth: runs + journal, threads (the conversation DAG), long-term memory (+ full-text index), session state; tasks, graph, vectors move in next
   files/         file contents — written whole and synced before the row that names them commits
   index/         indexes derived from substrate.db; deleting them loses nothing, they are rebuilt
 ```
@@ -55,8 +55,7 @@ runtime = Runtime(store)                            # Runtime.open(folder) opens
 `substrate.db` is a relational database (`stores/database.py`: `Database`, `Tx`, `migrate`) opened with a write-ahead
 log and `synchronous=FULL`, so a transaction that returned survives a kill (row: the store's `test_a_committed_transaction_survives…`).
 Each part of the engine owns its tables and ships them as ordered migrations recorded in the database; a folder from a
-newer build is refused (`StoreVersionError`). One transaction can change several parts, so a crash never leaves a turn
-half recorded. Workers on one host share the folder; PostgreSQL (later: `connect("postgresql://…")`) is the same
+newer build is refused (`StoreVersionError`). Every part lives in the same database, so a later step can make one turn commit as one transaction — today each part commits on its own. Workers on one host share the folder; PostgreSQL (later: `connect("postgresql://…")`) is the same
 engine over another `Database`. There is no in-memory store: tests use a folder (`ephemeral_runtime`, `runtime_store`).
 
 ## Running an agent

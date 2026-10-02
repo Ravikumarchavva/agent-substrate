@@ -1,27 +1,17 @@
 """substrate.integrations.memory — Concrete memory backends.
 
+Memory itself — long-term records and per-session state — lives in the store (``Store.memory``, ``Store.session_state``).
+What is here is optional: a Redis cache for session state, and what manages and exposes memory to an agent.
+
 Short-term memory (ShortTermMemory protocol):
     RedisSessionStore      — Redis HASH per session, configurable TTL
-    DurableSessionStore    — Postgres JSONB per session, durable
-    CachedShortTermMemory  — durable primary + fast cache, composes the two above
-
-Long-term memory (MemoryStore protocol):
-    DurableMemoryStore     — full-text search via tsvector (no embeddings needed)
-    LanceMemoryStore       — Lance-backed columnar memory store
+    CachedShortTermMemory  — a durable primary (the store's) with a fast cache in front
 """
 
 from __future__ import annotations
 
 from substrate.integrations.memory.redis_session_store import RedisSessionStore
-from substrate.integrations.memory.durable_session_store import DurableSessionStore
 from substrate.integrations.memory.cached_session_store import CachedShortTermMemory
-from substrate.integrations.memory.durable_memory_store import DurableMemoryStore
-from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
-from substrate.integrations.memory.factory import (
-    build_short_term_memory,
-    build_memory_store,
-    build_long_term_memory,
-)
 from substrate.integrations.memory.policy import (
     MemoryExposurePolicy,
     DefaultMemoryExposurePolicy,
@@ -30,13 +20,7 @@ from substrate.integrations.memory.manager import MemoryManager
 
 __all__ = [
     "RedisSessionStore",
-    "DurableSessionStore",
     "CachedShortTermMemory",
-    "DurableMemoryStore",
-    "LanceMemoryStore",
-    "build_short_term_memory",
-    "build_memory_store",
-    "build_long_term_memory",
     "MemoryExposurePolicy",
     "DefaultMemoryExposurePolicy",
     "MemoryManager",

@@ -39,10 +39,10 @@ async def _runtime_cm(backend: str, pg_url: str):
         )
         logger.info("Agent Runtime: durable (Postgres)")
     else:
-        from substrate.runtime import SqliteRuntimeStore
+        from substrate.stores import Store
 
-        store = SqliteRuntimeStore(os.environ.get("RUNTIME_LOCAL_DB_PATH", "./data/db/runtime.sqlite3"))
-        logger.info("Agent Runtime: durable, no infra (SQLite)")
+        store = Store.at(os.environ.get("STORE_PATH", "./data/store"))
+        logger.info("Agent Runtime: durable, no infra (store folder)")
     async with Runtime(store) as rt:
         yield rt
 
@@ -98,11 +98,7 @@ async def lifespan(app):
         await event_bus.connect()
         app.state.event_bus = event_bus
 
-        history = await build_history_provider(
-            redis_url,
-            ttl=int(os.environ.get("REDIS_SESSION_TTL", "3600")),
-            max_messages=int(os.environ.get("SESSION_MAX_MESSAGES", "200")),
-        )
+        history = await build_history_provider(store_path=os.environ.get("STORE_PATH", "./data/store"))
         app.state.history = history
 
         app.state.short_term_memory = (
@@ -143,7 +139,7 @@ async def lifespan(app):
         for task in list(app.state.forwarding_tasks.values()):
             task.cancel()
 
-        await history.disconnect()
+        await history.store.aclose()
         if app.state.short_term_memory is not None:
             await app.state.short_term_memory.disconnect()
         await app.state.event_bus.disconnect()

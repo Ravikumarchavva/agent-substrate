@@ -167,10 +167,10 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
         )
         logger.info("Agent runtime: durable (Postgres)")
     elif backend == "local":
-        from substrate.runtime import SqliteRuntimeStore
+        from substrate.stores import Store
 
-        store = SqliteRuntimeStore(cfg.RUNTIME_LOCAL_DB_PATH)
-        logger.info("Agent runtime: durable, no infra (SQLite at %s)", cfg.RUNTIME_LOCAL_DB_PATH)
+        store = Store.at(cfg.STORE_PATH)
+        logger.info("Agent runtime: durable, no infra (store at %s)", cfg.STORE_PATH)
     else:
         raise ValueError(f"RUNTIME_BACKEND must be 'postgres' or 'local', got {cfg.RUNTIME_BACKEND!r}")
 
@@ -236,10 +236,7 @@ async def init_infrastructure(
     from substrate.integrations.vector.pgvector_store import PgVectorStore
     from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
-    history = await build_history_provider(
-        database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
-        local_path=cfg.HISTORY_STORAGE_PATH,
-    )
+    history = await build_history_provider(store_path=cfg.STORE_PATH)
     workspace_store = await build_workspace_store(
         database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
         local_path=cfg.WORKSPACE_SNAPSHOT_STORAGE_PATH,
@@ -823,10 +820,9 @@ async def build_agent_for_thread(
         system_instructions = system_instructions.rstrip() + "\n\n" + memory_context
 
     if history is None:
-        from substrate.stores import LocalFilesystemThreadStore
+        from substrate.stores import Store
 
-        history = LocalFilesystemThreadStore()
-        await history.connect()
+        history = Store.at().threads
     # Everything the agent reads or writes of the conversation goes through the tenant's bound handle.
     from substrate.types import Scope
     from substrate.stores import bind_threads
@@ -958,34 +954,12 @@ def build_chat_tools(toolbox: Any, bridge: Any) -> list[Any]:
     return tools
 
 
-async def build_history_provider(
-    *,
-    database_url: str = "",
-    redis_url: str = "",
-    ttl: int = 3600,
-    max_messages: int = 200,
-    local_path: str = "./data/db/sessions",
-) -> Any:
-    """Build the shared ThreadStore.
+async def build_history_provider(*, store_path: str = "./.substrate") -> Any:
+    """The shared ``ThreadStore``: the threads of the store in ``store_path``, opened on first use."""
+    from substrate.stores import Store
 
-    Uses DurableThreadStore when database_url is provided, else
-    LocalFilesystemThreadStore (JSON files in ``local_path``).
-    The filesystem backend survives process restarts without requiring
-    a running Postgres instance — 100% durable by default.
-    """
-    if database_url:
-        from substrate.integrations.history.durable_history import DurableThreadStore
-
-        provider = DurableThreadStore(database_url=database_url)
-        await provider.connect()
-        return provider
-
-    from substrate.stores import LocalFilesystemThreadStore
-
-    provider = LocalFilesystemThreadStore(root=local_path)
-    await provider.connect()
-    logger.info("History backend: local filesystem at %s", local_path)
-    return provider
+    logger.info("History backend: store at %s", store_path)
+    return Store.at(store_path).threads
 
 
 async def build_workspace_store(
@@ -1320,11 +1294,9 @@ async def build_cached_history_for_thread(
     """Return the history provider for this thread."""
     if history is not None:
         return history
-    from substrate.stores import LocalFilesystemThreadStore
+    from substrate.stores import Store
 
-    provider = LocalFilesystemThreadStore()
-    await provider.connect()
-    return provider
+    return Store.at().threads
 
 
 def build_memory_tool(

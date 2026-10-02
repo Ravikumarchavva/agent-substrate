@@ -4,7 +4,7 @@ Implements the ``EmbeddingModel`` kernel Protocol using the
 ``sentence-transformers`` library.  Runs entirely on CPU — no API key,
 no external server required, ever.  The model is downloaded from HuggingFace
 on first instantiation and cached in ``~/.cache/huggingface/``. The L1
-default for the same reason ``LocalFilesystemThreadStore`` etc. are:
+default for the same reason the local stores are:
 needs the least infrastructure the Protocol can possibly need.
 
 Usage::

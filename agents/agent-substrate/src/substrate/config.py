@@ -66,7 +66,7 @@ class SubstrateConfig(BaseSettings):
     # "postgres" (durable, network-distributed) | "local" (durable, no infra —
     # one SQLite file under DATA_DIR) | "memory" (ephemeral/tests)
     RUNTIME_BACKEND: str = "postgres"
-    RUNTIME_LOCAL_DB_PATH: str = ""
+    STORE_PATH: str = ""
 
     # ── Session / context ────────────────────────────────────────────────────
     SESSION_MAX_MESSAGES: int = 200
@@ -200,8 +200,8 @@ class SubstrateConfig(BaseSettings):
             self.WORKSPACE_SNAPSHOT_STORAGE_PATH = f"{root}/db/workspaces"
         if not self.SANDBOX_SCRATCH_ROOT:
             self.SANDBOX_SCRATCH_ROOT = f"{root}/scratch/sandbox"
-        if not self.RUNTIME_LOCAL_DB_PATH:
-            self.RUNTIME_LOCAL_DB_PATH = f"{root}/db/runtime.sqlite3"
+        if not self.STORE_PATH:
+            self.STORE_PATH = f"{root}/store"
         return self
 
     @property

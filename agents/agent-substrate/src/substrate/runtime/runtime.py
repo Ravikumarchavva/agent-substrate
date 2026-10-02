@@ -1,20 +1,20 @@
-"""Runtime — the durable engine, over one ``RuntimeStore``.
+"""Runtime — the durable engine, over a ``Store``.
 
 ::
 
-    async with Runtime.local("./data/runtime.sqlite3") as rt:
+    async with Runtime.open("./.substrate") as rt:
         await rt.register(agent)
         outcome = await rt.run(agent, "What is the capital of France?")
 
-A runtime owns a worker that leases runs from its store and executes them, and the
-store's lifecycle: ``async with`` starts both and stops both. Everything it needs to
-survive a restart is in the store, so a run submitted before a crash is picked up
-after one.
+A runtime owns a worker that leases runs from the store and executes them. Everything it needs to survive a
+restart is in the store, so a run submitted before a crash is picked up after one.
 
-The store is the only thing that varies between deployments — the SQLite file here,
-a Postgres database for workers on several machines — and every engine behaviour
-(retries, leases, replay, supervision) is the same across them, because it lives
-here and not in the store.
+``Runtime.open(folder)`` opens a store of its own and closes it on exit. To share one store with other users
+of it — threads, memory — connect first and pass it in: ``Runtime(store)``; the runtime then leaves closing
+to whoever connected.
+
+Every engine behaviour (retries, leases, replay, supervision) lives here and not in the store, so it is the same
+wherever the store keeps its data.
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ from substrate.runtime.store import Delivery, RunRecord, RunSpec, RuntimeStore
 from substrate.runtime.resolver import ActorFactory, ActorResolver
 from substrate.runtime.tail import tail
 from substrate.runtime.worker import Worker
+from substrate.stores import Store
 
 if TYPE_CHECKING:
     from substrate.agents.orchestrator import SubAgentConfig
@@ -67,13 +68,19 @@ class Runtime:
 
     def __init__(
         self,
-        store: RuntimeStore,
+        store: Store | RuntimeStore,
         *,
         resolver: ActorResolver | None = None,
         max_concurrency: int = 10,
         lease_s: float = 30.0,
         poll_interval_s: float = 0.05,
     ) -> None:
+        self._source = store if isinstance(store, Store) else None
+        self._owns_source = False
+        if isinstance(store, Store):
+            from substrate.runtime.sql_store import SqlRuntimeStore
+
+            store = SqlRuntimeStore(store.database)
         self._store = store
         self._resolver = resolver or ActorResolver()
         self._worker = Worker(
@@ -87,11 +94,11 @@ class Runtime:
         self._started = False
 
     @classmethod
-    def local(cls, path: str | Path = "./data/db/runtime.sqlite3", **options: Any) -> Runtime:
-        """A runtime on a SQLite file: durable, no server, safe for workers on one host."""
-        from substrate.runtime.sqlite_store import SqliteRuntimeStore
-
-        return cls(SqliteRuntimeStore(path), **options)
+    def open(cls, folder: str | Path = "./.substrate", **options: Any) -> Runtime:
+        """A runtime on the store in ``folder`` — created if there is none — which it closes when it stops."""
+        runtime = cls(Store.at(folder), **options)
+        runtime._owns_source = True
+        return runtime
 
     # ------------------------------------------------------------------ registration
 
@@ -152,14 +159,21 @@ class Runtime:
         )
         return run.run_id
 
-    async def run(self, agent: Any, prompt: str, *, tenant: str = "default") -> RunOutcome:
+    async def run(self, agent: Any, prompt: str, *, tenant: str = "default", thread: str | None = None) -> RunOutcome:
         """Run an agent on one prompt and wait for its answer.
+
+        Each call is a conversation of its own unless you name a ``thread``: runs on the same thread share
+        its history, so the agent sees what was said before — across runs, restarts and processes — and a
+        thread has one active run at a time (a second raises ``ThreadBusyError``).
 
         For streaming, several messages, or runs that suspend, use ``register`` +
         ``submit`` and read ``tail`` yourself.
         """
         await self.register(agent)
-        run_id = await self.submit(agent.id, _chat(Actor(type="user", key="run"), agent.id, prompt), tenant=tenant, max_retries=0)
+        message = _chat(Actor(type="user", key="run"), agent.id, prompt)
+        if thread is not None:
+            message = message.model_copy(update={"correlation_id": thread})
+        run_id = await self.submit(agent.id, message, tenant=tenant, max_retries=0, thread_id=thread)
         text = ""
         async for entry in self.tail(run_id):
             payload = entry.payload or {}
@@ -244,6 +258,8 @@ class Runtime:
     async def start(self) -> None:
         if self._started:
             return
+        if self._source is not None:
+            await self._source.start()
         await self._store.start()
         await self._worker.start()
         self._started = True
@@ -253,6 +269,8 @@ class Runtime:
             return
         await self._worker.stop()
         await self._store.aclose()
+        if self._owns_source and self._source is not None:
+            await self._source.aclose()
         self._started = False
 
     async def __aenter__(self) -> Runtime:

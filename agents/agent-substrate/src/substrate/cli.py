@@ -346,7 +346,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from substrate.context import CompactionPipeline
     from substrate.context import ContextConfig
     from substrate.context import SlidingWindowCompaction
-    from substrate.stores import LocalFilesystemThreadStore
+    from substrate.stores import Store
 
     # Build tools
     tools = []
@@ -362,15 +362,14 @@ def cmd_chat(args: argparse.Namespace) -> None:
             toolbox = Toolbox()
             for t in tools:
                 toolbox.add(t)
-        history = LocalFilesystemThreadStore(root="./data/history")
-        await history.connect()
-        async with Runtime.local("./data/db/runtime.sqlite3") as rt:
+        store = Store.at("./.substrate")
+        async with Runtime(store) as rt:
             agent = ReActAgent(
                 args.name,
                 model=OpenAIClient(model=args.model),
                 tools=toolbox,
                 context=ContextConfig(
-                    history,
+                    store.threads,
                     CompactionPipeline([SlidingWindowCompaction(max_messages=1000)]),
                 ),
                 max_iterations=args.max_iterations,

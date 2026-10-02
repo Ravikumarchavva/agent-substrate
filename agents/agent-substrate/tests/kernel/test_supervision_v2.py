@@ -15,10 +15,10 @@ import asyncio
 
 
 from substrate.context import project_messages
-from substrate.runtime import Runtime
 from substrate.types import HistoryRetention
 from substrate.types import Actor
 from substrate.runtime import DataPayload, Message
+from substrate.testing.runtime import ephemeral_runtime
 
 
 def _agent_id(name: str) -> Actor:
@@ -44,7 +44,7 @@ async def test_crash_records_agent_crashed_status() -> None:
             raise RuntimeError("boom!")
 
     bomb = BombAgent()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(bomb)
         # max_retries=0: a bare RuntimeError is unclassified and therefore
         # retryable by default (see worker.py's exception handler) — without
@@ -73,7 +73,7 @@ async def test_guardrail_trip_records_guardrail_tripped_status() -> None:
             raise MiddlewareTermination("blocked!")
 
     agent = GuardrailAgent()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent.id, _msg(agent.id))
 
@@ -95,7 +95,7 @@ async def test_budget_exhausted_records_budget_exhausted_status() -> None:
             raise BudgetExhaustedError("too many tokens")
 
     agent = BudgetAgent()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent.id, _msg(agent.id))
 
@@ -136,7 +136,7 @@ async def test_history_retention_run_clears_after_completion() -> None:
             await persist_turns(ctx_cfg, session_id, run_id, [turn])
 
     agent = TransientAgent()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         done = asyncio.Event()
 
@@ -190,7 +190,7 @@ async def test_history_retention_permanent_survives_completion() -> None:
             await persist_turns(ctx_cfg, session_id, run_id, [turn])
 
     agent = PermanentAgent()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent.id, _msg(agent.id))
 

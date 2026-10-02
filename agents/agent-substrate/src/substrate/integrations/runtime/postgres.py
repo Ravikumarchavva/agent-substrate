@@ -18,11 +18,12 @@ Needs the ``postgres`` extra (``asyncpg``).
 from __future__ import annotations
 
 import re
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
 
-from substrate.runtime.sql_store import SqlRuntimeStore, Tx
+from substrate.runtime.sql_store import SqlRuntimeStore
+from substrate.stores.database import Tx
 from substrate.logger import setup_logging
 
 logger = setup_logging()
@@ -94,7 +95,7 @@ class PostgresDatabase:
                 await conn.execute(ddl)
 
     @asynccontextmanager
-    async def transaction(self) -> AsyncIterator[Tx]:
+    async def transaction(self) -> AsyncGenerator[Tx]:
         assert self._pool is not None, "database not started"
         async with self._pool.acquire() as conn:
             async with conn.transaction():
@@ -116,6 +117,9 @@ class PostgresRuntimeStore(SqlRuntimeStore):
 
     def __init__(self, dsn: str, *, pool_min_size: int = 2, pool_max_size: int = 10, **options: Any) -> None:
         super().__init__(PostgresDatabase(dsn, pool_min_size=pool_min_size, pool_max_size=pool_max_size), **options)
+
+    async def aclose(self) -> None:
+        await self._db.aclose()
 
 
 __all__ = ["PostgresDatabase", "PostgresRuntimeStore"]

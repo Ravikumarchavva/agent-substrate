@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 from substrate.types import Actor
 from substrate.runtime import Commit, RunSpec, Suspend
 from substrate.types import Wakeup
-from substrate.runtime import SqliteRuntimeStore
 from substrate.serving.monolith.sse.bridge import BridgeRegistry
+from substrate.testing.runtime import runtime_store
 
 
 async def test_resolve_falls_back_to_durable_lookup_when_no_local_bridge() -> None:
-    store = SqliteRuntimeStore(":memory:")
+    store = runtime_store()
     await store.start()
     try:
         run = await store.create_run(RunSpec(agent=Actor(type="agent", key="x")))
@@ -37,7 +37,7 @@ async def test_resolve_falls_back_to_durable_lookup_when_no_local_bridge() -> No
 
 
 async def test_resolve_returns_false_when_truly_unknown() -> None:
-    store = SqliteRuntimeStore(":memory:")
+    store = runtime_store()
     await store.start()
     try:
         assert await BridgeRegistry(store=store).resolve("nonexistent-request-id", {}) is False

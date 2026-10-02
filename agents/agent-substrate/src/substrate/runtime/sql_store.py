@@ -1,33 +1,19 @@
-"""SqlRuntimeStore — the runtime store, written once, over any SQL database.
+"""SqlRuntimeStore — the runtime store, written once, over the store's relational database.
 
-The engine owns every rule (what a terminal transition does, how a suspension avoids
-losing a wakeup, how a spawn is budgeted); a store owns *atomicity*. Written per
-database, those rules were duplicated three times and drifted. Here they are written
-once, in SQL both SQLite and PostgreSQL accept, over a ``Database`` that supplies
-nothing but connections, transactions and two small hooks:
-
-* ``lock(key)``   — serialise transactions that touch one run. SQLite has a single
-  writer, so this is a no-op there; PostgreSQL takes an advisory lock. Without it, a
-  signal landing between a run deciding to sleep and actually sleeping would be
-  buffered for a run that is not yet asleep and wake nothing.
-* ``is_unique_violation`` / ``is_retryable`` — the database's own error classes.
-
-Two adapters ship: ``SqliteDatabase`` (in this package) and the PostgreSQL one in
-``integrations``. Both run the same conformance suite against this class.
-
-SQL conventions: ``?`` placeholders (the adapter rewrites them), epoch-second
-``DOUBLE PRECISION`` times, ``INSERT .. ON CONFLICT DO NOTHING`` for idempotent
-inserts, no database-specific functions.
+The engine owns every rule (what a terminal transition does, how a suspension avoids losing a wakeup, how a
+spawn is budgeted); the database owns *atomicity*. Written per database, those rules were duplicated three
+times and drifted. Here they are written once, in SQL both SQLite and PostgreSQL accept, over the ``Database``
+of ``substrate.stores.database`` — which is also what threads, memory and tasks live in, so one transaction
+can span them. Its tables are the runtime's, ``rt_*``, created and versioned by ``migrate``.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractAsyncContextManager
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
-from typing import Any, Protocol, TypeVar
+from typing import Any, TypeVar
 
 from substrate.types.supervision import Priority, Supervision
 from substrate.types.error_info import ErrorInfo
@@ -60,12 +46,11 @@ from substrate.runtime.store import (
     Suspend,
 )
 from substrate.runtime.supervisor import RunHandle, RunResult
+from substrate.stores.database import Database, Row, Tx, migrate
 from substrate.types.wakeup import Wakeup
 
 T = TypeVar("T")
-Row = Mapping[str, Any]
 
-SCHEMA_VERSION = 1
 _ACTIVE = ("pending", "running", "suspended")
 _TERMINAL = ("completed", "failed", "cancelled")
 # How long live (ephemeral) entries outlive their run, so a late tail still sees them.
@@ -73,37 +58,7 @@ _EPHEMERAL_GRACE_S = 120.0
 _TX_ATTEMPTS = 4
 
 
-class Tx(Protocol):
-    """One open transaction."""
-
-    async def execute(self, sql: str, *params: Any) -> int: ...
-    async def fetchone(self, sql: str, *params: Any) -> Row | None: ...
-    async def fetchall(self, sql: str, *params: Any) -> list[Row]: ...
-    async def lock(self, key: str) -> None:
-        """Serialise with every other transaction that locks ``key``, until this one ends."""
-        ...
-
-
-class Database(Protocol):
-    """What the store needs from a database."""
-
-    auto_pk: str
-    """DDL for an auto-incrementing integer primary key column."""
-
-    async def start(self) -> None: ...
-    async def aclose(self) -> None: ...
-    async def script(self, ddl: str) -> None: ...
-    def transaction(self) -> AbstractAsyncContextManager[Tx]: ...
-    def is_unique_violation(self, exc: BaseException) -> bool: ...
-    def is_retryable(self, exc: BaseException) -> bool: ...
-
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS rt_meta (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-
+_SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS rt_runs (
     run_id TEXT PRIMARY KEY,
     agent TEXT NOT NULL,
@@ -250,19 +205,10 @@ class SqlRuntimeStore:
     # ------------------------------------------------------------------ lifecycle
 
     async def start(self) -> None:
-        await self._db.start()
-        await self._db.script(_SCHEMA.replace("{pk}", self._db.auto_pk))
-        async with self._db.transaction() as tx:
-            row = await tx.fetchone("SELECT value FROM rt_meta WHERE key = 'schema_version'")
-            if row is None:
-                await tx.execute("INSERT INTO rt_meta (key, value) VALUES ('schema_version', ?)", str(SCHEMA_VERSION))
-            elif int(row["value"]) > SCHEMA_VERSION:
-                raise RuntimeError(
-                    f"the runtime database is schema version {row['value']}; this build understands up to {SCHEMA_VERSION}"
-                )
+        await migrate(self._db, "runtime", [_SCHEMA_V1])
 
     async def aclose(self) -> None:
-        await self._db.aclose()
+        """The database belongs to whoever opened it (the ``Store``), not to the runtime that uses it."""
 
     async def _tx(self, fn: Callable[[Tx], Any]) -> Any:
         """Run ``fn`` in one transaction, retrying the whole of it if the database
@@ -1072,4 +1018,4 @@ class SqlRuntimeStore:
         return await self._tx(do)
 
 
-__all__ = ["Database", "SCHEMA_VERSION", "SqlRuntimeStore", "Tx"]
+__all__ = ["SqlRuntimeStore"]

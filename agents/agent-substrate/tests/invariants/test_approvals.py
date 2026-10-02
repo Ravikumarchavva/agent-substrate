@@ -55,7 +55,7 @@ class Treasurer:
 
 async def _decide(path: Path, response: dict[str, Any]) -> tuple[Treasurer, list[dict[str, Any]]]:
     agent = Treasurer()
-    async with Runtime.local(path) as rt:
+    async with Runtime.open(path) as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent.id, Message(target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})))
 

@@ -7,12 +7,12 @@ import pytest
 from dataclasses import dataclass
 
 from substrate.runtime import RunContext
-from substrate.runtime import Runtime
 from substrate.agents import ConditionalFlow, ParallelFlow, SequentialFlow
 from substrate.types import ChatMessage, Role, TextBlock
 from substrate.types import Actor
 from substrate.runtime import ChatPayload, Message
 from substrate.types import new_run_id
+from substrate.testing.runtime import ephemeral_runtime
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ async def _run_flow(flow, text: str, *extra_agents, timeout: float = 5.0) -> str
         reply_to=sentinel,
     )
     cid = msg.correlation_id
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         for agent in extra_agents:
             await rt.register(agent)
         await rt.register(flow)

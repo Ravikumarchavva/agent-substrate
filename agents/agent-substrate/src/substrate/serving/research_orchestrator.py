@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from substrate.context import build_token_budget_pipeline
 from substrate.agents.factory import create_assistant_agent
-from substrate.stores import LocalFilesystemThreadStore
+from substrate.stores import Store
 from substrate.models import ChatModel
 from substrate.tools import Tool
 
@@ -100,7 +100,7 @@ def build_research_orchestrator(
         ],
         max_iterations=15,
         context=ContextConfig(
-            LocalFilesystemThreadStore(), pipeline=build_token_budget_pipeline()
+            Store.at().threads, pipeline=build_token_budget_pipeline()
         ),
     )
     # Display names only — Actor routing keys stay lowercase (unchanged

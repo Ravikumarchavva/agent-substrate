@@ -211,9 +211,9 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
         assert port in suites, f"the {port} conformance suite has gone missing"
     assert "VectorStore" in suites, "the vector-store conformance suite has gone missing"
     shipped = {
-        "RuntimeStore": ("SqliteRuntimeStore", "PostgresRuntimeStore"),
+        "RuntimeStore": ("SqlRuntimeStoreOnSqlite", "PostgresRuntimeStore"),
         "MemoryStore": ("LocalFilesystemMemoryStore", "DurableMemoryStore", "LanceMemoryStore"),
-        "ThreadStore": ("LocalFilesystemThreadStore", "DurableThreadStore"),
+        "ThreadStore": ("TestThreads",),
         "FileStore": ("WorkspaceFileStore", "S3FileStore"),
         "TaskStore": ("LocalFilesystemTaskStore", "PgTaskStore"),
         "GraphStore": ("LocalFilesystemGraphStore", "LanceGraphStore"),

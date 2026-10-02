@@ -10,7 +10,7 @@ SSE-stream endpoint for it.
     from substrate.serve import add_routes
 
     app = FastAPI()
-    runtime = Runtime.local()
+    runtime = Runtime.open("./.substrate")
     agent = ReActAgent("my-agent", model=..., tools=[...])
 
     @app.on_event("startup")

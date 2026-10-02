@@ -12,7 +12,7 @@
 
 *   **🤖 ReAct Agent Loop**: Production-grade Reasoning + Action loop with HITL gates, supervision budgets, and priority preemption.
 *   **🔧 Safe Tool Execution**: JSON-schema-validated tools, risk-tiered approval gating, sandboxed code-mode chaining, and MCP integration.
-*   **💾 Pluggable Memory**: `DurableThreadStore` (PostgreSQL DAG-based history with branching, forking, and compaction checkpoints) is the production default; `InMemoryThreadStore` is available for lightweight in-process execution. Sliding-window, token-budget, and compaction anchor strategies included.
+*   **💾 Pluggable Memory**: The store's threads (a durable DAG-based history with branching, forking, and compaction checkpoints, kept in the `.substrate` folder) are the default. Sliding-window, token-budget, and compaction anchor strategies included.
 *   **🎯 Multi-Provider LLM**: OpenAI, Anthropic, Gemini, Groq, Ollama — auto-detected from model name prefix via `LLMFactory`.
 *   **📊 Guardrails & Middleware**: Async tripwire pipeline evaluating inputs, outputs, and tool calls with mutation policies.
 *   **🕷️ Composable Flows**: `SequentialFlow`, `ParallelFlow`, and `ConditionalFlow` nest recursively in `fabric/`.
@@ -88,7 +88,7 @@ async def main():
         system_instructions="You are a helpful assistant.",
     )
 
-    async with Runtime.local() as runtime:
+    async with Runtime.open() as runtime:
         result = await runtime.run(agent, "Write a Python function to compute Fibonacci numbers.")
         print(result.output)
 
@@ -114,7 +114,7 @@ async def main():
         system_instructions="Always use the calculator tool to solve math problems.",
     )
 
-    async with Runtime.local() as runtime:
+    async with Runtime.open() as runtime:
         result = await runtime.run(agent, "Calculate 1234 * 5678.")
         print(result.output)
 
@@ -234,7 +234,7 @@ orchestrator = OrchestratorAgent(
     ],
 )
 
-async with Runtime.local() as runtime:
+async with Runtime.open() as runtime:
     result = await runtime.run(orchestrator, "Research and draft a blog post about Rust vs Go.")
     print(result.output)
 ```
@@ -269,7 +269,7 @@ async def main():
     fetch, analyze = FetchStep(), AnalyzeStep()
     pipeline = SequentialFlow(steps=[fetch, analyze], name="demo_pipeline")
 
-    async with Runtime.local() as runtime:
+    async with Runtime.open() as runtime:
         await runtime.register(fetch)
         await runtime.register(analyze)
         result = await runtime.ask(pipeline, "Process the latest dataset.")

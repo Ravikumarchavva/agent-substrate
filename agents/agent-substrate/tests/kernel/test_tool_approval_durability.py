@@ -76,7 +76,7 @@ async def _wait_for(rt: Runtime, run_id: str, kind: str) -> dict[str, Any]:
 
 async def _approve_across_restart(path: Path, action: str) -> Mailer:
     first = Mailer()
-    async with Runtime.local(path) as rt:
+    async with Runtime.open(path) as rt:
         await rt.register(first)
         run_id = await rt.submit(first.id, _boot(first))
         request = await _wait_for(rt, run_id, RunLogKind.APPROVAL_REQUESTED)
@@ -87,7 +87,7 @@ async def _approve_across_restart(path: Path, action: str) -> Mailer:
             await asyncio.sleep(0.01)
 
     # The human responds while nothing is running.
-    async with Runtime.local(path) as rt:
+    async with Runtime.open(path) as rt:
         await rt.store.signal(run_id, f"hitl:{request['request_id']}", {"action": action})
         second = Mailer()
         await rt.register(second)
@@ -115,7 +115,7 @@ async def test_tool_approval_request_id_is_replay_stable(tmp_path: Path) -> None
     a second approval.requested — otherwise every retry would orphan the previous card."""
     path = tmp_path / "rt.sqlite3"
     agent = Mailer()
-    async with Runtime.local(path) as rt:
+    async with Runtime.open(path) as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent.id, _boot(agent))
         first = await _wait_for(rt, run_id, RunLogKind.APPROVAL_REQUESTED)
@@ -124,7 +124,7 @@ async def test_tool_approval_request_id_is_replay_stable(tmp_path: Path) -> None
                 break
             await asyncio.sleep(0.01)
 
-    async with Runtime.local(path) as rt:
+    async with Runtime.open(path) as rt:
         again = Mailer()
         await rt.register(again)
         # A new message wakes the suspended run; it replays to the same approval and suspends again.

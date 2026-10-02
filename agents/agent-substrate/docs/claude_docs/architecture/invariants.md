@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**97 enforced · 0 pending · 97 total**
+**107 enforced · 0 pending · 107 total**
 
 ## approvals
 
@@ -159,6 +159,29 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i03_a_tenant_whose_name_looks_like_another_tenants_prefix_gets_its_own_wall`
 - ✅ **i03 a fenced store keeps absolute keys but only inside its tenant**
   `test_i03_a_fenced_store_keeps_absolute_keys_but_only_inside_its_tenant`
+
+## store
+
+- ✅ **Pointing at a folder is all it takes: the library creates what is inside it, and the same folder opened again is the same store.**
+  `test_connecting_lays_out_the_folder_and_reopening_finds_what_was_written`
+- ✅ **Durable means a transaction that returned is on disk: the writer is killed without closing anything — no checkpoint, no flush — and a fresh process still reads it. A transaction killed half way is not there.**
+  `test_a_committed_transaction_survives_the_process_being_killed`
+- ✅ **Workers on one host share the folder. Every increment is a read-then-write in a transaction, from two independent connections at once; none may be lost.**
+  `test_two_stores_on_one_folder_never_lose_each_others_writes`
+- ✅ **Reading tables a newer build changed would misread them silently, so a version this build does not understand is an error naming both versions.**
+  `test_a_folder_written_by_a_newer_build_is_refused`
+- ✅ **Migrations are applied in order and recorded after they run, so a crash between the two — or two processes starting together — runs the script again; scripts are idempotent, and the version is recorded once.**
+  `test_an_upgrade_that_crashed_half_way_is_resumed_not_repeated_wrongly`
+- ✅ **Write-ahead log so readers never block the writer, and ``synchronous=FULL``: the engine records an intent before it acts and the answer after, and both have to outlive a power cut.**
+  `test_the_database_is_opened_for_durability`
+- ✅ **``Runtime.open(folder)`` owns the store it made; ``Runtime(store)`` shares one, so closing the runtime must not pull the store out from under whoever else uses it.**
+  `test_a_runtime_closes_a_store_it_opened_and_leaves_one_it_was_given`
+- ✅ **Names reach the store from request bodies. They are bound parameters, never paths and never part of a statement, so a traversal string or an injection attempt is stored and read back like any other name — and the folder gains nothing but the database's own files.**
+  `test_hostile_thread_and_branch_names_are_just_data_and_touch_no_other_file`
+- ✅ **The branch head moves with the node in one transaction. A process killed after appending the first of two messages and half way through the second finds, on reopening, a thread ending at the first — never a head pointing at a node that is not there, nor a node the head skipped.**
+  `test_a_turn_killed_between_two_appends_leaves_a_thread_that_is_whole`
+- ✅ **Most programs never call ``aclose`` on the store an agent opened for itself. Leaving the process must neither print a traceback nor lose anything: the connection is released at exit, after the thread pool is gone.**
+  `test_a_store_nobody_closed_exits_cleanly_and_keeps_what_was_committed`
 
 ## structure
 

@@ -25,7 +25,7 @@ from substrate.models import GenerationOptions, ModelCapabilities
 from substrate.runtime import DataPayload, Message
 from substrate.types import CompletionEvent
 from substrate.types import RunLogKind
-from substrate.runtime import Runtime
+from substrate.testing.runtime import ephemeral_runtime
 
 
 class _CostedLLM:
@@ -82,7 +82,7 @@ async def _run(children: int, calls: int, tokens: int, cap: int) -> tuple[int, i
     """(tokens spent by the tree, children that failed, children that finished)."""
     workers = [_Worker(f"w{i}", calls, tokens) for i in range(children)]
     boss = _Boss(workers, cap)
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         for w in workers:
             await rt.register(w)
         await rt.register(boss)

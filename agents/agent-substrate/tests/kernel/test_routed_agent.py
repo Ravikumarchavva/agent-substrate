@@ -15,6 +15,7 @@ from substrate.runtime import Delivery
 from substrate.agents.routed import RoutedAgent, handle
 from substrate.runtime import Runtime
 from substrate.runtime import RunContext
+from substrate.testing.runtime import ephemeral_runtime
 
 ME = Actor("agent", "routed")
 
@@ -62,7 +63,7 @@ async def _terminal(rt: Runtime, run_id: str) -> tuple[str, dict]:
 
 async def test_each_message_goes_to_the_handler_for_its_payload_type_in_order() -> None:
     agent = Recorder()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         run_id = await rt.submit(ME, _chat("hello"))
         await rt.store.deliver(Delivery(agent=ME, msg=_data(n=1)))
@@ -82,7 +83,7 @@ async def test_a_subclass_inherits_handlers_and_can_override_one() -> None:
             self.seen.append("LOUD")
 
     agent = Loud()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         await _terminal(rt, await rt.submit(ME, _chat("x")))
     assert agent.seen == ["LOUD"], "the subclass's handler for ChatPayload replaces the parent's"
@@ -91,7 +92,7 @@ async def test_a_subclass_inherits_handlers_and_can_override_one() -> None:
 
 async def test_an_unroutable_payload_fails_the_run_with_a_typed_reason_and_is_not_retried() -> None:
     agent = OnlyChat()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         run_id = await rt.submit(ME, _data(n=1), max_retries=5)
         kind, payload = await _terminal(rt, run_id)

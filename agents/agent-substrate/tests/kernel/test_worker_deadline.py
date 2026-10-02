@@ -15,14 +15,14 @@ from substrate.types import Actor
 from substrate.types import RunId, new_run_id
 from substrate.runtime import Lease
 from substrate.runtime import ActorResolver
-from substrate.runtime import SqliteRuntimeStore
 from substrate.runtime import Worker
+from substrate.testing.runtime import runtime_store
 
 _AGENT = Actor(type="agent", key="a")
 
 
 def _worker() -> Worker:
-    return Worker(worker_id="w1", store=SqliteRuntimeStore(":memory:"), resolver=ActorResolver())
+    return Worker(worker_id="w1", store=runtime_store(), resolver=ActorResolver())
 
 
 def _supervision(run_id: RunId, *, deadline_s: float | None) -> Supervision:

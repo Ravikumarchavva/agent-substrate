@@ -20,6 +20,7 @@ from substrate.models import GenerationOptions, LLMResponse
 from substrate.types import Usage
 from substrate.runtime import ChatPayload, Message
 from substrate.types import CompletionEvent, TextDelta
+from substrate.testing.runtime import ephemeral_runtime
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +127,7 @@ async def run_agent(
 async def test_standalone_session_accumulates_across_runs():
     """History accumulates across multiple submissions with the same session_id."""
     shared_history = fs_history()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = ReActAgent(
             "bot",
             model=MockChatModel(
@@ -157,7 +158,7 @@ async def test_standalone_session_accumulates_across_runs():
 async def test_session_isolation_across_different_sessions():
     """Two sessions of the same agent don't bleed into each other."""
     shared_history = fs_history()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = ReActAgent(
             "agent",
             model=MockChatModel(
@@ -188,7 +189,7 @@ async def test_session_isolation_across_different_sessions():
 async def test_cross_run_memory_same_session():
     """Agent sees prior turns when submitted with the same correlation_id."""
     shared_history = fs_history()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = ReActAgent(
             "mem-bot",
             model=MockChatModel(

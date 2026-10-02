@@ -132,6 +132,8 @@ class Worker:
         self._tokens: dict[str, CancellationToken] = {}
         # Why a task was asked to stop, so the handler can tell a cancel from a shutdown.
         self._stop_reason: dict[str, str] = {}
+        # Deleting a finished run's transcript is not cancelled with the run: a stop lets it finish (``stop``).
+        self._cleanups: set[asyncio.Future[None]] = set()
         self._stats_task: asyncio.Task[None] | None = None
         self._last_stats: dict[str, float] = {}
 
@@ -157,6 +159,8 @@ class Worker:
             task.cancel()
         if running:
             await asyncio.gather(*(t for _, t in running), return_exceptions=True)
+        if self._cleanups:
+            await asyncio.gather(*self._cleanups, return_exceptions=True)
 
     def cancel_local(self, run_id: str, reason: str = "cancelled") -> bool:
         """Interrupt a run this worker is executing. The store's cancel flag reaches
@@ -453,8 +457,15 @@ class Worker:
         if history is None:
             return
         for session_id in {m.correlation_id or run_id for m in handled} or {run_id}:
+            # Shielded and tracked: the run has already committed, so a worker stopping now must not leave
+            # the transcript behind — ``stop`` waits for these.
+            deletion = asyncio.ensure_future(history.delete_session(session_id))
+            self._cleanups.add(deletion)
+            deletion.add_done_callback(self._cleanups.discard)
             try:
-                await history.delete_session(session_id)
+                await asyncio.shield(deletion)
+            except asyncio.CancelledError:
+                raise
             except Exception:  # noqa: BLE001
                 logger.warning("could not delete history for agent %s run %s session %s", agent.id, run_id, session_id)
 

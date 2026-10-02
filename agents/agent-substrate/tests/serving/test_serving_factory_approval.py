@@ -22,7 +22,6 @@ import asyncio
 import uuid
 from typing import Any
 
-from substrate.runtime import Runtime
 from substrate.config import SubstrateConfig
 from substrate.serving.factory import build_agent_for_thread
 from substrate.types import ChatMessage, Role, TextBlock, ToolUseBlock
@@ -32,6 +31,7 @@ from substrate.runtime import ChatPayload, Message
 from substrate.types import CompletionEvent
 from substrate.tools import ToolExecutionResult, ToolRisk
 from substrate.serving.monolith.sse.bridge import WebHITLBridge
+from substrate.testing.runtime import ephemeral_runtime
 
 
 class _DropDatabaseTool:
@@ -75,7 +75,7 @@ async def test_critical_tool_call_pauses_for_approval_and_resumes():
     llm = _ScriptedChatModel()
     thread_id = uuid.uuid4()
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = await build_agent_for_thread(
             thread_id,
             model_client=llm,
@@ -125,7 +125,7 @@ async def test_critical_tool_call_denied_does_not_execute():
     llm = _ScriptedChatModel()
     thread_id = uuid.uuid4()
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = await build_agent_for_thread(
             thread_id,
             model_client=llm,

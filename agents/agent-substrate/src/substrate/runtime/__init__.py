@@ -45,9 +45,6 @@ from substrate.runtime.runtime import (
 from substrate.runtime.scheduler import (
     RunRetryPolicy,
 )
-from substrate.runtime.sqlite_store import (
-    SqliteRuntimeStore,
-)
 from substrate.runtime.store import (
     Cancel,
     Commit,
@@ -119,7 +116,6 @@ __all__ = [
     "SignalSpec",
     "SpawnSpec",
     "Spend",
-    "SqliteRuntimeStore",
     "StoreStats",
     "Subscription",
     "Suspend",

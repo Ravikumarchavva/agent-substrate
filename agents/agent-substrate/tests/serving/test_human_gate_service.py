@@ -21,6 +21,7 @@ from substrate.serving.services.human_gate.service import (
     get_request,
     resolve_request,
 )
+from substrate.testing.runtime import runtime_store
 
 pytestmark = [pytest.mark.requires_postgres]
 
@@ -55,12 +56,11 @@ async def db_session():
 
 @pytest.fixture
 async def store():
-    from substrate.runtime import SqliteRuntimeStore
 
-    runtime_store = SqliteRuntimeStore(":memory:")
-    await runtime_store.start()
-    yield runtime_store
-    await runtime_store.aclose()
+    rt_store = runtime_store()
+    await rt_store.start()
+    yield rt_store
+    await rt_store.aclose()
 
 
 async def test_resolve_request_fires_durable_signal(db_session, store) -> None:

@@ -16,6 +16,7 @@ from substrate.types import Actor
 from substrate.models.protocols import CompletionEvent, TextDelta, Usage
 from substrate.models import GenerationOptions, LLMResponse
 from substrate.runtime import ChatPayload, Message
+from substrate.testing.runtime import ephemeral_runtime
 
 
 class MockChatModel:
@@ -81,7 +82,7 @@ async def test_react_agent_post_turn_compaction_creates_checkpoint():
     agent = ReActAgent("compact-agent", model=llm, context=ctx_cfg)
     session_id = "test-compaction-sess"
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
 
         # Turn 1: 1 user message + 1 assistant message = 2 messages -> triggers turn_threshold=2!

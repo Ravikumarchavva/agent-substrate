@@ -6,16 +6,12 @@ from sqlalchemy.exc import OperationalError
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from substrate.types import ChatMessage
 from substrate.types import TextBlock
 from substrate.stores import Document
 from substrate.stores import MemoryNamespace, MemoryQuery, MemoryRecord
 from substrate.tools import ToolExecutionResult, ToolCallRequest
 
 from substrate.integrations.memory import DurableMemoryStore
-from substrate.context import project_messages
-from substrate.integrations.history import DurableThreadStore
-from substrate.stores import MessageNode
 from substrate.integrations.vector import PgVectorStore
 from substrate.integrations.graph import AGEGraphStore
 
@@ -203,49 +199,6 @@ async def test_durable_memory_store_multimodal():
     finally:
         await store.erase(ns)
         await store.disconnect()
-
-
-# ── 3. DurableThreadStore Protocol Tests ────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_postgres_thread_store_conformance():
-    if not await check_db_available():
-        pytest.skip("PostgreSQL database not available")
-
-    db_url = get_db_url()
-    provider = DurableThreadStore(db_url)
-    await provider.connect()
-
-    session_id = "sess-history-test"
-
-    try:
-        await provider.delete_session(session_id)
-
-        parent = None
-        for role, text, run in [
-            ("user", "message 1", "run-x"),
-            ("assistant", "message 2", "run-y"),
-            ("user", "message 3", "run-y"),
-        ]:
-            node = MessageNode(
-                parent_id=parent,
-                session_id=session_id,
-                run_id=run,
-                payload=ChatMessage(role=role, content=[TextBlock(text=text)]),
-            )
-            await provider.append_and_advance(node, "main")
-            parent = node.id
-
-        loaded = await project_messages(provider, session_id)
-        assert [m.content[0].text for m in loaded] == ["message 1", "message 2", "message 3"]
-        assert all(isinstance(m, ChatMessage) for m in loaded)
-
-        await provider.delete_session(session_id)
-        assert await project_messages(provider, session_id) == []
-    finally:
-        await provider.delete_session(session_id)
-        await provider.disconnect()
 
 
 # ── 4. PgVectorStore Protocol Tests ──────────────────────────────────────────

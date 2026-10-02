@@ -18,8 +18,8 @@ from substrate.types import Actor, Topic
 from substrate.runtime import DataPayload, Message
 from substrate.runtime import AskOutcome
 from substrate.runtime import RunRetryPolicy
-from substrate.runtime import Runtime
 from substrate.runtime import RunContext
+from substrate.testing.runtime import ephemeral_runtime
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ async def test_fire_and_forget_delivery() -> None:
     agent_id = _agent_id("recorder")
     agent = RecorderAgent(agent_id)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         await rt.submit(agent_id, _msg(agent_id, {"hello": "world"}))
         await asyncio.wait_for(agent.done.wait(), timeout=2.0)
@@ -104,7 +104,7 @@ async def test_ask_reply_round_trip() -> None:
     echo = EchoAgent(echo_id)
     asker = AskerAgent(asker_id, echo_id)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(echo)
         await rt.register(asker)
         # Submit asker first — it will ask the echo agent.
@@ -142,7 +142,7 @@ async def test_social_fanout() -> None:
     listener1 = FanoutListenerAgent(listener1_id)
     listener2 = FanoutListenerAgent(listener2_id)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(listener1)
         await rt.register(listener2)
 
@@ -211,7 +211,7 @@ async def test_spawn_child_receives_boot() -> None:
     child = ChildAgent(child_id)
     parent = SpawnParentAgent(parent_id, child_id)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(child)
         await rt.register(parent)
         await rt.submit(parent_id, _msg(parent_id, {"start": True}))
@@ -267,7 +267,7 @@ async def test_spawn_child_derives_distinct_addresses_for_same_type() -> None:
     data_analyst = SpawnsAssistantByType(data_analyst_id)
     researcher = SpawnsAssistantByType(researcher_id)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         rt.register_factory("assistant", lambda actor: RecordingChild(actor))
         await rt.register(data_analyst)
         await rt.register(researcher)
@@ -322,7 +322,7 @@ async def test_ask_timeout_is_not_target_failed() -> None:
     slow = SlowAgent(slow_id)
     asker = TimeoutAskerAgent(asker_id, slow_id)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(slow)
         await rt.register(asker)
         # Boot the slow agent first so it's RUNNING when asker asks it
@@ -360,7 +360,7 @@ async def test_journal_dedup_via_context() -> None:
     agent_id = _agent_id("counter")
     agent = ReplayedAgent(agent_id)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent_id, _msg(agent_id, {}), retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.0))
         async for entry in rt.tail(run_id):
@@ -426,7 +426,7 @@ async def test_nested_effect_inside_journal_hit_tool_stays_replay_safe() -> None
     agent = NestedEffectAgent(agent_id)
     NestedUuidTool.call_count = 0
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent_id, _msg(agent_id, {}), retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.0))
         async for entry in rt.tail(run_id):
@@ -477,7 +477,7 @@ async def test_supervisor_join() -> None:
     child = ChildJoinAgent(child_id)
     parent = ParentJoinAgent(parent_id, child_id)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(child)
         await rt.register(parent)
         await rt.submit(parent_id, _msg(parent_id, {"start": True}))
@@ -538,7 +538,7 @@ async def test_spawn_inherits_execution_budget_transitively() -> None:
     child = ChildAgent(child_id, grandchild_id)
     root = RootAgent(root_id, child_id)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(grandchild)
         await rt.register(child)
         await rt.register(root)
@@ -597,7 +597,7 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
     toolbox.add(SuspendingTool())
     agent.tools = toolbox
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent_id, _msg(agent_id, {}))
 

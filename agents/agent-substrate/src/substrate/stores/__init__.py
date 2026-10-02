@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+from substrate.stores.database import (
+    Database,
+    StoreVersionError,
+    Tx,
+    migrate,
+)
+from substrate.stores.store import (
+    Store,
+    connect,
+)
 from substrate.stores.blob import (
     BlobStore,
 )
@@ -31,9 +41,6 @@ from substrate.stores.local.short_term_memory import (
 )
 from substrate.stores.local.tasks import (
     LocalFilesystemTaskStore,
-)
-from substrate.stores.local.threads import (
-    LocalFilesystemThreadStore,
 )
 from substrate.stores.local.vector import (
     LocalFilesystemVectorStore,
@@ -80,6 +87,12 @@ from substrate.stores.vector import (
 )
 
 __all__ = [
+    "Database",
+    "Store",
+    "StoreVersionError",
+    "Tx",
+    "connect",
+    "migrate",
     "BlobStore",
     "Branch",
     "ContextMemoryInjection",
@@ -91,7 +104,6 @@ __all__ = [
     "HistoryCheckpoint",
     "ThreadStore",
     "LocalFilesystemGraphStore",
-    "LocalFilesystemThreadStore",
     "LocalFilesystemMemoryStore",
     "LocalFilesystemShortTermMemory",
     "LocalFilesystemTaskStore",

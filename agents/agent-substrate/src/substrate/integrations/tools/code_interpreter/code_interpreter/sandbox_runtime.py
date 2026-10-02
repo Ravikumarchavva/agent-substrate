@@ -13,6 +13,8 @@ import time
 import traceback
 import urllib.parse
 import uuid
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -76,15 +78,8 @@ class ListRequest(BaseModel):
     recursive: bool = False
 
 
-app = FastAPI(
-    title="Code Interpreter Sandbox Runtime",
-    description="Runtime API for stateful code execution and workspace artifacts.",
-    version="2.0.0",
-)
-
-
-@app.on_event("startup")
-async def _startup() -> None:
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     os.makedirs(ARTIFACTS_DIR, exist_ok=True)
     try:
@@ -93,6 +88,15 @@ async def _startup() -> None:
         matplotlib.use("Agg", force=True)
     except Exception:
         pass
+    yield
+
+
+app = FastAPI(
+    title="Code Interpreter Sandbox Runtime",
+    description="Runtime API for stateful code execution and workspace artifacts.",
+    version="2.0.0",
+    lifespan=_lifespan,
+)
 
 
 @app.get("/")

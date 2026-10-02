@@ -23,6 +23,8 @@ it, which is exactly the giveaway that it isn't already inside the graph.
 
 from __future__ import annotations
 
+from typing import Any
+
 import logging
 
 import io
@@ -108,7 +110,8 @@ class ImageSafetyClassifier:
                 detail=f"undecodable image: {exc}",
             )
 
-        (probs,) = self._session.run(None, {"image": tensor})
+        (probs_raw,) = self._session.run(None, {"image": tensor})
+        probs: Any = probs_raw
         scores = {label: float(p) for label, p in zip(_LABELS, probs[0])}
 
         if scores["NSFL"] >= self._nsfl_threshold:

@@ -22,6 +22,8 @@ model, not this one pretending to cover both.
 
 from __future__ import annotations
 
+from typing import Any
+
 import logging
 
 import math
@@ -99,9 +101,10 @@ class PromptGuardClassifier:
         input_ids = np.array([encoding.ids], dtype=np.int64)
         attention_mask = np.array([encoding.attention_mask], dtype=np.int64)
 
-        (logits,) = self._session.run(
+        (logits_raw,) = self._session.run(
             None, {"input_ids": input_ids, "attention_mask": attention_mask}
         )
+        logits: Any = logits_raw
         # softmax over the 2-way {BENIGN, MALICIOUS} logits (id2label in the
         # model config) — done by hand to avoid a torch/scipy dependency for
         # one 2-element softmax.

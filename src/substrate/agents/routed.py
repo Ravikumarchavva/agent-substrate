@@ -32,7 +32,7 @@ from substrate.telemetry.tracing import span
 if TYPE_CHECKING:
     from substrate.runtime.context import RunContext
 
-Handler = Callable[[Any, "RunContext", Message], Awaitable[None]]
+Handler = Callable[["RunContext", Message], Awaitable[None]]
 F = TypeVar("F", bound=Callable[..., Awaitable[None]])
 
 _ACCEPTS = "_handles_payloads"

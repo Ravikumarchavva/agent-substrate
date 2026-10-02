@@ -8,7 +8,7 @@ only (no ``.env`` file loading). Consumers instantiate it explicitly:
     runtime = Runtime(config=cfg)
 
 For running the built-in FastAPI server, use
-``substrate.serving.shared.settings.ServerSettings`` instead — it extends this
+``substrate_cloud.shared.settings.ServerSettings`` instead — it extends this
 class and adds server-only fields with ``.env`` file auto-loading.
 
 For the complete reference of all settings and architecture, see

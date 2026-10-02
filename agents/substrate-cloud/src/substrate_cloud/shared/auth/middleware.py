@@ -9,8 +9,8 @@ from typing import Optional
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.shared.auth import jwt as jwt_utils
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth import jwt as jwt_utils
 
 logger = logging.getLogger(__name__)
 

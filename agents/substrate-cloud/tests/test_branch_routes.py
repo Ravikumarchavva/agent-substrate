@@ -17,10 +17,10 @@ from substrate.types import ChatMessage, TextBlock
 from substrate.types import Scope
 from substrate.stores import MessageNode
 from substrate.stores import bind_threads
-from substrate.serving.monolith.app import app
-from substrate.serving.monolith.models import Thread, User
-from substrate.serving.monolith.security.deps import get_current_user
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.monolith.app import app
+from substrate_cloud.monolith.models import Thread, User
+from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 TENANT = "test-branch-tenant"
 OTHER_TENANT = "other-tenant"

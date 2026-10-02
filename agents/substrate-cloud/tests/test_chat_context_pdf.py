@@ -19,12 +19,12 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
-from substrate.serving.monolith.routes.chat_context import (
+from substrate_cloud.monolith.routes.chat_context import (
     _build_file_context,
     _session_relative_path,
 )
 
-_FIXTURE = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
+_FIXTURE = Path(__file__).parent / "fixtures" / "test_invoice.pdf"
 
 
 def test_session_relative_path_extracts_the_rest_of_a_conversation_key():
@@ -81,7 +81,7 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
     """End-to-end through _build_file_context: a PDF attachment must land
     in the returned text block *and* still get an attachment record (the
     UI/history needs the latter regardless of extraction outcome)."""
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "")
     file_id = "11111111-1111-1111-1111-111111111111"
@@ -239,7 +239,7 @@ async def test_file_context_includes_thread_files_with_no_file_ids_this_turn(mon
     returned whenever `body.file_ids` was empty, so a follow-up like
     "summarize that" carried no file context at all and the model asked the
     user to re-upload a file they'd already sent."""
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "inprocess")
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
@@ -296,7 +296,7 @@ async def test_new_attachments_stays_narrow_while_model_context_stays_broad():
     scoped to only `body.file_ids` — the actually-new-this-turn files —
     independent of how broad `attachments` (the 3rd, model-facing value)
     is."""
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     thread_id = "thread-two-turn"
     old_file_id = "66666666-6666-6666-6666-666666666666"
@@ -353,7 +353,7 @@ async def test_file_context_still_empty_with_no_file_ids_and_no_thread_files():
     """Not every request has a thread with prior uploads — the DB query
     itself does the real filtering; this only pins that an empty result set
     still short-circuits cleanly."""
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     scalars_result = MagicMock()
     scalars_result.all.return_value = []
@@ -393,7 +393,7 @@ async def test_workspace_path_strips_conversation_prefix_for_nsjail_mode(monkeyp
     _session_relative_path silently returned None for every real object key
     and non-extractable attachments (xlsx/docx/csv) reached the model with no
     readable path at all."""
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "nsjail")
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
@@ -413,7 +413,7 @@ async def test_attachment_dict_includes_session_path_for_ui_to_open_the_file(
     one a `sandbox:` generated-file link uses. Without it, only the
     sandbox-absolute workspace_path existed, which a browser can't turn into
     a fetchable URL."""
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "nsjail")
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
@@ -525,7 +525,7 @@ async def test_workspace_path_strips_tenant_and_user_prefix_for_k8s_pvc_mode(
     boundary — sandbox_service.py::_ensure_user_template), so that prefix
     is stripped before being made absolute — a path inside the pod is
     whatever's left after it."""
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "k8s")
     monkeypatch.setattr(
@@ -541,7 +541,7 @@ async def test_workspace_path_strips_tenant_and_user_prefix_for_k8s_pvc_mode(
 
 
 async def test_workspace_path_absent_when_no_sandbox_configured(monkeypatch):
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "inprocess")
     monkeypatch.setattr(chat_context.settings, "CI_WORKSPACE_PVC_CLAIM", "")
@@ -569,7 +569,7 @@ async def test_workspace_path_absent_for_a_pdf_even_with_nsjail_configured(
     (chat_intents.py::ATTACHMENT_ANALYSIS_INSTRUCTIONS) couldn't win against
     a real, working path sitting right next to it.
     """
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "SANDBOX_RUNTIME", "nsjail")
 

@@ -15,10 +15,10 @@ from httpx import ASGITransport
 
 # All microservice apps and their expected service names
 SERVICE_APPS: list[tuple[str, str, str]] = [
-    ("substrate.serving.services.gateway.app", "app", "Gateway BFF"),
-    ("substrate.serving.services.conversation.app", "app", "Conversation"),
-    ("substrate.serving.services.live_stream.app", "app", "Live Stream"),
-    ("substrate.serving.services.admin.app", "app", "Admin"),
+    ("substrate_cloud.services.gateway.app", "app", "Gateway BFF"),
+    ("substrate_cloud.services.conversation.app", "app", "Conversation"),
+    ("substrate_cloud.services.live_stream.app", "app", "Live Stream"),
+    ("substrate_cloud.services.admin.app", "app", "Admin"),
 ]
 
 

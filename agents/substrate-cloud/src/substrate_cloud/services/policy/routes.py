@@ -17,8 +17,8 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.shared.auth.middleware import get_current_user, require_role
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth.middleware import get_current_user, require_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/policy", tags=["policy"])
@@ -59,7 +59,7 @@ async def check_policy(
     user: AuthClaims = Depends(get_current_user),
 ):
     """Check whether the caller is authorized for a specific action."""
-    from substrate.serving.services.policy.service import check_permission
+    from substrate_cloud.services.policy.service import check_permission
 
     db_factory = request.app.state.session_factory
     async with db_factory() as db:
@@ -86,7 +86,7 @@ async def get_role(
     workspace_id: str = "default",
 ):
     """Get the effective role for a user in a workspace."""
-    from substrate.serving.services.policy.service import get_effective_role
+    from substrate_cloud.services.policy.service import get_effective_role
 
     db_factory = request.app.state.session_factory
     async with db_factory() as db:
@@ -101,7 +101,7 @@ async def create_rule(
     user: AuthClaims = Depends(require_role("platform_admin")),
 ):
     """Create a policy rule (platform_admin only)."""
-    from substrate.serving.services.policy.models import PolicyRule
+    from substrate_cloud.services.policy.models import PolicyRule
 
     db_factory = request.app.state.session_factory
     async with db_factory() as db:
@@ -126,7 +126,7 @@ async def list_rules(
 ):
     """List policy rules for the caller's tenant."""
     from sqlalchemy import select
-    from substrate.serving.services.policy.models import PolicyRule
+    from substrate_cloud.services.policy.models import PolicyRule
 
     db_factory = request.app.state.session_factory
     async with db_factory() as db:
@@ -158,7 +158,7 @@ async def grant_workspace_role(
     ),
 ):
     """Grant a workspace-level role to a user."""
-    from substrate.serving.services.policy.models import WorkspaceGrant
+    from substrate_cloud.services.policy.models import WorkspaceGrant
 
     db_factory = request.app.state.session_factory
     async with db_factory() as db:
@@ -180,7 +180,7 @@ async def seed_policies(
     user: AuthClaims = Depends(require_role("platform_admin")),
 ):
     """Seed default policy rules from the permission matrix."""
-    from substrate.serving.services.policy.service import seed_default_policies
+    from substrate_cloud.services.policy.service import seed_default_policies
 
     db_factory = request.app.state.session_factory
     async with db_factory() as db:

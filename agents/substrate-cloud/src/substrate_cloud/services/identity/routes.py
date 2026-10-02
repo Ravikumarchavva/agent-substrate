@@ -16,10 +16,10 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.shared.auth.middleware import get_current_user
-from substrate.serving.shared.auth import jwt as jwt_utils
-from substrate.serving.shared.contracts.auth import (
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth.middleware import get_current_user
+from substrate_cloud.shared.auth import jwt as jwt_utils
+from substrate_cloud.shared.contracts.auth import (
     AgentTokenRequest,
     AgentTokenResponse,
     RefreshRequest,
@@ -64,7 +64,7 @@ async def _is_refresh_jti_valid(request: Request, jti: str) -> bool:
 @router.post("/token", response_model=TokenResponse)
 async def exchange_token(body: TokenExchangeRequest, request: Request):
     """Exchange a frontend session token for backend access + refresh tokens."""
-    from substrate.serving.services.identity.service import exchange_frontend_token
+    from substrate_cloud.services.identity.service import exchange_frontend_token
 
     jwt_secret = request.app.state.jwt_secret
     db_factory = request.app.state.session_factory

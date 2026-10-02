@@ -112,7 +112,7 @@ def test_a_disconnect_or_timeout_is_a_denial() -> None:
 async def test_i23_the_server_names_the_approver_not_the_client(tmp_path: Path) -> None:
     """``create_app`` journals ``decided_by`` from the server's own hook — its auth — and ``decided_at`` from its own clock. A
     client that puts someone else's name in its body is not believed."""
-    from fastapi.testclient import TestClient
+    import httpx
 
     from substrate import ReActAgent, tool
     from substrate.server import create_app
@@ -126,21 +126,21 @@ async def test_i23_the_server_names_the_approver_not_the_client(tmp_path: Path) 
 
     agent = ReActAgent("t", model=ScriptedModel(ToolCall("wire", {"amount": 5}), "ok"), tools=[wire], approval_handler=DurableApproval())
     app = create_app(agent, store=tmp_path, identity_of=lambda request: "the-real-caller")
-    with TestClient(app) as client:
-        import threading
-
-        done = threading.Thread(target=lambda: client.post("/chat", json={"message": "pay", "thread_id": "t"}))
-        done.start()
-        runs: list = []
-        pending: list = []
-        for _ in range(300):
-            runs = client.portal.call(app.state.runtime.runs_for_thread, "t")
-            if runs:
-                pending = client.get(f"/runs/{runs[0].run_id}/approvals").json()
-                if pending:
-                    break
-            threading.Event().wait(0.02)
-        client.post(f"/runs/{runs[0].run_id}/approvals/{pending[0]['request_id']}", json={"decision": "approved", "decided_by": "the-cfo"})
-        done.join(10)
-        decided = [e.payload for e in client.portal.call(app.state.runtime.read, runs[0].run_id) if e.kind == RunLogKind.APPROVAL_DECIDED]
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as client:
+            chat = asyncio.create_task(client.post("/chat", json={"message": "pay", "thread_id": "t"}))
+            run_id, pending = "", []
+            for _ in range(300):
+                await asyncio.sleep(0.02)
+                runs = await app.state.runtime.runs_for_thread("t")
+                if runs:
+                    run_id = str(runs[0].run_id)
+                    pending = (await client.get(f"/runs/{run_id}/approvals")).json()
+                    if pending:
+                        break
+            await client.post(
+                f"/runs/{run_id}/approvals/{pending[0]['request_id']}", json={"decision": "approved", "decided_by": "the-cfo"}
+            )
+            await asyncio.wait_for(chat, 10)
+        decided = [e.payload for e in await app.state.runtime.read(run_id) if e.kind == RunLogKind.APPROVAL_DECIDED]
     assert decided[0]["decided_by"] == "the-real-caller" and decided[0]["decided_at"]

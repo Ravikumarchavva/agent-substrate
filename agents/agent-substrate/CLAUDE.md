@@ -17,8 +17,8 @@ keeping — it decays like this file does if left untouched.
 
 Python async AI-agent framework with two deployment modes:
 
-1. **Monolith** — single FastAPI server at `src/substrate/serving/monolith/`
-2. **Microservices** — 12 independent FastAPI services at `src/substrate/serving/services/`
+1. **Monolith** — single FastAPI server at `apps/substrate-cloud/src/substrate_cloud/monolith/`
+2. **Microservices** — 12 independent FastAPI services at `apps/substrate-cloud/src/substrate_cloud/services/`
 
 Stack: Python 3.13, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 18, Redis 7, OpenTelemetry → Tempo.
 
@@ -34,17 +34,17 @@ uv sync
 
 # Start infrastructure (Postgres, Redis, SeaweedFS, observability, MCP server)
 make infra-up                        # repo contributors — full stack via Makefile
-uv run substrate up                  # anyone depending on agent-substrate as a
-                                      # package — no clone, no `make`, required
+uv run --project apps/substrate-cloud substrate-cloud up   # anyone running the platform —
+                                      # no clone-only tooling, no `make`
 
 # Start monolith backend (port 8000)
-uv run substrate start --host 0.0.0.0 --foreground
+uv run --project apps/substrate-cloud substrate-cloud start --host 0.0.0.0 --foreground
 
 # With hot-reload
-uv run substrate start --host 0.0.0.0 --reload
+uv run --project apps/substrate-cloud substrate-cloud start --host 0.0.0.0 --reload
 
 # Bring up infra + start the server in one command
-uv run substrate start --all --host 0.0.0.0 --foreground
+uv run --project apps/substrate-cloud substrate-cloud start --all --host 0.0.0.0 --foreground
 
 # Run tests
 uv run pytest
@@ -54,16 +54,16 @@ uv run python -m ruff check .
 uv run python -m ruff format .
 ```
 
-**`make infra-up`/`make infra-down` and `uv run substrate up`/`down` are NOT
+**`make infra-up`/`make infra-down` and `substrate-cloud up`/`down` are NOT
 interchangeable in this repo** — they target two different docker-compose
 projects. `make infra-*` uses `deployment/docker/docker-compose.yml` at the
 repo root (`name: agent-framework` — what actually runs when you work in
-this repo, e.g. via `make infra-up`). `substrate up`/`down` resolve to a
+this repo, e.g. via `make infra-up`). `substrate-cloud up`/`down` resolve to a
 separate, packaged copy shipped inside the installed package
-(`src/substrate/deployment/docker/docker-compose.yml`, `name:
+(`apps/substrate-cloud/src/substrate_cloud/deployment/docker/docker-compose.yml`, `name:
 substrate-infra`) — meant for a downstream project depending on
 `agent-substrate` with no clone of this repo, not for repo contributors.
-Real, hit-live bug: running `substrate down` in this repo silently did
+Real, hit-live bug: running `substrate-cloud down` in this repo silently did
 nothing — it stopped containers under the `substrate-infra` project name,
 which were never running, while the real `agent-framework-*` containers
 (started via `make infra-up`) kept running with no error. **Inside this
@@ -146,27 +146,23 @@ src/substrate/
 │   ├── triggers/         TriggerScheduler, WebhookRegistry, ConditionMonitor
 │   ├── safety/           TextSafetyClassifier, ImageSafetyClassifier (model-backed)
 │   ├── artifacts/        OKF store
-│   └── gdpr/             cross-store eraser
 │
-├── serving/      orthogonal — the one folder outside the 3-layer stack. Owns its own
-│   │             composition root (factory.py/research_orchestrator.py — formerly a
-│   │             separate infrastructure/ concept, eliminated).
-│   ├── monolith/         single FastAPI app (app.py, routes/, sse/, security/, services/)
-│   ├── services/         12 independent microservices (one FastAPI app per folder)
-│   ├── shared/           cross-service infra: auth, database, events, contracts, observability
-│   ├── protocol/         engine↔UI SSE wire protocol (WireEvent union, requests, version);
-│   │                     `from_log.wire_from_log(kind, payload)` converts log entries to WireEvents
-│   ├── stream/           AgentStreamSession — tails EventLog, maps entries via wire_from_log
-│   ├── factory.py        constructs agents, tools, and runtime for the HTTP shell —
-│   │                     the primary place serving/, the core and the integrations meet
-│   └── research_orchestrator.py  fixed researcher/calculator/clock/coordinator topology
-│                         used when AGENT_MODE=orchestrator
-│
-├── config.py     Pydantic Settings (reads .env)
-├── exceptions.py public exceptions (GuardrailTripwireError, …)
-├── logger.py     setup_logging()
-├── cli.py        CLI entry point
-└── console.py    interactive console
+├── server/       `create_app(agent)` — an agent over HTTP: SSE wire protocol (`/chat`), AG-UI (`/agui`), resumable
+│                 run streams, cancel, durable approvals; `protocol/` is the engine↔UI wire protocol
+│                 (`wire_from_log(kind, payload)` turns log entries into WireEvents)
+├── cli.py        `substrate chat` / `substrate serve module:attr`
+├── logger.py     setup_logging() — for applications; the library only emits
+└── console/      interactive terminal console
+```
+
+Everything that is not the library is a project of its own (own `pyproject.toml`, environment, tests; `make test-apps`):
+
+```
+apps/substrate-cloud/        the multi-tenant platform: monolith API, 12 services, settings, GDPR, the composition root
+  src/substrate_cloud/       monolith/ services/ shared/ stream/ factory.py config.py gdpr/ session_index/ cli.py
+apps/document-intelligence/  OCR / layout service (PaddleOCR in extras)  — the library reaches it by URL
+apps/embedding-reranker/     multimodal embedding + reranking proxy       — the library reaches it by URL
+packages/inference-pool/     llama-server supervision + hardware detection, shared by the two services
 ```
 
 ---
@@ -190,7 +186,7 @@ src/substrate/
 ### Standard Service File Layout
 
 ```
-serving/services/<name>/
+substrate_cloud/services/<name>/
 ├── app.py       ← FastAPI factory + lifespan, wires app.state.*
 ├── models.py    ← SQLAlchemy ORM models (service-private DB tables)
 ├── routes.py    ← APIRouter with all endpoints
@@ -208,7 +204,7 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 substrate/{types … agents}   the core: the engine, one folder per concept, contracts beside implementations
 integrations/               adapters: vendors, databases, MCP, tools, and clients for the heavy services (by URL)
 apps/ packages/             the heavy services themselves, each a project of its own (see below)
-serving/ console/ cli        wiring: FastAPI apps, the REPL, the CLI
+server/ console/ cli         the library's HTTP server, the REPL, the CLI  (the platform is apps/substrate-cloud)
 evals/                       the eval harness (a client of the core)
 ```
 
@@ -229,10 +225,10 @@ something the package does not export.
 
 | Contract | Rule |
 |---|---|
-| `the core imports nothing outside it` | the core never imports integrations/serving/evals/console/cli/config-wiring |
+| `the core imports nothing outside it` | the core never imports integrations/server/evals/console/cli |
 | `the core's concepts only import downward` | the `layers` order above; imports made only under `TYPE_CHECKING` are exempt |
 | `adapters depend on the contracts and the engine's support libraries, not how it runs an agent` | integrations may use the contracts plus `models/workspace/stores/safety/tools/runtime/telemetry`, never `agents`, the context window internals, or middleware implementations |
-| `serving cannot import agents or integrations-that-were-capabilities` | serving/'s routes and services don't reach past its `factory.py`/`research_orchestrator.py` composition root |
+| `the platform routes cannot import the engine's internals` (apps/substrate-cloud) | the platform's routes and services don't reach past its `factory.py`/`research_orchestrator.py` composition root |
 
 **Structure rows** (`tests/invariants/test_structure.py`): the core's third-party imports are exactly the allowed
 set; concepts only import downward; the contracts never import the engine (I27); `substrate.testing` is never imported by
@@ -344,21 +340,21 @@ tools = await MCPTool.from_mcp_client(client)   # returns list[MCPTool]
 
 ```python
 from substrate.integrations.events import EventBus
-from substrate.serving.shared.events.types import workflow_started
+from substrate_cloud.shared.events.types import workflow_started
 
 bus: EventBus = app.state.bus
 await bus.publish(workflow_started(run_id=run.id, thread_id=thread.id, user_content=text))
 ```
 
 `EventBus` + `EventEnvelope` live in `integrations/events/`; the domain-event
-factory functions live in `serving/shared/events/types.py`.
+factory functions live in `substrate_cloud/shared/events/types.py`.
 
-Never construct event dicts manually — always use the factory functions from `serving/shared/events/types.py`.
+Never construct event dicts manually — always use the factory functions from `substrate_cloud/shared/events/types.py`.
 
 ### SSE event bus (monolith only)
 
 ```python
-from substrate.serving.monolith.sse.bridge import WebHITLBridge
+from substrate_cloud.monolith.sse.bridge import WebHITLBridge
 
 bridge: WebHITLBridge = request.app.state.bridge
 await bridge.put_event({"type": "my_event", "data": {...}})
@@ -366,8 +362,8 @@ await bridge.put_event({"type": "my_event", "data": {...}})
 
 ### New monolith route
 
-1. Create `serving/monolith/routes/my_feature.py` with `router = APIRouter(prefix="/my-feature")`
-2. Mount in `serving/monolith/app.py → create_app()` via `app.include_router(...)`
+1. Create `substrate_cloud/monolith/routes/my_feature.py` with `router = APIRouter(prefix="/my-feature")`
+2. Mount in `substrate_cloud/monolith/app.py → create_app()` via `app.include_router(...)`
 
 ### DI pattern — `app.state.*`
 
@@ -502,7 +498,7 @@ STORE_PG_POOL_MAX_SIZE=10
 | PostgreSQL | 5432 | `DATABASE_URL` uses `localhost:5432` |
 | Redis | 6379 | `REDIS_URL` uses `localhost:6379` |
 | MCP demo server | 9000 | SSE at `localhost:9000/sse` |
-| Monolith backend | 8000 | `uv run substrate start` |
+| Monolith backend | 8000 | `substrate-cloud start` |
 | Tempo | 4318 | OTLP HTTP |
 | Grafana | 3001 | Dashboard |
 
@@ -521,9 +517,12 @@ All observability services start via `make infra-up`.
 
 Logging convention:
 ```python
-# application code (serving/, integrations/, console/, cli) — configures handlers on first use
+# an application's entry point (an app's app.py, the CLI) configures handlers, once
 from substrate.logger import setup_logging
-logger = setup_logging("substrate.my_module")
+setup_logging(service_name="my-service")
+# every other module — library or app — just emits
+import logging
+logger = logging.getLogger(__name__)
 
 # the core is a library: it only emits, and the host decides where it goes
 import logging
@@ -580,9 +579,9 @@ runner.export_markdown()
 - **`uv run` always** — never invoke `python`, `pytest`, or `ruff` directly
 - **`uv` only** — never `pip install` or `pip uninstall`
 - **snake_case** — files, modules, functions, variables
-- New DB models → service-local `models.py` (microservices) or `serving/monolith/` (monolith)
+- New DB models → service-local `models.py` (microservices) or `substrate_cloud/monolith/` (monolith)
 - New skills → `src/substrate/integrations/tools/skills/<name>/SKILL.md` with YAML frontmatter
-- **DB session dependency** — all microservice routes use `get_db_session` from `serving/shared/database/`. Never define a local `_get_db` helper.
+- **DB session dependency** — all microservice routes use `get_db_session` from `substrate_cloud/shared/database/`. Never define a local `_get_db` helper.
 - **Testing** — `asyncio_mode = "auto"` in `pyproject.toml`: write `async def test_*` directly, no `@pytest.mark.asyncio` needed.
 - **Interactive Console** — `/q` is the sole quit/exit command. Interactive session uses `prompt_toolkit` for async-compatible autocomplete of slash commands (`/tools`, `/skills`, `/reset`, `/help`, `/q`) and input history.
 
@@ -593,7 +592,7 @@ runner.export_markdown()
 | Area | Issue |
 |---|---|
 | Test coverage | `guardrails`/`middleware`/MCP adapter/`evals` have real (if not exhaustive) coverage as of 2026-07-05 — the genuinely thin area is **microservices business logic** (`identity`, `policy`, `job_controller`, `tool_executor`, `code_interpreter`): only health/smoke tests exist (`tests/server/test_services_health.py`), no per-service behavior tests. See `docs/claude_docs/roadmap.md` "Recently shipped" (v1 remediation) for what else shipped that session and its known gaps. |
-| Microservices event architecture | Only 3 of ~28 domain-event factories in `serving/shared/events/types.py` have a real producer (`session_started`, `workflow_started`, `workflow_failed`); `live_stream` (the SSE projector) has almost nothing to project in the microservices deployment beyond a run starting/failing. Concretely: `workflow_completed` is never published by any service, so `job_controller::complete_run` is unreachable — a successful run has no code path that marks it `completed`. See `docs/claude_docs/roadmap.md`'s deferred-items list (2026-07-12 entry) for the full finding. |
+| Microservices event architecture | Only 3 of ~28 domain-event factories in `substrate_cloud/shared/events/types.py` have a real producer (`session_started`, `workflow_started`, `workflow_failed`); `live_stream` (the SSE projector) has almost nothing to project in the microservices deployment beyond a run starting/failing. Concretely: `workflow_completed` is never published by any service, so `job_controller::complete_run` is unreachable — a successful run has no code path that marks it `completed`. See `docs/claude_docs/roadmap.md`'s deferred-items list (2026-07-12 entry) for the full finding. |
 
 ---
 

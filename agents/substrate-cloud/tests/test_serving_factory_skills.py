@@ -10,8 +10,8 @@ one and no reason to know any existed. Pins both halves of that wiring.
 from __future__ import annotations
 
 from substrate.integrations.tools.skills._manager import SkillManager
-from substrate.config import SubstrateConfig
-from substrate.serving.factory import init_tool_registry
+from substrate_cloud.config import SubstrateConfig
+from substrate_cloud.factory import init_tool_registry
 
 
 async def test_skills_tool_registered_when_skill_manager_given():

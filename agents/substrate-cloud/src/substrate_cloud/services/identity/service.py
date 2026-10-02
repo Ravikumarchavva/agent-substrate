@@ -9,10 +9,10 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.services.identity.models import IdentityUser
-from substrate.serving.shared.auth import jwt as jwt_utils
+from substrate_cloud.services.identity.models import IdentityUser
+from substrate_cloud.shared.auth import jwt as jwt_utils
 from substrate.integrations.events import EventBus
-from substrate.serving.shared.events import types as events
+from substrate_cloud.shared.events import types as events
 
 logger = logging.getLogger(__name__)
 

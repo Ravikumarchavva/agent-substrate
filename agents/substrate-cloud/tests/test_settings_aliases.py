@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from substrate.config import SubstrateConfig
+from substrate_cloud.config import SubstrateConfig
 
 
 def test_settings_accepts_common_provider_env_aliases(

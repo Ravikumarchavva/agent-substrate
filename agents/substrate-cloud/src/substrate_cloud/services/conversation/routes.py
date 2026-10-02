@@ -21,9 +21,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.shared.database.dependency import get_db_session
+from substrate_cloud.shared.database.dependency import get_db_session
 
-from substrate.serving.services.conversation.service import (
+from substrate_cloud.services.conversation.service import (
     create_feedback,
     create_step,
     create_thread,

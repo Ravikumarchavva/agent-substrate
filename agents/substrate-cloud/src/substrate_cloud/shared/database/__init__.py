@@ -1,7 +1,7 @@
-"""substrate.serving.shared.database — shared database connections."""
+"""substrate_cloud.shared.database — shared database connections."""
 
 from __future__ import annotations
 
-from substrate.serving.shared.database.dependency import get_db_session
+from substrate_cloud.shared.database.dependency import get_db_session
 
 __all__ = ["get_db_session"]

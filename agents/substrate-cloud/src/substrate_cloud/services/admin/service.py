@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.services.admin.models import AuditLog, Tenant
+from substrate_cloud.services.admin.models import AuditLog, Tenant
 
 logger = logging.getLogger(__name__)
 

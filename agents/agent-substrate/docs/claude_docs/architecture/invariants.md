@@ -21,7 +21,7 @@ and the marker has to come off. That is what keeps this document honest.
   `test_the_result_carries_the_attribution_it_was_given`
 - ✅ **a disconnect or timeout is a denial**
   `test_a_disconnect_or_timeout_is_a_denial`
-- ✅ **The route stamps ``decided_by`` / ``decided_at`` from the authenticated caller. A client that puts someone else's name in its body is not believed.**
+- ✅ **``create_app`` journals ``decided_by`` from the server's own hook — its auth — and ``decided_at`` from its own clock. A client that puts someone else's name in its body is not believed.**
   `test_i23_the_server_names_the_approver_not_the_client`
 
 ## budgets
@@ -222,7 +222,7 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i30_every_implementation_of_a_port_with_a_suite_runs_it`
 - ✅ **i30 every port has a conformance suite**
   `test_i30_every_port_has_a_conformance_suite`
-- ✅ **The engine instruments itself through ``opentelemetry-api``, which does nothing until a host configures an SDK. The SDK, the exporter and the web-framework instrumentation are the host's choice — the reference server installs them through its extra — so a plain install of the engine does not pull them in.**
+- ✅ **The engine instruments itself through ``opentelemetry-api``, which does nothing until a host configures an SDK. The SDK, the exporter and the web-framework instrumentation are the host's choice — the platform (apps/substrate-cloud) installs them — so a plain install of the engine does not pull them in.**
   `test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports`
 - ✅ **The AST check above sees what each file names; this one sees what actually loads. A module that reached a vendor SDK, a logging stack or a database driver through a helper would pass the first and fail this.**
   `test_i26_importing_the_whole_engine_loads_only_the_allowed_third_party_set`

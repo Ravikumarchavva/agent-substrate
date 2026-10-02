@@ -14,7 +14,7 @@ from sqlalchemy import DateTime, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from substrate.serving.shared.database.base import ServiceBase
+from substrate_cloud.shared.database.base import ServiceBase
 
 
 class JobRun(ServiceBase):

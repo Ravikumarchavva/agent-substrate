@@ -1,0 +1,148 @@
+[project]
+name = "substrate-cloud"
+version = "0.1.0"
+description = "The multi-tenant Substrate platform: the monolith API, its twelve services, and the composition root that picks backends. A consumer of the agent-substrate library."
+requires-python = ">=3.11"
+# Everything the library keeps optional is chosen here, because this is where backends are chosen: the library's extras
+# for the vendors, stores and tools the platform wires up, plus the web, ORM, auth and observability it owns.
+dependencies = [
+    "agent-substrate[serve,openai,anthropic,gemini,postgres,redis,scheduler,mcp,tts,tools,services,logging,web,code,rag,s3,safety,sandbox]",
+    "pydantic-settings>=2.12.0",
+    "sqlalchemy>=2.0.46",
+    "greenlet>=3.0.0",
+    # SQLAlchemy resolves a `postgresql+psycopg://` DATABASE_URL dynamically — nothing imports it by name
+    "psycopg[binary]>=3.2.0",
+    # The engine only imports opentelemetry-api (a no-op until something configures an SDK); the SDK, the OTLP exporter
+    # and the FastAPI instrumentation are what the platform wires up.
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-instrumentation-fastapi<0.60b1",
+    "uvicorn[standard]>=0.34.0",
+    "python-multipart>=0.0.9",
+    "pyjwt>=2.12.0",
+    "cryptography>=46.0.6",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0", "pillow>=10.4.0", "import-linter>=2.11"]
+
+[project.scripts]
+substrate-cloud = "substrate_cloud.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "substrate_cloud"
+
+[tool.uv.sources]
+agent-substrate = { path = "../..", editable = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+# Tests marked ``heavy`` load real models (several GB, tens of seconds) and are left out of a plain run.
+addopts = ["-m", "not heavy"]
+
+[tool.importlinter]
+root_packages = ["substrate_cloud", "substrate"]
+# An import made only for type checking never runs, so it cannot make a layer drag another along.
+exclude_type_checking_imports = true
+
+[[tool.importlinter.contracts]]
+name = "the platform routes cannot import the engine's internals"
+type = "forbidden"
+# substrate_cloud.factory and .research_orchestrator are deliberately NOT
+# listed here — they're substrate_cloud/'s own composition root (formerly
+# infrastructure/serving_factory.py, an orthogonal module outside the layer
+# stack entirely), whose whole job is building the DI graph across every
+# layer. This contract restricts the rest of substrate_cloud/ (routes, services)
+# from reaching past that composition root directly.
+source_modules = [
+    "substrate_cloud.monolith",
+    "substrate_cloud.services",
+    "substrate_cloud.shared",
+    "substrate_cloud.stream",
+]
+forbidden_modules = [
+    # the engine — serving's routes use the contracts; building the engine is factory.py's job
+    "substrate.agents",
+    "substrate.context.builder",
+    "substrate.context.compaction",
+    "substrate.context.context",
+    "substrate.context.tokens",
+    "substrate.middleware._contracts",
+    "substrate.middleware.audit_logger",
+    "substrate.middleware.cache",
+    "substrate.middleware.content_truncator",
+    "substrate.middleware.file_validator",
+    "substrate.middleware.guardrails",
+    "substrate.middleware.history_truncator",
+    "substrate.middleware.pipeline",
+    "substrate.middleware.rate_limiter",
+    "substrate.middleware.retry",
+    "substrate.middleware.schema_validator",
+    "substrate.models.client",
+    "substrate.models.errors",
+    "substrate.models.modalities",
+    "substrate.models.registry",
+    "substrate.models.tool_arguments",
+    "substrate.runtime.cancellation",
+    "substrate.runtime.context",
+    "substrate.runtime.journal",
+    "substrate.runtime.resolver",
+    "substrate.runtime.runtime",
+    "substrate.runtime.sql_store",
+    "substrate.runtime.tail",
+    "substrate.runtime.tool_invoker",
+    "substrate.runtime.worker",
+    "substrate.safety.normalize",
+    "substrate.stores.scoped",
+    "substrate.tools.toolbox",
+    "substrate.workspace.branching",
+    "substrate.workspace.cas",
+    "substrate.workspace.layout",
+    "substrate.workspace.materialize",
+    "substrate.workspace.scope",
+    "substrate.workspace.snapshots",
+    # These are the former `capabilities/` submodules, now merged into
+    # `integrations/` (Phase G of the layer-charter pass). substrate_cloud/ was
+    # always freely allowed to import `integrations.llm`/`.events`/`.tts`/
+    # `.tools.mcp` directly (they were never under the old "capabilities"
+    # restriction) — deliberately NOT listed here, so that stays true.
+    "substrate.integrations.tools",
+    "substrate.integrations.knowledge",
+    "substrate.integrations.memory",
+    "substrate.integrations.history",
+    "substrate.integrations.storage",
+    "substrate.integrations.pipeline",
+    "substrate.integrations.triggers",
+    "substrate.integrations.safety",
+    "substrate.integrations.artifacts",
+]
+# substrate_cloud/'s own factory.py is orthogonal — it may cross-cut to agents/integrations by design.
+# We only want to catch DIRECT imports from substrate_cloud/'s routes to agents/former-capabilities.
+allow_indirect_imports = "true"
+ignore_imports = [
+    # WebHITLBridge delivers human-input events; must know the capability type
+    "substrate_cloud.monolith.sse.bridge -> substrate.integrations.tools.human_input",
+    # pipelines/triggers routes need DTOs defined in integrations (PipelineDef, TriggerDef, ConditionDef)
+    "substrate_cloud.monolith.routes.pipelines -> substrate.integrations.pipeline.engine",
+    "substrate_cloud.monolith.routes.triggers -> substrate.integrations.triggers.conditions",
+    "substrate_cloud.monolith.routes.triggers -> substrate.integrations.triggers.scheduler",
+    # tool_executor IS a capability executor by design
+    "substrate_cloud.services.tool_executor.app -> substrate.integrations.tools.code_interpreter",
+    "substrate_cloud.services.tool_executor.app -> substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.factory",
+    "substrate_cloud.services.tool_executor.app -> substrate.integrations.tools.task_manager.tool",
+    "substrate_cloud.services.tool_executor.app -> substrate.integrations.tools.web.surfer",
+    # files/workspace/knowledge routes build object keys with the canonical workspace layout
+    "substrate_cloud.monolith.routes.workspace -> substrate.workspace.layout",
+    "substrate_cloud.monolith.routes.files -> substrate.workspace.layout",
+    "substrate_cloud.monolith.routes.knowledge -> substrate.workspace.layout",
+    # file_versioning builds version-snapshot keys with the same canonical
+    # layout helper routes/workspace.py uses for the working file's key —
+    # otherwise it has to hand-roll (and keep in sync) the same key shape.
+    "substrate_cloud.monolith.file_versioning -> substrate.workspace.layout",
+]

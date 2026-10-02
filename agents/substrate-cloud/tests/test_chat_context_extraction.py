@@ -16,7 +16,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from substrate.documents import ExtractionResult
-from substrate.serving.monolith.routes.chat_context import _build_file_context
+from substrate_cloud.monolith.routes.chat_context import _build_file_context
 
 
 def _pdf_meta(file_id: str, name: str, object_key: str, size: int) -> MagicMock:
@@ -63,7 +63,7 @@ async def _run(meta) -> tuple[str, list, list, list]:
 
 
 async def test_extraction_configured_builds_endpoint_from_settings(monkeypatch):
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     monkeypatch.setattr(
         chat_context.settings,
@@ -93,7 +93,7 @@ async def test_extraction_configured_builds_endpoint_from_settings(monkeypatch):
 
 
 async def test_extraction_not_configured_passes_no_endpoint(monkeypatch):
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "")
 
@@ -112,7 +112,7 @@ async def test_extraction_empty_markdown_falls_back_to_attachment_metadata():
     document neither the service nor the local engine could read anything
     from) must fall through to metadata-only attachment handling, not be
     cached as if it were real content."""
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     meta = _pdf_meta("f3", "corrupt.pdf", "users/u1/uploads/f3/corrupt.pdf", 12)
     mock_extract = AsyncMock(
@@ -128,7 +128,7 @@ async def test_extraction_empty_markdown_falls_back_to_attachment_metadata():
 
 
 async def test_extraction_truncates_over_configured_cap(monkeypatch):
-    from substrate.serving.monolith.routes import chat_context
+    from substrate_cloud.monolith.routes import chat_context
 
     monkeypatch.setattr(chat_context.settings, "ATTACHMENT_PDF_MAX_CHARS", 5)
 

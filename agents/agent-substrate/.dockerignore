@@ -46,6 +46,10 @@ build/
 # ── Virtual environments ────────────────────────────────────────────────────
 .venv/
 venv/
+# the per-project test environments (make test-apps, make test-child) — gigabytes, never part of an image
+**/.venv/
+**/.venv-test/
+**/.venv-acceptance/
 
 # ── Docker (avoid recursive copy) ───────────────────────────────────────────
 Dockerfile*

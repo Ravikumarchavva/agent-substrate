@@ -11,9 +11,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from substrate.serving.shared.settings import settings
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.shared.auth import jwt as _jwt
+from substrate_cloud.shared.settings import settings
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth import jwt as _jwt
 
 _SECRET = settings.JWT_SECRET
 _ALG = settings.JWT_ALGORITHM

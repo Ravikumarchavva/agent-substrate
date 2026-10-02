@@ -93,7 +93,7 @@ class K8sRuntime:
         """Terminate every live sandbox pod.
 
         Without this, pods outlive the process: the monolith's shutdown loop
-        (``serving/monolith/app.py``) duck-types ``hasattr(tool, "stop")``, and
+        (``substrate_cloud/monolith/app.py``) duck-types ``hasattr(tool, "stop")``, and
         the old k8s tool had no ``stop()``, so nothing ever reaped them.
         """
         for session in list(self._service.store.list()):

@@ -16,11 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.stores import Erased, MemoryNamespace, Store
 from substrate.workspace.layout import tenant_prefix, user_prefix
-from substrate.integrations.storage.session_index_erasure import (
+from substrate_cloud.session_index.erasure import (
     erase_session_index,
     erase_session_index_for_tenant,
 )
-from substrate.serving.monolith.models import FileMetadata, Thread, User
+from substrate_cloud.monolith.models import FileMetadata, Thread, User
 
 
 @dataclass(frozen=True, slots=True)

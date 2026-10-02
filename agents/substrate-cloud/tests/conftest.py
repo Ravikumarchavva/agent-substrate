@@ -1,0 +1,165 @@
+"""Shared pytest fixtures for the substrate-cloud test suite."""
+
+from __future__ import annotations
+
+import os
+
+# Real-billing guardrail. ServerSettings (substrate_cloud/shared/settings.py) reads
+# .env directly off disk (env_file=".env", relative to CWD) — that bypasses
+# every os.environ override below, and its module-level `settings =
+# ServerSettings()` singleton constructs at IMPORT time. So the real
+# OPENAI_API_KEY from .env loads into every test process the instant
+# anything imports substrate_cloud.shared.settings, regardless of what
+# this file sets. A test that builds an embedding/LLM client from that
+# singleton instead of an explicitly mocked one would silently make a real,
+# billed API call.
+#
+# setdefault, not a hard overwrite: if you deliberately `export
+# OPENAI_API_KEY=sk-...` before running pytest (the documented way to opt
+# tests/eval/test_retrieval_eval.py into its real, billed run), that real
+# value already occupies this slot before conftest ever executes, so
+# setdefault leaves it alone. Only the common case — nothing exported,
+# ServerSettings would otherwise silently fall through to reading the real
+# key from .env — gets the fake value, so a slip elsewhere fails loudly
+# (401) instead of succeeding and billing.
+os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-a-real-key-see-conftest")
+# ServerSettings refuses the placeholder secret; tests run from this directory, which has no .env to supply one.
+os.environ.setdefault("JWT_SECRET", "test-secret-" + "x" * 32)
+# The local dev infrastructure (`substrate-cloud up`, deployment/docker/docker-compose.yml): Postgres and Redis on localhost.
+# A .env in the working directory still wins, so a developer with their own settings is unaffected.
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb")
+os.environ.setdefault("ASYNC_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb")
+
+import pytest
+
+# The safety guardrail's classifiers (PromptGuardClassifier,
+# ImageSafetyClassifier) take ~2-3s each to construct — a real, unavoidable
+# cost of loading a ~280MB ONNX model into memory, confirmed even fully
+# offline (not a network round-trip that can be cached away). Every test
+# that spins up the full app lifespan (test_workspace_routes.py,
+# test_chat_stream.py, test_memory_routes.py, test_scheduled.py — ~20+
+# tests combined) was paying this cost on every single test, since
+# build_safety_middleware() reconstructs them fresh each time
+# init_infrastructure() runs. None of those tests exercise the guardrail
+# itself — that's covered directly by test_multimodal_safety_middleware.py/
+# test_prompt_guard_classifier.py/test_image_safety_classifier.py, which
+# don't go through the full app lifespan at all — so this loses no real
+# coverage. setdefault, not a hard override: a test that explicitly wants
+# the real guardrail wired into a full app can still set
+# ENABLE_TEXT_SAFETY_GUARD=true in its own environment before import.
+os.environ.setdefault("ENABLE_TEXT_SAFETY_GUARD", "false")
+
+# The actual dominant cost of the app-lifespan tests turned out to be here,
+# not the safety guardrail above: this repo's own .env sets
+# EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2 (a local torch
+# model), and create_embedding_client() constructs a fresh
+# SentenceTransformersEmbeddingClient — full torch + tokenizer + weights
+# load — on every single full-app-lifespan test. Measured directly:
+# init_llm_clients() alone was 12.7s per call (vs. 0.4s for
+# init_infrastructure(), which is everything else including the safety
+# guardrail). None of the app-lifespan test files touch embeddings at all
+# (confirmed by grep); the one file that genuinely needs real embeddings
+# (tests/eval/test_retrieval_eval.py) constructs its own
+# OpenAIEmbeddingClient directly rather than reading this setting, so
+# overriding the default here doesn't weaken that test.
+os.environ.setdefault("EMBEDDING_MODEL", "text-embedding-3-small")
+
+import re
+
+# asyncpg takes a plain ``postgresql://`` URL: drop whatever SQLAlchemy driver suffix (+asyncpg, +psycopg) the setting carries.
+_PG_URL = re.sub(
+    r"^(postgresql)\+\w+", r"\1", os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb")
+)
+_REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+# Session-level reachability cache — probe once, skip the whole run for each mark.
+_pg_available: bool | None = None
+_redis_available: bool | None = None
+
+
+async def _check_pg() -> bool:
+    global _pg_available
+    if _pg_available is not None:
+        return _pg_available
+    try:
+        import asyncpg
+
+        pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=1, timeout=3)
+        await pool.close()
+        _pg_available = True
+    except Exception:
+        _pg_available = False
+    return _pg_available
+
+
+async def _check_redis() -> bool:
+    global _redis_available
+    if _redis_available is not None:
+        return _redis_available
+    try:
+        import redis.asyncio as aioredis
+
+        client = aioredis.from_url(_REDIS_URL, socket_connect_timeout=3)
+        await client.ping()
+        await client.aclose()
+        _redis_available = True
+    except Exception:
+        _redis_available = False
+    return _redis_available
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers", "requires_postgres: skip when Postgres is not reachable"
+    )
+    config.addinivalue_line(
+        "markers", "requires_redis: skip when Redis is not reachable"
+    )
+    config.addinivalue_line(
+        "markers",
+        "heavy: loads a real model or document engine into memory (several GB, tens of seconds) — "
+        "not run by a plain `pytest`; `make test-ci` and `pytest -m ''` run everything",
+    )
+    config.addinivalue_line(
+        "markers",
+        "requires_model_download: downloads a real model from the HF Hub "
+        "(100MB+) — skip in offline/constrained CI via SKIP_MODEL_DOWNLOAD_TESTS=1",
+    )
+
+
+@pytest.fixture(autouse=True)
+async def _skip_if_infra_missing(request: pytest.FixtureRequest) -> None:
+    """Auto-skip any test marked requires_postgres / requires_redis /
+    requires_model_download."""
+    if request.node.get_closest_marker("requires_postgres"):
+        if not await _check_pg():
+            pytest.skip("Postgres not reachable — run `make infra-up` first")
+    if request.node.get_closest_marker("requires_redis"):
+        if not await _check_redis():
+            pytest.skip("Redis not reachable — run `make infra-up` first")
+    if request.node.get_closest_marker("requires_model_download"):
+        if os.environ.get("SKIP_MODEL_DOWNLOAD_TESTS"):
+            pytest.skip("SKIP_MODEL_DOWNLOAD_TESTS=1")
+
+
+# ---------------------------------------------------------------------------
+# Convenience fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def redis_url() -> str:
+    return _REDIS_URL
+
+
+@pytest.fixture
+def database_url() -> str:
+    return os.getenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
+    )
+
+
+@pytest.fixture
+def system_prompt() -> str:
+    return "You are a helpful agent."

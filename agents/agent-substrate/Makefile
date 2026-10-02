@@ -15,7 +15,7 @@ endif
 help:
 	@echo "Available targets:"
 	@echo "  make sync         - install project dependencies"
-	@echo "  make start        - start the backend in foreground via uv run substrate start --foreground"
+	@echo "  make start        - start the backend in foreground via substrate-cloud start --foreground"
 	@echo "  make start-reload - start the backend with auto-reload (requires make infra-up)"
 	@echo "  make infra-up     - start host-dev support services (Postgres, Redis, SeaweedFS, Loki, Promtail, Grafana, Tempo, MCP server)"
 	@echo "  make infra-up-all - infra-up + ONLYOFFICE (everything for file editing; excludes the opt-in document-intelligence/embedding-reranker services)"
@@ -38,10 +38,10 @@ help:
 	@echo "  make ci           - run the same preflight used by CI (lint, lint-imports, typecheck, test, security — all blocking)"
 
 start:
-	uv run substrate start --host 0.0.0.0 --foreground
+	uv run --project apps/substrate-cloud substrate-cloud start --host 0.0.0.0 --foreground
 
 start-reload:
-	uv run substrate start --host 0.0.0.0 --reload
+	uv run --project apps/substrate-cloud substrate-cloud start --host 0.0.0.0 --reload
 
 infra-up:
 	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime up -d --remove-orphans postgres redis seaweedfs loki promtail tempo grafana mcp-server
@@ -122,7 +122,7 @@ test-child:
 # The services and the pool are projects of their own (apps/, packages/): each is installed into a fresh environment
 # with only its own dependencies and runs its own tests there. Nothing heavy — PaddleOCR is the `paddle` extra and its
 # tests skip without it.
-APPS = packages/inference-pool apps/embedding-reranker apps/document-intelligence
+APPS = packages/inference-pool apps/embedding-reranker apps/document-intelligence apps/substrate-cloud
 test-apps:
 	@for p in $(APPS); do \
 		echo "== $$p"; rm -rf $$p/.venv-test; uv venv -q $$p/.venv-test && \

@@ -12,10 +12,10 @@ from sqlalchemy import text
 
 from substrate.workspace.layout import conversation_shared_key
 from substrate.stores import Store
-from substrate.serving.monolith.app import app
-from substrate.serving.monolith.models import Thread, User
-from substrate.serving.monolith.security.deps import get_current_user
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.monolith.app import app
+from substrate_cloud.monolith.models import Thread, User
+from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 TENANT = "test-tenant"
 
@@ -87,10 +87,10 @@ async def _promote_file(file_id: str) -> None:
     """Simulate "the message carrying this attachment was sent" — a
     composer upload (real thread_id) only reaches the real file_store at
     that point (see routes/files.py::promote_pending_file), and these
-    tests exercise /workspace/file's own serving/caching behavior against
+    tests exercise /workspace/file's own substrate_cloud/caching behavior against
     an already-permanent file, not the pending-upload mechanics."""
-    from substrate.serving.monolith.models import FileMetadata
-    from substrate.serving.monolith.routes.files import promote_pending_file
+    from substrate_cloud.monolith.models import FileMetadata
+    from substrate_cloud.monolith.routes.files import promote_pending_file
 
     async with _bypass_session() as db:
         meta = await db.get(FileMetadata, uuid.UUID(file_id))
@@ -167,7 +167,7 @@ async def test_upload_auto_creates_missing_user_row(tmp_path) -> None:
     user store, like substrate-ui's Google-OAuth Prisma id) must not hit an
     IntegrityError on the FileMetadata.user_id FK — the row is
     get-or-created (see routes/files.py::_ensure_user)."""
-    from substrate.serving.monolith.models import User
+    from substrate_cloud.monolith.models import User
 
     async with app.router.lifespan_context(app):
         app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files

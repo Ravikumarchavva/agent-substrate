@@ -791,3 +791,25 @@ Tesseract if the `ocr` extra is there) and reports `engine="local"`; Office form
 than falling back to a local markitdown/LibreOffice conversion, which now exists only inside `apps/document-intelligence`'s
 `raw_text` mode. The document security scan (`doc-firewall`) is the service's, applied to what it receives, not the library's.
 The services' modules no longer configure logging on import; each service's `app.py` does, once.
+
+
+---
+
+## `serving/` is an app, not part of the library (2026-10-02)
+
+**Decision:** `src/substrate/serving/` (the monolith, the twelve services, the composition root), `substrate.config`
+(`SubstrateConfig`), the GDPR eraser, and the per-user session index code that took the platform's settings object now live in
+`apps/substrate-cloud` (package `substrate_cloud`), a consumer of the library with its own `pyproject.toml`, lock file,
+environment, tests and import contract. The library keeps what a downstream project needs: the engine, `substrate.server`
+(`create_app(agent)`, AG-UI), the wire protocol, `substrate chat` and `substrate serve`. The platform's CLI is `substrate-cloud`
+(`up`, `down`, `start`, `stop`, `status`).
+
+**Why:** the library imported the application — `integrations/gdpr` imported the platform's ORM models,
+`SessionDocumentSearchTool` and `session_ingest` called `serving.factory` with the platform's settings object, and the CLI
+started the monolith — so "pip install agent-substrate" carried a SaaS inside it, and the one place that picks backends *by
+name* (settings) was part of the library whose rule is that you pass instances. Choosing backends from configuration is an
+application's job; that is now literally the app's `config.py` and `factory.py`.
+
+**Consequences:** the library's `server` extra is gone (its dependencies are the app's). `Tenant.erase` is the library's erase;
+the GDPR eraser, which also sweeps the platform's own tables and Redis, is the app's. The library's console reads provider
+keys from the environment (`provider_keys_from_env`). Root tests no longer include the platform's (261 moved with it).

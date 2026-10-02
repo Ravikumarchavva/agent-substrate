@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from substrate.serving.monolith.models import Base
-from substrate.serving.monolith.rls import enable_row_level_security, ensure_app_role
+from substrate_cloud.monolith.models import Base
+from substrate_cloud.monolith.rls import enable_row_level_security, ensure_app_role
 
 # Columns added to existing tables after they first shipped —
 # `Base.metadata.create_all` below is a no-op on a pre-existing table (it

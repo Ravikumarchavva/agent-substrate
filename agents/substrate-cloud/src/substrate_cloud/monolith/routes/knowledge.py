@@ -8,9 +8,9 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from substrate.workspace.layout import knowledge_document_prefix
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.security.deps import get_current_user
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 router = APIRouter(prefix="/internal/knowledge", tags=["knowledge"])
 

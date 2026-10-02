@@ -36,26 +36,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from substrate.workspace.layout import conversation_shared_key, user_upload_key
 from substrate.stores import WorkspaceQuotaExceededError
 from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.models import FileMetadata, Thread, User
-from substrate.serving.monolith.routes.chat_context import (
+from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.models import FileMetadata, Thread, User
+from substrate_cloud.monolith.routes.chat_context import (
     EXTRACTABLE_CONTENT_TYPES,
     _session_relative_path,
 )
-from substrate.serving.monolith.security.deps import get_current_user
-from substrate.serving.monolith.services import get_owned_thread
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.shared.contracts.file_store import (
+from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.monolith.services import get_owned_thread
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.contracts.file_store import (
     FileUploadResponse,
     FileUrlResponse,
 )
-from substrate.serving.shared.doc_quota import (
+from substrate_cloud.shared.doc_quota import (
     check_and_increment,
     peek,
     seconds_until_reset,
 )
-from substrate.serving.shared.settings import settings
+from substrate_cloud.shared.settings import settings
 from substrate.documents import ExtractionResult
 from substrate.integrations.services.document_extraction import extract_document
 
@@ -370,7 +370,7 @@ async def _stage_uploaded_doc(
     assert ctx.rag_backend is not None
     assert ctx.embedding_client is not None
     session_factory = ctx.session_factory
-    from substrate.integrations.knowledge.session_ingest import ingest_session_document
+    from substrate_cloud.session_index.ingest import ingest_session_document
 
     try:
         await ingest_session_document(

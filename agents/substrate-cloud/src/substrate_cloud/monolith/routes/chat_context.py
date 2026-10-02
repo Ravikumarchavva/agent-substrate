@@ -13,15 +13,15 @@ from typing import Any
 from fastapi import HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.factory import build_chat_tools
+from substrate_cloud.factory import build_chat_tools
 from substrate.integrations.llm.endpoint import InferenceEndpoint
 from substrate.integrations.services.document_extraction import OFFICE_CONTENT_TYPES, extract_document
-from substrate.serving.monolith.dependencies import ServerDependencies
-from substrate.serving.monolith.schemas import ChatRequest
-from substrate.serving.monolith.routes.chat_wire import _ImagePayload
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.shared.doc_quota import check_and_increment, release
-from substrate.serving.shared.settings import settings
+from substrate_cloud.monolith.dependencies import ServerDependencies
+from substrate_cloud.monolith.schemas import ChatRequest
+from substrate_cloud.monolith.routes.chat_wire import _ImagePayload
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.doc_quota import check_and_increment, release
+from substrate_cloud.shared.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ async def _build_file_context(
 
     from sqlalchemy import or_, select
 
-    from substrate.serving.monolith.models import FileMetadata
+    from substrate_cloud.monolith.models import FileMetadata
 
     conditions = [FileMetadata.thread_id == body.thread_id]
     if body.file_ids:
@@ -260,7 +260,7 @@ async def _build_file_context(
             # Must happen before any of the ctx.files_for(claims.tenant_id).download(...)
             # calls below, for both extractable and non-extractable
             # (workspace-mounted) files.
-            from substrate.serving.monolith.routes.files import promote_pending_file
+            from substrate_cloud.monolith.routes.files import promote_pending_file
 
             await promote_pending_file(ctx, meta)
             needs_commit = True
@@ -292,7 +292,7 @@ async def _build_file_context(
                         # or referenced from a different thread than it was
                         # uploaded under — either way, index it now, tagged
                         # with *this* message's real thread_id.
-                        from substrate.integrations.knowledge.session_ingest import (
+                        from substrate_cloud.session_index.ingest import (
                             ingest_session_document,
                         )
 

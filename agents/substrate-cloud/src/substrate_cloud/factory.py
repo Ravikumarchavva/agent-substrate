@@ -1,9 +1,9 @@
 """Serving factory — constructs agents, tools, and runtime for the HTTP shell.
 
-This is the *primary* place serving/ and agents/integrations meet — most
+This is the *primary* place substrate_cloud/ and agents/integrations meet — most
 routes call these factory functions instead of importing concrete agent or
 integration types directly. It is not the ONLY place: several
-``serving/monolith/routes/*.py`` files (``branches.py``, ``gdpr.py``,
+``substrate_cloud/monolith/routes/*.py`` files (``branches.py``, ``gdpr.py``,
 ``admin.py``, ``chat.py``, ``knowledge.py``, ``files.py``, ``workspace.py``)
 import ``substrate``/``substrate.integrations`` directly too, each
 for a narrow, documented reason — see the corresponding
@@ -29,7 +29,7 @@ from typing import Any, List, Optional, cast
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from substrate.config import SubstrateConfig
+from substrate_cloud.config import SubstrateConfig
 from substrate.types import Actor
 from substrate.models import EmbeddingModel, ChatModel
 from substrate.stores import ThreadStore
@@ -232,7 +232,7 @@ async def init_infrastructure(
     from substrate.integrations.knowledge.backends import build_rag_backend
     from substrate.integrations.pipeline.data_ref import DataRefStore
     from substrate.integrations.tools.skills._manager import SkillManager
-    from substrate.serving.monolith.sse.bridge import BridgeRegistry
+    from substrate_cloud.monolith.sse.bridge import BridgeRegistry
     from substrate.stores import vector_namespace
 
     store = open_store(cfg)
@@ -280,7 +280,7 @@ async def init_infrastructure(
         # actually holds a tenant_id (see that model's docstring).
         from sqlalchemy import select
 
-        from substrate.serving.monolith.models import WorkspaceQuota
+        from substrate_cloud.monolith.models import WorkspaceQuota
 
         async with session_factory() as session:
             rows = (await session.execute(select(WorkspaceQuota))).scalars().all()
@@ -541,7 +541,7 @@ async def init_tool_registry(
             )
         )
     if model_client is not None and embedding_client is not None:
-        from substrate.integrations.tools.ai.session_document_search import (
+        from substrate_cloud.session_index.search_tool import (
             SessionDocumentSearchTool,
         )
 
@@ -746,15 +746,15 @@ async def build_agent_for_thread(
 
     Returns a ``ReActAgent`` or ``OrchestratorAgent``.  Serving code
     must treat the return type as ``Any``; the concrete type lives in
-    agents/ and must not be imported from serving/.
+    agents/ and must not be imported from substrate_cloud/.
 
     Agent topology (the fixed researcher/calculator/clock orchestrator, and
     the default single-assistant shape) lives in ``agents/factory.py`` —
     this function only decides which one to build from ``cfg.AGENT_MODE``
     and registers the result(s) with ``runtime``. ``cfg`` is passed in
-    rather than imported from a submodule of ``substrate.serving`` directly —
+    rather than imported from a submodule of ``substrate_cloud`` directly —
     this factory stays a leaf callers depend on, not a hub that reaches back
-    into the rest of ``serving/``.
+    into the rest of ``substrate_cloud/``.
 
     ``history`` (the shared ThreadStore) is provided to the agent
     for session conversation history.
@@ -764,18 +764,18 @@ async def build_agent_for_thread(
     tool call actually pauses for a human decision over SSE instead of
     either running unguarded (no handler configured) or failing closed —
     this is the one real implementation of kernel's ``ApprovalHandler``
-    Protocol; see ``serving/monolith/sse/approval.py``.
+    Protocol; see ``substrate_cloud/monolith/sse/approval.py``.
     """
     from substrate.context import build_token_budget_pipeline
     from substrate.agents.factory import create_assistant_agent
-    from substrate.serving.research_orchestrator import build_research_orchestrator
+    from substrate_cloud.research_orchestrator import build_research_orchestrator
 
     if runtime is None:
         raise ValueError("build_agent_for_thread() requires a runtime.")
 
     approval_handler = None
     if bridge is not None:
-        from substrate.serving.monolith.sse.approval import SSEApprovalHandler
+        from substrate_cloud.monolith.sse.approval import SSEApprovalHandler
 
         approval_handler = SSEApprovalHandler(bridge)
 
@@ -1097,7 +1097,7 @@ def build_safety_middleware(cfg: SubstrateConfig) -> Any:
 
     Thin pass-through to concrete L1/L2 types, same "legal meeting point"
     convention as ``build_short_term_memory``
-    above — this module is the one place serving/'s dependency chain is
+    above — this module is the one place substrate_cloud/'s dependency chain is
     allowed to construct agents/capabilities concrete types.
     """
     enabled = getattr(cfg, "ENABLE_TEXT_SAFETY_GUARD", True)

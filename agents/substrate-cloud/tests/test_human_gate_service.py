@@ -13,9 +13,9 @@ import uuid
 
 import pytest
 
-from substrate.serving.services.base import init_service_db
-from substrate.serving.services.human_gate.models import ServiceBase
-from substrate.serving.services.human_gate.service import (
+from substrate_cloud.services.base import init_service_db
+from substrate_cloud.services.human_gate.models import ServiceBase
+from substrate_cloud.services.human_gate.service import (
     cancel_pending_for_thread,
     create_request,
     get_request,

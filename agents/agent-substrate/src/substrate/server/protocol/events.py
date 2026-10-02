@@ -137,7 +137,7 @@ class Attachment(BaseModel):
 class UserMessageEvent(BaseModel):
     """The user's turn that started this run — logged once, at run start, so
     the EventLogProtocol is a self-complete record of the conversation (the single
-    source of truth history is projected from; see ``serving/stream/
+    source of truth history is projected from; see ``substrate_cloud/stream/
     history.py``). ``text`` is the display text the user actually typed/saw,
     which may differ from the LLM-input content a route augments with file
     context — see ``ReActAgent``/``OrchestratorAgent``'s ``_handle_message``.

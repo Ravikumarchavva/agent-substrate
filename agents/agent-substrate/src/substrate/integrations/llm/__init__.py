@@ -49,6 +49,7 @@ _LAZY: dict[str, str] = {
     "strip_provider_prefix": "substrate.integrations.llm.factory",
     "model_supports_vision": "substrate.integrations.llm.factory",
     "has_provider_api_key": "substrate.integrations.llm.factory",
+    "provider_keys_from_env": "substrate.integrations.llm.factory",
     "resolve_model_for_available_credentials": "substrate.integrations.llm.factory",
     "resolve_vision_model_for_available_credentials": "substrate.integrations.llm.factory",
     "CHAT_MODEL_FALLBACKS": "substrate.integrations.llm.factory",
@@ -69,6 +70,7 @@ if TYPE_CHECKING:
     from substrate.integrations.llm.factory import strip_provider_prefix
     from substrate.integrations.llm.factory import model_supports_vision
     from substrate.integrations.llm.factory import has_provider_api_key
+    from substrate.integrations.llm.factory import provider_keys_from_env
     from substrate.integrations.llm.factory import (
         resolve_model_for_available_credentials,
     )
@@ -95,6 +97,7 @@ __all__ = [
     "strip_provider_prefix",
     "model_supports_vision",
     "has_provider_api_key",
+    "provider_keys_from_env",
     "resolve_model_for_available_credentials",
     "resolve_vision_model_for_available_credentials",
     "CHAT_MODEL_FALLBACKS",

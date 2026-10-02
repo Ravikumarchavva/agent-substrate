@@ -9,9 +9,9 @@ lifespan).  Import from here for monolith routes; microservices import from
 from __future__ import annotations
 
 # Re-export so existing `from server.security.deps import get_current_user` works
-from substrate.serving.shared.auth.middleware import (  # noqa: F401
+from substrate_cloud.shared.auth.middleware import (  # noqa: F401
     get_current_user,
     optional_current_user,
 )
 
-from substrate.serving.shared.auth.claims import AuthClaims  # noqa: F401
+from substrate_cloud.shared.auth.claims import AuthClaims  # noqa: F401

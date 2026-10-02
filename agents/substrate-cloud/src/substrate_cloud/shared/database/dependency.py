@@ -2,7 +2,7 @@
 
 Usage in any service ``routes.py``::
 
-    from substrate.serving.shared.database.dependency import get_db_session
+    from substrate_cloud.shared.database.dependency import get_db_session
     from fastapi import Depends
     from sqlalchemy.ext.asyncio import AsyncSession
 

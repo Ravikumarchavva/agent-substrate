@@ -4,7 +4,7 @@ Fork is the headline fix this package exists for: forking a branch's
 workspace is a ``WorkspaceStore.fork_branch_snapshot`` call — O(1), a new
 branch-head pointer at the same existing snapshot, zero bytes copied, no
 quota charged — not the old ``copy_prefix`` byte-copy that
-``serving/monolith/routes/branches.py`` used to do (and that dead-ended:
+``substrate_cloud/monolith/routes/branches.py`` used to do (and that dead-ended:
 see the workspace plan's Context section for why the old mechanism never
 actually took effect).
 

@@ -26,7 +26,7 @@ from uuid import uuid4
 from substrate.tools import ApprovalRequest, ApprovalResult
 
 if TYPE_CHECKING:
-    from substrate.serving.monolith.sse.bridge import WebHITLBridge
+    from substrate_cloud.monolith.sse.bridge import WebHITLBridge
 
 
 class SSEApprovalHandler:

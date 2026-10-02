@@ -138,7 +138,7 @@ async def step_rows_from_log(store: RuntimeStore, thread_id: str) -> list[dict]:
     """Project a thread's EventLogProtocol into ``rebuild_messages_from_steps``'s
     step-row schema — the monolith's cold-store source, now that the EventLogProtocol
     (not a separate ``steps`` table) is the single source of truth for
-    conversation history (see ``serving/stream/history.py::project_thread()``,
+    conversation history (see ``substrate_cloud/stream/history.py::project_thread()``,
     the sibling projection for UI display).
 
     Turn-boundary rule matches ``project_thread``'s UI-facing counterpart
@@ -154,7 +154,7 @@ async def step_rows_from_log(store: RuntimeStore, thread_id: str) -> list[dict]:
     placeholder before this function returns. This is what makes
     "persist-but-exclude" real for *future* turns: the flagged message stays
     visible via the EventLogProtocol/wire-event history a client reads
-    directly (``serving/stream/history.py::project_thread``, untouched by
+    directly (``substrate_cloud/stream/history.py::project_thread``, untouched by
     this function), but never re-enters the ``messages`` list an LLM call
     actually sees on any turn after the one it was flagged on. The marker
     always appears after its target within the same run (the guardrail logs

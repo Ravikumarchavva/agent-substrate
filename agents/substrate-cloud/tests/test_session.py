@@ -13,7 +13,7 @@ from substrate.runtime import RunContext
 from substrate.types import ChatMessage, Role, TextBlock
 from substrate.types import Actor
 from substrate.runtime import ChatPayload, Message
-from substrate.serving.monolith.sse.bridge import BRIDGE_DONE
+from substrate_cloud.monolith.sse.bridge import BRIDGE_DONE
 from substrate.server.protocol import (
     HelloEvent,
     RunCompletedEvent,
@@ -21,7 +21,7 @@ from substrate.server.protocol import (
     WireEvent,
     RunCancelledEvent,
 )
-from substrate.serving.stream.session import AgentStreamSession, tail_wire_events
+from substrate_cloud.stream.session import AgentStreamSession, tail_wire_events
 from substrate.testing.runtime import ephemeral_runtime
 
 
@@ -156,7 +156,7 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
     answers some time LATER, the run resumes and only then produces its
     final response — which must still land in the EventLogProtocol (the single
     source of truth for conversation history — see
-    serving/stream/history.py::project_thread()) even though nothing is
+    substrate_cloud/stream/history.py::project_thread()) even though nothing is
     watching this specific SSE connection anymore.
 
     Two properties must hold for this to work:

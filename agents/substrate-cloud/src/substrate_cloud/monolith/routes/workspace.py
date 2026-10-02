@@ -28,9 +28,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.stores import WorkspacePathError
 from substrate.workspace.layout import conversation_shared_key, conversation_workspace_prefix, user_prefix
-from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.file_versioning import (
+from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.file_versioning import (
     VERSIONS_DIR,
     capture_bytes,
     latest_version,
@@ -38,10 +38,10 @@ from substrate.serving.monolith.file_versioning import (
     record_version,
     sha256_hex,
 )
-from substrate.serving.monolith.models import FileMetadata, FileVersion, Thread
-from substrate.serving.monolith.security.deps import get_current_user
-from substrate.serving.monolith.services import get_owned_thread
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.monolith.models import FileMetadata, FileVersion, Thread
+from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.monolith.services import get_owned_thread
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 router = APIRouter(
     prefix="/workspace",

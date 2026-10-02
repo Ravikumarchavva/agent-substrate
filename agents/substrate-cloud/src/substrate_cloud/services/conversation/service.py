@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.services.conversation.models import Feedback, Step, Thread
+from substrate_cloud.services.conversation.models import Feedback, Step, Thread
 
 
 # ── Thread CRUD ──────────────────────────────────────────────────────────────

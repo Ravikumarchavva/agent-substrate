@@ -26,11 +26,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
-from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
-from substrate.serving.monolith.schemas import (
+from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
+from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.monolith.schemas import (
     ScheduledTaskCreate,
     ScheduledTaskUpdate,
     ScheduledTaskOut,
@@ -39,9 +39,9 @@ from substrate.serving.monolith.schemas import (
     ScheduledTaskParseResponse,
     ScheduledTaskFeedbackRequest,
 )
-from substrate.serving.monolith.services.scheduled_service import execute_scheduled_task
-from substrate.serving.monolith.services.thread_service import create_thread
-from substrate.serving.stream import append_user_message
+from substrate_cloud.monolith.services.scheduled_service import execute_scheduled_task
+from substrate_cloud.monolith.services.thread_service import create_thread
+from substrate_cloud.stream import append_user_message
 
 logger = logging.getLogger(__name__)
 

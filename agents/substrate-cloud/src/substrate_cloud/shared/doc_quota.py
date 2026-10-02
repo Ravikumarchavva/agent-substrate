@@ -17,7 +17,7 @@ Two independent counters share this helper (see ``routes/files.py`` and
 
 Usage::
 
-    from substrate.serving.shared.doc_quota import check_and_increment
+    from substrate_cloud.shared.doc_quota import check_and_increment
 
     allowed, remaining = await check_and_increment(
         request.app.state.redis, "docquota:commit", claims.sub, limit=20,

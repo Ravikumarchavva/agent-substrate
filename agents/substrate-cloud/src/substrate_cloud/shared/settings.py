@@ -5,7 +5,7 @@ server needs: JWT auth, CORS, rate limiting, observability, and feature flags.
 
 It auto-loads ``.env`` from the current working directory (where you run
 ``uv run start``).  For library use, import ``SubstrateConfig`` from
-``substrate.config`` instead.
+``substrate_cloud.config`` instead.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import List
 from pydantic import field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
-from substrate.config import SubstrateConfig
+from substrate_cloud.config import SubstrateConfig
 
 
 class ServerSettings(SubstrateConfig):
@@ -115,5 +115,5 @@ class ServerSettings(SubstrateConfig):
     )
 
 
-# Server-layer singleton — only import this from serving/ code.
+# Server-layer singleton — only import this from substrate_cloud/ code.
 settings = ServerSettings()

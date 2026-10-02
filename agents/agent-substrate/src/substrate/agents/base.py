@@ -49,7 +49,7 @@ async def log_user_message(
 ) -> int:
     """Journal the turn that started this run as a ``user.message`` EventLogProtocol
     entry, so the log is a self-complete record of the conversation (history
-    is projected from it — see ``serving/stream/history.py``).
+    is projected from it — see ``substrate_cloud/stream/history.py``).
 
     ``msg.metadata["display_text"]``/``["attachments"]`` (set by the serving
     layer when it augments the LLM-input content with file context) win when

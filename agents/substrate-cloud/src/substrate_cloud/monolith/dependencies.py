@@ -13,7 +13,7 @@ from fastapi import Request
 
 from substrate.models import ChatModel
 from substrate.stores import ThreadStore
-from substrate.serving.monolith.sse.bridge import BridgeRegistry
+from substrate_cloud.monolith.sse.bridge import BridgeRegistry
 
 
 @dataclass

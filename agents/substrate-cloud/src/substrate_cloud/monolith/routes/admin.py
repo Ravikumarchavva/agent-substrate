@@ -19,11 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from substrate.stores.file_tables import Files
-from substrate.serving.monolith.security.rls_deps import get_service_scoped_db
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.models import Thread, WorkspaceQuota
-from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
-from substrate.serving.stream import project_thread
+from substrate_cloud.monolith.security.rls_deps import get_service_scoped_db
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.models import Thread, WorkspaceQuota
+from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.stream import project_thread
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ async def admin_stats(
 
     ``total_events`` counts durable EventLogProtocol rows (``event_log``)
     directly — conversation history has no separate steps table anymore; the
-    EventLogProtocol is the single source of truth (see ``serving/stream/history.py``).
+    EventLogProtocol is the single source of truth (see ``substrate_cloud/stream/history.py``).
     """
     thread_count: int = (await db.execute(select(func.count(Thread.id)))).scalar_one()
     event_count: int = (

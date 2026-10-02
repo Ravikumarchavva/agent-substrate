@@ -24,7 +24,7 @@ import httpx2 as httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from substrate.serving.services.tool_executor.executor import (
+from substrate_cloud.services.tool_executor.executor import (
     execute_and_publish,
     execute_tool,
 )

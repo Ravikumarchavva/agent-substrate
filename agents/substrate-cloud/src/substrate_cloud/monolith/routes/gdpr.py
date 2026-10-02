@@ -10,11 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.integrations.gdpr.eraser import erase_tenant, erase_user
-from substrate.serving.monolith.security.rls_deps import get_service_scoped_db
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.shared.auth.middleware import require_service_identity
-from substrate.serving.shared.settings import settings
+from substrate_cloud.gdpr.eraser import erase_tenant, erase_user
+from substrate_cloud.monolith.security.rls_deps import get_service_scoped_db
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.shared.auth.middleware import require_service_identity
+from substrate_cloud.shared.settings import settings
 
 router = APIRouter(prefix="/internal/gdpr", tags=["gdpr"])
 

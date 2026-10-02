@@ -1,8 +1,8 @@
-"""substrate.serving.shared.observability — telemetry and distributed tracing."""
+"""substrate_cloud.shared.observability — telemetry and distributed tracing."""
 
 from __future__ import annotations
 
-from substrate.serving.shared.observability.telemetry import (
+from substrate_cloud.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
     Tracer,

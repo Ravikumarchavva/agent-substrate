@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from substrate.serving.monolith.rls import APP_DB_ROLE, ensure_app_role
+from substrate_cloud.monolith.rls import APP_DB_ROLE, ensure_app_role
 
 # Reuses whatever RLS_APP_ROLE_PASSWORD the environment already has (the
 # same value the real app's own init_db() call provisions the role with) —

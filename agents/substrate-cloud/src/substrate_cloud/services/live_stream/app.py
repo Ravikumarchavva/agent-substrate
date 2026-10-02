@@ -1,6 +1,6 @@
 """Live Stream Service — FastAPI application.
 
-Entry point: uvicorn substrate.serving.services.live_stream.app:app --port 8017
+Entry point: uvicorn substrate_cloud.services.live_stream.app:app --port 8017
 """
 
 from __future__ import annotations
@@ -12,10 +12,10 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
-from substrate.serving.services.base import create_service_app
-from substrate.serving.services.live_stream.projector import StreamProjector
-from substrate.serving.services.live_stream.routes import router
-from substrate.serving.shared.events.factory import get_event_bus
+from substrate_cloud.services.base import create_service_app
+from substrate_cloud.services.live_stream.projector import StreamProjector
+from substrate_cloud.services.live_stream.routes import router
+from substrate_cloud.shared.events.factory import get_event_bus
 
 logger = logging.getLogger(__name__)
 

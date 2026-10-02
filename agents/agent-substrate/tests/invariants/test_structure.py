@@ -250,7 +250,7 @@ def test_i30_every_port_has_a_conformance_suite() -> None:
 def test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports() -> None:
     """The engine instruments itself through ``opentelemetry-api``, which does nothing until a
     host configures an SDK. The SDK, the exporter and the web-framework instrumentation are the
-    host's choice — the reference server installs them through its extra — so a plain install of the
+    host's choice — the platform (apps/substrate-cloud) installs them — so a plain install of the
     engine does not pull them in."""
     import tomllib
 
@@ -259,8 +259,8 @@ def test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports
     assert "opentelemetry-api" in core
     exporting = sorted(d for d in core if d.startswith("opentelemetry-") and d != "opentelemetry-api")
     assert not exporting, f"core dependencies that belong to the host, not the engine: {exporting}"
-    server = " ".join(project["optional-dependencies"]["server"])
-    assert "opentelemetry-sdk" in server, "the reference server lost the SDK it configures"
+    cloud = tomllib.loads((REPO_ROOT / "apps" / "substrate-cloud" / "pyproject.toml").read_text())["project"]
+    assert "opentelemetry-sdk" in " ".join(cloud["dependencies"]), "the platform lost the SDK it configures"
 
 
 def test_i26_importing_the_whole_engine_loads_only_the_allowed_third_party_set() -> None:

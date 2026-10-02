@@ -33,7 +33,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 
-from substrate.serving.shared.settings import settings
+from substrate_cloud.shared.settings import settings
 from substrate.integrations.llm.gemini.gemini_client import GeminiClient
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.integrations.tts.kokoro_client import KokoroTTSClient, get_kokoro_client
@@ -42,12 +42,12 @@ from substrate.integrations.llm.factory import (
     detect_provider,
     strip_provider_prefix,
 )
-from substrate.serving.monolith.schemas import (
+from substrate_cloud.monolith.schemas import (
     RealtimeTokenResponse,
     TranscribeResponse,
     TTSRequest,
 )
-from substrate.serving.monolith.security.deps import get_current_user
+from substrate_cloud.monolith.security.deps import get_current_user
 
 logger = logging.getLogger(__name__)
 

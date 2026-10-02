@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from substrate.serving.monolith.security.deps import get_current_user
+from substrate_cloud.monolith.security.deps import get_current_user
 
 router = APIRouter(
     prefix="/triggers",

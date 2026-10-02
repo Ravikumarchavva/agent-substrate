@@ -71,7 +71,6 @@ class DefaultMemoryExposurePolicy:
             return ContextMemoryInjection()
 
         directive_budget = int(token_budget * self._directive_ratio)
-        memory_budget = token_budget - directive_budget
 
         # 1. Format Directives
         directive_blocks: list[ContentBlock] = []

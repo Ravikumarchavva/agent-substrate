@@ -360,7 +360,7 @@ async def test_disconnected_stops_local_relay_without_cancelling_run() -> None:
 
 
 # ---------------------------------------------------------------------------
-# bridge=None — the thin, HITL-free consumer (substrate.server.create_app)
+# bridge=None — the thin, HITL-free consumer (substrate.serve.add_routes)
 # ---------------------------------------------------------------------------
 
 

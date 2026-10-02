@@ -53,7 +53,7 @@ tts = ["kokoro>=0.9.4", "soundfile>=0.12.1"]
 tools = ["pyyaml>=6.0"]
 # the interactive console and CLI chat
 console = ["rich>=14.3.2", "prompt-toolkit>=3.0.0", "pydantic-settings>=2.12.0"]
-# substrate.server.create_app: hand an agent object to a FastAPI app
+# substrate.serve.add_routes: hand an agent object to a FastAPI app
 serve = ["fastapi>=0.128.0"]
 # the conformance suites and test helpers in substrate.testing (what an integration author runs)
 testing = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0"]

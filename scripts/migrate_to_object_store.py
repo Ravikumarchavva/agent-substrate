@@ -44,13 +44,13 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from substrate.integrations.storage.s3 import S3FileStore
+from substrate.capabilities.storage.s3 import S3FileStore
 from substrate.types.content import ImageBlock, content_block_from_dict
 from substrate.types import TextBlock
 
 # ServerSettings, not SubstrateConfig: only the server layer loads `.env`, and
 # this script is run from the same directory as `uv run start`.
-from substrate_cloud.shared.settings import ServerSettings
+from substrate.serving.shared.settings import ServerSettings
 
 settings = ServerSettings()
 

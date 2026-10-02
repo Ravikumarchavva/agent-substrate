@@ -271,7 +271,7 @@ async def _build_file_context(
         # Extractable types (e.g. PDF) are indexed into RAG, so workspace_path
         # (the only field attachments_block/chat_intents.py actually puts in
         # front of the model) is omitted for them — that's what steers the
-        # model toward knowledge_search/session_document_search instead of
+        # model toward the documents tool instead of
         # reading the raw file via code_interpreter. session_path below is a
         # UI-only field the model never sees (opens the file in the read-only
         # side-panel viewer — substrate-ui's AttachmentDocumentCard), so it

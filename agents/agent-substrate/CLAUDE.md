@@ -460,7 +460,8 @@ SESSION_AUTO_CHECKPOINT=50
 
 # Models (override globally or let per-request override take precedence)
 CHAT_MODEL=openai/gpt-5.4-mini
-EMBEDDING_MODEL=text-embedding-3-small
+# Knowledge bases are searched by meaning only if an embedder is set: EMBEDDING_RERANKER_SERVICE_URL, or EMBEDDING_MODEL=openai/text-embedding-3-small
+EMBEDDING_MODEL=
 
 # CORS (comma-separated origins)
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3002

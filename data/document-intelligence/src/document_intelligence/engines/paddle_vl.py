@@ -197,24 +197,5 @@ class PaddleVLEngine:
         finally:
             self._pool.release(worker)
 
-    async def aextract_batch(
-        self, items: list[tuple[bytes, str]]
-    ) -> list[ExtractionResult]:
-        """No special multi-file predict()-batching here (unlike
-        ``PaddleClassicEngine.extract_batch`` — that optimization is
-        specific to how PPStructureV3's local batch sampler groups OCR
-        inference across files; the VL model's real cost is the network
-        round trip to the pool's worker, which bounded concurrency across
-        items already parallelizes)."""
-        if not items:
-            return []
-        semaphore = asyncio.Semaphore(max(1, self._pool.worker_count))
-
-        async def _one(data: bytes, filename: str) -> ExtractionResult:
-            async with semaphore:
-                return await self.aextract(data, filename)
-
-        return await asyncio.gather(*(_one(d, f) for d, f in items))
-
 
 __all__ = ["PaddleVLEngine"]

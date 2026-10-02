@@ -259,26 +259,6 @@ async def test_aextract_passes_worker_endpoint_and_device_into_pipeline_config(
     )
 
 
-@needs_paddlex
-async def test_aextract_batch_processes_all_items_with_bounded_concurrency(
-    monkeypatch,
-) -> None:
-    pool = _FakePool(worker_count=2)
-    fake_pipeline = _FakePaddlexPipeline()
-    _patch_create_pipeline(monkeypatch, fake_pipeline)
-    monkeypatch.setattr(
-        "document_intelligence.engines.paddle_vl._apply_paddle_patches_once",
-        lambda: None,
-    )
-
-    engine = PaddleVLEngine(pool, device_mode="gpu")
-    items = [(b"%PDF-1.4\n%%EOF", f"doc{i}.pdf") for i in range(4)]
-    results = await engine.aextract_batch(items)
-
-    assert len(results) == 4
-    assert all(r.engine == "paddleocr-vl" for r in results)
-
-
 def test_apply_paddle_patches_once_is_idempotent(monkeypatch) -> None:
     calls = {"disable": 0, "parallelize": 0}
     monkeypatch.setattr(

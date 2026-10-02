@@ -25,7 +25,6 @@ workaround and the sequential-crop-loop speedup apply there as well.
 
 from __future__ import annotations
 
-import contextlib
 import io
 import re
 import tempfile
@@ -420,13 +419,6 @@ class PaddleClassicEngine:
 
         return await asyncio.to_thread(self.extract, data, filename)
 
-    async def aextract_batch(
-        self, items: list[tuple[bytes, str]]
-    ) -> list[ExtractionResult]:
-        import asyncio
-
-        return await asyncio.to_thread(self.extract_batch, items)
-
     def extract(self, data: bytes, filename: str) -> ExtractionResult:
         """Run layout+chart detection + OCR over every page of *data*."""
         suffix = Path(filename).suffix or ".pdf"
@@ -488,52 +480,6 @@ class PaddleClassicEngine:
             markdown=self._finalize_markdown(pages, markdown_pages),
             engine=self.name,
         )
-
-    def extract_batch(self, items: list[tuple[bytes, str]]) -> list[ExtractionResult]:
-        """Extract multiple documents in ONE ``predict()`` call.
-
-        Real, found-not-assumed reason this matters: ``predict()`` accepts
-        ``list[str]`` (paddlex's own signature — it renders each path's
-        pages internally, PDFs included, via pypdfium2) and each yielded
-        page result carries its own ``input_path``
-        (paddlex/inference/pipelines/layout_parsing/pipeline_v2.py — set
-        alongside ``page_index``), so results are demuxable back to their
-        source file with no extra bookkeeping. A single document's pages
-        often don't have enough text regions to fill a large
-        ``ocr_batch_size`` on their own (a sparse page might have 3-4); a
-        multi-file predict() call lets paddlex's batch sampler group OCR/
-        layout inference across ALL these files' pages together instead,
-        which is real, additional GPU-batching headroom this pipeline was
-        leaving on the table before.
-        """
-        if not items:
-            return []
-        with contextlib.ExitStack() as stack:
-            tmp_paths: list[str] = []
-            for data, filename in items:
-                suffix = Path(filename).suffix or ".pdf"
-                tmp = stack.enter_context(tempfile.NamedTemporaryFile(suffix=suffix))
-                tmp.write(data)
-                tmp.flush()
-                tmp_paths.append(tmp.name)
-
-            results = list(self._pipeline.predict(tmp_paths))
-
-        by_path: dict[str, list[Any]] = {p: [] for p in tmp_paths}
-        for res in results:
-            by_path[res.get("input_path")].append(res)
-
-        out: list[ExtractionResult] = []
-        for p in tmp_paths:
-            pages, markdown_pages = self._pages_from_results(by_path[p])
-            out.append(
-                ExtractionResult(
-                    pages=pages,
-                    markdown=self._finalize_markdown(pages, markdown_pages),
-                    engine=self.name,
-                )
-            )
-        return out
 
     def _pages_from_results(
         self, results: Iterable[Any], *, page_offset: int = 0

@@ -3,7 +3,9 @@
 # Build:   docker build -f docker/document-intelligence.Dockerfile -t document-intelligence:latest .
 # Run:     docker run -p 8080:8080 document-intelligence:latest
 #
-# Layout-aware document parsing (PaddleOCR: chart/table detection + OCR).
+# Document server: the library's own Reader as the baseline for every format (PDFium, native Office/HTML),
+# PaddleOCR layout/chart/table extraction for PDFs and images on `hi_res` or scanned pages, and an optional
+# LibreOffice (not installed here) for legacy .doc/.ppt/.xls/.rtf — without it those get a clear failure.
 # Multimodal embedding and reranking are a separate service now — see
 # apps/embedding-reranker/ and docs/claude_docs/decisions.md for why.
 # CPU-only — paddlepaddle's CPU wheel (~185MB) is used, no CUDA runtime

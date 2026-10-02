@@ -104,9 +104,6 @@ class Package:
     def names(self) -> set[str]:
         return set(self._names)
 
-    def has(self, name: str) -> bool:
-        return name in self._names
-
     def read(self, name: str, *, limit: int = MAX_PART_BYTES) -> bytes | None:
         """The member's bytes (at most ``limit``), or ``None`` if there is no such member. Raises ``UnsafeDocument`` over the limit."""
         info = self._names.get(name)

@@ -56,6 +56,9 @@ def _db_mock() -> MagicMock:
 
 def _ctx_mock(*, rag_backend=None, redis=None) -> MagicMock:
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.file_store.upload = AsyncMock()
     # Uploads write here first, not ctx.file_store directly — see
@@ -526,6 +529,12 @@ def _session_ctx_mock(rows: list) -> MagicMock:
     session_cm.__aexit__ = AsyncMock(return_value=False)
 
     ctx = MagicMock()
+
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.session_factory = MagicMock(return_value=session_cm)
     ctx.rag_backend = MagicMock()
     ctx.pending_file_store = MagicMock()
@@ -604,6 +613,9 @@ async def test_sweep_skips_row_when_bytes_cannot_be_read(monkeypatch):
 
 async def test_sweep_ignores_no_session_factory_or_rag_backend():
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.session_factory = None
     ctx.rag_backend = MagicMock()
 

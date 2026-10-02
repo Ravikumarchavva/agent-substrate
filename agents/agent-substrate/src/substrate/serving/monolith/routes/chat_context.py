@@ -259,7 +259,7 @@ async def _build_file_context(
             # Attachments live only in the local pending store (see
             # integrations/storage/pending.py) until the message
             # referencing them is actually sent — this is that moment.
-            # Must happen before any of the ctx.file_store.download(...)
+            # Must happen before any of the ctx.files_for(claims.tenant_id).download(...)
             # calls below, for both extractable and non-extractable
             # (workspace-mounted) files.
             from substrate.serving.monolith.routes.files import promote_pending_file
@@ -298,7 +298,7 @@ async def _build_file_context(
                             ingest_session_document,
                         )
 
-                        data = await ctx.file_store.download(meta.object_key)
+                        data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
                         try:
                             await ingest_session_document(
                                 data=data,
@@ -326,7 +326,7 @@ async def _build_file_context(
                         # commit whose staged_at wasn't set, before this
                         # loop ever runs. Kept as a defensive fallback, not
                         # a designed code path.
-                        data = await ctx.file_store.download(meta.object_key)
+                        data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
                         await ctx.rag_backend.ingest(
                             data,
                             collection=str(body.thread_id),
@@ -359,7 +359,7 @@ async def _build_file_context(
                 attachments.append(_attachment_dict(meta))
                 continue
 
-            data = await ctx.file_store.download(meta.object_key)
+            data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
             endpoint = None
             if settings.DOCUMENT_INTELLIGENCE_SERVICE_URL:
                 endpoint = InferenceEndpoint(
@@ -386,11 +386,11 @@ async def _build_file_context(
             # so the model at least knows the file exists.
 
         elif meta.content_type.startswith("image/"):
-            data = await ctx.file_store.download(meta.object_key)
+            data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
             image_inputs.append(_ImagePayload(data=data, media_type=meta.content_type))
             continue
         elif meta.content_type.startswith("text/"):
-            data = await ctx.file_store.download(meta.object_key)
+            data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
             text_parts.append(
                 f"[File: {meta.original_name}]\n"
                 + data.decode("utf-8", errors="replace")

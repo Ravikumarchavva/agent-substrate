@@ -404,7 +404,7 @@ async def _stage_uploaded_doc(
                 await session.commit()
         return
     await _write_extracted_sidecar(
-        ctx.pending_file_store,
+        ctx.pending_for(tenant_id),
         file_id,
         data,
         object_key=object_key,
@@ -421,25 +421,25 @@ async def _stage_uploaded_doc(
 
 async def promote_pending_file(ctx: ServerDependencies, meta: FileMetadata) -> None:
     """Copy an attachment from the local pending store into the real
-    ``ctx.file_store`` (SeaweedFS/S3) and mark it promoted — called once,
+    ``ctx.files_for(meta.org_id)`` (SeaweedFS/S3) and mark it promoted — called once,
     at the moment a message that actually references this file is sent
     (see ``routes/chat_context.py::_build_file_context``). Idempotent
     no-op if already promoted, since a send can reference the same file
     more than once (e.g. across retries)."""
     if meta.promoted_at is not None:
         return
-    if ctx.pending_file_store is None or ctx.file_store is None:
+    if ctx.pending_for(meta.org_id) is None or ctx.files_for(meta.org_id) is None:
         return
-    data = await ctx.pending_file_store.download(meta.object_key)
-    await ctx.file_store.upload(meta.object_key, data, content_type=meta.content_type)
-    await ctx.pending_file_store.delete(meta.object_key)
+    data = await ctx.pending_for(meta.org_id).download(meta.object_key)
+    await ctx.files_for(meta.org_id).upload(meta.object_key, data, content_type=meta.content_type)
+    await ctx.pending_for(meta.org_id).delete(meta.object_key)
     sidecar_key = f"{meta.object_key}.extracted.md"
-    if await ctx.pending_file_store.exists(sidecar_key):
-        sidecar_data = await ctx.pending_file_store.download(sidecar_key)
-        await ctx.file_store.upload(
+    if await ctx.pending_for(meta.org_id).exists(sidecar_key):
+        sidecar_data = await ctx.pending_for(meta.org_id).download(sidecar_key)
+        await ctx.files_for(meta.org_id).upload(
             sidecar_key, sidecar_data, content_type="text/markdown"
         )
-        await ctx.pending_file_store.delete(sidecar_key)
+        await ctx.pending_for(meta.org_id).delete(sidecar_key)
     meta.promoted_at = datetime.now(timezone.utc)
 
 
@@ -483,7 +483,7 @@ async def _read_stuck_upload_bytes(
     finished for some other reason). Never raises — a download failure
     (the object was itself swept/deleted independently) just skips this
     one row, logged, rather than crashing the whole reconciliation pass."""
-    store = ctx.pending_file_store if row.promoted_at is None else ctx.file_store
+    store = ctx.pending_for(row.org_id) if row.promoted_at is None else ctx.files_for(row.org_id)
     if store is None:
         return None
     try:
@@ -592,7 +592,7 @@ async def upload_file(
     already known — see ``_stage_uploaded_doc``. Other file types are
     unaffected: pure blob+metadata storage, same as today.
     """
-    if ctx.file_store is None:
+    if ctx.files_for(claims.tenant_id) is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
     if thread_id is not None and await get_owned_thread(db, thread_id, claims) is None:
@@ -683,11 +683,11 @@ async def upload_file(
         # touching SeaweedFS/S3, until the message carrying it is actually
         # sent (routes/chat_context.py promotes it then; see
         # integrations/storage/pending.py's module docstring for why).
-        if ctx.pending_file_store is None:
+        if ctx.pending_for(claims.tenant_id) is None:
             raise HTTPException(
                 status_code=503, detail="Pending upload storage not configured"
             )
-        await ctx.pending_file_store.upload(object_key, data, content_type=content_type)
+        await ctx.pending_for(claims.tenant_id).upload(object_key, data, content_type=content_type)
         promoted_at = None
     else:
         # No thread_id -> not a composer attachment (e.g. the settings
@@ -695,10 +695,10 @@ async def upload_file(
         # will ever exist to promote it out of a pending store, so it
         # would sit there until the abandoned-upload sweep quietly deleted
         # it. Go straight to permanent storage — already final.
-        if ctx.file_store is None:
+        if ctx.files_for(claims.tenant_id) is None:
             raise HTTPException(status_code=503, detail="File store not configured")
         try:
-            await ctx.file_store.upload(object_key, data, content_type=content_type)
+            await ctx.files_for(claims.tenant_id).upload(object_key, data, content_type=content_type)
         except WorkspaceQuotaExceededError as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         promoted_at = datetime.now(timezone.utc)
@@ -832,9 +832,9 @@ async def serve_object(
     # message has already been sent, which is what promotes a file out of
     # the pending store) — defensive fallback, not a designed path.
     store = (
-        ctx.pending_file_store
+        ctx.pending_for(claims.tenant_id)
         if meta is not None and meta.promoted_at is None
-        else ctx.file_store
+        else ctx.files_for(claims.tenant_id)
     )
     if store is None:
         raise HTTPException(status_code=503, detail="File storage is not configured")
@@ -887,7 +887,7 @@ async def download_file(
 ) -> StreamingResponse:
     """Download file bytes."""
     meta = await _get_meta(file_id, db, claims)
-    store = ctx.file_store if meta.promoted_at is not None else ctx.pending_file_store
+    store = ctx.files_for(claims.tenant_id) if meta.promoted_at is not None else ctx.pending_for(claims.tenant_id)
     if store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
     data = await store.download(meta.object_key)
@@ -919,10 +919,10 @@ async def get_file_url(
     meta = await _get_meta(file_id, db, claims)
     if meta.promoted_at is None:
         return FileUrlResponse(url=f"/files/{file_id}/download", expires_in=expires_in)
-    if ctx.file_store is None:
+    if ctx.files_for(claims.tenant_id) is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
-    url = await ctx.file_store.presign_url(meta.object_key, expires_in=expires_in)
+    url = await ctx.files_for(claims.tenant_id).presign_url(meta.object_key, expires_in=expires_in)
 
     if url.startswith("memory://"):
         url = f"/files/{file_id}/download"
@@ -939,7 +939,7 @@ async def delete_file(
 ) -> None:
     """Soft-delete metadata and remove object from store."""
     meta = await _get_meta(file_id, db, claims)
-    store = ctx.file_store if meta.promoted_at is not None else ctx.pending_file_store
+    store = ctx.files_for(claims.tenant_id) if meta.promoted_at is not None else ctx.pending_for(claims.tenant_id)
     if store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
@@ -961,8 +961,8 @@ async def delete_file(
     await db.commit()
 
     await store.delete(meta.object_key)
-    if meta.promoted_at is None and ctx.pending_file_store is not None:
-        await ctx.pending_file_store.delete(f"{meta.object_key}.extracted.md")
+    if meta.promoted_at is None and ctx.pending_for(claims.tenant_id) is not None:
+        await ctx.pending_for(claims.tenant_id).delete(f"{meta.object_key}.extracted.md")
 
     # Discarded before ever being sent (rag_ingested_at never set) — clean
     # up its orphaned staging collection so it doesn't linger forever.

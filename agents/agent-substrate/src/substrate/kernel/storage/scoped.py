@@ -264,6 +264,64 @@ class ScopedObjectStore:
         return await self._inner.delete_prefix(self._root)
 
 
+class FencedObjectStore:
+    """An ``ObjectStore`` that keeps its callers' *absolute* keys but confines them to ``tenants/<tenant>/``.
+
+    ``ScopedObjectStore`` is for code that thinks in tenant-relative keys. Serving builds absolute keys through
+    ``workspace/layout`` and stores them in database rows, so what it needs is a fence: every key and prefix must
+    be inside the tenant's subtree, with nothing that could climb out of it. Anything else raises ``ValueError``
+    before the store is touched.
+    """
+
+    def __init__(self, inner: ObjectStore, scope: Scope) -> None:
+        if "/" in scope.tenant_id or "\\" in scope.tenant_id:
+            raise ValueError("a tenant id with a path separator cannot be fenced")
+        self._inner = inner
+        self._scope = scope
+        self._root = f"tenants/{scope.tenant_id}/"
+
+    def _in(self, key: str, *, prefix: bool = False) -> str:
+        parts = key.split("/")
+        if (
+            not key.startswith(self._root)
+            or "\\" in key
+            or "\x00" in key
+            or any(p in ("..", ".") for p in parts)
+            or (not prefix and key.endswith("/"))
+        ):
+            raise ValueError(f"key {key!r} is outside tenant {self._scope.tenant_id!r}")
+        return key
+
+    async def upload(self, key: str, data: bytes, *, content_type: str = "application/octet-stream") -> None:
+        await self._inner.upload(self._in(key), data, content_type=content_type)
+
+    async def download(self, key: str) -> bytes:
+        return await self._inner.download(self._in(key))
+
+    async def exists(self, key: str) -> bool:
+        return await self._inner.exists(self._in(key))
+
+    async def delete(self, key: str) -> None:
+        await self._inner.delete(self._in(key))
+
+    async def list_prefix(self, prefix: str) -> list[tuple[str, int, float]]:
+        return await self._inner.list_prefix(self._in(prefix, prefix=True))
+
+    async def delete_prefix(self, prefix: str) -> int:
+        return await self._inner.delete_prefix(self._in(prefix, prefix=True))
+
+    async def copy_prefix(self, source_prefix: str, dest_prefix: str) -> int:
+        return await self._inner.copy_prefix(self._in(source_prefix, prefix=True), self._in(dest_prefix, prefix=True))
+
+    async def presign_url(self, key: str, *, expires_in: int = 3600) -> str:
+        return await self._inner.presign_url(self._in(key), expires_in=expires_in)
+
+    async def usage_bytes(self, tenant_id: str | None = None, *, force: bool = False) -> int:
+        if tenant_id is not None and tenant_id != self._scope.tenant_id:
+            raise ValueError("a fenced store reports only its own tenant's usage")
+        return await self._inner.usage_bytes(self._scope.tenant_id, force=force)
+
+
 # ===================================================================== tasks
 
 
@@ -335,11 +393,16 @@ def bind_objects(store: ObjectStore, scope: Scope) -> ScopedObjectStore:
     return ScopedObjectStore(store, scope)
 
 
+def fence_objects(store: ObjectStore, scope: Scope) -> FencedObjectStore:
+    return FencedObjectStore(store, scope)
+
+
 def bind_tasks(store: TaskStore, scope: Scope) -> TaskStore:
     return ScopedTaskStore(store, scope)
 
 
 __all__ = [
+    "FencedObjectStore",
     "ScopedGraphStore",
     "ScopedHistory",
     "ScopedObjectStore",
@@ -350,4 +413,5 @@ __all__ = [
     "bind_objects",
     "bind_tasks",
     "bind_vector",
+    "fence_objects",
 ]

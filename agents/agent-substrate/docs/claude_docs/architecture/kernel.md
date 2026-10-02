@@ -91,7 +91,8 @@ Row I30 fails the build if an implementation of a port that has a suite does not
 * **Every store port has a scope-bound handle.** `bind_history/vector/graph/objects/tasks(store, scope)`
   (`kernel/storage/scoped.py`, written once over the ports so it holds for every implementation) places each
   session, collection, conversation, key and namespace under the tenant (percent-encoded, so no name can look like
-  another tenant's), refuses ids that resolve elsewhere, and rejects object keys that could climb out. Serving binds conversation history (agent
+  another tenant's), refuses ids that resolve elsewhere, and rejects object keys that could climb out. `fence_objects` keeps serving's absolute `tenants/<t>/...` keys but refuses anything outside the tenant or containing `..`;
+  request code reaches objects only via `ctx.files_for(tenant)` / `ctx.pending_for(tenant)`. Serving binds conversation history (agent
   build, scheduled runs, branch/checkpoint routes) and task boards (`TaskManagerTool.store_for(tenant)`, task routes);
   a run gets its scope from `ctx.store_scope`; there is no unscoped handle to forget to scope. Rows I1–I3 in `test_scope_binding.py`
   run the conformance suites *through* a bound handle and then attack the wall.
@@ -109,6 +110,4 @@ Row I30 fails the build if an implementation of a port that has a suite does not
 ## Not done yet
 
 Recorded in the register as pending (`xfail(strict=True)`), not forgotten: conformance suites for the
-LLM-client, embedding-client and document-extractor ports (row I30), and binding the object store in
-serving (its callers build absolute `tenants/...` keys through `workspace/layout`, so it needs those call sites rewritten to
-relative keys first).
+LLM-client, embedding-client and document-extractor ports (row I30), and the admin routes, which are tenant-wide by design and use the raw stores.

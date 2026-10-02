@@ -69,6 +69,29 @@ class ServerDependencies:
     # not file_store.copy_prefix.
     workspace_store: Optional[Any] = None
 
+    # -- tenant-fenced object stores -------------------------------------------------------------
+    # Request code never touches ``file_store`` / ``pending_file_store`` directly: these return them fenced
+    # to one tenant's ``tenants/<tenant>/`` subtree (kernel/storage/scoped.py), so a key built from a
+    # database row or a request cannot reach another tenant's objects. The unfenced stores stay for the
+    # admin routes, which are tenant-wide by design.
+
+    def files_for(self, tenant_id: str | None) -> Any | None:
+        return _fence(self.file_store, tenant_id)
+
+    def pending_for(self, tenant_id: str | None) -> Any | None:
+        return _fence(self.pending_file_store, tenant_id)
+
+
+def _fence(store: Any, tenant_id: str | None) -> Any | None:
+    if store is None:
+        return None
+    if not tenant_id:
+        raise ValueError("an object store can only be used on behalf of a tenant")
+    from substrate.kernel.abstractions.core.scope import Scope
+    from substrate.kernel.storage.scoped import fence_objects
+
+    return fence_objects(store, Scope(tenant_id=tenant_id))
+
 
 def get_ctx(request: Request) -> ServerDependencies:
     """FastAPI dependency that returns typed server dependencies."""

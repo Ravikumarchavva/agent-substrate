@@ -89,6 +89,9 @@ async def test_send_blocked_when_staging_still_in_progress():
     rag_backend = MagicMock()
     rag_backend.name = "local"
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = rag_backend
 
@@ -115,6 +118,9 @@ async def test_send_blocked_when_staging_failed():
     rag_backend = MagicMock()
     rag_backend.name = "local"
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = rag_backend
 
@@ -142,6 +148,9 @@ async def test_send_blocked_when_daily_quota_exceeded_and_quota_is_released():
     rag_backend = MagicMock()
     rag_backend.name = "local"
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = rag_backend
 
@@ -182,6 +191,9 @@ async def test_send_skips_reingestion_for_file_already_staged_this_thread():
     rag_backend = MagicMock()
     rag_backend.name = "local"
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = rag_backend
     ctx.embedding_client = MagicMock()
@@ -214,6 +226,9 @@ async def test_send_ingests_a_file_staged_under_a_different_thread():
     rag_backend = MagicMock()
     rag_backend.name = "local"
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.file_store.download = AsyncMock(return_value=b"pdf bytes")
     ctx.rag_backend = rag_backend
@@ -248,6 +263,9 @@ async def test_send_non_local_backend_unaffected_by_staging_logic():
     rag_backend.name = "managed"
     rag_backend.ingest = AsyncMock()
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.file_store.download = AsyncMock(return_value=b"pdf bytes")
     ctx.rag_backend = rag_backend
@@ -271,6 +289,9 @@ async def test_send_ingest_failure_releases_quota():
     rag_backend = MagicMock()
     rag_backend.name = "local"
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.file_store.download = AsyncMock(return_value=b"pdf bytes")
     ctx.rag_backend = rag_backend
@@ -306,6 +327,9 @@ async def test_send_multi_file_quota_blocks_both_when_insufficient_remaining():
     rag_backend.name = "local"
     rag_backend.promote = AsyncMock()
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = rag_backend
 
@@ -344,6 +368,9 @@ async def test_send_skips_pre_validation_when_no_new_commits():
     rag_backend.promote = AsyncMock()
     rag_backend.ingest = AsyncMock()
     ctx = MagicMock()
+    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = rag_backend
 

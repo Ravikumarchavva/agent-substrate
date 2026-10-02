@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**93 enforced · 1 pending · 94 total**
+**94 enforced · 1 pending · 95 total**
 
 ## approvals
 
@@ -157,6 +157,8 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i03_object_stores_are_per_tenant_with_their_own_usage_and_erase`
 - ✅ **i03 a tenant whose name looks like another tenants prefix gets its own wall**
   `test_i03_a_tenant_whose_name_looks_like_another_tenants_prefix_gets_its_own_wall`
+- ✅ **i03 a fenced store keeps absolute keys but only inside its tenant**
+  `test_i03_a_fenced_store_keeps_absolute_keys_but_only_inside_its_tenant`
 
 ## structure
 

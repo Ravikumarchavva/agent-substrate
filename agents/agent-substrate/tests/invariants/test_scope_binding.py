@@ -180,3 +180,41 @@ async def test_i03_a_tenant_whose_name_looks_like_another_tenants_prefix_gets_it
     n2 = _node("b/s", "y")
     await plain.append_node(n2)
     assert await tricky.get_node(n2.id) is None, "tenant 'a' session 'b/s' was readable as tenant 'a/b' session 's'"
+
+
+async def test_i03_a_fenced_store_keeps_absolute_keys_but_only_inside_its_tenant(tmp_path) -> None:
+    from substrate.kernel.storage.scoped import fence_objects
+
+    raw = WorkspaceFileStore(tmp_path, user_quota_bytes=10**9)
+    mine = fence_objects(raw, A)
+    await mine.upload("tenants/acme/users/u/uploads/a.bin", b"ok")
+    await raw.upload("tenants/evilcorp/secret", b"keep me")
+    assert await mine.download("tenants/acme/users/u/uploads/a.bin") == b"ok"
+    assert [k for k, _s, _m in await mine.list_prefix("tenants/acme/users/u/")] == ["tenants/acme/users/u/uploads/a.bin"]
+    hostile = [
+        "tenants/evilcorp/secret",
+        "tenants/acme/../evilcorp/secret",
+        "tenants/acme/users/../../../evilcorp/secret",
+        "tenants/acmeevil/x",
+        "tenants/acme",
+        "/tenants/acme/x",
+        "tenants\\acme\\x",
+        "other/x",
+    ]
+    for key in hostile:
+        with pytest.raises(ValueError):
+            await mine.download(key)
+        with pytest.raises(ValueError):
+            await mine.upload(key, b"attack")
+    for prefix in ("tenants/evilcorp/", "tenants/acme/../evilcorp/", "tenants/"):
+        with pytest.raises(ValueError):
+            await mine.delete_prefix(prefix)
+        with pytest.raises(ValueError):
+            await mine.list_prefix(prefix)
+    with pytest.raises(ValueError):
+        await mine.copy_prefix("tenants/acme/", "tenants/evilcorp/stolen/")
+    with pytest.raises(ValueError):
+        await mine.usage_bytes("evilcorp")
+    with pytest.raises(ValueError):
+        fence_objects(raw, Scope(tenant_id="a/b"))
+    assert await raw.download("tenants/evilcorp/secret") == b"keep me"

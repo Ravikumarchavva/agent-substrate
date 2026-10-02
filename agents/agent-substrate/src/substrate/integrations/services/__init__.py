@@ -5,7 +5,6 @@ runs as a server, and this package is only the client side: a base URL (and a to
 imports a model library, so the base install stays small and the same code talks to a service on localhost, in the
 cluster, or hosted.
 
-``document_extraction``  ExtractionClient, ``extract_document``, ``ServiceBackedDocumentExtractor``
 ``embedding_reranker``   EmbeddingRerankerClient — embeddings and rerank scores from an embedding-reranker service
 ``llama_server``         EmbeddingReranker — the same, direct to llama-server (``/embeddings``, ``/rerank``)
 

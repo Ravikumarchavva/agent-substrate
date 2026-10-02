@@ -2,9 +2,14 @@
 
 A ``Provider`` builds the extractor and makes a sample document with known per-page text in whatever
 format that extractor reads. What every extractor must do: surface every page's text in order, number
-pages from 1, name the engine that did the work, and **never raise for a document it cannot read** — a
-corrupt, empty or hostile file comes back as ``ExtractionResult(success=False, error=…)`` so a chat turn
-degrades instead of failing.
+pages from 1, put a ``<!-- page N -->`` marker before each page of ``markdown`` (in order), name the engine
+that did the work, accept every ``strategy`` and a ``content_type`` hint without raising, and **never raise
+for a document it cannot read** — a corrupt, empty or hostile file comes back as
+``ExtractionResult(success=False, error=…)`` so a chat turn degrades instead of failing.
+
+A provider that can also make a *scanned* document (``scanned() -> (bytes, filename)``: a page that is only
+a picture of the text "4417") is held to one more rule, the one that matters most to a user: such a page is
+either recognised (its text says 4417) or **reported** in ``needs_ocr`` — never returned silently empty.
 """
 
 from __future__ import annotations
@@ -29,6 +34,10 @@ class Provider(Protocol):
 
     def document(self, pages: list[str]) -> tuple[bytes, str]:
         """A document whose pages contain exactly ``pages``, and the filename it should be submitted under."""
+
+    def scanned(self) -> tuple[bytes, str] | None:
+        """Optional: a one-page document that is only a picture of the text ``Invoice 4417``, and its filename; ``None`` if the
+        extractor does not read pictures of text."""
 
 
 def pdf(pages: list[str]) -> bytes:
@@ -66,12 +75,12 @@ class DocumentExtractorConformance:
     def provider(self) -> Provider:  # pragma: no cover - supplied by subclasses
         raise NotImplementedError
 
-    async def extract(self, provider: Provider, pages: list[str] = PAGES) -> ExtractionResult:
+    async def read(self, provider: Provider, pages: list[str] = PAGES) -> ExtractionResult:
         data, filename = provider.document(pages)
-        return await provider.extractor().extract(data, filename)
+        return await provider.extractor().read(data, filename)
 
     async def test_every_pages_text_comes_out_in_order(self, provider: Provider) -> None:
-        result = await self.extract(provider)
+        result = await self.read(provider)
         assert result.success and result.error is None
         body = result.markdown or " ".join(p.text for p in result.pages)
         positions = [body.find(token) for token in ("4417", "Rotterdam", "terms and conditions")]
@@ -79,7 +88,7 @@ class DocumentExtractorConformance:
         assert positions == sorted(positions), "pages were reordered"
 
     async def test_pages_are_numbered_from_one_in_order(self, provider: Provider) -> None:
-        result = await self.extract(provider)
+        result = await self.read(provider)
         numbers = [p.page_number for p in result.pages]
         assert numbers == sorted(numbers) and len(set(numbers)) == len(numbers)
         if provider.paged:
@@ -87,23 +96,48 @@ class DocumentExtractorConformance:
             assert "4417" in result.pages[0].text and "Rotterdam" in result.pages[1].text
 
     async def test_the_engine_that_did_the_work_is_named(self, provider: Provider) -> None:
-        assert (await self.extract(provider)).engine
+        assert (await self.read(provider)).engine
+
+    async def test_the_markdown_marks_each_page_in_order(self, provider: Provider) -> None:
+        result = await self.read(provider)
+        if not provider.paged or not getattr(provider, "marks_pages", True):
+            return
+        positions = [result.markdown.find(f"<!-- page {n} -->") for n in (1, 2, 3)]
+        assert all(p >= 0 for p in positions), f"missing page markers: {positions}"
+        assert positions == sorted(positions)
+
+    @pytest.mark.parametrize("strategy", ["fast", "auto", "hi_res", "ocr_only"])
+    async def test_every_strategy_is_accepted_and_a_content_type_is_only_a_hint(self, provider: Provider, strategy: str) -> None:
+        data, filename = provider.document(PAGES)
+        result = await provider.extractor().read(data, filename, content_type="application/octet-stream", strategy=strategy)  # type: ignore[arg-type]
+        assert isinstance(result, ExtractionResult)
+        assert result.success or result.error
+
+    async def test_a_scanned_page_is_recognised_or_reported_never_silently_empty(self, provider: Provider) -> None:
+        scanned = provider.scanned() if hasattr(provider, "scanned") else None
+        if scanned is None:
+            pytest.skip("this extractor does not read pictures of text")
+        data, filename = scanned
+        result = await provider.extractor().read(data, filename)
+        assert result.success, result.error
+        page = result.pages[0]
+        assert "4417" in page.text or page.needs_ocr, f"a scanned page came back empty without saying so: {page.model_dump(exclude={'images'})}"
 
     async def test_a_corrupt_document_is_a_failure_not_an_exception(self, provider: Provider) -> None:
         data, filename = provider.document(PAGES)
-        result = await provider.extractor().extract(data[: len(data) // 3], filename)
+        result = await provider.extractor().read(data[: len(data) // 3], filename)
         assert isinstance(result, ExtractionResult)
         assert result.success or result.error, "a failure must say why"
 
     async def test_empty_bytes_are_a_failure_not_an_exception(self, provider: Provider) -> None:
         _, filename = provider.document(PAGES)
-        result = await provider.extractor().extract(b"", filename)
+        result = await provider.extractor().read(b"", filename)
         assert isinstance(result, ExtractionResult)
         assert not result.success or not any(p.text.strip() for p in result.pages)
 
     async def test_arbitrary_bytes_are_a_failure_not_an_exception(self, provider: Provider) -> None:
         _, filename = provider.document(PAGES)
-        result = await provider.extractor().extract(bytes(range(256)) * 40, filename)
+        result = await provider.extractor().read(bytes(range(256)) * 40, filename)
         assert isinstance(result, ExtractionResult)
         if provider.rejects_garbage:
             assert not result.success and result.error
@@ -113,7 +147,7 @@ class DocumentExtractorConformance:
         data, filename = provider.document(PAGES)
         suffix = filename[filename.rfind("."):]
         name = hostile if hostile.endswith(suffix) else hostile + suffix
-        result = await provider.extractor().extract(data, name)
+        result = await provider.extractor().read(data, name)
         assert isinstance(result, ExtractionResult)
 
 

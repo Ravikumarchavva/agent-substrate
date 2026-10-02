@@ -374,6 +374,7 @@ async def init_tool_registry(
     workspace_store: Any = None,
     skill_manager: Any = None,
     task_store: Any = None,
+    library: Any = None,
 ) -> ToolboxResult:
     """Create all tools and return a registry.
 
@@ -540,14 +541,11 @@ async def init_tool_registry(
                 ),
             )
         )
-    if model_client is not None and embedding_client is not None:
-        from substrate_cloud.session_index.search_tool import (
-            SessionDocumentSearchTool,
-        )
+    if library is not None:
+        from substrate.documents import DocumentsTool
+        from substrate_cloud.documents_library import collection_for_scope
 
-        registry.add(
-            SessionDocumentSearchTool(cfg, embedding_client, model_client)
-        )
+        registry.add(DocumentsTool(library, collection=collection_for_scope))
     if artifact_store is not None:
         from substrate.integrations.tools.artifacts import ArtifactsTool
 
@@ -935,152 +933,6 @@ async def build_short_term_memory(*, store: Any, redis_url: str, ttl: int = 3600
     cache = RedisSessionStore(redis_url=redis_url, ttl=ttl)
     await cache.connect()
     return CachedShortTermMemory(primary=primary, cache=cache)
-
-
-def build_session_index_vector_store(cfg: SubstrateConfig, tenant_id: str, user_id: str) -> Any:
-    """The per-user session-document vector store — the vector half of the per-user index bundle at
-    ``workspace/layout.py::user_index_prefix``, beside the PageIndex trees and the knowledge graph.
-
-    A store of its own in the user's index folder, so erasing a user's index is removing that one folder. A per-(tenant,
-    user) *factory*, not a single shared instance built at startup: the folder depends on both ids, which are only known
-    once a request exists. Cheap — nothing is opened until the first read or write. ``user_index_prefix`` validates both
-    ids (they come from request-scoped auth claims, not trusted input), so neither can be a path separator or traversal.
-    """
-    from pathlib import Path
-
-    from substrate.stores import Store
-    from substrate.workspace.layout import user_index_prefix
-
-    return Store.at(Path(cfg.SESSION_INDEX_LOCAL_PATH) / user_index_prefix(tenant_id, user_id)).vectors
-
-
-def build_session_rag_backend(
-    cfg: SubstrateConfig,
-    tenant_id: str,
-    user_id: str,
-    embedding_client: Any,
-    model_client: Any | None = None,
-) -> Any:
-    """Build a ``LocalRagBackend`` scoped to one user's session-document
-    Lance store, wrapping ``build_session_index_vector_store`` above with the
-    same prefilter → hybrid rerank retrieval path ``KnowledgeSearchTool``
-    gets from the tenant-KB ``LocalRagBackend`` (``build_rag_backend``,
-    ``backends/factory.py``) — closes the gap where
-    ``SessionDocumentSearchTool`` called ``store.hybrid_search()`` directly
-    on the raw vector store, skipping reranking and citation-ready
-    ``SearchResult`` scoring entirely.
-
-    ``embedding_client`` is a required parameter (unlike the tenant-KB path,
-    where it's built once at server startup and threaded through
-    ``build_rag_backend``): this function has no server-startup counterpart
-    of its own, so the caller — ``SessionDocumentSearchTool``, which already
-    holds its own ``self._embedding_client`` — passes it through instead of
-    this function rebuilding one per call.
-
-    Reranking mirrors ``backends/factory.py``'s ``"local"`` branch exactly:
-    only enabled when ``cfg.EMBEDDING_RERANKER_SERVICE_URL`` is configured,
-    preferring the free local ``CrossEncoderReranker`` and falling back to
-    an ``LLMReranker`` (needs ``model_client``) only if reranking is wanted
-    but that service isn't configured.
-
-    No extraction/image-store wiring: this backend is query-only — session
-    documents are ingested via ``session_ingest.py::ingest_session_document``,
-    a separate path that never calls ``.ingest()``/``.load()`` on the
-    ``RagBackend`` this function returns.
-    """
-    from substrate.integrations.knowledge.backends.local import LocalRagBackend
-    from substrate.integrations.knowledge.chunking import recommend_chunk_params
-    from substrate.integrations.knowledge.pipeline import RAGPipeline
-
-    # None (the default) -> derive from the configured embedding model --
-    # same resolution backends/factory.py's build_rag_backend and
-    # session_ingest.py use; see recommend_chunk_params's own docstring.
-    _recommended_size, _recommended_overlap = recommend_chunk_params(
-        getattr(cfg, "EMBEDDING_MODEL", "") or ""
-    )
-    _chunk_size = getattr(cfg, "RAG_CHUNK_SIZE", None)
-    _chunk_overlap = getattr(cfg, "RAG_CHUNK_OVERLAP", None)
-
-    vector_store = build_session_index_vector_store(cfg, tenant_id, user_id)
-    pipeline = RAGPipeline(
-        embedding_client=embedding_client,
-        vector_store=vector_store,
-        default_chunk_size=_chunk_size if _chunk_size is not None else _recommended_size,
-        default_chunk_overlap=(
-            _chunk_overlap if _chunk_overlap is not None else _recommended_overlap
-        ),
-    )
-
-    embedding_reranker_client = None
-    if cfg.EMBEDDING_RERANKER_SERVICE_URL:
-        from substrate.integrations.services.embedding_reranker import (
-            EmbeddingRerankerClient,
-        )
-
-        embedding_reranker_client = EmbeddingRerankerClient(
-            base_url=cfg.EMBEDDING_RERANKER_SERVICE_URL,
-            auth_token=cfg.EMBEDDING_RERANKER_AUTH_TOKEN,
-            timeout_s=cfg.EMBEDDING_RERANKER_TIMEOUT_S,
-        )
-
-    reranker = None
-    if cfg.EMBEDDING_RERANKER_SERVICE_URL:
-        if embedding_reranker_client is not None:
-            from substrate.integrations.knowledge.reranker import CrossEncoderReranker
-
-            reranker = CrossEncoderReranker(embedding_reranker_client)
-        elif model_client is not None:
-            from substrate.integrations.knowledge.reranker import LLMReranker
-
-            reranker = LLMReranker(model_client)
-
-    return LocalRagBackend(
-        pipeline,
-        vector_store=vector_store,
-        embedding_reranker_service_url=cfg.EMBEDDING_RERANKER_SERVICE_URL,
-        embedding_reranker_auth_token=cfg.EMBEDDING_RERANKER_AUTH_TOKEN,
-        embedding_reranker_timeout_s=cfg.EMBEDDING_RERANKER_TIMEOUT_S,
-        embedding_reranker_client=embedding_reranker_client,
-        reranker=reranker,
-        model_client=model_client,
-        dense_k=cfg.RAG_DENSE_K,
-        lexical_k=cfg.RAG_LEXICAL_K,
-        fused_k=cfg.RAG_FUSED_K,
-        rerank_top_n=cfg.RAG_RERANK_TOP_N,
-    )
-
-
-def build_page_index_memory(cfg: SubstrateConfig, tenant_id: str, user_id: str) -> Any:
-    """The per-user ``MemoryStore`` backing ``PageIndexRAGPipeline``'s outline trees — the tree half of the per-user
-    index bundle, alongside ``build_session_index_vector_store`` above.
-
-    A store of its own in the user's index folder (``user_index_prefix``), not the shared long-term memory: different
-    data, different lifecycle — and erasing a user's index is still removing that one folder. Same per-(tenant, user)
-    factory shape as the vector store, because both ids are only known once a request exists.
-    """
-    from pathlib import Path
-
-    from substrate.stores import Store
-    from substrate.workspace.layout import user_index_prefix
-
-    return Store.at(Path(cfg.SESSION_INDEX_LOCAL_PATH) / user_index_prefix(tenant_id, user_id)).memory
-
-
-def build_session_graph_store(cfg: SubstrateConfig, tenant_id: str, user_id: str) -> Any:
-    """The per-user knowledge-graph store backing ``GraphRAGPipeline`` — the graph third of the per-user index bundle,
-    alongside ``build_session_index_vector_store``/``build_page_index_memory`` above.
-
-    A store of its own in the user's index folder (``user_index_prefix``), so erasing a user's index is still removing
-    that one folder. Deliberately separate from the shared store's ``graph`` (``Store.graph``), which would hold any
-    standing, cross-user knowledge graph — different scale, different lifecycle. Reads span everything the user has
-    ever had extracted.
-    """
-    from pathlib import Path
-
-    from substrate.stores import Store
-    from substrate.workspace.layout import user_index_prefix
-
-    return Store.at(Path(cfg.SESSION_INDEX_LOCAL_PATH) / user_index_prefix(tenant_id, user_id)).graph
 
 
 def build_safety_middleware(cfg: SubstrateConfig) -> Any:

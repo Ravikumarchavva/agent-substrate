@@ -19,7 +19,7 @@ SRC = REPO_ROOT / "src" / "substrate"
 _NOT_THE_ENGINES = (
     "asyncpg sqlalchemy psycopg redis apscheduler fastapi starlette uvicorn openai anthropic google mcp rich "
     "prompt_toolkit kokoro soundfile tiktoken yaml PIL httpx httpx2 pydantic_settings pythonjsonlogger msgspec "
-    "greenlet numpy jwt pytest"
+    "greenlet numpy jwt pytest pypdfium2 pypdfium2_raw rapidocr onnxruntime cv2"
 ).split()
 
 _CORE = "types telemetry tools models stores documents workspace safety context middleware runtime agents".split()
@@ -37,11 +37,11 @@ def _loaded_by(*imports: str) -> set[str]:
 
 
 def test_i31_the_core_install_is_the_engine_and_nothing_else() -> None:
-    """``pip install agent-substrate`` brings pydantic and the OpenTelemetry API. A driver, an SDK or a web framework
-    in the base dependencies is installed by every user who wanted none of them."""
+    """``pip install agent-substrate`` brings pydantic, the OpenTelemetry API and ``pypdfium2`` (so a plain install reads PDFs). A driver,
+    an SDK or a web framework in the base dependencies is installed by every user who wanted none of them."""
     project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     names = {d.split("[")[0].split(">")[0].split("=")[0].split("<")[0].strip().lower() for d in project["dependencies"]}
-    assert names == {"pydantic", "opentelemetry-api"}, f"the base dependencies are {sorted(names)}"
+    assert names == {"pydantic", "opentelemetry-api", "pypdfium2"}, f"the base dependencies are {sorted(names)}"
 
 
 def test_i31_importing_the_engine_loads_no_driver_sdk_or_framework() -> None:

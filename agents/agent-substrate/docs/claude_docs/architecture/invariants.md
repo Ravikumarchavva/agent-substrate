@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**116 enforced · 0 pending · 116 total**
+**120 enforced · 0 pending · 120 total**
 
 ## approvals
 
@@ -30,6 +30,15 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i20_total_spend_never_exceeds_the_cap_by_more_than_the_calls_in_flight`
 - ✅ **The same budget, split across many children, stops the tree as one agent would.**
   `test_i20_spawning_more_agents_is_not_a_way_around_a_cap`
+
+## documents
+
+- ✅ **A scanned page comes back with its text (OCR available) or listed in ``needs_ocr`` (it is not) — never as an empty page with no note.**
+  `test_a_page_that_is_only_a_picture_is_recognised_or_reported_never_silently_empty`
+- ✅ **With isolation on (the default) the PDF parser and the OCR runtime run in a worker process: the host's modules never include them.**
+  `test_an_isolated_read_never_loads_the_parser_or_the_ocr_runtime_into_the_host`
+- ✅ **A zip bomb, an entity bomb, an external entity, absurd nesting and a member flood each come back as ``success=False`` with a reason.**
+  `test_a_hostile_document_is_a_failed_result_never_an_exception`
 
 ## durable execution
 
@@ -70,7 +79,7 @@ and the marker has to come off. That is what keeps this document honest.
 
 ## library
 
-- ✅ **``pip install agent-substrate`` brings pydantic and the OpenTelemetry API. A driver, an SDK or a web framework in the base dependencies is installed by every user who wanted none of them.**
+- ✅ **``pip install agent-substrate`` brings pydantic, the OpenTelemetry API and ``pypdfium2`` (so a plain install reads PDFs). A driver, an SDK or a web framework in the base dependencies is installed by every user who wanted none of them.**
   `test_i31_the_core_install_is_the_engine_and_nothing_else`
 - ✅ **Every concept package of the core, imported in a fresh interpreter, loads none of what an extra provides.**
   `test_i31_importing_the_engine_loads_no_driver_sdk_or_framework`
@@ -208,6 +217,8 @@ and the marker has to come off. That is what keeps this document honest.
 
 - ✅ **The core is the engine, so it has to be installable and importable without a vendor SDK, a model runtime, or a database driver.**
   `test_i26_the_core_imports_only_its_allowed_third_party_set`
+- ✅ **``pypdfium2`` (base) and ``rapidocr`` (the ``ocr`` extra) are parsers of untrusted bytes and a model runtime. They may be named only under ``documents/reading/`` and only inside a function, so that importing ``substrate`` loads neither, and so that the host process never has PDFium in it unless it chose to read in-process.**
+  `test_the_document_parsers_are_imported_lazily_and_only_by_the_reader`
 - ✅ **The core is what every integration and application builds on, so it can name none of them.**
   `test_the_core_imports_nothing_outside_itself`
 - ✅ **``CORE`` is ordered bottom-up: types, then tools, models, stores … up to agents. A concept that imported one above it would make the order a cycle, and the bottom of the engine would drag the top along. Imports made only for type checking are exempt — they never run.**

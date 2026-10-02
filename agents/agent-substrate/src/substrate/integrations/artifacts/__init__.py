@@ -9,7 +9,7 @@ See ``okf.py`` for the format and ``store.py`` for the storage layout.
 
 from __future__ import annotations
 
-from substrate.integrations.artifacts.okf import (
+from substrate.documents.okf import (
     Concept,
     OKFParseError,
     agent_actor,

@@ -22,7 +22,7 @@ from document_intelligence.engines.paddle_classic import (
     PaddleClassicEngine,
 )
 from document_intelligence.engines.paddle_vl import PaddleVLEngine
-from document_intelligence.engines.raw_text import RawTextEngine
+from document_intelligence.engines.native import NativeEngine
 from inference_pool.llama_pool import (
     LocalLlamaServerPool,
     RemoteInferencePool,
@@ -164,7 +164,7 @@ async def build_engine(cfg: Any, resolved: ResolvedRuntime) -> ExtractionEngine:
     startup, not on the first real request.
     """
     if resolved.mode == "raw_text":
-        return RawTextEngine()
+        return NativeEngine(max_bytes=getattr(cfg, "max_upload_bytes", 50 * 1024 * 1024))
 
     if resolved.mode == "ocr_classic":
         # An explicit cfg.device override always wins over the

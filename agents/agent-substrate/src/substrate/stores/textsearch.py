@@ -22,6 +22,31 @@ def words(text: str) -> list[str]:
     return _WORDS.findall(text)
 
 
+_STOPWORDS = frozenset(
+    "a an and are as at be but by for from has have how i if in into is it its of on or that the their then there these this to was were what when where which who why will with you your".split()
+)
+MAX_TERMS = 16
+
+
+def terms(query: str) -> list[str]:
+    """The words of ``query`` worth searching for: stopwords dropped (unless that leaves nothing), duplicates folded, at most ``MAX_TERMS``."""
+    found = list(dict.fromkeys(word for word in words(query) if word))
+    kept = [word for word in found if word.lower() not in _STOPWORDS] or found
+    return kept[:MAX_TERMS]
+
+
+def snippet(text: str, query_words: list[str], *, width: int = 240) -> str:
+    """About ``width`` characters of ``text`` around the first place any of the words occurs (the start if none does)."""
+    flat = " ".join(text.split())
+    lower = flat.lower()
+    at = min((i for i in (lower.find(w.lower()) for w in query_words) if i >= 0), default=-1)
+    if at < 0 or len(flat) <= width:
+        return flat[:width] + ("…" if len(flat) > width else "")
+    start = max(0, at - width // 3)
+    end = min(len(flat), start + width)
+    return ("…" if start else "") + flat[start:end] + ("…" if end < len(flat) else "")
+
+
 def ddl(dialect: str, *, index: str, table: str, column: str = "text") -> str:
     """What to append to a table's migration so ``column`` can be searched. ``table`` must have a ``seq`` key."""
     if dialect == "postgresql":
@@ -47,20 +72,32 @@ END;
 """
 
 
-def ranked(dialect: str, *, index: str, table: str, alias: str, query_words: list[str]) -> tuple[str, str, list[str]]:
+def ranked(
+    dialect: str, *, index: str, table: str, alias: str, query_words: list[str], match: str = "all"
+) -> tuple[str, str, list[str]]:
     """``(from, where, params)`` for ``SELECT {alias}.*, <score> AS score FROM <from> WHERE <where>``: the rows of
-    ``table`` (as ``alias``) that contain every word, with their relevance as ``score`` (higher is better).
+    ``table`` (as ``alias``) that contain every word (``match="all"``) or any of them (``match="any"``), with their
+    relevance as ``score`` (higher is better).
 
     ``from`` and ``where`` precede the caller's own conditions, so ``params`` come first among its parameters.
     """
+    if match not in ("all", "any"):
+        raise ValueError(f"match must be 'all' or 'any', got {match!r}")
     if dialect == "postgresql":
+        if match == "any":  # the words are \w+ only (see ``words``), so none of them can be query syntax
+            return (
+                f"{table} {alias}, to_tsquery('english', ?) AS query",
+                f"{alias}.tsv @@ query",
+                [" | ".join(query_words)],
+            )
         return (
             f"{table} {alias}, plainto_tsquery('english', ?) AS query",
             f"{alias}.tsv @@ query",
             [" ".join(query_words)],
         )
-    match = " ".join('"' + word.replace('"', '""') + '"' for word in query_words)
-    return f"{index} JOIN {table} {alias} ON {alias}.seq = {index}.rowid", f"{index} MATCH ?", [match]
+    joiner = " OR " if match == "any" else " "
+    quoted = joiner.join('"' + word.replace('"', '""') + '"' for word in query_words)
+    return f"{index} JOIN {table} {alias} ON {alias}.seq = {index}.rowid", f"{index} MATCH ?", [quoted]
 
 
 def score(dialect: str, *, index: str, alias: str) -> str:

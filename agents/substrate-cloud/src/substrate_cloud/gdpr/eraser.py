@@ -16,10 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.stores import Erased, MemoryNamespace, Store
 from substrate.workspace.layout import tenant_prefix, user_prefix
-from substrate_cloud.session_index.erasure import (
-    erase_session_index,
-    erase_session_index_for_tenant,
-)
 from substrate_cloud.monolith.models import FileMetadata, Thread, User
 
 
@@ -31,7 +27,7 @@ class ErasureSummary:
     metadata_rows_deleted: int
     objects_deleted: int
     redis_keys_deleted: int
-    session_index_tables_deleted: int
+    documents_deleted: int
     memories_deleted: int = 0
     runs_deleted: int = 0
     thread_nodes_deleted: int = 0
@@ -48,6 +44,15 @@ async def _delete_prefix(store: Any, prefix: str) -> int:
     if method is None:
         raise RuntimeError("configured file store does not support prefix erasure")
     return int(await method(prefix))
+
+
+async def _erase_documents(folder: Store | None, store: Any, prefix: str) -> int:
+    """The documents (catalog rows, bundles) the conversations under ``prefix`` were given — see ``substrate.documents.Library``."""
+    if folder is None:
+        return 0
+    from substrate.documents import Library
+
+    return await Library(folder, files=store).erase_under(prefix)
 
 
 async def _redis_sweep(redis: Any, identifiers: set[str]) -> int:
@@ -124,7 +129,7 @@ async def erase_user(
         # but never-sent survives erasure entirely.
         objects += await pending_store.delete_prefix(user_prefix(tenant_id, user_id))
     redis_deleted = await _redis_sweep(redis, {user_id, *thread_ids})
-    session_index_tables = await erase_session_index(cfg, tenant_id, user_id)
+    documents = await _erase_documents(folder, store, user_prefix(tenant_id, user_id))
     memories = await memory_store.erase(MemoryNamespace(tenant_id=tenant_id, user_id=user_id)) if memory_store else 0
     runs = 0
     if runtime_store is not None:
@@ -145,7 +150,7 @@ async def erase_user(
         metadata_result.rowcount or 0,
         objects,
         redis_deleted,
-        session_index_tables,
+        documents,
         memories,
         runs,
         erased.thread_nodes,
@@ -183,7 +188,7 @@ async def erase_tenant(
     if pending_store is not None and hasattr(pending_store, "delete_prefix"):
         objects += await pending_store.delete_prefix(tenant_prefix(tenant_id))
     redis_deleted = await _redis_sweep(redis, thread_ids | users)
-    session_index_tables = await erase_session_index_for_tenant(cfg, tenant_id, users)
+    documents = await _erase_documents(folder, store, tenant_prefix(tenant_id))
     memories = erased.memories + (await memory_store.erase(MemoryNamespace(tenant_id=tenant_id)) if memory_store else 0)
     runs = await runtime_store.erase(tenant=tenant_id) if runtime_store is not None else 0
     return ErasureSummary(
@@ -193,7 +198,7 @@ async def erase_tenant(
         metadata_result.rowcount or 0,
         objects,
         redis_deleted,
-        session_index_tables,
+        documents,
         memories,
         runs,
         erased.thread_nodes,

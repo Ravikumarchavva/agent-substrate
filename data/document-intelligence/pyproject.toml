@@ -10,11 +10,8 @@ dependencies = [
     "fastapi>=0.128.0",
     "uvicorn[standard]>=0.34.0",
     "pydantic-settings>=2.12.0",
-    "pypdfium2>=4.30.0",
     "pillow>=10.4.0",
     "numpy>=1.26.0",
-    # mode raw_text's DOCX/PPTX conversion — pure Python, no rendering engine (LibreOffice is the optional tier 2)
-    "markitdown[docx,pptx]>=0.1.0",
     # the structural/security scan of an upload, before any parser touches it
     "doc-firewall>=0.5.1",
     # model provisioning: HF Hub lookups/downloads for the PaddleOCR-VL GGUF files
@@ -26,7 +23,7 @@ dependencies = [
 paddle = ["paddleocr[doc-parser]>=3.7.0", "paddlepaddle==3.3.0"]
 # same, CUDA wheel, and NVML for the GPU detection chain
 paddle-gpu = ["paddleocr[doc-parser]>=3.7.0", "paddlepaddle-gpu==3.3.0", "nvidia-ml-py>=12.0"]
-test = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0", "python-docx>=1.1.0", "python-pptx>=1.0.0", "pypdf>=6.13.0"]
+test = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0", "pypdf>=6.13.0"]
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12"]

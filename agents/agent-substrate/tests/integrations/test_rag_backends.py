@@ -226,8 +226,8 @@ async def test_local_backend_no_loader_raises_rag_load_error():
     store = StubVectorStore()
     backend = build_rag_backend("local", embedding_client=embed, vector_store=store)
 
-    with pytest.raises(Exception, match="No local loader"):
-        await backend.ingest(b"binary blob", metadata={"filename": "file.xyz"})
+    with pytest.raises(Exception, match="could not be read"):
+        await backend.ingest(bytes(range(256)) * 20, metadata={"filename": "file.xyz"})
 
 
 async def test_local_backend_list_and_delete_collections():

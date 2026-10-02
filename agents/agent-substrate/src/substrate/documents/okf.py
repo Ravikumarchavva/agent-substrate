@@ -1,4 +1,4 @@
-"""OKF concept parsing/serialization.
+"""OKF concept parsing/serialization — core, standard library only (``_frontmatter.py`` is the YAML subset codec).
 
 Implements Google Cloud's Open Knowledge Format v0.2
 (https://github.com/GoogleCloudPlatform/open-knowledge-format): a bundle is a
@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-import yaml
+from substrate.documents import _frontmatter
 
 # Reserved by the spec — never concept documents.
 INDEX_FILENAME = "index.md"
@@ -167,12 +167,7 @@ def parse(text: str) -> Concept:
     # is idempotent rather than accreting a newline per round-trip.
     body = rest[end + len(_FRONTMATTER_FENCE) + 1 :].strip()
 
-    try:
-        loaded = yaml.safe_load(raw_yaml) or {}
-    except yaml.YAMLError as exc:
-        raise OKFParseError(f"invalid YAML frontmatter: {exc}") from exc
-    if not isinstance(loaded, dict):
-        raise OKFParseError("frontmatter is not a YAML mapping")
+    loaded = _frontmatter.load_mapping(raw_yaml)  # never raises: what it cannot read is kept as raw text
 
     concept_type = loaded.get("type")
     if not isinstance(concept_type, str) or not concept_type.strip():
@@ -235,7 +230,7 @@ def serialize(concept: Concept) -> str:
         data["sources"] = concept.sources
     data.update(concept.extra)
 
-    front = yaml.safe_dump(data, sort_keys=False, allow_unicode=True).rstrip("\n")
+    front = _frontmatter.dump_mapping(data)
     body = concept.body.strip()
     return f"{_FRONTMATTER_FENCE}\n{front}\n{_FRONTMATTER_FENCE}\n\n{body}\n"
 

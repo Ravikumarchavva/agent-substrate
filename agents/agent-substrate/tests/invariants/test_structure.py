@@ -31,7 +31,12 @@ SNAPSHOT = Path(__file__).parent / "public_api.json"
 # beyond that: the homoglyph skeleton in ``safety.normalize`` is a prompt-
 # injection defence the engine owns, it does no I/O, and reimplementing the
 # UTS-39 table by hand would be a worse trade than the dependency.
-_ALLOWED_THIRD_PARTY = {"pydantic", "typing_extensions", "opentelemetry", "confusable_homoglyphs"}
+#
+# ``pypdfium2`` is the one parser in the base install: a plain ``pip install agent-substrate`` reads PDFs. ``rapidocr`` is the optional
+# OCR engine (the ``ocr`` extra). Both are admitted only as **lazy imports inside ``documents/reading/``** — a function body, never a
+# module level — so importing the engine loads neither; ``test_the_document_parsers_are_imported_lazily_and_only_by_the_reader`` holds that.
+_ALLOWED_THIRD_PARTY = {"pydantic", "typing_extensions", "opentelemetry", "confusable_homoglyphs", "pypdfium2", "rapidocr"}
+_LAZY_ONLY = {"pypdfium2", "rapidocr"}
 
 
 def _imports(path: Path, *, type_checking: bool = True) -> list[str]:
@@ -71,6 +76,31 @@ def test_i26_the_core_imports_only_its_allowed_third_party_set() -> None:
         "anything needing a third-party SDK belongs in an integration:\n"
         + "\n".join(f"  {where}: {sorted(roots)}" for where, roots in offenders.items())
     )
+
+
+def test_the_document_parsers_are_imported_lazily_and_only_by_the_reader() -> None:
+    """``pypdfium2`` (base) and ``rapidocr`` (the ``ocr`` extra) are parsers of untrusted bytes and a model runtime. They may be named only
+    under ``documents/reading/`` and only inside a function, so that importing ``substrate`` loads neither, and so that the host process
+    never has PDFium in it unless it chose to read in-process."""
+    offenders: list[str] = []
+    for path in core_files(include_testing=True):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        top_level = {id(node) for node in tree.body}
+        for node in ast.walk(tree):
+            names = (
+                [a.name for a in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module or ""]
+                if isinstance(node, ast.ImportFrom) and not node.level
+                else []
+            )
+            for name in names:
+                if name.split(".")[0] not in _LAZY_ONLY:
+                    continue
+                inside_reader = "documents" in path.parts and "reading" in path.parts
+                if not inside_reader or id(node) in top_level:
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}: imports {name}{' at module level' if id(node) in top_level else ''}")
+    assert not offenders, "document parsers must be lazy imports under documents/reading/:\n  " + "\n  ".join(offenders)
 
 
 def test_the_core_imports_nothing_outside_itself() -> None:
@@ -167,6 +197,7 @@ _PORTS = (
     "ChatModel",
     "EmbeddingModel",
     "DocumentExtractor",
+    "Ocr",
 )
 _SUITES_DIR = SRC / "testing" / "conformance"
 
@@ -217,7 +248,7 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
     assert "TaskStore" in suites, "the TaskStore conformance suite has gone missing"
     assert "WorkspaceStore" in suites, "the WorkspaceStore conformance suite has gone missing"
     assert "GraphStore" in suites, "the GraphStore conformance suite has gone missing"
-    for port in ("ChatModel", "EmbeddingModel", "DocumentExtractor"):
+    for port in ("ChatModel", "EmbeddingModel", "DocumentExtractor", "Ocr"):
         assert port in suites, f"the {port} conformance suite has gone missing"
     assert "VectorStore" in suites, "the vector-store conformance suite has gone missing"
     shipped = {
@@ -231,7 +262,8 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
         "GraphStore": ("TestGraph", "TestPostgresGraph"),
         "ChatModel": ("OpenAICompatibleClient", "OpenAIClient", "AnthropicClient", "GeminiClient"),
         "EmbeddingModel": ("OpenAIEmbeddingClient", "GeminiEmbeddingClient", "SentenceTransformersEmbeddingClient", "EmbeddingRerankerTextEmbeddingClient"),
-        "DocumentExtractor": ("LocalDocumentExtractor", "ServiceBackedDocumentExtractor"),
+        "DocumentExtractor": ("TestIsolatedReader", "TestInProcessReader", "TestReaderByUrl"),
+        "Ocr": ("TestTesseract", "TestRapidOcr"),
         "VectorStore": ("TestVectors", "TestPostgresVectors"),
     }
     for port, implementations in shipped.items():

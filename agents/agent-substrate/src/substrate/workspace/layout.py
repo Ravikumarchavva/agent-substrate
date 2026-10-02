@@ -154,14 +154,12 @@ def conversation_artifacts_prefix(
     return f"{conversation_prefix(tenant_id, user_id, conversation_id)}/artifacts"
 
 
-def user_index_prefix(tenant_id: str, user_id: str) -> str:
-    """Per-user session-document index bundle (vectors, PageIndex tree
-    nodes, entity/relationship graph) — see docs/claude_docs for the Lance
-    table shapes stored under this prefix. Deliberately per-user, not
-    per-conversation: lets a search span the user's own recent sessions
-    (filtered by a `session_id` column on each table) instead of being
-    blind past one conversation's boundary."""
-    return f"{user_prefix(tenant_id, user_id)}/index"
+def conversation_documents_prefix(tenant_id: str, user_id: str, conversation_id: str) -> str:
+    """The conversation's ``Library`` collection: documents a user gave it, as an OKF bundle (``substrate.documents.Library``).
+
+    A sibling of ``workspace`` and ``artifacts``, outside ``workspace/shared`` for the same reason: that prefix is mounted into the
+    sandbox and listed as the user's files, and the bundle is the model's reading material, written only by ``Library.add``."""
+    return f"{conversation_prefix(tenant_id, user_id, conversation_id)}/documents"
 
 
 def knowledge_document_prefix(
@@ -185,7 +183,7 @@ __all__ = [
     "blob_key",
     "user_artifacts_prefix",
     "conversation_artifacts_prefix",
-    "user_index_prefix",
+    "conversation_documents_prefix",
     "knowledge_document_prefix",
     "safe_relative_path",
 ]

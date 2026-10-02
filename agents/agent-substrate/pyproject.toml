@@ -23,10 +23,12 @@ classifiers = [
 requires-python = ">=3.11"
 # The engine and nothing else: types, stores, runtime, agents, middleware. Everything that talks to a vendor,
 # a database server, or a network — and everything the reference server needs — is an extra named for what it
-# enables (docs/claude_docs/architecture/optional-dependencies.md). Row: importing `substrate` loads no driver or SDK.
+# enables (docs/claude_docs/architecture/optional-dependencies.md). Rows I26/I31: importing `substrate` loads no driver, SDK or parser.
 dependencies = [
     "pydantic>=2.12.5",
     "opentelemetry-api>=1.20.0",
+    # the PDF text layer and page rendering (Apache-2.0/BSD-3, ~4 MB, no system libraries): a plain install reads documents
+    "pypdfium2>=5.0.0",
 ]
 
 # Full rationale for every extra below — size costs, version-pin reasoning,
@@ -83,12 +85,12 @@ sandbox = [
     "pdfplumber>=0.11.0",
 ]
 # local PDF loading + embedded vector store
-rag = ["pypdf>=6.13.0"]
+rag = ["pypdf>=6.13.0", "pytesseract>=0.3.10"]  # both go with the old extractors, removed with them
 # model-based sentence segmentation (SaTSegmenter)
 chunking = ["wtpsplit[onnx-cpu]>=2.1.0"]
-# LocalDocumentExtractor's bare-minimum OCR fallback for scanned pages —
-# also needs the tesseract-ocr system binary, not pip-installable
-ocr = ["pytesseract>=0.3.10", "pypdfium2>=4.30.0"]
+# OCR without a system program: RapidOCR (PaddleOCR's own small models on ONNX Runtime, models inside the wheel). Preferred over the
+# `tesseract` program automatically when installed. Pulls opencv-python; on a headless server install opencv-python-headless first.
+ocr = ["rapidocr>=3.0.0", "onnxruntime>=1.20.0"]
 # non-OpenAI LLM providers — LLMFactory lazy-imports each client, so only
 # the provider(s) you actually select need to be installed
 anthropic = ["anthropic>=0.95.0", "pillow>=10.4.0"]

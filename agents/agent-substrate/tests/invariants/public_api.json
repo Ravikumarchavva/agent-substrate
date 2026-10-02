@@ -51,6 +51,7 @@
     "RunScope",
     "RunStatus",
     "Scope",
+    "ServiceUnavailableError",
     "SnapshotConflictError",
     "SpawnBudget",
     "StreamDone",
@@ -70,6 +71,7 @@
     "UnsupportedContentError",
     "Usage",
     "UserId",
+    "VectorSpaceError",
     "Wakeup",
     "content_blocks_to_str",
     "new_id",
@@ -192,7 +194,13 @@
     "ExtractedImage",
     "ExtractedImageLabel",
     "ExtractedPage",
-    "ExtractionResult"
+    "ExtractionResult",
+    "Ocr",
+    "OcrResult",
+    "PageMethod",
+    "ReadLimits",
+    "Reader",
+    "Strategy"
   ],
   "substrate.workspace": [
     "BlobCAS",

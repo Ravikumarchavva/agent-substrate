@@ -130,6 +130,11 @@ async def lifespan(app: FastAPI):
 
     app.state.jwt_secret = settings.JWT_SECRET
 
+    from substrate_cloud.documents_library import build_library
+
+    library = build_library(infra.store, infra.file_store, settings)
+    app.state.library = library
+
     # Tool registry
     tools: ToolboxResult = await init_tool_registry(
         settings,
@@ -144,6 +149,7 @@ async def lifespan(app: FastAPI):
         workspace_store=infra.workspace_store,
         skill_manager=infra.skill_manager,
         task_store=infra.task_store,
+        library=library,
     )
     app.state.tools = tools.registry
     app.state.task_tool = tools.task_tool
@@ -247,6 +253,7 @@ async def lifespan(app: FastAPI):
         workspace_user_delete_allowed=settings.WORKSPACE_USER_DELETE_ALLOWED,
         rag_backend=app.state.rag_backend,
         embedding_client=app.state.embedding_client,
+        library=app.state.library,
     )
 
     from substrate_cloud.monolith.routes.files import sweep_stuck_staging_uploads

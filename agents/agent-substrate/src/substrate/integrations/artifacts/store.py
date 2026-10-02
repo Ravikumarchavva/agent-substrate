@@ -32,7 +32,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from substrate.integrations.artifacts.okf import (
+from substrate.documents.okf import (
     INDEX_FILENAME,
     LOG_FILENAME,
     RESERVED_FILENAMES,
@@ -42,7 +42,7 @@ from substrate.integrations.artifacts.okf import (
     serialize,
     utc_now_iso,
 )
-from substrate.integrations.artifacts.okf import human_actor as okf_human_actor
+from substrate.documents.okf import human_actor as okf_human_actor
 from substrate.workspace.layout import conversation_artifacts_prefix, user_artifacts_prefix
 
 logger = logging.getLogger(__name__)

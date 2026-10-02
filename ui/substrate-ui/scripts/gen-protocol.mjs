@@ -19,7 +19,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const SCHEMA_PATH = resolve(
   __dirname,
-  "../../agent-substrate/src/substrate/serving/protocol/protocol.schema.json"
+  "../../agent-substrate/src/substrate/server/protocol/protocol.schema.json"
 );
 const OUT_PATH = resolve(__dirname, "../src/protocol/protocol.gen.ts");
 
@@ -38,7 +38,7 @@ const ts = await compile(schema, "SubstrateProtocol", {
   bannerComment:
     `/* eslint-disable */\n` +
     `/**\n * GENERATED — DO NOT EDIT.\n` +
-    ` * Source: agent-substrate/src/substrate/serving/protocol/ (Pydantic).\n` +
+    ` * Source: agent-substrate/src/substrate/server/protocol/ (Pydantic).\n` +
     ` * Regenerate: cd ../agent-substrate && make protocol-schema && cd ../substrate-ui && pnpm gen:protocol\n` +
     ` * Protocol version: ${version}\n */\n`,
   additionalProperties: false,

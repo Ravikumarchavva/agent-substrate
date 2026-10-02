@@ -1,7 +1,7 @@
 /* eslint-disable */
 /**
  * GENERATED — DO NOT EDIT.
- * Source: agent-substrate/src/substrate/serving/protocol/ (Pydantic).
+ * Source: agent-substrate/src/substrate/server/protocol/ (Pydantic).
  * Regenerate: cd ../agent-substrate && make protocol-schema && cd ../substrate-ui && pnpm gen:protocol
  * Protocol version: 1.0.0
  */

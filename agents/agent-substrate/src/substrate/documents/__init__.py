@@ -1,9 +1,9 @@
-"""substrate.documents — Document extraction and chunking contracts, and the local document store."""
+"""substrate.documents — Document extraction and chunking contracts, and the document catalog."""
 
 from __future__ import annotations
 
-from substrate.documents.local_store import (
-    LocalFilesystemDocumentStore,
+from substrate.documents.tables import (
+    Documents,
 )
 from substrate.documents.protocols import (
     DocumentChunker,
@@ -29,5 +29,5 @@ __all__ = [
     "ExtractedImageLabel",
     "ExtractedPage",
     "ExtractionResult",
-    "LocalFilesystemDocumentStore",
+    "Documents",
 ]

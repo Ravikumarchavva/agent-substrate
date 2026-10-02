@@ -305,10 +305,8 @@ async def lifespan(app: FastAPI):
         await app.state.store.aclose()  # threads, memory and session state share it
     if getattr(app.state, "redis_client", None):
         await app.state.redis_client.aclose()
-    if getattr(app.state, "file_store", None):
-        await app.state.file_store.disconnect()
-    if getattr(app.state, "workspace_store", None):
-        await app.state.workspace_store.disconnect()
+    if hasattr(getattr(app.state, "file_store", None), "disconnect"):
+        await app.state.file_store.disconnect()  # the S3 connection; the store's own files close with the store
     for tool in app.state.tools.all():
         if hasattr(tool, "stop"):
             try:

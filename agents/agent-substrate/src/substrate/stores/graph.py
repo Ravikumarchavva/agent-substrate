@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import Field
@@ -89,4 +90,17 @@ class CypherCapable(Protocol):
     ) -> list[dict[str, Any]]: ...
 
 
-__all__ = ["Entity", "Relationship", "SubGraph", "GraphStore", "CypherCapable"]
+@runtime_checkable
+class EntityFinder(Protocol):
+    """Optional capability: find entities by the words in their name (or, with no name, their id).
+
+    Retrieval over a knowledge graph starts from the entities a question mentions. A store that can answer that
+    directly implements this; one that only speaks Cypher is asked with ``CypherCapable`` instead.
+    """
+
+    async def find_entities(
+        self, terms: Sequence[str], *, limit: int = 100, namespace: str = ""
+    ) -> list[Entity]: ...
+
+
+__all__ = ["Entity", "Relationship", "SubGraph", "GraphStore", "CypherCapable", "EntityFinder"]

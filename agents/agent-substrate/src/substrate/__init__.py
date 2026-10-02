@@ -20,8 +20,6 @@ if TYPE_CHECKING:
     from substrate.agents import UserProxyAgent
     from substrate.config import SubstrateConfig
     from substrate.stores import Store, connect
-    from substrate.workspace import LocalFilesystemWorkspaceStore
-    from substrate.stores import WorkspaceFileStore
     from substrate.context import AgentContext, ContextConfig
     from substrate.context import SlidingWindowCompaction
     from substrate.middleware import AgentRunResult, MiddlewareContext
@@ -64,10 +62,6 @@ __all__ = [
     # native durable storage
     "Store",
     "connect",
-    "LocalFilesystemWorkspaceStore",
-    "LocalWorkspaceStore",
-    "WorkspaceFileStore",
-    "LocalFileStore",
     # supporting types
     "AgentRunResult",
     "Skill",
@@ -121,22 +115,6 @@ _LAZY: dict[str, tuple[str, str]] = {
     # native durable storage
     "Store": ("substrate.stores", "Store"),
     "connect": ("substrate.stores", "connect"),
-    "LocalFilesystemWorkspaceStore": (
-        "substrate.workspace.local_store",
-        "LocalFilesystemWorkspaceStore",
-    ),
-    "LocalWorkspaceStore": (
-        "substrate.workspace.local_store",
-        "LocalFilesystemWorkspaceStore",
-    ),
-    "WorkspaceFileStore": (
-        "substrate.stores.local.files",
-        "WorkspaceFileStore",
-    ),
-    "LocalFileStore": (
-        "substrate.stores.local.files",
-        "WorkspaceFileStore",
-    ),
     # supporting
     "AgentRunResult": ("substrate.middleware", "AgentRunResult"),
     "Skill": ("substrate.tools", "Skill"),

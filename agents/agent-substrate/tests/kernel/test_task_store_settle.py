@@ -54,3 +54,22 @@ async def test_settle_is_scoped_to_conversation() -> None:
     b = await store.get_task_list(tl_b.id)
     assert a.tasks[0].status == TaskStatus.SUCCEEDED
     assert b.tasks[0].status == TaskStatus.IN_PROGRESS  # other conversation untouched
+
+
+async def test_workers_racing_for_the_last_retry_never_both_get_it(tmp_path) -> None:
+    """The retry bound is part of the UPDATE, not a check before it. Two stores — two workers on one folder — retry the
+    same failing task with one attempt left, 20 times each at once: exactly the attempts that were left succeed."""
+    import asyncio
+
+    from substrate.stores import Store
+
+    first, second = Store.at(tmp_path / "s"), Store.at(tmp_path / "s")
+    board = await first.tasks.create_task_list("c", ["flaky"], max_retries=3)
+    task_id = board.tasks[0].id
+
+    results = await asyncio.gather(*(s.tasks.increment_retry(board.id, task_id) for s in (first, second) for _ in range(20)))
+
+    assert sum(r is not None for r in results) == 3
+    assert (await first.tasks.get_task_list(board.id)).tasks[0].retry_count == 3
+    await first.aclose()
+    await second.aclose()

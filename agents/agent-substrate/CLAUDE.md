@@ -102,8 +102,8 @@ src/substrate/
 │   ├── tools/        Tool/HostedTool/ProviderDefinedTool (protocols.py), ToolRisk, approval, chain, Toolbox
 │   ├── models/       ChatModel/EmbeddingModel (protocols.py), capability registry, modality fitting,
 │   │                 error classification (`classify_llm_error`), tool-argument parsing
-│   ├── stores/       History/Memory/Vector/Graph/Object/Task contracts + local/ (the folder
-│   │                 implementations: the durable floor) + scoped.py (tenant binding)
+│   ├── stores/       Thread/Memory/Vector/Graph/File/Task contracts + Store (connect(folder): one database +
+│   │                 files/ — threads, memory, tasks, graph, vectors, files are its facets) + scoped.py (tenant binding)
 │   ├── documents/ workspace/ safety/    DocumentExtractor, branching/snapshots/CAS files, text normalisation
 │   ├── context/      context window, compaction, `history.py` (the linear view of a thread)
 │   ├── middleware/   Middleware contract + built-ins + guardrails
@@ -136,10 +136,10 @@ src/substrate/
 │   ├── tts/              text-to-speech provider adapters
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore (cache), CachedShortTermMemory, MemoryManager, exposure policy
-│   ├── vector/           PgVectorStore, LanceDB  (implement VectorStore Protocol)
+│   ├── vector/           PgVectorStore  (the PostgreSQL VectorStore; the folder store's is Store.vectors)
 │   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
 │   ├── storage/          S3Connector (raw client) + S3FileStore (FileStore Protocol
-│   │                     impl built on top), PgTaskStore, PostgresWorkspaceStore
+│   │                     impl built on top), PostgresWorkspaceStore
 │   ├── database/         PostgresConnector (asyncpg pool — engine's own DB)
 │   ├── cache/            RedisConnector
 │   ├── runtime/          PostgresRuntimeStore (the RuntimeStore on asyncpg)
@@ -426,14 +426,17 @@ Vector and graph store contracts live in the core (`stores/`). Concrete implemen
 from substrate.stores.vector import VectorStore, Document, SearchResult
 from substrate.stores.graph import GraphStore, Entity, Relationship, SubGraph
 
-# Concrete implementations
+# Implementations: the folder store's own (exact + full-text + hybrid search; graph by recursive query), or Postgres
+from substrate.stores import Store
 from substrate.integrations.vector import PgVectorStore
 from substrate.integrations.graph import AGEGraphStore
+
+store = Store.at("./.substrate")          # store.vectors, store.graph — nothing else to install or start
 
 # High-level RAG pipeline
 from substrate.integrations.knowledge import RAGPipeline, GraphRAGPipeline
 
-pipeline = RAGPipeline(embedding_client=embed_client, vector_store=pg_store)
+pipeline = RAGPipeline(embedding_client=embed_client, vector_store=store.vectors)
 await pipeline.ingest("Long document …", collection="kb")
 results = await pipeline.query("What is X?", collection="kb")
 ```

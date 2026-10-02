@@ -10,8 +10,8 @@ from substrate.workspace.branching import (
 from substrate.workspace.cas import (
     BlobCAS,
 )
-from substrate.workspace.local_store import (
-    LocalFilesystemWorkspaceStore,
+from substrate.workspace.tables import (
+    Workspaces,
 )
 from substrate.workspace.protocols import (
     ContentRef,
@@ -32,7 +32,7 @@ from substrate.workspace.snapshots import (
 __all__ = [
     "BlobCAS",
     "ContentRef",
-    "LocalFilesystemWorkspaceStore",
+    "Workspaces",
     "WorkspaceFileEntry",
     "WorkspaceManifest",
     "WorkspaceScope",

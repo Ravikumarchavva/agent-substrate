@@ -171,12 +171,15 @@ class GraphRAGPipeline:
                 if len(w) > 4 and w[0].isupper():
                     keywords.add(w.lower())
 
-        # If CypherCapable, query the graph to find matching entities
-        from substrate.stores import CypherCapable
+        # Find the graph's entities the question mentions: ask the store directly when it can answer that,
+        # else (a Cypher-only store) read its first nodes and match in Python.
+        from substrate.stores import CypherCapable, Entity, EntityFinder
 
-        matched_entities = []
+        matched_entities: list[Entity] = []
 
-        if isinstance(self._graph, CypherCapable):
+        if isinstance(self._graph, EntityFinder):
+            matched_entities = await self._graph.find_entities(sorted(keywords), limit=5)
+        elif isinstance(self._graph, CypherCapable):
             try:
                 # Retrieve all nodes (limit to 100) to find matches in Python
                 rows = await self._graph.query_cypher("MATCH (n) RETURN n LIMIT 100")
@@ -194,8 +197,6 @@ class GraphRAGPipeline:
                                 }
                                 name = props.get("name", "").lower() or eid.lower()
                                 if any(kw in name for kw in keywords):
-                                    from substrate.stores import Entity
-
                                     matched_entities.append(
                                         Entity(id=eid, label=label, properties=props)
                                     )

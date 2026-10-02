@@ -103,8 +103,8 @@ class DocumentIngestPipeline:
             document-intelligence deployment.
         embedder: Pre-built ``EmbeddingReranker`` pointed at the
             llama-embed/llama-rerank sidecars.
-        store: Any ``VectorStore`` implementation (``LocalFilesystemVectorStore``/
-            ``LanceDBVectorStore`` for dev, ``PgVectorStore`` for production).
+        store: Any ``VectorStore`` implementation (``Store.vectors`` for the folder store,
+            ``PgVectorStore`` for production).
         blob_store: Optional duck-typed object store (``async upload(key,
             data, *, content_type)`` / ``async download(key)`` — e.g.
             ``S3FileStore``). ``None`` (the default) inlines images instead;

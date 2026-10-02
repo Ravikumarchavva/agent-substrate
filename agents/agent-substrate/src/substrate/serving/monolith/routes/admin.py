@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pydantic import BaseModel
 
-from substrate.stores import WorkspaceFileStore
+from substrate.stores.file_tables import Files
 from substrate.serving.monolith.security.rls_deps import get_service_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import Thread, WorkspaceQuota
@@ -168,17 +168,17 @@ async def delete_thread(
     return {"deleted": thread_id}
 
 
-# ── Storage (WorkspaceFileStore only — FILE_STORE_BACKEND=local) ─────────────
+# ── Storage (the store's own files only — FILE_STORE_BACKEND=local) ──────────
 
 
-def _require_workspace_file_store(ctx: ServerDependencies) -> WorkspaceFileStore:
+def _require_workspace_file_store(ctx: ServerDependencies) -> Files:
     store = ctx.file_store
-    if not isinstance(store, WorkspaceFileStore):
+    if not isinstance(store, Files):
         raise HTTPException(
             status_code=501,
             detail=(
-                "Admin storage management requires the docker-volume backend "
-                "(FILE_STORE_BACKEND=local, the default) — not S3/memory."
+                "Admin storage management requires the store's own file backend "
+                "(FILE_STORE_BACKEND=local, the default) — not S3."
             ),
         )
     return store
@@ -198,7 +198,7 @@ async def list_storage_tenants(
 
     Metered per tenant, not per user: usage/quota stay tenant-scoped even
     though conversation keys do carry a user segment (see
-    ``WorkspaceFileStore``'s module docstring) — tenant is the coarser
+    ``Files``' module docstring) — tenant is the coarser
     identity every key reliably carries.
     """
     store = _require_workspace_file_store(ctx)

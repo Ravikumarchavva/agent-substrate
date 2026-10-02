@@ -1,10 +1,10 @@
 """ingest_session_document — real end-to-end integration test.
 
 Runs actual extraction (pypdf fallback, no extraction service configured),
-actual chunking/embedding into a real local LanceDBVectorStore, actual
+actual chunking/embedding into a real per-user vector store, actual
 PageIndex tree building into a real LanceLongTermMemory, and actual
 "graph extraction" (LLM call stubbed, but the store write is real) into a
-real LanceGraphStore — only the embedding/LLM network calls are stubbed,
+real graph store — only the embedding/LLM network calls are stubbed,
 matching this test file's sibling (test_rag_pipelines.py)'s existing
 convention. Confirms the whole chain the storage plan describes actually
 works together, not just each store in isolation.
@@ -130,7 +130,6 @@ async def test_ingest_session_document_writes_to_all_three_stores(
 
     graph_store = build_session_graph_store(cfg, "tenant-a", "user-a")
     # The stub LLM response above names one entity ("Acme") with no id, so
-    # its auto-generated uuid isn't predictable — just confirm something
-    # real landed via the narrow query_cypher path.
-    rows = await graph_store.query_cypher("MATCH (n) RETURN n LIMIT 100")
-    assert len(rows) == 1
+    # its auto-generated uuid isn't predictable — just confirm it landed.
+    found = await graph_store.find_entities(["acme"])
+    assert len(found) == 1

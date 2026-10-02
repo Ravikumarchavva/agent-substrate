@@ -90,7 +90,7 @@ sandbox = [
     "pdfplumber>=0.11.0",
 ]
 # local PDF loading + embedded vector store
-rag = ["pypdf>=6.13.0", "lancedb>=0.37.1", "networkx>=3.6.1"]
+rag = ["pypdf>=6.13.0"]
 # model-based sentence segmentation (SaTSegmenter)
 chunking = ["wtpsplit[onnx-cpu]>=2.1.0"]
 # LocalDocumentExtractor's bare-minimum OCR fallback for scanned pages —
@@ -217,6 +217,9 @@ docs = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+# Tests marked ``heavy`` load real models (several GB, tens of seconds) and are left out of a plain run;
+# CI and ``pytest -m ""`` run everything.
+addopts = ["-m", "not heavy"]
 
 
 [tool.ruff]
@@ -311,7 +314,6 @@ forbidden_modules = [
     "substrate.context.context",
     "substrate.context.history",
     "substrate.context.tokens",
-    "substrate.documents.local_store",
     "substrate.middleware._contracts",
     "substrate.middleware.audit_logger",
     "substrate.middleware.cache",
@@ -349,7 +351,6 @@ forbidden_modules = [
     "substrate.context.compaction",
     "substrate.context.context",
     "substrate.context.tokens",
-    "substrate.documents.local_store",
     "substrate.middleware._contracts",
     "substrate.middleware.audit_logger",
     "substrate.middleware.cache",
@@ -372,19 +373,15 @@ forbidden_modules = [
     "substrate.runtime.resolver",
     "substrate.runtime.runtime",
     "substrate.runtime.sql_store",
-    "substrate.runtime.sqlite_db",
-    "substrate.runtime.sqlite_store",
     "substrate.runtime.tail",
     "substrate.runtime.tool_invoker",
     "substrate.runtime.worker",
     "substrate.safety.normalize",
-    "substrate.stores.local",
     "substrate.stores.scoped",
     "substrate.tools.toolbox",
     "substrate.workspace.branching",
     "substrate.workspace.cas",
     "substrate.workspace.layout",
-    "substrate.workspace.local_store",
     "substrate.workspace.materialize",
     "substrate.workspace.scope",
     "substrate.workspace.snapshots",

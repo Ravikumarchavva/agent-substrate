@@ -196,21 +196,12 @@ class LocalRagBackend:
     ) -> list[SearchResult]:
         hybrid = getattr(store, "hybrid_search", None)
         if hybrid is not None:
-            # Not every VectorStore's hybrid_search takes the same knobs --
-            # PgVectorStore does its own manual dense/lexical fusion
-            # (dense_k/lexical_k/fused_k size each stage's candidate pool);
-            # LanceDBVectorStore fuses via LanceDB's own native RRF
-            # reranker over one fetch and only takes `limit` (real,
-            # found-not-assumed: this method's plain `getattr(store,
-            # "hybrid_search", None)` existence check had never actually
-            # been exercised against LanceDBVectorStore before
-            # SessionDocumentSearchTool started routing through
-            # LocalRagBackend.query() -- it raised
-            # `TypeError: hybrid_search() got an unexpected keyword
-            # argument 'dense_k'` the first time it was). Inspect the real
-            # signature rather than hardcoding a second branch per store
-            # class, so a third VectorStore's own hybrid_search shape
-            # works here without another special case.
+            # Not every VectorStore's hybrid_search takes the same knobs
+            # (dense_k/lexical_k/fused_k size each stage's candidate pool;
+            # one that fuses in a single fetch takes only `limit`). Inspect
+            # the real signature rather than hardcoding a branch per store
+            # class, so another VectorStore's own shape works here without
+            # a special case.
             import inspect
 
             accepted = inspect.signature(hybrid).parameters

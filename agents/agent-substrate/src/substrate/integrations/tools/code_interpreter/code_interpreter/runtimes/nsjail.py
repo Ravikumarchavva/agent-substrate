@@ -391,7 +391,7 @@ class NsjailRuntime:
 
     # ── internals ────────────────────────────────────────────────────────────
     def _resolve_session(self, session_dir: str) -> Path:
-        """Reject traversal — the same rule ``WorkspaceFileStore._resolve`` uses, so both sides of the mount agree."""
+        """Reject traversal — the same rule ``the store's key check`` uses, so both sides of the mount agree."""
         key = session_dir.strip("/")
         if not key or ".." in Path(key).parts:
             raise ValueError(f"Invalid session_dir: {session_dir!r}")

@@ -17,28 +17,16 @@ from substrate.stores.blob import (
 )
 from substrate.stores.files import (
     FileStore,
+    WorkspacePathError,
+    WorkspaceQuotaExceededError,
 )
 from substrate.stores.graph import (
     CypherCapable,
+    EntityFinder,
     Entity,
     GraphStore,
     Relationship,
     SubGraph,
-)
-from substrate.stores.local.files import (
-    WorkspaceFileStore,
-    WorkspacePathError,
-    WorkspaceQuotaExceededError,
-)
-from substrate.stores.local.graph import (
-    LocalFilesystemGraphStore,
-)
-from substrate.stores.local.tasks import (
-    LocalFilesystemTaskStore,
-)
-from substrate.stores.local.vector import (
-    LocalFilesystemVectorStore,
-    cosine_similarity,
 )
 from substrate.stores.memory import (
     ContextMemoryInjection,
@@ -91,15 +79,13 @@ __all__ = [
     "Branch",
     "ContextMemoryInjection",
     "CypherCapable",
+    "EntityFinder",
     "Document",
     "Entity",
     "ExtractionMethod",
     "GraphStore",
     "HistoryCheckpoint",
     "ThreadStore",
-    "LocalFilesystemGraphStore",
-    "LocalFilesystemTaskStore",
-    "LocalFilesystemVectorStore",
     "MemoryCategory",
     "MemoryMatch",
     "MemoryNamespace",
@@ -120,7 +106,6 @@ __all__ = [
     "TaskStore",
     "TenantWide",
     "VectorStore",
-    "WorkspaceFileStore",
     "WorkspacePathError",
     "WorkspaceQuotaExceededError",
     "bind_graph",
@@ -128,6 +113,5 @@ __all__ = [
     "bind_files",
     "bind_tasks",
     "bind_vector",
-    "cosine_similarity",
     "fence_objects",
 ]

@@ -1,6 +1,6 @@
 """S3-compatible file store backed by S3Connector (L2).
 
-Keys use the same ``tenants/{tenant_id}/...`` layout as ``WorkspaceFileStore``
+Keys use the same ``tenants/{tenant_id}/...`` layout as ``Files``
 (see its module docstring and ``agents/workspace/layout.py``), so the two
 are interchangeable behind ``ctx.file_store`` and the workspace management
 API works against either. The store is addressed purely through the S3 API,
@@ -25,7 +25,7 @@ def _tenant_id_from_key(key: str) -> str | None:
     not charged to a quota). Every key under the current layout starts
     ``tenants/{tenant_id}/...`` — a conversation-scoped key carries no user
     segment at all, so tenant is the only identity reliably present. Same
-    rule as ``WorkspaceFileStore._tenant_id_from_key``."""
+    rule as ``the store's tenant rule``."""
     parts = PurePosixPath(key).parts
     if len(parts) >= 2 and parts[0] == "tenants":
         return parts[1]
@@ -97,7 +97,7 @@ class S3FileStore:
         if tenant_id is not None and self._quota_bytes > 0:
             # One listing yields both the prefix total and this key's current
             # size, so an overwrite is charged for its *delta* rather than
-            # double-counted (mirrors WorkspaceFileStore.upload). Deliberately
+            # double-counted (mirrors Files.upload). Deliberately
             # uncached: a stale total here would let a write past the quota.
             entries = await self.list_prefix(f"tenants/{tenant_id}/")
             used = sum(size for _key, size, _mtime in entries)
@@ -128,7 +128,7 @@ class S3FileStore:
         No native server-side copy on ``S3Connector`` yet, so this reads
         each object and re-uploads it through ``self.upload`` — which keeps
         quota accounting correct on the destination — rather than bypassing
-        it via the raw connector. Mirrors ``WorkspaceFileStore.copy_prefix``.
+        it via the raw connector. Mirrors ``Files.copy_prefix``.
         """
         entries = await self.list_prefix(source_prefix)
         src_root = source_prefix.rstrip("/")
@@ -147,13 +147,13 @@ class S3FileStore:
             key, bucket=self._bucket, expires_in=expires_in
         )
 
-    # ── workspace surface (mirrors WorkspaceFileStore, so the workspace
+    # ── workspace surface (mirrors Files, so the workspace
     # management API in serving/monolith/routes/workspace.py works against
     # either store) ──────────────────────────────────────────────────────────
 
     async def list_prefix(self, prefix: str) -> list[tuple[str, int, float]]:
         """``(key, size_bytes, mtime)`` for every object under *prefix* —
-        the generic listing primitive (mirrors ``WorkspaceFileStore.list_prefix``)."""
+        the generic listing primitive (mirrors ``Files.list_prefix``)."""
         objects = await self._connector.list_objects(prefix=prefix, bucket=self._bucket)
         return [(o["key"], int(o["size"]), float(o["mtime"])) for o in objects]
 
@@ -163,7 +163,7 @@ class S3FileStore:
 
     async def exists(self, key: str) -> bool:
         """True if *key* is present. A HEAD, not a LIST — cheap point check,
-        matching ``WorkspaceFileStore.exists``."""
+        matching ``Files.exists``."""
         import botocore.exceptions
 
         async with self._connector._client_ctx() as client:

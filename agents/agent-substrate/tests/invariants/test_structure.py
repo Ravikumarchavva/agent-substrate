@@ -163,6 +163,7 @@ _PORTS = (
     "GraphStore",
     "FileStore",
     "TaskStore",
+    "WorkspaceStore",
     "ChatModel",
     "EmbeddingModel",
     "DocumentExtractor",
@@ -208,6 +209,7 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
     assert "ThreadStore" in suites, "the history-provider conformance suite has gone missing"
     assert "FileStore" in suites, "the FileStore conformance suite has gone missing"
     assert "TaskStore" in suites, "the TaskStore conformance suite has gone missing"
+    assert "WorkspaceStore" in suites, "the WorkspaceStore conformance suite has gone missing"
     assert "GraphStore" in suites, "the GraphStore conformance suite has gone missing"
     for port in ("ChatModel", "EmbeddingModel", "DocumentExtractor"):
         assert port in suites, f"the {port} conformance suite has gone missing"
@@ -217,13 +219,14 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
         "MemoryStore": ("TestMemory",),
         "ShortTermMemory": ("TestSessionState", "TestRedisSessionStore"),
         "ThreadStore": ("TestThreads",),
-        "FileStore": ("WorkspaceFileStore", "S3FileStore"),
-        "TaskStore": ("LocalFilesystemTaskStore", "PgTaskStore"),
-        "GraphStore": ("LocalFilesystemGraphStore", "LanceGraphStore"),
+        "FileStore": ("TestFiles", "S3FileStore"),
+        "TaskStore": ("TestTasks",),
+        "WorkspaceStore": ("TestWorkspaces",),
+        "GraphStore": ("TestGraph",),
         "ChatModel": ("OpenAICompatibleClient", "OpenAIClient", "AnthropicClient", "GeminiClient"),
         "EmbeddingModel": ("OpenAIEmbeddingClient", "GeminiEmbeddingClient", "SentenceTransformersEmbeddingClient", "EmbeddingRerankerTextEmbeddingClient"),
         "DocumentExtractor": ("LocalDocumentExtractor", "ServiceBackedDocumentExtractor"),
-        "VectorStore": ("LocalFilesystemVectorStore", "LanceDBVectorStore", "PgVectorStore"),
+        "VectorStore": ("TestVectors", "PgVectorStore"),
     }
     for port, implementations in shipped.items():
         runners = " ".join(_classes_running(suites[port]))

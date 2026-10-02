@@ -2,7 +2,7 @@
 tenant-scoped filesystem backing uploads and code-interpreter artifacts.
 
 Works against any file store that can enumerate a prefix — both
-``WorkspaceFileStore`` (``FILE_STORE_BACKEND=local``, a filesystem tree) and
+``Files`` (``FILE_STORE_BACKEND=local``, a filesystem tree) and
 ``S3FileStore`` (``=s3``, object storage keyed on the same
 ``tenants/{tenant_id}/...`` layout, see ``agents/workspace/layout.py``)
 qualify. Stores that can't 501 here.
@@ -73,8 +73,8 @@ class WorkspaceFilesResponse(BaseModel):
 class _WorkspaceCapableStore(Protocol):
     """The surface this API needs beyond plain upload/download/delete.
 
-    A capability check rather than ``isinstance(WorkspaceFileStore)``: both
-    ``WorkspaceFileStore`` (filesystem tree) and ``S3FileStore`` (object
+    A capability check rather than ``isinstance(Files)``: both
+    ``Files`` (filesystem tree) and ``S3FileStore`` (object
     storage, keyed on the same ``tenants/{tenant_id}/...`` layout) implement
     it, and the backend is meant to be swappable without touching this API.
     Stores that can't enumerate a prefix still get

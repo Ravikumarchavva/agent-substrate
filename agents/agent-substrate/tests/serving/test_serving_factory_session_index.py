@@ -1,20 +1,17 @@
-"""build_session_index_vector_store — per-(tenant, user) Lance factory.
+"""The per-(tenant, user) session-index factories.
 
-A per-user store, not a single shared instance the way PgVectorStore is:
-a Lance Namespace table identifier needs tenant_id/user_id baked into its
-namespace_path, which isn't known until a real request exists. These tests
-pin the two connection modes (local-dev path, remote namespace catalog) and
-that tenant_id/user_id are validated the same way every other object-storage
-key is (layout.py's `_id()`), not accepted as raw path/namespace segments.
+A per-user store, not a single shared instance the way PgVectorStore is: the folder depends on tenant_id/user_id, which
+isn't known until a real request exists. These tests pin where each store lives and that tenant_id/user_id are
+validated the same way every other object-storage key is (layout.py's `_id()`), not accepted as raw path segments.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from substrate.integrations.graph.lance_graph_store import LanceGraphStore
+from substrate.stores.graph_tables import Graph
 from substrate.stores.memory_tables import Memory
-from substrate.integrations.vector.lancedb_store import LanceDBVectorStore
+from substrate.stores.vector_tables import Vectors
 from substrate.config import SubstrateConfig
 from substrate.serving.factory import (
     build_page_index_memory,
@@ -23,24 +20,12 @@ from substrate.serving.factory import (
 )
 
 
-def test_local_mode_scopes_path_by_tenant_and_user(tmp_path) -> None:
+def test_the_vector_store_is_a_store_of_its_own_in_the_users_index_folder(tmp_path) -> None:
     cfg = SubstrateConfig(SESSION_INDEX_LOCAL_PATH=str(tmp_path))
     store = build_session_index_vector_store(cfg, "tenant-a", "user-a")
 
-    assert isinstance(store, LanceDBVectorStore)
-    assert store._namespace_uri is None
-    assert store._path == str(tmp_path / "tenants/tenant-a/users/user-a/index")
-
-
-def test_namespace_mode_scopes_path_by_tenant_and_user() -> None:
-    cfg = SubstrateConfig(
-        SESSION_INDEX_NAMESPACE_URI="http://seaweedfs:9101",
-        SESSION_INDEX_BUCKET="my-bucket",
-    )
-    store = build_session_index_vector_store(cfg, "tenant-a", "user-a")
-
-    assert store._namespace_uri == "http://seaweedfs:9101"
-    assert store._namespace_path == ["my-bucket", "tenant-a", "user-a"]
+    assert isinstance(store, Vectors)
+    assert store.store.root == tmp_path / "tenants/tenant-a/users/user-a/index"
 
 
 @pytest.mark.parametrize("bad_id", ["", "../other", "a/b"])
@@ -62,27 +47,15 @@ def test_page_index_memory_local_mode_scopes_path(tmp_path) -> None:
 
 def test_page_index_memory_is_a_store_of_its_own_in_the_users_index_folder(tmp_path) -> None:
     """Erasing a user's index is still removing one folder, because the trees live inside it — in any deployment."""
-    cfg = SubstrateConfig(SESSION_INDEX_NAMESPACE_URI="http://seaweedfs:9101", SESSION_INDEX_BUCKET="my-bucket", SESSION_INDEX_LOCAL_PATH=str(tmp_path))
+    cfg = SubstrateConfig(SESSION_INDEX_LOCAL_PATH=str(tmp_path))
     memory = build_page_index_memory(cfg, "tenant-a", "user-a")
 
     assert memory.store.root == tmp_path / "tenants/tenant-a/users/user-a/index"
 
 
-def test_session_graph_store_local_mode_scopes_path(tmp_path) -> None:
+def test_session_graph_store_is_a_store_of_its_own_in_the_users_index_folder(tmp_path) -> None:
     cfg = SubstrateConfig(SESSION_INDEX_LOCAL_PATH=str(tmp_path))
     store = build_session_graph_store(cfg, "tenant-a", "user-a")
 
-    assert isinstance(store, LanceGraphStore)
-    assert store._namespace_uri is None
-    assert store._path == str(tmp_path / "tenants/tenant-a/users/user-a/index")
-
-
-def test_session_graph_store_namespace_mode_scopes_path() -> None:
-    cfg = SubstrateConfig(
-        SESSION_INDEX_NAMESPACE_URI="http://seaweedfs:9101",
-        SESSION_INDEX_BUCKET="my-bucket",
-    )
-    store = build_session_graph_store(cfg, "tenant-a", "user-a")
-
-    assert store._namespace_uri == "http://seaweedfs:9101"
-    assert store._namespace_path == ["my-bucket", "tenant-a", "user-a"]
+    assert isinstance(store, Graph)
+    assert store.store.root == tmp_path / "tenants/tenant-a/users/user-a/index"

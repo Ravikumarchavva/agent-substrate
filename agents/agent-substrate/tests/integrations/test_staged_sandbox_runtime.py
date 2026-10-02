@@ -1,8 +1,8 @@
 """StagedSandboxRuntime — materialize a branch's workspace snapshot before a
 run, commit a new one after.
 
-Exercises the real CAS/WorkspaceStore machinery (WorkspaceFileStore +
-LocalFilesystemWorkspaceStore), not hand-rolled fakes, so these tests prove
+Exercises the real CAS/WorkspaceStore machinery (the store's files +
+workspaces), not hand-rolled fakes, so these tests prove
 the actual materialize/commit round trip works, not just that the wrapper
 calls the right methods.
 """
@@ -15,9 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from substrate.workspace import LocalFilesystemWorkspaceStore
+from substrate.workspace import Workspaces
 from substrate.workspace import WorkspaceScope
-from substrate.stores import WorkspaceFileStore
+from substrate.stores import Store
+from substrate.stores.file_tables import Files
 from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
     ExecResult,
     SandboxSpec,
@@ -83,7 +84,7 @@ async def _seed_branch(object_store, ws_store, files: dict[str, bytes]) -> None:
     from substrate.workspace.materialize import commit
 
     cas = BlobCAS(object_store, tenant_id=TENANT, user_id=USER)
-    tmp_seed = Path(object_store._root) / ".seed"  # type: ignore[attr-defined]
+    tmp_seed = object_store.store.root / ".seed"
     tmp_seed.mkdir(parents=True, exist_ok=True)
     for name, data in files.items():
         (tmp_seed / name).parent.mkdir(parents=True, exist_ok=True)
@@ -106,10 +107,9 @@ def spec() -> SandboxSpec:
     )
 
 
-async def _runtime(tmp_path: Path, inner) -> tuple[StagedSandboxRuntime, WorkspaceFileStore, LocalFilesystemWorkspaceStore]:
-    store = WorkspaceFileStore(tmp_path / "objects", user_quota_bytes=10_000_000)
-    await store.connect()
-    ws_store = LocalFilesystemWorkspaceStore(root=tmp_path / "ws_store")
+async def _runtime(tmp_path: Path, inner) -> tuple[StagedSandboxRuntime, Files, Workspaces]:
+    store = Store.at(tmp_path / "objects", file_quota_bytes=10_000_000).files
+    ws_store = Workspaces(Store.at(tmp_path / "ws_store"))
     runtime = StagedSandboxRuntime(
         inner,
         object_store=store,

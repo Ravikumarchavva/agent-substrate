@@ -11,7 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from substrate.workspace.layout import conversation_shared_key
-from substrate.stores import WorkspaceFileStore
+from substrate.stores import Store
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.models import Thread, User
 from substrate.serving.monolith.security.deps import get_current_user
@@ -105,9 +105,7 @@ async def test_upload_scoped_key_and_workspace_management(tmp_path) -> None:
         # Swap in a workspace store rooted at a throwaway tmp dir so the
         # test never touches real disk under FILE_STORE_ROOT, and give
         # the tenant a small quota to exercise the 413 path.
-        app.state.ctx.file_store = WorkspaceFileStore(
-            root=tmp_path, user_quota_bytes=1000
-        )
+        app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=1000).files
         app.state.ctx.workspace_user_quota_bytes = 1000
         app.state.ctx.workspace_user_delete_allowed = True
 
@@ -172,9 +170,7 @@ async def test_upload_auto_creates_missing_user_row(tmp_path) -> None:
     from substrate.serving.monolith.models import User
 
     async with app.router.lifespan_context(app):
-        app.state.ctx.file_store = WorkspaceFileStore(
-            root=tmp_path, user_quota_bytes=10_000
-        )
+        app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files
         app.state.ctx.workspace_user_quota_bytes = 10_000
 
         user_id = str(uuid.uuid4())
@@ -209,9 +205,7 @@ async def test_upload_auto_creates_missing_user_row(tmp_path) -> None:
 @pytest.mark.requires_postgres
 async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
     async with app.router.lifespan_context(app):
-        app.state.ctx.file_store = WorkspaceFileStore(
-            root=tmp_path, user_quota_bytes=10_000
-        )
+        app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files
         app.state.ctx.workspace_user_quota_bytes = 10_000
         app.state.ctx.workspace_user_delete_allowed = True
 
@@ -275,9 +269,7 @@ async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None
     another user's conversation file just by knowing the thread id. It must
     now go through the same ownership predicate as get_owned_thread."""
     async with app.router.lifespan_context(app):
-        app.state.ctx.file_store = WorkspaceFileStore(
-            root=tmp_path, user_quota_bytes=10_000
-        )
+        app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files
         app.state.ctx.workspace_user_quota_bytes = 10_000
         app.state.ctx.workspace_user_delete_allowed = True
 
@@ -355,7 +347,7 @@ async def test_delete_file_locks_the_owners_own_thread(tmp_path) -> None:
     branch (path outside the caller's own prefix), which a caller deleting
     their own file never takes."""
     async with app.router.lifespan_context(app):
-        store = WorkspaceFileStore(root=tmp_path, user_quota_bytes=10_000)
+        store = Store.at(tmp_path, file_quota_bytes=10_000).files
         app.state.ctx.file_store = store
         app.state.ctx.workspace_user_quota_bytes = 10_000
         app.state.ctx.workspace_user_delete_allowed = True
@@ -404,7 +396,7 @@ async def test_list_files_lists_each_conversation_file_once(tmp_path) -> None:
     scan) — and non-file prefixes under the same user (index/, the curated
     artifacts bundle) used to leak into the Storage browser too."""
     async with app.router.lifespan_context(app):
-        store = WorkspaceFileStore(root=tmp_path, user_quota_bytes=10_000)
+        store = Store.at(tmp_path, file_quota_bytes=10_000).files
         app.state.ctx.file_store = store
         app.state.ctx.workspace_user_quota_bytes = 10_000
         app.state.ctx.workspace_user_delete_allowed = True
@@ -463,9 +455,7 @@ async def test_serve_file_sets_etag_and_honors_if_none_match(tmp_path) -> None:
     (auth + DB + object-storage download) on every page load. An unchanged
     file must now round-trip as a cheap 304 with no body."""
     async with app.router.lifespan_context(app):
-        app.state.ctx.file_store = WorkspaceFileStore(
-            root=tmp_path, user_quota_bytes=10_000
-        )
+        app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files
         app.state.ctx.workspace_user_quota_bytes = 10_000
 
         async with _registered_user() as user_id:
@@ -523,9 +513,7 @@ async def test_serve_file_pinned_version_is_cached_immutable(tmp_path) -> None:
     """A `seq`-pinned historical version's bytes never change — safe to
     cache aggressively, unlike the mutable "latest" file."""
     async with app.router.lifespan_context(app):
-        app.state.ctx.file_store = WorkspaceFileStore(
-            root=tmp_path, user_quota_bytes=10_000
-        )
+        app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files
         app.state.ctx.workspace_user_quota_bytes = 10_000
 
         async with _registered_user() as user_id:

@@ -10,7 +10,7 @@ Framework features showcased:
   • BaseTool subclasses for each agent's capability
   • AgentCatalog for tool registration and discovery
   • Pub/sub via async EventBus (fan-out to parallel subscribers)
-  • PIIDetectionGuardrail reused from substrate.kernel.guardrails
+  • PIIDetectionGuardrail reused from substrate.guardrails
   • LazyTool for optional heavy deps (sentence-transformers)
 """
 

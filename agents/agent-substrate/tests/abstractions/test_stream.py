@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-from substrate.kernel.abstractions.messaging.stream import (
-    TextDelta,
-    ReasoningDelta,
-    CompletionEvent,
-    StreamDone,
-)
-from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.types import TextDelta, ReasoningDelta, CompletionEvent, StreamDone
+from substrate.types import TextBlock
 
 
 def test_text_delta():

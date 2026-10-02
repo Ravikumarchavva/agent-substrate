@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
-from substrate.kernel.testing.conformance.memory_store import MemoryStoreConformance
+from substrate.stores import LocalFilesystemMemoryStore
+from substrate.testing.conformance.memory_store import MemoryStoreConformance
 
 
 class TestLocalFilesystemMemoryStore(MemoryStoreConformance):

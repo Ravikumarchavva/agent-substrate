@@ -15,10 +15,10 @@ from typing import Any
 
 import pytest
 
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.exceptions import ToolDeclarationError
-from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
-from substrate.kernel.tools.toolbox import Toolbox
+from substrate.types import TextBlock
+from substrate.types.errors import ToolDeclarationError
+from substrate.tools import ToolExecutionResult, ToolRisk
+from substrate.tools import Toolbox
 
 
 def _tool(**declared: Any) -> object:

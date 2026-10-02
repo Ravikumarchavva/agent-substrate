@@ -11,7 +11,7 @@ System instructions are NOT passed through this layer.  They travel as an
 explicit ``system_instructions=`` kwarg on every ``generate()`` call (see
 ``LLMClient.generate``).  The factory only handles connection wiring.
 
-Provider / model / cost table lives in ``substrate.kernel.abstractions.llm.models``.
+Provider / model / cost table lives in ``substrate.models.models``.
 
 OpenAI-compatible providers
 ----------------------------
@@ -60,13 +60,8 @@ from __future__ import annotations
 
 from typing import ClassVar, Optional, Any
 
-from substrate.kernel.llm import (
-    EmbeddingClient,
-    LLMClient,
-    ModelProfile,
-    get_model_profile,
-    list_models,
-)
+from substrate.models import EmbeddingClient, LLMClient
+from substrate.models import ModelProfile, get_model_profile, list_models
 from substrate.logger import setup_logging
 
 logger = setup_logging()

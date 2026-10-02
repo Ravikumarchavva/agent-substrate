@@ -65,7 +65,7 @@ settings = SubstrateConfig()
 # ```python
 # from substratereasoning.agents.assistant import ReActAgent
 ## from substrate.integrations.llm.factory import create_model_client
-# from substrate.kernel.agent_catalog import AgentCatalog
+# from substrate.agent_catalog import AgentCatalog
 # from substrate.fabric.memory.unbounded import UnboundedMemory
 # from substratereasoning.memory.context.unbounded import UnboundedContext
 # from substrate.fabric.tools.builtin_tools import CalculatorTool
@@ -82,8 +82,8 @@ settings = SubstrateConfig()
 #
 # ### Write a custom tool
 # ```python
-# from substrate.kernel.abstractions.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
-# from substrate.kernel.messages.content import TextBlock
+# from substrate.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
+# from substrate.messages.content import TextBlock
 #
 # class MyTool(BaseTool):
 #     risk = ToolRisk.SAFE
@@ -121,7 +121,7 @@ settings = SubstrateConfig()
 #
 # ### Register in the AgentCatalog
 # ```python
-# from substrate.kernel.agent_catalog import AgentCatalog, ResourceSpec, ResourceType
+# from substrate.agent_catalog import AgentCatalog, ResourceSpec, ResourceType
 #
 # catalog = AgentCatalog()
 # spec = ResourceSpec(name="my_tool", namespace="main.default", resource_type=ResourceType.TOOL)

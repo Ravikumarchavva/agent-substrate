@@ -19,12 +19,8 @@ import asyncio
 import json
 from substrate.integrations.llm.factory import create_model_client
 from substrate.integrations.tools.mcp.client import MCPClient
-from substrate.kernel.messages.client_messages import (
-    SystemMessage,
-    ToolExecutionResultMessage,
-    UserMessage,
-)
-from substrate.kernel.messages.content import TextBlock
+from substrate.messages.client_messages import SystemMessage, ToolExecutionResultMessage, UserMessage
+from substrate.messages.content import TextBlock
 
 # Infrastructure: Node.js / npx required to launch the MCP filesystem server.
 

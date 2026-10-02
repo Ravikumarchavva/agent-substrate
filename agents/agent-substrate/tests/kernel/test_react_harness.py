@@ -5,30 +5,23 @@ from __future__ import annotations
 
 from tests._stores import fs_history
 
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.tools import ToolRisk
 
 import asyncio
 from typing import AsyncIterator
 
-from substrate.kernel.context import ContextConfig
-from substrate.kernel.agents.react import ReActAgent
-from substrate.kernel.abstractions.agent.supervision import ExecutionBudget
-from substrate.kernel.runtime.runtime import Runtime
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    ContentBlock,
-    Role,
-    TextBlock,
-    ToolResultBlock,
-    ToolUseBlock,
-)
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm import GenerationOptions, ModelCapabilities
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent
-from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
-from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.context import ContextConfig
+from substrate.agents import ReActAgent
+from substrate.types import ExecutionBudget
+from substrate.runtime import Runtime
+from substrate.types import ChatMessage, ContentBlock, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import Actor
+from substrate.types import Usage
+from substrate.models import GenerationOptions, ModelCapabilities
+from substrate.runtime import ChatPayload, Message
+from substrate.types import CompletionEvent
+from substrate.runtime import RunRetryPolicy
+from substrate.tools import ToolExecutionResult
 
 
 class ScriptedLLM:
@@ -301,7 +294,7 @@ async def test_every_tool_returned_image_reaches_the_model_not_only_the_inline_o
     """Regression: an image referenced by URL or file_id (no bytes) used to be
     dropped between the tool and the model, and every image left a
     "[Image: ...]" placeholder in the text on top of the real thing."""
-    from substrate.kernel.abstractions.core.content import MediaBlock
+    from substrate.types import MediaBlock
 
     class GalleryTool:
         risk = ToolRisk.SAFE
@@ -345,9 +338,9 @@ async def test_every_tool_returned_image_reaches_the_model_not_only_the_inline_o
 async def test_the_reply_is_the_answer_text_not_the_reasoning_trace():
     """Regression: the final answer used to be the last assistant turn
     stringified whole, so a reasoning block came back as "[Reasoning] ..."."""
-    from substrate.kernel.middleware.pipeline import MiddlewarePipeline
-    from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-    from substrate.kernel.abstractions.core.content import ReasoningBlock
+    from substrate.middleware import MiddlewarePipeline
+    from substrate.middleware import MiddlewareStage
+    from substrate.types import ReasoningBlock
 
     outputs: list[str] = []
 
@@ -371,7 +364,7 @@ async def test_the_reply_is_the_answer_text_not_the_reasoning_trace():
 async def test_a_budget_stop_keeps_the_turn_in_history():
     """Regression: a budget error mid-turn skipped persistence, so the user's
     message and every tool result vanished from the conversation."""
-    from substrate.kernel.storage.history import project_messages
+    from substrate.context import project_messages
 
     history = fs_history()
     llm = ScriptedLLM(
@@ -412,13 +405,13 @@ async def test_an_agent_can_make_more_than_fifty_tool_calls_in_one_run():
 
 
 async def test_direct_tool_calls_are_not_cut_off_at_the_chain_default_of_60s():
-    from substrate.kernel.tools.invoker import DIRECT_CALL_POLICY
+    from substrate.runtime.tool_invoker import DIRECT_CALL_POLICY
 
     assert DIRECT_CALL_POLICY.call_timeout_s >= 300  # the code interpreter's own max
 
 
 async def test_an_agent_can_set_its_own_tool_policy():
-    from substrate.kernel.abstractions.tools.chain import ChainPolicy
+    from substrate.tools import ChainPolicy
 
     class SlowTool:
         risk = ToolRisk.SAFE

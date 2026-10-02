@@ -13,7 +13,7 @@ no separate zero-infra LLM client. Additional vendor-native clients
 
 No inheritance from provider-specific clients.  Only imports:
   - ``openai`` SDK (AsyncOpenAI)
-  - ``substrate.kernel.*`` (contracts and content types)
+  - ``substrate.*`` (contracts and content types)
   - standard library
 """
 
@@ -26,20 +26,15 @@ from typing import Any, AsyncIterator, Optional
 
 from openai import AsyncOpenAI
 
-from substrate.kernel.llm.modalities import fit_to_capabilities
-from substrate.kernel.llm.tool_arguments import parse_tool_arguments
-from substrate.kernel.llm.models import resolve_capabilities
-from substrate.kernel.abstractions import ChatMessage, ContentBlock
-from substrate.kernel.abstractions.agent.runtime_context import RunMeta
-from substrate.kernel.abstractions.core.finish_reason import FinishReason
-from substrate.kernel.abstractions.llm import (
-    GenerationOptions,
-    LLMResponse,
-    ModelCapabilities,
-    ReasoningEffort,
-    Usage,
-)
-from substrate.kernel.abstractions.core.content import (
+from substrate.models.modalities import fit_to_capabilities
+from substrate.models.tool_arguments import parse_tool_arguments
+from substrate.models.registry import resolve_capabilities
+from substrate.types import ChatMessage, ContentBlock
+from substrate.types import RunMeta
+from substrate.types.finish_reason import FinishReason
+from substrate.models import GenerationOptions, LLMResponse, ModelCapabilities, ReasoningEffort
+from substrate.types import Usage
+from substrate.types import (
     DataBlock,
     ErrorBlock,
     MediaBlock,
@@ -48,7 +43,7 @@ from substrate.kernel.abstractions.core.content import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent, ReasoningDelta, TextDelta
+from substrate.types import CompletionEvent, ReasoningDelta, TextDelta
 from substrate.logger import setup_logging
 
 logger = setup_logging()

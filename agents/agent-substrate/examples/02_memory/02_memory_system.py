@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 
-from substrate.kernel.context import SlidingWindowCompaction, SummarizationCompaction
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.llm import GenerationOptions, LLMResponse, Usage
+from substrate.context import SlidingWindowCompaction
+from substrate.context import SummarizationCompaction
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.models import GenerationOptions, LLMResponse
+from substrate.types import Usage
 
 
 class MockLLM:

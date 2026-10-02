@@ -33,9 +33,9 @@ from typing import Any, Optional
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from substrate.kernel.abstractions.core.content import parse_content_block
-from substrate.kernel.abstractions.storage.vector import Document, SearchResult
-from substrate.kernel.abstractions.ids import new_id
+from substrate.types import parse_content_block
+from substrate.stores import Document, SearchResult
+from substrate.types import new_id
 from substrate.logger import setup_logging
 
 logger = setup_logging()

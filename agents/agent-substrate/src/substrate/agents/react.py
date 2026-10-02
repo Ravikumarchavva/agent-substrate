@@ -6,60 +6,35 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from substrate.kernel.abstractions.agent.context import (
-    CompactionContext,
-    CompactionPhase,
-)
-from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.abstractions.agent.runtime_context import RunScope
-from substrate.kernel.abstractions.agent.supervision import ExecutionBudget
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    Role,
-    TextBlock,
-    ToolResultBlock,
-    ToolUseBlock,
-)
-from substrate.kernel.abstractions.core.finish_reason import FinishReason
-from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.exceptions import (
-    BudgetExhaustedError,
-    ContentFilterError,
-    ContextLengthError,
-)
-from substrate.kernel.abstractions.llm.llm import (
-    GenerationOptions,
-    LLMResponse,
-    ReasoningEffort,
-)
-from substrate.kernel.abstractions.messaging.message import (
-    ChatPayload,
-    DataPayload,
-    Message,
-)
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.storage.history import HistoryProvider
-from substrate.kernel.abstractions.tools import ToolRegistry, is_concurrency_safe
-from substrate.kernel.abstractions.tools.approval import ApprovalHandler
-from substrate.kernel.abstractions.tools.chain import ChainPolicy
-from substrate.kernel.abstractions.tools.tools import ToolRisk
-from substrate.kernel.agents.base import BaseAgent
-from substrate.kernel.agents.routed import handle
-from substrate.kernel.context.compaction.sliding_window import SlidingWindowCompaction
-from substrate.kernel.context.context import ContextConfig
-from substrate.kernel.middleware._contracts import (
-    AgentRunResult,
-    MiddlewareContext,
-    ToolCallRecord,
-)
-from substrate.kernel.middleware.pipeline import MiddlewarePipeline
+from substrate.context.protocols import CompactionContext, CompactionPhase
+from substrate.middleware.stage import MiddlewareStage
+from substrate.types.run import RunScope
+from substrate.types.supervision import ExecutionBudget
+from substrate.types.content import ChatMessage, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types.finish_reason import FinishReason
+from substrate.types.identity import Actor, Topic
+from substrate.types.errors import BudgetExhaustedError, ContentFilterError, ContextLengthError
+from substrate.models.protocols import GenerationOptions, LLMResponse, ReasoningEffort
+from substrate.runtime.message import ChatPayload, DataPayload, Message
+from substrate.types.run_log import RunLogKind
+from substrate.stores.threads import HistoryProvider
+from substrate.tools.protocols import ToolRegistry, is_concurrency_safe
+from substrate.tools.approval import ApprovalHandler
+from substrate.tools.chain import ChainPolicy
+from substrate.tools.protocols import ToolRisk
+from substrate.agents.base import BaseAgent
+from substrate.agents.routed import handle
+from substrate.context.compaction.sliding_window import SlidingWindowCompaction
+from substrate.context.context import ContextConfig
+from substrate.middleware._contracts import AgentRunResult, MiddlewareContext, ToolCallRecord
+from substrate.middleware.pipeline import MiddlewarePipeline
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.llm.llm import LLMClient
-    from substrate.kernel.abstractions.tools.chain import InvocationResult
-    from substrate.kernel.runtime.context import RunContext
+    from substrate.models.protocols import LLMClient
+    from substrate.tools.chain import InvocationResult
+    from substrate.runtime.context import RunContext
 
 
 class ReActAgent(BaseAgent):
@@ -105,7 +80,7 @@ class ReActAgent(BaseAgent):
         self.model = model
 
         if isinstance(tools, list):
-            from substrate.kernel.tools.toolbox import Toolbox
+            from substrate.tools.toolbox import Toolbox
 
             tb = Toolbox()
             for t in tools:

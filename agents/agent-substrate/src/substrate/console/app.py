@@ -13,13 +13,8 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from rich.console import Console as RichConsole
 
-from substrate.kernel.abstractions.core.content import content_blocks_to_str
-from substrate.kernel.abstractions.messaging.stream import (
-    CompletionEvent,
-    ReasoningDelta,
-    StreamDone,
-    TextDelta,
-)
+from substrate.types import content_blocks_to_str
+from substrate.types import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
 from substrate.logger import setup_logging
 
 from .commands import SlashCommands
@@ -33,7 +28,7 @@ from .theme import DEFAULT_THEME, ConsoleTheme
 from .widgets import assistant_panel, error_panel, user_markup
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime import Runtime
+    from substrate.runtime import Runtime
     from substrate.integrations.tools.skills._manager import SkillManager
 
 

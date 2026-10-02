@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**95 enforced · 0 pending · 95 total**
+**97 enforced · 0 pending · 97 total**
 
 ## approvals
 
@@ -162,12 +162,16 @@ and the marker has to come off. That is what keeps this document honest.
 
 ## structure
 
-- ✅ **The kernel is the engine, so it has to be installable and importable without a vendor SDK, a model runtime, or a database driver.**
-  `test_i26_the_kernel_imports_only_its_allowed_third_party_set`
-- ✅ **``kernel/testing`` holds conformance suites and doubles. Production code that imported it would make pytest a runtime dependency of the engine.**
-  `test_the_kernel_never_imports_its_own_test_support`
-- ✅ **``abstractions`` is what an adapter author depends on. If it reaches back into the engine, implementing a port drags the whole engine along.**
-  `test_i27_abstractions_never_imports_the_engine`
+- ✅ **The core is the engine, so it has to be installable and importable without a vendor SDK, a model runtime, or a database driver.**
+  `test_i26_the_core_imports_only_its_allowed_third_party_set`
+- ✅ **The core is what every integration and application builds on, so it can name none of them.**
+  `test_the_core_imports_nothing_outside_itself`
+- ✅ **``CORE`` is ordered bottom-up: types, then tools, models, stores … up to agents. A concept that imported one above it would make the order a cycle, and the bottom of the engine would drag the top along. Imports made only for type checking are exempt — they never run.**
+  `test_concepts_only_import_the_concepts_below_them`
+- ✅ **``substrate.testing`` holds conformance suites and doubles. Production code that imported it would make pytest a runtime dependency of the engine.**
+  `test_the_core_never_imports_its_own_test_support`
+- ✅ **The contracts are what someone implementing a port depends on. If one reaches into the engine, implementing a port drags the whole engine along.**
+  `test_i27_the_contracts_never_import_the_engine`
 - ✅ **Every addition or removal in the public API shows up as a diff in ``public_api.json``, so it is reviewed rather than noticed later.**
   `test_i28_the_public_api_matches_its_snapshot`
 - ✅ **The row that keeps the other rows honest. A file once promised "the same suite is run against those implementations" and never was, while three backends drifted apart.**

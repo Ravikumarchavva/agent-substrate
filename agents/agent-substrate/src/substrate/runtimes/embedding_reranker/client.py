@@ -22,11 +22,11 @@ from typing import TYPE_CHECKING, Any
 import httpx2 as httpx
 from pydantic import BaseModel
 
-from substrate.kernel.abstractions.core.content import ContentBlock, MediaBlock, TextBlock
-from substrate.kernel.abstractions.exceptions import UnsupportedContentError
+from substrate.types import ContentBlock, MediaBlock, TextBlock
+from substrate.types import UnsupportedContentError
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.llm import EmbeddingResult
+    from substrate.models import EmbeddingResult
 
 logger = setup_logging()
 
@@ -204,7 +204,7 @@ class EmbeddingRerankerClient:
 class EmbeddingRerankerTextEmbeddingClient:
     """Adapts ``EmbeddingRerankerClient.embed_text()`` to the kernel
     ``EmbeddingClient`` Protocol (``embed``/``embed_single`` —
-    ``substrate.kernel.abstractions.llm.EmbeddingClient``).
+    ``substrate.models.protocols.EmbeddingClient``).
 
     A shape unification, not a dimension one: this service's embedding
     space (``RAG_IMAGE_EMBEDDING_DIM``, 2048-dim — ``PgVectorStore``
@@ -223,7 +223,7 @@ class EmbeddingRerankerTextEmbeddingClient:
         self._model = model
 
     async def embed(self, texts: list[str]) -> EmbeddingResult:
-        from substrate.kernel.abstractions.llm import EmbeddingResult
+        from substrate.models import EmbeddingResult
 
         embeddings: list[list[float]] = []
         for text in texts:

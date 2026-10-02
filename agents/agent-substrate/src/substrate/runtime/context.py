@@ -27,9 +27,9 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
-from substrate.kernel.abstractions.agent.runtime_context import RunMeta, RunScope
-from substrate.kernel.abstractions.agent.supervision import Supervision
-from substrate.kernel.abstractions.core.content import (
+from substrate.types.run import RunMeta, RunScope
+from substrate.types.supervision import Supervision
+from substrate.types.content import (
     ChatMessage,
     JsonObject,
     MediaBlock,
@@ -37,36 +37,20 @@ from substrate.kernel.abstractions.core.content import (
     TextBlock,
     parse_content_block,
 )
-from substrate.kernel.abstractions.core.scope import Scope
-from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.core.trace import TraceContext
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.exceptions import (
-    BudgetExhaustedError,
-    ControlSignal,
-    SuspendInterrupt,
-)
-from substrate.kernel.abstractions.ids import new_id, new_run_id
-from substrate.kernel.abstractions.llm.llm import (
-    FinishReason,
-    GenerationOptions,
-    LLMClient,
-    LLMResponse,
-)
-from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.messaging.stream import (
-    CompletionEvent,
-    ReasoningDelta,
-    TextDelta,
-)
-from substrate.kernel.abstractions.runtime.agent import Agent as _KernelAgent
-from substrate.kernel.abstractions.runtime.communication import (
-    AskOutcome,
-    RunStatusSummary,
-)
-from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.runtime.store import (
+from substrate.types.scope import Scope
+from substrate.types.identity import Actor, Topic
+from substrate.types.trace import TraceContext
+from substrate.types.usage import Usage
+from substrate.types.errors import BudgetExhaustedError, ControlSignal, SuspendInterrupt
+from substrate.types.ids import new_id, new_run_id
+from substrate.models.protocols import FinishReason, GenerationOptions, LLMClient, LLMResponse
+from substrate.runtime.message import DataPayload, Message
+from substrate.types.stream import CompletionEvent, ReasoningDelta, TextDelta
+from substrate.runtime.agent import Agent as _KernelAgent
+from substrate.runtime.communication import AskOutcome, RunStatusSummary
+from substrate.types.run_status import RunId, RunStatus
+from substrate.types.run_log import RunLogKind
+from substrate.runtime.store import (
     Commit,
     CommitResult,
     Delivery,
@@ -77,14 +61,16 @@ from substrate.kernel.abstractions.runtime.store import (
     SpawnSpec,
     Spend,
 )
-from substrate.kernel.abstractions.runtime.supervisor import RunHandle, RunResult
-from substrate.kernel.abstractions.runtime.wakeup import Wakeup
-from substrate.kernel.abstractions.tools.chain import InvocationResult
-from substrate.kernel.runtime.journal import Journal, current_idempotency_key
-from substrate.kernel.telemetry import instruments, semconv, span
+from substrate.runtime.supervisor import RunHandle, RunResult
+from substrate.types.wakeup import Wakeup
+from substrate.tools.chain import InvocationResult
+from substrate.runtime.journal import Journal, current_idempotency_key
+from substrate.telemetry.metrics import instruments
+from substrate.telemetry import semconv
+from substrate.telemetry.tracing import span
 
 if TYPE_CHECKING:
-    from substrate.kernel.tools.invoker import InvokerSession, ToolInvoker
+    from substrate.runtime.tool_invoker import InvokerSession, ToolInvoker
 
 logger = logging.getLogger(__name__)
 
@@ -322,7 +308,7 @@ class RunContext:
             raise BudgetExhaustedError(f"Turn limit exceeded: {spent.turns} {'>' if strict else '>='} {budget.max_turns}")
 
     async def _generate(self, client: LLMClient, messages: list[ChatMessage], options: GenerationOptions) -> LLMResponse:
-        from substrate.kernel.llm.errors import classify_llm_error
+        from substrate.models.errors import classify_llm_error
 
         started = time.monotonic()
         attributes = {
@@ -366,8 +352,8 @@ class RunContext:
         middleware = getattr(self.agent, "middleware", None)
         if middleware is None:
             return await self._stream(client, messages, options)
-        from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-        from substrate.kernel.middleware._contracts import MiddlewareContext
+        from substrate.middleware.stage import MiddlewareStage
+        from substrate.middleware._contracts import MiddlewareContext
 
         chat_ctx = MiddlewareContext(
             stage=MiddlewareStage.CHAT,
@@ -446,7 +432,7 @@ class RunContext:
         for the tool's schema, and splatting an untrusted dict into this method's own
         keywords collides the first time a schema names an argument ``name``.
         """
-        from substrate.kernel.abstractions.tools import ToolCallRequest
+        from substrate.tools.protocols import ToolCallRequest
 
         invoker = self._tool_invoker
         if invoker is None:
@@ -495,8 +481,8 @@ class RunContext:
         middleware = getattr(self.agent, "middleware", None)
         if middleware is None:
             return await invoke()
-        from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-        from substrate.kernel.middleware._contracts import MiddlewareContext
+        from substrate.middleware.stage import MiddlewareStage
+        from substrate.middleware._contracts import MiddlewareContext
 
         func_ctx = MiddlewareContext(
             stage=MiddlewareStage.TOOL,

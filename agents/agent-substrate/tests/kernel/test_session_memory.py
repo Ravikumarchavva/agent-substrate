@@ -4,23 +4,22 @@ from __future__ import annotations
 
 from tests._stores import fs_history
 
-from substrate.kernel.abstractions.llm import ModelCapabilities
+from substrate.models import ModelCapabilities
 from typing import AsyncIterator
 
-from substrate.kernel.storage.history import project_messages
-from substrate.kernel.context import (
-    ContextConfig,
-    SlidingWindowCompaction,
-    CompactionPipeline,
-)
-from substrate.kernel.agents import ReActAgent
-from substrate.kernel.runtime import Runtime
-from substrate.kernel.abstractions import ChatMessage, ContentBlock, TextBlock
-from substrate.kernel.abstractions.core.content import Role
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.llm import GenerationOptions, LLMResponse, Usage
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
+from substrate.context import project_messages
+from substrate.context import ContextConfig
+from substrate.context import SlidingWindowCompaction
+from substrate.context import CompactionPipeline
+from substrate.agents import ReActAgent
+from substrate.runtime import Runtime
+from substrate.types import ChatMessage, ContentBlock, TextBlock
+from substrate.types import Role
+from substrate.types import Actor
+from substrate.models import GenerationOptions, LLMResponse
+from substrate.types import Usage
+from substrate.runtime import ChatPayload, Message
+from substrate.types import CompletionEvent, TextDelta
 
 
 # ---------------------------------------------------------------------------

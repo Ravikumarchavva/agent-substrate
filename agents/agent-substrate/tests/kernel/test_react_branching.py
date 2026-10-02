@@ -2,23 +2,18 @@ from __future__ import annotations
 
 from tests._stores import fs_history
 
-from substrate.kernel.abstractions.llm import ModelCapabilities
+from substrate.models import ModelCapabilities
 from typing import AsyncIterator
 import pytest
 
-from substrate.kernel.context import ContextConfig
-from substrate.kernel.agents.react import ReActAgent
-from substrate.kernel.runtime.runtime import Runtime
-from substrate.kernel.abstractions.core.content import ChatMessage, ContentBlock, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.llm.llm import (
-    CompletionEvent,
-    GenerationOptions,
-    LLMResponse,
-    TextDelta,
-    Usage,
-)
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.context import ContextConfig
+from substrate.agents import ReActAgent
+from substrate.runtime import Runtime
+from substrate.types import ChatMessage, ContentBlock, Role, TextBlock
+from substrate.types import Actor
+from substrate.models.protocols import CompletionEvent, TextDelta, Usage
+from substrate.models import GenerationOptions, LLMResponse
+from substrate.runtime import ChatPayload, Message
 
 
 class MockLLMClient:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, ToolUseBlock
+from substrate.types.content import ChatMessage, Role, ToolUseBlock
 
 
 class SelectiveToolCallCompactionStrategy:

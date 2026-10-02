@@ -13,21 +13,21 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from substrate.kernel.abstractions.core.scope import Scope
-from substrate.kernel.abstractions.core.content import ChatMessage, Role
-from substrate.kernel.abstractions.storage.graph import Entity, Relationship
-from substrate.kernel.abstractions.storage.history import HistoryCheckpoint, MessageNode
-from substrate.kernel.abstractions.storage.vector import Document
-from substrate.kernel.storage.local_graph import LocalFilesystemGraphStore
-from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
-from substrate.kernel.storage.local_object_store import WorkspaceFileStore
-from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
-from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore
-from substrate.kernel.storage.scoped import bind_graph, bind_history, bind_objects, bind_tasks, bind_vector
-from substrate.kernel.testing.conformance.graph_store import GraphStoreConformance
-from substrate.kernel.testing.conformance.history_provider import HistoryProviderConformance
-from substrate.kernel.testing.conformance.task_store import TaskStoreConformance
-from substrate.kernel.testing.conformance.vector_store import VectorStoreConformance
+from substrate.types import Scope
+from substrate.types import ChatMessage, Role
+from substrate.stores import Entity, Relationship
+from substrate.stores import HistoryCheckpoint, MessageNode
+from substrate.stores import Document
+from substrate.stores import LocalFilesystemGraphStore
+from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import WorkspaceFileStore
+from substrate.stores import LocalFilesystemTaskStore
+from substrate.stores import LocalFilesystemVectorStore
+from substrate.stores import bind_graph, bind_history, bind_objects, bind_tasks, bind_vector
+from substrate.testing.conformance.graph_store import GraphStoreConformance
+from substrate.testing.conformance.history_provider import HistoryProviderConformance
+from substrate.testing.conformance.task_store import TaskStoreConformance
+from substrate.testing.conformance.vector_store import VectorStoreConformance
 
 A, B = Scope(tenant_id="acme"), Scope(tenant_id="evilcorp")
 
@@ -183,7 +183,7 @@ async def test_i03_a_tenant_whose_name_looks_like_another_tenants_prefix_gets_it
 
 
 async def test_i03_a_fenced_store_keeps_absolute_keys_but_only_inside_its_tenant(tmp_path) -> None:
-    from substrate.kernel.storage.scoped import fence_objects
+    from substrate.stores import fence_objects
 
     raw = WorkspaceFileStore(tmp_path, user_quota_bytes=10**9)
     mine = fence_objects(raw, A)

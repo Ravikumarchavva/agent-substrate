@@ -3,11 +3,8 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from substrate.kernel.workspace.layout import conversation_workspace_prefix
-from substrate.kernel.storage.local_object_store import (
-    WorkspaceFileStore,
-    WorkspaceQuotaExceededError,
-)
+from substrate.workspace.layout import conversation_workspace_prefix
+from substrate.stores import WorkspaceFileStore, WorkspaceQuotaExceededError
 
 
 @pytest.mark.asyncio

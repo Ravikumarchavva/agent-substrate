@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import io
 
-from substrate.kernel.abstractions.agent.safety import SafetyVerdict, Severity
+from substrate.safety import SafetyVerdict, Severity
 from substrate.logger import setup_logging
 
 logger = setup_logging("substrate.integrations.safety.image_classifier")

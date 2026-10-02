@@ -6,16 +6,16 @@ from sqlalchemy.exc import OperationalError
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from substrate.kernel.abstractions import ChatMessage
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.storage.vector import Document
-from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery, MemoryRecord
-from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolCallRequest
+from substrate.types import ChatMessage
+from substrate.types import TextBlock
+from substrate.stores import Document
+from substrate.stores import MemoryNamespace, MemoryQuery, MemoryRecord
+from substrate.tools import ToolExecutionResult, ToolCallRequest
 
 from substrate.integrations.memory import DurableMemoryStore
-from substrate.kernel.storage.history import project_messages
+from substrate.context import project_messages
 from substrate.integrations.history import DurableHistoryProvider
-from substrate.kernel.abstractions.storage.history import MessageNode
+from substrate.stores import MessageNode
 from substrate.integrations.vector import PgVectorStore
 from substrate.integrations.graph import AGEGraphStore
 
@@ -171,7 +171,7 @@ async def test_durable_memory_store_multimodal():
     if not await check_db_available():
         pytest.skip("PostgreSQL database not available")
 
-    from substrate.kernel.abstractions.core.content import DataBlock, MediaBlock, TextBlock
+    from substrate.types import DataBlock, MediaBlock, TextBlock
 
     db_url = get_db_url()
     store = DurableMemoryStore(db_url)

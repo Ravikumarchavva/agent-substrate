@@ -26,12 +26,8 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.kernel.storage.local_object_store import WorkspacePathError
-from substrate.kernel.workspace.layout import (
-    conversation_shared_key,
-    conversation_workspace_prefix,
-    user_prefix,
-)
+from substrate.stores import WorkspacePathError
+from substrate.workspace.layout import conversation_shared_key, conversation_workspace_prefix, user_prefix
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.file_versioning import (

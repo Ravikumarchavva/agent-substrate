@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from substrate.kernel.abstractions.storage.vector import SearchResult
+from substrate.stores import SearchResult
 
 
 @dataclass(slots=True)

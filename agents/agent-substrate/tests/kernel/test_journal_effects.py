@@ -12,10 +12,11 @@ from typing import Any
 
 import pytest
 
-from substrate.kernel.abstractions.exceptions import NonDeterminismError, OrphanedEffectError
-from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
-from substrate.kernel.abstractions.runtime.store import NewEntry
-from substrate.kernel.runtime.journal import OFFLOAD_BYTES, Journal, current_idempotency_key
+from substrate.types import NonDeterminismError, OrphanedEffectError
+from substrate.types import RunLogEntry, RunLogKind
+from substrate.runtime import NewEntry
+from substrate.runtime.journal import OFFLOAD_BYTES, current_idempotency_key
+from substrate.runtime import Journal
 
 
 class Log:

@@ -18,12 +18,9 @@ removed, not fixed.)
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.storage.history import HistoryProvider
-from substrate.kernel.abstractions.storage.objects import ObjectStore
-from substrate.kernel.abstractions.storage.snapshots import (
-    WorkspaceSnapshot,
-    WorkspaceStore,
-)
+from substrate.stores.threads import HistoryProvider
+from substrate.stores.files import ObjectStore
+from substrate.workspace.protocols import WorkspaceSnapshot, WorkspaceStore
 
 from .layout import conversation_workspace_prefix
 

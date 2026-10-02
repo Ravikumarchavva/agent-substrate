@@ -13,7 +13,7 @@ import os
 import pytest
 
 from substrate.integrations.runtime import PostgresRuntimeStore
-from substrate.kernel.testing.conformance.runtime_store import NOW, RuntimeStoreConformance
+from substrate.testing.conformance.runtime_store import NOW, RuntimeStoreConformance
 
 pytestmark = [pytest.mark.requires_postgres]
 

@@ -3,14 +3,8 @@
 from __future__ import annotations
 
 
-from substrate.kernel.abstractions.exceptions import (
-    ContextLengthError,
-    KernelError,
-    PermanentError,
-    SuspendInterrupt,
-    ToolDeclarationError,
-    UnroutableMessageError,
-)
+from substrate.types import ContextLengthError, KernelError, PermanentError, SuspendInterrupt
+from substrate.types.errors import ToolDeclarationError, UnroutableMessageError
 
 
 def test_deterministic_errors_inherit_from_permanent_error() -> None:
@@ -30,8 +24,8 @@ def test_suspend_interrupt_is_base_exception() -> None:
 
 
 def test_kernel_exceptions_module() -> None:
-    """substrate.kernel.abstractions.exceptions must export all L0 exceptions with correct semantic tiering."""
-    import substrate.kernel.abstractions.exceptions as ke
+    """substrate.types.errors must export all L0 exceptions with correct semantic tiering."""
+    import substrate.types.errors as ke
 
     # 1. Control Signals (BaseException)
     assert issubclass(ke.ControlSignal, BaseException)

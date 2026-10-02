@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from substrate.kernel.abstractions.ids import new_id
+from substrate.types import new_id
 
 pytestmark = [pytest.mark.requires_postgres]
 
@@ -85,7 +85,7 @@ async def test_pg_task_store_persist_and_reload() -> None:
         pytest.skip("Postgres not reachable")
 
     from substrate.integrations.storage.pg_task_store import PgTaskStore
-    from substrate.kernel.abstractions.storage.tasks import TaskStatus
+    from substrate.stores import TaskStatus
 
     conv_id = f"conv-{id(object())}"
 
@@ -179,7 +179,7 @@ async def test_pg_vector_store_custom_table_name_is_isolated_from_default() -> N
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
     from substrate.integrations.vector.pgvector_store import PgVectorStore
-    from substrate.kernel.abstractions.storage.vector import Document
+    from substrate.stores import Document
 
     engine = await _pg_async_engine()
     if engine is None:
@@ -238,7 +238,7 @@ async def test_pg_vector_store_rename_collection_rekeys_rows() -> None:
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
     from substrate.integrations.vector.pgvector_store import PgVectorStore
-    from substrate.kernel.abstractions.storage.vector import Document
+    from substrate.stores import Document
 
     engine = await _pg_async_engine()
     if engine is None:
@@ -333,7 +333,7 @@ def _vec384(*nonzero: tuple[int, float]) -> list[float]:
 
 
 async def test_pg_vector_store_lexical_search_ranks_by_ts_rank() -> None:
-    from substrate.kernel.abstractions.storage.vector import Document
+    from substrate.stores import Document
 
     store = await _hybrid_test_store()
     if store is None:
@@ -364,7 +364,7 @@ async def test_pg_vector_store_hybrid_search_fuses_dense_and_lexical_rank() -> N
     that's an exact lexical match AND a decent semantic match should outrank
     a document that's only a semantic-adjacent match, which should in turn
     outrank a document that's neither."""
-    from substrate.kernel.abstractions.storage.vector import Document
+    from substrate.stores import Document
 
     store = await _hybrid_test_store()
     if store is None:
@@ -397,7 +397,7 @@ async def test_pg_vector_store_hybrid_search_fuses_dense_and_lexical_rank() -> N
 
 
 async def test_pg_vector_store_hybrid_search_applies_filter() -> None:
-    from substrate.kernel.abstractions.storage.vector import Document
+    from substrate.stores import Document
 
     store = await _hybrid_test_store()
     if store is None:
@@ -432,7 +432,7 @@ async def test_pg_vector_store_add_spans_multiple_insert_batches() -> None:
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
     from substrate.integrations.vector.pgvector_store import PgVectorStore
-    from substrate.kernel.abstractions.storage.vector import Document
+    from substrate.stores import Document
 
     engine = await _pg_async_engine()
     if engine is None:
@@ -470,7 +470,7 @@ async def test_pg_vector_store_upsert_dedupes_repeated_id_within_a_chunk() -> No
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
     from substrate.integrations.vector.pgvector_store import PgVectorStore
-    from substrate.kernel.abstractions.storage.vector import Document
+    from substrate.stores import Document
 
     engine = await _pg_async_engine()
     if engine is None:

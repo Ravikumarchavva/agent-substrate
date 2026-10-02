@@ -18,20 +18,21 @@ from uuid import uuid4
 
 import pytest
 
-from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.messaging.message import Message, DataPayload
-from substrate.kernel.abstractions.exceptions import ConcurrentAppendError
-from substrate.kernel.abstractions.agent.runtime_context import RunMeta
-from substrate.kernel.runtime.cancellation import CancellationToken
-from substrate.kernel.abstractions.agent.supervision import Supervision
-from substrate.kernel.abstractions.runtime.ids import RunStatus, new_run_id
-from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
-from substrate.kernel.abstractions.runtime.effects import Effect, EffectResult
-from substrate.kernel.abstractions.runtime.wakeup import Wakeup
-from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
-from substrate.kernel.abstractions.runtime.supervisor import RunHandle, RunResult
-from substrate.kernel.abstractions.runtime.agent import AgentRunContext, Agent
-from substrate.kernel.abstractions.storage.memory import MemoryProvenance
+from substrate.types import Actor, Topic
+from substrate.runtime import Message, DataPayload
+from substrate.types import ConcurrentAppendError
+from substrate.types import RunMeta
+from substrate.runtime import CancellationToken
+from substrate.types import Supervision
+from substrate.types import RunStatus, new_run_id
+from substrate.types import RunLogEntry
+from substrate.runtime import Effect, EffectResult
+from substrate.types import Wakeup
+from substrate.runtime import RunRetryPolicy
+from substrate.runtime import RunHandle, RunResult
+from substrate.runtime import AgentRunContext
+from substrate.runtime.agent import Agent
+from substrate.stores import MemoryProvenance
 
 
 # ---------------------------------------------------------------------------

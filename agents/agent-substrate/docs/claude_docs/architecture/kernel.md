@@ -1,6 +1,6 @@
 # The kernel — the engine
 
-`substrate.kernel` is the engine: everything needed to run a durable agent. It is not a
+`substrate` is the engine: everything needed to run a durable agent. It is not a
 thin layer of contracts under a separate runtime; it does the work. What it needs from the
 outside world is declared in `kernel/abstractions`, and everything that touches the outside
 world — vendors, databases, HTTP — sits above it.
@@ -91,7 +91,7 @@ Row I30 fails the build if an implementation of a port that has a suite does not
   `ScopeViolationError`, and cross-user reads need an explicit `TenantWide(reason=…)`. `erase(within)`
   removes everything under a tenant/user/agent/session, and the GDPR eraser reaches memory and the run journal.
 * **Every store port has a scope-bound handle.** `bind_history/vector/graph/objects/tasks(store, scope)`
-  (`kernel/storage/scoped.py`, written once over the ports so it holds for every implementation) places each
+  (`stores/scoped.py`, written once over the ports so it holds for every implementation) places each
   session, collection, conversation, key and namespace under the tenant (percent-encoded, so no name can look like
   another tenant's), refuses ids that resolve elsewhere, and rejects object keys that could climb out. `fence_objects` keeps serving's absolute `tenants/<t>/...` keys but refuses anything outside the tenant or containing `..`;
   request code reaches objects only via `ctx.files_for(tenant)` / `ctx.pending_for(tenant)`. Serving binds conversation history (agent

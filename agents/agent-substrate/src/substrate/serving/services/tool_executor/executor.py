@@ -13,7 +13,7 @@ from substrate.logger import setup_logging
 import asyncio
 from typing import Any, Dict, List, Optional
 
-from substrate.kernel.abstractions.tools import Tool, ToolExecutionResult
+from substrate.tools import Tool, ToolExecutionResult
 from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
 

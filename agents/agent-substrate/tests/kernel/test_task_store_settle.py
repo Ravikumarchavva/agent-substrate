@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from tests._stores import fs_tasks
 
-from substrate.kernel.abstractions.storage.tasks import TaskStatus
+from substrate.stores import TaskStatus
 
 
 async def test_settle_flips_in_progress_to_succeeded() -> None:

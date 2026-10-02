@@ -23,12 +23,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from substrate.kernel.abstractions.exceptions import SnapshotConflictError
-from substrate.kernel.abstractions.storage.snapshots import (
-    WorkspaceManifest,
-    WorkspaceSnapshot,
-    WorkspaceStore,
-)
+from substrate.types import SnapshotConflictError
+from substrate.workspace import WorkspaceManifest, WorkspaceSnapshot, WorkspaceStore
 from substrate.logger import setup_logging
 
 logger = setup_logging()

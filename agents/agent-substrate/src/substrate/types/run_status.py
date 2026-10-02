@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from substrate.kernel.abstractions.ids import RunId, new_run_id
+from substrate.types.ids import RunId, new_run_id
 
 
 class RunStatus(StrEnum):

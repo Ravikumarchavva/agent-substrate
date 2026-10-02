@@ -51,15 +51,11 @@ from typing import (
 
 from pydantic import BaseModel, Field
 
-from substrate.kernel.abstractions.core.content import (
-    ContentBlock,
-    JsonObject,
-    content_blocks_to_str,
-)
-from substrate.kernel.abstractions.ids import new_id
+from substrate.types.content import ContentBlock, JsonObject, content_blocks_to_str
+from substrate.types.ids import new_id
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+    from substrate.types.run import RunMeta
 
 
 # ---------------------------------------------------------------------------

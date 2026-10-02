@@ -18,8 +18,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from substrate.kernel.abstractions.exceptions import ScopeViolationError
-from substrate.kernel.abstractions.storage.memory import (
+from substrate.types.errors import ScopeViolationError
+from substrate.stores.memory import (
     MemoryCategory,
     MemoryNamespace,
     MemoryQuery,

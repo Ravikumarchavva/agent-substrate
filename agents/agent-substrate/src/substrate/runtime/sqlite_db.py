@@ -27,7 +27,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
-from substrate.kernel.runtime.sql_store import Tx
+from substrate.runtime.sql_store import Tx
 
 T = TypeVar("T")
 

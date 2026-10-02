@@ -8,7 +8,7 @@ import pytest
 
 from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
 from substrate.integrations.tools.memory import MemoryTool
-from substrate.kernel.abstractions.agent.runtime_context import RunScope
+from substrate.types import RunScope
 
 
 class FakeShortTermMemory:

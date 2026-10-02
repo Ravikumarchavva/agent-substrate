@@ -18,7 +18,7 @@ import secrets
 
 from pydantic import field_validator
 
-from substrate.kernel.abstractions.core.content import KernelModel
+from substrate.types.content import KernelModel
 
 _TRACEPARENT = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$")
 _HEX32 = re.compile(r"^[0-9a-f]{32}$")

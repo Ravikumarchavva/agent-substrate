@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 
 from substrate.integrations.llm.local_embeddings import SentenceTransformersEmbeddingClient
 from substrate.integrations.llm.openai.openai_embedding_client import OpenAIEmbeddingClient
-from substrate.kernel.testing.conformance.embedding_client import EmbeddingClientConformance, vector_of
+from substrate.testing.conformance.embedding_client import EmbeddingClientConformance, vector_of
 
 
 class OpenAIEmbeddings:

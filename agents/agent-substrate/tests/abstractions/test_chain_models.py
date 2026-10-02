@@ -4,14 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.abstractions.tools.chain import (
-    ChainCallRecord,
-    ChainFile,
-    ChainPolicy,
-    ChainRunResult,
-    InvocationResult,
-)
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.tools import ChainCallRecord, ChainFile, ChainPolicy, ChainRunResult, InvocationResult
+from substrate.tools import ToolRisk
 
 
 def test_chain_policy_defaults():

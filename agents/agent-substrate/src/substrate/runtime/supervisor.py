@@ -60,10 +60,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from substrate.kernel.abstractions.core.content import JsonObject
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import Payload
-from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus
+from substrate.types.content import JsonObject
+from substrate.types.identity import Actor
+from substrate.runtime.message import Payload
+from substrate.types.run_status import RunId, RunStatus
 
 
 class RunHandle(BaseModel):

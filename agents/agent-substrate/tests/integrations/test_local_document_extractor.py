@@ -45,7 +45,7 @@ async def test_extract_garbage_bytes_returns_failure_not_exception():
 
 
 async def test_ocr_fallback_triggers_on_textless_page():
-    from substrate.kernel.abstractions.document import ExtractedPage
+    from substrate.documents import ExtractedPage
 
     extractor = LocalDocumentExtractor()
     blank_page = ExtractedPage(page_number=1, text="")
@@ -69,7 +69,7 @@ async def test_ocr_degrades_gracefully_when_unavailable():
     binary not installed), yields empty page text — not an exception."""
     extractor = LocalDocumentExtractor()
 
-    from substrate.kernel.abstractions.document import ExtractedPage
+    from substrate.documents import ExtractedPage
 
     blank_page = ExtractedPage(page_number=1, text="")
     with patch.object(

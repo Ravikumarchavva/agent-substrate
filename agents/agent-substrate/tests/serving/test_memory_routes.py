@@ -10,7 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from substrate.integrations.memory.durable_memory_store import DurableMemoryStore
-from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryRecord
+from substrate.stores import MemoryNamespace, MemoryRecord
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims

@@ -26,33 +26,22 @@ import uuid
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
-from substrate.kernel.context import (
-    ContextConfig,
-    SlidingWindowCompaction,
-    CompactionPipeline,
-)
-from substrate.kernel.storage import (
-    LocalFilesystemHistoryProvider,
-)
-from substrate.kernel.agents.react import ReActAgent
-from substrate.kernel.agents.orchestrator import OrchestratorAgent, SubAgentConfig
-from substrate.kernel.runtime import Runtime
-from substrate.kernel.middleware import AgentRunResult
-from substrate.kernel.abstractions.core.content import Role
-from substrate.kernel.abstractions.messaging.message import Message, ChatPayload
+from substrate.context import ContextConfig
+from substrate.context import SlidingWindowCompaction
+from substrate.context import CompactionPipeline
+from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.agents import ReActAgent
+from substrate.agents import OrchestratorAgent, SubAgentConfig
+from substrate.runtime import Runtime
+from substrate.middleware import AgentRunResult
+from substrate.types import Role
+from substrate.runtime import Message, ChatPayload
 from substrate.integrations.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
-from substrate.kernel.abstractions import (
-    Priority,
-    TextBlock,
-    Tool,
-    ToolUseBlock,
-    ChatMessage,
-    ContentBlock,
-    CompletionEvent,
-    ReasoningDelta,
-    TextDelta,
-    AgentId,
-)
+from substrate.types import Priority
+from substrate.types import TextBlock, ToolUseBlock, ChatMessage, ContentBlock
+from substrate.tools import Tool
+from substrate.types import CompletionEvent, ReasoningDelta, TextDelta
+from substrate.types import AgentId
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +306,7 @@ async def run_demo(
                                     is_error = getattr(res_block, "is_error", False)
                                     break
 
-                    from substrate.kernel.middleware._contracts import ToolCallRecord
+                    from substrate.middleware import ToolCallRecord
 
                     tool_calls.append(
                         ToolCallRecord(

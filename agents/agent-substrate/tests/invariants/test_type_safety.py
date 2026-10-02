@@ -18,16 +18,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    DataBlock,
-    Role,
-    TextBlock,
-    ToolUseBlock,
-    parse_content_block,
-)
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.core.usage import Usage
+from substrate.types import ChatMessage, DataBlock, Role, TextBlock, ToolUseBlock, parse_content_block
+from substrate.types import Actor
+from substrate.types import Usage
 
 # --------------------------------------------------------------------------
 # Content model
@@ -37,14 +30,14 @@ from substrate.kernel.abstractions.core.usage import Usage
 def test_a_block_without_a_type_is_rejected() -> None:
     """``UnknownBlock`` exists for *future provider* types, not for malformed
     input. Swallowing a missing discriminator turns a bug into lost content."""
-    from substrate.kernel.abstractions.exceptions import BlockValidationError
+    from substrate.types import BlockValidationError
 
     with pytest.raises(BlockValidationError):
         parse_content_block({"text": "hello"})
 
 
 def test_a_misspelled_known_type_is_rejected() -> None:
-    from substrate.kernel.abstractions.exceptions import BlockValidationError
+    from substrate.types import BlockValidationError
 
     with pytest.raises(BlockValidationError):
         parse_content_block({"type": "txt", "text": "hello"})
@@ -74,7 +67,7 @@ def test_structured_blocks_render_non_json_values() -> None:
 def test_a_naive_deadline_is_rejected_at_construction() -> None:
     """``check()`` runs at every cooperative yield point. A deadline that makes
     it raise ``TypeError`` disables cancellation everywhere at once."""
-    from substrate.kernel.abstractions.agent.runtime_context import RunMeta
+    from substrate.types import RunMeta
 
     class _Token:
         is_cancelled = False
@@ -93,7 +86,7 @@ def test_a_naive_deadline_is_rejected_at_construction() -> None:
 def test_structured_exceptions_survive_a_process_boundary() -> None:
     """Workers may run in another process. An exception that cannot be pickled
     is reported as a pickling error instead of the real failure."""
-    from substrate.kernel.abstractions.exceptions import (
+    from substrate.types import (
         AgentCrashError,
         BranchHeadConflictError,
         ConcurrentAppendError,
@@ -126,7 +119,7 @@ def test_usage_accumulates_with_sum() -> None:
 def test_tool_risk_is_ordered_by_severity() -> None:
     """Risk is compared to decide whether approval is required. String ordering
     silently inverts that decision."""
-    from substrate.kernel.abstractions.tools import ToolRisk
+    from substrate.tools import ToolRisk
 
     assert ToolRisk.SAFE < ToolRisk.HIGH < ToolRisk.CRITICAL
     assert not ToolRisk.SAFE > ToolRisk.CRITICAL
@@ -135,7 +128,7 @@ def test_tool_risk_is_ordered_by_severity() -> None:
 def test_supervision_survives_a_round_trip_with_an_unknown_field() -> None:
     """Supervision is persisted and read back by a possibly older or newer
     worker. An unknown field must not crash the read."""
-    from substrate.kernel.abstractions.agent.supervision import Supervision
+    from substrate.types import Supervision
 
     data = Supervision.root(Actor("a", "k")).to_dict()
     data["execution_budget"]["max_tool_calls"] = 5  # a field this version doesn't know
@@ -148,10 +141,10 @@ def test_supervision_survives_a_round_trip_with_an_unknown_field() -> None:
 
 
 def test_tagged_results_cannot_contradict_their_tag() -> None:
-    from substrate.kernel.abstractions.document import ExtractionResult
-    from substrate.kernel.abstractions.runtime.communication import AskOutcome
-    from substrate.kernel.abstractions.runtime.wakeup import Wakeup
-    from substrate.kernel.abstractions.tools.approval import ApprovalDecision, ApprovalResult
+    from substrate.documents import ExtractionResult
+    from substrate.runtime import AskOutcome
+    from substrate.types import Wakeup
+    from substrate.tools import ApprovalDecision, ApprovalResult
 
     with pytest.raises(ValueError):
         Wakeup(kind="timer")  # a timer with no time
@@ -167,7 +160,7 @@ def test_tagged_results_cannot_contradict_their_tag() -> None:
 
 def test_workspace_paths_cannot_escape_the_workspace() -> None:
     """A manifest path comes from tool output and names a file to materialise."""
-    from substrate.kernel.abstractions.storage.snapshots import ContentRef, WorkspaceFileEntry
+    from substrate.workspace import ContentRef, WorkspaceFileEntry
 
     ref = ContentRef(hash="x", size_bytes=1)
     for hostile in ("../../etc/passwd", "/etc/passwd"):
@@ -178,7 +171,7 @@ def test_workspace_paths_cannot_escape_the_workspace() -> None:
 def test_effect_identity_handles_any_json_encodable_argument() -> None:
     """Effect identity is computed from tool arguments, which routinely contain
     bytes and timestamps."""
-    from substrate.kernel.abstractions.runtime.effects import Effect
+    from substrate.runtime import Effect
 
     assert Effect.make_id("r", "0", "k", {"b": b"\x00"})
     assert Effect.make_id("r", "0", "k", {"d": datetime.now(tz=timezone.utc)})
@@ -189,7 +182,7 @@ def test_ids_are_time_sortable() -> None:
     separate sequence column."""
     import time
 
-    from substrate.kernel.abstractions.ids import new_id
+    from substrate.types import new_id
 
     first = new_id()
     time.sleep(0.002)

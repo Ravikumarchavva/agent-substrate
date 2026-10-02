@@ -6,8 +6,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from substrate.integrations.memory.durable_memory_store import DurableMemoryStore  # noqa: F401
-from substrate.kernel.abstractions.agent.runtime_context import RunScope
-from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
+from substrate.types import RunScope
+from substrate.stores import LocalFilesystemMemoryStore
 from substrate.serving.factory import build_memory_tool
 
 

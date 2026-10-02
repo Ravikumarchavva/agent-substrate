@@ -254,10 +254,10 @@ new orchestration in `kernel/flows/`, a new port in `kernel/abstractions/` **wit
 | A new guardrail | `kernel/middleware/guardrails/<name>.py` — implement the middleware contract |
 | A new LLM provider | `integrations/llm/<provider>/` — implement `LLMClient` (`kernel/abstractions/llm/`); report a `FinishReason` and let `classify_llm_error` type its failures |
 | A new memory backend | `integrations/memory/<name>.py` — implement `MemoryStore` and run `MemoryStoreConformance` against it |
-| A new history backend | `integrations/history/<name>.py` — implement `HistoryProvider` (`kernel/abstractions/storage/history.py`) |
-| A new vector store | `integrations/vector/<name>.py` — implement `VectorStore` (`kernel/abstractions/storage/vector.py`) |
-| A new graph store | `integrations/graph/<name>.py` — implement `GraphStore` (`kernel/abstractions/storage/graph.py`) |
-| A new runtime store | implement `RuntimeStore` (`kernel/abstractions/runtime/store.py`) — or a new `Database` adapter for `SqlRuntimeStore` — and run `RuntimeStoreConformance` against it |
+| A new history backend | `integrations/history/<name>.py` — implement `HistoryProvider` (`stores/threads.py`) |
+| A new vector store | `integrations/vector/<name>.py` — implement `VectorStore` (`stores/vector.py`) |
+| A new graph store | `integrations/graph/<name>.py` — implement `GraphStore` (`stores/graph.py`) |
+| A new runtime store | implement `RuntimeStore` (`runtime/store.py`) — or a new `Database` adapter for `SqlRuntimeStore` — and run `RuntimeStoreConformance` against it |
 | A new document extractor | `integrations/document/<name>.py` — implement `DocumentExtractor` (`kernel/abstractions/document/`) |
 | A new tool | `integrations/tools/<name>/tool.py` — implement `Tool`, **declaring `risk` and `idempotent`** (auto-scanned, no registration needed) |
 | A new skill | `integrations/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
@@ -266,8 +266,8 @@ new orchestration in `kernel/flows/`, a new port in `kernel/abstractions/` **wit
 ### Tool creation
 
 ```python
-from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
-from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.tools import ToolExecutionResult, ToolRisk
+from substrate.types.content import TextBlock
 
 class MyTool:
     name = "my_tool"
@@ -292,7 +292,7 @@ time (pure reads); a turn's tool calls then run concurrently and are journaled r
 needs to know whose work it is reads `scope_of(ctx)` (tenant/user/thread/branch/agent —
 `kernel.abstractions.agent.runtime_context.RunScope`), never a global and never a model-supplied argument.
 
-`substrate.kernel.abstractions.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
+`substrate.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
 `HostedTool` (provider-executed, `provider_specs`), `ProviderDefinedTool`
 (provider call-shape + local `handle_call()`). Use `is_hosted_tool` /
 `is_provider_defined_tool` to branch at dispatch. Wire-dict encoding for each
@@ -378,7 +378,7 @@ All shared objects (LLM clients, tool registry, event bus, HITL bridge) are wire
 
 ```python
 # zero-infra default — one JSON file per session
-from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
+from substrate.stores.local.threads import LocalFilesystemHistoryProvider
 
 # Redis-backed
 from substrate.integrations.history import RedisHistoryProvider
@@ -396,7 +396,7 @@ a caller passes *its own* namespace to every read and delete, and sees the recor
 so leaving a field out narrows what you see, never widens it.
 
 ```python
-from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery, MemoryRecord, TenantWide
+from substrate.stores.memory import MemoryNamespace, MemoryQuery, MemoryRecord, TenantWide
 
 me = MemoryNamespace(tenant_id="acme", user_id="alice")
 await store.save(MemoryRecord.from_text("prefers French", namespace=me))
@@ -418,8 +418,8 @@ Vector and graph store contracts live in the kernel. Concrete implementations li
 
 ```python
 # Contracts (kernel)
-from substrate.kernel.abstractions.storage.vector import VectorStore, Document, SearchResult
-from substrate.kernel.abstractions.storage.graph import GraphStore, Entity, Relationship, SubGraph
+from substrate.stores.vector import VectorStore, Document, SearchResult
+from substrate.stores.graph import GraphStore, Entity, Relationship, SubGraph
 
 # Concrete implementations
 from substrate.integrations.vector import PgVectorStore

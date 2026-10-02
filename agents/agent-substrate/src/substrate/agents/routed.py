@@ -24,12 +24,13 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
-from substrate.kernel.abstractions.exceptions import UnroutableMessageError
-from substrate.kernel.abstractions.messaging.message import Message
-from substrate.kernel.telemetry import semconv, span
+from substrate.types.errors import UnroutableMessageError
+from substrate.runtime.message import Message
+from substrate.telemetry import semconv
+from substrate.telemetry.tracing import span
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.context import RunContext
+    from substrate.runtime.context import RunContext
 
 Handler = Callable[[Any, "RunContext", Message], Awaitable[None]]
 F = TypeVar("F", bound=Callable[..., Awaitable[None]])

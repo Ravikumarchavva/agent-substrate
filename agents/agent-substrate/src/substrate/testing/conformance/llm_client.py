@@ -24,17 +24,12 @@ from typing import Any, Protocol
 import httpx
 import pytest
 
-from substrate.kernel.abstractions.core.content import ChatMessage, MediaBlock, Role, TextBlock
-from substrate.kernel.abstractions.core.finish_reason import FinishReason
-from substrate.kernel.abstractions.exceptions import (
-    AuthError,
-    ContentFilterError,
-    ContextLengthError,
-    RateLimitedError,
-)
-from substrate.kernel.abstractions.llm import LLMClient, ModelCapabilities
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
-from substrate.kernel.llm.errors import classify_llm_error
+from substrate.types.content import ChatMessage, MediaBlock, Role, TextBlock
+from substrate.types.finish_reason import FinishReason
+from substrate.types.errors import AuthError, ContentFilterError, ContextLengthError, RateLimitedError
+from substrate.models.protocols import LLMClient, ModelCapabilities
+from substrate.types.stream import CompletionEvent, TextDelta
+from substrate.models.errors import classify_llm_error
 
 Handler = Callable[[httpx.Request], httpx.Response]
 

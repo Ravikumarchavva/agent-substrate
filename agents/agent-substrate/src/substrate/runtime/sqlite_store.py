@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from substrate.kernel.runtime.sql_store import SqlRuntimeStore
-from substrate.kernel.runtime.sqlite_db import SqliteDatabase
+from substrate.runtime.sql_store import SqlRuntimeStore
+from substrate.runtime.sqlite_db import SqliteDatabase
 
 
 class SqliteRuntimeStore(SqlRuntimeStore):

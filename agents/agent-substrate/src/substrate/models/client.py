@@ -1,7 +1,7 @@
-"""LLM client re-exports — canonical Protocol definitions live in substrate.kernel.abstractions.llm."""
+"""LLM client re-exports — canonical Protocol definitions live in substrate.models."""
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.llm import EmbeddingClient, LLMClient
+from substrate.models.protocols import EmbeddingClient, LLMClient
 
 __all__ = ["LLMClient", "EmbeddingClient"]

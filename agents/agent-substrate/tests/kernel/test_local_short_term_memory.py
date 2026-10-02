@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from substrate.kernel.storage import LocalFilesystemShortTermMemory
+from substrate.stores import LocalFilesystemShortTermMemory
 
 
 async def test_set_get_state_round_trip(tmp_path: Path) -> None:

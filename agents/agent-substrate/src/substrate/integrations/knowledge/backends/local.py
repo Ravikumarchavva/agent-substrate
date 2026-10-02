@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.workspace.layout import user_prefix
-from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
-from substrate.kernel.abstractions.storage.vector import Document, SearchResult
+from substrate.workspace.layout import user_prefix
+from substrate.types import MediaBlock, TextBlock
+from substrate.stores import Document, SearchResult
 from substrate.logger import setup_logging
 
 from .base import IngestResult
@@ -17,8 +17,8 @@ logger = setup_logging("substrate.knowledge.local")
 if TYPE_CHECKING:
     from substrate.runtimes.embedding_reranker.client import EmbeddingRerankerClient
     from substrate.integrations.knowledge.pipeline import RAGPipeline
-    from substrate.kernel.abstractions.llm import LLMClient
-    from substrate.kernel.abstractions.storage.vector import VectorStore
+    from substrate.models import LLMClient
+    from substrate.stores import VectorStore
 
 # Extensions the local (no-extraction-service) fallback can read
 _LOCAL_FALLBACK_EXTENSIONS = {".pdf", ".txt", ".md", ".csv", ".json"}

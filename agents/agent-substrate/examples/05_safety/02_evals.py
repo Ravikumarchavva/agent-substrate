@@ -18,9 +18,9 @@ from pydantic import BaseModel, Field
 
 from substratereasoning.structured import LLMJudge, parse
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.kernel.guardrails.base_guardrail import GuardrailContext, GuardrailType
-from substrate.kernel.messages.client_messages import UserMessage
-from substrate.kernel.messages.content import TextBlock
+from substrate.guardrails.base_guardrail import GuardrailContext, GuardrailType
+from substrate.messages.client_messages import UserMessage
+from substrate.messages.content import TextBlock
 
 
 # ---

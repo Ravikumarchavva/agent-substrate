@@ -18,15 +18,8 @@ from typing import Any, AsyncIterator, Optional
 from rich.console import Console as RichConsole, Group, RenderableType
 from rich.live import Live
 
-from substrate.kernel.abstractions.core.content import content_blocks_to_str
-from substrate.kernel.abstractions.messaging.stream import (
-    AgentProgress,
-    AgentStep,
-    CompletionEvent,
-    ReasoningDelta,
-    StreamDone,
-    TextDelta,
-)
+from substrate.types import content_blocks_to_str
+from substrate.types import AgentProgress, AgentStep, CompletionEvent, ReasoningDelta, StreamDone, TextDelta
 
 from .hitl import ConsoleHumanHandler, _HITLRequest, render_hitl_panel
 from .status import StatusLine

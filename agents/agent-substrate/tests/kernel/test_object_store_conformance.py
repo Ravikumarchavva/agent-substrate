@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.storage.local_object_store import WorkspaceFileStore
-from substrate.kernel.testing.conformance.object_store import ObjectStoreConformance
+from substrate.stores import WorkspaceFileStore
+from substrate.testing.conformance.object_store import ObjectStoreConformance
 
 
 class TestWorkspaceFileStore(ObjectStoreConformance):

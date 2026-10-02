@@ -11,8 +11,8 @@ from google import genai
 from google.genai import types as genai_types
 
 from substrate.integrations.llm.gemini.gemini_client import GeminiClient
-from substrate.kernel.abstractions.llm import ModelCapabilities
-from substrate.kernel.testing.conformance.llm_client import LLMClientConformance
+from substrate.models import ModelCapabilities
+from substrate.testing.conformance.llm_client import LLMClientConformance
 
 CAPS = ModelCapabilities(model_id="conformance-gemini", input_modalities=frozenset({"text", "image"}))
 

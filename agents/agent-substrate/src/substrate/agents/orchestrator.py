@@ -11,34 +11,24 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from substrate.kernel.abstractions.agent.runtime_context import RunScope
-from substrate.kernel.abstractions.agent.supervision import Priority, SpawnBudget
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    Role,
-    TextBlock,
-    ToolResultBlock,
-    ToolUseBlock,
-)
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.llm.llm import GenerationOptions
-from substrate.kernel.abstractions.messaging.message import (
-    ChatPayload,
-    DataPayload,
-    Message,
-)
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.tools import AnyTool
-from substrate.kernel.abstractions.tools.tools import ToolExecutionResult, ToolRisk
-from substrate.kernel.agents.base import BaseAgent
-from substrate.kernel.agents.routed import handle
-from substrate.kernel.context.context import ContextConfig
-from substrate.kernel.limits.spawn import SpawnTracker
+from substrate.types.run import RunScope
+from substrate.types.supervision import Priority, SpawnBudget
+from substrate.types.content import ChatMessage, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types.identity import Actor
+from substrate.models.protocols import GenerationOptions
+from substrate.runtime.message import ChatPayload, DataPayload, Message
+from substrate.types.run_log import RunLogKind
+from substrate.tools.protocols import AnyTool
+from substrate.tools.protocols import ToolExecutionResult, ToolRisk
+from substrate.agents.base import BaseAgent
+from substrate.agents.routed import handle
+from substrate.context.context import ContextConfig
+from substrate.agents.spawn import SpawnTracker
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.llm.llm import LLMClient
-    from substrate.kernel.abstractions.storage.history import HistoryProvider
-    from substrate.kernel.runtime.context import Agent, RunContext
+    from substrate.models.protocols import LLMClient
+    from substrate.stores.threads import HistoryProvider
+    from substrate.runtime.context import Agent, RunContext
 
 
 @dataclass
@@ -243,7 +233,7 @@ class OrchestratorAgent(BaseAgent):
 
             messages.append(ChatMessage(role=Role.TOOL, content=results))  # type: ignore[arg-type]
         else:
-            from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
+            from substrate.types.errors import BudgetExhaustedError
 
             raise BudgetExhaustedError(
                 f"Agent reached max iterations limit ({self._max_iterations})"

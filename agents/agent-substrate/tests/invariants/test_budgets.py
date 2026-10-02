@@ -17,15 +17,15 @@ from typing import Any
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from substrate.kernel.abstractions.agent.supervision import ExecutionBudget, Supervision
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm import GenerationOptions, ModelCapabilities
-from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.runtime import Runtime
+from substrate.types import ExecutionBudget, Supervision
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import Actor
+from substrate.types import Usage
+from substrate.models import GenerationOptions, ModelCapabilities
+from substrate.runtime import DataPayload, Message
+from substrate.types import CompletionEvent
+from substrate.types import RunLogKind
+from substrate.runtime import Runtime
 
 
 class _CostedLLM:

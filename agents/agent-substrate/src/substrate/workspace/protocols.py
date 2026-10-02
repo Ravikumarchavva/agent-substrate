@@ -17,8 +17,8 @@ from typing import Literal, Protocol, runtime_checkable
 from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
 
-from substrate.kernel.abstractions.core.content import JsonObject, KernelModel
-from substrate.kernel.abstractions.ids import new_id
+from substrate.types.content import JsonObject, KernelModel
+from substrate.types.ids import new_id
 
 
 class ContentRef(KernelModel):

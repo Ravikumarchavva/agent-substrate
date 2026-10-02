@@ -4,15 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from substrate.kernel.storage import LocalFilesystemMemoryStore
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.storage.memory import (
-    MemoryCategory,
-    MemoryNamespace,
-    MemoryQuery,
-    MemoryRecord,
-    MemoryStatus,
-)
+from substrate.stores import LocalFilesystemMemoryStore
+from substrate.types import TextBlock
+from substrate.stores import MemoryCategory, MemoryNamespace, MemoryQuery, MemoryRecord, MemoryStatus
 
 
 def _record(text: str, *, tenant="t1", user=None, category=MemoryCategory.SEMANTIC) -> MemoryRecord:

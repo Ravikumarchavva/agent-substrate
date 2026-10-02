@@ -27,8 +27,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.ids import new_id
+from substrate.types.identity import Actor
+from substrate.types.ids import new_id
 
 
 class HistoryRetention(StrEnum):

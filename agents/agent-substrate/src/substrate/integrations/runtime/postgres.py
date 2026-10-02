@@ -22,7 +22,7 @@ from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
 
-from substrate.kernel.runtime.sql_store import SqlRuntimeStore, Tx
+from substrate.runtime.sql_store import SqlRuntimeStore, Tx
 from substrate.logger import setup_logging
 
 logger = setup_logging()

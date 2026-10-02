@@ -12,15 +12,15 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.runtime.store import Delivery
-from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
-from substrate.kernel.abstractions.tools.approval import ApprovalRequest, ApprovalResult
-from substrate.kernel.runtime import Runtime
-from substrate.kernel.tools.toolbox import Toolbox
+from substrate.types import TextBlock
+from substrate.types import Actor
+from substrate.runtime import DataPayload, Message
+from substrate.types import RunLogKind
+from substrate.runtime import Delivery
+from substrate.tools import ToolExecutionResult, ToolRisk
+from substrate.tools import ApprovalRequest, ApprovalResult
+from substrate.runtime import Runtime
+from substrate.tools import Toolbox
 
 TIMEOUT = 10
 

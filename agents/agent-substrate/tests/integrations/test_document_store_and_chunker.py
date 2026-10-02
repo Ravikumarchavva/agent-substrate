@@ -7,12 +7,8 @@ from substrate.integrations.knowledge.chunking import (
     ExtractionDocumentChunker,
     get_chunker,
 )
-from substrate.kernel.abstractions.document.models import (
-    DocumentChunk,
-    ExtractedPage,
-    ExtractionResult,
-)
-from substrate.kernel.abstractions.document.protocols import DocumentChunker
+from substrate.documents import DocumentChunk, ExtractedPage, ExtractionResult
+from substrate.documents import DocumentChunker
 
 
 def test_extraction_document_chunker_implements_protocol():

@@ -13,17 +13,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from substrate.kernel.abstractions import (
-    ChatMessage,
-    ContentBlock,
-    TextBlock,
-    ToolResultBlock,
-    ToolUseBlock,
-)
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.types.content import ChatMessage, ContentBlock, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types.run_log import RunLogKind
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.runtime.store import RuntimeStore
+    from substrate.runtime.store import RuntimeStore
 
 
 async def rebuild_messages_from_steps(

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from substrate.kernel.abstractions.runtime.ids import RunId
-from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
-from substrate.kernel.abstractions.runtime.store import RuntimeStore
+from substrate.types.run_status import RunId
+from substrate.types.run_log import RunLogEntry
+from substrate.runtime.store import RuntimeStore
 
 _WAIT_S = 1.0
 

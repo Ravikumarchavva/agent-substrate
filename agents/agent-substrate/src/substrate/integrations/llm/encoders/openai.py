@@ -16,15 +16,8 @@ from typing import Any
 
 from substrate.integrations.llm.encoders._media import bytes_to_base64
 
-from substrate.kernel.abstractions import ChatMessage
-from substrate.kernel.abstractions.core.content import (
-    DataBlock,
-    ErrorBlock,
-    MediaBlock,
-    TextBlock,
-    ToolResultBlock,
-    ToolUseBlock,
-)
+from substrate.types import ChatMessage
+from substrate.types import DataBlock, ErrorBlock, MediaBlock, TextBlock, ToolResultBlock, ToolUseBlock
 
 
 def _make_optional_schema_nullable(schema: dict[str, Any]) -> dict[str, Any]:

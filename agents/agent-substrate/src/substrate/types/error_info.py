@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from substrate.kernel.abstractions.core.content import JsonObject, KernelModel
+from substrate.types.content import JsonObject, KernelModel
 
 
 class ErrorInfo(KernelModel):

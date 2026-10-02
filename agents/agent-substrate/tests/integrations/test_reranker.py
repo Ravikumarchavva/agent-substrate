@@ -7,8 +7,8 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 from substrate.integrations.knowledge.reranker import CrossEncoderReranker
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.storage.vector import SearchResult
+from substrate.types import TextBlock
+from substrate.stores import SearchResult
 
 
 def _result(id_: str, text: str, score: float) -> SearchResult:

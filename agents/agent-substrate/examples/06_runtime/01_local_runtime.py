@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import asyncio
 
-from substrate.kernel.abstractions.core.identity import AgentId, TopicId
-from substrate.kernel.abstractions.messaging.message import Message, DataPayload
-from substrate.kernel.runtime import Runtime, RunContext
+from substrate.types.identity import AgentId, TopicId
+from substrate.runtime import Message, DataPayload
+from substrate.runtime import Runtime
+from substrate.runtime import RunContext
 
 
 # --- Section 1: define custom agent types satisfying Agent protocol ---

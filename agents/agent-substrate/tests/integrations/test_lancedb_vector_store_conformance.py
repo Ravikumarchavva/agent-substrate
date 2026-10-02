@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("lancedb")
 
 from substrate.integrations.vector.lancedb_store import LanceDBVectorStore  # noqa: E402
-from substrate.kernel.testing.conformance.vector_store import VectorStoreConformance  # noqa: E402
+from substrate.testing.conformance.vector_store import VectorStoreConformance
 
 
 class TestLanceDBVectorStore(VectorStoreConformance):

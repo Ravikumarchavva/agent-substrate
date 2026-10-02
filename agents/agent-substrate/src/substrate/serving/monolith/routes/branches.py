@@ -18,17 +18,13 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.kernel.abstractions.core.scope import Scope
-from substrate.kernel.abstractions.storage.history import HistoryProvider
-from substrate.kernel.storage.history import DefaultHistoryResolver
-from substrate.kernel.storage.scoped import bind_history
-from substrate.kernel.workspace.branching import fork_branch, resolve_workspace_snapshot_id
-from substrate.kernel.abstractions.exceptions import (
-    BranchAlreadyExistsError,
-    BranchNotFoundError,
-    DAGIntegrityError,
-)
-from substrate.kernel.abstractions.storage.history import HistoryCheckpoint
+from substrate.types import Scope
+from substrate.stores import HistoryProvider
+from substrate.context import DefaultHistoryResolver
+from substrate.stores import bind_history
+from substrate.workspace import fork_branch, resolve_workspace_snapshot_id
+from substrate.types import BranchAlreadyExistsError, BranchNotFoundError, DAGIntegrityError
+from substrate.stores import HistoryCheckpoint
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.schemas import (
     BranchForkRequest,
@@ -278,7 +274,7 @@ async def delete_branch_endpoint(
         raise HTTPException(status_code=400, detail=str(exc))
 
     if ctx.file_store is not None:
-        from substrate.kernel.workspace.branching import delete_branch_workspace
+        from substrate.workspace import delete_branch_workspace
 
         try:
             await delete_branch_workspace(

@@ -10,13 +10,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from substrate.kernel.abstractions.agent.supervision import ExecutionBudget, Supervision
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.runtime.ids import RunId, new_run_id
-from substrate.kernel.abstractions.runtime.store import Lease
-from substrate.kernel.runtime.resolver import ActorResolver
-from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
-from substrate.kernel.runtime.worker import Worker
+from substrate.types import ExecutionBudget, Supervision
+from substrate.types import Actor
+from substrate.types import RunId, new_run_id
+from substrate.runtime import Lease
+from substrate.runtime import ActorResolver
+from substrate.runtime import SqliteRuntimeStore
+from substrate.runtime import Worker
 
 _AGENT = Actor(type="agent", key="a")
 
@@ -77,8 +77,8 @@ def test_the_earlier_of_the_run_deadline_and_the_budget_wins() -> None:
 
 async def test_run_meta_check_raises_past_deadline() -> None:
     """The other half of the contract: RunMeta.check() enforces the resolved deadline."""
-    from substrate.kernel.abstractions.agent.runtime_context import RunMeta
-    from substrate.kernel.abstractions.exceptions import CancellationError
+    from substrate.types import RunMeta
+    from substrate.types import CancellationError
 
     class _NeverCancelledToken:
         is_cancelled = False

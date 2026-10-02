@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from substrate.kernel.abstractions.storage.memory import ShortTermMemory
+from substrate.stores import ShortTermMemory
 from substrate.logger import setup_logging
 
 logger = setup_logging()

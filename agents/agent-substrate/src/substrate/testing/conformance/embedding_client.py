@@ -19,9 +19,9 @@ from typing import Any, Protocol
 import httpx
 import pytest
 
-from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
-from substrate.kernel.abstractions.exceptions import UnsupportedContentError
-from substrate.kernel.abstractions.llm import EmbeddingClient
+from substrate.types.content import MediaBlock, TextBlock
+from substrate.types.errors import UnsupportedContentError
+from substrate.models.protocols import EmbeddingClient
 
 WIDTH = 4
 

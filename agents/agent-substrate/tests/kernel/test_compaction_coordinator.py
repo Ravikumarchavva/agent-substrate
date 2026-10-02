@@ -3,15 +3,11 @@
 import pytest
 from pydantic import ValidationError
 
-from substrate.kernel.context.compaction.coordinator import DefaultCompactionCoordinator
-from substrate.kernel.abstractions.agent.context import (
-    CompactionContext,
-    CompactionPhase,
-    CompactionResult,
-)
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.exceptions import BudgetExhaustedError
-from substrate.kernel.abstractions.storage.history import HistoryCheckpoint
+from substrate.context import DefaultCompactionCoordinator
+from substrate.context import CompactionContext, CompactionPhase, CompactionResult
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import BudgetExhaustedError
+from substrate.stores import HistoryCheckpoint
 
 
 def _msg(text: str, role: Role = Role.USER) -> ChatMessage:

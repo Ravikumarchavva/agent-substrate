@@ -7,7 +7,7 @@ from typing import Protocol, Sequence, runtime_checkable
 
 from pydantic import Field
 
-from substrate.kernel.abstractions.core.content import KernelModel
+from substrate.types.content import KernelModel
 
 
 class TaskStatus(StrEnum):

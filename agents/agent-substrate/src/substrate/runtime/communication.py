@@ -24,8 +24,8 @@ from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
-from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus
-from substrate.kernel.abstractions.runtime.supervisor import RunHandle, RunResult
+from substrate.types.run_status import RunId, RunStatus
+from substrate.runtime.supervisor import RunHandle, RunResult
 
 
 class AskOutcome(BaseModel):

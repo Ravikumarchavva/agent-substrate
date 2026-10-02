@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from substrate.integrations.vector.pgvector_store import PgVectorStore
-from substrate.kernel.testing.conformance.vector_store import VectorStoreConformance
+from substrate.testing.conformance.vector_store import VectorStoreConformance
 
 pytestmark = [pytest.mark.requires_postgres]
 

@@ -24,12 +24,12 @@ from substrate.logger import setup_logging
 import json
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.abstractions.storage.graph import Entity, Relationship
-from substrate.kernel.abstractions.storage.vector import SearchResult
+from substrate.stores import Entity, Relationship
+from substrate.stores import SearchResult
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.llm import LLMClient
-    from substrate.kernel.abstractions.storage.graph import GraphStore
+    from substrate.models import LLMClient
+    from substrate.stores import GraphStore
     from substrate.integrations.knowledge.pipeline import RAGPipeline
 
 logger = setup_logging()
@@ -76,7 +76,7 @@ class GraphRAGPipeline:
 
     async def _extract_and_store_graph(self, text: str) -> None:
         """Use an LLM to extract entities and relationships from text."""
-        from substrate.kernel.abstractions import ChatMessage, TextBlock
+        from substrate.types import ChatMessage, TextBlock
 
         # Truncate very long texts for entity extraction
         extract_text = text[:5000] if len(text) > 5000 else text
@@ -86,7 +86,7 @@ class GraphRAGPipeline:
         ]
 
         try:
-            from substrate.kernel.abstractions.llm import GenerationOptions
+            from substrate.models import GenerationOptions
 
             response = await self._model.generate(
                 messages,
@@ -172,7 +172,7 @@ class GraphRAGPipeline:
                     keywords.add(w.lower())
 
         # If CypherCapable, query the graph to find matching entities
-        from substrate.kernel.abstractions.storage.graph import CypherCapable
+        from substrate.stores import CypherCapable
 
         matched_entities = []
 
@@ -194,7 +194,7 @@ class GraphRAGPipeline:
                                 }
                                 name = props.get("name", "").lower() or eid.lower()
                                 if any(kw in name for kw in keywords):
-                                    from substrate.kernel.abstractions.storage.graph import Entity
+                                    from substrate.stores import Entity
 
                                     matched_entities.append(
                                         Entity(id=eid, label=label, properties=props)
@@ -229,7 +229,7 @@ class GraphRAGPipeline:
                 )
 
             # Append graph SearchResult
-            from substrate.kernel.abstractions import TextBlock
+            from substrate.types import TextBlock
 
             graph_result = SearchResult(
                 id="graph_context",
@@ -251,7 +251,7 @@ class GraphRAGPipeline:
         graph_depth: int = 1,
     ) -> str:
         """Full GraphRAG: vector search + graph context → LLM answer."""
-        from substrate.kernel.abstractions import ChatMessage, TextBlock
+        from substrate.types import ChatMessage, TextBlock
 
         results = await self.query(
             question,
@@ -275,7 +275,7 @@ class GraphRAGPipeline:
             ChatMessage(role="user", content=[TextBlock(text=question)]),
         ]
 
-        from substrate.kernel.abstractions.llm import GenerationOptions
+        from substrate.models import GenerationOptions
 
         response = await self._model.generate(
             messages,

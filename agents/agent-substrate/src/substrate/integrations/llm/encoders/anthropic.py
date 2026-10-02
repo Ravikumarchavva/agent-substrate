@@ -16,8 +16,8 @@ from typing import Any
 
 from substrate.integrations.llm.encoders._media import bytes_to_base64
 
-from substrate.kernel.abstractions import ChatMessage
-from substrate.kernel.abstractions.core.content import (
+from substrate.types import ChatMessage
+from substrate.types import (
     DataBlock,
     ErrorBlock,
     MediaBlock,
@@ -191,7 +191,7 @@ def _encode_tool_result(block: ToolResultBlock) -> dict[str, Any]:
                     import logging
 
                     logging.getLogger(
-                        "substrate.kernel.messages.encoders.anthropic"
+                        "substrate.messages.encoders.anthropic"
                     ).warning(
                         "Failed to encode media item for Anthropic tool result: %s", e
                     )

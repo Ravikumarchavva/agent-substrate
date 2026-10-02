@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Awaitable, Callable, ClassVar
 
-from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
-from substrate.kernel.abstractions.exceptions import MiddlewareTermination
-from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.middleware.stage import MiddlewareStage
+from substrate.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
+from substrate.types.errors import MiddlewareTermination
+from substrate.middleware._contracts import MiddlewareContext
 
 
 class MaxTokenMiddleware:

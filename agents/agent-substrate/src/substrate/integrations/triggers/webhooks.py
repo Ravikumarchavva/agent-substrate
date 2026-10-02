@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime import Runtime
+    from substrate.runtime import Runtime
 
 logger = setup_logging()
 
@@ -156,8 +156,8 @@ class WebhookRegistry:
         )
 
         if self._runtime is not None:
-            from substrate.kernel.abstractions.core.identity import Actor
-            from substrate.kernel.abstractions.messaging.message import Message, DataPayload
+            from substrate.types import Actor
+            from substrate.runtime import Message, DataPayload
 
             combined_params = {**webhook.target_params, **payload}
             agent_id = Actor(type=webhook.target_type, key=webhook.target_name)

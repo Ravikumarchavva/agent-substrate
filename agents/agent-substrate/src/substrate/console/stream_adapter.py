@@ -14,18 +14,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-from substrate.kernel.abstractions.messaging.stream import (
-    AgentProgress,
-    AgentStep,
-    CompletionEvent,
-    StreamDone,
-    TextDelta,
-    ReasoningDelta,
-)
+from substrate.types import RunLogKind
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import Actor
+from substrate.runtime import ChatPayload, Message
+from substrate.types import AgentProgress, AgentStep, CompletionEvent, StreamDone, TextDelta, ReasoningDelta
 
 from substrate.integrations.tools.human_input import InputOption
 
@@ -165,7 +158,7 @@ def _subagent_progress(
 
 
 async def _task_boards(correlation_id: str, task_store: Any = None) -> list[Any]:
-    from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
+    from substrate.stores import LocalFilesystemTaskStore
 
     store = task_store or LocalFilesystemTaskStore()
     return await store.get_boards_by_conversation(correlation_id)

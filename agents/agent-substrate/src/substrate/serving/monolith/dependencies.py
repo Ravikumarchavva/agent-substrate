@@ -11,8 +11,8 @@ from typing import Any, Optional
 
 from fastapi import Request
 
-from substrate.kernel.abstractions.llm import LLMClient
-from substrate.kernel.abstractions.storage.history import HistoryProvider
+from substrate.models import LLMClient
+from substrate.stores import HistoryProvider
 from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
 
@@ -71,7 +71,7 @@ class ServerDependencies:
 
     # -- tenant-fenced object stores -------------------------------------------------------------
     # Request code never touches ``file_store`` / ``pending_file_store`` directly: these return them fenced
-    # to one tenant's ``tenants/<tenant>/`` subtree (kernel/storage/scoped.py), so a key built from a
+    # to one tenant's ``tenants/<tenant>/`` subtree (stores/scoped.py), so a key built from a
     # database row or a request cannot reach another tenant's objects. The unfenced stores stay for the
     # admin routes, which are tenant-wide by design.
 
@@ -87,8 +87,8 @@ def _fence(store: Any, tenant_id: str | None) -> Any | None:
         return None
     if not tenant_id:
         raise ValueError("an object store can only be used on behalf of a tenant")
-    from substrate.kernel.abstractions.core.scope import Scope
-    from substrate.kernel.storage.scoped import fence_objects
+    from substrate.types import Scope
+    from substrate.stores import fence_objects
 
     return fence_objects(store, Scope(tenant_id=tenant_id))
 

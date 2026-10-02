@@ -39,11 +39,11 @@ from opentelemetry.trace import (
     TraceFlags,
 )
 
-from substrate.kernel.abstractions.core.trace import TraceContext
-from substrate.kernel.abstractions.exceptions import ControlSignal, KernelError
-from substrate.kernel.telemetry import semconv
+from substrate.types.trace import TraceContext
+from substrate.types.errors import ControlSignal, KernelError
+from substrate.telemetry import semconv
 
-_TRACER_NAME = "substrate.kernel"
+_TRACER_NAME = "substrate"
 
 AttributeValue = str | int | float | bool
 

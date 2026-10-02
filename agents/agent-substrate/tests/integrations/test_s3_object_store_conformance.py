@@ -8,7 +8,7 @@ import botocore.exceptions
 import pytest
 
 from substrate.integrations.storage.s3 import S3FileStore
-from substrate.kernel.testing.conformance.object_store import ObjectStoreConformance
+from substrate.testing.conformance.object_store import ObjectStoreConformance
 from tests.integrations.test_s3_file_store import FakeConnector
 
 

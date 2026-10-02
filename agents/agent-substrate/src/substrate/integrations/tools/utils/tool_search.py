@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import json
 
-from substrate.kernel.abstractions import Tool, TextBlock
-from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
+from substrate.tools import Tool
+from substrate.types import TextBlock
+from substrate.tools import ToolExecutionResult, ToolRisk
 
 
 def _param_summary(schema: dict[str, object]) -> str:

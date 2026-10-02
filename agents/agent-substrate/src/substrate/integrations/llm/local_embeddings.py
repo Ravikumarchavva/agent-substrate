@@ -30,9 +30,9 @@ import asyncio
 import logging
 from collections.abc import Sequence
 
-from substrate.kernel.abstractions.core.content import ContentBlock, MediaBlock, TextBlock
-from substrate.kernel.abstractions.exceptions import UnsupportedContentError
-from substrate.kernel.abstractions.llm import EmbeddingResult
+from substrate.types import ContentBlock, MediaBlock, TextBlock
+from substrate.types import UnsupportedContentError
+from substrate.models import EmbeddingResult
 
 logger = logging.getLogger(__name__)
 

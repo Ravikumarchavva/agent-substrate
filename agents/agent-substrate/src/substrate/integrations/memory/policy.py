@@ -9,12 +9,8 @@ from __future__ import annotations
 
 from typing import Protocol, Sequence
 
-from substrate.kernel.abstractions.core.content import ContentBlock, TextBlock
-from substrate.kernel.abstractions.storage.memory import (
-    ContextMemoryInjection,
-    MemoryMatch,
-    MemoryRecord,
-)
+from substrate.types import ContentBlock, TextBlock
+from substrate.stores import ContextMemoryInjection, MemoryMatch, MemoryRecord
 
 
 def _xml_escape(text: str) -> str:

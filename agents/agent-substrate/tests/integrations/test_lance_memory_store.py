@@ -9,11 +9,7 @@ from __future__ import annotations
 import pytest
 
 from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
-from substrate.kernel.abstractions.storage.memory import (
-    MemoryNamespace,
-    MemoryQuery,
-    MemoryRecord,
-)
+from substrate.stores import MemoryNamespace, MemoryQuery, MemoryRecord
 
 
 @pytest.fixture
@@ -91,7 +87,7 @@ async def test_metadata_roundtrips(store: LanceMemoryStore) -> None:
 
 
 async def test_multimodal_blocks_roundtrip(store: LanceMemoryStore) -> None:
-    from substrate.kernel.abstractions.core.content import DataBlock, MediaBlock, TextBlock
+    from substrate.types import DataBlock, MediaBlock, TextBlock
 
     blocks = [
         TextBlock(text="Summary of invoice"),

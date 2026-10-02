@@ -7,7 +7,7 @@ import os
 import pytest
 
 from substrate.integrations.history import DurableHistoryProvider
-from substrate.kernel.testing.conformance.history_provider import HistoryProviderConformance
+from substrate.testing.conformance.history_provider import HistoryProviderConformance
 
 pytestmark = [pytest.mark.requires_postgres]
 

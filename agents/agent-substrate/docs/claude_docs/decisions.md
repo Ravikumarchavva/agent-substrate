@@ -2,7 +2,7 @@
 
 ## The kernel is the engine, not a layer of contracts (2026-10-02)
 
-**Decision:** `substrate.kernel` does the work of running an agent — routed agents, the durable
+**Decision:** `substrate` does the work of running an agent — routed agents, the durable
 runtime, journal, telemetry, budgets, tool invocation — and declares what it needs from outside in
 `kernel/abstractions`. Vendor clients, databases and HTTP live above it (`integrations/`, `serving/`).
 The old L0/L1/L2 stack (frozen contracts / default implementations / adapters) and the `agents/` layer

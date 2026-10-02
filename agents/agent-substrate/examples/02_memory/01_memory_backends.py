@@ -9,7 +9,7 @@ is not something an agent's conversation can rest on.
 Both implement the same conversation-DAG HistoryProvider contract
 (``append_node`` / ``append_and_advance`` / ``get_branch`` / ...) — a linear
 transcript is a *projection* of one branch, read via
-``substrate.kernel.storage.project_messages``, not stored separately.
+``substrate.context.history.project_messages``, not stored separately.
 
 Demonstrates using:
   - LocalFilesystemHistoryProvider (durable, no infra — the default floor)
@@ -22,13 +22,11 @@ import asyncio
 import os
 import tempfile
 
-from substrate.kernel.storage import (
-    LocalFilesystemHistoryProvider,
-    project_messages,
-)
+from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.context import project_messages
 from substrate.integrations.history import DurableHistoryProvider
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.storage.history import MessageNode
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.stores import MessageNode
 
 DB_URL = os.getenv(
     "DATABASE_URL",

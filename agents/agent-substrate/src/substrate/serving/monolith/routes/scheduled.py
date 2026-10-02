@@ -437,8 +437,8 @@ async def parse_schedule_endpoint(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Parse a natural language query into scheduled task configuration."""
-    from substrate.kernel.abstractions import ChatMessage, TextBlock
-    from substrate.kernel.abstractions.llm import GenerationOptions
+    from substrate.types import ChatMessage, TextBlock
+    from substrate.models import GenerationOptions
 
     system_instructions = (
         "You are an expert natural language scheduling assistant. "

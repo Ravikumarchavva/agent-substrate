@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.runtime.store import NewEntry, RuntimeStore
+from substrate.types import RunLogKind
+from substrate.runtime import NewEntry, RuntimeStore
 from substrate.serving.protocol.events import WireEvent
 from substrate.serving.protocol.from_log import wire_from_log
 

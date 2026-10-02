@@ -14,9 +14,9 @@ per-tool.
 from __future__ import annotations
 
 from substrate.integrations.knowledge.citations import CitationLedger, build_citations
-from substrate.kernel.abstractions import MediaBlock, TextBlock
-from substrate.kernel.abstractions.storage.vector import SearchResult
-from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.types import MediaBlock, TextBlock
+from substrate.stores import SearchResult
+from substrate.tools import ToolExecutionResult
 
 
 def render_search_results(

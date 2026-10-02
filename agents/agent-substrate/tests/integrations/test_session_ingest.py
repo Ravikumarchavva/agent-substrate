@@ -29,9 +29,9 @@ from substrate.serving.factory import (
 from substrate.integrations.llm.openai.openai_embedding_client import (
     OpenAIEmbeddingClient,
 )
-from substrate.kernel.abstractions import ChatMessage, TextBlock
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm import EmbeddingResult, GenerationOptions, LLMResponse
+from substrate.types import ChatMessage, TextBlock
+from substrate.types import Usage
+from substrate.models import EmbeddingResult, GenerationOptions, LLMResponse
 
 FIXTURE_PDF = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
 
@@ -117,7 +117,7 @@ async def test_ingest_session_document_writes_to_all_three_stores(
 
     # PageIndexRAGPipeline's default agent_id ("system") when
     # ingest_session_document doesn't override it — see its constructor.
-    from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery
+    from substrate.stores import MemoryNamespace, MemoryQuery
 
     memory = build_page_index_memory(cfg, "tenant-a", "user-a")
     matches = await memory.query(

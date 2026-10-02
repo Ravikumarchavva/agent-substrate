@@ -25,13 +25,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from substrate.kernel.context import ContextConfig
-from substrate.kernel.agents.react import ReActAgent
-from substrate.kernel.runtime.runtime import Runtime
-from substrate.kernel.tools.toolbox import Toolbox
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock, ToolUseBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.context import ContextConfig
+from substrate.agents import ReActAgent
+from substrate.runtime import Runtime
+from substrate.tools import Toolbox
+from substrate.types import ChatMessage, Role, TextBlock, ToolUseBlock
+from substrate.types import Actor
+from substrate.runtime import ChatPayload, Message
 
 from tests.invariants._harness.doubles import ScriptedLLM
 from tests.invariants._harness.scenarios import ChargeCard

@@ -22,8 +22,8 @@ import time
 from collections import OrderedDict
 from typing import Awaitable, Callable, Union
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.runtime.agent import Agent
+from substrate.types.identity import Actor
+from substrate.runtime.agent import Agent
 
 logger = logging.getLogger(__name__)
 

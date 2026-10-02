@@ -2,10 +2,10 @@ import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from substrate.kernel.abstractions import ChatMessage, TextBlock
-from substrate.kernel.abstractions.llm import LLMResponse, EmbeddingResult, GenerationOptions
-from substrate.kernel.abstractions.storage.vector import Document, SearchResult
-from substrate.kernel.abstractions.storage.graph import Entity, Relationship, SubGraph
+from substrate.types import ChatMessage, TextBlock
+from substrate.models import LLMResponse, EmbeddingResult, GenerationOptions
+from substrate.stores import Document, SearchResult
+from substrate.stores import Entity, Relationship, SubGraph
 from substrate.integrations.llm.openai.openai_embedding_client import (
     OpenAIEmbeddingClient,
 )
@@ -29,7 +29,7 @@ class StubLLMClient:
     ) -> LLMResponse:
         self.calls.append((messages, options))
         text = self.responses.pop(0) if self.responses else "stub response"
-        from substrate.kernel.abstractions.core.usage import Usage
+        from substrate.types import Usage
 
         return LLMResponse(content=[TextBlock(text=text)], usage=Usage())
 

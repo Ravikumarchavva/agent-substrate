@@ -94,8 +94,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from substrate.kernel.abstractions.core.content import content_blocks_to_str, parse_content_block
-from substrate.kernel.abstractions.storage.vector import Document, SearchResult
+from substrate.types import content_blocks_to_str, parse_content_block
+from substrate.stores import Document, SearchResult
 
 # Exhaustive search covers every row regardless of this value (no ANN index
 # is ever created for vector search) — it just needs to be >= the table

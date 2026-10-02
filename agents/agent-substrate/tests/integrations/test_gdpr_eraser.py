@@ -279,13 +279,13 @@ async def test_erase_tenant_deletes_every_thread_in_that_tenant_only(
 async def test_erasure_reaches_long_term_memory_and_the_run_journal(db: AsyncSession, db_factory, cfg, tmp_path):
     """A deletion request must reach the raw conversation in the run journal and the person's
     long-term memory, not only the relational rows: the journal is where the text actually lives."""
-    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.types import Actor
     from datetime import datetime, timezone
 
-    from substrate.kernel.abstractions.runtime.store import Commit, Complete, NewEntry, RunSpec
-    from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryRecord
-    from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
-    from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
+    from substrate.runtime import Commit, Complete, NewEntry, RunSpec
+    from substrate.stores import MemoryNamespace, MemoryRecord
+    from substrate.runtime import SqliteRuntimeStore
+    from substrate.stores import LocalFilesystemMemoryStore
 
     tenant = f"tenant-{uuid.uuid4()}"
     thread = Thread(id=uuid.uuid4(), user_identifier="alice", tenant_id=tenant)

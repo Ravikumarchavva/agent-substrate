@@ -16,11 +16,11 @@ from __future__ import annotations
 from typing import Any
 
 from substrate.integrations.artifacts.store import ArtifactStore
-from substrate.kernel.abstractions import TextBlock
-from substrate.kernel.abstractions.agent.runtime_context import RunScope, scope_of
-from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
+from substrate.types import TextBlock
+from substrate.types import RunScope, scope_of
+from substrate.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.tools import ToolRisk
 
 logger = setup_logging("substrate.integrations.tools.artifacts")
 

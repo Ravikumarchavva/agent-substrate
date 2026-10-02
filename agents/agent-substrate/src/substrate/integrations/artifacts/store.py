@@ -41,10 +41,7 @@ from substrate.integrations.artifacts.okf import (
     utc_now_iso,
 )
 from substrate.integrations.artifacts.okf import human_actor as okf_human_actor
-from substrate.kernel.workspace.layout import (
-    conversation_artifacts_prefix,
-    user_artifacts_prefix,
-)
+from substrate.workspace.layout import conversation_artifacts_prefix, user_artifacts_prefix
 from substrate.logger import setup_logging
 
 logger = setup_logging("substrate.integrations.artifacts.store")

@@ -29,8 +29,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, cast
 
 from substrate.integrations.pipeline.data_ref import DataRefStore
-from substrate.kernel.tools.toolbox import Toolbox
-from substrate.kernel.abstractions.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
+from substrate.tools import Toolbox
+from substrate.tools import Tool, is_hosted_tool, is_provider_defined_tool
 from substrate.logger import setup_logging
 
 logger = setup_logging()

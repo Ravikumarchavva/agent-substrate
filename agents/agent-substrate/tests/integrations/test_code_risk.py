@@ -10,10 +10,10 @@ from substrate.integrations.tools.code_interpreter.code_interpreter.code_risk im
     classify_code,
     templated_summary,
 )
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm.llm import LLMResponse
-from substrate.kernel.abstractions.tools.tools import ToolRisk
+from substrate.types import TextBlock
+from substrate.types import Usage
+from substrate.models import LLMResponse
+from substrate.tools import ToolRisk
 
 
 # ── SAFE: exploratory analysis ────────────────────────────────────────────────

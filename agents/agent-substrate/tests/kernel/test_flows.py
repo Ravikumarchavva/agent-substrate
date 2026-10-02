@@ -6,13 +6,13 @@ import asyncio
 import pytest
 from dataclasses import dataclass
 
-from substrate.kernel.runtime.context import RunContext
-from substrate.kernel.runtime.runtime import Runtime
-from substrate.kernel.flows import ConditionalFlow, ParallelFlow, SequentialFlow
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-from substrate.kernel.abstractions.runtime.ids import new_run_id
+from substrate.runtime import RunContext
+from substrate.runtime import Runtime
+from substrate.agents import ConditionalFlow, ParallelFlow, SequentialFlow
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import Actor
+from substrate.runtime import ChatPayload, Message
+from substrate.types import new_run_id
 
 
 # ---------------------------------------------------------------------------

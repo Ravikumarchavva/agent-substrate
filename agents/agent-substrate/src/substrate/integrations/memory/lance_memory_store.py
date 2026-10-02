@@ -21,14 +21,9 @@ import time
 from pathlib import Path
 from typing import Any, Sequence
 
-from substrate.kernel.abstractions.core.content import content_blocks_to_str
-from substrate.kernel.abstractions.exceptions import ScopeViolationError
-from substrate.kernel.abstractions.storage.memory import (
-    MemoryMatch,
-    MemoryNamespace,
-    MemoryQuery,
-    MemoryRecord,
-)
+from substrate.types import content_blocks_to_str
+from substrate.types.errors import ScopeViolationError
+from substrate.stores import MemoryMatch, MemoryNamespace, MemoryQuery, MemoryRecord
 
 
 class LanceMemoryStore:

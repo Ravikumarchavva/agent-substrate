@@ -42,18 +42,18 @@ from typing import Annotated, Literal, Protocol, runtime_checkable
 
 from pydantic import Field
 
-from substrate.kernel.abstractions.agent.supervision import Priority, Supervision
-from substrate.kernel.abstractions.core.content import JsonObject, KernelModel
-from substrate.kernel.abstractions.core.error_info import ErrorInfo
-from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.core.trace import TraceContext
-from substrate.kernel.abstractions.messaging.message import Message
-from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus
-from substrate.kernel.abstractions.runtime.inbox import DeadLetterEntry
-from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry
-from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
-from substrate.kernel.abstractions.runtime.supervisor import RunHandle, RunResult
-from substrate.kernel.abstractions.runtime.wakeup import Wakeup
+from substrate.types.supervision import Priority, Supervision
+from substrate.types.content import JsonObject, KernelModel
+from substrate.types.error_info import ErrorInfo
+from substrate.types.identity import Actor, Topic
+from substrate.types.trace import TraceContext
+from substrate.runtime.message import Message
+from substrate.types.run_status import RunId, RunStatus
+from substrate.runtime.inbox import DeadLetterEntry
+from substrate.types.run_log import RunLogEntry
+from substrate.runtime.scheduler import RunRetryPolicy
+from substrate.runtime.supervisor import RunHandle, RunResult
+from substrate.types.wakeup import Wakeup
 
 # ---------------------------------------------------------------------------
 # Records

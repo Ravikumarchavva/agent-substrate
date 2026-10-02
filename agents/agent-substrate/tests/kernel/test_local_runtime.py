@@ -11,16 +11,16 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm import ModelCapabilities
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.runtime.store import Delivery
-from substrate.kernel.agents.react import ReActAgent
-from substrate.kernel.runtime import Runtime
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import Actor
+from substrate.types import Usage
+from substrate.models import ModelCapabilities
+from substrate.runtime import ChatPayload, Message
+from substrate.types import CompletionEvent
+from substrate.types import RunLogKind
+from substrate.runtime import Delivery
+from substrate.agents import ReActAgent
+from substrate.runtime import Runtime
 
 TERMINAL = (RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED)
 
@@ -72,8 +72,8 @@ async def test_a_run_submitted_before_a_restart_is_picked_up_after_it(tmp_path: 
     path = tmp_path / "rt.db"
     agent = ReActAgent("LocalBot", model=MockLLMClient(), max_iterations=3)
 
-    from substrate.kernel.runtime import SqliteRuntimeStore
-    from substrate.kernel.abstractions.runtime.store import RunSpec
+    from substrate.runtime import SqliteRuntimeStore
+    from substrate.runtime import RunSpec
 
     store = SqliteRuntimeStore(path)
     await store.start()

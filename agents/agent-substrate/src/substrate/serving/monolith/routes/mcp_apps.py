@@ -13,7 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 from pydantic import BaseModel
-from substrate.kernel.abstractions.tools import Tool
+from substrate.tools import Tool
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse

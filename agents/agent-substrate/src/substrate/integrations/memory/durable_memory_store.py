@@ -20,14 +20,9 @@ from typing import Any, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from substrate.kernel.abstractions.core.content import content_blocks_to_str
-from substrate.kernel.abstractions.exceptions import ScopeViolationError
-from substrate.kernel.abstractions.storage.memory import (
-    MemoryMatch,
-    MemoryNamespace,
-    MemoryQuery,
-    MemoryRecord,
-)
+from substrate.types import content_blocks_to_str
+from substrate.types.errors import ScopeViolationError
+from substrate.stores import MemoryMatch, MemoryNamespace, MemoryQuery, MemoryRecord
 from substrate.logger import setup_logging
 
 logger = setup_logging()

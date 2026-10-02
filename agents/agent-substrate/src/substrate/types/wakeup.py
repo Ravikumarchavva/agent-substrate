@@ -29,8 +29,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from substrate.kernel.abstractions.core.content import JsonObject
-from substrate.kernel.abstractions.runtime.ids import RunId
+from substrate.types.content import JsonObject
+from substrate.types.run_status import RunId
 
 
 class Wakeup(BaseModel):

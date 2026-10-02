@@ -11,15 +11,11 @@ and MCP tools (like filesystem) together in a single agent.
 """
 
 import asyncio
-from substrate.kernel.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from substrate.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from substrate.integrations.tools.mcp import MCPClient, MCPTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.kernel.storage import LocalFilesystemHistoryProvider
-from substrate.kernel.messages.client_messages import (
-    UserMessage,
-    SystemMessage,
-    ToolExecutionResultMessage,
-)
+from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.messages.client_messages import UserMessage, SystemMessage, ToolExecutionResultMessage
 
 
 async def main():

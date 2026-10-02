@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 
-from substrate.kernel.abstractions.storage.graph import Entity, GraphStore, Relationship, SubGraph
-from substrate.kernel.abstractions.storage.vector import Document, SearchResult, VectorStore
+from substrate.stores import Entity, GraphStore, Relationship, SubGraph
+from substrate.stores import Document, SearchResult, VectorStore
 from substrate.integrations.knowledge.pipeline import RAGPipeline
 from substrate.integrations.knowledge.graph_rag import GraphRAGPipeline
 from substrate.integrations.knowledge.page_pipeline import PageIndexRAGPipeline

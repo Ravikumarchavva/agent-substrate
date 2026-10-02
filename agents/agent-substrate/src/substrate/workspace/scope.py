@@ -6,8 +6,8 @@ starts handling each inbound message; nothing here reads ambient state.
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.agent.runtime_context import RunScope
-from substrate.kernel.abstractions.core.content import KernelModel
+from substrate.types.run import RunScope
+from substrate.types.content import KernelModel
 
 
 class WorkspaceScope(KernelModel):

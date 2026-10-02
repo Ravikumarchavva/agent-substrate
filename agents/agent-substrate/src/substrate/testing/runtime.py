@@ -11,8 +11,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from substrate.kernel.runtime.runtime import Runtime
-from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
+from substrate.runtime.runtime import Runtime
+from substrate.runtime.sqlite_store import SqliteRuntimeStore
 
 
 @asynccontextmanager

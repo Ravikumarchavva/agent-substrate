@@ -12,7 +12,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery
+from substrate.stores import MemoryNamespace, MemoryQuery
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 

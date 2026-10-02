@@ -17,7 +17,7 @@ dependency-free enum that every middleware implementation across the agents
 layer needs, which is exactly the kind of small shared value kernel exists
 to hold — so it stays here on its own.
 
-Raise ``MiddlewareTermination`` (see ``substrate.kernel.abstractions.exceptions``) from
+Raise ``MiddlewareTermination`` (see ``substrate.types.errors``) from
 any ``process`` implementation to halt execution cleanly at that point.
 """
 

@@ -9,15 +9,11 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    ContentBlock,
-    KernelModel,
-)
-from substrate.kernel.abstractions.storage.history import HistoryCheckpoint, MessageNode
+from substrate.types.content import ChatMessage, ContentBlock, KernelModel
+from substrate.stores.threads import HistoryCheckpoint, MessageNode
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.storage.memory import ContextMemoryInjection
+    from substrate.stores.memory import ContextMemoryInjection
 
 
 class ContextWindow(KernelModel):

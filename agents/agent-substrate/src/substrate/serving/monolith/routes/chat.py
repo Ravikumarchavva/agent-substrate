@@ -35,15 +35,9 @@ from substrate.integrations.llm.factory import (
 from substrate.serving.factory import build_agent_for_thread
 
 # ContextVar that scopes TaskManagerTool to the active thread
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage as _ChatMessage,
-    Role,
-)
-from substrate.kernel.abstractions.core.identity import Actor as _Actor
-from substrate.kernel.abstractions.messaging.message import (
-    ChatPayload as _ChatPayload,
-    Message as _Message,
-)
+from substrate.types import ChatMessage as _ChatMessage, Role
+from substrate.types import Actor as _Actor
+from substrate.runtime import ChatPayload as _ChatPayload, Message as _Message
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.hooks import ChatContext, hooks

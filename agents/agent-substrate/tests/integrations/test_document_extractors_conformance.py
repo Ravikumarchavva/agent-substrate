@@ -10,7 +10,7 @@ import pytest
 
 from substrate.integrations.document.local_extractor import LocalDocumentExtractor
 from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.kernel.testing.conformance.document_extractor import DocumentExtractorConformance, pdf
+from substrate.testing.conformance.document_extractor import DocumentExtractorConformance, pdf
 from substrate.runtimes.document_intelligence import extract as extract_module
 from substrate.runtimes.document_intelligence.client import ExtractionClient
 

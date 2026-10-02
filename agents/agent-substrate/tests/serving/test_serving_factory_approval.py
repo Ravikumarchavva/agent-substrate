@@ -17,20 +17,20 @@ from __future__ import annotations
 
 from tests._stores import fs_history
 
-from substrate.kernel.abstractions.llm import ModelCapabilities
+from substrate.models import ModelCapabilities
 import asyncio
 import uuid
 from typing import Any
 
-from substrate.kernel.runtime import Runtime
+from substrate.runtime import Runtime
 from substrate.config import SubstrateConfig
 from substrate.serving.factory import build_agent_for_thread
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock, ToolUseBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent
-from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
+from substrate.types import ChatMessage, Role, TextBlock, ToolUseBlock
+from substrate.types import Actor
+from substrate.types import Usage
+from substrate.runtime import ChatPayload, Message
+from substrate.types import CompletionEvent
+from substrate.tools import ToolExecutionResult, ToolRisk
 from substrate.serving.monolith.sse.bridge import WebHITLBridge
 
 

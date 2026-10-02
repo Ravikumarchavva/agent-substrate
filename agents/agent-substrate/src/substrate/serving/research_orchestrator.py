@@ -13,14 +13,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from substrate.kernel.context.compaction.presets import build_token_budget_pipeline
-from substrate.kernel.agents.factory import create_assistant_agent
-from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
-from substrate.kernel.abstractions.llm import LLMClient
-from substrate.kernel.abstractions import Tool
+from substrate.context import build_token_budget_pipeline
+from substrate.agents.factory import create_assistant_agent
+from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.models import LLMClient
+from substrate.tools import Tool
 
 if TYPE_CHECKING:
-    from substrate.kernel.agents import ReActAgent, OrchestratorAgent
+    from substrate.agents import ReActAgent
+    from substrate.agents import OrchestratorAgent
 
 
 @dataclass
@@ -56,8 +57,8 @@ def build_research_orchestrator(
     (which owns the ``Runtime``) is responsible for registering every agent
     in ``.all_agents`` before submitting work to the coordinator.
     """
-    from substrate.kernel.agents import OrchestratorAgent, SubAgentConfig
-    from substrate.kernel.context import ContextConfig
+    from substrate.agents import OrchestratorAgent, SubAgentConfig
+    from substrate.context import ContextConfig
 
     researcher = create_assistant_agent(
         name="researcher",

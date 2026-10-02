@@ -33,8 +33,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from substrate.kernel.abstractions.core.content import MediaBlock
-from substrate.kernel.abstractions.tools.tools import ToolRisk
+from substrate.types.content import MediaBlock
+from substrate.tools.protocols import ToolRisk
 
 # ---------------------------------------------------------------------------
 # ChainPolicy — per-chain execution limits

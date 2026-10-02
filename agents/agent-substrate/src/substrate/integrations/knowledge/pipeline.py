@@ -21,10 +21,10 @@ from substrate.logger import setup_logging
 from typing import TYPE_CHECKING, Any
 
 from substrate.integrations.knowledge.chunking import get_chunker
-from substrate.kernel.abstractions.storage.vector import Document, SearchResult, VectorStore
+from substrate.stores import Document, SearchResult, VectorStore
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.llm import LLMClient, EmbeddingClient as BaseEmbeddingClient
+    from substrate.models import LLMClient, EmbeddingClient as BaseEmbeddingClient
 
 logger = setup_logging()
 
@@ -198,7 +198,7 @@ class RAGPipeline:
         Returns:
             The generated answer string.
         """
-        from substrate.kernel.abstractions import ChatMessage, TextBlock
+        from substrate.types import ChatMessage, TextBlock
 
         results = await self.query(
             question,
@@ -223,7 +223,7 @@ class RAGPipeline:
             ChatMessage(role="user", content=[TextBlock(text=question)]),
         ]
 
-        from substrate.kernel.abstractions.llm import GenerationOptions
+        from substrate.models import GenerationOptions
 
         response = await model_client.generate(
             messages,

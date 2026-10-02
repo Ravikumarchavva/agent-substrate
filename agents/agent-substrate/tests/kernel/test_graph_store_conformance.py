@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.storage.local_graph import LocalFilesystemGraphStore
-from substrate.kernel.testing.conformance.graph_store import GraphStoreConformance
+from substrate.stores import LocalFilesystemGraphStore
+from substrate.testing.conformance.graph_store import GraphStoreConformance
 
 
 class TestLocalFilesystemGraphStore(GraphStoreConformance):

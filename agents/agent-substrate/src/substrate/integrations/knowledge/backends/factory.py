@@ -27,8 +27,8 @@ from .base import RagBackend, RagBackendUnavailableError
 from .local import LocalRagBackend
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.llm import EmbeddingClient, LLMClient
-    from substrate.kernel.abstractions.storage.vector import VectorStore
+    from substrate.models import EmbeddingClient, LLMClient
+    from substrate.stores import VectorStore
 
 
 def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:

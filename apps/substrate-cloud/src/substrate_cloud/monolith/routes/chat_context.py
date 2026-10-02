@@ -14,8 +14,8 @@ from fastapi import HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate_cloud.factory import build_chat_tools
-from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.integrations.services.document_extraction import OFFICE_CONTENT_TYPES, extract_document
+from substrate_cloud.document_reader import document_reader
+from substrate_cloud.documents_library import documents_collection
 from substrate_cloud.monolith.dependencies import ServerDependencies
 from substrate_cloud.monolith.schemas import ChatRequest
 from substrate_cloud.monolith.routes.chat_wire import _ImagePayload
@@ -48,8 +48,19 @@ async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
 _SANDBOX_WORKSPACE_MOUNT_PATH = "/app/workspace"
 
 # Types eligible for upload-time size caps and eager RAG staging
-EXTRACTABLE_CONTENT_TYPES = (
-    {"application/pdf", "text/markdown"} | OFFICE_CONTENT_TYPES
+EXTRACTABLE_CONTENT_TYPES = frozenset(
+    {
+        "application/pdf",
+        "text/markdown",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/ms-powerpoint",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.oasis.opendocument.text",
+        "application/rtf",
+        "text/rtf",
+    }
 )
 
 
@@ -92,6 +103,48 @@ def _truncate(text: str) -> str:
     if len(text) > max_chars:
         return text[:max_chars] + f"\n\n[...truncated to {max_chars} characters]"
     return text
+
+
+# A document up to this size goes into the prompt whole; a larger one as its outline, to be read with the `documents` tool.
+INLINE_DOCUMENT_TOKENS = 8000
+
+
+def _library_metadata(meta: Any, thread_id: str) -> dict[str, str]:
+    """What the library keeps with a document so a citation can open the exact file later: the DB id for ``/files/{id}/download`` and the
+    thread-relative path ``/workspace/file`` expects."""
+    return {
+        "file_id": str(meta.id),
+        "session_path": _session_relative_path(meta.object_key) or meta.original_name,
+        "thread_id": thread_id,
+    }
+
+
+async def _library_context(library: Any, collection: str | None, meta: Any) -> str | None:
+    """What the model is shown of a filed document: its text if it is small, else its outline and how to read the rest."""
+    if not collection or not meta.checksum_sha256:
+        return None
+    document = library.document_id(meta.original_name, meta.checksum_sha256)
+    outline = await library.outline(collection=collection, document=document)
+    if outline is None:
+        return None
+    info = outline.document
+    total = sum(s.tokens for s in outline.sections)
+    if not outline.more and total <= INLINE_DOCUMENT_TOKENS:
+        parts = []
+        for section in outline.sections:
+            passage = await library.read(collection=collection, document=document, section=section.position)
+            if passage is not None:
+                parts.append(passage.text)
+        if parts:
+            return f"[File: {meta.original_name}]\n{_truncate(chr(10).join(parts))}"
+    lines = [
+        f"[File: {meta.original_name} — {info.pages} pages, {info.sections} sections, too long to include; "
+        f"read it with the documents tool (document id: {document})]"
+    ]
+    lines += [f"{s.position}. {s.title} (pp. {s.first_page}–{s.last_page})" for s in outline.sections]
+    if outline.more:
+        lines.append(f"(+{outline.more} more sections)")
+    return "\n".join(lines)
 
 
 async def _build_file_context(
@@ -151,7 +204,7 @@ async def _build_file_context(
 
     new_file_ids = {str(fid) for fid in (body.file_ids or [])}
 
-    # Pre-validation pass, staged/local-backend files only: block the WHOLE
+    # Pre-validation pass, staged files only: block the WHOLE
     # send (not a silent per-file degrade — this session's explicit design
     # choice) if any referenced file failed eager staging, is still
     # processing, or would push the caller over today's commit quota.
@@ -160,7 +213,7 @@ async def _build_file_context(
     # avoid hitting this in the common case (queued send — see
     # substrate-ui's composer), so a live 425 here should be rare; it's a
     # defense-in-depth backstop, not the primary UX.
-    if ctx.rag_backend is not None and ctx.rag_backend.name == "local":
+    if ctx.library is not None:
         new_commits = [
             m
             for m in rows
@@ -265,91 +318,45 @@ async def _build_file_context(
             await promote_pending_file(ctx, meta)
             needs_commit = True
         if meta.content_type in EXTRACTABLE_CONTENT_TYPES:
-            # Extractable docs are ingested into the user's per-user
-            # session-document index instead of inlined into the prompt —
-            # the agent retrieves relevant passages via
-            # session_document_search. Cache hit: already ingested (files
-            # are immutable once uploaded), skip re-ingesting on every
-            # later reference.
-            if ctx.rag_backend is not None:
+            # Extractable documents are filed in the conversation's documents (substrate.documents.Library) and worked through with the
+            # `documents` tool; a small one is also put in front of the model here, a large one as its outline. Cache hit: already
+            # filed (files are immutable once uploaded), nothing to redo on every later reference.
+            if ctx.library is not None:
+                collection = documents_collection(claims.tenant_id, claims.sub, str(body.thread_id))
                 if meta.rag_ingested_at is None:
                     already_staged_for_this_thread = (
-                        ctx.rag_backend.name == "local"
-                        and meta.staged_at is not None
+                        meta.staged_at is not None
                         and meta.thread_id is not None
                         and str(meta.thread_id) == str(body.thread_id)
                     )
-                    if already_staged_for_this_thread:
-                        # Already extracted+embedded+indexed at upload time
-                        # (routes/files.py::_stage_uploaded_doc), already
-                        # tagged with this exact session_id — nothing to
-                        # move. The pre-validation pass above already
-                        # confirmed staging succeeded and quota was
-                        # consumed for this file before we got here.
-                        pass
-                    elif ctx.rag_backend.name == "local" and ctx.embedding_client is not None:
-                        # Not staged (thread_id wasn't known at upload time)
-                        # or referenced from a different thread than it was
-                        # uploaded under — either way, index it now, tagged
-                        # with *this* message's real thread_id.
-                        from substrate_cloud.session_index.ingest import (
-                            ingest_session_document,
-                        )
-
+                    if not already_staged_for_this_thread:
+                        # Not staged at upload (thread_id wasn't known then), or referenced from a different thread than it was
+                        # uploaded under — file it now, under *this* message's real thread_id.
                         data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
                         try:
-                            await ingest_session_document(
-                                data=data,
-                                filename=meta.original_name,
+                            await ctx.library.add(
+                                data,
+                                meta.original_name,
+                                collection=collection or "",
+                                resource=meta.object_key,
                                 content_type=meta.content_type,
-                                tenant_id=claims.tenant_id,
-                                user_id=claims.sub,
-                                session_id=str(body.thread_id),
-                                cfg=settings,
-                                embedding_client=ctx.embedding_client,
-                                model_client=ctx.model_client,
-                                rag_backend=ctx.rag_backend,
+                                sha256=meta.checksum_sha256 or None,
+                                metadata=_library_metadata(meta, str(body.thread_id)),
                             )
                         except Exception:
                             redis = getattr(request.app.state, "redis", None)
                             if redis is not None:
                                 await release(redis, "docquota:commit", claims.sub)
                             raise
-                    else:
-                        # A non-local backend (no eager-staging concept --
-                        # managed ingest at send time instead). For the
-                        # "local" backend (the only one today) this branch
-                        # should be unreachable: the pre-validation pass
-                        # above already 425/422'd any local-backend new
-                        # commit whose staged_at wasn't set, before this
-                        # loop ever runs. Kept as a defensive fallback, not
-                        # a designed code path.
-                        data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
-                        await ctx.rag_backend.ingest(
-                            data,
-                            collection=str(body.thread_id),
-                            metadata={
-                                "filename": meta.original_name,
-                                "content_type": meta.content_type,
-                                # Lets a citation open this exact file later: the
-                                # DB id for /files/{id}/download, and the
-                                # thread-relative path /workspace/file expects
-                                # (session_path falls back to original_name in
-                                # integrations/knowledge/citations.py when this
-                                # is None — e.g. an "uploads/" scoped file with
-                                # no thread session).
-                                "file_id": str(meta.id),
-                                "session_path": _session_relative_path(meta.object_key)
-                                or meta.original_name,
-                            },
-                        )
                     meta.rag_ingested_at = datetime.now(timezone.utc)
                     needs_commit = True
+                inline = await _library_context(ctx.library, collection, meta)
+                if inline:
+                    text_parts.append(inline)
                 attachments.append(_attachment_dict(meta))
                 continue
 
-            # No RAG backend configured — fall back to the old inline-extract
-            # path so uploads still work.
+            # No documents library configured — read it inline instead, so uploads still work.
             if meta.extracted_text:
                 text_parts.append(
                     f"[File: {meta.original_name}]\n{meta.extracted_text}"
@@ -358,16 +365,8 @@ async def _build_file_context(
                 continue
 
             data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
-            endpoint = None
-            if settings.DOCUMENT_INTELLIGENCE_SERVICE_URL:
-                endpoint = InferenceEndpoint(
-                    model="",
-                    base_url=settings.DOCUMENT_INTELLIGENCE_SERVICE_URL,
-                    api_key=settings.DOCUMENT_INTELLIGENCE_AUTH_TOKEN,
-                    timeout_s=settings.DOCUMENT_INTELLIGENCE_TIMEOUT_S,
-                )
-            result = await extract_document(
-                data, meta.original_name, meta.content_type, endpoint=endpoint
+            result = await document_reader().read(
+                data, meta.original_name, content_type=meta.content_type
             )
             text = result.markdown.strip() or None
             if text is not None:

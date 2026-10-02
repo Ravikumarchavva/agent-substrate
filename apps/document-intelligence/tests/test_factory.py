@@ -14,7 +14,7 @@ import pytest
 from document_intelligence.autoconfig import ResolvedRuntime
 from document_intelligence.engines import factory
 from document_intelligence.engines.paddle_vl import PaddleVLEngine
-from document_intelligence.engines.raw_text import RawTextEngine
+from document_intelligence.engines.native import NativeEngine
 
 
 @dataclass
@@ -31,10 +31,10 @@ class _FakeCfg:
     vl_base_port: int = 8090
 
 
-async def test_raw_text_mode_builds_raw_text_engine() -> None:
+async def test_raw_text_mode_builds_the_native_engine() -> None:
     resolved = ResolvedRuntime(mode="raw_text", worker_count=0)
     engine = await factory.build_engine(_FakeCfg(), resolved)
-    assert isinstance(engine, RawTextEngine)
+    assert isinstance(engine, NativeEngine)
 
 
 async def test_ocr_classic_mode_uses_resolved_device_when_cfg_device_unset(

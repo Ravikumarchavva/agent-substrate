@@ -7,15 +7,10 @@ backends/local.py's module docstring."""
 
 from __future__ import annotations
 
-import base64
 from unittest.mock import AsyncMock
 
+from substrate.documents import ExtractedImage, ExtractedPage, ExtractionResult
 from substrate.integrations.knowledge.backends.local import LocalRagBackend
-from substrate.integrations.services.document_extraction import (
-    ExtractedImage,
-    ExtractedPageText,
-    ExtractResponse,
-)
 from substrate.types import MediaBlock, TextBlock
 from substrate.stores import Document, SearchResult
 
@@ -107,6 +102,7 @@ def _backend(
     embedding_reranker_client=None,
     vector_store=None,
     file_store=None,
+    reader=None,
 ) -> tuple[LocalRagBackend, StubPipeline]:
     pipeline = StubPipeline()
     backend = LocalRagBackend(
@@ -117,6 +113,7 @@ def _backend(
         embedding_reranker_service_url="http://embedding-reranker-test:8080",
         embedding_reranker_client=embedding_reranker_client,
         file_store=file_store,
+        reader=reader,
     )
     return backend, pipeline
 
@@ -366,41 +363,37 @@ async def test_query_merges_text_and_image_candidates_before_reranking():
     assert any(isinstance(b, MediaBlock) and b.is_image for r in results for b in r.content)
 
 
-# ── _load_via_extraction_service — splits text pages and images ────────────
+# ── _load_via_reader — splits text pages and images ────────────────────────
 
 
-async def test_load_via_extraction_service_splits_text_and_images(monkeypatch):
-    client = AsyncMock()
+class StubReader:
+    def __init__(self, result: ExtractionResult) -> None:
+        self.result = result
+        self.calls: list[tuple[bytes, str]] = []
+
+    async def read(self, data, filename="", *, content_type=None, strategy="auto"):
+        self.calls.append((data, filename))
+        return self.result
+
+
+async def test_load_via_reader_splits_text_and_images():
     img_bytes = b"fake-png-bytes"
-    client.extract = AsyncMock(
-        return_value=ExtractResponse(
-            success=True,
-            text="page1\n\npage2",
+    reader = StubReader(
+        ExtractionResult(
             pages=[
-                ExtractedPageText(page_number=1, text="page1"),
-                ExtractedPageText(page_number=2, text="page2"),
-            ],
-            images=[
-                ExtractedImage(
-                    data_base64=base64.b64encode(img_bytes).decode("ascii"),
+                ExtractedPage(
                     page_number=1,
-                    label="chart",
-                    confidence=0.97,
-                )
+                    text="page1",
+                    images=[ExtractedImage(data=img_bytes, page_number=1, label="chart", confidence=0.97)],
+                ),
+                ExtractedPage(page_number=2, text="page2"),
             ],
             engine="paddleocr",
-            page_count=2,
         )
     )
-    monkeypatch.setattr(
-        "substrate.integrations.services.document_extraction.ExtractionClient",
-        lambda *a, **kw: client,
-    )
-    backend, _ = _backend(image_store=StubImageStore())
+    backend, _ = _backend(image_store=StubImageStore(), reader=reader)
 
-    result = await backend._load_via_extraction_service(
-        b"pdf bytes", "report.pdf", {"filename": "report.pdf"}
-    )
+    result = await backend._load_via_reader(b"pdf bytes", "report.pdf", {"filename": "report.pdf"})
 
     assert result is not None
     text_documents, image_items = result
@@ -416,66 +409,36 @@ async def test_load_via_extraction_service_splits_text_and_images(monkeypatch):
     assert meta["page_number"] == 1
 
 
-async def test_load_via_extraction_service_returns_none_on_failure(monkeypatch):
-    """Service failure now falls back to local raw_text extraction (inside
-    ``extract_document``) instead of just failing outright — but garbage
-    PDF bytes still yield an empty result there too, so this still ends in
-    ``None``."""
-    client = AsyncMock()
-    client.extract = AsyncMock(
-        return_value=ExtractResponse(success=False, error="boom")
-    )
-    monkeypatch.setattr(
-        "substrate.integrations.services.document_extraction.ExtractionClient",
-        lambda *a, **kw: client,
-    )
-    backend, _ = _backend(image_store=StubImageStore())
+async def test_load_via_reader_returns_none_when_nothing_could_be_read():
+    reader = StubReader(ExtractionResult(success=False, error="boom"))
+    backend, _ = _backend(image_store=StubImageStore(), reader=reader)
 
-    result = await backend._load_via_extraction_service(
-        b"pdf bytes", "report.pdf", {"filename": "report.pdf"}
-    )
-
-    assert result is None
+    assert await backend._load_via_reader(b"pdf bytes", "report.pdf", {"filename": "report.pdf"}) is None
 
 
 # ── ingest() — wires both text and image paths ─────────────────────────────
 
 
-async def test_ingest_routes_pdf_text_through_pipeline_and_images_through_image_store(
-    monkeypatch,
-):
+async def test_ingest_routes_pdf_text_through_pipeline_and_images_through_image_store():
     image_store = StubImageStore()
     client = AsyncMock()
     img_bytes = b"fake-png-bytes"
-    client.extract = AsyncMock(
-        return_value=ExtractResponse(
-            success=True,
-            text="page1",
-            pages=[ExtractedPageText(page_number=1, text="page1")],
-            images=[
-                ExtractedImage(
-                    data_base64=base64.b64encode(img_bytes).decode("ascii"),
+    client.embed_image = AsyncMock(return_value=[0.1, 0.2])
+    reader = StubReader(
+        ExtractionResult(
+            pages=[
+                ExtractedPage(
                     page_number=1,
-                    label="chart",
+                    text="page1",
+                    images=[ExtractedImage(data=img_bytes, page_number=1, label="chart")],
                 )
             ],
             engine="paddleocr",
-            page_count=1,
         )
     )
-    client.embed_image = AsyncMock(return_value=[0.1, 0.2])
-    monkeypatch.setattr(
-        "substrate.integrations.services.document_extraction.ExtractionClient",
-        lambda *a, **kw: client,
-    )
-    backend, pipeline = _backend(
-        image_store=image_store,
-        embedding_reranker_client=client,
-    )
+    backend, pipeline = _backend(image_store=image_store, embedding_reranker_client=client, reader=reader)
 
-    result = await backend.ingest(
-        b"pdf bytes", collection="kb", metadata={"filename": "report.pdf"}
-    )
+    result = await backend.ingest(b"pdf bytes", collection="kb", metadata={"filename": "report.pdf"})
 
     assert result.chunks_indexed == 1
     assert len(pipeline.ingested) == 1

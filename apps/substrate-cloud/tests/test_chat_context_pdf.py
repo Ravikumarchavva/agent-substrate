@@ -16,6 +16,7 @@ document-intelligence service configured, same as before."""
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -114,6 +115,7 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
     ctx.file_store = file_store
     # No RAG backend configured — exercises the old inline-extraction path.
     ctx.rag_backend = None
+    ctx.library = None
 
     body = MagicMock()
     body.file_ids = [file_id]
@@ -133,7 +135,7 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
 
     # Extraction cache must be written back onto the row.
     assert meta.extracted_text is not None
-    assert meta.extraction_engine == "local"
+    assert meta.extraction_engine == "pdfium"
     assert meta.extracted_at is not None
     db.commit.assert_awaited_once()
 
@@ -166,6 +168,7 @@ async def test_build_file_context_falls_back_to_attachment_on_bad_pdf():
     ctx.file_store = file_store
     # No RAG backend configured — exercises the old inline-extraction path.
     ctx.rag_backend = None
+    ctx.library = None
 
     body = MagicMock()
     body.file_ids = [file_id]
@@ -271,6 +274,7 @@ async def test_file_context_includes_thread_files_with_no_file_ids_this_turn(mon
     ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = None  # not extractable, so ingestion never runs
+    ctx.library = None
 
     body = MagicMock()
     body.file_ids = None  # exactly what a follow-up turn sends
@@ -334,6 +338,7 @@ async def test_new_attachments_stays_narrow_while_model_context_stays_broad():
     ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = None
+    ctx.library = None
 
     body = MagicMock()
     body.file_ids = [new_file_id]  # only this turn's actual attachment
@@ -461,6 +466,7 @@ async def test_attachment_dict_omits_workspace_path_for_extractable_types():
     ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = None
+    ctx.library = None
 
     body = MagicMock()
     body.file_ids = [file_id]
@@ -507,6 +513,7 @@ async def test_attachment_dict_still_sets_session_path_for_extractable_types():
     ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = None
+    ctx.library = None
 
     body = MagicMock()
     body.file_ids = [file_id]
@@ -595,6 +602,7 @@ async def test_workspace_path_absent_for_a_pdf_even_with_nsjail_configured(
     ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = None  # exercises the old inline-extraction cache-hit path
+    ctx.library = None
 
     body = MagicMock()
     body.file_ids = [file_id]
@@ -641,6 +649,7 @@ async def test_build_file_context_uses_cached_extracted_text_without_download():
     ctx.file_store = file_store
     # No RAG backend configured — exercises the old inline-extraction path.
     ctx.rag_backend = None
+    ctx.library = None
 
     body = MagicMock()
     body.file_ids = [file_id]
@@ -655,164 +664,147 @@ async def test_build_file_context_uses_cached_extracted_text_without_download():
     file_store.download.assert_not_awaited()
 
 
-async def test_build_file_context_ingests_pdf_into_rag_backend():
-    """With a RagBackend configured, extractable docs are ingested into the
-    thread's collection instead of inlined — the model retrieves them via
-    the knowledge_search tool."""
-    file_id = "55555555-5555-5555-5555-555555555555"
-    meta = _pdf_meta(
-        file_id, "invoice.pdf", f"users/u1/uploads/{file_id}/invoice.pdf", 1234
-    )
+def _documents_ctx(tmp_path, data: bytes):
+    """A ctx with a real ``Library`` (a store in a temp folder, the in-process reader) and a file store that hands back ``data``."""
+    from substrate.documents import Library, Reader
+    from substrate.stores import Store
 
+    ctx = MagicMock()
+    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
+    ctx.file_store = MagicMock()
+    ctx.file_store.download = AsyncMock(return_value=data)
+    ctx.library = Library(Store.at(tmp_path / "store"), reader=Reader(isolate=False))
+    return ctx
+
+
+def _staged_under_another_thread(meta):
+    """Staged at upload, but under a different thread than the one now sending it — so the send files it again under *this* thread."""
+    from datetime import datetime, timezone
+
+    meta.staging_error = None
+    meta.staged_at = datetime.now(timezone.utc)
+    meta.thread_id = "some-other-thread"
+    return meta
+
+
+def _request_without_redis():
+    request = MagicMock()
+    request.app.state.redis = None
+    return request
+
+
+def _db_with(meta):
     scalars_result = MagicMock()
     scalars_result.all.return_value = [meta]
     execute_result = MagicMock()
     execute_result.scalars.return_value = scalars_result
-
     db = MagicMock()
     db.execute = AsyncMock(return_value=execute_result)
     db.commit = AsyncMock()
+    return db
 
-    file_store = MagicMock()
-    file_store.download = AsyncMock(return_value=b"pdf bytes")
 
-    rag_backend = MagicMock()
-    rag_backend.ingest = AsyncMock()
+def _claims():
+    from types import SimpleNamespace
 
-    ctx = MagicMock()
+    return SimpleNamespace(tenant_id="t1", sub="u1")
 
-    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
-
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
-    ctx.file_store = file_store
-    ctx.rag_backend = rag_backend
-
+async def test_build_file_context_files_the_pdf_in_the_conversations_documents_and_inlines_it(tmp_path):
+    """With a documents library, an extractable file is filed under the conversation (reading it once), and a small one is put in front of
+    the model whole; the file's id and path travel with it so a citation can open the exact file later."""
+    data = _FIXTURE.read_bytes()
+    file_id = "55555555-5555-5555-5555-555555555555"
+    meta = _pdf_meta(file_id, "invoice.pdf", f"users/u1/uploads/{file_id}/invoice.pdf", len(data))
+    meta.checksum_sha256 = hashlib.sha256(data).hexdigest()
+    _staged_under_another_thread(meta)
+    ctx = _documents_ctx(tmp_path, data)
     body = MagicMock()
     body.thread_id = "thread-abc"
     body.file_ids = [file_id]
+    db = _db_with(meta)
 
-    text_block, image_inputs, attachments, _new_attachments = await _build_file_context(
-        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
-    )
+    text_block, image_inputs, attachments, _new = await _build_file_context(db, body, request=_request_without_redis(), ctx=ctx, claims=_claims())
 
-    assert text_block == ""
-    assert image_inputs == []
-    assert len(attachments) == 1
-    assert attachments[0]["name"] == "invoice.pdf"
-
-    rag_backend.ingest.assert_awaited_once()
-    _args, kwargs = rag_backend.ingest.call_args
-    assert kwargs["collection"] == "thread-abc"
-    assert kwargs["metadata"]["filename"] == "invoice.pdf"
-    assert kwargs["metadata"]["file_id"] == file_id
-    # object_key is "users/u1/uploads/{id}/invoice.pdf" — not a thread
-    # session path, so session_path falls back to original_name.
-    assert kwargs["metadata"]["session_path"] == "invoice.pdf"
+    assert "[File: invoice.pdf]" in text_block and "Invoice #12345" in text_block
+    assert image_inputs == [] and len(attachments) == 1 and attachments[0]["name"] == "invoice.pdf"
+    collection = "tenants/t1/users/u1/conversations/thread-abc/documents"
+    listing = await ctx.library.list(collection=collection)
+    assert [d.filename for d in listing.documents] == ["invoice.pdf"]
+    info = listing.documents[0]
+    assert info.document == ctx.library.document_id("invoice.pdf", meta.checksum_sha256)
+    assert info.resource == meta.object_key
+    assert info.meta["file_id"] == file_id
+    # object_key is "users/u1/uploads/{id}/invoice.pdf" — not a thread session path, so session_path falls back to original_name.
+    assert info.meta["session_path"] == "invoice.pdf" and info.meta["thread_id"] == "thread-abc"
     assert meta.rag_ingested_at is not None
     db.commit.assert_awaited_once()
 
 
-async def test_build_file_context_ingest_metadata_uses_real_session_path():
-    """A file uploaded scoped to this thread gets its real session-relative
-    path in the ingest metadata — what a citation's "open this file" click
-    needs (routes/workspace.py::serve_file), not just the original filename."""
+async def test_build_file_context_documents_metadata_uses_the_real_session_path(tmp_path):
+    """A file uploaded scoped to this thread keeps its real session-relative path with the document — what a citation's "open this file"
+    click needs (routes/workspace.py::serve_file), not just the original filename."""
+    data = _FIXTURE.read_bytes()
     file_id = "77777777-7777-7777-7777-777777777777"
-    thread_id = "thread-xyz"
     meta = _pdf_meta(
         file_id,
         "invoice.pdf",
-        # uniquified basename
-        f"tenants/t1/users/u1/conversations/{thread_id}/branches/main/workspace/shared/uploads/invoice-1.pdf",
-        1234,
+        "tenants/t1/users/u1/conversations/thread-xyz/branches/main/workspace/shared/uploads/invoice-1.pdf",  # uniquified basename
+        len(data),
     )
-
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
-
-    file_store = MagicMock()
-    file_store.download = AsyncMock(return_value=b"pdf bytes")
-
-    rag_backend = MagicMock()
-    rag_backend.ingest = AsyncMock()
-
-    ctx = MagicMock()
-
-    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
-
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
-
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
-    ctx.file_store = file_store
-    ctx.rag_backend = rag_backend
-
+    meta.checksum_sha256 = hashlib.sha256(data).hexdigest()
+    _staged_under_another_thread(meta)
+    ctx = _documents_ctx(tmp_path, data)
     body = MagicMock()
-    body.thread_id = thread_id
+    body.thread_id = "thread-xyz"
     body.file_ids = [file_id]
 
-    await _build_file_context(
-        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
-    )
+    await _build_file_context(_db_with(meta), body, request=_request_without_redis(), ctx=ctx, claims=_claims())
 
-    _args, kwargs = rag_backend.ingest.call_args
-    # The real object-key basename, not original_name — they differ here
-    # because _unique_object_key uniquified it.
-    assert kwargs["metadata"]["session_path"] == "uploads/invoice-1.pdf"
+    info = (await ctx.library.list(collection="tenants/t1/users/u1/conversations/thread-xyz/documents")).documents[0]
+    assert info.meta["session_path"] == "uploads/invoice-1.pdf"
 
 
-async def test_build_file_context_skips_reingest_when_already_indexed():
-    """A file already ingested into the RAG backend must not be re-ingested
-    on every later reference in the same thread."""
+async def test_build_file_context_does_not_file_a_document_twice(tmp_path):
+    """A file already filed must not be downloaded and read again on every later reference in the same thread."""
+    data = _FIXTURE.read_bytes()
     file_id = "66666666-6666-6666-6666-666666666666"
-    meta = _pdf_meta(
-        file_id, "invoice.pdf", f"users/u1/uploads/{file_id}/invoice.pdf", 1234
-    )
+    meta = _pdf_meta(file_id, "invoice.pdf", f"users/u1/uploads/{file_id}/invoice.pdf", len(data))
+    meta.checksum_sha256 = hashlib.sha256(data).hexdigest()
     meta.rag_ingested_at = "already set"
+    ctx = _documents_ctx(tmp_path, data)
+    ctx.file_store.download = AsyncMock(side_effect=AssertionError("must not download an already-filed file"))
+    body = MagicMock()
+    body.thread_id = "thread-abc"
+    body.file_ids = [file_id]
+    db = _db_with(meta)
 
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
+    text_block, _images, attachments, _new = await _build_file_context(db, body, request=_request_without_redis(), ctx=ctx, claims=_claims())
 
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    assert len(attachments) == 1
+    db.commit.assert_not_awaited()
 
-    file_store = MagicMock()
-    file_store.download = AsyncMock(
-        side_effect=AssertionError("must not download an already-indexed file")
-    )
 
-    rag_backend = MagicMock()
-    rag_backend.ingest = AsyncMock()
+async def test_build_file_context_gives_a_large_document_as_its_outline(tmp_path):
+    from substrate.documents import ExtractedPage, ExtractionResult
 
-    ctx = MagicMock()
-
-    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
-
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
-
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
-    ctx.file_store = file_store
-    ctx.rag_backend = rag_backend
-
+    file_id = "88888888-8888-8888-8888-888888888888"
+    checksum = "ab12cd" * 10
+    sections = "\n\n".join(f"## Chapter {n}\n\n" + "word " * 2500 for n in range(1, 6))
+    big = ExtractionResult(pages=[ExtractedPage(page_number=1, text="x")], markdown=f"<!-- page 1 -->\n\n{sections}", engine="t")
+    ctx = _documents_ctx(tmp_path, b"unused")
+    collection = "tenants/t1/users/u1/conversations/thread-abc/documents"
+    await ctx.library.add(big, "handbook.pdf", collection=collection, sha256=checksum)
+    meta = _pdf_meta(file_id, "handbook.pdf", f"users/u1/uploads/{file_id}/handbook.pdf", 1234)
+    meta.checksum_sha256 = checksum
+    meta.rag_ingested_at = "already set"
     body = MagicMock()
     body.thread_id = "thread-abc"
     body.file_ids = [file_id]
 
-    text_block, _images, attachments, _new_attachments = await _build_file_context(
-        db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
-    )
+    text_block, _images, attachments, _new = await _build_file_context(_db_with(meta), body, request=_request_without_redis(), ctx=ctx, claims=_claims())
 
-    assert text_block == ""
+    assert "too long to include" in text_block and f"document id: {ctx.library.document_id('handbook.pdf', checksum)}" in text_block
+    assert "Chapter 1" in text_block and "word word word" not in text_block
     assert len(attachments) == 1
-    rag_backend.ingest.assert_not_awaited()
-    db.commit.assert_not_awaited()
-    db.commit.assert_not_awaited()

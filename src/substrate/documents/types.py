@@ -6,14 +6,12 @@ multimodal document chunks, and document metadata.
 
 from __future__ import annotations
 
-from datetime import datetime
 from enum import StrEnum
-from typing import Any, Sequence
+from typing import Literal, Sequence
 
 from pydantic import Field, model_validator
 
-from substrate.types.content import ContentBlock, JsonObject, KernelModel, TextBlock
-from substrate.types.ids import new_id
+from substrate.types.content import JsonObject, KernelModel
 
 
 class ExtractedImageLabel(StrEnum):
@@ -44,18 +42,27 @@ class ExtractedImage(KernelModel):
     }
 
 
+PageMethod = Literal["text", "ocr", "layout", "native"]
+"""How a page's text was obtained: read from the text layer, recognised from pixels, laid out by a layout model, or taken from a
+format that has text natively (Office, HTML, plain text)."""
+
+
 class ExtractedPage(KernelModel):
-    """A single page of extracted content."""
+    """A single page of extracted content. Slides and sheets are pages too."""
 
     page_number: int
     text: str
     markdown: str = ""
     images: Sequence[ExtractedImage] = Field(default_factory=list)
     metadata: JsonObject = Field(default_factory=dict)
+    method: PageMethod = "text"
+    needs_ocr: bool = False
+    """The page has pixels but no readable text and nothing here could recognise it: say so rather than return it empty."""
 
 
 class ExtractionResult(KernelModel):
-    """Outcome of a document extraction run."""
+    """Outcome of reading a document. ``markdown`` is the whole document with a ``<!-- page N -->`` marker before each page;
+    this JSON is also what a document server answers with."""
 
     success: bool = True
     pages: Sequence[ExtractedPage] = Field(default_factory=list)
@@ -63,6 +70,14 @@ class ExtractionResult(KernelModel):
     engine: str = ""
     error: str | None = None
     degraded_from: str | None = None
+    content_type: str = ""
+    title: str | None = None
+    warnings: Sequence[str] = Field(default_factory=list)
+
+    @property
+    def needs_ocr(self) -> list[int]:
+        """Numbers of the pages that have no readable text and were not recognised."""
+        return [page.page_number for page in self.pages if page.needs_ocr]
 
     @model_validator(mode="after")
     def _success_excludes_error(self) -> "ExtractionResult":
@@ -73,56 +88,33 @@ class ExtractionResult(KernelModel):
         return self
 
 
-class DocumentMetadata(KernelModel):
-    """Catalog metadata describing a stored document."""
+class OcrResult(KernelModel):
+    """What an OCR engine read from one page image."""
 
-    id: str = Field(default_factory=lambda: new_id())
-    filename: str = ""
-    content_type: str = "application/octet-stream"
-    byte_size: int = 0
-    total_pages: int = 0
-    sha256: str = ""
-    created_at: datetime | None = None
-    metadata: JsonObject = Field(default_factory=dict)
-
-
-class DocumentChunk(KernelModel):
-    """A discrete passage or multimodal section of a document prepared for retrieval."""
-
-    id: str = Field(default_factory=lambda: new_id())
-    document_id: str = ""
     text: str = ""
-    content: Sequence[ContentBlock] = Field(default_factory=list)
-    page_number: int | None = None
-    chunk_index: int = 0
-    token_count: int = 0
-    embedding: Sequence[float] | None = None
-    metadata: JsonObject = Field(default_factory=dict)
+    confidence: float = 0.0
+    """Mean confidence, 0–100."""
+    error: str | None = None
+    """Why nothing was read when the engine itself failed (timed out, crashed) — distinct from a page with no text."""
 
-    @classmethod
-    def from_text(
-        cls,
-        text: str,
-        *,
-        document_id: str = "",
-        page_number: int | None = None,
-        chunk_index: int = 0,
-        token_count: int = 0,
-        id: str | None = None,
-        embedding: Sequence[float] | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> "DocumentChunk":
-        return cls(
-            id=id or new_id(),
-            document_id=document_id,
-            text=text,
-            content=[TextBlock(text=text)],
-            page_number=page_number,
-            chunk_index=chunk_index,
-            token_count=token_count,
-            embedding=embedding,
-            metadata=metadata or {},
-        )
+
+Strategy = Literal["fast", "auto", "hi_res", "ocr_only"]
+"""``fast`` never runs OCR. ``auto`` runs it only on pages with no text layer. ``ocr_only`` runs it on every page.
+``hi_res`` also runs a layout model on every page — only a document server has one; in-process it degrades to ``auto``."""
+
+
+class ReadLimits(KernelModel):
+    """What a read may cost. Exceeding one is a failure with a reason (or, for pages, a truncation with a warning), never a hang."""
+
+    max_bytes: int = 100 * 1024 * 1024
+    max_pages: int = 2000
+    max_ocr_pages: int = 200
+    timeout_s: float = 30.0
+    """Wall-clock budget before the page-dependent allowance."""
+    per_page_s: float = 2.0
+    max_timeout_s: float = 300.0
+    memory_bytes: int = 1536 * 1024 * 1024
+    """Address-space limit of an isolated reader (enforced on Linux)."""
 
 
 __all__ = [
@@ -130,6 +122,4 @@ __all__ = [
     "ExtractedImage",
     "ExtractedPage",
     "ExtractionResult",
-    "DocumentMetadata",
-    "DocumentChunk",
 ]

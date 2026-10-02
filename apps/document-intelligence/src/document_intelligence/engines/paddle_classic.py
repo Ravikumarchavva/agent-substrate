@@ -5,7 +5,7 @@ re-export shim) as part of the 3-mode redesign. Behavior is byte-for-byte
 unchanged: still ``PPStructureV3`` (layout + chart/table detection + OCR,
 no vision-language model), still tiny/small/medium OCR sizing, still the
 same ``max_pages_per_call`` chunking. Kept as an unadvertised fallback mode
-behind the same :class:`PaginatedExtractionEngine` Protocol the new VL
+behind the same :class:`ExtractionEngine` Protocol the new VL
 engines implement — proves the abstraction is genuinely pluggable (not
 just theoretically so), and is the real escape hatch if the VL path ever
 regresses on a document type this session didn't test.
@@ -357,7 +357,7 @@ def _finalize_markdown_for_pipeline(
 class PaddleClassicEngine:
     """One PaddleOCR ``PPStructureV3`` pipeline: layout + chart/table
     detection + OCR, in a single call per document. Mode ``ocr_classic``.
-    Implements ``PaginatedExtractionEngine`` (async wrappers below wrap the
+    Implements ``ExtractionEngine`` (async wrappers below wrap the
     same sync, CPU/GPU-bound calls this file always had — the engine itself
     doesn't change, only how ``routes.py`` calls it)."""
 

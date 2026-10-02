@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from substrate.documents import Reader
 from substrate.workspace.layout import user_prefix
 from substrate.types import MediaBlock, TextBlock
 from substrate.stores import Document, SearchResult
@@ -21,12 +22,12 @@ if TYPE_CHECKING:
     from substrate.models import ChatModel
     from substrate.stores import VectorStore
 
-# Extensions the local (no-extraction-service) fallback can read
-_LOCAL_FALLBACK_EXTENSIONS = {".pdf", ".txt", ".md", ".csv", ".json"}
+# Read by a text loader; everything else is a document and goes through the Reader
+_TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json"}
 
 
 class LocalRagBackend:
-    """Self-hosted RAG: extraction-service-or-pypdf parsing, pgvector storage."""
+    """Self-hosted RAG: parsing by the Reader (built-in, or a document server by URL), pgvector storage."""
 
     name = "local"
 
@@ -46,6 +47,7 @@ class LocalRagBackend:
         model_client: "ChatModel | None" = None,
         embedding_reranker_client: "EmbeddingRerankerClient | None" = None,
         file_store: Any | None = None,
+        reader: Reader | None = None,
         dense_k: int = 50,
         lexical_k: int = 50,
         fused_k: int = 50,
@@ -57,6 +59,9 @@ class LocalRagBackend:
         self._extraction_url = extraction_service_url
         self._extraction_auth_token = extraction_auth_token
         self._extraction_timeout_s = extraction_timeout_s
+        self._reader = reader or Reader(
+            extraction_service_url or None, api_key=extraction_auth_token, timeout=float(extraction_timeout_s)
+        )
         self._embedding_reranker_url = embedding_reranker_service_url
         self._embedding_reranker_auth_token = embedding_reranker_auth_token
         self._embedding_reranker_timeout_s = embedding_reranker_timeout_s
@@ -405,40 +410,21 @@ class LocalRagBackend:
         )
         ext = Path(name).suffix.lower()
 
-        if self._extraction_url and ext not in _LOCAL_FALLBACK_EXTENSIONS:
-            result = await self._load_via_extraction_service(source, name, metadata)
-            if result is not None:
-                return result
-            raise RagLoadError(
-                f"{ext} extraction failed and no local fallback exists for it."
-            )
-        if ext == ".pdf" and self._extraction_url:
-            result = await self._load_via_extraction_service(source, name, metadata)
-            if result is not None:
-                return result
-            # Extraction service failed — fall through to the local pypdf
-            # path below rather than losing the document entirely.
+        if ext in _TEXT_EXTENSIONS:
+            return await self._load_via_registry(source, name, ext, metadata), []
+        result = await self._load_via_reader(source, name, metadata)
+        if result is None:
+            raise RagLoadError(f"{name or ext!r} could not be read, or has no text or images in it.")
+        return result
 
-        return await self._load_via_registry(source, name, ext, metadata), []
-
-    async def _load_via_extraction_service(
+    async def _load_via_reader(
         self, source: str | bytes | Path, name: str, metadata: dict[str, Any]
     ) -> tuple[list[Document], list[tuple[bytes, dict[str, Any]]]] | None:
-        if not self._extraction_url:
-            return None
-
-        from substrate.integrations.llm.endpoint import InferenceEndpoint
-        from substrate.integrations.services.document_extraction import extract_document
-
         data = source if isinstance(source, bytes) else Path(source).read_bytes()
-        content_type = metadata.get("content_type", "application/octet-stream")
-        endpoint = InferenceEndpoint(
-            model="",
-            base_url=self._extraction_url,
-            api_key=self._extraction_auth_token,
-            timeout_s=self._extraction_timeout_s,
-        )
-        result = await extract_document(data, name, content_type, endpoint=endpoint)
+        result = await self._reader.read(data, name, content_type=metadata.get("content_type"))
+        if not result.success:
+            logger.info("Reading %r failed: %s", name, result.error)
+            return None
         total_pages = len(result.pages)
 
         text_documents = [
@@ -486,12 +472,10 @@ class LocalRagBackend:
             CSVLoader,
             DocumentLoaderRegistry,
             JSONLoader,
-            PDFLoader,
             TextLoader,
         )
 
         registry = DocumentLoaderRegistry()
-        registry.register(".pdf", PDFLoader())
         for text_ext in (".txt", ".md"):
             registry.register(text_ext, TextLoader())
         registry.register(".csv", CSVLoader())
@@ -501,9 +485,7 @@ class LocalRagBackend:
             loader = registry.get_loader(name)
         except ValueError as exc:
             raise RagLoadError(
-                f"No local loader for {ext!r} and no extraction service is "
-                "configured. Supported without one: "
-                f"{sorted(_LOCAL_FALLBACK_EXTENSIONS)}."
+                f"No loader for {ext!r}. Text formats: {sorted(_TEXT_EXTENSIONS)}."
             ) from exc
         return await loader.load(source, metadata=metadata)
 

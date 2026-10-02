@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.integrations.artifacts.okf import (
+from substrate.documents.okf import (
     Concept,
     OKFParseError,
     human_actor,

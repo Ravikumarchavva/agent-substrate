@@ -1,53 +1,39 @@
-"""Document protocols — contracts for extraction, chunking, and document storage."""
+"""Document protocols — contracts for reading documents: the extractor and the OCR engine."""
 
 from __future__ import annotations
 
 from typing import Protocol, Sequence, runtime_checkable
 
-from substrate.documents.types import DocumentChunk, DocumentMetadata, ExtractionResult
+from substrate.documents.types import ExtractionResult, OcrResult, Strategy
 
 
 @runtime_checkable
 class DocumentExtractor(Protocol):
-    """Contract every document extraction backend satisfies."""
+    """Contract every document reader satisfies — the built-in one, a document server, or your own.
 
-    async def extract(self, data: bytes, filename: str) -> ExtractionResult: ...
+    ``read`` never raises for a document it cannot read: it returns ``ExtractionResult(success=False, error=…)``.
+    ``content_type`` is a hint (the format is sniffed from the bytes first); ``strategy`` is ``fast | auto | hi_res | ocr_only``.
+    """
 
-
-@runtime_checkable
-class DocumentChunker(Protocol):
-    """Contract for splitting extracted document pages into retrieval-ready chunks."""
-
-    def chunk(
-        self,
-        result: ExtractionResult,
-        *,
-        chunk_size: int = 500,
-        chunk_overlap: int = 50,
-    ) -> Sequence[DocumentChunk]: ...
+    async def read(
+        self, data: bytes, filename: str, *, content_type: str | None = None, strategy: Strategy = "auto"
+    ) -> ExtractionResult: ...
 
 
 @runtime_checkable
-class DocumentStore(Protocol):
-    """Durable catalog and chunk store for ingested documents."""
+class Ocr(Protocol):
+    """Contract for an OCR engine: one page image in, its text out.
 
-    async def save_document(
-        self, metadata: DocumentMetadata, chunks: Sequence[DocumentChunk]
-    ) -> None: ...
+    ``recognize`` is synchronous (it runs in a worker, off the event loop) and must not raise on an unreadable image — return an
+    empty result. Instances are rebuilt in the worker from their constructor arguments, so they must be cheap to construct.
+    """
 
-    async def get_document(self, document_id: str) -> DocumentMetadata | None: ...
+    name: str
 
-    async def get_chunks(self, document_id: str) -> Sequence[DocumentChunk]: ...
-
-    async def list_documents(
-        self, *, limit: int = 100, offset: int = 0
-    ) -> Sequence[DocumentMetadata]: ...
-
-    async def delete_document(self, document_id: str) -> None: ...
+    def recognize(self, png: bytes, *, languages: Sequence[str] = ("eng",)) -> OcrResult: ...
 
 
 __all__ = [
+    "Ocr",
     "DocumentExtractor",
-    "DocumentChunker",
-    "DocumentStore",
 ]

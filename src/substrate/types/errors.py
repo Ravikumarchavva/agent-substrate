@@ -14,7 +14,8 @@
     │   ├── ThreadBusyError
     │   ├── BranchHeadConflictError
     │   ├── SnapshotConflictError
-    │   └── RateLimitedError       carries `retry_after`
+    │   ├── RateLimitedError       carries `retry_after`
+    │   └── ServiceUnavailableError  a service reached by URL is down, timed out, or answered 5xx
     ├── PermanentError             never worth retrying
     │   ├── AgentCrashError
     │   ├── BlockValidationError
@@ -24,6 +25,7 @@
     │   ├── ContextLengthError     the prompt exceeded the model's window
     │   ├── ContentFilterError     the provider refused on content grounds
     │   ├── AuthError              credentials rejected
+    │   ├── VectorSpaceError       vectors from two different embedders were mixed in one collection
     │   ├── NonDeterminismError    a replay diverged from its journal
     │   └── OrphanedEffectError    an effect started and its outcome was never recorded
     └── PolicyTermination          intentional halt, not a bug
@@ -205,6 +207,15 @@ class RateLimitedError(TransientError):
         self.retry_after = retry_after
 
 
+class ServiceUnavailableError(TransientError):
+    """A service reached by URL (an embedder, a reranker, a document server) did not answer: connection refused, timed out,
+    or a 5xx. Retrying, or falling back to something local, can help."""
+
+    def __init__(self, message: str = "service unavailable", *, url: str | None = None) -> None:
+        super().__init__(message)
+        self.url = url
+
+
 class PermanentError(KernelError):
     """A failure that retrying cannot fix."""
 
@@ -300,6 +311,15 @@ class ContentFilterError(PermanentError):
 
 class AuthError(PermanentError):
     """The provider rejected our credentials."""
+
+
+class VectorSpaceError(PermanentError):
+    """A collection holds vectors from one embedder; these are from another (or of another width). Mixing them makes
+    every similarity score meaningless, so the write or the search is refused. Re-embed the collection, or use another."""
+
+    def __init__(self, message: str, *, collection: str | None = None) -> None:
+        super().__init__(message)
+        self.collection = collection
 
 
 class NonDeterminismError(PermanentError):

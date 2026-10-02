@@ -35,7 +35,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.workspace.layout import conversation_shared_key, user_upload_key
 from substrate.stores import WorkspaceQuotaExceededError
-from substrate.integrations.llm.endpoint import InferenceEndpoint
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
 from substrate_cloud.monolith.models import FileMetadata, Thread, User
@@ -57,7 +56,7 @@ from substrate_cloud.shared.doc_quota import (
 )
 from substrate_cloud.shared.settings import settings
 from substrate.documents import ExtractionResult
-from substrate.integrations.services.document_extraction import extract_document
+from substrate_cloud.document_reader import document_reader
 
 logger = logging.getLogger(__name__)
 
@@ -271,35 +270,12 @@ def render_page_marked_markdown(result: ExtractionResult) -> Optional[str]:
     return "\n\n".join(sections).strip() or None
 
 
-async def _build_extracted_sidecar_text(
-    data: bytes, name: str, content_type: str
-) -> Optional[str]:
-    """Best-effort, page-marked plain text for ``code_interpreter`` to read
-    instead of re-parsing a PDF's raw bytes. Delegates the extraction
-    fallback chain (document-intelligence service, else local pypdf/etc.) to
-    ``extract_document``, then renders the result via
-    ``render_page_marked_markdown``.
-    """
-    endpoint = None
-    if settings.DOCUMENT_INTELLIGENCE_SERVICE_URL:
-        endpoint = InferenceEndpoint(
-            model="",
-            base_url=settings.DOCUMENT_INTELLIGENCE_SERVICE_URL,
-            api_key=settings.DOCUMENT_INTELLIGENCE_AUTH_TOKEN,
-            timeout_s=settings.DOCUMENT_INTELLIGENCE_TIMEOUT_S,
-        )
-    result = await extract_document(data, name, content_type, endpoint=endpoint)
-    return render_page_marked_markdown(result)
-
-
 async def _write_extracted_sidecar(
     store: Any,
     file_id: uuid.UUID,
-    data: bytes,
+    result: ExtractionResult,
     *,
     object_key: str,
-    original_name: str,
-    content_type: str,
 ) -> None:
     """Write a ``{original_name}.extracted.md`` sidecar next to the uploaded
     file, in the same *store* the raw file itself currently lives in — the
@@ -311,7 +287,7 @@ async def _write_extracted_sidecar(
     try:
         if store is None:
             return
-        text = await _build_extracted_sidecar_text(data, original_name, content_type)
+        text = render_page_marked_markdown(result)
         if not text:
             return
         sidecar_key = f"{object_key}.extracted.md"
@@ -330,9 +306,9 @@ async def _set_tenant_guc(session: AsyncSession, tenant_id: str) -> None:
 
     Without this, ``file_metadata``'s ``FORCE ROW LEVEL SECURITY`` policy
     (``org_id = current_setting('app.current_tenant_id', true)``) hides
-    every row from this session — found live: ``ingest_session_document``
-    ran to real completion (confirmed via Lance table data actually
-    written to disk), but the follow-up ``session.get(FileMetadata,
+    every row from this session — found live: the staging
+    ran to real completion (confirmed via the bundle actually
+    written), but the follow-up ``session.get(FileMetadata,
     file_id)`` below silently returned ``None`` and the caller's `if row
     is not None` guard swallowed it with no error — so `staged_at` /
     `staging_error` never got written, and the composer polled "still
@@ -354,36 +330,35 @@ async def _stage_uploaded_doc(
     content_type: str,
     owner_sub: str,
     tenant_id: str,
+    checksum_sha256: str,
     session_id: str,
 ) -> None:
-    """Fire-and-forget eager extraction+embedding into the caller's own
-    per-user session-document index (vector + PageIndex tree + knowledge
-    graph — see ``integrations/knowledge/session_ingest.py``), already
-    tagged with the real ``session_id`` — unlike the old Postgres
-    staging-collection flow this replaced, there's no separate "promote"
-    data-movement step needed later: every row is written already scoped
-    to where it belongs. Same in-process ``asyncio.create_task`` pattern as
-    ``routes/scheduled.py``'s ``_run_bg`` — no durable job queue in this
-    codebase. If the server restarts mid-task, ``staged_at`` simply never
-    gets set; the send-time path already handles that (blocks with a clear
-    "still processing" error) rather than needing a retry queue."""
-    assert ctx.rag_backend is not None
-    assert ctx.embedding_client is not None
+    """Fire-and-forget: read the upload **once**, file it in the conversation's documents (``Library.add`` — an OKF bundle and a
+    catalog, no embeddings), and write the ``.extracted.md`` sidecar from that same read. Same in-process ``asyncio.create_task``
+    pattern as ``routes/scheduled.py``'s ``_run_bg`` — no durable job queue in this codebase. If the server restarts mid-task,
+    ``staged_at`` simply never gets set; ``sweep_stuck_staging_uploads`` re-dispatches it at the next start, and the send-time
+    path blocks with a clear "still processing" error meanwhile."""
+    assert ctx.library is not None
     session_factory = ctx.session_factory
-    from substrate_cloud.session_index.ingest import ingest_session_document
+    from substrate.documents import DocumentError
+    from substrate_cloud.documents_library import documents_collection
 
     try:
-        await ingest_session_document(
-            data=data,
-            filename=original_name,
-            content_type=content_type,
-            tenant_id=tenant_id,
-            user_id=owner_sub,
-            session_id=session_id,
-            cfg=settings,
-            embedding_client=ctx.embedding_client,
-            model_client=ctx.model_client,
-            rag_backend=ctx.rag_backend,
+        collection = documents_collection(tenant_id, owner_sub, session_id)
+        if collection is None:
+            raise DocumentError("this upload has no conversation to file it under")
+        result = await document_reader().read(data, original_name, content_type=content_type)
+        await ctx.library.add(
+            result,
+            original_name,
+            collection=collection,
+            resource=object_key,
+            sha256=checksum_sha256,
+            metadata={
+                "file_id": str(file_id),
+                "session_path": _session_relative_path(object_key) or original_name,
+                "thread_id": session_id,
+            },
         )
     except Exception as exc:
         # Full detail goes to the server log only — staging_error is served
@@ -407,10 +382,8 @@ async def _stage_uploaded_doc(
     await _write_extracted_sidecar(
         ctx.pending_for(tenant_id),
         file_id,
-        data,
+        result,
         object_key=object_key,
-        original_name=original_name,
-        content_type=content_type,
     )
     async with session_factory() as session:
         await _set_tenant_guc(session, tenant_id)
@@ -526,7 +499,7 @@ async def sweep_stuck_staging_uploads(
     work. Cross-tenant by design (a startup sweep, not a request), same
     ``app.bypass_rls`` pattern as ``sweep_stale_pending_uploads`` above.
     """
-    if ctx.session_factory is None or ctx.rag_backend is None:
+    if ctx.session_factory is None or ctx.library is None:
         return 0
 
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=ttl_minutes)
@@ -559,6 +532,7 @@ async def sweep_stuck_staging_uploads(
                 content_type=row.content_type,
                 owner_sub=str(row.user_id),
                 tenant_id=row.org_id or "",
+                checksum_sha256=row.checksum_sha256 or "",
                 session_id=str(row.thread_id),
             )
         )
@@ -587,10 +561,9 @@ async def upload_file(
 
     RAG-eligible types (currently PDF only — see ``EXTRACTABLE_CONTENT_TYPES``)
     get extra, synchronous-before-storing checks (upload-attempt quota, size
-    cap, page cap) plus eager background staging (extraction, chunking,
-    embedding, PageIndex tree, and graph extraction into the caller's
-    per-user session-document index) once stored, when a ``thread_id`` is
-    already known — see ``_stage_uploaded_doc``. Other file types are
+    cap, page cap) plus eager background staging (the document is read once
+    and filed in the conversation's documents) once stored, when a
+    ``thread_id`` is already known — see ``_stage_uploaded_doc``. Other file types are
     unaffected: pure blob+metadata storage, same as today.
     """
     if ctx.files_for(claims.tenant_id) is None:
@@ -620,11 +593,9 @@ async def upload_file(
     is_extractable = content_type in EXTRACTABLE_CONTENT_TYPES
     will_stage = (
         is_extractable
-        and ctx.rag_backend is not None
-        and ctx.rag_backend.name == "local"
-        and ctx.embedding_client is not None
-        # No thread_id yet -> no session_id to scope the per-user index
-        # under. Deferred to send time instead, once the real thread_id is
+        and ctx.library is not None
+        # No thread_id yet -> no conversation to file the document under.
+        # Deferred to send time instead, once the real thread_id is
         # known — see chat_context.py::_build_file_context.
         and thread_id is not None
     )
@@ -739,6 +710,7 @@ async def upload_file(
                 content_type=content_type,
                 owner_sub=claims.sub,
                 tenant_id=claims.tenant_id,
+                checksum_sha256=checksum,
                 session_id=str(thread_id),
             )
         )

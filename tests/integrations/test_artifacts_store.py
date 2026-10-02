@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 
-from substrate.integrations.artifacts.okf import Concept
+from substrate.documents.okf import Concept
 from substrate.integrations.artifacts.store import ArtifactStore
 
 TENANT = "t1"

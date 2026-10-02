@@ -20,10 +20,8 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from document_intelligence.pipeline import (
-    ExtractedPage,
-    ExtractionResult,
-)
+from substrate.documents import ExtractedPage, ExtractionResult
+from document_intelligence.engines.native import NativeEngine
 from document_intelligence.routes import router
 
 pytestmark = pytest.mark.heavy
@@ -51,11 +49,8 @@ class _FakeEngine:
     def __init__(self) -> None:
         self.extract_calls: list[bytes] = []
 
-    def supported_formats(self) -> set[str]:
-        return {"application/pdf"}
-
     def accepts(self, filename: str, content_type: str) -> bool:
-        return content_type in self.supported_formats()
+        return True
 
     def warmup(self) -> None:
         pass
@@ -63,15 +58,12 @@ class _FakeEngine:
     async def aclose(self) -> None:
         pass
 
-    def extract(self, data: bytes, filename: str) -> ExtractionResult:
+    async def aextract(self, data: bytes, filename: str) -> ExtractionResult:
         self.extract_calls.append(data)
         return ExtractionResult(
             pages=[ExtractedPage(page_number=1, text="parsed content", images=[])],
             markdown="parsed content",
         )
-
-    def extract_batch(self, items: list[tuple[bytes, str]]) -> list[ExtractionResult]:
-        return [self.extract(data, filename) for data, filename in items]
 
 
 def _client(
@@ -80,6 +72,7 @@ def _client(
     app = FastAPI()
     app.include_router(router)
     app.state.engine = pipeline or _FakeEngine()
+    app.state.native = NativeEngine()
     app.state.embedding_reranker = None
     app.state.config = config or _FakeConfig()
     app.state.resolved = _FakeResolved()
@@ -116,6 +109,7 @@ def test_malicious_pdf_is_rejected_before_reaching_the_parser():
             "content_base64": base64.b64encode(_malicious_pdf_bytes()).decode(),
             "filename": "malicious.pdf",
             "content_type": "application/pdf",
+            "strategy": "hi_res",
         },
     )
     assert resp.status_code == 200
@@ -133,12 +127,13 @@ def test_clean_pdf_still_succeeds_through_the_scan_and_parser():
             "content_base64": base64.b64encode(_clean_pdf_bytes()).decode(),
             "filename": "clean.pdf",
             "content_type": "application/pdf",
+            "strategy": "hi_res",
         },
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
-    assert body["text"] == "parsed content"
+    assert body["markdown"].endswith("parsed content")
     assert len(pipeline.extract_calls) == 1  # parser did run
 
 
@@ -151,6 +146,7 @@ def test_scan_can_be_disabled_via_config():
             "content_base64": base64.b64encode(_malicious_pdf_bytes()).decode(),
             "filename": "malicious.pdf",
             "content_type": "application/pdf",
+            "strategy": "hi_res",
         },
     )
     assert resp.status_code == 200

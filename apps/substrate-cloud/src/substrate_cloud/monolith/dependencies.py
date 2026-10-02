@@ -54,6 +54,9 @@ class ServerDependencies:
     # (integrations/knowledge/session_ingest.py) so both the tenant-KB flow
     # and the per-user flow embed through the same configured model.
     embedding_client: Optional[Any] = None
+    # The documents a conversation was given, filed as an OKF bundle with a catalog (substrate.documents.Library); the model works
+    # through them with the `documents` tool. `None` when there is no store or object store to keep them in.
+    library: Optional[Any] = None
     # Local disk store for not-yet-sent attachments — see
     # integrations/storage/pending.py. Never SeaweedFS/S3 directly; routes
     # promote a file from here into `file_store` only once the message

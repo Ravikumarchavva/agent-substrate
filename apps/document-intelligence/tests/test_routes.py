@@ -1,23 +1,24 @@
-"""Document-intelligence service routes — exercised against a fake pipeline
-on app.state, never the real paddleocr model (that's covered by
-test_pipeline.py). A bare FastAPI app with no lifespan is built here so
-constructing it never touches the heavy `document-intelligence` extra at all."""
+"""Document-intelligence routes — the real built-in reader (isolated worker processes) and a fake layout engine on app.state, never the
+real paddleocr model (that is test_pipeline.py's job). A bare FastAPI app with no lifespan, so nothing here loads the heavy extras."""
 
 from __future__ import annotations
 
 import base64
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from document_intelligence.pipeline import (
-    ExtractedImage,
-    ExtractedPage,
-    ExtractionResult,
-)
+from substrate.documents import ExtractedImage, ExtractedPage, ExtractionResult
+from document_intelligence import convert
+from document_intelligence.engines.native import NativeEngine
 from document_intelligence.routes import router
+
+FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures"
+DOCUMENTS = FIXTURES / "documents"
 
 
 @dataclass
@@ -26,34 +27,26 @@ class _FakeConfig:
     max_upload_bytes: int = 50 * 1024 * 1024
     pod_name: str = "document-intelligence-test"
     mode: str = "auto"
+    enable_document_security_scan: bool = False
 
 
 @dataclass
 class _FakeResolved:
-    mode: str = "raw_text"
+    mode: str = "ocr_classic"
     degraded_from: str | None = None
-    worker_count: int = 0
+    worker_count: int = 1
 
 
-class _FakeEngine:
-    """Implements ``DeclarativeExtractionEngine`` structurally (only
-    ``extract``/``extract_batch``, no ``aextract``/``aextract_batch``) so
-    ``routes.py``'s isinstance dispatch runs it through the sync path,
-    same as the real ``RawTextEngine``."""
+class _FakeLayoutEngine:
+    """A layout engine: answers PDFs and images with ``pages`` (or raises ``error``), and records what it was asked."""
 
-    name = "fake-engine"
+    name = "fake-layout"
 
-    def __init__(
-        self, pages: list[ExtractedPage] | None = None, error: Exception | None = None
-    ):
-        self._pages = pages if pages is not None else []
-        self._error = error
-
-    def supported_formats(self) -> set[str]:
-        return {"application/pdf"}
+    def __init__(self, pages: list[ExtractedPage] | None = None, error: Exception | None = None) -> None:
+        self._pages, self._error, self.calls = pages or [], error, []
 
     def accepts(self, filename: str, content_type: str) -> bool:
-        return content_type in self.supported_formats()
+        return True
 
     def warmup(self) -> None:
         pass
@@ -61,300 +54,159 @@ class _FakeEngine:
     async def aclose(self) -> None:
         pass
 
-    def extract(self, data: bytes, filename: str) -> ExtractionResult:
+    async def aextract(self, data: bytes, filename: str) -> ExtractionResult:
+        self.calls.append(filename)
         if self._error is not None:
             raise self._error
-        return ExtractionResult(pages=self._pages)
-
-    def extract_batch(self, items: list[tuple[bytes, str]]) -> list[ExtractionResult]:
-        if self._error is not None:
-            raise self._error
-        return [ExtractionResult(pages=self._pages) for _ in items]
+        return ExtractionResult(pages=self._pages, markdown="\n\n".join(p.markdown or p.text for p in self._pages), engine=self.name)
 
 
-def _client(*, pipeline: _FakeEngine | None = None, config=None) -> TestClient:
+def _client(*, engine=None, config=None, native=None) -> tuple[TestClient, object]:
     app = FastAPI()
     app.include_router(router)
-    app.state.engine = pipeline or _FakeEngine()
+    app.state.native = native or NativeEngine()
+    app.state.engine = engine or app.state.native
     app.state.config = config or _FakeConfig()
     app.state.resolved = _FakeResolved()
     app.state.start_time = time.monotonic()
-    return TestClient(app)
+    return TestClient(app), app.state.engine
 
 
-def _b64(data: bytes) -> str:
-    return base64.b64encode(data).decode("ascii")
+def _body(data: bytes, filename: str, content_type: str = "", strategy: str = "auto") -> dict:
+    return {"content_base64": base64.b64encode(data).decode("ascii"), "filename": filename, "content_type": content_type, "strategy": strategy}
 
 
-# ── /v1/extract ──────────────────────────────────────────────────────────────
+def _post(client: TestClient, data: bytes, filename: str, **kw) -> dict:
+    resp = client.post("/v1/extract", json=_body(data, filename, **kw))
+    assert resp.status_code == 200, resp.text
+    return resp.json()
 
 
-def test_extract_success_returns_pages_and_images():
-    pages = [
-        ExtractedPage(
-            page_number=1,
-            text="hello world",
-            images=[ExtractedImage(data=b"png-bytes", label="chart", confidence=0.97)],
-        )
-    ]
-    client = _client(pipeline=_FakeEngine(pages=pages))
-
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": _b64(b"fake pdf bytes"),
-            "filename": "test.pdf",
-            "content_type": "application/pdf",
-        },
-    )
-
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["success"] is True
-    assert body["text"] == "hello world"
-    assert body["pages"] == [{"page_number": 1, "text": "hello world", "markdown": ""}]
-    assert len(body["images"]) == 1
-    assert body["images"][0]["label"] == "chart"
-    assert base64.b64decode(body["images"][0]["data_base64"]) == b"png-bytes"
+# ── the answer is an ExtractionResult ────────────────────────────────────────
 
 
-def test_extract_unsupported_content_type_returns_400():
-    client = _client()
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": _b64(b"data"),
-            "filename": "report.docx",
-            "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        },
-    )
+def test_a_pdf_is_read_and_answered_as_an_extraction_result():
+    client, _ = _client()
+    body = _post(client, (FIXTURES / "test_invoice.pdf").read_bytes(), "invoice.pdf", content_type="application/pdf")
+    assert body["success"] is True and body["engine"] == "pdfium"
+    assert "<!-- page 1 -->" in body["markdown"] and "Invoice #12345" in body["pages"][0]["text"]
+
+
+def test_office_formats_are_read_natively_whatever_the_declared_type():
+    client, _ = _client()
+    for name in ("sample.docx", "sample.pptx", "sample.xlsx", "sample.odt"):
+        body = _post(client, (DOCUMENTS / name).read_bytes(), name, content_type="application/octet-stream")
+        assert body["success"] is True and body["engine"] == "native", (name, body)
+        assert body["markdown"].startswith("<!-- page 1 -->")
+
+
+def test_a_layout_engine_never_sees_an_office_document():
+    client, engine = _client(engine=_FakeLayoutEngine(pages=[ExtractedPage(page_number=1, text="from layout")]))
+    body = _post(client, (DOCUMENTS / "sample.docx").read_bytes(), "sample.docx", strategy="hi_res")
+    assert body["engine"] == "native" and engine.calls == []
+
+
+# ── choosing between the built-in reader and the layout engine ────────────────
+
+
+def _layout_pages() -> list[ExtractedPage]:
+    return [ExtractedPage(page_number=1, text="Invoice 4417", markdown="# Invoice 4417", images=[ExtractedImage(data=b"png", id="img-p1-0")])]
+
+
+def test_hi_res_goes_to_the_layout_engine_and_its_markdown_gets_page_markers():
+    client, engine = _client(engine=_FakeLayoutEngine(pages=_layout_pages()))
+    body = _post(client, (FIXTURES / "test_invoice.pdf").read_bytes(), "i.pdf", strategy="hi_res")
+    assert engine.calls == ["i.pdf"] and body["engine"] == "fake-layout"
+    assert body["markdown"].startswith("<!-- page 1 -->") and body["pages"][0]["images"][0]["id"] == "img-p1-0"
+    assert base64.b64decode(body["pages"][0]["images"][0]["data"]) == b"png"
+
+
+def test_auto_keeps_the_built_in_answer_when_every_page_has_text():
+    client, engine = _client(engine=_FakeLayoutEngine(pages=_layout_pages()))
+    body = _post(client, (FIXTURES / "test_invoice.pdf").read_bytes(), "i.pdf")
+    assert engine.calls == [] and body["engine"] == "pdfium"
+
+
+def test_fast_never_uses_the_layout_engine():
+    client, engine = _client(engine=_FakeLayoutEngine(pages=_layout_pages()))
+    _post(client, (FIXTURES / "test_invoice.pdf").read_bytes(), "i.pdf", strategy="fast")
+    assert engine.calls == []
+
+
+def test_auto_escalates_a_scanned_page_to_the_layout_engine_when_the_built_in_reader_has_no_ocr():
+    from substrate.documents import Reader
+
+    client, engine = _client(engine=_FakeLayoutEngine(pages=_layout_pages()), native=NativeEngine(reader=Reader(ocr=None)))
+    body = _post(client, (DOCUMENTS / "scanned_page.pdf").read_bytes(), "scan.pdf")
+    assert engine.calls == ["scan.pdf"] and body["engine"] == "fake-layout"
+
+
+def test_a_failing_layout_engine_degrades_to_the_built_in_reader_and_says_so():
+    client, _ = _client(engine=_FakeLayoutEngine(error=RuntimeError("mkldnn boom")))
+    body = _post(client, (FIXTURES / "test_invoice.pdf").read_bytes(), "i.pdf", strategy="hi_res")
+    assert body["success"] is True and body["degraded_from"] == "fake-layout"
+    assert any("mkldnn boom" in w for w in body["warnings"])
+
+
+# ── what cannot be read is a failure with a reason, not an error ──────────────
+
+
+def test_a_legacy_office_file_without_libreoffice_says_what_to_do(monkeypatch):
+    async def _missing(data, filename, **kw):
+        return None
+
+    monkeypatch.setattr(convert, "convert_via_libreoffice", _missing)
+    client, _ = _client()
+    body = _post(client, b"\xd0\xcf\x11\xe0" + bytes(200), "old.doc")
+    assert body["success"] is False and "LibreOffice" in body["error"] and "DOCX" in body["error"]
+
+
+def test_a_legacy_office_file_is_converted_and_read_as_a_pdf(monkeypatch):
+    seen = {}
+
+    async def _convert(data, filename, **kw):
+        seen["filename"] = filename
+        return (FIXTURES / "test_invoice.pdf").read_bytes()
+
+    monkeypatch.setattr(convert, "convert_via_libreoffice", _convert)
+    client, _ = _client()
+    body = _post(client, b"\xd0\xcf\x11\xe0" + bytes(200), "old.doc")
+    assert seen["filename"] == "old.doc" and body["success"] is True and "Invoice #12345" in body["markdown"]
+
+
+def test_garbage_is_a_failure_with_a_reason():
+    client, _ = _client()
+    body = _post(client, bytes(range(256)) * 20, "x.bin")
+    assert body["success"] is False and body["error"]
+
+
+def test_invalid_base64_returns_400():
+    client, _ = _client()
+    resp = client.post("/v1/extract", json={"content_base64": "not-valid-base64!!!", "filename": "t.pdf"})
     assert resp.status_code == 400
 
 
-def test_extract_invalid_base64_returns_400():
-    client = _client()
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": "not-valid-base64!!!",
-            "filename": "test.pdf",
-            "content_type": "application/pdf",
-        },
-    )
-    assert resp.status_code == 400
+def test_oversized_file_returns_413():
+    client, _ = _client(config=_FakeConfig(max_upload_bytes=4))
+    assert client.post("/v1/extract", json=_body(b"way too big", "t.pdf")).status_code == 413
 
 
-def test_extract_oversized_file_returns_413():
-    client = _client(config=_FakeConfig(max_upload_bytes=4))
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": _b64(b"way too big"),
-            "filename": "test.pdf",
-            "content_type": "application/pdf",
-        },
-    )
-    assert resp.status_code == 413
-
-
-def test_extract_pipeline_exception_returns_structured_failure_not_500():
-    client = _client(pipeline=_FakeEngine(error=RuntimeError("mkldnn boom")))
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": _b64(b"data"),
-            "filename": "test.pdf",
-            "content_type": "application/pdf",
-        },
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["success"] is False
-    assert "mkldnn boom" in body["error"]
-
-
-def test_extract_empty_result_returns_structured_failure():
-    client = _client(
-        pipeline=_FakeEngine(pages=[ExtractedPage(page_number=1, text="")])
-    )
-    resp = client.post(
-        "/v1/extract",
-        json={
-            "content_base64": _b64(b"data"),
-            "filename": "test.pdf",
-            "content_type": "application/pdf",
-        },
-    )
-    body = resp.json()
-    assert body["success"] is False
-
-
-# ── /v1/extract-batch ───────────────────────────────────────────────────────
-
-
-def _item(filename: str = "test.pdf", data: bytes = b"data") -> dict:
-    return {
-        "content_base64": _b64(data),
-        "filename": filename,
-        "content_type": "application/pdf",
-    }
-
-
-def test_extract_batch_success_returns_one_response_per_item():
-    pages = [ExtractedPage(page_number=1, text="hello world")]
-    client = _client(pipeline=_FakeEngine(pages=pages))
-
-    resp = client.post(
-        "/v1/extract-batch",
-        json={"items": [_item("a.pdf"), _item("b.pdf")]},
-    )
-
-    assert resp.status_code == 200
-    body = resp.json()
-    assert len(body) == 2
-    assert all(item["success"] is True for item in body)
-    assert all(item["text"] == "hello world" for item in body)
-
-
-def test_extract_batch_empty_items_returns_empty_list():
-    client = _client()
-    resp = client.post("/v1/extract-batch", json={"items": []})
-    assert resp.status_code == 200
-    assert resp.json() == []
-
-
-def test_extract_batch_partial_failure_does_not_fail_whole_batch():
-    """One item with a bad content_type must not 400 (or otherwise fail)
-    the other, valid items in the same batch -- the whole point of the
-    per-item soft-failure design over /extract's stricter single-file
-    behavior."""
-    pages = [ExtractedPage(page_number=1, text="hello world")]
-    client = _client(pipeline=_FakeEngine(pages=pages))
-
-    bad_item = _item("bad.docx")
-    bad_item["content_type"] = (
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
-
-    resp = client.post(
-        "/v1/extract-batch",
-        json={"items": [_item("good.pdf"), bad_item]},
-    )
-
-    assert resp.status_code == 200
-    body = resp.json()
-    assert len(body) == 2
-    assert body[0]["success"] is True
-    assert body[1]["success"] is False
-    assert "Unsupported content_type" in body[1]["error"]
-
-
-def test_extract_batch_preserves_input_order_with_mixed_results():
-    pages = [ExtractedPage(page_number=1, text="hello world")]
-    client = _client(pipeline=_FakeEngine(pages=pages))
-
-    bad_item = _item("bad.docx")
-    bad_item["content_type"] = (
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
-
-    resp = client.post(
-        "/v1/extract-batch",
-        json={"items": [bad_item, _item("good.pdf"), bad_item]},
-    )
-
-    body = resp.json()
-    assert [item["success"] for item in body] == [False, True, False]
-
-
-def test_extract_batch_pipeline_exception_fails_only_validated_items():
-    client = _client(pipeline=_FakeEngine(error=RuntimeError("mkldnn boom")))
-
-    bad_item = _item("bad.docx")
-    bad_item["content_type"] = (
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
-
-    resp = client.post(
-        "/v1/extract-batch",
-        json={"items": [_item("good.pdf"), bad_item]},
-    )
-
-    body = resp.json()
-    assert resp.status_code == 200
-    # The validation-failed item keeps its own specific error, not the
-    # pipeline exception -- it never reached the pipeline at all.
-    assert body[0]["success"] is False
-    assert "mkldnn boom" in body[0]["error"]
-    assert body[1]["success"] is False
-    assert "Unsupported content_type" in body[1]["error"]
-
-
-def test_extract_batch_oversized_item_returns_413_equivalent_soft_failure():
-    client = _client(config=_FakeConfig(max_upload_bytes=4))
-    resp = client.post(
-        "/v1/extract-batch",
-        json={"items": [_item(data=b"way too big")]},
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body[0]["success"] is False
-    assert "maximum size" in body[0]["error"]
-
-
-# ── /v1/health ───────────────────────────────────────────────────────────────
+# ── /v1/health and auth ───────────────────────────────────────────────────────
 
 
 def test_health_returns_ok():
-    client = _client(config=_FakeConfig(pod_name="document-intelligence-7"))
-    resp = client.get("/v1/health")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["status"] == "ok"
-    assert body["pod_name"] == "document-intelligence-7"
-    assert body["uptime_seconds"] >= 0
-
-
-# ── auth (/v1/health is deliberately unauthenticated — used for k8s
-# liveness/readiness probes, which don't send a Bearer token — so these
-# exercise /v1/extract, an Authed route, instead) ───────────────────────────
+    client, _ = _client(config=_FakeConfig(pod_name="document-intelligence-7"))
+    body = client.get("/v1/health").json()
+    assert body["status"] == "ok" and body["pod_name"] == "document-intelligence-7" and body["engine"] == "native"
 
 
 def test_health_has_no_auth_requirement_even_when_token_configured():
-    client = _client(config=_FakeConfig(auth_token="secret"))
-    resp = client.get("/v1/health")
-    assert resp.status_code == 200
+    client, _ = _client(config=_FakeConfig(auth_token="secret"))
+    assert client.get("/v1/health").status_code == 200
 
 
-def _extract_body() -> dict:
-    return {
-        "content_base64": _b64(b"data"),
-        "filename": "test.pdf",
-        "content_type": "application/pdf",
-    }
-
-
-def test_missing_auth_token_rejected_when_configured():
-    client = _client(config=_FakeConfig(auth_token="secret"))
-    resp = client.post("/v1/extract", json=_extract_body())
-    assert resp.status_code == 401
-
-
-def test_wrong_auth_token_rejected():
-    client = _client(config=_FakeConfig(auth_token="secret"))
-    resp = client.post(
-        "/v1/extract",
-        json=_extract_body(),
-        headers={"Authorization": "Bearer wrong"},
-    )
-    assert resp.status_code == 403
-
-
-def test_correct_auth_token_accepted():
-    client = _client(config=_FakeConfig(auth_token="secret"))
-    resp = client.post(
-        "/v1/extract",
-        json=_extract_body(),
-        headers={"Authorization": "Bearer secret"},
-    )
-    assert resp.status_code == 200
+@pytest.mark.parametrize(("headers", "status"), [({}, 401), ({"Authorization": "Bearer wrong"}, 403), ({"Authorization": "Bearer secret"}, 200)])
+def test_the_bearer_token_is_checked(headers, status):
+    client, _ = _client(config=_FakeConfig(auth_token="secret"))
+    resp = client.post("/v1/extract", json=_body((FIXTURES / "test_invoice.pdf").read_bytes(), "i.pdf"), headers=headers)
+    assert resp.status_code == status

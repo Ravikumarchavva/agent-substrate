@@ -235,7 +235,7 @@ async def delete_artifact(
     """Deprecate by default; ``?hard=true`` erases the document.
 
     Soft is the default because an invalidated fact still carries history
-    worth keeping (see integrations/artifacts/okf.py) — a hard delete is
+    worth keeping (see documents/okf.py) — a hard delete is
     for genuinely unwanted content, not for superseded content.
     """
     store = _require_store(ctx)

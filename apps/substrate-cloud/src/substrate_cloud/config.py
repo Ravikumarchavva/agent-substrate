@@ -160,10 +160,6 @@ class SubstrateConfig(BaseSettings):
     RAG_FINAL_K: int = 5
     RAG_MIN_RERANK_SCORE: float = 0.1
 
-    # ── Session document index (per-user vector/tree/graph) ────────────────────
-    # Each user's index is a store of its own, in a folder under SESSION_INDEX_LOCAL_PATH.
-    SESSION_INDEX_LOCAL_PATH: str = ""
-
     # ── Local database paths (PostgreSQL & Redis replacements under DATA_DIR) ──
     HISTORY_STORAGE_PATH: str = ""
     MEMORY_STORAGE_PATH: str = ""
@@ -180,8 +176,6 @@ class SubstrateConfig(BaseSettings):
         root = self.DATA_DIR.rstrip("/")
         if not self.FILE_STORE_ROOT:
             self.FILE_STORE_ROOT = f"{root}/blobs/{self.FILE_STORE_BUCKET}"
-        if not self.SESSION_INDEX_LOCAL_PATH:
-            self.SESSION_INDEX_LOCAL_PATH = f"{root}/blobs/{self.FILE_STORE_BUCKET}"
         if not self.HISTORY_STORAGE_PATH:
             self.HISTORY_STORAGE_PATH = f"{root}/db/sessions"
         if not self.MEMORY_STORAGE_PATH:

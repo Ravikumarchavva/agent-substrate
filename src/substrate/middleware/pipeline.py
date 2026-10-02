@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Awaitable, Callable, Sequence
 
-from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.middleware._contracts import Middleware, MiddlewareContext
+from substrate.middleware.stage import MiddlewareStage
+from substrate.middleware._contracts import Middleware, MiddlewareContext
 
 _ALL_STAGES = frozenset(MiddlewareStage)
 

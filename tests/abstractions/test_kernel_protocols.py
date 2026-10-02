@@ -5,25 +5,24 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import pkgutil
 from typing import Protocol
 
 import pytest
 
-import substrate.kernel.abstractions as kernel_pkg
-from substrate.kernel.storage.local_graph import LocalFilesystemGraphStore
+from substrate.stores import LocalFilesystemGraphStore
+from tests._layout import contract_files, module_name
 from tests._stores import folder, fs_tasks
-from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
-from substrate.kernel.abstractions.exceptions import UnsupportedContentError
-from substrate.kernel.abstractions.llm.llm import EmbeddingClient, EmbeddingResult
-from substrate.kernel.abstractions.storage.graph import Entity, GraphStore, Relationship
-from substrate.kernel.abstractions.storage.tasks import TaskStatus, TaskStore
+from substrate.types import MediaBlock, TextBlock
+from substrate.types import UnsupportedContentError
+from substrate.models import EmbeddingClient, EmbeddingResult
+from substrate.stores import Entity, GraphStore, Relationship
+from substrate.stores import TaskStatus, TaskStore
 
 
 def _kernel_protocols() -> list[type]:
     found: dict[str, type] = {}
-    for mod_info in pkgutil.walk_packages(kernel_pkg.__path__, "substrate.kernel.abstractions."):
-        mod = importlib.import_module(mod_info.name)
+    for path in contract_files():
+        mod = importlib.import_module(module_name(path))
         for _, obj in inspect.getmembers(mod, inspect.isclass):
             if (
                 obj.__module__ == mod.__name__
@@ -62,7 +61,7 @@ class _RecordingEmbedder:
         return [float(len(text))]
 
     async def embed_blocks(self, blocks) -> list[float]:
-        from substrate.kernel.abstractions.core.content import content_blocks_to_str
+        from substrate.types import content_blocks_to_str
 
         return await self.embed_single(content_blocks_to_str(blocks))
 

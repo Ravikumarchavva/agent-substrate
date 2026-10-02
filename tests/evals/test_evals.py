@@ -6,7 +6,7 @@ import asyncio
 import pytest
 from dataclasses import dataclass
 
-from substrate.kernel.runtime.context import RunContext
+from substrate.runtime import RunContext
 from substrate.evals import (
     EvalCase,
     EvalDataset,
@@ -16,8 +16,8 @@ from substrate.evals import (
     TOOL_USAGE,
 )
 from substrate.evals.judge import LLMJudge
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import Message
+from substrate.types import Actor
+from substrate.runtime import Message
 
 
 # ---------------------------------------------------------------------------
@@ -34,8 +34,8 @@ class OKAgent:
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
             # Extract input text from the message payload
-            from substrate.kernel.abstractions.messaging.message import ChatPayload, DataPayload
-            from substrate.kernel.abstractions.core.content import content_blocks_to_str
+            from substrate.runtime import ChatPayload, DataPayload
+            from substrate.types import content_blocks_to_str
 
             p = msg.payload
             if isinstance(p, ChatPayload):

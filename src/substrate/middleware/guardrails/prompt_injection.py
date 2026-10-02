@@ -3,10 +3,10 @@ from __future__ import annotations
 import re
 from typing import Awaitable, Callable, ClassVar
 
-from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.exceptions import MiddlewareTermination
-from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.middleware.stage import MiddlewareStage
+from substrate.types.content import TextBlock
+from substrate.types.errors import MiddlewareTermination
+from substrate.middleware._contracts import MiddlewareContext
 
 _INJECTION_PATTERNS: list[re.Pattern[str]] = [
     re.compile(

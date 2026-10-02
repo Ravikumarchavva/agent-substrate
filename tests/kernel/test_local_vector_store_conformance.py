@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore
-from substrate.kernel.testing.conformance.vector_store import VectorStoreConformance
+from substrate.stores import LocalFilesystemVectorStore
+from substrate.testing.conformance.vector_store import VectorStoreConformance
 
 
 class TestLocalFilesystemVectorStore(VectorStoreConformance):

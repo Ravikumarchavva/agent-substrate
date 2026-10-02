@@ -23,10 +23,10 @@ from substrate.logger import setup_logging
 import json
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.abstractions.storage.vector import SearchResult
+from substrate.stores import SearchResult
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.llm import LLMClient
+    from substrate.models import LLMClient
 
 logger = setup_logging()
 
@@ -85,7 +85,7 @@ class LLMReranker:
         if len(results) <= top_k:
             return results
 
-        from substrate.kernel.abstractions import ChatMessage, TextBlock
+        from substrate.types import ChatMessage, TextBlock
 
         # Build scoring prompt
         docs_block = "\n".join(
@@ -100,7 +100,7 @@ class LLMReranker:
         ]
 
         try:
-            from substrate.kernel.abstractions.llm import GenerationOptions
+            from substrate.models import GenerationOptions
 
             response = await self._client.generate(
                 messages,

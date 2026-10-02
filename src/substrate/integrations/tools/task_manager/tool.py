@@ -20,14 +20,14 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, Dict
 
-from substrate.kernel.abstractions.agent.runtime_context import RunMeta, scope_of
-from substrate.kernel.abstractions.core.scope import Scope
-from substrate.kernel.storage.scoped import bind_tasks
-from substrate.kernel.abstractions.storage.tasks import TaskStatus
-from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolUI
-from substrate.kernel.abstractions import TextBlock
+from substrate.types import RunMeta, scope_of
+from substrate.types import Scope
+from substrate.stores import bind_tasks
+from substrate.stores import TaskStatus
+from substrate.tools import ToolExecutionResult, ToolUI
+from substrate.types import TextBlock
 from substrate.logger import setup_logging
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.tools import ToolRisk
 
 logger = setup_logging()
 

@@ -21,11 +21,11 @@ Prerequisites: OPENAI_API_KEY set.
 
 import asyncio
 
-from substrate.kernel.agents import ReActAgent
-from substrate.kernel.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from substrate.agents import ReActAgent
+from substrate.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.kernel.storage import LocalFilesystemHistoryProvider
+from substrate.agent_catalog import AgentCatalog
+from substrate.stores import LocalFilesystemHistoryProvider
 
 # Infrastructure:
 # - OPENAI_API_KEY environment variable required

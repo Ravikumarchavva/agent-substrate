@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
-from substrate.kernel.testing.conformance.history_provider import HistoryProviderConformance
+from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.testing.conformance.history_provider import HistoryProviderConformance
 
 
 class TestLocalFilesystemHistoryProvider(HistoryProviderConformance):

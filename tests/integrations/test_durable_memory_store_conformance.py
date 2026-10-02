@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import text
 
 from substrate.integrations.memory import DurableMemoryStore
-from substrate.kernel.testing.conformance.memory_store import MemoryStoreConformance
+from substrate.testing.conformance.memory_store import MemoryStoreConformance
 
 pytestmark = [pytest.mark.requires_postgres]
 

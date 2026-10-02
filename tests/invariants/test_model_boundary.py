@@ -17,19 +17,12 @@ import asyncio
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from substrate.kernel.context.compaction.sliding_window import SlidingWindowCompaction
-from substrate.kernel.context.compaction.tool_result import ToolResultCompactionStrategy
-from substrate.kernel.llm.modalities import fit_to_capabilities
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    MediaBlock,
-    Role,
-    TextBlock,
-    ToolResultBlock,
-    ToolUseBlock,
-)
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm import Modality, ModelCapabilities
+from substrate.context import SlidingWindowCompaction
+from substrate.context import ToolResultCompactionStrategy
+from substrate.models.modalities import fit_to_capabilities
+from substrate.types import ChatMessage, MediaBlock, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import Usage
+from substrate.models import Modality, ModelCapabilities
 
 # --------------------------------------------------------------------------
 # Generated conversations containing tool calls and tool-result media

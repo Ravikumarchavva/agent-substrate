@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from substrate.kernel.abstractions.exceptions import BlockValidationError, KernelError
-from substrate.kernel.abstractions.core.content import (
+from substrate.types import BlockValidationError, KernelError
+from substrate.types import (
     ChatMessage,
     DataBlock,
     ErrorBlock,

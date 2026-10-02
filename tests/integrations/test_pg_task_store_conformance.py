@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from substrate.integrations.storage.pg_task_store import PgTaskStore
-from substrate.kernel.testing.conformance.task_store import TaskStoreConformance
+from substrate.testing.conformance.task_store import TaskStoreConformance
 
 pytestmark = [pytest.mark.requires_postgres]
 

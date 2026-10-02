@@ -23,10 +23,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from substrate.kernel.abstractions.tools.approval import (
-    ApprovalRequest,
-    ApprovalResult,
-)
+from substrate.tools import ApprovalRequest, ApprovalResult
 
 if TYPE_CHECKING:
     from substrate.serving.monolith.sse.bridge import WebHITLBridge

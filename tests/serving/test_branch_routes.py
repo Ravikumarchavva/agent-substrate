@@ -13,10 +13,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
-from substrate.kernel.abstractions.core.scope import Scope
-from substrate.kernel.abstractions.storage.history import MessageNode
-from substrate.kernel.storage.scoped import bind_history
+from substrate.types import ChatMessage, TextBlock
+from substrate.types import Scope
+from substrate.stores import MessageNode
+from substrate.stores import bind_history
 from substrate.serving.monolith.app import app
 from substrate.serving.monolith.models import Thread, User
 from substrate.serving.monolith.security.deps import get_current_user
@@ -155,7 +155,7 @@ async def test_fork_points_new_branch_at_the_same_workspace_snapshot():
     """The headline fix, exercised through the real route: forking must
     move a workspace-snapshot pointer, not copy any bytes — replacing the
     old dead-end copy_prefix mechanism (see agents/workspace/branching.py)."""
-    from substrate.kernel.abstractions.storage.snapshots import WorkspaceManifest, WorkspaceSnapshot
+    from substrate.workspace import WorkspaceManifest, WorkspaceSnapshot
 
     async with app.router.lifespan_context(app):
         async with _registered_user() as user_id:

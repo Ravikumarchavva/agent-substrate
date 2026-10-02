@@ -14,8 +14,8 @@ When only one strategy is needed, pass it directly — no need to wrap it.
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.agent.context import CompactionStrategy
-from substrate.kernel.abstractions.core.content import ChatMessage
+from substrate.context.protocols import CompactionStrategy
+from substrate.types.content import ChatMessage
 
 
 class CompactionPipeline:

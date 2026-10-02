@@ -8,7 +8,7 @@ pytest.importorskip("lancedb")
 pytest.importorskip("networkx")
 
 from substrate.integrations.graph.lance_graph_store import LanceGraphStore  # noqa: E402
-from substrate.kernel.testing.conformance.graph_store import GraphStoreConformance  # noqa: E402
+from substrate.testing.conformance.graph_store import GraphStoreConformance
 
 
 class TestLanceGraphStore(GraphStoreConformance):

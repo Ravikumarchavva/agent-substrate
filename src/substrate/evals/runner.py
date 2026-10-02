@@ -15,12 +15,12 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.runtime import Runtime
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-from substrate.kernel.abstractions.runtime.ids import RunId, new_run_id
+from substrate.types import RunLogKind
+from substrate.runtime import Runtime
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import Actor
+from substrate.runtime import ChatPayload, Message
+from substrate.types import RunId, new_run_id
 
 from substrate.evals.judge import LLMJudge
 from substrate.evals.models import (
@@ -31,7 +31,7 @@ from substrate.evals.models import (
 )
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.context import Agent
+    from substrate.runtime import Agent
 
 logger = logging.getLogger(__name__)
 

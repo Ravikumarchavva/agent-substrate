@@ -32,7 +32,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.kernel.workspace.layout import conversation_version_key
+from substrate.workspace.layout import conversation_version_key
 from substrate.serving.monolith.models import FileVersion
 
 # Per-user snapshot prefix, a sibling of `sessions/` and `uploads/` rather than

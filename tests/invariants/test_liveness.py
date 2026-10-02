@@ -12,10 +12,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.runtime import Runtime
+from substrate.types import Actor
+from substrate.runtime import DataPayload, Message
+from substrate.types import RunLogKind
+from substrate.runtime import Runtime
 
 
 class Slow:

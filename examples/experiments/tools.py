@@ -26,10 +26,10 @@ def _to_md(extract_result: list) -> str:
     return json2md(extract_result)
 
 
-from substrate.kernel.abstractions.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.kernel.messages.content import TextBlock
-from substrate.kernel.reasoning.guardrails.pii import _PII_PATTERNS
+from substrate.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from substrate.agent_catalog import AgentCatalog
+from substrate.messages.content import TextBlock
+from substrate.reasoning.guardrails.pii import _PII_PATTERNS
 from substrate.logger import setup_logging
 
 logger = setup_logging(mode="pretty", handler="console")

@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.storage.vector import Document, VectorStore
+from substrate.types.content import TextBlock
+from substrate.stores.vector import Document, VectorStore
 
 
 class VectorStoreConformance:

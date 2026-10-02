@@ -17,10 +17,11 @@ import asyncio
 from substrate.integrations.tools.mcp.client import MCPClient
 from substrate.integrations.tools.mcp.tool import MCPTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.kernel.storage import LocalFilesystemHistoryProvider, project_messages
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.llm.llm import GenerationOptions
-from substrate.kernel.abstractions.storage.history import MessageNode
+from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.context import project_messages
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.models import GenerationOptions
+from substrate.stores import MessageNode
 
 
 async def main():

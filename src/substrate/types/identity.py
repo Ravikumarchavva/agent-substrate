@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from substrate.kernel.abstractions.ids import new_id
+from substrate.types.ids import new_id
 
 
 @dataclass(frozen=True, slots=True)

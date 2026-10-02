@@ -18,17 +18,17 @@ In production, set OTEL_EXPORTER_OTLP_TRACES_ENDPOINT to ship spans to Grafana T
 
 import asyncio
 import os
-from substrate.kernel.agents import ReActAgent
+from substrate.agents import ReActAgent
 from substrate.serving.shared.observability import (
     InMemoryEnvelopeSpanRecorder,
     InMemoryOperatorKillSwitch,
     InMemoryReplayGate,
 )
-from substrate.kernel.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from substrate.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from substrate.integrations.llm.factory import create_model_client
-from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.kernel.storage import LocalFilesystemHistoryProvider
-from substrate.kernel.observability import (
+from substrate.agent_catalog import AgentCatalog
+from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.observability import (
     EnvelopeSpan,
     KillSwitchRule,
     KillSwitchScope,

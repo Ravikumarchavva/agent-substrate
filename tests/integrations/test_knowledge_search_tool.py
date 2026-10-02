@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from substrate.integrations.knowledge.backends.base import IngestResult
 from substrate.integrations.tools.ai.knowledge_search import KnowledgeSearchTool
-from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
-from substrate.kernel.abstractions.storage.vector import SearchResult
+from substrate.types import MediaBlock, TextBlock
+from substrate.stores import SearchResult
 
 
 class FakeRagBackend:

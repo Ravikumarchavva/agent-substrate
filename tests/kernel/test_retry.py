@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import time
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.exceptions import PermanentError
-from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
-from substrate.kernel.runtime import Runtime
-from substrate.kernel.testing.runtime import ephemeral_runtime
+from substrate.types import Actor
+from substrate.types import PermanentError
+from substrate.runtime import DataPayload, Message
+from substrate.runtime import RunRetryPolicy
+from substrate.runtime import Runtime
+from substrate.testing.runtime import ephemeral_runtime
 
 
 def _agent_id(name: str) -> Actor:

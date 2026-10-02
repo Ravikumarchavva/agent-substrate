@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from substrate.kernel.abstractions.exceptions import (
+from substrate.types.errors import (
     AuthError,
     ContentFilterError,
     ContextLengthError,

@@ -5,14 +5,14 @@ routes call these factory functions instead of importing concrete agent or
 integration types directly. It is not the ONLY place: several
 ``serving/monolith/routes/*.py`` files (``branches.py``, ``gdpr.py``,
 ``admin.py``, ``chat.py``, ``knowledge.py``, ``files.py``, ``workspace.py``)
-import ``substrate.kernel``/``substrate.integrations`` directly too, each
+import ``substrate``/``substrate.integrations`` directly too, each
 for a narrow, documented reason — see the corresponding
 ``ignore_imports`` entries in ``pyproject.toml``'s
 ``"serving cannot import agents or integrations-that-were-capabilities"``
 contract.
 
 serving/ is orthogonal to the 3-layer stack (kernel -> agents ->
-integrations) so cross-layer imports from substrate.kernel and
+integrations) so cross-layer imports from substrate and
 substrate.integrations are permitted here.
 """
 
@@ -28,15 +28,10 @@ from typing import Any, List, Optional, cast
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from substrate.config import SubstrateConfig
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.llm import EmbeddingClient, LLMClient
-from substrate.kernel.abstractions.storage.history import HistoryProvider
-from substrate.kernel.abstractions.tools import (
-    Tool,
-    ToolRisk,
-    is_hosted_tool,
-    is_provider_defined_tool,
-)
+from substrate.types import Actor
+from substrate.models import EmbeddingClient, LLMClient
+from substrate.stores import HistoryProvider
+from substrate.tools import Tool, ToolRisk, is_hosted_tool, is_provider_defined_tool
 from substrate.logger import setup_logging
 
 logger = setup_logging()
@@ -158,7 +153,7 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
 
     Returns ``(runtime, stack_or_None)`` — caller must close the stack on shutdown.
     """
-    from substrate.kernel.runtime import Runtime
+    from substrate.runtime import Runtime
 
     backend = cfg.RUNTIME_BACKEND.lower()
     if backend == "postgres":
@@ -172,7 +167,7 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
         )
         logger.info("Agent runtime: durable (Postgres)")
     elif backend == "local":
-        from substrate.kernel.runtime import SqliteRuntimeStore
+        from substrate.runtime import SqliteRuntimeStore
 
         store = SqliteRuntimeStore(cfg.RUNTIME_LOCAL_DB_PATH)
         logger.info("Agent runtime: durable, no infra (SQLite at %s)", cfg.RUNTIME_LOCAL_DB_PATH)
@@ -201,7 +196,7 @@ def _init_file_store(cfg: SubstrateConfig) -> Any:
         )
     # Default: "local" — a per-user directory tree on server-side storage
     # (local dir in dev, docker volume in compose, RWX PVC in k8s).
-    from substrate.kernel.storage.local_object_store import WorkspaceFileStore
+    from substrate.stores import WorkspaceFileStore
 
     return WorkspaceFileStore(
         root=cfg.FILE_STORE_ROOT,
@@ -280,7 +275,7 @@ async def init_infrastructure(
         await task_store.setup()
         logger.info("Task store: durable (Postgres JSONB)")
     else:
-        from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
+        from substrate.stores import LocalFilesystemTaskStore
 
         task_store = LocalFilesystemTaskStore(f"{cfg.MEMORY_STORAGE_PATH}/tasks")
 
@@ -425,8 +420,8 @@ async def init_tool_registry(
     no way to discover or read a skill's instructions, so a skill existing on
     disk does nothing.
     """
-    from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
-    from substrate.kernel.tools.toolbox import Toolbox
+    from substrate.stores import LocalFilesystemTaskStore
+    from substrate.tools import Toolbox
     from substrate.integrations.tools import (
         CalculatorTool,
         CurrentTimeTool,
@@ -635,7 +630,7 @@ async def init_runtime_services(
     code_interpreter_tool: Any | None = None,
 ) -> RuntimeServices:
     """Create ToolChainTool, pipeline engine, triggers."""
-    from substrate.kernel.tools.invoker import ToolInvoker
+    from substrate.runtime.tool_invoker import ToolInvoker
     from substrate.integrations.pipeline.data_ref import DataRefArtifactStore
     from substrate.integrations.pipeline.engine import PipelineEngine
     from substrate.integrations.pipeline.store import PipelineStore
@@ -646,7 +641,7 @@ async def init_runtime_services(
     from substrate.integrations.triggers.scheduler import TriggerScheduler
     from substrate.integrations.triggers.webhooks import WebhookRegistry
     from substrate.integrations.events.redis_event_bus import EventBus
-    from substrate.kernel.abstractions.tools.chain import ChainPolicy
+    from substrate.tools import ChainPolicy
 
     pipeline_engine = PipelineEngine(registry=registry, data_store=data_store)
     pipeline_store = PipelineStore(session_factory=session_factory)
@@ -721,7 +716,7 @@ async def resume_pending_runs(runtime: Any, *, registry: Any, model_client: Any)
     here: the worker refuses to replay a run under a version other than the one that
     started it, and fails that run cleanly.
     """
-    from substrate.kernel.agents.factory import rebuild_agent
+    from substrate.agents.factory import rebuild_agent
 
     resumable = [run for run in await runtime.store.find_runs() if run.recipe]
     for run in resumable:
@@ -804,8 +799,8 @@ async def build_agent_for_thread(
     this is the one real implementation of kernel's ``ApprovalHandler``
     Protocol; see ``serving/monolith/sse/approval.py``.
     """
-    from substrate.kernel.context.compaction.presets import build_token_budget_pipeline
-    from substrate.kernel.agents.factory import create_assistant_agent
+    from substrate.context import build_token_budget_pipeline
+    from substrate.agents.factory import create_assistant_agent
     from substrate.serving.research_orchestrator import build_research_orchestrator
 
     if runtime is None:
@@ -828,13 +823,13 @@ async def build_agent_for_thread(
         system_instructions = system_instructions.rstrip() + "\n\n" + memory_context
 
     if history is None:
-        from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
+        from substrate.stores import LocalFilesystemHistoryProvider
 
         history = LocalFilesystemHistoryProvider()
         await history.connect()
     # Everything the agent reads or writes of the conversation goes through the tenant's bound handle.
-    from substrate.kernel.abstractions.core.scope import Scope
-    from substrate.kernel.storage.scoped import bind_history
+    from substrate.types import Scope
+    from substrate.stores import bind_history
 
     memory = bind_history(history, Scope(tenant_id=tenant_id or "default"))
 
@@ -985,7 +980,7 @@ async def build_history_provider(
         await provider.connect()
         return provider
 
-    from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
+    from substrate.stores import LocalFilesystemHistoryProvider
 
     provider = LocalFilesystemHistoryProvider(root=local_path)
     await provider.connect()
@@ -1012,9 +1007,7 @@ async def build_workspace_store(
         await store.connect()
         return store
 
-    from substrate.kernel.workspace.local_workspace_store import (
-        LocalFilesystemWorkspaceStore,
-    )
+    from substrate.workspace import LocalFilesystemWorkspaceStore
 
     store = LocalFilesystemWorkspaceStore(root=local_path)
     await store.connect()
@@ -1080,7 +1073,7 @@ def build_session_index_vector_store(
     — mirrors the namespace-mode path's tenant/user split, just as
     directory nesting instead of a namespace path.
     """
-    from substrate.kernel.workspace.layout import user_index_prefix
+    from substrate.workspace.layout import user_index_prefix
     from substrate.integrations.vector.lancedb_store import LanceDBVectorStore
 
     # user_index_prefix() validates tenant_id/user_id (rejects path
@@ -1210,7 +1203,7 @@ def build_page_index_memory(cfg: SubstrateConfig, tenant_id: str, user_id: str) 
     does.
     """
     from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
-    from substrate.kernel.workspace.layout import user_index_prefix
+    from substrate.workspace.layout import user_index_prefix
 
     key = user_index_prefix(tenant_id, user_id)
     if cfg.SESSION_INDEX_NAMESPACE_URI:
@@ -1245,7 +1238,7 @@ def build_session_graph_store(
     user has ever uploaded.
     """
     from substrate.integrations.graph.lance_graph_store import LanceGraphStore
-    from substrate.kernel.workspace.layout import user_index_prefix
+    from substrate.workspace.layout import user_index_prefix
 
     key = user_index_prefix(tenant_id, user_id)
     if cfg.SESSION_INDEX_NAMESPACE_URI:
@@ -1285,9 +1278,7 @@ def build_safety_middleware(cfg: SubstrateConfig) -> Any:
         )
         return None
 
-    from substrate.kernel.middleware.guardrails.multimodal_safety import (
-        MultimodalSafetyMiddleware,
-    )
+    from substrate.middleware import MultimodalSafetyMiddleware
     from substrate.integrations.safety.image_classifier import ImageSafetyClassifier
     from substrate.integrations.safety.text_classifier import PromptGuardClassifier
 
@@ -1329,7 +1320,7 @@ async def build_cached_history_for_thread(
     """Return the history provider for this thread."""
     if history is not None:
         return history
-    from substrate.kernel.storage import LocalFilesystemHistoryProvider
+    from substrate.stores import LocalFilesystemHistoryProvider
 
     provider = LocalFilesystemHistoryProvider()
     await provider.connect()
@@ -1391,7 +1382,7 @@ async def build_user_memory_context_block(
     """
     if long_term_memory is None or not user_id:
         return ""
-    from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery
+    from substrate.stores import MemoryNamespace, MemoryQuery
 
     matches = await long_term_memory.query(
         MemoryQuery(namespace=MemoryNamespace(tenant_id=tenant_id or "default", user_id=user_id), limit=limit)
@@ -1436,8 +1427,9 @@ def build_agent_for_run(
     max_iterations: int = 30,
 ) -> Any:
     """Create a stateless agent for a microservice agent_runtime run."""
-    from substrate.kernel.context import CompactionPipeline, SlidingWindowCompaction
-    from substrate.kernel.agents.factory import create_assistant_agent
+    from substrate.context import CompactionPipeline
+    from substrate.context import SlidingWindowCompaction
+    from substrate.agents.factory import create_assistant_agent
 
     return create_assistant_agent(
         model_client=model_client,

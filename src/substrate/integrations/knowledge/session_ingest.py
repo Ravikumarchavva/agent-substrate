@@ -28,7 +28,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from substrate.kernel.abstractions.llm import EmbeddingClient, LLMClient
+from substrate.models import EmbeddingClient, LLMClient
 
 
 @dataclass
@@ -64,7 +64,7 @@ async def ingest_session_document(
         build_session_index_vector_store,
     )
     from substrate.integrations.llm.endpoint import InferenceEndpoint
-    from substrate.kernel.abstractions.storage.vector import Document
+    from substrate.stores import Document
     from substrate.runtimes.document_intelligence.extract import extract_document
 
     document_id = uuid.uuid4().hex

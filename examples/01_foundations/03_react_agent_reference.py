@@ -24,18 +24,24 @@ settings = SubstrateConfig()
 import asyncio
 import datetime
 import math
-from substrate.kernel import ReActAgent, OrchestratorAgent, SubAgentConfig, UserProxyAgent, Runtime
-from substrate.kernel.context import ContextConfig, SlidingWindowCompaction, CompactionPipeline
-from substrate.kernel.storage import LocalFilesystemHistoryProvider
+from substrate.agents import ReActAgent
+from substrate.agents import OrchestratorAgent, SubAgentConfig
+from substrate.agents import UserProxyAgent
+from substrate.runtime import Runtime
+from substrate.context import ContextConfig
+from substrate.context import SlidingWindowCompaction
+from substrate.context import CompactionPipeline
+from substrate.stores import LocalFilesystemHistoryProvider
 from substrate.integrations.llm import (
     create_model_client,
     detect_provider,
     has_provider_api_key,
 )
-from substrate.kernel.abstractions import TextBlock, ToolExecutionResult
-from substrate.kernel.abstractions.core.content import ChatMessage, Role
-from substrate.kernel.abstractions.core.identity import AgentId
-from substrate.kernel.abstractions.messaging.message import Message, ChatPayload
+from substrate.types import TextBlock
+from substrate.tools import ToolExecutionResult
+from substrate.types import ChatMessage, Role
+from substrate.types.identity import AgentId
+from substrate.runtime import Message, ChatPayload
 
 
 # ---------------------------------------------------------------------------

@@ -1,25 +1,19 @@
-"""Purity of ``kernel.abstractions`` — what an adapter author depends on.
+"""Purity of the contracts — what someone implementing a port depends on.
 
-The abstractions are the engine's boundary with the outside: ports plus the
-value types in their signatures. They stay importable by anyone who implements
-a port, so they must stay free of I/O, of the engine, and of every layer above.
-
-(Whether the *engine* keeps to its own third-party set is a separate row in
+The contracts (``tests/_layout.py``) are the engine's boundary with the outside: ports plus the value types in
+their signatures. They stay importable by anyone who implements a port, so they must stay free of I/O, of the
+engine, and of any vendor. (Which concepts may import which, and the core's third-party set, are rows in
 ``tests/invariants/test_structure.py``.)
 """
 
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-KERNEL_DIR = REPO_ROOT / "src" / "substrate" / "kernel" / "abstractions"
+from tests._layout import REPO_ROOT, contract_files
 
-# Kernel guardrails: the foundation stays contract-only and provider-neutral.
-
-# Vendor strings that must NEVER appear in kernel source.
-# Schema shaping belongs in integrations/; the kernel is provider-neutral.
+# Vendor strings that must never appear in a contract.
+# Schema shaping belongs in an integration; the contracts are provider-neutral.
 _VENDOR_PATTERNS = [
     r"\bdefer_loading\b",
     r"\btool_search\b",
@@ -29,91 +23,28 @@ _VENDOR_PATTERNS = [
 ]
 
 
-def _iter_kernel_files() -> list[Path]:
-    return [p for p in KERNEL_DIR.rglob("*.py") if "__pycache__" not in p.parts]
-
-
-def _iter_kernel_contract_files() -> list[Path]:
-    return [p for p in _iter_kernel_files() if p.name != "__init__.py"]
-
-
 def _strip_docstrings(text: str) -> str:
     text = re.sub(r'""".*?"""', "", text, flags=re.DOTALL)
     text = re.sub(r"'''.*?'''", "", text, flags=re.DOTALL)
     return text
 
 
-_FORBIDDEN_PREFIXES = (
-    "substrate.kernel.agents",
-    "substrate.kernel.context",
-    "substrate.kernel.document",
-    "substrate.kernel.flows",
-    "substrate.kernel.limits",
-    "substrate.kernel.llm",
-    "substrate.kernel.middleware",
-    "substrate.kernel.runtime",
-    "substrate.kernel.safety",
-    "substrate.kernel.storage",
-    "substrate.kernel.tools",
-    "substrate.kernel.workspace",
-    "substrate.integrations",
-    "substrate.serving",
-    "substrate.config",
-    "substrate.logger",
-)
-
-
-def test_kernel_has_no_upward_imports() -> None:
-    """No file in kernel/ may import from any layer above it."""
+def test_contracts_have_no_vendor_strings() -> None:
+    """Model names and provider-specific parameters belong in an integration. Any vendor pattern in a
+    contract couples every port to one provider's API."""
     violations: list[str] = []
-    for path in _iter_kernel_files():
-        text = path.read_text(encoding="utf-8")
-        stripped = _strip_docstrings(text)
-        for prefix in _FORBIDDEN_PREFIXES:
-            for match in re.finditer(
-                rf"^\s*(?:from\s+{re.escape(prefix)}|import\s+{re.escape(prefix)})",
-                stripped,
-                re.MULTILINE,
-            ):
-                relpath = path.relative_to(REPO_ROOT)
-                violations.append(
-                    f"{relpath}: imports {prefix!r} ({match.group(0).strip()})"
-                )
-    assert not violations, (
-        "Kernel must not import from any layer above it. Violations:\n  "
-        + "\n  ".join(violations)
-    )
-
-
-def test_kernel_has_no_vendor_strings() -> None:
-    """Kernel source must not reference vendor-specific LLM API strings.
-
-    Schema shaping, model names, and provider-specific parameters belong in
-    ``integrations/llm/``.  Any vendor pattern in the kernel source couples
-    the foundation to one provider's API.
-    """
-    violations: list[str] = []
-    for path in _iter_kernel_files():
-        text = path.read_text(encoding="utf-8")
-        stripped = _strip_docstrings(text)
+    for path in contract_files():
+        stripped = _strip_docstrings(path.read_text(encoding="utf-8"))
         for pattern in _VENDOR_PATTERNS:
             for match in re.finditer(pattern, stripped):
-                relpath = path.relative_to(REPO_ROOT)
-                violations.append(
-                    f"{relpath}: contains vendor string {match.group()!r}"
-                )
-    assert not violations, (
-        "Kernel must not contain vendor-specific strings. Violations:\n  "
-        + "\n  ".join(violations)
-    )
+                violations.append(f"{path.relative_to(REPO_ROOT)}: contains vendor string {match.group()!r}")
+    assert not violations, "Contracts must not contain vendor-specific strings:\n  " + "\n  ".join(violations)
 
 
-def test_kernel_requires_only_pydantic_as_third_party_dependency() -> None:
-    """The kernel should not import concrete runtime libs or vendor SDKs.
+def test_contracts_import_only_pydantic_and_a_measured_stdlib_set() -> None:
+    """A contract imports no runtime library or vendor SDK — only pydantic and a measured stdlib set.
 
-    This check allows stdlib imports and the kernel's own internal re-exports,
-    while flagging actual third-party dependencies that would couple the
-    contract layer to runtime infrastructure.
+    Imports of other contracts are fine; that they never reach into the engine is row I27.
     """
     # Deliberately the measured set, not a generous one: nothing here does I/O.
     # Adding a module is a decision to make in review, not a default.
@@ -135,7 +66,7 @@ def test_kernel_requires_only_pydantic_as_third_party_dependency() -> None:
     )
 
     illegal: list[str] = []
-    for path in _iter_kernel_contract_files():
+    for path in contract_files():
         text = path.read_text(encoding="utf-8")
         stripped = _strip_docstrings(text)
         for line in stripped.splitlines():
@@ -145,21 +76,21 @@ def test_kernel_requires_only_pydantic_as_third_party_dependency() -> None:
                 continue
             if "pydantic" in line or "typing_extensions" in line:
                 continue
-            if line.startswith("from substrate.kernel.abstractions") or line.startswith("import substrate.kernel.abstractions"):
+            if line.startswith("from substrate.") or line.startswith("import substrate."):
                 continue
             if line.startswith("from .") or line.startswith("from .."):
                 continue
             if any(line.startswith(f"import {prefix}") or line.startswith(f"from {prefix}") for prefix in stdlib_prefixes):
                 continue
             illegal.append(f"{path.relative_to(REPO_ROOT)}: {line.strip()}")
-    assert not illegal, "Kernel imports must stay at the protocol layer and use pydantic only for validation:\n  " + "\n  ".join(illegal[:20])
+    assert not illegal, "Contracts must stay at the protocol layer and use pydantic only for validation:\n  " + "\n  ".join(illegal[:20])
 
 
 def test_message_round_trip() -> None:
     """Message must serialize/deserialize cleanly via model_dump_json()."""
-    from substrate.kernel.abstractions.core.identity import Actor
-    from substrate.kernel.abstractions.core.content import TextBlock, ChatMessage
-    from substrate.kernel.abstractions.messaging.message import Message, ChatPayload
+    from substrate.types import Actor
+    from substrate.types import TextBlock, ChatMessage
+    from substrate.runtime import Message, ChatPayload
 
     agent = Actor(type="agent", key="assistant")
     chat = ChatMessage(role="user", content=[TextBlock(text="hello")])
@@ -177,7 +108,7 @@ def test_message_round_trip() -> None:
 
 def test_content_block_unknown_preserved() -> None:
     """Unknown block types must be preserved as UnknownBlock, not silently mangled."""
-    from substrate.kernel.abstractions.core.content import UnknownBlock, parse_content_block
+    from substrate.types import UnknownBlock, parse_content_block
 
     raw = {"type": "future_block_v99", "some_field": "some_value"}
     result = parse_content_block(raw, forward_compatible=True)  # type: ignore[arg-type]
@@ -187,10 +118,7 @@ def test_content_block_unknown_preserved() -> None:
 
 def test_content_block_invalid_raises() -> None:
     """Invalid data for a known block type must raise BlockValidationError."""
-    from substrate.kernel.abstractions.core.content import (
-        BlockValidationError,
-        parse_content_block,
-    )
+    from substrate.types import BlockValidationError, parse_content_block
 
     bad = {"type": "text"}  # missing required 'text' field
     try:
@@ -204,8 +132,8 @@ def test_message_requires_sender() -> None:
     """Message must enforce non-anonymous provenance — omitting sender raises ValidationError."""
     import pytest
     from pydantic import ValidationError
-    from substrate.kernel.abstractions.core.identity import Actor
-    from substrate.kernel.abstractions.messaging.message import Message, DataPayload
+    from substrate.types import Actor
+    from substrate.runtime import Message, DataPayload
 
     target = Actor(type="agent", key="worker")
 
@@ -224,7 +152,7 @@ def test_message_requires_sender() -> None:
 
 def test_actor_factory_helpers() -> None:
     """Actor factory classmethods must provide canonical standard addresses."""
-    from substrate.kernel.abstractions.core.identity import Actor
+    from substrate.types import Actor
 
     system_default = Actor.system()
     assert system_default == Actor(type="system", key="bootstrap")

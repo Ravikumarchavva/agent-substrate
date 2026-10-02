@@ -7,9 +7,9 @@ from tests._stores import fs_history
 
 import pytest
 
-from substrate.kernel.storage.history import project_messages
-from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
-from substrate.kernel.abstractions.storage.history import HistoryProvider, MessageNode
+from substrate.context import project_messages
+from substrate.types import ChatMessage, TextBlock
+from substrate.stores import HistoryProvider, MessageNode
 
 
 def _msg(text: str) -> ChatMessage:

@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Callable, Optional
 from uuid import uuid4
 
-from substrate.kernel.abstractions.agent.context import CompactionContext
-from substrate.kernel.abstractions.storage.history import HistoryCheckpoint
-from substrate.kernel.context.tokens import estimate_tokens
+from substrate.context.protocols import CompactionContext
+from substrate.stores.threads import HistoryCheckpoint
+from substrate.context.tokens import estimate_tokens
 
 
 class ThresholdCheckpointStrategy:

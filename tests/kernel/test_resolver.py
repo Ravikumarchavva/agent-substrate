@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from substrate.kernel.runtime.resolver import ActorResolver
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import Message
+from substrate.runtime import ActorResolver
+from substrate.types import Actor
+from substrate.runtime import Message
 
 
 @dataclass

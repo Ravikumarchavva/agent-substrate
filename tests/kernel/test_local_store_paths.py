@@ -7,15 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from substrate.kernel.storage.fs import safe_name
-from substrate.kernel.storage.local_graph import LocalFilesystemGraphStore
-from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
-from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
-from substrate.kernel.storage.local_short_term_memory import LocalFilesystemShortTermMemory
-from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore
-from substrate.kernel.workspace.local_workspace_store import LocalFilesystemWorkspaceStore
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.storage.history import MessageNode
+from substrate.stores.local.fs import safe_name
+from substrate.stores import LocalFilesystemGraphStore
+from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemMemoryStore
+from substrate.stores import LocalFilesystemShortTermMemory
+from substrate.stores import LocalFilesystemVectorStore
+from substrate.workspace import LocalFilesystemWorkspaceStore
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.stores import MessageNode
 
 HOSTILE = ["../../evil", "..", ".", "a/b", "a\\b", "/etc/passwd", "x/../../y", "..%2F..", "\x00"]
 
@@ -111,10 +111,7 @@ async def test_history_still_round_trips_with_a_hostile_branch_and_session(tmp_p
 
 
 async def test_memory_store_keeps_records_of_tenants_with_unusual_names_inside_its_root(tmp_path: Path):
-    from substrate.kernel.abstractions.storage.memory import (
-        MemoryNamespace,
-        MemoryRecord,
-    )
+    from substrate.stores import MemoryNamespace, MemoryRecord
 
     store = LocalFilesystemMemoryStore(tmp_path)
     ns = MemoryNamespace(tenant_id="acme/../corp", user_id="u")

@@ -27,18 +27,14 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from substrate.kernel.abstractions.exceptions import (
+from substrate.types.errors import (
     BranchAlreadyExistsError,
     BranchHeadConflictError,
     BranchNotFoundError,
     DAGIntegrityError,
 )
-from substrate.kernel.abstractions.storage.history import (
-    Branch,
-    HistoryCheckpoint,
-    MessageNode,
-)
-from substrate.kernel.storage.fs import atomic_write_json, safe_name
+from substrate.stores.threads import Branch, HistoryCheckpoint, MessageNode
+from substrate.stores.local.fs import atomic_write_json, safe_name
 
 _UNSET: Any = object()
 

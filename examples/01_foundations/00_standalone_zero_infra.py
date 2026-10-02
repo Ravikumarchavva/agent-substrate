@@ -1,6 +1,6 @@
 """Example 1-0: Standalone, zero-infra chatbot — proof of the L1 charter.
 
-Every import below comes from ``substrate.kernel`` (or stdlib/``dotenv``) —
+Every import below comes from ``substrate`` (or stdlib/``dotenv``) —
 nothing from ``substrate.integrations`` or ``substrate.serving``. No
 Docker, no Postgres, no Redis, no S3: history is
 one local JSON file, the runtime is one local SQLite file. This is the
@@ -28,13 +28,13 @@ from dotenv import load_dotenv
 
 load_dotenv()  # walks up to find the repo-root .env
 
-from substrate.kernel import ReActAgent
-from substrate.kernel.context import ContextConfig
-from substrate.kernel.llm import OpenAICompatibleClient
-from substrate.kernel.runtime import Runtime
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.agents import ReActAgent
+from substrate.context import ContextConfig
+from substrate.models import OpenAICompatibleClient
+from substrate.runtime import Runtime
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import Actor
+from substrate.runtime import ChatPayload, Message
 
 
 async def main() -> None:

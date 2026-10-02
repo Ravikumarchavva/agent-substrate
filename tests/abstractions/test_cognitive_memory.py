@@ -13,9 +13,9 @@ Verifies:
 from __future__ import annotations
 
 
-from substrate.kernel.abstractions.core.content import DataBlock, MediaBlock, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.storage.memory import (
+from substrate.types import DataBlock, MediaBlock, TextBlock
+from substrate.types import Actor
+from substrate.stores import (
     ContextMemoryInjection,
     MemoryCategory,
     MemoryMatch,

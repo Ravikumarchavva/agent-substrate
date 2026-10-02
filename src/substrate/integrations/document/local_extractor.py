@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import io
 
-from substrate.kernel.abstractions.document import ExtractedPage, ExtractionResult
+from substrate.documents import ExtractedPage, ExtractionResult
 from substrate.logger import setup_logging
 
 logger = setup_logging()

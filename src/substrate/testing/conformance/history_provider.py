@@ -9,14 +9,10 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.abstractions.core.content import ChatMessage, Role
-from substrate.kernel.abstractions.exceptions import (
-    BranchAlreadyExistsError,
-    BranchHeadConflictError,
-    BranchNotFoundError,
-)
-from substrate.kernel.abstractions.ids import new_id
-from substrate.kernel.abstractions.storage.history import HistoryCheckpoint, HistoryProvider, MessageNode
+from substrate.types.content import ChatMessage, Role
+from substrate.types.errors import BranchAlreadyExistsError, BranchHeadConflictError, BranchNotFoundError
+from substrate.types.ids import new_id
+from substrate.stores.threads import HistoryCheckpoint, HistoryProvider, MessageNode
 
 
 def node(session: str, text: str, parent: MessageNode | None = None) -> MessageNode:

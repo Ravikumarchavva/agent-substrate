@@ -9,8 +9,8 @@ import pytest
 from anthropic import AsyncAnthropic
 
 from substrate.integrations.llm.anthropic.anthropic_client import AnthropicClient
-from substrate.kernel.abstractions.llm import ModelCapabilities
-from substrate.kernel.testing.conformance.llm_client import LLMClientConformance
+from substrate.models import ModelCapabilities
+from substrate.testing.conformance.llm_client import LLMClientConformance
 
 CAPS = ModelCapabilities(model_id="conformance-claude", input_modalities=frozenset({"text", "image"}))
 

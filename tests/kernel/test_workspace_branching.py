@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from substrate.kernel.workspace import LocalFilesystemWorkspaceStore
-from substrate.kernel.workspace.branching import fork_branch
-from substrate.kernel.workspace.cas import BlobCAS
-from substrate.kernel.workspace.materialize import commit, materialize
-from substrate.kernel.workspace.snapshots import checkout_branch, commit_turn
-from substrate.kernel.storage.local_object_store import WorkspaceFileStore
-from substrate.kernel.abstractions.exceptions import SnapshotConflictError
+from substrate.workspace import LocalFilesystemWorkspaceStore
+from substrate.workspace import fork_branch
+from substrate.workspace import BlobCAS
+from substrate.workspace.materialize import commit, materialize
+from substrate.workspace import checkout_branch, commit_turn
+from substrate.stores import WorkspaceFileStore
+from substrate.types import SnapshotConflictError
 
 TENANT = "tenant-a"
 USER = "user-a"
@@ -36,7 +36,7 @@ async def test_cas_dedups_identical_content(tmp_path: Path) -> None:
     assert ref1.kind == "blob"
 
     # Only one object was ever actually uploaded.
-    from substrate.kernel.workspace.layout import blob_key
+    from substrate.workspace.layout import blob_key
 
     key = blob_key(TENANT, USER, ref1.hash)
     assert await store.exists(key)
@@ -179,7 +179,7 @@ async def test_concurrent_commit_to_same_branch_conflicts_not_silently_lost(
 
     # Two independent commits race against the same (now stale) parent.
     parent = await ws_store.get_branch_snapshot_head("s1", "main")
-    from substrate.kernel.workspace.materialize import commit as _commit_dir
+    from substrate.workspace.materialize import commit as _commit_dir
 
     snap_a = await _commit_dir(cas, root, session_id="s1", branch_id="main", parent=parent)
     snap_b = await _commit_dir(cas, root, session_id="s1", branch_id="main", parent=parent)

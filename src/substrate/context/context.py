@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import logging
 
-from substrate.kernel.abstractions.agent.context import ContextBuilder
-from substrate.kernel.abstractions.agent.supervision import HistoryRetention
-from substrate.kernel.abstractions.core.content import ChatMessage
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.storage.history import HistoryProvider
-from substrate.kernel.context.builder import DefaultContextBuilder
-from substrate.kernel.context.compaction import (
-    CompactionCoordinator,
-    CompactionPipeline,
-    SlidingWindowCompaction,
-)
-from substrate.kernel.storage.history import project_messages
+from substrate.context.protocols import ContextBuilder
+from substrate.types.supervision import HistoryRetention
+from substrate.types.content import ChatMessage
+from substrate.types.identity import Actor
+from substrate.stores.threads import HistoryProvider
+from substrate.context.builder import DefaultContextBuilder
+from substrate.context.compaction.coordinator import CompactionCoordinator
+from substrate.context.compaction.pipeline import CompactionPipeline
+from substrate.context.compaction.sliding_window import SlidingWindowCompaction
+from substrate.context.history import project_messages
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +32,7 @@ class ContextConfig:
 
     Pass a :class:`CompactionPipeline` configured with one or more strategies::
 
-        from substrate.kernel.context import CompactionPipeline, ToolResultCompactionStrategy, SlidingWindowCompaction
+        from substrate.context import CompactionPipeline, ToolResultCompactionStrategy, SlidingWindowCompaction
 
         ctx = ContextConfig(
             LocalFilesystemHistoryProvider(),
@@ -81,9 +79,7 @@ class ContextConfig:
     @classmethod
     def default(cls) -> "ContextConfig":
         """Return a durable local filesystem context with default sliding-window compaction."""
-        from substrate.kernel.storage.local_history import (
-            LocalFilesystemHistoryProvider,
-        )
+        from substrate.stores.local.threads import LocalFilesystemHistoryProvider
 
         return cls(LocalFilesystemHistoryProvider())
 

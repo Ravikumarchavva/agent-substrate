@@ -23,21 +23,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from substrate.kernel.abstractions.agent.supervision import (
-    Priority,
-    SpawnBudget,
-    Supervision,
-)
-from substrate.kernel.abstractions.core.error_info import ErrorInfo
-from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.exceptions import (
-    BudgetExhaustedError,
-    LeaseLostError,
-    ThreadBusyError,
-)
-from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.runtime.ids import RunStatus
-from substrate.kernel.abstractions.runtime.store import (
+from substrate.types.supervision import Priority, SpawnBudget, Supervision
+from substrate.types.error_info import ErrorInfo
+from substrate.types.identity import Actor, Topic
+from substrate.types.errors import BudgetExhaustedError, LeaseLostError, ThreadBusyError
+from substrate.runtime.message import DataPayload, Message
+from substrate.types.run_status import RunStatus
+from substrate.runtime.store import (
     Cancel,
     Commit,
     Complete,
@@ -54,7 +46,7 @@ from substrate.kernel.abstractions.runtime.store import (
     Spend,
     Suspend,
 )
-from substrate.kernel.abstractions.runtime.wakeup import Wakeup
+from substrate.types.wakeup import Wakeup
 
 AGENT = Actor("agent", "a")
 OTHER = Actor("agent", "b")

@@ -20,9 +20,12 @@ from substrate.config import SubstrateConfig
 load_dotenv()  # walks up to find the repo-root .env
 settings = SubstrateConfig()
 
-from substrate.kernel import ReActAgent, Runtime
-from substrate.kernel.context import ContextConfig, SlidingWindowCompaction, CompactionPipeline
-from substrate.kernel.storage import LocalFilesystemHistoryProvider
+from substrate.agents import ReActAgent
+from substrate.runtime import Runtime
+from substrate.context import ContextConfig
+from substrate.context import SlidingWindowCompaction
+from substrate.context import CompactionPipeline
+from substrate.stores import LocalFilesystemHistoryProvider
 from substrate.integrations.llm import (
     create_model_client,
     detect_provider,

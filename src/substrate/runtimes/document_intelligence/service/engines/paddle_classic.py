@@ -33,7 +33,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Iterable
 
-from substrate.kernel.abstractions.document import ExtractedImage, ExtractedPage, ExtractionResult
+from substrate.documents import ExtractedImage, ExtractedPage, ExtractionResult
 
 # Layout regions extracted as discrete image crops (see docs/integrations/08-document-intelligence.md)
 _IMAGE_LABELS = {"chart", "table", "figure", "image"}

@@ -5,13 +5,11 @@ import pytest
 
 from tests._stores import fs_history
 
-from substrate.kernel.context.builder import DefaultContextBuilder
-from substrate.kernel.storage.history import (
-    AncestryCheckpointResolver,
-)
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.exceptions import DAGIntegrityError
-from substrate.kernel.abstractions.storage.history import HistoryCheckpoint, MessageNode
+from substrate.context import DefaultContextBuilder
+from substrate.context import AncestryCheckpointResolver
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import DAGIntegrityError
+from substrate.stores import HistoryCheckpoint, MessageNode
 
 
 def _msg(text: str, role: Role = Role.USER) -> ChatMessage:

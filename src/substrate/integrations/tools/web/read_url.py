@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions import TextBlock
-from substrate.kernel.abstractions.tools import ToolExecutionResult
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.types import TextBlock
+from substrate.tools import ToolExecutionResult
+from substrate.tools import ToolRisk
 
 _MAX_CHARS = 6_000
 

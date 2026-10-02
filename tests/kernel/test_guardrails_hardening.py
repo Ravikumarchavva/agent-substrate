@@ -5,21 +5,14 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.middleware._contracts import MiddlewareContext
-from substrate.kernel.middleware.guardrails.max_token import MaxTokenMiddleware
-from substrate.kernel.middleware.guardrails.pii import PIIDetectionMiddleware
-from substrate.kernel.middleware.retry import RetryMiddleware
-from substrate.kernel.abstractions.exceptions import MiddlewareTermination
-from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    MediaBlock,
-    Role,
-    TextBlock,
-    ToolResultBlock,
-    ToolUseBlock,
-)
-from substrate.kernel.abstractions.exceptions import BudgetExhaustedError, PermanentError, TransientError
+from substrate.middleware import MiddlewareContext
+from substrate.middleware import MaxTokenMiddleware
+from substrate.middleware import PIIDetectionMiddleware
+from substrate.middleware import RetryMiddleware
+from substrate.types import MiddlewareTermination
+from substrate.middleware import MiddlewareStage
+from substrate.types import ChatMessage, MediaBlock, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import BudgetExhaustedError, PermanentError, TransientError
 
 
 async def _pass() -> None:

@@ -4,7 +4,7 @@ add a cache only if you want one.
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.storage.memory import MemoryStore, ShortTermMemory
+from substrate.stores import MemoryStore, ShortTermMemory
 
 
 async def build_short_term_memory(
@@ -39,9 +39,7 @@ async def build_short_term_memory(
         await cache.connect()
         return CachedShortTermMemory(primary=primary, cache=cache)
 
-    from substrate.kernel.storage.local_short_term_memory import (
-        LocalFilesystemShortTermMemory,
-    )
+    from substrate.stores import LocalFilesystemShortTermMemory
 
     return LocalFilesystemShortTermMemory(root=local_path)
 

@@ -55,7 +55,7 @@ async def db_session():
 
 @pytest.fixture
 async def store():
-    from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
+    from substrate.runtime import SqliteRuntimeStore
 
     runtime_store = SqliteRuntimeStore(":memory:")
     await runtime_store.start()

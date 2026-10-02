@@ -30,9 +30,9 @@ from __future__ import annotations
 import secrets
 from typing import Any
 
-from substrate.kernel.tools.invoker import InvokerSession, ToolInvoker
-from substrate.kernel.abstractions.tools.chain import InvocationResult
-from substrate.kernel.abstractions.tools import ToolCallRequest
+from substrate.runtime.tool_invoker import InvokerSession, ToolInvoker
+from substrate.tools import InvocationResult
+from substrate.tools import ToolCallRequest
 from substrate.logger import setup_logging
 
 logger = setup_logging("substrate.integrations.tools.chain.bridge")

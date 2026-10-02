@@ -4,11 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, Sequence, runtime_checkable
 
-from substrate.kernel.abstractions.document.models import (
-    DocumentChunk,
-    DocumentMetadata,
-    ExtractionResult,
-)
+from substrate.documents.types import DocumentChunk, DocumentMetadata, ExtractionResult
 
 
 @runtime_checkable

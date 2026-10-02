@@ -13,7 +13,8 @@ from typing import Protocol
 
 import pytest
 
-from substrate.kernel.abstractions.document import DocumentExtractor, ExtractionResult
+from substrate.documents.protocols import DocumentExtractor
+from substrate.documents.types import ExtractionResult
 
 PAGES = ["Invoice 4417 total due 120 EUR", "Second page: shipping to Rotterdam", "Third page: terms and conditions"]
 

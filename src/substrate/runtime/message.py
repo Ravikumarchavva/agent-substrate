@@ -21,14 +21,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, SerializeAsAny, field_validator
 
-from substrate.kernel.abstractions.core.content import ChatMessage, JsonObject
-from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.ids import new_id
-from substrate.kernel.abstractions.tools import (
-    PayloadBase,
-    ToolCallRequest,
-    ToolExecutionResult,
-)
+from substrate.types.content import ChatMessage, JsonObject
+from substrate.types.identity import Actor, Topic
+from substrate.types.ids import new_id
+from substrate.tools.protocols import PayloadBase, ToolCallRequest, ToolExecutionResult
 
 # ---------------------------------------------------------------------------
 # Built-in payload types  (all inherit PayloadBase)

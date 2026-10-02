@@ -11,7 +11,7 @@ import uuid
 
 import pytest
 
-from substrate.kernel.abstractions.storage.tasks import TaskStatus, TaskStore
+from substrate.stores.tasks import TaskStatus, TaskStore
 
 
 class TaskStoreConformance:

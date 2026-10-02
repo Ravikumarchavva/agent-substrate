@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import tempfile
 
-from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
-from substrate.kernel.storage.local_object_store import WorkspaceFileStore
-from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
+from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import WorkspaceFileStore
+from substrate.stores import LocalFilesystemTaskStore
 
 _ROOT = tempfile.TemporaryDirectory(prefix="substrate-tests-")
 

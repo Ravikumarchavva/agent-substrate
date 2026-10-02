@@ -11,12 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.llm.models import (
-    ModelProfile,
-    estimate_cost,
-    get_model_profile,
-    list_models,
-)
+from substrate.models import ModelProfile, estimate_cost, get_model_profile, list_models
 
 KNOWN_PROVIDERS = {"openai", "anthropic", "gemini", "google", "groq"}
 

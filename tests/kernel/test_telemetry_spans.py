@@ -17,10 +17,11 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
-from substrate.kernel.abstractions.core.trace import TraceContext
-from substrate.kernel.abstractions.exceptions import RateLimitedError, SuspendInterrupt
-from substrate.kernel.abstractions.runtime.wakeup import Wakeup
-from substrate.kernel.telemetry import semconv, span
+from substrate.types import TraceContext
+from substrate.types import RateLimitedError, SuspendInterrupt
+from substrate.types import Wakeup
+from substrate.telemetry import semconv
+from substrate.telemetry import span
 
 
 @pytest.fixture

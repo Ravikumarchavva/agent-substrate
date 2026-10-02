@@ -113,7 +113,7 @@ safety = [
 # everything the reference monolith server needs beyond the base install --
 # uvicorn to actually run it, python-multipart for file-upload routes,
 # pyjwt+cryptography for its own auth. None of these are needed to build
-# and run an agent object with substrate.kernel/integrations alone.
+# and run an agent object with substrate/integrations alone.
 server = [
     "agent-substrate[web,code,rag,s3,safety,sandbox,anthropic,gemini]",
     # The engine only ever imports opentelemetry-api (a no-op until something configures an SDK);
@@ -227,8 +227,8 @@ exclude = ["notebooks/", "examples/", ".venv"]
 # ---------------------------------------------------------------------------
 # import-linter — the boundaries of the engine, enforced rather than described.
 #
-#   substrate.kernel                 the engine: everything needed to run an agent
-#   substrate.kernel.abstractions    what the engine needs from outside (pure)
+#   substrate                 the engine: everything needed to run an agent
+#   substrate.types    what the engine needs from outside (pure)
 #   substrate.integrations / runtimes   adapters over the abstractions
 #   substrate.serving / console / cli   wiring
 #
@@ -236,11 +236,28 @@ exclude = ["notebooks/", "examples/", ".venv"]
 # ---------------------------------------------------------------------------
 [tool.importlinter]
 root_packages = ["substrate"]
+# An import made only for type checking never runs, so it cannot make a layer drag another along.
+exclude_type_checking_imports = true
 
 [[tool.importlinter.contracts]]
-name = "the kernel imports nothing above it"
+name = "the core imports nothing outside it"
 type = "forbidden"
-source_modules = ["substrate.kernel"]
+source_modules = [
+    "substrate.types",
+    "substrate.telemetry",
+    "substrate.tools",
+    "substrate.models",
+    "substrate.stores",
+    "substrate.documents",
+    "substrate.workspace",
+    "substrate.safety",
+    "substrate.context",
+    "substrate.middleware",
+    "substrate.runtime",
+    "substrate.agents",
+    "substrate.testing",
+    "substrate.version",
+]
 forbidden_modules = [
     "substrate.evals",
     "substrate.integrations",
@@ -248,55 +265,64 @@ forbidden_modules = [
     "substrate.serving",
     "substrate.console",
     "substrate.cli",
-]
-
-[[tool.importlinter.contracts]]
-name = "abstractions are independent of the engine"
-type = "forbidden"
-source_modules = ["substrate.kernel.abstractions"]
-forbidden_modules = [
-    "substrate.kernel.agents",
-    "substrate.kernel.context",
-    "substrate.kernel.document",
-    "substrate.kernel.flows",
-    "substrate.kernel.limits",
-    "substrate.kernel.llm",
-    "substrate.kernel.middleware",
-    "substrate.kernel.runtime",
-    "substrate.kernel.safety",
-    "substrate.kernel.storage",
-    "substrate.kernel.tools",
-    "substrate.kernel.workspace",
-    "substrate.integrations",
-    "substrate.runtimes",
-    "substrate.serving",
     "substrate.config",
     "substrate.logger",
 ]
 
 [[tool.importlinter.contracts]]
-name = "adapters depend on abstractions and the engine's support libraries, not its internals"
+name = "the core's concepts only import downward"
+type = "layers"
+# Top first. tests/_layout.py holds the same order for the register row.
+layers = [
+    "substrate.testing",
+    "substrate.agents",
+    "substrate.runtime",
+    "substrate.middleware",
+    "substrate.context",
+    "substrate.safety",
+    "substrate.workspace",
+    "substrate.documents",
+    "substrate.stores",
+    "substrate.models",
+    "substrate.tools",
+    "substrate.telemetry",
+    "substrate.types",
+]
+
+[[tool.importlinter.contracts]]
+name = "adapters depend on the contracts and the engine's support libraries, not how it runs an agent"
 type = "forbidden"
-# What an adapter (integrations/, runtimes/) may use from the kernel:
-#   abstractions      the ports and value types it implements
-#   llm               capability registry, modality fitting, tool-argument parsing, error classification
+# What an adapter (integrations/, runtimes/) may use from the core: the contracts it implements, and
+#   models            capability registry, modality fitting, tool-argument parsing, error classification
 #   workspace         object-key layout, content-addressed store, scope
-#   storage           the local default stores that the cloud stores wrap or reuse
+#   stores            the folder stores that the cloud stores wrap or reuse, tenant binding
 #   safety            text normalisation shared by the guardrail and the classifiers
 #   tools, runtime    Toolbox / ToolInvoker (the chain and pipeline tools) and Runtime / RunContext / the
 #                     SQL runtime store (triggers, human input, the Postgres store)
 #   telemetry         spans and metrics
 # These are pure or reusable by design. What it may not reach is how the engine runs an agent — the
-# agents, context window, flows, hooks, middleware and limits — because depending on those is how an
-# adapter ends up coupled to behaviour that is free to change.
+# agents, the context window, middleware — because depending on those is how an adapter ends up coupled
+# to behaviour that is free to change.
 source_modules = ["substrate.integrations", "substrate.runtimes"]
 forbidden_modules = [
-    "substrate.kernel.agents",
-    "substrate.kernel.context",
-    "substrate.kernel.document",
-    "substrate.kernel.flows",
-    "substrate.kernel.limits",
-    "substrate.kernel.middleware",
+    "substrate.agents",
+    "substrate.context.builder",
+    "substrate.context.compaction",
+    "substrate.context.context",
+    "substrate.context.history",
+    "substrate.context.tokens",
+    "substrate.documents.local_store",
+    "substrate.middleware._contracts",
+    "substrate.middleware.audit_logger",
+    "substrate.middleware.cache",
+    "substrate.middleware.content_truncator",
+    "substrate.middleware.file_validator",
+    "substrate.middleware.guardrails",
+    "substrate.middleware.history_truncator",
+    "substrate.middleware.pipeline",
+    "substrate.middleware.rate_limiter",
+    "substrate.middleware.retry",
+    "substrate.middleware.schema_validator",
 ]
 allow_indirect_imports = "true"
 
@@ -317,18 +343,51 @@ source_modules = [
     "substrate.serving.stream",
 ]
 forbidden_modules = [
-    "substrate.kernel.agents",
-    "substrate.kernel.context",
-    "substrate.kernel.document",
-    "substrate.kernel.flows",
-    "substrate.kernel.limits",
-    "substrate.kernel.llm",
-    "substrate.kernel.middleware",
-    "substrate.kernel.runtime",
-    "substrate.kernel.safety",
-    "substrate.kernel.storage",
-    "substrate.kernel.tools",
-    "substrate.kernel.workspace",
+    # the engine — serving's routes use the contracts; building the engine is factory.py's job
+    "substrate.agents",
+    "substrate.context.builder",
+    "substrate.context.compaction",
+    "substrate.context.context",
+    "substrate.context.tokens",
+    "substrate.documents.local_store",
+    "substrate.middleware._contracts",
+    "substrate.middleware.audit_logger",
+    "substrate.middleware.cache",
+    "substrate.middleware.content_truncator",
+    "substrate.middleware.file_validator",
+    "substrate.middleware.guardrails",
+    "substrate.middleware.history_truncator",
+    "substrate.middleware.pipeline",
+    "substrate.middleware.rate_limiter",
+    "substrate.middleware.retry",
+    "substrate.middleware.schema_validator",
+    "substrate.models.client",
+    "substrate.models.errors",
+    "substrate.models.modalities",
+    "substrate.models.registry",
+    "substrate.models.tool_arguments",
+    "substrate.runtime.cancellation",
+    "substrate.runtime.context",
+    "substrate.runtime.journal",
+    "substrate.runtime.resolver",
+    "substrate.runtime.runtime",
+    "substrate.runtime.sql_store",
+    "substrate.runtime.sqlite_db",
+    "substrate.runtime.sqlite_store",
+    "substrate.runtime.tail",
+    "substrate.runtime.tool_invoker",
+    "substrate.runtime.worker",
+    "substrate.safety.normalize",
+    "substrate.stores.local",
+    "substrate.stores.scoped",
+    "substrate.tools.toolbox",
+    "substrate.workspace.branching",
+    "substrate.workspace.cas",
+    "substrate.workspace.layout",
+    "substrate.workspace.local_store",
+    "substrate.workspace.materialize",
+    "substrate.workspace.scope",
+    "substrate.workspace.snapshots",
     # These are the former `capabilities/` submodules, now merged into
     # `integrations/` (Phase G of the layer-charter pass). serving/ was
     # always freely allowed to import `integrations.llm`/`.events`/`.tts`/
@@ -357,38 +416,24 @@ ignore_imports = [
     "substrate.serving.monolith.routes.pipelines -> substrate.integrations.pipeline.engine",
     "substrate.serving.monolith.routes.triggers -> substrate.integrations.triggers.conditions",
     "substrate.serving.monolith.routes.triggers -> substrate.integrations.triggers.scheduler",
-    # agent_runtime: in-memory fallback Runtime (for RUNTIME_BACKEND=memory env)
-    "substrate.serving.services.agent_runtime.app -> substrate.kernel.runtime",
     # tool_executor IS a capability executor by design
-    "substrate.serving.services.tool_executor.app -> substrate.kernel.storage.local_tasks",
     "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.code_interpreter",
     "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.factory",
     "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.task_manager.tool",
     "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.web.surfer",
-    # files/workspace routes need WorkspaceFileStore/WorkspaceQuotaExceededError
-    "substrate.serving.monolith.routes.files -> substrate.kernel.storage.local_object_store",
-    "substrate.serving.monolith.routes.workspace -> substrate.kernel.storage.local_object_store",
-    "substrate.serving.monolith.routes.admin -> substrate.kernel.storage.local_object_store",
-    "substrate.serving.monolith.routes.workspace -> substrate.kernel.workspace.layout",
-    "substrate.serving.monolith.routes.files -> substrate.kernel.workspace.layout",
-    "substrate.serving.monolith.routes.knowledge -> substrate.kernel.workspace.layout",
+    # files/workspace/knowledge routes build object keys with the canonical workspace layout
+    "substrate.serving.monolith.routes.workspace -> substrate.workspace.layout",
+    "substrate.serving.monolith.routes.files -> substrate.workspace.layout",
+    "substrate.serving.monolith.routes.knowledge -> substrate.workspace.layout",
     # file_versioning builds version-snapshot keys with the same canonical
     # layout helper routes/workspace.py uses for the working file's key —
     # otherwise it has to hand-roll (and keep in sync) the same key shape.
-    "substrate.serving.monolith.file_versioning -> substrate.kernel.workspace.layout",
-    # binding a store to the caller's tenant is serving's job at every request (kernel/storage/scoped.py)
-    "substrate.serving.monolith.dependencies -> substrate.kernel.storage.scoped",
-    "substrate.serving.monolith.routes.branches -> substrate.kernel.storage.scoped",
-    # branches route resolves a fork point's ancestry and performs the O(1)
-    # CAS branch fork directly — same shape as the layout.py exceptions above
-    "substrate.serving.monolith.routes.branches -> substrate.kernel.storage.history",
-    "substrate.serving.monolith.routes.branches -> substrate.kernel.workspace.branching",
-    # gdpr route needs the erasure orchestrator itself, the same way
-    # files/workspace routes need WorkspaceFileStore above
+    "substrate.serving.monolith.file_versioning -> substrate.workspace.layout",
+    # gdpr route needs the erasure orchestrator itself
     "substrate.serving.monolith.routes.gdpr -> substrate.integrations.gdpr.eraser",
     # files/chat_context routes call the per-user session-document ingestion
     # orchestrator directly (upload-time eager staging / send-time fallback
-    # ingest) — same shape as the PDFLoader exception directly above
+    # ingest)
     "substrate.serving.monolith.routes.files -> substrate.integrations.knowledge.session_ingest",
     "substrate.serving.monolith.routes.chat_context -> substrate.integrations.knowledge.session_ingest",
     # Note: chat_context.py/files.py's ExtractionClient import, and
@@ -404,5 +449,5 @@ ignore_imports = [
 # serving/      — FastAPI monolith + microservices + its own factory.py wiring
 # runtimes/     — independently-deployable, heavy-dependency, HTTP-only
 #                 services (document_intelligence, embedding_reranker)
-# These carry cross-layer edges by design (e.g. serving/ wires kernel/agents/
+# These carry cross-layer edges by design (e.g. serving/ wires the core's agents and
 # integrations together in lifespan).

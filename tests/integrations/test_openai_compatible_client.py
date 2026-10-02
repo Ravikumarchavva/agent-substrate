@@ -18,8 +18,8 @@ import httpx
 import pytest
 
 from substrate.integrations.llm.openai_compatible import OpenAICompatibleClient
-from substrate.kernel.abstractions import ChatMessage, TextBlock
-from substrate.kernel.abstractions.llm import GenerationOptions
+from substrate.types import ChatMessage, TextBlock
+from substrate.models import GenerationOptions
 
 
 def _client(handler, **kwargs) -> OpenAICompatibleClient:
@@ -153,7 +153,7 @@ async def test_generate_stream_yields_text_deltas_then_completion() -> None:
     async for event in client.generate_stream(_user_message("hi")):
         deltas.append(event)
 
-    from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
+    from substrate.types import CompletionEvent, TextDelta
 
     text_deltas = [e for e in deltas if isinstance(e, TextDelta)]
     completions = [e for e in deltas if isinstance(e, CompletionEvent)]

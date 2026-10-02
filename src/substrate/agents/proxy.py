@@ -12,16 +12,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import (
-    ChatPayload,
-    DataPayload,
-    Message,
-)
-from substrate.kernel.agents.routed import RoutedAgent, handle
+from substrate.types.identity import Actor
+from substrate.runtime.message import ChatPayload, DataPayload, Message
+from substrate.agents.routed import RoutedAgent, handle
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.context import RunContext
+    from substrate.runtime.context import RunContext
 
 
 class UserProxyAgent(RoutedAgent):
@@ -79,7 +75,7 @@ class UserProxyAgent(RoutedAgent):
     def _extract_text(self, msg: Message) -> str:
         payload = msg.payload
         if isinstance(payload, ChatPayload):
-            from substrate.kernel.abstractions.core.content import content_blocks_to_str
+            from substrate.types.content import content_blocks_to_str
 
             return content_blocks_to_str(payload.message.content)  # type: ignore[arg-type]
         return str(getattr(payload, "data", payload))

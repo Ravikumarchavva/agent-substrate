@@ -3,14 +3,9 @@
 import pytest
 from pydantic import ValidationError
 
-from substrate.kernel.workspace import LocalFilesystemWorkspaceStore
-from substrate.kernel.abstractions.exceptions import SnapshotConflictError
-from substrate.kernel.abstractions.storage.snapshots import (
-    ContentRef,
-    WorkspaceFileEntry,
-    WorkspaceManifest,
-    WorkspaceSnapshot,
-)
+from substrate.workspace import LocalFilesystemWorkspaceStore
+from substrate.types import SnapshotConflictError
+from substrate.workspace import ContentRef, WorkspaceFileEntry, WorkspaceManifest, WorkspaceSnapshot
 
 
 class TestWorkspaceSnapshotValidation:

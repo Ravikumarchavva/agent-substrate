@@ -13,8 +13,8 @@ the conversation only.
 from __future__ import annotations
 
 
-from substrate.kernel.abstractions.agent.runtime_context import scope_of
-from substrate.kernel.abstractions.storage.memory import (
+from substrate.types import scope_of
+from substrate.stores import (
     MemoryCategory,
     MemoryNamespace,
     MemoryQuery,
@@ -22,10 +22,10 @@ from substrate.kernel.abstractions.storage.memory import (
     MemoryStore,
     ShortTermMemory,
 )
-from substrate.kernel.abstractions.tools import ToolExecutionResult
-from substrate.kernel.abstractions import TextBlock
+from substrate.tools import ToolExecutionResult
+from substrate.types import TextBlock
 from substrate.logger import setup_logging
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.tools import ToolRisk
 
 logger = setup_logging()
 

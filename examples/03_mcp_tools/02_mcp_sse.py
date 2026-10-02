@@ -20,12 +20,8 @@ import asyncio
 import json
 from substrate.integrations.llm.factory import create_model_client
 from substrate.integrations.tools.mcp.client import MCPClient
-from substrate.kernel.messages.client_messages import (
-    SystemMessage,
-    ToolExecutionResultMessage,
-    UserMessage,
-)
-from substrate.kernel.messages.content import TextBlock
+from substrate.messages.client_messages import SystemMessage, ToolExecutionResultMessage, UserMessage
+from substrate.messages.content import TextBlock
 
 # Infrastructure: MCP server must be running at SSE_URL before this script runs.
 

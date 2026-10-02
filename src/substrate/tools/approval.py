@@ -24,9 +24,9 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import Field, model_validator
 
-from substrate.kernel.abstractions.core.content import JsonObject, KernelModel
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.tools.tools import ToolCallRequest, ToolRisk
+from substrate.types.content import JsonObject, KernelModel
+from substrate.types.identity import Actor
+from substrate.tools.protocols import ToolCallRequest, ToolRisk
 
 
 class ApprovalDecision(StrEnum):

@@ -14,7 +14,7 @@ import io
 
 import pytest
 
-from substrate.kernel.abstractions.agent.safety import Severity
+from substrate.safety import Severity
 
 pytestmark = pytest.mark.requires_model_download
 

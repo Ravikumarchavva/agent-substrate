@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.storage.local_tasks import LocalFilesystemTaskStore
-from substrate.kernel.testing.conformance.task_store import TaskStoreConformance
+from substrate.stores import LocalFilesystemTaskStore
+from substrate.testing.conformance.task_store import TaskStoreConformance
 
 
 class TestLocalFilesystemTaskStore(TaskStoreConformance):

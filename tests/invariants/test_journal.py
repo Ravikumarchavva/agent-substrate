@@ -16,13 +16,13 @@ from typing import Any
 
 import pytest
 
-from substrate.kernel.testing.runtime import ephemeral_runtime
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm import GenerationOptions, ModelCapabilities
-from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
+from substrate.testing.runtime import ephemeral_runtime
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import Actor
+from substrate.types import Usage
+from substrate.models import GenerationOptions, ModelCapabilities
+from substrate.runtime import DataPayload, Message
+from substrate.types import CompletionEvent, TextDelta
 
 
 class _StreamingLLM:

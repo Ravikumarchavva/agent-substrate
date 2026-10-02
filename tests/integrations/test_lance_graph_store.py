@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from substrate.integrations.graph.lance_graph_store import LanceGraphStore
-from substrate.kernel.abstractions.storage.graph import CypherCapable, Entity, Relationship
+from substrate.stores import CypherCapable, Entity, Relationship
 
 
 @pytest.fixture

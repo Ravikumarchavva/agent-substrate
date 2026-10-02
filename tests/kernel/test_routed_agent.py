@@ -6,15 +6,15 @@ import asyncio
 
 import pytest
 
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.exceptions import UnroutableMessageError
-from substrate.kernel.abstractions.messaging.message import ChatPayload, DataPayload, Message
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.runtime.store import Delivery
-from substrate.kernel.agents.routed import RoutedAgent, handle
-from substrate.kernel.runtime import Runtime
-from substrate.kernel.runtime.context import RunContext
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import Actor
+from substrate.types.errors import UnroutableMessageError
+from substrate.runtime import ChatPayload, DataPayload, Message
+from substrate.types import RunLogKind
+from substrate.runtime import Delivery
+from substrate.agents.routed import RoutedAgent, handle
+from substrate.runtime import Runtime
+from substrate.runtime import RunContext
 
 ME = Actor("agent", "routed")
 

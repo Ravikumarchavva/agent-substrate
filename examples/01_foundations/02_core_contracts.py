@@ -1,5 +1,5 @@
 """Example 1-2: Core Contracts
-Module: substrate.kernel.abstractions, substrate.kernel.stream, substrate.kernel.content
+Module: substrate.types, substrate.stream, substrate.content
 
 Demonstrates the new kernel data model — all offline, no external services
 required. Covers: ChatMessage, ContentBlock subtypes, Tool Protocol, stream
@@ -14,15 +14,10 @@ from __future__ import annotations
 
 import asyncio
 
-from substrate.kernel.abstractions import (
-    AgentId,
-    ChatMessage,
-    TextBlock,
-    ToolExecutionResult,
-    ToolResultBlock,
-    ToolUseBlock,
-)
-from substrate.kernel.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
+from substrate.types import AgentId
+from substrate.types import ChatMessage, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.tools import ToolExecutionResult
+from substrate.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
 
 
 # ---------------------------------------------------------------------------

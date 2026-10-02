@@ -4,7 +4,7 @@ snapshot id back to ctx so persist_turns can stamp the turn's MessageNode."""
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.agent.runtime_context import RunScope
+from substrate.types import RunScope
 
 from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
     ExecResult,

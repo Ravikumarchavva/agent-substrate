@@ -22,7 +22,7 @@ from dataclasses import dataclass, field, replace
 from difflib import SequenceMatcher
 from typing import Any
 
-from substrate.kernel.abstractions.storage.vector import SearchResult
+from substrate.stores import SearchResult
 
 # Characters to include in UI snippet preview
 _SNIPPET_CHARS = 240

@@ -7,25 +7,16 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, AsyncIterator, Protocol, runtime_checkable
 
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    ContentBlock,
-    KernelModel,
-    TextBlock,
-)
-from substrate.kernel.abstractions.core.finish_reason import FinishReason
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.messaging.stream import (
-    CompletionEvent,
-    ReasoningDelta,
-    TextDelta,
-)
+from substrate.types.content import ChatMessage, ContentBlock, KernelModel, TextBlock
+from substrate.types.finish_reason import FinishReason
+from substrate.types.usage import Usage
+from substrate.types.stream import CompletionEvent, ReasoningDelta, TextDelta
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-    from substrate.kernel.abstractions.agent.runtime_context import RunMeta
-    from substrate.kernel.abstractions.tools import AnyTool
+    from substrate.types.run import RunMeta
+    from substrate.tools.protocols import AnyTool
 
 
 class Modality(StrEnum):

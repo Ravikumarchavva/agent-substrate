@@ -25,28 +25,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.abstractions.agent.supervision import Priority
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.core.trace import TraceContext
-from substrate.kernel.abstractions.exceptions import ThreadBusyError
-from substrate.kernel.abstractions.ids import new_id
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-from substrate.kernel.abstractions.runtime.ids import RunId, RunStatus
-from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
-from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
-from substrate.kernel.abstractions.runtime.store import (
-    Delivery,
-    RunRecord,
-    RunSpec,
-    RuntimeStore,
-)
-from substrate.kernel.runtime.resolver import ActorFactory, ActorResolver
-from substrate.kernel.runtime.tail import tail
-from substrate.kernel.runtime.worker import Worker
+from substrate.types.supervision import Priority
+from substrate.types.content import ChatMessage, Role, TextBlock
+from substrate.types.identity import Actor, Topic
+from substrate.types.trace import TraceContext
+from substrate.types.errors import ThreadBusyError
+from substrate.types.ids import new_id
+from substrate.runtime.message import ChatPayload, Message
+from substrate.types.run_status import RunId, RunStatus
+from substrate.types.run_log import RunLogEntry, RunLogKind
+from substrate.runtime.scheduler import RunRetryPolicy
+from substrate.runtime.store import Delivery, RunRecord, RunSpec, RuntimeStore
+from substrate.runtime.resolver import ActorFactory, ActorResolver
+from substrate.runtime.tail import tail
+from substrate.runtime.worker import Worker
 
 if TYPE_CHECKING:
-    from substrate.kernel.agents.orchestrator import SubAgentConfig
+    from substrate.agents.orchestrator import SubAgentConfig
 
 _TERMINAL_KINDS = frozenset(
     {RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED, RunLogKind.RUN_TRUNCATED}
@@ -94,7 +89,7 @@ class Runtime:
     @classmethod
     def local(cls, path: str | Path = "./data/db/runtime.sqlite3", **options: Any) -> Runtime:
         """A runtime on a SQLite file: durable, no server, safe for workers on one host."""
-        from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
+        from substrate.runtime.sqlite_store import SqliteRuntimeStore
 
         return cls(SqliteRuntimeStore(path), **options)
 

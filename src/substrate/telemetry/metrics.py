@@ -13,9 +13,9 @@ from typing import Any
 
 from opentelemetry import metrics
 
-from substrate.kernel.telemetry import semconv
+from substrate.telemetry import semconv
 
-_METER_NAME = "substrate.kernel"
+_METER_NAME = "substrate"
 
 
 class Instruments:

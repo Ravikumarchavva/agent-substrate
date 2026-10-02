@@ -20,13 +20,13 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
-from substrate.kernel.testing.runtime import ephemeral_runtime
-from substrate.kernel.tools.toolbox import Toolbox
+from substrate.types import TextBlock
+from substrate.types import Actor
+from substrate.runtime import DataPayload, Message
+from substrate.types import RunLogKind
+from substrate.tools import ToolExecutionResult, ToolRisk
+from substrate.testing.runtime import ephemeral_runtime
+from substrate.tools import Toolbox
 
 
 class _NameArgTool:

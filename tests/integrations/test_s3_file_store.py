@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import pytest
 
 from substrate.integrations.storage.s3 import S3FileStore
-from substrate.kernel.storage.local_object_store import WorkspaceQuotaExceededError
+from substrate.stores import WorkspaceQuotaExceededError
 from substrate.integrations.storage.s3_connector import S3Connector
 
 

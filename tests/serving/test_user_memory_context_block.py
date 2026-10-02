@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryRecord
-from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
+from substrate.stores import MemoryNamespace, MemoryRecord
+from substrate.stores import LocalFilesystemMemoryStore
 from substrate.serving.factory import build_user_memory_context_block
 
 TENANT = "acme"

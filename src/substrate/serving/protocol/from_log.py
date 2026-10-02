@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pydantic import TypeAdapter
 
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
+from substrate.types import RunLogKind
 from substrate.serving.protocol.events import WireEvent
 
 _ADAPTER: TypeAdapter[WireEvent] = TypeAdapter(WireEvent)

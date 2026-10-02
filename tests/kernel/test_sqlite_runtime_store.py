@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
-from substrate.kernel.testing.conformance.runtime_store import NOW, RuntimeStoreConformance
+from substrate.runtime import SqliteRuntimeStore
+from substrate.testing.conformance.runtime_store import NOW, RuntimeStoreConformance
 
 
 class TestSqliteRuntimeStore(RuntimeStoreConformance):
@@ -34,8 +34,8 @@ async def test_closing_while_cancelled_callers_statements_are_in_flight_does_not
     must queue behind in-flight work. Repeated, because the window is narrow."""
     import asyncio
 
-    from substrate.kernel.abstractions.core.identity import Actor
-    from substrate.kernel.abstractions.runtime.store import RunSpec
+    from substrate.types import Actor
+    from substrate.runtime import RunSpec
 
     for _ in range(25):
         store = SqliteRuntimeStore(":memory:")

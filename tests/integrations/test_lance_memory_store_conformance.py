@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("lancedb")
 
 from substrate.integrations.memory.lance_memory_store import LanceMemoryStore  # noqa: E402
-from substrate.kernel.testing.conformance.memory_store import MemoryStoreConformance  # noqa: E402
+from substrate.testing.conformance.memory_store import MemoryStoreConformance
 
 
 class TestLanceMemoryStore(MemoryStoreConformance):

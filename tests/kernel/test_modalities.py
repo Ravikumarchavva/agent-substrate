@@ -6,19 +6,13 @@ from __future__ import annotations
 import pytest
 
 from substrate.integrations.llm import OpenAICompatibleClient
-from substrate.kernel.llm.tool_arguments import parse_tool_arguments
-from substrate.kernel.llm.modalities import fit_to_capabilities
-from substrate.kernel.llm.models import estimate_cost, resolve_capabilities
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    MediaBlock,
-    Role,
-    TextBlock,
-    ToolResultBlock,
-    ToolUseBlock,
-)
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm import Modality, ModelCapabilities
+from substrate.models.tool_arguments import parse_tool_arguments
+from substrate.models.modalities import fit_to_capabilities
+from substrate.models import estimate_cost
+from substrate.models.registry import resolve_capabilities
+from substrate.types import ChatMessage, MediaBlock, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import Usage
+from substrate.models import Modality, ModelCapabilities
 
 PNG = b"\x89PNG" + b"\x00" * 16
 

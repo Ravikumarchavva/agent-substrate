@@ -22,7 +22,7 @@ from pydantic import (
     model_validator,
 )
 
-from substrate.kernel.abstractions.exceptions import BlockValidationError
+from substrate.types.errors import BlockValidationError
 
 JsonObject = dict[str, Any]
 

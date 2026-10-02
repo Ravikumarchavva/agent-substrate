@@ -4,11 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.storage.local_object_store import (
-    WorkspaceFileStore,
-    WorkspacePathError,
-    WorkspaceQuotaExceededError,
-)
+from substrate.stores import WorkspaceFileStore, WorkspacePathError, WorkspaceQuotaExceededError
 
 
 @pytest.fixture

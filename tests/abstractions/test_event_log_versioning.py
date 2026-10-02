@@ -3,7 +3,7 @@ their persisted spellings, and a log with an unknown kind still loads."""
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
+from substrate.types import RunLogEntry, RunLogKind
 
 
 def test_core_kind_values_are_the_persisted_strings() -> None:

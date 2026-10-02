@@ -5,13 +5,8 @@ import pytest
 from sqlalchemy.exc import OperationalError
 
 from substrate.integrations.storage.workspace_store import PostgresWorkspaceStore
-from substrate.kernel.abstractions.exceptions import SnapshotConflictError
-from substrate.kernel.abstractions.storage.snapshots import (
-    ContentRef,
-    WorkspaceFileEntry,
-    WorkspaceManifest,
-    WorkspaceSnapshot,
-)
+from substrate.types import SnapshotConflictError
+from substrate.workspace import ContentRef, WorkspaceFileEntry, WorkspaceManifest, WorkspaceSnapshot
 
 pytestmark = [pytest.mark.requires_postgres]
 

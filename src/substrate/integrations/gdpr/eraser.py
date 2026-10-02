@@ -14,8 +14,8 @@ from typing import Any
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.kernel.abstractions.storage.memory import MemoryNamespace
-from substrate.kernel.workspace.layout import tenant_prefix, user_prefix
+from substrate.stores import MemoryNamespace
+from substrate.workspace.layout import tenant_prefix, user_prefix
 from substrate.integrations.storage.session_index_erasure import (
     erase_session_index,
     erase_session_index_for_tenant,

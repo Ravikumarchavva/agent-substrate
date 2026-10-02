@@ -15,12 +15,12 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote
 
-from substrate.kernel.abstractions.core.scope import Scope
-from substrate.kernel.abstractions.storage.graph import Entity, GraphStore, Relationship, SubGraph
-from substrate.kernel.abstractions.storage.history import Branch, HistoryCheckpoint, HistoryProvider, MessageNode
-from substrate.kernel.abstractions.storage.objects import ObjectStore
-from substrate.kernel.abstractions.storage.tasks import Task, TaskList, TaskStatus, TaskStore
-from substrate.kernel.abstractions.storage.vector import Document, SearchResult, VectorStore
+from substrate.types.scope import Scope
+from substrate.stores.graph import Entity, GraphStore, Relationship, SubGraph
+from substrate.stores.threads import Branch, HistoryCheckpoint, HistoryProvider, MessageNode
+from substrate.stores.files import ObjectStore
+from substrate.stores.tasks import Task, TaskList, TaskStatus, TaskStore
+from substrate.stores.vector import Document, SearchResult, VectorStore
 
 
 def _tenant(scope: Scope) -> str:

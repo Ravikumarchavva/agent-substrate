@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.storage.local_vector import LocalFilesystemVectorStore
-from substrate.kernel.abstractions.storage.vector import Document
+from substrate.stores import LocalFilesystemVectorStore
+from substrate.stores import Document
 
 
 async def test_add_get_delete_round_trip(tmp_path):

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from substrate.kernel.abstractions.agent.context import CompactionStrategy
-from substrate.kernel.abstractions.core.content import ChatMessage
-from substrate.kernel.context.tokens import estimate_tokens
+from substrate.context.protocols import CompactionStrategy
+from substrate.types.content import ChatMessage
+from substrate.context.tokens import estimate_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class TokenBudgetComposedStrategy:
         default_context_length: int = 128_000,
     ) -> "TokenBudgetComposedStrategy":
         """Build a strategy whose budget is derived from the model's context window."""
-        from substrate.kernel.llm.models import get_context_length
+        from substrate.models.registry import get_context_length
 
         context_length = get_context_length(model_name, default=default_context_length)
         token_budget = int(context_length * trigger_ratio)

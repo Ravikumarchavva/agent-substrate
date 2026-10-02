@@ -43,18 +43,13 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
-from substrate.kernel.abstractions.core.content import JsonObject
-from substrate.kernel.abstractions.core.error_info import ErrorInfo
-from substrate.kernel.abstractions.exceptions import (
-    ControlSignal,
-    KernelError,
-    NonDeterminismError,
-    OrphanedEffectError,
-)
-from substrate.kernel.abstractions.runtime.effects import Effect, args_digest
-from substrate.kernel.abstractions.runtime.log_entry import RunLogEntry, RunLogKind
-from substrate.kernel.abstractions.runtime.store import NewEntry
-from substrate.kernel.telemetry import instruments
+from substrate.types.content import JsonObject
+from substrate.types.error_info import ErrorInfo
+from substrate.types.errors import ControlSignal, KernelError, NonDeterminismError, OrphanedEffectError
+from substrate.runtime.effects import Effect, args_digest
+from substrate.types.run_log import RunLogEntry, RunLogKind
+from substrate.runtime.store import NewEntry
+from substrate.telemetry.metrics import instruments
 
 T = TypeVar("T")
 

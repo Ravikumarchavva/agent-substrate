@@ -1,6 +1,6 @@
 """Scope — whose data a store handle may touch.
 
-A ``Scope`` is a tenant. A store handle is *bound* to one (``kernel/storage/scoped.py``): every key,
+A ``Scope`` is a tenant. A store handle is *bound* to one (``stores/scoped.py``): every key,
 collection, session and namespace it is given is placed inside the tenant, and nothing a caller passes
 can name anything outside it. Omitting the scope is not representable — there is no unscoped handle,
 only a bound one — so a forgotten argument cannot widen a query.
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pydantic import field_validator
 
-from substrate.kernel.abstractions.core.content import KernelModel
+from substrate.types.content import KernelModel
 
 
 class Scope(KernelModel):

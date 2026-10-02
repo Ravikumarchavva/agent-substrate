@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import pytest
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import Message, DataPayload
+from substrate.types import Actor
+from substrate.runtime import Message, DataPayload
 from substrate.integrations.triggers.scheduler import TriggerScheduler, TriggerDef
 from substrate.integrations.triggers.webhooks import WebhookRegistry
 from substrate.integrations.triggers.conditions import ConditionMonitor, ConditionDef

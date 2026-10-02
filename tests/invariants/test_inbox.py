@@ -13,10 +13,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.runtime.store import Commit, Complete, Delivery
-from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
+from substrate.types import Actor
+from substrate.runtime import DataPayload, Message
+from substrate.runtime import Commit, Complete, Delivery
+from substrate.runtime import SqliteRuntimeStore
 
 AGENT = Actor("agent", "a")
 

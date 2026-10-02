@@ -15,10 +15,10 @@ from pathlib import Path
 from typing import Any, Union
 
 from substrate.integrations.document.local_extractor import LocalDocumentExtractor
-from substrate.kernel.abstractions.document import DocumentExtractor
+from substrate.documents import DocumentExtractor
 from substrate.integrations.knowledge.loaders.base import BaseDocumentLoader
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.storage.vector import Document
+from substrate.types import TextBlock
+from substrate.stores import Document
 from substrate.logger import setup_logging
 
 logger = setup_logging()

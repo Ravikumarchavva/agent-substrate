@@ -41,11 +41,11 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from substrate.kernel.abstractions.core.identity import Actor
+from substrate.types.identity import Actor
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.core.error_info import ErrorInfo
-    from substrate.kernel.abstractions.runtime.wakeup import Wakeup
+    from substrate.types.error_info import ErrorInfo
+    from substrate.types.wakeup import Wakeup
 
 
 def _snake(name: str) -> str:
@@ -130,7 +130,7 @@ class KernelError(_Reconstructible, Exception):
             cls.code = _snake(cls.__name__.removesuffix("Error"))
 
     def to_info(self) -> "ErrorInfo":
-        from substrate.kernel.abstractions.core.error_info import ErrorInfo
+        from substrate.types.error_info import ErrorInfo
 
         return ErrorInfo(code=self.code, message=str(self), retryable=self.retryable)
 

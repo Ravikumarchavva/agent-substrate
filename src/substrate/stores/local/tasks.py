@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from substrate.kernel.abstractions.storage.tasks import Task, TaskList, TaskStatus
-from substrate.kernel.storage.fs import atomic_write_json, safe_name
+from substrate.stores.tasks import Task, TaskList, TaskStatus
+from substrate.stores.local.fs import atomic_write_json, safe_name
 
 
 class LocalFilesystemTaskStore:

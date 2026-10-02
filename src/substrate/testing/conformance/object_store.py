@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from substrate.kernel.abstractions.storage.objects import ObjectStore
+from substrate.stores.files import ObjectStore
 
 T1 = "tenants/t1/users/u1/"
 T2 = "tenants/t2/users/u1/"

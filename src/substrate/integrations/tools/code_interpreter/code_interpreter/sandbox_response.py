@@ -12,8 +12,8 @@ import base64
 import json
 from typing import Any
 
-from substrate.kernel.abstractions import MediaBlock, TextBlock
-from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.types import MediaBlock, TextBlock
+from substrate.tools import ToolExecutionResult
 
 # Appended to both code-interpreter tools' descriptions. Teaches the model the
 # ChatGPT-ADA presentation convention: files it saves in its working directory

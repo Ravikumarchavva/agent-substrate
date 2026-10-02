@@ -12,8 +12,8 @@ from substrate.integrations.llm import OpenAICompatibleClient
 from substrate.integrations.llm.anthropic.anthropic_client import AnthropicClient
 from substrate.integrations.llm.gemini.gemini_client import GeminiClient
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.kernel.abstractions.core.content import ChatMessage, ReasoningBlock, Role, TextBlock
-from substrate.kernel.abstractions.llm import GenerationOptions, ReasoningEffort
+from substrate.types import ChatMessage, ReasoningBlock, Role, TextBlock
+from substrate.models import GenerationOptions, ReasoningEffort
 
 MSGS = [ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])]
 HIGH = GenerationOptions(reasoning=ReasoningEffort.HIGH)

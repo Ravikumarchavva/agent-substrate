@@ -21,7 +21,7 @@ from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.runtime.store import RuntimeStore
+    from substrate.runtime import RuntimeStore
 
 logger = setup_logging()
 

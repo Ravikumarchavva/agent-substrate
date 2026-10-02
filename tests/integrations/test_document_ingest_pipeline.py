@@ -15,7 +15,7 @@ from substrate.integrations.knowledge.document_ingest_pipeline import (
     ExtractedFile,
     ExtractionFailedError,
 )
-from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
+from substrate.types import MediaBlock, TextBlock
 from substrate.runtimes.document_intelligence.client import (
     ExtractedImage,
     ExtractResponse,

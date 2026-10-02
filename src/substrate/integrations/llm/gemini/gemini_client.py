@@ -9,27 +9,16 @@ from google import genai
 from google.genai import types as genai_types
 
 import uuid
-from substrate.kernel.llm.modalities import fit_to_capabilities
-from substrate.kernel.llm.models import resolve_capabilities
-from substrate.kernel.abstractions.agent.runtime_context import RunMeta
-from substrate.kernel.abstractions.core.finish_reason import FinishReason
-from substrate.kernel.abstractions.llm import (
-    GenerationOptions,
-    LLMClient,
-    LLMResponse,
-    ModelCapabilities,
-    ReasoningEffort,
-    Usage,
-)
-from substrate.kernel.abstractions import ChatMessage, ContentBlock
-from substrate.kernel.abstractions.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
-from substrate.kernel.abstractions.core.content import (
-    DataBlock,
-    ReasoningBlock,
-    TextBlock,
-    ToolUseBlock,
-)
-from substrate.kernel.abstractions.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
+from substrate.models.modalities import fit_to_capabilities
+from substrate.models.registry import resolve_capabilities
+from substrate.types import RunMeta
+from substrate.types.finish_reason import FinishReason
+from substrate.models import GenerationOptions, LLMClient, LLMResponse, ModelCapabilities, ReasoningEffort
+from substrate.types import Usage
+from substrate.types import ChatMessage, ContentBlock
+from substrate.tools import Tool, is_hosted_tool, is_provider_defined_tool
+from substrate.types import DataBlock, ReasoningBlock, TextBlock, ToolUseBlock
+from substrate.types import TextDelta, ReasoningDelta, CompletionEvent
 from substrate.integrations.llm.encoders.gemini import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,

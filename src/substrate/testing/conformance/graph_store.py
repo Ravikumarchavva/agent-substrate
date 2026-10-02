@@ -12,7 +12,7 @@ import uuid
 
 import pytest
 
-from substrate.kernel.abstractions.storage.graph import Entity, GraphStore, Relationship
+from substrate.stores.graph import Entity, GraphStore, Relationship
 
 
 def ids(sub) -> set[str]:

@@ -1,8 +1,8 @@
 """Invariant register — structure (rows I26, I27, I28, I30).
 
-The merge pulls a 17.6k-line engine into ``kernel``. Three of these rows are
-tripwires for that move: they pass today and must keep passing as the engine
-arrives, which is what stops a vendor SDK riding in with it.
+The core package is the engine: one folder per concept (``tests/_layout.py``), each holding its contracts beside
+its built-in implementation. These rows keep it a library: it loads no vendor SDK or driver, its concepts only
+import downward, the contracts never reach into the engine, and its public API changes only on purpose.
 
 Row I30 is the meta-row. The audit found a file that promised "the same suite
 is run against those implementations" and never was, while the three runtime
@@ -13,16 +13,16 @@ the register asserts the promise itself.
 from __future__ import annotations
 
 import ast
+import importlib
 import json
 import sys
 from pathlib import Path
 
+from tests._layout import CORE, REPO_ROOT, SRC, contract_files, core_files, module_name
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-KERNEL = REPO_ROOT / "src" / "substrate" / "kernel"
 SNAPSHOT = Path(__file__).parent / "public_api.json"
 
-# What the kernel is allowed to import from outside the standard library.
+# What the core is allowed to import from outside the standard library.
 # pydantic for validation, typing_extensions for back-ported typing, and the
 # OpenTelemetry *API* (never the SDK — the API is a no-op until an application
 # configures an SDK, which is what lets a library instrument itself for free).
@@ -34,125 +34,126 @@ SNAPSHOT = Path(__file__).parent / "public_api.json"
 _ALLOWED_THIRD_PARTY = {"pydantic", "typing_extensions", "opentelemetry", "confusable_homoglyphs"}
 
 
-def _kernel_files() -> list[Path]:
-    """The kernel's production code. ``kernel/testing`` is test support (it needs pytest to
-    import), shipped beside the ports it verifies and used only by tests — see
-    ``test_the_kernel_never_imports_its_own_test_support``."""
-    return [p for p in KERNEL.rglob("*.py") if "__pycache__" not in p.parts and "testing" not in p.relative_to(KERNEL).parts[:1]]
-
-
-def _imported_roots(path: Path) -> set[str]:
-    """Top-level package of every import in a file, from the AST.
-
-    Parsed rather than pattern-matched on line prefixes: the existing
-    architecture test misses indented imports inside functions, which is
-    exactly where a lazy heavy dependency hides.
-    """
+def _imports(path: Path, *, type_checking: bool = True) -> list[str]:
+    """Every module a file imports, from the AST — including imports inside functions, which is exactly
+    where a lazy heavy dependency hides. ``type_checking=False`` leaves out ``if TYPE_CHECKING:`` blocks."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    roots: set[str] = set()
+    skipped: set[int] = set()
+    if not type_checking:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.If) and "TYPE_CHECKING" in ast.unparse(node.test):
+                skipped.update(id(n) for child in node.body for n in ast.walk(child))
+    found: list[str] = []
     for node in ast.walk(tree):
+        if id(node) in skipped:
+            continue
         if isinstance(node, ast.Import):
-            roots.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            if node.level:  # relative import, stays inside the package
-                continue
-            if node.module:
-                roots.add(node.module.split(".")[0])
-    return roots
+            found += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            found.append(node.module)
+    return found
 
 
-def test_i26_the_kernel_imports_only_its_allowed_third_party_set() -> None:
-    """The kernel is the engine, so it has to be installable and importable
+def test_i26_the_core_imports_only_its_allowed_third_party_set() -> None:
+    """The core is the engine, so it has to be installable and importable
     without a vendor SDK, a model runtime, or a database driver."""
     offenders: dict[str, set[str]] = {}
-    for path in _kernel_files():
+    for path in core_files():
         third_party = {
             root
-            for root in _imported_roots(path)
-            if root not in _ALLOWED_THIRD_PARTY
-            and root != "substrate"
-            and root not in sys.stdlib_module_names
+            for root in (m.split(".")[0] for m in _imports(path))
+            if root not in _ALLOWED_THIRD_PARTY and root != "substrate" and root not in sys.stdlib_module_names
         }
         if third_party:
             offenders[str(path.relative_to(REPO_ROOT))] = third_party
     assert not offenders, (
-        "the kernel may depend only on pydantic, the OpenTelemetry API and confusable_homoglyphs; "
-        "anything needing a third-party SDK belongs in integrations/:\n"
+        "the core may depend only on pydantic, the OpenTelemetry API and confusable_homoglyphs; "
+        "anything needing a third-party SDK belongs in an integration:\n"
         + "\n".join(f"  {where}: {sorted(roots)}" for where, roots in offenders.items())
     )
 
 
-def test_the_kernel_never_imports_its_own_test_support() -> None:
-    """``kernel/testing`` holds conformance suites and doubles. Production code that imported
+def test_the_core_imports_nothing_outside_itself() -> None:
+    """The core is what every integration and application builds on, so it can name none of them."""
+    allowed = {f"substrate.{c}" for c in CORE} | {"substrate.version", "substrate"}
+    offenders = {
+        f"{path.relative_to(REPO_ROOT)}: {module}"
+        for path in core_files(include_testing=True)
+        for module in _imports(path)
+        if module.startswith("substrate") and ".".join(module.split(".")[:2]) not in allowed
+    }
+    assert not offenders, "the core imports from outside it:\n  " + "\n  ".join(sorted(offenders))
+
+
+def test_concepts_only_import_the_concepts_below_them() -> None:
+    """``CORE`` is ordered bottom-up: types, then tools, models, stores … up to agents. A concept that imported
+    one above it would make the order a cycle, and the bottom of the engine would drag the top along. Imports
+    made only for type checking are exempt — they never run."""
+    rank = {c: i for i, c in enumerate(CORE)}
+    offenders: set[str] = set()
+    for path in core_files(include_testing=True):
+        own = path.relative_to(SRC).parts[0]
+        if own not in rank:
+            continue
+        for module in _imports(path, type_checking=False):
+            parts = module.split(".")
+            if parts[0] == "substrate" and len(parts) > 1 and parts[1] in rank and rank[parts[1]] > rank[own]:
+                offenders.add(f"{path.relative_to(REPO_ROOT)}: {own} imports {module}")
+    assert not offenders, "a concept imports one above it:\n  " + "\n  ".join(sorted(offenders))
+
+
+def test_the_core_never_imports_its_own_test_support() -> None:
+    """``substrate.testing`` holds conformance suites and doubles. Production code that imported
     it would make pytest a runtime dependency of the engine."""
-    support = KERNEL / "testing"
+    support = SRC / "testing"
     offenders = [
         str(path.relative_to(REPO_ROOT))
-        for path in (REPO_ROOT / "src" / "substrate").rglob("*.py")
+        for path in SRC.rglob("*.py")
         if "__pycache__" not in path.parts
         and support not in path.parents
-        and "substrate.kernel.testing" in path.read_text(encoding="utf-8")
+        and any(m.startswith("substrate.testing") for m in _imports(path))
     ]
-    assert not offenders, f"production code imports substrate.kernel.testing: {offenders}"
+    assert not offenders, f"production code imports substrate.testing: {offenders}"
 
 
-def test_i27_abstractions_never_imports_the_engine() -> None:
-    """``abstractions`` is what an adapter author depends on. If it reaches back
-    into the engine, implementing a port drags the whole engine along."""
-    abstractions = KERNEL / "abstractions"
-    assert abstractions.is_dir(), "kernel/abstractions does not exist"
-
-    engine_packages = {
-        p.name for p in KERNEL.iterdir() if p.is_dir() and p.name not in ("abstractions", "__pycache__")
-    }
-    offenders: dict[str, set[str]] = {}
-    for path in abstractions.rglob("*.py"):
-        if "__pycache__" in path.parts:
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        reached: set[str] = set()
-        for node in ast.walk(tree):
-            module = None
-            if isinstance(node, ast.ImportFrom) and node.module:
-                module = node.module
-            elif isinstance(node, ast.Import):
-                module = node.names[0].name
-            if module and module.startswith("substrate.kernel."):
-                area = module.removeprefix("substrate.kernel.").split(".")[0]
-                if area in engine_packages:
-                    reached.add(area)
-        if reached:
-            offenders[str(path.relative_to(REPO_ROOT))] = reached
-    assert not offenders, (
-        "kernel/abstractions reached into the engine:\n"
-        + "\n".join(f"  {where}: {sorted(areas)}" for where, areas in offenders.items())
-    )
+def test_i27_the_contracts_never_import_the_engine() -> None:
+    """The contracts are what someone implementing a port depends on. If one reaches into the engine,
+    implementing a port drags the whole engine along."""
+    contracts = {module_name(p) for p in contract_files()}
+    offenders: set[str] = set()
+    for path in contract_files():
+        for module in _imports(path):
+            if module.startswith("substrate.") and module not in contracts and module != "substrate.types":
+                offenders.add(f"{path.relative_to(REPO_ROOT)}: {module}")
+    assert not offenders, "a contract imports the engine:\n  " + "\n  ".join(sorted(offenders))
 
 
 def test_i28_the_public_api_matches_its_snapshot() -> None:
     """Every addition or removal in the public API shows up as a diff in
     ``public_api.json``, so it is reviewed rather than noticed later.
 
-    This rewrite changes the API deliberately and often — the snapshot is meant
-    to be updated in the same commit as the change, never regenerated blindly.
+    The public API is what each concept package exports. This rewrite changes it
+    deliberately and often — the snapshot is meant to be updated in the same
+    commit as the change, never regenerated blindly.
     """
-    import substrate.kernel.abstractions as abstractions
-
-    current = sorted(abstractions.__all__)
-    expected = json.loads(SNAPSHOT.read_text())["substrate.kernel.abstractions"]
-
-    added = sorted(set(current) - set(expected))
-    removed = sorted(set(expected) - set(current))
-    assert not added and not removed, (
-        "the public API of substrate.kernel.abstractions changed.\n"
-        f"  added:   {added}\n"
-        f"  removed: {removed}\n"
-        f"If intended, update {SNAPSHOT.relative_to(REPO_ROOT)} in this commit."
+    expected = json.loads(SNAPSHOT.read_text())
+    problems: list[str] = []
+    for concept in CORE:
+        if concept == "testing":
+            continue
+        name = f"substrate.{concept}"
+        current = set(getattr(importlib.import_module(name), "__all__", ()))
+        wanted = set(expected.get(name, ()))
+        if current != wanted:
+            problems.append(f"{name}\n    added:   {sorted(current - wanted)}\n    removed: {sorted(wanted - current)}")
+    assert not problems, (
+        "the public API changed:\n  " + "\n  ".join(problems)
+        + f"\nIf intended, update {SNAPSHOT.relative_to(REPO_ROOT)} in this commit."
     )
 
 
 # Ports an outside party can implement, and what each one's conformance suite is called
-# (``kernel/testing/conformance/``). A port with no suite is a promise nothing checks.
+# (``substrate/testing/conformance/``). A port with no suite is a promise nothing checks.
 _PORTS = (
     "RuntimeStore",
     "HistoryProvider",
@@ -165,7 +166,7 @@ _PORTS = (
     "EmbeddingClient",
     "DocumentExtractor",
 )
-_SUITES_DIR = KERNEL / "testing" / "conformance"
+_SUITES_DIR = SRC / "testing" / "conformance"
 
 
 def _suite_classes() -> dict[str, str]:
@@ -259,9 +260,7 @@ def test_i26_importing_the_whole_engine_loads_only_the_allowed_third_party_set()
     probe = (
         "import sys\n"
         "before = set(sys.modules)\n"
-        "import substrate.kernel, substrate.kernel.runtime, substrate.kernel.agents, substrate.kernel.tools\n"
-        "import substrate.kernel.context, substrate.kernel.flows, substrate.kernel.middleware, substrate.kernel.llm\n"
-        "import substrate.kernel.storage, substrate.kernel.workspace, substrate.kernel.safety, substrate.kernel.telemetry\n"
+        f"import {', '.join('substrate.' + c for c in CORE if c != 'testing')}\n"
         "roots = {m.split('.')[0] for m in set(sys.modules) - before}\n"
         "print(sorted(r for r in roots if r not in sys.stdlib_module_names and not r.startswith('_') and r != 'substrate'))\n"
     )
@@ -270,4 +269,4 @@ def test_i26_importing_the_whole_engine_loads_only_the_allowed_third_party_set()
     # Dependencies of the allowed packages themselves: pydantic's, and opentelemetry-api's.
     transitive = {"annotated_types", "pydantic_core", "typing_inspection", "importlib_metadata", "zipp"}
     unexpected = loaded - _ALLOWED_THIRD_PARTY - transitive
-    assert not unexpected, f"importing the kernel loaded packages outside its allowed set: {sorted(unexpected)}"
+    assert not unexpected, f"importing the core loaded packages outside its allowed set: {sorted(unexpected)}"

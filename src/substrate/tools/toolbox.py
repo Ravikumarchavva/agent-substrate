@@ -8,8 +8,8 @@ pass a plain list[AnyTool] to the agent constructor.
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.exceptions import ToolDeclarationError
-from substrate.kernel.abstractions.tools import AnyTool, ToolRisk, is_hosted_tool
+from substrate.types.errors import ToolDeclarationError
+from substrate.tools.protocols import AnyTool, ToolRisk, is_hosted_tool
 
 
 def check_declaration(tool: object) -> None:

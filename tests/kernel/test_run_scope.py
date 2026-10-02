@@ -5,17 +5,17 @@ from __future__ import annotations
 
 from tests._stores import fs_history
 
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.tools import ToolRisk
 
-from substrate.kernel.context import ContextConfig
-from substrate.kernel.agents.orchestrator import OrchestratorAgent, SubAgentConfig
-from substrate.kernel.agents.react import ReActAgent
-from substrate.kernel.runtime.runtime import Runtime
-from substrate.kernel.abstractions.agent.runtime_context import RunScope, scope_of
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock, ToolUseBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-from substrate.kernel.abstractions.tools import ToolExecutionResult
+from substrate.context import ContextConfig
+from substrate.agents import OrchestratorAgent, SubAgentConfig
+from substrate.agents import ReActAgent
+from substrate.runtime import Runtime
+from substrate.types import RunScope, scope_of
+from substrate.types import ChatMessage, Role, TextBlock, ToolUseBlock
+from substrate.types import Actor
+from substrate.runtime import ChatPayload, Message
+from substrate.tools import ToolExecutionResult
 
 from tests.kernel.test_react_harness import ScriptedLLM  # noqa: E402
 

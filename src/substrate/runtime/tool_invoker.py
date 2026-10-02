@@ -25,38 +25,24 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from substrate.kernel.abstractions.core.content import (
-    JsonObject,
-    MediaBlock,
-    content_blocks_to_str,
-)
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.stream import AgentProgress, AgentStep
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.storage.blob import BlobStore
-from substrate.kernel.abstractions.tools import (
+from substrate.types.content import JsonObject, MediaBlock, content_blocks_to_str
+from substrate.types.identity import Actor
+from substrate.types.stream import AgentProgress, AgentStep
+from substrate.types.run_log import RunLogKind
+from substrate.stores.blob import BlobStore
+from substrate.tools.protocols import (
     ToolCallRequest,
     ToolRegistry,
     ToolRisk,
     is_hosted_tool,
     is_provider_defined_tool,
 )
-from substrate.kernel.abstractions.tools.approval import (
-    ApprovalDecision,
-    ApprovalHandler,
-    ApprovalRequest,
-    ApprovalResult,
-)
-from substrate.kernel.abstractions.tools.chain import (
-    ChainCallRecord,
-    ChainFile,
-    ChainPolicy,
-    InvocationResult,
-)
+from substrate.tools.approval import ApprovalDecision, ApprovalHandler, ApprovalRequest, ApprovalResult
+from substrate.tools.chain import ChainCallRecord, ChainFile, ChainPolicy, InvocationResult
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.tools.tools import ToolExecutionResult
-    from substrate.kernel.runtime.context import RunContext
+    from substrate.tools.protocols import ToolExecutionResult
+    from substrate.runtime.context import RunContext
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +246,7 @@ class ToolInvoker:
                 signal_payload = await ctx.sleep_until_signal(f"hitl:{request_id}")
                 result: ApprovalResult = ApprovalResult.from_response(signal_payload)
             else:
-                from substrate.kernel.abstractions.core.identity import Actor
+                from substrate.types.identity import Actor
 
                 decision_key = call.call_id
                 approval_req = ApprovalRequest(
@@ -461,11 +447,8 @@ def build_invoker(agent: Any) -> ToolInvoker:
     """The ``ToolInvoker`` for an agent, from what the agent declares: its tools, its
     approval handler, its blob store and the highest risk it lets through
     without approval."""
-    from substrate.kernel.abstractions.tools.approval import (
-        ApprovalDecision,
-        ApprovalResult,
-    )
-    from substrate.kernel.tools.toolbox import Toolbox
+    from substrate.tools.approval import ApprovalDecision, ApprovalResult
+    from substrate.tools.toolbox import Toolbox
 
     registry = getattr(agent, "tools", None) or Toolbox()
     approval = getattr(agent, "approval_handler", None)

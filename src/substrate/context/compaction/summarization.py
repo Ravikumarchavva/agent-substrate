@@ -5,16 +5,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.llm import GenerationOptions
-from substrate.kernel.context.tokens import (
-    DEFAULT_CHARS_PER_TOKEN,
-    estimate_message_tokens,
-    estimate_tokens,
-)
+from substrate.types.content import ChatMessage, Role, TextBlock
+from substrate.models.protocols import GenerationOptions
+from substrate.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_message_tokens, estimate_tokens
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.llm import LLMClient
+    from substrate.models.protocols import LLMClient
 
 logger = logging.getLogger(__name__)
 

@@ -36,8 +36,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import Message
+from substrate.types.identity import Actor
+from substrate.runtime.message import Message
 
 
 class DeadLetterReason(StrEnum):

@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import re
 
-from substrate.kernel.abstractions.tools import ToolExecutionResult
-from substrate.kernel.abstractions import TextBlock
+from substrate.tools import ToolExecutionResult
+from substrate.types import TextBlock
 from substrate.logger import setup_logging
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.tools import ToolRisk
 
 logger = setup_logging()
 

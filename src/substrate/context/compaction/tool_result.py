@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    Role,
-    TextBlock,
-    ToolResultBlock,
-)
+from substrate.types.content import ChatMessage, Role, TextBlock, ToolResultBlock
 
 
 class ToolResultCompactionStrategy:

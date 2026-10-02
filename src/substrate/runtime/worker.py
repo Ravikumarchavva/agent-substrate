@@ -32,9 +32,9 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
-from substrate.kernel.abstractions.agent.runtime_context import RunMeta
-from substrate.kernel.abstractions.core.error_info import ErrorInfo
-from substrate.kernel.abstractions.exceptions import (
+from substrate.types.run import RunMeta
+from substrate.types.error_info import ErrorInfo
+from substrate.types.errors import (
     AgentCrashError,
     BudgetExhaustedError,
     CancellationError,
@@ -45,9 +45,9 @@ from substrate.kernel.abstractions.exceptions import (
     RateLimitedError,
     SuspendInterrupt,
 )
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
-from substrate.kernel.abstractions.runtime.store import (
+from substrate.types.run_log import RunLogKind
+from substrate.runtime.scheduler import RunRetryPolicy
+from substrate.runtime.store import (
     Cancel,
     Commit,
     Complete,
@@ -60,13 +60,15 @@ from substrate.kernel.abstractions.runtime.store import (
     RuntimeStore,
     Suspend,
 )
-from substrate.kernel.runtime.cancellation import CancellationToken
-from substrate.kernel.runtime.context import RunContext
-from substrate.kernel.runtime.journal import Journal
-from substrate.kernel.telemetry import instruments, semconv, span
+from substrate.runtime.cancellation import CancellationToken
+from substrate.runtime.context import RunContext
+from substrate.runtime.journal import Journal
+from substrate.telemetry.metrics import instruments
+from substrate.telemetry import semconv
+from substrate.telemetry.tracing import span
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.resolver import ActorResolver
+    from substrate.runtime.resolver import ActorResolver
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +220,7 @@ class Worker:
     # ------------------------------------------------------------------ one run
 
     def _build_tool_invoker(self, agent: Any) -> Any:
-        from substrate.kernel.tools.invoker import build_invoker
+        from substrate.runtime.tool_invoker import build_invoker
 
         return build_invoker(agent)
 
@@ -442,7 +444,7 @@ class Worker:
         """Delete run-scoped history once the run has ended. After the commit, never
         before: a crash between the two leaks a transcript, whereas deleting first would
         lose one a retry still needs."""
-        from substrate.kernel.abstractions.agent.supervision import HistoryRetention
+        from substrate.types.supervision import HistoryRetention
 
         context_cfg = getattr(agent, "_context", None)
         if context_cfg is None or getattr(context_cfg, "retention", HistoryRetention.PERMANENT) != HistoryRetention.RUN:

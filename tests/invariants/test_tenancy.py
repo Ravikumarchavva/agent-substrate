@@ -16,8 +16,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from substrate.kernel.storage.local_memory_store import LocalFilesystemMemoryStore
-from substrate.kernel.abstractions.storage.memory import MemoryNamespace, MemoryQuery, MemoryRecord
+from substrate.stores import LocalFilesystemMemoryStore
+from substrate.stores import MemoryNamespace, MemoryQuery, MemoryRecord
 
 
 async def test_i03_a_record_is_not_readable_from_another_tenant(tmp_path: Path) -> None:

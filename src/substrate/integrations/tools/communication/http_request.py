@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import Dict, List
 from urllib.parse import urlparse
 
-from substrate.kernel.abstractions.tools import ToolExecutionResult
-from substrate.kernel.abstractions import TextBlock
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.tools import ToolExecutionResult
+from substrate.types import TextBlock
+from substrate.tools import ToolRisk
 
 
 _DEFAULT_ALLOWED_DOMAINS: List[str] = [

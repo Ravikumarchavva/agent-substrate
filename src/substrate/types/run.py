@@ -22,9 +22,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Mapping, Protocol, runtime_checkable
 
-from substrate.kernel.abstractions.agent.supervision import Supervision
-from substrate.kernel.abstractions.core.trace import TraceContext
-from substrate.kernel.abstractions.exceptions import CancellationError
+from substrate.types.supervision import Supervision
+from substrate.types.trace import TraceContext
+from substrate.types.errors import CancellationError
 
 
 @runtime_checkable

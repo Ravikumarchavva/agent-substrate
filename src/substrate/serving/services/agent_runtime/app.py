@@ -27,7 +27,7 @@ logger = setup_logging()
 
 @asynccontextmanager
 async def _runtime_cm(backend: str, pg_url: str):
-    from substrate.kernel.runtime import Runtime
+    from substrate.runtime import Runtime
 
     if backend == "postgres" and pg_url:
         from substrate.integrations.runtime import PostgresRuntimeStore
@@ -39,7 +39,7 @@ async def _runtime_cm(backend: str, pg_url: str):
         )
         logger.info("Agent Runtime: durable (Postgres)")
     else:
-        from substrate.kernel.runtime import SqliteRuntimeStore
+        from substrate.runtime import SqliteRuntimeStore
 
         store = SqliteRuntimeStore(os.environ.get("RUNTIME_LOCAL_DB_PATH", "./data/db/runtime.sqlite3"))
         logger.info("Agent Runtime: durable, no infra (SQLite)")

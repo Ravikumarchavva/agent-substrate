@@ -6,8 +6,8 @@ matter once the tool does anything beyond a trivial computation.
 ## Base skeleton (from root CLAUDE.md)
 
 ```python
-from substrate.kernel.abstractions.tools import ToolExecutionResult
-from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.tools import ToolExecutionResult
+from substrate.types.content import TextBlock
 
 class MyTool:
     name = "my_tool"
@@ -33,7 +33,7 @@ for the annotation and want to avoid any runtime import surface:
 ```python
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.context import RunContext
+    from substrate.runtime.context import RunContext
 
 async def execute(self, *, ctx: "RunContext | None" = None, **kwargs) -> ToolExecutionResult:
     ...

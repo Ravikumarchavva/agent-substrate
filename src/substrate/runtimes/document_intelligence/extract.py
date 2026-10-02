@@ -11,7 +11,7 @@ else fall back to pypdf" existed before this module —
 one of them now calls this instead.
 
 Placed inside ``runtimes/`` deliberately: ``runtimes/`` imports only
-``substrate.kernel.abstractions``/``substrate.logger`` today (verified via grep), and
+``substrate.types``/``substrate.logger`` today (verified via grep), and
 ``pyproject.toml`` already documents it as exempt from the "serving cannot
 import agents/capabilities" import-linter contract — this needs zero new
 lint exceptions, while a ``integrations/knowledge/`` home would need two.
@@ -34,7 +34,7 @@ import base64
 import mimetypes
 
 from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.kernel.abstractions.document import ExtractedImage, ExtractedPage, ExtractionResult
+from substrate.documents import ExtractedImage, ExtractedPage, ExtractionResult
 from substrate.logger import setup_logging
 from substrate.runtimes.document_intelligence.client import ExtractionClient, ExtractResponse
 from substrate.runtimes.document_intelligence.service.engines.raw_text import RawTextEngine

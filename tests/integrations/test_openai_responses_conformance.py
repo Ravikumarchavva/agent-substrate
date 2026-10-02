@@ -10,8 +10,8 @@ import pytest
 from openai import AsyncOpenAI
 
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.kernel.abstractions.llm import ModelCapabilities
-from substrate.kernel.testing.conformance.llm_client import LLMClientConformance
+from substrate.models import ModelCapabilities
+from substrate.testing.conformance.llm_client import LLMClientConformance
 
 CAPS = ModelCapabilities(model_id="conformance-gpt", input_modalities=frozenset({"text", "image"}))
 

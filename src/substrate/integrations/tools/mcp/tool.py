@@ -3,10 +3,10 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
-from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolType
+from substrate.types import MediaBlock, TextBlock
+from substrate.tools import ToolExecutionResult, ToolType
 from substrate.integrations.tools.mcp.client import MCPClient
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.tools import ToolRisk
 
 
 class MCPTool:

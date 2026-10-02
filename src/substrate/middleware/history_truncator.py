@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Awaitable, Callable, ClassVar
 
-from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.middleware.stage import MiddlewareStage
+from substrate.middleware._contracts import MiddlewareContext
 
 logger = logging.getLogger(__name__)
 

@@ -26,8 +26,8 @@ from dataclasses import dataclass, field
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from substrate.kernel.abstractions.runtime.store import Commit
-from substrate.kernel.runtime.journal import Journal
+from substrate.runtime import Commit
+from substrate.runtime import Journal
 
 
 class _Allocator(Journal):
@@ -192,14 +192,14 @@ def test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect(program: li
     let the retry replay. The retry must see exactly the values the first attempt saw for the
     prefix, and a tool must have run once per call in the program — never again for a call the
     journal already held."""
-    from substrate.kernel.abstractions.core.content import TextBlock
-    from substrate.kernel.abstractions.core.identity import Actor
-    from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-    from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-    from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
-    from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
-    from substrate.kernel.runtime import Runtime
-    from substrate.kernel.tools.toolbox import Toolbox
+    from substrate.types import TextBlock
+    from substrate.types import Actor
+    from substrate.runtime import DataPayload, Message
+    from substrate.types import RunLogKind
+    from substrate.runtime import RunRetryPolicy
+    from substrate.tools import ToolExecutionResult, ToolRisk
+    from substrate.runtime import Runtime
+    from substrate.tools import Toolbox
 
     cut = min(crash_after, len(program))
     executed: list[int] = []

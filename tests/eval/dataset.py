@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from substrate.kernel.abstractions.storage.vector import Document
+from substrate.stores import Document
 
 
 @dataclass(slots=True)

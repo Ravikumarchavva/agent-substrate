@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from substrate.kernel.document import LocalFilesystemDocumentStore
-from substrate.kernel.abstractions.document import DocumentChunk, DocumentMetadata, DocumentStore
+from substrate.documents import LocalFilesystemDocumentStore
+from substrate.documents import DocumentChunk, DocumentMetadata
+from substrate.documents import DocumentStore
 
 
 async def test_round_trip_list_and_delete(tmp_path: Path):

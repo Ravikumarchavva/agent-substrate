@@ -11,13 +11,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.runtime.store import Commit, NewEntry, RunSpec
-from substrate.kernel.agents.log_projection import (
-    rebuild_messages_from_steps,
-    step_rows_from_log,
-)
-from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
+from substrate.types import Actor
+from substrate.runtime import Commit, NewEntry, RunSpec
+from substrate.agents.log_projection import rebuild_messages_from_steps, step_rows_from_log
+from substrate.runtime import SqliteRuntimeStore
 
 THREAD = "thread-1"
 

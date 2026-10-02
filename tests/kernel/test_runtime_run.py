@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.llm import ModelCapabilities
-from substrate.kernel.agents.react import ReActAgent
-from substrate.kernel.runtime import Runtime
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
-from substrate.kernel.abstractions.runtime.ids import RunStatus
+from substrate.models import ModelCapabilities
+from substrate.agents import ReActAgent
+from substrate.runtime import Runtime
+from substrate.types import TextBlock
+from substrate.types import Usage
+from substrate.types import CompletionEvent, TextDelta
+from substrate.types import RunStatus
 
 
 class _StubLLM:

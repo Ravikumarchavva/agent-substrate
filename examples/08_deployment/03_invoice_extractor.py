@@ -27,10 +27,10 @@ import tempfile
 from pathlib import Path
 
 from substrate.integrations.tools.invoice_extractor.tool import InvoiceExtractorTool
-from substrate.kernel.agents import ReActAgent
+from substrate.agents import ReActAgent
 from substrate.integrations.llm.factory import create_model_client
-from substrate.kernel.agent_catalog import AgentCatalog
-from substrate.kernel.storage import LocalFilesystemHistoryProvider
+from substrate.agent_catalog import AgentCatalog
+from substrate.stores import LocalFilesystemHistoryProvider
 
 # Infrastructure: none required for direct tool calls.
 #   For the agent sections, set OPENAI_API_KEY (or another provider key).

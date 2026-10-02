@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
-from substrate.kernel.abstractions.core.content import (
+from substrate.types.content import (
     ChatMessage,
     ContentBlock,
     DataBlock,

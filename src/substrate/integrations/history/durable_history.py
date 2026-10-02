@@ -44,18 +44,14 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from substrate.kernel.abstractions.core.content import ChatMessage
-from substrate.kernel.abstractions.exceptions import (
+from substrate.types import ChatMessage
+from substrate.types import (
     BranchAlreadyExistsError,
     BranchHeadConflictError,
     BranchNotFoundError,
     DAGIntegrityError,
 )
-from substrate.kernel.abstractions.storage.history import (
-    Branch,
-    HistoryCheckpoint,
-    MessageNode,
-)
+from substrate.stores import Branch, HistoryCheckpoint, MessageNode
 from substrate.logger import setup_logging
 
 logger = setup_logging()

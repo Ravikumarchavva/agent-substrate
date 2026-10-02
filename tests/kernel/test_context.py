@@ -3,18 +3,16 @@ from __future__ import annotations
 from tests._stores import fs_history
 
 import pytest
-from substrate.kernel.abstractions.storage.history import MessageNode
-from substrate.kernel.context import (
-    AgentContext,
-    ContextConfig,
-    SlidingWindowCompaction,
-    SummarizationCompaction,
-    TokenBudgetComposedStrategy,
-    CompactionPipeline,
-)
-from substrate.kernel.abstractions import Actor
-from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
-from substrate.kernel.abstractions.llm import GenerationOptions, LLMResponse, Usage
+from substrate.stores import MessageNode
+from substrate.context import AgentContext, ContextConfig
+from substrate.context import SlidingWindowCompaction
+from substrate.context import SummarizationCompaction
+from substrate.context import TokenBudgetComposedStrategy
+from substrate.context import CompactionPipeline
+from substrate.types import Actor
+from substrate.types import ChatMessage, TextBlock
+from substrate.models import GenerationOptions, LLMResponse
+from substrate.types import Usage
 
 
 @pytest.mark.asyncio
@@ -41,7 +39,7 @@ async def test_context_config():
     assert cfg.pipeline is pipeline
 
     default_cfg = ContextConfig.default()
-    from substrate.kernel.storage.local_history import LocalFilesystemHistoryProvider
+    from substrate.stores import LocalFilesystemHistoryProvider
 
     assert isinstance(default_cfg.history, LocalFilesystemHistoryProvider)
     assert isinstance(default_cfg.pipeline, CompactionPipeline)
@@ -149,7 +147,7 @@ async def test_summarization_incremental_update():
         chars_per_token=4.0,
     )
 
-    from substrate.kernel.context.compaction.summarization import _make_summary_message
+    from substrate.context.compaction.summarization import _make_summary_message
 
     existing_summary_msg = _make_summary_message("Previous summary of early turns.")
     new_msgs = [_make_msg("user", "b" * 100) for _ in range(5)]

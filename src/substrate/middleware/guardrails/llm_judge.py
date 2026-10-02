@@ -5,12 +5,12 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, ClassVar
 
-from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.abstractions.exceptions import MiddlewareTermination
-from substrate.kernel.middleware._contracts import MiddlewareContext
+from substrate.middleware.stage import MiddlewareStage
+from substrate.types.errors import MiddlewareTermination
+from substrate.middleware._contracts import MiddlewareContext
 
 if TYPE_CHECKING:
-    from substrate.kernel.abstractions.llm.llm import LLMClient
+    from substrate.models.protocols import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +51,13 @@ class LLMJudgeMiddleware:
         logger.debug("[LLMJudge] checking %r (agent=%s)", text[:80], context.agent_name)
 
         try:
-            from substrate.kernel.abstractions import ChatMessage, TextBlock
+            from substrate.types.content import ChatMessage, TextBlock
 
             classify_request = f'Classify this message:\n"""\n{text}\n"""'
             messages = [
                 ChatMessage(role="user", content=[TextBlock(text=classify_request)])
             ]
-            from substrate.kernel.abstractions.llm import GenerationOptions
+            from substrate.models.protocols import GenerationOptions
 
             resp = await self._model_client.generate(
                 messages,

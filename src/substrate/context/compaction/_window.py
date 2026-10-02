@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.core.content import ChatMessage, Role
+from substrate.types.content import ChatMessage, Role
 
 
 def drop_orphaned_tool_results(window: list[ChatMessage]) -> list[ChatMessage]:

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from tests._stores import fs_tasks
 
-from substrate.kernel.runtime.cancellation import CancellationToken
+from substrate.runtime import CancellationToken
 from substrate.integrations.tools.task_manager.tool import TaskManagerTool
-from substrate.kernel.abstractions.agent.runtime_context import RunMeta, RunScope
-from substrate.kernel.abstractions.storage.tasks import TaskStatus
+from substrate.types import RunMeta, RunScope
+from substrate.stores import TaskStatus
 
 
 def _ctx(thread_id: str, agent_id: str, parent: str | None = None) -> RunMeta:

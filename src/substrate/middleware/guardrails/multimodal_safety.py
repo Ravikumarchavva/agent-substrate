@@ -44,22 +44,20 @@ import asyncio
 import logging
 from typing import Awaitable, Callable, ClassVar
 
-from substrate.kernel.abstractions.agent.middleware import MiddlewareStage
-from substrate.kernel.abstractions.agent.safety import (
+from substrate.middleware.stage import MiddlewareStage
+from substrate.safety.protocols import (
     ImageSafetyClassifier,
     SafetyVerdict,
     Severity,
     TextSafetyClassifier,
     max_severity,
 )
-from substrate.kernel.abstractions.core.content import MediaBlock, TextBlock
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.exceptions import MiddlewareTermination
-from substrate.kernel.middleware._contracts import MiddlewareContext
-from substrate.kernel.middleware.guardrails.prompt_injection import (
-    _INJECTION_PATTERNS,
-)
-from substrate.kernel.safety.normalize import normalize
+from substrate.types.content import MediaBlock, TextBlock
+from substrate.types.run_log import RunLogKind
+from substrate.types.errors import MiddlewareTermination
+from substrate.middleware._contracts import MiddlewareContext
+from substrate.middleware.guardrails.prompt_injection import _INJECTION_PATTERNS
+from substrate.safety.normalize import normalize
 
 logger = logging.getLogger(__name__)
 

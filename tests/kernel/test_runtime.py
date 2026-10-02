@@ -14,11 +14,12 @@ from __future__ import annotations
 import asyncio
 
 
-from substrate.kernel.abstractions.core.identity import Actor, Topic
-from substrate.kernel.abstractions.messaging.message import DataPayload, Message
-from substrate.kernel.abstractions.runtime.communication import AskOutcome
-from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
-from substrate.kernel.runtime import Runtime, RunContext
+from substrate.types import Actor, Topic
+from substrate.runtime import DataPayload, Message
+from substrate.runtime import AskOutcome
+from substrate.runtime import RunRetryPolicy
+from substrate.runtime import Runtime
+from substrate.runtime import RunContext
 
 
 # ---------------------------------------------------------------------------
@@ -386,9 +387,9 @@ async def test_nested_effect_inside_journal_hit_tool_stays_replay_safe() -> None
     or miss, and its internal effects live in a child scope that is only
     entered when the body genuinely executes.
     """
-    from substrate.kernel.tools.toolbox import Toolbox
-    from substrate.kernel.abstractions.core.content import TextBlock
-    from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
+    from substrate.tools import Toolbox
+    from substrate.types import TextBlock
+    from substrate.tools import ToolExecutionResult, ToolRisk
 
     class NestedUuidTool:
         name = "nested_uuid_tool"
@@ -448,7 +449,7 @@ async def test_nested_effect_inside_journal_hit_tool_stays_replay_safe() -> None
 
 async def test_supervisor_join() -> None:
     """A parent agent can spawn a child and await its completion via ctx.join()."""
-    from substrate.kernel.abstractions.runtime.ids import RunStatus
+    from substrate.types import RunStatus
 
     class ChildJoinAgent:
         def __init__(self, agent_id: Actor) -> None:
@@ -495,7 +496,7 @@ async def test_spawn_inherits_execution_budget_transitively() -> None:
     that same budget too, proving the Worker actually rehydrates
     RunMeta.supervision from SupervisorProtocol.supervision_of() at each lease, not
     just at the moment of the original spawn() call."""
-    from substrate.kernel.abstractions.agent.supervision import ExecutionBudget, Supervision
+    from substrate.types import ExecutionBudget, Supervision
 
     class GrandchildAgent:
         def __init__(self, agent_id: Actor) -> None:
@@ -559,8 +560,8 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
 
     ctx.log_once() must append its entry exactly once no matter how many
     times the surrounding tool body re-executes."""
-    from substrate.kernel.abstractions.tools import ToolExecutionResult, ToolRisk
-    from substrate.kernel.abstractions.core.content import TextBlock
+    from substrate.tools import ToolExecutionResult, ToolRisk
+    from substrate.types import TextBlock
 
     log_call_count = 0
 
@@ -588,7 +589,7 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
             await ctx.tool("suspending_tool")
             self.done.set()
 
-    from substrate.kernel.tools.toolbox import Toolbox
+    from substrate.tools import Toolbox
 
     agent_id = _agent_id("log_once_suspend")
     agent = SuspendingAgent(agent_id)

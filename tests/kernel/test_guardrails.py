@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import pytest
-from substrate.kernel.abstractions.exceptions import MiddlewareTermination
-from substrate.kernel.middleware import (
-    ContentFilterMiddleware,
-    MaxTokenMiddleware,
-    PromptInjectionMiddleware,
-    MiddlewareContext,
-    MiddlewareStage,
-    MiddlewarePipeline,
-)
-from substrate.kernel.abstractions.core.content import ChatMessage, TextBlock
+from substrate.types import MiddlewareTermination
+from substrate.middleware import ContentFilterMiddleware
+from substrate.middleware import MaxTokenMiddleware
+from substrate.middleware import PromptInjectionMiddleware
+from substrate.middleware import MiddlewareContext
+from substrate.middleware import MiddlewareStage
+from substrate.middleware import MiddlewarePipeline
+from substrate.types import ChatMessage, TextBlock
 
 
 def _agent_ctx(text: str) -> MiddlewareContext:

@@ -4,15 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from substrate.kernel.abstractions.core.content import ChatMessage
-from substrate.kernel.abstractions.exceptions import (
-    DAGIntegrityError,
-)
-from substrate.kernel.abstractions.storage.history import (
-    HistoryCheckpoint,
-    HistoryProvider,
-    MessageNode,
-)
+from substrate.types.content import ChatMessage
+from substrate.types.errors import DAGIntegrityError
+from substrate.stores.threads import HistoryCheckpoint, HistoryProvider, MessageNode
 
 _UNSET: Any = object()
 
@@ -131,7 +125,7 @@ async def project_messages(
         branch.head_message_id
     )
     if builder is None:
-        from substrate.kernel.context.builder import DefaultContextBuilder
+        from substrate.context.builder import DefaultContextBuilder
 
         builder = DefaultContextBuilder()
     window = await builder.build(nodes, checkpoint=checkpoint)

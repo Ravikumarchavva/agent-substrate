@@ -10,10 +10,10 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from substrate.kernel.abstractions.core.content import ChatMessage, ContentBlock, TextBlock
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.llm import GenerationOptions, ModelCapabilities
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
+from substrate.types import ChatMessage, ContentBlock, TextBlock
+from substrate.types import Usage
+from substrate.models import GenerationOptions, ModelCapabilities
+from substrate.types import CompletionEvent, TextDelta
 
 
 class ScriptedLLM:

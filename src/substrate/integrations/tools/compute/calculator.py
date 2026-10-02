@@ -6,9 +6,9 @@ import ast
 import operator
 from typing import Callable
 
-from substrate.kernel.abstractions import TextBlock
-from substrate.kernel.abstractions.tools import ToolExecutionResult
-from substrate.kernel.abstractions.tools import ToolRisk
+from substrate.types import TextBlock
+from substrate.tools import ToolExecutionResult
+from substrate.tools import ToolRisk
 
 # Whitelisted binary/unary operators. Anything not in these maps is rejected —
 # there is no ``eval``, so LLM-controlled input can never reach attribute

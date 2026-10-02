@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.runtime.store import Commit, RunSpec, Suspend
-from substrate.kernel.abstractions.runtime.wakeup import Wakeup
-from substrate.kernel.runtime.sqlite_store import SqliteRuntimeStore
+from substrate.types import Actor
+from substrate.runtime import Commit, RunSpec, Suspend
+from substrate.types import Wakeup
+from substrate.runtime import SqliteRuntimeStore
 from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
 

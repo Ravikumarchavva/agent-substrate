@@ -32,14 +32,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
-from substrate.kernel.abstractions.exceptions import ScopeViolationError
-from substrate.kernel.abstractions.storage.memory import (
-    MemoryMatch,
-    MemoryNamespace,
-    MemoryQuery,
-    MemoryRecord,
-)
-from substrate.kernel.storage.fs import atomic_write_json, safe_name
+from substrate.types.errors import ScopeViolationError
+from substrate.stores.memory import MemoryMatch, MemoryNamespace, MemoryQuery, MemoryRecord
+from substrate.stores.local.fs import atomic_write_json, safe_name
 
 
 class LocalFilesystemMemoryStore:

@@ -19,25 +19,25 @@ from typing import Any
 
 import pytest
 
-from substrate.kernel.abstractions.core.content import ChatMessage, ContentBlock, Role, TextBlock
-from substrate.kernel.abstractions.core.finish_reason import FinishReason
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.exceptions import (
+from substrate.types import ChatMessage, ContentBlock, Role, TextBlock
+from substrate.types.finish_reason import FinishReason
+from substrate.types import Actor
+from substrate.types import Usage
+from substrate.types import (
     AuthError,
     ContentFilterError,
     ContextLengthError,
     PermanentError,
     RateLimitedError,
 )
-from substrate.kernel.abstractions.llm import GenerationOptions, ModelCapabilities
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent
-from substrate.kernel.abstractions.runtime.log_entry import RunLogKind
-from substrate.kernel.abstractions.runtime.scheduler import RunRetryPolicy
-from substrate.kernel.agents.react import ReActAgent
-from substrate.kernel.llm.errors import classify_llm_error
-from substrate.kernel.runtime import Runtime
+from substrate.models import GenerationOptions, ModelCapabilities
+from substrate.runtime import ChatPayload, Message
+from substrate.types import CompletionEvent
+from substrate.types import RunLogKind
+from substrate.runtime import RunRetryPolicy
+from substrate.agents import ReActAgent
+from substrate.models.errors import classify_llm_error
+from substrate.runtime import Runtime
 
 # ---------------------------------------------------------------------------- classification
 
@@ -108,7 +108,7 @@ def test_every_vendor_reports_why_the_model_stopped() -> None:
     from substrate.integrations.llm.gemini.gemini_client import gemini_finish_reason
     from substrate.integrations.llm.openai.openai_client import responses_finish_reason
     from substrate.integrations.llm.openai_compatible import chat_finish_reason
-    from substrate.kernel.abstractions.core.content import ToolUseBlock
+    from substrate.types import ToolUseBlock
 
     assert chat_finish_reason("stop", has_tool_calls=False) is FinishReason.STOP
     assert chat_finish_reason("length", has_tool_calls=False) is FinishReason.LENGTH
@@ -213,8 +213,8 @@ async def test_i21_a_content_filter_stop_fails_the_run_with_its_own_code() -> No
 
 
 async def test_i21_a_context_overflow_is_retried_once_with_a_smaller_prompt() -> None:
-    from substrate.kernel.abstractions.core.content import ToolUseBlock
-    from substrate.kernel.tools.toolbox import Toolbox
+    from substrate.types import ToolUseBlock
+    from substrate.tools import Toolbox
     from tests.invariants._harness.scenarios import ChargeCard
 
     tools = Toolbox()

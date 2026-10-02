@@ -9,14 +9,8 @@ provider rejecting the request or the content vanishing silently.
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    ContentBlock,
-    MediaBlock,
-    TextBlock,
-    ToolResultBlock,
-)
-from substrate.kernel.abstractions.llm import Modality, ModelCapabilities
+from substrate.types.content import ChatMessage, ContentBlock, MediaBlock, TextBlock, ToolResultBlock
+from substrate.models.protocols import Modality, ModelCapabilities
 
 
 def _placeholder(block: MediaBlock, caps: ModelCapabilities) -> TextBlock:

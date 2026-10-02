@@ -76,7 +76,7 @@ answer is available.
 
 ```python
 import asyncio
-from substrate.kernel import ReActAgent, Runtime
+from substrate import ReActAgent, Runtime
 from substrate.integrations.llm import LLMFactory
 
 async def main():
@@ -100,7 +100,7 @@ if __name__ == "__main__":
 
 ```python
 import asyncio
-from substrate.kernel import ReActAgent, Runtime
+from substrate import ReActAgent, Runtime
 from substrate.capabilities.tools.compute.calculator import CalculatorTool
 from substrate.integrations.llm import LLMFactory
 
@@ -165,8 +165,8 @@ Import-linter enforces the layer contract on every CI run (`uv run lint-imports`
 Drop a file at `src/substrate/capabilities/tools/<name>/tool.py` — `CatalogScanner` discovers it automatically, no registration needed:
 
 ```python
-from substrate.kernel.abstractions.tools import ToolExecutionResult
-from substrate.kernel.abstractions.core.content import TextBlock
+from substrate.tools import ToolExecutionResult
+from substrate.types.content import TextBlock
 
 class MyTool:
     name = "my_tool"
@@ -220,7 +220,7 @@ also works with `Runtime.run()` — its final synthesized answer streams
 through the same mechanism as `ReActAgent`'s.
 
 ```python
-from substrate.kernel import OrchestratorAgent, SubAgentConfig, ReActAgent
+from substrate import OrchestratorAgent, SubAgentConfig, ReActAgent
 
 researcher = ReActAgent("researcher", model=llm, system_instructions="Research the web.")
 writer = ReActAgent("writer", model=llm, system_instructions="Write content.")
@@ -249,9 +249,9 @@ to invoke one directly and read its result — register each step with the
 `Runtime` first:
 
 ```python
-from substrate.kernel.runtime import Runtime
+from substrate.runtime import Runtime
 from substrate.fabric.flows import SequentialFlow
-from substrate.kernel.abstractions.core.identity import AgentId
+from substrate.types.identity import AgentId
 
 class FetchStep:
     id = AgentId(type="step", key="fetch")

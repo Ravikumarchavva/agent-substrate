@@ -14,12 +14,8 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import Field
 
-from substrate.kernel.abstractions.core.content import (
-    ChatMessage,
-    JsonObject,
-    KernelModel,
-)
-from substrate.kernel.abstractions.ids import new_id
+from substrate.types.content import ChatMessage, JsonObject, KernelModel
+from substrate.types.ids import new_id
 
 
 class MessageNode(KernelModel):

@@ -9,11 +9,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from typing import Any
-from substrate.kernel.runtime.context import RunContext
-from substrate.kernel.runtime.runtime import Runtime
-from substrate.kernel.abstractions.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.messaging.message import ChatPayload, Message
+from substrate.runtime import RunContext
+from substrate.runtime import Runtime
+from substrate.types import ChatMessage, Role, TextBlock
+from substrate.types import Actor
+from substrate.runtime import ChatPayload, Message
 from substrate.serving.monolith.sse.bridge import BRIDGE_DONE
 from substrate.serving.protocol import (
     HelloEvent,

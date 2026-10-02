@@ -6,14 +6,16 @@ are broken and need fixing alongside whatever changed the API.
 
 from __future__ import annotations
 
-from substrate.kernel.abstractions.llm import ModelCapabilities
-from substrate.kernel import OrchestratorAgent, ReActAgent, Runtime, SubAgentConfig
+from substrate.models import ModelCapabilities
+from substrate.agents import OrchestratorAgent, SubAgentConfig
+from substrate.agents import ReActAgent
+from substrate.runtime import Runtime
 from substrate.integrations.tools.compute.calculator import CalculatorTool
-from substrate.kernel.flows import ConditionalFlow, ParallelFlow, SequentialFlow
-from substrate.kernel.abstractions.core.content import TextBlock
-from substrate.kernel.abstractions.core.identity import Actor
-from substrate.kernel.abstractions.core.usage import Usage
-from substrate.kernel.abstractions.messaging.stream import CompletionEvent, TextDelta
+from substrate.agents import ConditionalFlow, ParallelFlow, SequentialFlow
+from substrate.types import TextBlock
+from substrate.types import Actor
+from substrate.types import Usage
+from substrate.types import CompletionEvent, TextDelta
 
 
 class _StubLLM:
@@ -40,7 +42,7 @@ class _ToolCallingStubLLM:
         self._calls = 0
 
     async def generate_stream(self, messages, *, options, ctx=None):
-        from substrate.kernel.abstractions.core.content import ToolUseBlock
+        from substrate.types import ToolUseBlock
 
         self._calls += 1
         if self._calls == 1:

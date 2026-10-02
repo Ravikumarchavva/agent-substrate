@@ -31,8 +31,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.kernel.workspace.layout import conversation_shared_key, user_upload_key
-from substrate.kernel.storage.local_object_store import WorkspaceQuotaExceededError
+from substrate.workspace.layout import conversation_shared_key, user_upload_key
+from substrate.stores import WorkspaceQuotaExceededError
 from substrate.integrations.llm.endpoint import InferenceEndpoint
 from substrate.logger import setup_logging
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
@@ -55,7 +55,7 @@ from substrate.serving.shared.doc_quota import (
     seconds_until_reset,
 )
 from substrate.serving.shared.settings import settings
-from substrate.kernel.abstractions.document import ExtractionResult
+from substrate.documents import ExtractionResult
 from substrate.runtimes.document_intelligence.extract import extract_document
 
 logger = setup_logging()

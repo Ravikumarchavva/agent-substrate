@@ -17,6 +17,7 @@ import asyncio
 from typing import Any
 
 import pytest
+from substrate.testing.runtime import ephemeral_runtime
 
 pytest.importorskip("opentelemetry.sdk")
 
@@ -27,7 +28,6 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from substrate.context import ContextConfig
 from substrate.agents import ReActAgent
-from substrate.runtime import Runtime
 from substrate.tools import Toolbox
 from substrate.types import ChatMessage, Role, TextBlock, ToolUseBlock
 from substrate.types import Actor
@@ -68,7 +68,7 @@ def _spans() -> list[Any]:
     )
 
     async def _run() -> None:
-        async with Runtime.local(":memory:") as runtime:
+        async with ephemeral_runtime() as runtime:
             await runtime.register(agent)
             run_id = await runtime.submit(
                 agent.id,

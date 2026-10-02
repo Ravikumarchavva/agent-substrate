@@ -21,6 +21,7 @@ from substrate.models import GenerationOptions, LLMResponse
 from substrate.types import Usage
 from substrate.runtime import ChatPayload, Message
 from substrate.types import CompletionEvent, TextDelta
+from substrate.testing.runtime import ephemeral_runtime
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +186,7 @@ def make_agent(
 
 async def test_run_plain_text():
     """Agent returns the LLM's text response."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = make_agent([[TextBlock(text="hello world")]])
         result = await run_agent(rt, agent, "hi")
         assert result["status"] == "success"
@@ -194,7 +195,7 @@ async def test_run_plain_text():
 
 async def test_run_with_tool_call():
     """Agent executes a tool when the LLM returns a ToolUseBlock."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         tool_use = ToolUseBlock(
             call_id="c1", tool_name="echo", arguments={"text": "pong"}
         )
@@ -212,7 +213,7 @@ async def test_run_with_tool_call():
 
 async def test_run_unknown_tool_returns_error_and_continues():
     """Calling an unregistered tool gives an error result; agent continues."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         tool_use = ToolUseBlock(call_id="c1", tool_name="ghost", arguments={})
         agent = make_agent([[tool_use], [TextBlock(text="ok")]])
         result = await run_agent(rt, agent, "use ghost tool")
@@ -221,7 +222,7 @@ async def test_run_unknown_tool_returns_error_and_continues():
 
 async def test_multi_turn_history():
     """History accumulates across multiple submissions with the same session."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = make_agent(
             [
                 [TextBlock(text="I am fine.")],
@@ -242,7 +243,7 @@ async def test_multi_turn_history():
 async def test_max_iterations_wraps_up_instead_of_failing():
     """Out of steps, the agent makes one last tool-free call and the turn is
     saved and flagged ``run.truncated`` rather than crashing and losing it."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         tool_use = ToolUseBlock(call_id="c1", tool_name="echo", arguments={"text": "x"})
         agent = make_agent(
             [[tool_use]] * 5 + [[TextBlock(text="Here is what I found so far.")]],
@@ -255,7 +256,7 @@ async def test_max_iterations_wraps_up_instead_of_failing():
 
 
 async def test_max_iterations_falls_back_when_wrap_up_still_calls_tools():
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         tool_use = ToolUseBlock(call_id="c1", tool_name="echo", arguments={"text": "x"})
         agent = make_agent([[tool_use]] * 6, tools=[EchoTool()])
         result = await run_agent(rt, agent, "loop forever")
@@ -265,7 +266,7 @@ async def test_max_iterations_falls_back_when_wrap_up_still_calls_tools():
 
 async def test_multiple_tool_calls_in_one_turn():
     """Two tool uses in a single assistant turn are both executed."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         tc1 = ToolUseBlock(call_id="c1", tool_name="echo", arguments={"text": "a"})
         tc2 = ToolUseBlock(call_id="c2", tool_name="echo", arguments={"text": "b"})
         agent = make_agent(
@@ -287,7 +288,7 @@ async def test_multiple_tool_calls_in_one_turn():
 
 async def test_hitl_approval_granted():
     """When approval_handler approves, the tool executes and agent succeeds."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         approved_calls: list[str] = []
 
         async def handler(tool_name: str, args: dict) -> bool:
@@ -308,7 +309,7 @@ async def test_hitl_approval_granted():
 
 async def test_hitl_approval_denied():
     """When approval_handler denies, tool call produces an error and agent continues."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
 
         async def handler(tool_name: str, args: dict) -> bool:
             return False
@@ -327,7 +328,7 @@ async def test_hitl_approval_denied():
 
 async def test_hitl_safe_tool_skips_approval():
     """SAFE-risk tools bypass the approval handler entirely."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         calls: list[str] = []
 
         async def handler(tool_name: str, args: dict) -> bool:
@@ -353,7 +354,7 @@ async def test_hitl_safe_tool_skips_approval():
 
 async def test_agent_context_config():
     """ContextConfig accepts a CompactionPipeline."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         pipeline = CompactionPipeline([SlidingWindowCompaction(max_messages=10)])
         ctx = ContextConfig(
             fs_history(),
@@ -371,7 +372,7 @@ async def test_agent_context_config():
 
 async def test_agent_context_config_pipeline():
     """ContextConfig with a CompactionPipeline chains multiple strategies in sequence."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         pipeline = CompactionPipeline(
             [
                 SlidingWindowCompaction(max_messages=20),

@@ -49,8 +49,8 @@ class CrashAgent:
         raise RuntimeError("intentional crash")
 
 
-def _build_app(agent) -> tuple[FastAPI, Runtime]:
-    runtime = Runtime.local(":memory:")
+def _build_app(agent, folder) -> tuple[FastAPI, Runtime]:
+    runtime = Runtime.open(folder)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -77,9 +77,9 @@ def _sse_events(body: str) -> list[dict]:
     return events
 
 
-def test_add_routes_streams_a_real_agent_run_end_to_end() -> None:
+def test_add_routes_streams_a_real_agent_run_end_to_end(tmp_path) -> None:
     agent = ReplyAgent(reply="hello from add_routes", name="e2e_agent")
-    app, _runtime = _build_app(agent)
+    app, _runtime = _build_app(agent, tmp_path)
 
     with TestClient(app) as client:
         resp = client.post("/chat", json={"message": "hi"})
@@ -97,9 +97,9 @@ def test_add_routes_streams_a_real_agent_run_end_to_end() -> None:
     assert resp.text.rstrip().endswith("data: [DONE]")
 
 
-def test_add_routes_surfaces_a_real_agent_error_as_run_failed() -> None:
+def test_add_routes_surfaces_a_real_agent_error_as_run_failed(tmp_path) -> None:
     agent = CrashAgent(name="e2e_crash_agent")
-    app, _runtime = _build_app(agent)
+    app, _runtime = _build_app(agent, tmp_path)
 
     with TestClient(app) as client:
         resp = client.post("/chat", json={"message": "hi"})
@@ -108,13 +108,13 @@ def test_add_routes_surfaces_a_real_agent_error_as_run_failed() -> None:
     assert any(e.get("type") == "run.failed" for e in events)
 
 
-def test_add_routes_threadless_request_gets_a_generated_correlation_id() -> None:
+def test_add_routes_threadless_request_gets_a_generated_correlation_id(tmp_path) -> None:
     """The real bug this guards against: Message.correlation_id has no
     None-means-"generate one" case of its own -- passing thread_id=None
     straight through as correlation_id=None crashes pydantic validation
     before the run ever starts."""
     agent = ReplyAgent(reply="ok", name="threadless_agent")
-    app, _runtime = _build_app(agent)
+    app, _runtime = _build_app(agent, tmp_path)
 
     with TestClient(app) as client:
         resp = client.post("/chat", json={"message": "hi"})
@@ -124,9 +124,9 @@ def test_add_routes_threadless_request_gets_a_generated_correlation_id() -> None
     assert events[-1]["type"] == "run.completed"
 
 
-def test_add_routes_respects_a_custom_path() -> None:
+def test_add_routes_respects_a_custom_path(tmp_path) -> None:
     agent = ReplyAgent(reply="custom path works", name="custom_path_agent")
-    runtime = Runtime.local(":memory:")
+    runtime = Runtime.open(tmp_path)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

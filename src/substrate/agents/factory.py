@@ -14,7 +14,7 @@ from substrate.context.compaction.sliding_window import SlidingWindowCompaction
 from substrate.middleware._contracts import Middleware
 from substrate.middleware.pipeline import MiddlewarePipeline
 from substrate.context.history import ThreadStore
-from substrate.stores.local.threads import LocalFilesystemThreadStore
+from substrate.stores import Store
 
 if TYPE_CHECKING:
     from substrate.agents.react import ReActAgent
@@ -57,7 +57,7 @@ def rebuild_agent(
     system_instructions = spec.get("system_instructions", "")
 
     ctx = ContextConfig(
-        LocalFilesystemThreadStore(),
+        Store.at().threads,
         pipeline=CompactionPipeline(
             [SlidingWindowCompaction(max_messages=model_context_window)]
         ),
@@ -106,8 +106,8 @@ def create_assistant_agent(
         model_client: The LLM client to drive the ReAct loop.
         tools: Optional list of Tool instances to expose.
         system_instructions: System prompt prepended to every conversation.
-        memory: Shared history provider; an ``InMemoryThreadStore`` is used
-            when ``None``.
+        memory: Shared history provider; the threads of the store in ``./.substrate`` are
+            used when ``None``.
         model_context: Explicit compaction pipeline; if ``None`` a
             ``CompactionPipeline([SlidingWindowCompaction(max_messages=model_context_window)])`` is
             created automatically.
@@ -147,7 +147,7 @@ def create_assistant_agent(
     )
 
     ctx = ContextConfig(
-        memory if memory is not None else LocalFilesystemThreadStore(),
+        memory if memory is not None else Store.at().threads,
         pipeline=pipeline,
     )
 

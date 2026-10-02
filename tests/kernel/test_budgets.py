@@ -9,6 +9,7 @@ from substrate.agents import SpawnTracker
 from substrate.types import ExecutionBudget, Priority, SpawnBudget
 from substrate.types import BudgetExhaustedError
 from substrate.types import Actor
+from substrate.testing.runtime import ephemeral_runtime
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +56,6 @@ def test_spawn_tracker_priority_of_tracks_active_agents() -> None:
 
 async def test_react_agent_respects_execution_budget() -> None:
     from substrate.agents import ReActAgent
-    from substrate.runtime import Runtime
     from substrate.types import ChatMessage, Role, TextBlock
     from substrate.types import Actor
     from substrate.types import Usage
@@ -87,7 +87,7 @@ async def test_react_agent_respects_execution_budget() -> None:
         max_iterations=5,
     )
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
 
         msg = Message(
@@ -114,7 +114,6 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
     through ctx.spawn()/spawn_child() but nothing ever converted it into an
     enforced budget for the spawned run."""
     from substrate.agents import ReActAgent
-    from substrate.runtime import Runtime
     from substrate.types import ExecutionBudget, Supervision
     from substrate.types import ChatMessage, Role, TextBlock
     from substrate.types import Actor
@@ -165,7 +164,7 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
 
     parent = SpawningParent()
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(parent)
         await rt.register(child)
 

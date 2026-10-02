@@ -17,6 +17,8 @@ ssl
 *.so
 *.parquet
 data
+# the store a program opens in its working directory (substrate.connect / Runtime.open default)
+.substrate/
 *.zip
 *.csv
 opensearch-3.5.0-windows-x64

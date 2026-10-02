@@ -299,7 +299,7 @@ async def lifespan(app: FastAPI):
     if getattr(app.state, "ci_client", None):
         await app.state.ci_client.close()  # type: ignore[union-attr]
     if getattr(app.state, "history", None):
-        await app.state.history.disconnect()
+        await app.state.history.store.aclose()
     if getattr(app.state, "short_term_memory", None):
         await app.state.short_term_memory.disconnect()
     if getattr(app.state, "long_term_memory", None):

@@ -22,11 +22,11 @@ from substrate.middleware import ContentFilterMiddleware
 from substrate.middleware import MaxTokenMiddleware
 from substrate.middleware import MiddlewarePipeline
 from substrate.middleware import PIIDetectionMiddleware
-from substrate.runtime import Runtime
 from substrate.types import TextBlock, ToolUseBlock
 from substrate.tools import ToolExecutionResult
 
 from tests.reasoning.test_assistant_agent import make_agent, run_agent
+from substrate.testing.runtime import ephemeral_runtime
 
 
 class CountingTool:
@@ -52,7 +52,7 @@ class CountingTool:
 async def test_turn_stage_middleware_blocks_via_content_filter():
     """A ContentFilterMiddleware (TURN stage) halts the turn before any LLM
     call happens — the run ends 'guardrail_tripped', not 'success'."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = make_agent([[TextBlock(text="should never be reached")]])
         agent.middleware = MiddlewarePipeline(
             [ContentFilterMiddleware(blocked_keywords=["badword"])]
@@ -62,7 +62,7 @@ async def test_turn_stage_middleware_blocks_via_content_filter():
 
 
 async def test_turn_stage_middleware_passes_clean_input():
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = make_agent([[TextBlock(text="all clear")]])
         agent.middleware = MiddlewarePipeline(
             [ContentFilterMiddleware(blocked_keywords=["badword"])]
@@ -75,7 +75,7 @@ async def test_turn_stage_middleware_passes_clean_input():
 async def test_chat_stage_middleware_blocks_via_max_token():
     """MaxTokenMiddleware (CHAT stage) sees the real messages passed to
     ctx.llm() and blocks before the (mock) LLM is ever called."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = make_agent([[TextBlock(text="should never be reached")]])
         agent.middleware = MiddlewarePipeline(
             [MaxTokenMiddleware(max_tokens=1, chars_per_token=1.0)]
@@ -87,7 +87,7 @@ async def test_chat_stage_middleware_blocks_via_max_token():
 async def test_tool_stage_middleware_blocks_via_pii_detection():
     """PIIDetectionMiddleware (TOOL stage) inspects real tool arguments and
     blocks before the tool actually executes."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         tool = CountingTool()
         tool_use = ToolUseBlock(
             call_id="c1",
@@ -104,7 +104,7 @@ async def test_tool_stage_middleware_blocks_via_pii_detection():
 async def test_tool_stage_middleware_cache_hit_skips_real_tool_call():
     """CacheMiddleware's (TOOL stage) skip-call_next-on-hit path is honored:
     a second identical tool call doesn't re-invoke the underlying tool."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         tool = CountingTool()
         tool_use = ToolUseBlock(
             call_id="c1", tool_name="counting_tool", arguments={"value": "x"}
@@ -142,7 +142,7 @@ async def test_one_pipeline_dispatches_all_three_stages_together():
     """A single MiddlewarePipeline holding middleware for all three stages
     dispatches each at its own real call site in one run — the core claim
     of "one middleware, no different kinds": no separate slots needed."""
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         tool = CountingTool()
         tool_use = ToolUseBlock(
             call_id="c1", tool_name="counting_tool", arguments={"value": "ok"}

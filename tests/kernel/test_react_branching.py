@@ -14,6 +14,7 @@ from substrate.types import Actor
 from substrate.models.protocols import CompletionEvent, TextDelta, Usage
 from substrate.models import GenerationOptions, LLMResponse
 from substrate.runtime import ChatPayload, Message
+from substrate.testing.runtime import ephemeral_runtime
 
 
 class MockChatModel:
@@ -77,7 +78,7 @@ async def test_react_agent_branching_and_dag_history():
     agent = ReActAgent("assistant", model=llm, context=ctx_cfg)
     session_id = "test-session-branching"
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
 
         # Turn 1: On main branch

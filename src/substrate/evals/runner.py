@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import tempfile
 import time
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -34,6 +37,14 @@ if TYPE_CHECKING:
     from substrate.runtime import Agent
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _scratch_runtime() -> AsyncGenerator[Runtime]:
+    """A runtime on a store in a temporary folder: an eval run leaves nothing behind."""
+    with tempfile.TemporaryDirectory(prefix="substrate-eval-") as folder:
+        async with Runtime.open(folder) as runtime:
+            yield runtime
 
 
 @dataclass
@@ -82,7 +93,7 @@ class EvalRunner:
     async def run(self, dataset: EvalDataset) -> EvalReport:
         """Run all cases in the dataset and return an aggregated EvalReport."""
         wall_start = time.monotonic()
-        async with Runtime.local(":memory:") as rt:
+        async with _scratch_runtime() as rt:
             await rt.register(self._agent)
 
             if self._concurrency == 1:
@@ -109,7 +120,7 @@ class EvalRunner:
 
     async def run_case(self, case: EvalCase) -> EvalCaseResult:
         """Run a single case with its own ephemeral Runtime."""
-        async with Runtime.local(":memory:") as rt:
+        async with _scratch_runtime() as rt:
             await rt.register(self._agent)
             return await self._run_case(case, rt=rt)
 

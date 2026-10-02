@@ -3,7 +3,7 @@
 The canonical zero-infra ``FileStore`` (``kernel/storage/objects.py``)
 implementation — moved here from ``integrations/storage/`` because it needs
 nothing beyond the local filesystem, same as every other storage Protocol's
-L1 default (``LocalFilesystemThreadStore``, `LocalFilesystemGraphStore`,
+L1 default (`LocalFilesystemGraphStore`,
 etc.). ``agents/workspace/``'s ``BlobCAS`` composes with this by default;
 ``integrations/storage/s3.py::S3FileStore`` is the L2 production upgrade for
 the same Protocol.

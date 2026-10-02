@@ -10,7 +10,6 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 from substrate.runtime import RunContext
-from substrate.runtime import Runtime
 from substrate.types import ChatMessage, Role, TextBlock
 from substrate.types import Actor
 from substrate.runtime import ChatPayload, Message
@@ -23,6 +22,7 @@ from substrate.serving.protocol import (
     RunCancelledEvent,
 )
 from substrate.serving.stream.session import AgentStreamSession, tail_wire_events
+from substrate.testing.runtime import ephemeral_runtime
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ def _make_msg(agent_id: Actor, text: str = "hello") -> Message:
 async def _stream_events(
     agent: Any, text: str = "hello", timeout: float = 5.0
 ) -> list[WireEvent]:
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         msg = _make_msg(agent.id, text)
         session = AgentStreamSession(
             runtime=rt,
@@ -194,7 +194,7 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
     async def check_disconnected() -> bool:
         return is_disconnected
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = SuspendingReplyAgent()
         msg = _make_msg(agent.id)
         session = AgentStreamSession(
@@ -266,7 +266,7 @@ async def test_durable_cancel_ends_session() -> None:
             for msg in inbox:
                 await asyncio.sleep(100)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = HangingAgent()
         msg = _make_msg(agent.id)
         thread_id = "test-thread-durable-cancel"
@@ -326,7 +326,7 @@ async def test_disconnected_stops_local_relay_without_cancelling_run() -> None:
     async def check_disconnected() -> bool:
         return is_disconnected
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = SlowAgent()
         msg = _make_msg(agent.id)
         session = AgentStreamSession(
@@ -370,7 +370,7 @@ async def test_bridge_none_still_completes_and_terminates() -> None:
     loop to stop -- a naive `bridge=None` would just poll forever after the
     run finishes. Real Runtime, real agent, no bridge object anywhere."""
     agent = ReplyAgent(reply="no bridge needed", name="no_bridge_agent")
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         msg = _make_msg(agent.id)
         session = AgentStreamSession(runtime=rt, agent=agent, msg=msg)
         events = await asyncio.wait_for(_collect(session), timeout=5.0)
@@ -381,7 +381,7 @@ async def test_bridge_none_still_completes_and_terminates() -> None:
 
 async def test_bridge_none_error_still_emits_run_failed() -> None:
     agent = CrashAgent(name="crash_no_bridge")
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         msg = _make_msg(agent.id)
         session = AgentStreamSession(runtime=rt, agent=agent, msg=msg)
         events = await asyncio.wait_for(_collect(session), timeout=5.0)
@@ -410,7 +410,7 @@ async def test_bridge_none_disconnect_does_not_crash_on_missing_bridge() -> None
             for msg in inbox:
                 await asyncio.sleep(0.2)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = SlowAgent()
         msg = _make_msg(agent.id)
         session = AgentStreamSession(
@@ -455,7 +455,7 @@ async def test_tail_wire_events_skips_non_streamable_kinds_without_crashing() ->
         id = Actor(type="agent", key="tail_wire_test")
         run = staticmethod(agent_run)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = InlineAgent()
         await rt.register(agent)
         msg = Message(
@@ -489,7 +489,7 @@ async def test_tail_wire_events_maps_run_failed() -> None:
         id = Actor(type="agent", key="tail_wire_fail_test")
         run = staticmethod(agent_run)
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         agent = CrashInlineAgent()
         await rt.register(agent)
         msg = Message(

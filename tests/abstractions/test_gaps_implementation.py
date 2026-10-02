@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import pytest
+from substrate.testing.runtime import ephemeral_runtime
 
 
 @pytest.mark.asyncio
 async def test_runtime_agent_registration():
     """Runtime: register + submit routes message to the agent inbox."""
-    from substrate.runtime import Runtime
     from substrate.types import Actor
     from substrate.runtime import Message, DataPayload
 
@@ -21,7 +21,7 @@ async def test_runtime_agent_registration():
             received.extend(inbox)
 
     agent = EchoAgent()
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         msg = Message(
             target=agent.id,

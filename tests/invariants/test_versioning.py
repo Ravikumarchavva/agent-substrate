@@ -46,7 +46,7 @@ async def _terminal(rt: Runtime, run_id: str) -> tuple[str, dict[str, Any]]:
 
 async def _suspend_under(path: Path, version: str) -> str:
     agent = Waiter(version)
-    async with Runtime.local(path) as rt:
+    async with Runtime.open(path) as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent.id, Message(target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})))
         for _ in range(300):
@@ -61,7 +61,7 @@ async def test_i15_a_run_continues_under_the_version_that_started_it(tmp_path: P
     run_id = await _suspend_under(path, "1")
 
     same = Waiter("1")
-    async with Runtime.local(path) as rt:
+    async with Runtime.open(path) as rt:
         await rt.register(same)
         await rt.store.signal(run_id, "go", {})
         kind, _ = await _terminal(rt, run_id)
@@ -74,7 +74,7 @@ async def test_i15_a_run_is_refused_by_a_different_version(tmp_path: Path) -> No
     run_id = await _suspend_under(path, "1")
 
     changed = Waiter("2")
-    async with Runtime.local(path) as rt:
+    async with Runtime.open(path) as rt:
         await rt.register(changed)
         await rt.store.signal(run_id, "go", {})
         kind, payload = await _terminal(rt, run_id)

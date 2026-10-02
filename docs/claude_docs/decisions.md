@@ -22,9 +22,9 @@ used and the seam is where the defects lived.
 The three per-protocol runtime backends (event log, inbox, scheduler, signals, supervisor × in-memory /
 SQLite / Postgres, ~3.2k lines) are replaced by one command-oriented `RuntimeStore` whose `commit` is a
 single transaction, implemented once as `SqlRuntimeStore` over a small `Database` protocol (SQLite in
-the kernel, asyncpg in `integrations/runtime`). There is deliberately no in-memory store: tests use
-`:memory:` SQLite through the same code. **Consequence accepted:** SQLite is the zero-infra floor, so a
-process always has a real database file or `:memory:` connection.
+the kernel, asyncpg in `integrations/runtime`). There is deliberately no in-memory store: tests use a
+store in a throwaway folder through the same code. **Consequence accepted:** an embedded database in a folder is the
+zero-infra floor, so a process always has real files to write.
 
 ## One observability mechanism: the lifecycle hook manager and the second exception tree are deleted (2026-10-02)
 
@@ -37,7 +37,7 @@ observe a run and `abstractions/exceptions.py` the one error taxonomy.
 `InMemoryThreadStore`, `InMemoryVectorStore`, `InMemoryGraphStore`, `InMemoryFileStore` and the dict-based
 `TaskStore` are deleted (the kernel's task default is `LocalFilesystemTaskStore`). A store that forgets on exit
 cannot be what an agent's conversation, memory or tasks rest on, and a second implementation per port is a second
-thing to drift. Tests use `tmp_path` folders (`tests/_stores.py`); runtime tests use `Runtime.local(":memory:")`.
+thing to drift. Tests use `tmp_path` folders (`tests/_stores.py`); runtime tests use `ephemeral_runtime()` (a store in a throwaway folder).
 Removing them also removed the resolver's "pin actors with in-memory history" guard.
 
 ## Tools declare risk and idempotency; MCP defaults to deny (2026-10-02)
@@ -755,3 +755,13 @@ history persistence has no idempotency key, so a crash between persist and `run.
 duplicate a turn on replay (not reproduced — reasoned from the code); `TaskStore` (L1 default) is
 in-memory; `CompactionCoordinator`'s PRE_LLM/POST_TOOL phases are not used by the agent loop;
 `RunMeta.tenant_id` (lease) and `scope.tenant_id` (message metadata) are two sources of tenant identity.
+
+## The engine's state is one store, not one class per backend (2026-10-02)
+
+Chroma's persist directory and a Lance database are the model: you point at a location, the library owns what is
+inside, and the public API never names the storage technology. `substrate.connect(folder)` returns a `Store` — a
+relational database (`substrate.db`: WAL, `synchronous=FULL`, versioned `migrate` scripts per component), `files/`,
+and `index/` (derived, rebuildable). The runtime journal is the first thing on it (`Runtime(store)`,
+`Runtime.open(folder)`); threads, memory, tasks, graph, vectors and files follow, each written once over the same
+`Database`, replacing the per-technology `LocalFilesystem*` / `Durable*` / `Pg*` duplicates. One transaction can span
+them, and tenancy becomes a view of the store (`store.tenant(t)`) instead of `Scoped*` wrappers around each port.

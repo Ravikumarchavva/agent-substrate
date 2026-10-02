@@ -12,16 +12,16 @@ from datetime import datetime, timezone
 import pytest
 
 from substrate.types import Actor
-from substrate.runtime import Commit, NewEntry, RunSpec
+from substrate.runtime import Commit, NewEntry, RunSpec, RuntimeStore
 from substrate.agents.log_projection import rebuild_messages_from_steps, step_rows_from_log
-from substrate.runtime import SqliteRuntimeStore
+from substrate.testing.runtime import runtime_store
 
 THREAD = "thread-1"
 
 
-async def _store_with(entries: list[tuple[str, dict]]) -> SqliteRuntimeStore:
+async def _store_with(entries: list[tuple[str, dict]]) -> RuntimeStore:
     """A store holding one run on THREAD whose log is *entries*, in order (seq 0, 1, …)."""
-    store = SqliteRuntimeStore(":memory:")
+    store = runtime_store()
     await store.start()
     await store.create_run(RunSpec(agent=Actor(type="agent", key="a"), thread_id=THREAD))
     (lease,) = await store.lease(worker_id="w", capacity=1, lease_s=30, now=datetime.now(timezone.utc))

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from substrate.integrations.gdpr.eraser import erase_tenant, erase_user
 from substrate.config import SubstrateConfig
 from substrate.serving.monolith.models import FileMetadata, Thread, User
+from substrate.testing.runtime import runtime_store
 
 
 class FakeStore:
@@ -284,7 +285,6 @@ async def test_erasure_reaches_long_term_memory_and_the_run_journal(db: AsyncSes
 
     from substrate.runtime import Commit, Complete, NewEntry, RunSpec
     from substrate.stores import MemoryNamespace, MemoryRecord
-    from substrate.runtime import SqliteRuntimeStore
     from substrate.stores import LocalFilesystemMemoryStore
 
     tenant = f"tenant-{uuid.uuid4()}"
@@ -297,7 +297,7 @@ async def test_erasure_reaches_long_term_memory_and_the_run_journal(db: AsyncSes
     await memory.save(MemoryRecord.from_text("alice-secret-fact", namespace=MemoryNamespace(tenant_id=tenant, user_id="alice")))
     await memory.save(MemoryRecord.from_text("bob-fact", namespace=MemoryNamespace(tenant_id=tenant, user_id="bob")))
 
-    runtime = SqliteRuntimeStore(tmp_path / "rt.sqlite3")
+    runtime = runtime_store(tmp_path / "rt.sqlite3")
     await runtime.start()
     try:
         agent = Actor("agent", "a")

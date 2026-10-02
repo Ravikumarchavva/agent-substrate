@@ -84,7 +84,7 @@ agent-substrate/                         ← repo root
 │   │   └── mcp_server/          ← FastMCP 2.x demo SSE server
 │   └── README.md                ← How to run it (dev, one-shot, or a real public deploy)
 ├── docs/                        ← Architecture docs, design patterns, archive
-├── examples/                    ← Jupyter notebooks
+├── examples/                    ← nine short, runnable examples (offline by default); tests/test_examples.py runs them
 ├── tests/                       ← pytest suite
 ├── legacy/                      ← Archived pre-migration code (do not import)
 ├── Makefile                     ← Common dev targets
@@ -136,7 +136,6 @@ src/substrate/
 │   ├── tts/              text-to-speech provider adapters
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore, DurableMemoryStore
-│   ├── history/          RedisThreadStore, DurableThreadStore
 │   ├── vector/           PgVectorStore, LanceDB  (implement VectorStore Protocol)
 │   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
 │   ├── storage/          S3Connector (raw client) + S3FileStore (FileStore Protocol
@@ -384,14 +383,10 @@ All shared objects (LLM clients, tool registry, event bus, HITL bridge) are wire
 ## Memory / History
 
 ```python
-# zero-infra default — one JSON file per session
-from substrate.stores.local.threads import LocalFilesystemThreadStore
+# durable by default — the threads of the store in a folder (no server, survives a kill, safe across processes)
+from substrate.stores import Store
 
-# Redis-backed
-from substrate.integrations.history import RedisThreadStore
-
-# Postgres-backed
-from substrate.integrations.history import DurableThreadStore
+threads = Store.at("./.substrate").threads      # usable at once; the first call opens the store
 ```
 
 All `ThreadStore` methods are `async def`. Always `await` them.
@@ -483,7 +478,7 @@ SANDBOX_RUNTIME=nsjail
 
 # Agent runtime store: "postgres" (default, durable) or "local" (SQLite file, no infra).
 # There is no in-memory store anywhere: the floor is a folder (or a SQLite file). Runtime tests use
-# Runtime.local(":memory:") — the same SQLite code on a throwaway connection.
+# ephemeral_runtime() (substrate.testing) — the same code on a store in a throwaway folder.
 RUNTIME_BACKEND=postgres
 
 # Durable runtime's own asyncpg pool (separate from the ORM engine's pool)

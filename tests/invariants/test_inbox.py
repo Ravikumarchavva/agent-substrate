@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from substrate.types import Actor
 from substrate.runtime import DataPayload, Message
 from substrate.runtime import Commit, Complete, Delivery
-from substrate.runtime import SqliteRuntimeStore
+from substrate.testing.runtime import runtime_store
 
 AGENT = Actor("agent", "a")
 
@@ -27,7 +27,7 @@ def _message() -> Message:
 
 async def test_redelivery_before_ack_is_deduplicated() -> None:
     """While a message is in flight, redelivering it is a no-op rather than a duplicate."""
-    store = SqliteRuntimeStore(":memory:")
+    store = runtime_store()
     await store.start()
     try:
         message = _message()
@@ -41,7 +41,7 @@ async def test_redelivery_before_ack_is_deduplicated() -> None:
 async def test_i12_redelivery_after_ack_is_rejected() -> None:
     """The consumer committed (acked) the message; a later redelivery of the same id must
     not reach the agent again."""
-    store = SqliteRuntimeStore(":memory:")
+    store = runtime_store()
     await store.start()
     try:
         message = _message()

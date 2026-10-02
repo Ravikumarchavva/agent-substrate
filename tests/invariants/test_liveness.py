@@ -15,7 +15,7 @@ from typing import Any
 from substrate.types import Actor
 from substrate.runtime import DataPayload, Message
 from substrate.types import RunLogKind
-from substrate.runtime import Runtime
+from substrate.testing.runtime import ephemeral_runtime
 
 
 class Slow:
@@ -31,7 +31,7 @@ class Slow:
 
 async def test_i13_a_run_longer_than_its_lease_completes_once() -> None:
     agent = Slow(seconds=1.5)
-    async with Runtime.local(":memory:", lease_s=0.4, poll_interval_s=0.02) as rt:
+    async with ephemeral_runtime(lease_s=0.4, poll_interval_s=0.02) as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent.id, Message(target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})), max_retries=0)
 

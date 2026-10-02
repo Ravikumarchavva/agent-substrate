@@ -37,7 +37,7 @@ from substrate.types import RunLogKind
 from substrate.runtime import RunRetryPolicy
 from substrate.agents import ReActAgent
 from substrate.models.errors import classify_llm_error
-from substrate.runtime import Runtime
+from substrate.testing.runtime import ephemeral_runtime
 
 # ---------------------------------------------------------------------------- classification
 
@@ -173,7 +173,7 @@ async def _run(llm: _LLM, *, retries: int = 0) -> tuple[str, dict[str, Any], lis
 
 
 async def _run_with(agent: ReActAgent, *, retries: int = 0) -> tuple[str, dict[str, Any], list[str]]:
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         msg = Message(
             target=agent.id,

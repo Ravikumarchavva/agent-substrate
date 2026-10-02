@@ -28,6 +28,7 @@ from hypothesis import strategies as st
 
 from substrate.runtime import Commit
 from substrate.runtime import Journal
+from substrate.testing.runtime import ephemeral_runtime
 
 
 class _Allocator(Journal):
@@ -198,7 +199,6 @@ def test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect(program: li
     from substrate.types import RunLogKind
     from substrate.runtime import RunRetryPolicy
     from substrate.tools import ToolExecutionResult, ToolRisk
-    from substrate.runtime import Runtime
     from substrate.tools import Toolbox
 
     cut = min(crash_after, len(program))
@@ -240,7 +240,7 @@ def test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect(program: li
 
     async def scenario() -> Prog:
         agent = Prog()
-        async with Runtime.local(":memory:") as rt:
+        async with ephemeral_runtime() as rt:
             await rt.register(agent)
             run_id = await rt.submit(
                 agent.id,

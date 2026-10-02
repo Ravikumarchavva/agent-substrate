@@ -18,7 +18,7 @@ Usage::
 
     agent = ReActAgent(name="assistant", model_client=client, tools=[ask])
 
-    async with Runtime.local() as rt:
+    async with Runtime.open() as rt:
         await Console(agent, runtime=rt, hitl_handler=handler).run_stream("help me")
 """
 

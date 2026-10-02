@@ -35,7 +35,7 @@ class ContextConfig:
         from substrate.context import CompactionPipeline, ToolResultCompactionStrategy, SlidingWindowCompaction
 
         ctx = ContextConfig(
-            LocalFilesystemThreadStore(),
+            Store.at("./.substrate").threads,
             CompactionPipeline([
                 ToolResultCompactionStrategy(),
                 SlidingWindowCompaction(max_messages=40),
@@ -78,10 +78,11 @@ class ContextConfig:
 
     @classmethod
     def default(cls) -> "ContextConfig":
-        """Return a durable local filesystem context with default sliding-window compaction."""
-        from substrate.stores.local.threads import LocalFilesystemThreadStore
+        """A context on the threads of the store in ``./.substrate`` (opened on first use), with default
+        sliding-window compaction."""
+        from substrate.stores import Store
 
-        return cls(LocalFilesystemThreadStore())
+        return cls(Store.at().threads)
 
 
 class AgentContext:

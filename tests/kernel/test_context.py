@@ -39,9 +39,9 @@ async def test_context_config():
     assert cfg.pipeline is pipeline
 
     default_cfg = ContextConfig.default()
-    from substrate.stores import LocalFilesystemThreadStore
+    from substrate.stores.thread_tables import Threads
 
-    assert isinstance(default_cfg.history, LocalFilesystemThreadStore)
+    assert isinstance(default_cfg.history, Threads)
     assert isinstance(default_cfg.pipeline, CompactionPipeline)
     assert isinstance(default_cfg.pipeline._strategies[0], SlidingWindowCompaction)
 

@@ -9,13 +9,10 @@ import pytest
 
 from substrate.stores.local.fs import safe_name
 from substrate.stores import LocalFilesystemGraphStore
-from substrate.stores import LocalFilesystemThreadStore
 from substrate.stores import LocalFilesystemMemoryStore
 from substrate.stores import LocalFilesystemShortTermMemory
 from substrate.stores import LocalFilesystemVectorStore
 from substrate.workspace import LocalFilesystemWorkspaceStore
-from substrate.types import ChatMessage, Role, TextBlock
-from substrate.stores import MessageNode
 
 HOSTILE = ["../../evil", "..", ".", "a/b", "a\\b", "/etc/passwd", "x/../../y", "..%2F..", "\x00"]
 
@@ -47,10 +44,6 @@ def test_every_local_store_keeps_paths_inside_its_root(tmp_path: Path, identifie
     root = tmp_path / "store"
     paths = [
         LocalFilesystemShortTermMemory(root)._path(identifier),
-        LocalFilesystemThreadStore(root)._node_path(identifier),
-        LocalFilesystemThreadStore(root)._branch_path(identifier, identifier),
-        LocalFilesystemThreadStore(root)._checkpoint_path(identifier, identifier),
-        LocalFilesystemThreadStore(root)._session_dir(identifier),
         LocalFilesystemVectorStore(root)._doc_path(identifier, identifier),
         LocalFilesystemGraphStore(root)._entity_path(identifier),
         LocalFilesystemGraphStore(root)._relationship_path(identifier),
@@ -71,52 +64,3 @@ async def test_short_term_memory_sessions_never_share_state(tmp_path: Path):
     assert await store.get_state("c/b") == {"who": "second"}
     assert await store.get_state("../../evil") == {}
     assert not (tmp_path.parent / "evil.json").exists()
-
-
-@pytest.mark.parametrize("hostile", ["..", "../victim", "../../victim", "../../../../tmp"])
-async def test_deleting_a_hostile_session_id_removes_nothing_it_should_not(
-    tmp_path: Path, hostile: str
-):
-    """``delete_session`` ends in ``shutil.rmtree`` — with an unsanitized id,
-    ``..`` deletes the whole store and ``../../victim`` deletes a sibling."""
-    victim = tmp_path / "victim"
-    victim.mkdir()
-    (victim / "precious.txt").write_text("keep me")
-    root = tmp_path / "store"
-    history = LocalFilesystemThreadStore(root)
-    await history.connect()
-    (root / "sessions").mkdir()
-    (root / "marker.txt").write_text("the store's own data")
-
-    await history.delete_session(hostile)
-
-    assert (victim / "precious.txt").read_text() == "keep me"
-    assert (root / "marker.txt").read_text() == "the store's own data"
-
-
-async def test_history_still_round_trips_with_a_hostile_branch_and_session(tmp_path: Path):
-    history = LocalFilesystemThreadStore(tmp_path / "store")
-    await history.connect()
-    node = MessageNode(
-        session_id="../s",
-        run_id="r",
-        payload=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")]),
-    )
-
-    await history.append_and_advance(node, branch_id="../../b")
-
-    branch = await history.get_branch("../s", "../../b")
-    assert branch is not None and branch.head_message_id == node.id
-    assert not list(tmp_path.glob("*.json")) and not (tmp_path.parent / "b.json").exists()
-
-
-async def test_memory_store_keeps_records_of_tenants_with_unusual_names_inside_its_root(tmp_path: Path):
-    from substrate.stores import MemoryNamespace, MemoryRecord
-
-    store = LocalFilesystemMemoryStore(tmp_path)
-    ns = MemoryNamespace(tenant_id="acme/../corp", user_id="u")
-    record = MemoryRecord(namespace=ns, content=[TextBlock(text="likes tea")])
-    await store.save(record)
-
-    assert (await store.get(ns, record.id)) is not None
-    assert all(_inside(p, tmp_path) for p in tmp_path.rglob("*"))

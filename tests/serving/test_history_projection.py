@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from substrate.models import ModelCapabilities
 from substrate.agents import ReActAgent
-from substrate.runtime import Runtime
 from substrate.types import TextBlock
 from substrate.types import Actor
 from substrate.types import Usage
@@ -21,6 +20,7 @@ from substrate.serving.protocol.events import (
     UserMessageEvent,
 )
 from substrate.serving.stream.history import project_thread
+from substrate.testing.runtime import ephemeral_runtime
 
 
 class _StubLLM:
@@ -37,7 +37,7 @@ class _StubLLM:
 async def test_project_thread_returns_one_runs_full_conversation() -> None:
     agent = ReActAgent("assistant", model=_StubLLM("hi there"))
     thread_id = "thread-1"
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         from substrate.types import ChatMessage, Role
         from substrate.runtime import ChatPayload, Message
@@ -70,7 +70,7 @@ async def test_project_thread_spans_multiple_runs_in_order() -> None:
     from substrate.types import ChatMessage, Role
     from substrate.runtime import ChatPayload, Message
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
 
         msg1 = Message(
@@ -112,7 +112,7 @@ async def test_project_thread_skips_non_streaming_log_kinds() -> None:
     from substrate.types import ChatMessage, Role
     from substrate.runtime import ChatPayload, Message
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(agent)
         msg = Message(
             target=agent.id,

@@ -1,35 +1,40 @@
-"""SqliteDatabase — the SQLite adapter for ``SqlRuntimeStore``.
+"""SqliteDatabase — the embedded relational component: one SQLite file, stdlib only.
 
-Stdlib only: the default store needs no server and no extra dependency. Durable
-across restarts, safe for any number of workers *on one host* sharing the file
-(SQLite's file locking works across processes), not across machines.
+Durable across restarts and crashes (WAL, ``synchronous=FULL``: a transaction that returned is on disk), and
+safe for any number of workers *on one host* sharing the file (SQLite's file locking works across processes),
+not across machines.
 
-SQLite allows one writer at a time, so every transaction is serialised through one
-connection, one lock and one ``BEGIN IMMEDIATE`` — which is also why ``lock`` has
-nothing to do. Statements run on a worker thread so a slow disk never blocks the
-event loop.
+SQLite allows one writer at a time, so every transaction is serialised through one connection, one lock and
+one ``BEGIN IMMEDIATE`` — which is also why ``lock`` has nothing to do. Statements run on a worker thread so a
+slow disk never blocks the event loop.
 
-Every statement runs on one dedicated thread. A task cancelled while awaiting a
-statement does not stop the statement — the thread finishes it — so closing the
-connection has to queue behind that thread's work rather than race it (closing a
-SQLite connection another thread is using is a crash, not an exception).
-
-``:memory:`` goes through the same code, which is what tests use.
+Every statement runs on one dedicated thread. A task cancelled while awaiting a statement does not stop the
+statement — the thread finishes it — so closing the connection has to queue behind that thread's work rather
+than race it (closing a SQLite connection another thread is using is a crash, not an exception).
 """
 
 from __future__ import annotations
 
 import asyncio
 import sqlite3
-from collections.abc import AsyncIterator, Mapping
+import weakref
+from collections.abc import AsyncGenerator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
-from substrate.runtime.sql_store import Tx
+from substrate.stores.database import Tx
 
 T = TypeVar("T")
+
+
+def _release(conn: sqlite3.Connection, thread: ThreadPoolExecutor) -> None:
+    """Close a connection nobody closed — a store that was simply dropped — on its own thread, then stop it."""
+    try:
+        thread.submit(conn.close).add_done_callback(lambda _: thread.shutdown(wait=False))
+    except RuntimeError:  # the interpreter is exiting and the thread pool is already gone: nothing else is using it
+        conn.close()
 
 
 class _Connection:
@@ -37,13 +42,15 @@ class _Connection:
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
-        self._thread = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlite-runtime")
+        self._thread = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlite-store")
+        self._finalizer = weakref.finalize(self, _release, conn, self._thread)
 
     def call(self, fn: Callable[[], T]) -> asyncio.Future[T]:
         return asyncio.get_running_loop().run_in_executor(self._thread, fn)
 
     async def close(self) -> None:
         """Close after everything already queued has finished."""
+        self._finalizer.detach()
         await self.call(self.conn.close)
         self._thread.shutdown(wait=True)
 
@@ -68,7 +75,7 @@ class _SqliteTx:
 class SqliteDatabase:
     auto_pk = "INTEGER PRIMARY KEY AUTOINCREMENT"
 
-    def __init__(self, path: str | Path = "./data/db/runtime.sqlite3") -> None:
+    def __init__(self, path: str | Path) -> None:
         self._path = str(path)
         self._conn: _Connection | None = None
         self._lock = asyncio.Lock()
@@ -76,14 +83,14 @@ class SqliteDatabase:
     async def start(self) -> None:
         if self._conn is not None:
             return
-        if self._path != ":memory:":
-            Path(self._path).parent.mkdir(parents=True, exist_ok=True)
+        Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         # autocommit mode: transactions are explicit, so ``BEGIN IMMEDIATE`` means what it says.
         conn = sqlite3.connect(self._path, check_same_thread=False, timeout=30, isolation_level=None)
         conn.row_factory = sqlite3.Row
-        if self._path != ":memory:":
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA journal_mode=WAL")
+        # FULL: the engine records an intent before it acts and the answer after, and both must outlive a
+        # power cut — NORMAL could lose the last commits of a WAL.
+        conn.execute("PRAGMA synchronous=FULL")
         self._conn = _Connection(conn)
 
     async def aclose(self) -> None:
@@ -97,7 +104,7 @@ class SqliteDatabase:
         await db.call(lambda: db.conn.executescript(ddl))
 
     @asynccontextmanager
-    async def transaction(self) -> AsyncIterator[Tx]:
+    async def transaction(self) -> AsyncGenerator[Tx]:
         assert self._conn is not None, "database not started"
         db = self._conn
         async with self._lock:

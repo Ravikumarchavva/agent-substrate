@@ -19,7 +19,7 @@ from substrate.stores import Entity, Relationship
 from substrate.stores import HistoryCheckpoint, MessageNode
 from substrate.stores import Document
 from substrate.stores import LocalFilesystemGraphStore
-from substrate.stores import LocalFilesystemThreadStore
+from substrate.stores import Store
 from substrate.stores import WorkspaceFileStore
 from substrate.stores import LocalFilesystemTaskStore
 from substrate.stores import LocalFilesystemVectorStore
@@ -46,7 +46,7 @@ def test_a_scope_needs_a_tenant() -> None:
 class TestBoundHistoryConforms(ThreadStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
-        return bind_threads(LocalFilesystemThreadStore(tmp_path), A)
+        return bind_threads(Store.at(tmp_path / "threads").threads, A)
 
 
 class TestBoundVectorConforms(VectorStoreConformance):
@@ -75,7 +75,7 @@ def _node(session: str, text: str, parent: MessageNode | None = None) -> Message
 
 
 async def test_i03_history_of_one_tenant_is_invisible_to_another(tmp_path) -> None:
-    raw = LocalFilesystemThreadStore(tmp_path)
+    raw = Store.at(tmp_path / "threads").threads
     mine, theirs = bind_threads(raw, A), bind_threads(raw, B)
     n = _node("s", "secret")
     await mine.append_node(n)
@@ -98,7 +98,7 @@ async def test_i03_history_of_one_tenant_is_invisible_to_another(tmp_path) -> No
 
 
 async def test_i03_ids_returned_to_the_caller_carry_no_tenant_prefix(tmp_path) -> None:
-    h = bind_threads(LocalFilesystemThreadStore(tmp_path), A)
+    h = bind_threads(Store.at(tmp_path / "threads").threads, A)
     n = _node("s", "x")
     await h.append_node(n)
     assert (await h.get_node(n.id)).session_id == "s"
@@ -172,7 +172,7 @@ async def test_i03_object_stores_are_per_tenant_with_their_own_usage_and_erase(t
 
 
 async def test_i03_a_tenant_whose_name_looks_like_another_tenants_prefix_gets_its_own_wall(tmp_path) -> None:
-    raw = LocalFilesystemThreadStore(tmp_path)
+    raw = Store.at(tmp_path / "threads").threads
     plain, tricky = bind_threads(raw, Scope(tenant_id="a")), bind_threads(raw, Scope(tenant_id="a/b"))
     n = _node("s", "x")
     await plain.append_node(n)

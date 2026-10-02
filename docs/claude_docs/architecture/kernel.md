@@ -35,17 +35,41 @@ import the engine; adapters use the contracts and the engine's named support lib
 (see the contract's comment in `pyproject.toml`), never `agents`, the context window internals or middleware implementations.
 Import a public name from its concept package (`from substrate.runtime import Runtime`).
 
+## The store
+
+The engine's state is one thing you point at, as with Chroma's persist directory or a Lance database — the library
+owns what is inside:
+
+```python
+store = await substrate.connect("./.substrate")     # or Store.at(folder) and `async with`
+runtime = Runtime(store)                            # Runtime.open(folder) opens (and closes) one of its own
+```
+
+```
+.substrate/
+  substrate.db   the source of truth: runs + journal and threads (the conversation DAG); memory, tasks, graph, vectors move in next
+  files/         file contents — written whole and synced before the row that names them commits
+  index/         indexes derived from substrate.db; deleting them loses nothing, they are rebuilt
+```
+
+`substrate.db` is a relational database (`stores/database.py`: `Database`, `Tx`, `migrate`) opened with a write-ahead
+log and `synchronous=FULL`, so a transaction that returned survives a kill (row: the store's `test_a_committed_transaction_survives…`).
+Each part of the engine owns its tables and ships them as ordered migrations recorded in the database; a folder from a
+newer build is refused (`StoreVersionError`). One transaction can change several parts, so a crash never leaves a turn
+half recorded. Workers on one host share the folder; PostgreSQL (later: `connect("postgresql://…")`) is the same
+engine over another `Database`. There is no in-memory store: tests use a folder (`ephemeral_runtime`, `runtime_store`).
+
 ## Running an agent
 
 ```python
-async with Runtime.local("./data/runtime.sqlite3") as rt:      # or Runtime(PostgresRuntimeStore(dsn))
+async with Runtime.open("./.substrate") as rt:      # a folder; Runtime(store) to share a connected Store
     await rt.register(agent)
     run_id = await rt.submit(agent.id, message, thread_id=..., tenant=...)
     async for entry in rt.tail(run_id): ...                     # live output + the durable record
 ```
 
 One engine, one port. `Runtime` owns a `Worker` that leases runs from a `RuntimeStore`; the
-store is the only thing that varies (SQLite file, Postgres). Every engine behaviour — leases,
+store is the only thing that varies (the folder store, later Postgres). Every engine behaviour — leases,
 retries, replay, supervision — lives in the engine, not in a store, so it is identical across them.
 
 `RuntimeStore` (`abstractions/runtime/store.py`) is command-oriented: each method is one

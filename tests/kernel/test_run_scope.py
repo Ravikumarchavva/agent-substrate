@@ -18,6 +18,7 @@ from substrate.runtime import ChatPayload, Message
 from substrate.tools import ToolExecutionResult
 
 from tests.kernel.test_react_harness import ScriptedLLM  # noqa: E402
+from substrate.testing.runtime import ephemeral_runtime
 
 
 class ProbeTool:
@@ -95,7 +96,7 @@ async def test_a_tool_sees_the_scope_of_the_message_being_handled():
     llm = ScriptedLLM([[ToolUseBlock(call_id="c1", tool_name="probe", arguments={})], [TextBlock(text="ok")]])
     agent = ReActAgent("bot", model=llm, tools=[probe], context=_isolated())
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await _finish(
             rt,
             agent,
@@ -138,7 +139,7 @@ async def test_a_sub_agent_inherits_tenant_user_and_branch():
         context=_isolated(),
     )
 
-    async with Runtime.local(":memory:") as rt:
+    async with ephemeral_runtime() as rt:
         await rt.register(worker)
         await _finish(
             rt,

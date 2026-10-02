@@ -21,6 +21,7 @@ from substrate.types import RunLogKind
 from substrate.runtime import Delivery
 from substrate.agents import ReActAgent
 from substrate.runtime import Runtime
+from substrate.testing.runtime import runtime_store
 
 TERMINAL = (RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED)
 
@@ -57,7 +58,7 @@ async def _terminal(rt: Runtime, run_id: str) -> str:
 async def test_react_agent_runs_end_to_end_on_local_runtime(tmp_path: Path) -> None:
     agent = ReActAgent("LocalBot", model=MockChatModel(), max_iterations=3)
 
-    async with Runtime.local(tmp_path / "rt.db") as rt:
+    async with Runtime.open(tmp_path / "rt.db") as rt:
         await rt.register(agent)
         run_id = await rt.submit(agent.id, _chat(agent.id, "hi"))
         assert await _terminal(rt, run_id) == "run.completed"
@@ -72,14 +73,13 @@ async def test_a_run_submitted_before_a_restart_is_picked_up_after_it(tmp_path: 
     path = tmp_path / "rt.db"
     agent = ReActAgent("LocalBot", model=MockChatModel(), max_iterations=3)
 
-    from substrate.runtime import SqliteRuntimeStore
     from substrate.runtime import RunSpec
 
-    store = SqliteRuntimeStore(path)
+    store = runtime_store(path)
     await store.start()
     run = await store.create_run(RunSpec(agent=agent.id), deliveries=[Delivery(agent=agent.id, msg=_chat(agent.id, "hi"))])
     await store.aclose()
 
-    async with Runtime.local(path) as rt:
+    async with Runtime.open(path) as rt:
         await rt.register(agent)
         assert await _terminal(rt, run.run_id) == "run.completed"

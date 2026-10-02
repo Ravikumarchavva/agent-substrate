@@ -18,7 +18,7 @@ from substrate.testing.conformance.runtime_store import NOW, RuntimeStoreConform
 pytestmark = [pytest.mark.requires_postgres]
 
 _PG_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb").replace("+asyncpg", "")
-_TABLES = tuple(f"rt_{t}" for t in ("meta", "runs", "run_wake", "events", "inbox", "inbox_processed", "dead_letters", "signals", "signal_claims", "spawns", "edges"))
+_TABLES = ("substrate_migrations", *(f"rt_{t}" for t in ("runs", "run_wake", "events", "inbox", "inbox_processed", "dead_letters", "signals", "signal_claims", "spawns", "edges")))
 
 
 class TestPostgresRuntimeStore(RuntimeStoreConformance):

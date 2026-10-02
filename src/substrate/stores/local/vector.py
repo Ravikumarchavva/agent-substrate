@@ -1,7 +1,7 @@
 """LocalFilesystemVectorStore — JSON-file-backed vector store for RAG.
 
 Stores data in a local directory tree (default: ``./data/db/vector``), mirroring
-``LocalFilesystemThreadStore``'s convention of creating a folder on first
+the store's convention of creating a folder on first
 use instead of requiring an external database.
 
 Layout::

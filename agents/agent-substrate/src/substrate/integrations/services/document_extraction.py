@@ -1,25 +1,33 @@
-"""HTTP client for the document-extraction service.
+"""Document extraction by URL — the client for a document-intelligence service, and the one place that decides
+service-or-local.
 
-Used by chat_context.py and LocalRagBackend to get layout-aware document
-text and chart/table images, without loading paddlepaddle into the main API
-process — see document_intelligence/service/ for the service itself.
-Multimodal embedding + reranking is a separate concern/service now — see
-substrate.runtimes.embedding_reranker.client.EmbeddingRerankerClient.
+Layout-aware extraction (OCR, charts and tables as images, reading order) needs heavy dependencies and often a GPU, so it
+runs as a server of its own and this library only holds the *client*: ``ExtractionClient(base_url)``. The server is
+``apps/document-intelligence`` in this repository, but anything that speaks the same two endpoints works, and nothing here
+imports it. The wire shapes below are the contract both sides import.
 
-Single-URL only (no consistent-hash routing): every endpoint here is
-stateless request/response, so one low-replica service is enough and there's
-no session affinity to route on.
+``extract_document`` is what call sites use: the service when a URL is configured, else (or if it fails) the light local
+``LocalDocumentExtractor`` — a PDF text layer through pdfplumber/pypdf, with Tesseract for scanned pages if the ``ocr``
+extra is installed. Office formats (DOCX, PPTX, …) need the service; without one they come back as an empty result rather
+than an error, the way every extractor here reports "nothing I can read".
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import base64
+import logging
+import mimetypes
 
 from typing import Any
 
 import httpx2 as httpx
 from pydantic import BaseModel
 
-logger = setup_logging()
+from substrate.documents import ExtractedImage as ExtractedImageDTO
+from substrate.documents import ExtractedPage, ExtractionResult
+from substrate.integrations.llm.endpoint import InferenceEndpoint
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=10.0, pool=5.0)
 
@@ -138,8 +146,6 @@ class ExtractionClient:
         ``timeout_s`` overrides the client's own constructor timeout for
         this call only (httpx supports a per-request ``timeout=`` override).
         """
-        import base64
-
         try:
             resp = await self._request(
                 "POST",
@@ -197,8 +203,6 @@ class ExtractionClient:
         the same error, so the caller can retry those files individually
         rather than losing the whole batch's worth of work silently.
         """
-        import base64
-
         if not items:
             return []
         try:
@@ -248,3 +252,93 @@ class ExtractionClient:
         if self._client is not None:
             await self._client.aclose()
             self._client = None
+
+
+# Content types a document service converts to text (Office formats): without one, they cannot be read.
+OFFICE_CONTENT_TYPES: frozenset[str] = frozenset(
+    {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/ms-powerpoint",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.oasis.opendocument.text",
+        "application/rtf",
+        "text/rtf",
+    }
+)
+
+
+def _response_to_result(resp: ExtractResponse) -> ExtractionResult:
+    """The wire response (base64 images, a page list) as the engine's own ``ExtractionResult``."""
+    pages = [ExtractedPage(page_number=p.page_number, text=p.text, markdown=p.markdown) for p in resp.pages]
+    by_number = {p.page_number: p for p in pages}
+    for img in resp.images:
+        page = by_number.get(img.page_number)
+        if page is None:
+            continue
+        page.images.append(
+            ExtractedImageDTO(
+                data=base64.b64decode(img.data_base64),
+                media_type=img.media_type,
+                page_number=img.page_number,
+                label=img.label,
+                confidence=img.confidence,
+                caption=img.caption,
+                id=img.id,
+            )
+        )
+    return ExtractionResult(pages=pages, markdown=resp.markdown, engine=resp.engine)
+
+
+async def extract_document(
+    data: bytes,
+    filename: str,
+    content_type: str,
+    *,
+    endpoint: InferenceEndpoint | None = None,
+) -> ExtractionResult:
+    """Extract text (and, from a service, chart/table images) from a document.
+
+    With ``endpoint`` (the service's URL) the service goes first; if it is unreachable or reports a failure, a PDF falls
+    back to the local extractor. Never raises for a normal extraction failure — a corrupt file, a service that is down, a
+    format nothing here can read — it returns an ``ExtractionResult`` with no pages.
+    """
+    if endpoint is not None and endpoint.base_url:
+        client = ExtractionClient(base_url=endpoint.base_url, auth_token=endpoint.api_key, timeout_s=endpoint.timeout_s)
+        try:
+            resp = await client.extract(data, filename, content_type, timeout_s=endpoint.timeout_s)
+        finally:
+            await client.close()
+        if resp.success:
+            return _response_to_result(resp)
+        logger.warning("document service extraction failed for %r (%s) — trying local extraction", filename, resp.error)
+
+    if content_type == "application/pdf" or filename.lower().endswith(".pdf"):
+        from substrate.integrations.document.local_extractor import LocalDocumentExtractor
+
+        return await LocalDocumentExtractor().extract(data, filename)
+    return ExtractionResult(pages=[], markdown="", engine="none")
+
+
+class ServiceBackedDocumentExtractor:
+    """A ``DocumentExtractor`` over ``extract_document``: the document service at ``endpoint`` when there is one, the local
+    extractor otherwise. Hand it anywhere a ``DocumentExtractor`` is taken (``PDFLoader(extractor=...)``)."""
+
+    def __init__(self, *, endpoint: InferenceEndpoint | None = None) -> None:
+        self._endpoint = endpoint
+
+    async def extract(self, data: bytes, filename: str) -> ExtractionResult:
+        content_type, _ = mimetypes.guess_type(filename)
+        return await extract_document(data, filename, content_type or "application/octet-stream", endpoint=self._endpoint)
+
+
+__all__ = [
+    "OFFICE_CONTENT_TYPES",
+    "ExtractResponse",
+    "ExtractedImage",
+    "ExtractedPageText",
+    "ExtractionClient",
+    "ServiceBackedDocumentExtractor",
+    "extract_document",
+]

@@ -1,18 +1,14 @@
-"""HTTP client for the embedding-reranker service.
+"""Multimodal embedding and reranking by URL — the client for an embedding-reranker service.
 
-Used by LocalRagBackend for multimodal embedding + reranking, without
-loading the llama-server sidecar plumbing into the main API process — see
-embedding_reranker/service/ for the service itself. A separate service from
-document_intelligence: shares no code or state with it, split out so one
-person can own embedding/reranking infra without touching OCR/layout code.
-
-Single-URL only (no consistent-hash routing): every endpoint here is
-stateless request/response, so one low-replica service is enough and there's
-no session affinity to route on.
+``EmbeddingRerankerClient(base_url)`` embeds text, images, or text with images into one shared space and scores passages
+against a query. The model (Qwen3-VL-Embedding / -Reranker through llama-server) runs elsewhere — ``apps/embedding-reranker``
+in this repository, or anything with the same endpoints — so nothing heavy is imported here. One URL, no routing:
+every call is a stateless request.
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import base64
 import math
@@ -28,7 +24,7 @@ from substrate.types import UnsupportedContentError
 if TYPE_CHECKING:
     from substrate.models import EmbeddingResult
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
 

@@ -13,11 +13,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from substrate.runtimes.document_intelligence.service.autoconfig import (
+from document_intelligence.autoconfig import (
     resolve_child_setting,
     resolve_runtime,
 )
-from substrate.runtimes.document_intelligence.service.hardware import GpuInfo, HardwareProfile
+from inference_pool.hardware import GpuInfo, HardwareProfile
 
 
 def _cfg(**overrides: object) -> SimpleNamespace:

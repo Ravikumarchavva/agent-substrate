@@ -8,7 +8,7 @@ import io
 
 import pypdfium2 as pdfium
 
-from substrate.runtimes.document_intelligence.service.engines.raw_text import (
+from document_intelligence.engines.raw_text import (
     RawTextEngine,
 )
 

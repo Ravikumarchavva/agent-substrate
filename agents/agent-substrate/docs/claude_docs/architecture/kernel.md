@@ -24,7 +24,8 @@ agents       RoutedAgent (+ @handle), ReActAgent, OrchestratorAgent, UserProxyAg
 testing      conformance suites and doubles; never imported by production code
 -------
 evals/                the eval harness, a client of the core (not part of it)
-integrations/ runtimes/   adapters: vendor LLM clients, Postgres/Redis/S3/Lance stores, MCP, tools
+integrations/             adapters: vendor LLM clients, Postgres/Redis/S3 backends, MCP, tools, and URL clients for the heavy services
+apps/ packages/           the heavy services (document intelligence, embedding/reranking, the inference pool): projects of their own
 serving/ console/ cli     wiring: FastAPI apps, the REPL, the CLI
 ```
 

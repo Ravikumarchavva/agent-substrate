@@ -16,6 +16,8 @@ cycle (``raw_text.py`` imports this module at top level).
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import shutil
 import tempfile
@@ -23,9 +25,8 @@ import uuid
 from pathlib import Path
 
 from substrate.documents import ExtractedPage, ExtractionResult
-from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.document_intelligence.convert")
+logger = logging.getLogger(__name__)
 
 # Real, standard IANA media types for each format — not guessed casually.
 _CONTENT_TYPE_EXT: dict[str, str] = {
@@ -121,7 +122,7 @@ async def convert_office_document(
 
     # Lazy import — avoids a module-level circular import with
     # engines/raw_text.py, which imports this module at top level.
-    from substrate.runtimes.document_intelligence.service.engines.raw_text import (
+    from document_intelligence.engines.raw_text import (
         _extract_pdf,
     )
 

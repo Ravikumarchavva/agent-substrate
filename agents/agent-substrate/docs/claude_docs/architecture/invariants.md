@@ -76,7 +76,7 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i31_importing_the_engine_loads_no_driver_sdk_or_framework`
 - ✅ **``substrate.integrations`` and its vendor packages import nothing until a name is used: asking for the Anthropic client must not require the OpenAI SDK, nor MCP, nor Redis.**
   `test_i32_an_adapter_package_imports_only_what_it_is_asked_for`
-- ✅ **A library emits (``logging.getLogger(__name__)``); the application decides where the records go. Configuring handlers at import — as 118 modules once did, writing a rotating file into whatever directory the process started in — is a side effect nobody asked for. Only application entry points call ``setup_logging``. ``runtimes/`` (separate services, being rewritten) is outside this row.**
+- ✅ **A library emits (``logging.getLogger(__name__)``); the application decides where the records go. Configuring handlers at import — as 118 modules once did, writing a rotating file into whatever directory the process started in — is a side effect nobody asked for. Only application entry points call ``setup_logging``.**
   `test_i33_a_library_module_never_configures_logging`
 - ✅ **The permitted callers run ``setup_logging`` inside a function, never as a statement of the module.**
   `test_i33_an_entry_point_configures_logging_when_started_not_when_imported`

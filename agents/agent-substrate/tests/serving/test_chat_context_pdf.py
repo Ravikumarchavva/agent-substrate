@@ -7,7 +7,7 @@ never answer "what's in this file" without the user pasting the text
 themselves — see routes/chat_context.py.
 
 Extraction itself (service-vs-local fallback) is now owned by the shared
-``runtimes/document_intelligence/extract.py::extract_document`` — see
+``integrations/services/document_extraction.py::extract_document`` — see
 ``tests/document_intelligence/test_extract.py`` for that logic's own
 coverage and ``test_chat_context_extraction.py`` for chat_context's
 endpoint-building wiring around it. These tests exercise the real local
@@ -133,7 +133,7 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
 
     # Extraction cache must be written back onto the row.
     assert meta.extracted_text is not None
-    assert meta.extraction_engine == "raw_text"
+    assert meta.extraction_engine == "local"
     assert meta.extracted_at is not None
     db.commit.assert_awaited_once()
 

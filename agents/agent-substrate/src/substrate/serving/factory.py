@@ -1013,7 +1013,7 @@ def build_session_rag_backend(
 
     embedding_reranker_client = None
     if cfg.EMBEDDING_RERANKER_SERVICE_URL:
-        from substrate.runtimes.embedding_reranker.client import (
+        from substrate.integrations.services.embedding_reranker import (
             EmbeddingRerankerClient,
         )
 

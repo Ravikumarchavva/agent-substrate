@@ -65,7 +65,7 @@ async def ingest_session_document(
     )
     from substrate.integrations.llm.endpoint import InferenceEndpoint
     from substrate.stores import Document
-    from substrate.runtimes.document_intelligence.extract import extract_document
+    from substrate.integrations.services.document_extraction import extract_document
 
     document_id = uuid.uuid4().hex
     endpoint = None

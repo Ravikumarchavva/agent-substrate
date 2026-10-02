@@ -1,32 +1,27 @@
-"""``runtimes/document_intelligence/extract.py::extract_document`` — the
-single entry point every Phase 2 call site now shares. Mocks
-``ExtractionClient`` so this never needs a real service; local fallback is
-exercised against the real ``RawTextEngine`` (pypdfium2), same as
-``test_raw_text_engine.py``."""
+"""``extract_document`` — the single entry point every call site shares: the document service by URL when there is one,
+the light local extractor otherwise. The service client is replaced by a fake here so no server is needed; the local path
+runs for real against a real PDF."""
 
 from __future__ import annotations
 
-import pypdfium2 as pdfium
+from pathlib import Path
+
 import pytest
 
 from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.runtimes.document_intelligence import extract as extract_mod
-from substrate.runtimes.document_intelligence.client import (
+from substrate.integrations.services import document_extraction as extract_mod
+from substrate.integrations.services.document_extraction import (
     ExtractedImage,
     ExtractedPageText,
     ExtractResponse,
 )
 
 
-def _real_pdf_bytes(text: str = "hello world") -> bytes:
-    import io
+_INVOICE = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
 
-    doc = pdfium.PdfDocument.new()
-    doc.new_page(200, 200)
-    buf = io.BytesIO()
-    doc.save(buf)
-    doc.close()
-    return buf.getvalue()
+
+def _real_pdf_bytes() -> bytes:
+    return _INVOICE.read_bytes()
 
 
 async def test_no_endpoint_runs_local_extraction_only(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -38,12 +33,15 @@ async def test_no_endpoint_runs_local_extraction_only(monkeypatch: pytest.Monkey
     result = await extract_mod.extract_document(
         _real_pdf_bytes(), "doc.pdf", "application/pdf", endpoint=None
     )
-    assert result.engine == "raw_text"
+    assert result.engine == "local" and result.pages  # the PDF text layer, read in this process
 
 
 async def test_endpoint_success_returns_service_result(monkeypatch: pytest.MonkeyPatch) -> None:
     class _FakeClient:
         def __init__(self, **kwargs):
+            pass
+
+        async def close(self) -> None:
             pass
 
         async def extract(self, data, filename, content_type, *, timeout_s=None):
@@ -74,6 +72,9 @@ async def test_endpoint_failure_falls_back_to_local(monkeypatch: pytest.MonkeyPa
         def __init__(self, **kwargs):
             pass
 
+        async def close(self) -> None:
+            pass
+
         async def extract(self, data, filename, content_type, *, timeout_s=None):
             return ExtractResponse(success=False, error="service down")
 
@@ -85,7 +86,7 @@ async def test_endpoint_failure_falls_back_to_local(monkeypatch: pytest.MonkeyPa
         "application/pdf",
         endpoint=InferenceEndpoint(model="compatible/whatever", base_url="http://svc:8080"),
     )
-    assert result.engine == "raw_text"
+    assert result.engine == "local" and result.pages  # the PDF text layer, read in this process
 
 
 async def test_service_response_images_attached_to_correct_page(
@@ -95,6 +96,9 @@ async def test_service_response_images_attached_to_correct_page(
 
     class _FakeClient:
         def __init__(self, **kwargs):
+            pass
+
+        async def close(self) -> None:
             pass
 
         async def extract(self, data, filename, content_type, *, timeout_s=None):
@@ -128,8 +132,8 @@ async def test_service_response_images_attached_to_correct_page(
     assert result.pages[1].images[0].data == b"img-bytes"
 
 
-async def test_unsupported_local_content_type_returns_empty_result() -> None:
+async def test_a_format_only_a_service_can_read_comes_back_empty_without_one() -> None:
     result = await extract_mod.extract_document(
-        b"data", "archive.zip", "application/zip", endpoint=None
+        b"data", "report.docx", next(iter(extract_mod.OFFICE_CONTENT_TYPES)), endpoint=None
     )
-    assert result.pages == []
+    assert result.pages == [] and result.engine == "none"

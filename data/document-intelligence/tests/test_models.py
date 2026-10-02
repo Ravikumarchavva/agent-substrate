@@ -14,7 +14,7 @@ from pathlib import Path
 import huggingface_hub
 import pytest
 
-from substrate.runtimes.document_intelligence.service import models
+from document_intelligence import models
 
 
 def _fail_hf_hub_download(*args: object, **kwargs: object) -> str:

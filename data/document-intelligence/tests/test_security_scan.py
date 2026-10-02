@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from substrate.runtimes.document_intelligence.security_scan import scan_document
+from document_intelligence.security_scan import scan_document
 from substrate.safety import Severity
 
-FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def test_clean_pdf_is_not_flagged():

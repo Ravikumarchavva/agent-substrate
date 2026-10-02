@@ -72,8 +72,8 @@ install tesseract`), not pip-installable. Both imports are lazy inside
 extra or the binary at all — it only matters if you feed the extractor a
 scanned page. For real OCR/layout quality (multi-column reading order,
 chart/table detection), use the PaddleOCR-backed
-`document-intelligence`/`document-intelligence-gpu` extras instead — this
-tier is deliberately the bare minimum.
+the document-intelligence service (`apps/document-intelligence`, reached by URL through
+`integrations/services`) instead — this tier is deliberately the bare minimum.
 
 ## `chunking`
 
@@ -125,41 +125,38 @@ on top: web search/browsing, the K8s sandbox runtime, local RAG, S3 storage,
 the safety guardrail, and the code-interpreter's data-science packages.
 Shorthand for `agent-substrate[web,code,rag,s3,safety,sandbox]`.
 
-## `document-intelligence` / `document-intelligence-gpu`
+## `services`
 
-Layout-aware document parsing (PDF layout, chart/table detection, OCR) via
-PaddleOCR — used only by `runtimes/document_intelligence/service/`, never
-imported from the main API process. Multimodal embedding and reranking are
-a separate service (`runtimes/embedding_reranker/`) — thin HTTP calls to
-the `llama-embed`/`llama-rerank` `llama-server` sidecars — so
-`sentence-transformers`/`torch` aren't needed here either. Not needed
-unless you actually run the document-intelligence service; the base
-install already covers CSV/JSON/text/`pypdf`-based PDF loading without it.
+`httpx2` — the clients in `integrations/services` that reach the heavy services by URL (document extraction, embedding and
+reranking). The services themselves are not in this package: see "Heavy services" below.
 
-`paddlepaddle` (CPU) is pinned to the exact wheel version verified working
-on this project's own target hardware, served from PaddlePaddle's own CPU
-package index (`[[tool.uv.index]] name = "paddle-cpu"`), not plain PyPI.
-`paddlepaddle-gpu` is the CUDA 13.0 wheel from the matching GPU index
-(`paddle-cu130`) — mutually exclusive with the CPU extra (pick one, not
-both; both provide the `paddle` import and will conflict). Pick the CUDA
-index (cu118/cu126/cu130/...) matching your driver — `cu130` is what this
-project's own dev GPU (CUDA 13.1 driver) uses. A CPU-only wheel without the
-exact pin also exists on plain PyPI and is what a downstream resolver falls
-back to.
+## `logging`
 
-**Note for downstream consumers:** `[tool.uv.sources]`/`[[tool.uv.index]]`
-in this repo's `pyproject.toml` only apply when *this* repo is the active
-uv project — they don't propagate to a project that merely depends on
-`agent-substrate`. Replicate the same `[tool.uv.sources]` entry in your own
-project if you need that exact pinned/verified wheel rather than whatever
-PyPI resolves to.
+The JSON formatter for `substrate.logger.setup_logging` (`python-json-logger`, `msgspec`): what an *application* (a service)
+needs to configure logging. A library never calls it.
+
+## Heavy services (`apps/`, `packages/`)
+
+OCR, layout analysis, multimodal embedding — anything that needs gigabytes of dependencies or a GPU — runs as a server, and the
+library only holds the client (`integrations/services`: a base URL and a token in, a typed result out). Each server is a project
+of its own with its own `pyproject.toml`, environment, tests and Dockerfile, so installing the library never installs them and
+upgrading one never touches another:
+
+* `apps/document-intelligence` — PaddleOCR layout/chart/table extraction, Office conversion, a pre-parse security scan.
+  Extras `paddle` (CPU wheel) or `paddle-gpu`, pinned to the wheel versions verified on the target hardware and served from
+  PaddlePaddle's own indexes (declared in that project, not here).
+* `apps/embedding-reranker` — Qwen3-VL embedding and reranking, a thin proxy in front of llama-server. No model library at all.
+* `packages/inference-pool` — spawning, supervising and load-balancing llama-server children (or pointing at remote ones), and
+  GPU/CPU/RAM detection; shared by both services.
+
+`make test-apps` installs each into a fresh environment and runs its tests there.
 
 ## `sentence-transformers`
 
 `create_embedding_client("sentence-transformers/<model>")`
 (`integrations/llm/factory.py`) — local, CPU-or-CUDA, no API key, no
 external server. This is the one place `torch` comes back after being
-deliberately removed everywhere else (see `document-intelligence` above) —
+deliberately removed everywhere else (see "Heavy services" above) —
 genuinely needed here, not an oversight, since `sentence-transformers` has
 no lighter runtime. Opt-in only: without this extra, selecting this
 provider raises a clean `ModuleNotFoundError` instead of silently working.

@@ -5,7 +5,8 @@ Authentication is via ``Bearer <token>`` header (optional, configurable).
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import time
 from typing import Annotated
@@ -20,7 +21,7 @@ from .schemas import (
     RerankResponse,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1", tags=["embedding-reranker"])
 

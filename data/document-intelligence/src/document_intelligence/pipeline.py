@@ -16,7 +16,7 @@ New code should import from ``substrate.documents``/
 
 from __future__ import annotations
 
-from substrate.runtimes.document_intelligence.service.engines.paddle_classic import (
+from document_intelligence.engines.paddle_classic import (
     PaddleClassicEngine as ExtractionPipeline,
 )
 from substrate.documents import ExtractedImage, ExtractedPage, ExtractionResult

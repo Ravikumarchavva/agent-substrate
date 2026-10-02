@@ -136,6 +136,8 @@ src/substrate/
 │   ├── tts/              text-to-speech provider adapters
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore (cache), CachedShortTermMemory, MemoryManager, exposure policy
+│   ├── services/         clients, by URL, for the heavy services you run yourself: document extraction
+│   │                     (ExtractionClient, extract_document), embedding/reranking (no model code here)
 │   ├── storage/          S3Connector (raw client) + S3FileStore (FileStore Protocol impl built on top)
 │   ├── database/         PostgresDatabase + postgres_store(dsn) (the engine's whole state on PostgreSQL/pgvector),
 │   │                     PostgresConnector (asyncpg pool for direct queries)
@@ -159,10 +161,6 @@ src/substrate/
 │   │                     the primary place serving/, the core and the integrations meet
 │   └── research_orchestrator.py  fixed researcher/calculator/clock/coordinator topology
 │                         used when AGENT_MODE=orchestrator
-│
-├── runtimes/     independently-deployable, heavy-dependency, HTTP-only services (orthogonal to layers)
-│   ├── document_intelligence/  PaddleOCR layout/chart/table extraction + OCR (client.py always importable)
-│   └── embedding_reranker/     Qwen3-VL embedding + reranking proxy service (client.py always importable)
 │
 ├── config.py     Pydantic Settings (reads .env)
 ├── exceptions.py public exceptions (GuardrailTripwireError, …)
@@ -208,7 +206,8 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 
 ```
 substrate/{types … agents}   the core: the engine, one folder per concept, contracts beside implementations
-integrations/ runtimes/      adapters: vendors, databases, MCP, tools
+integrations/               adapters: vendors, databases, MCP, tools, and clients for the heavy services (by URL)
+apps/ packages/             the heavy services themselves, each a project of its own (see below)
 serving/ console/ cli        wiring: FastAPI apps, the REPL, the CLI
 evals/                       the eval harness (a client of the core)
 ```
@@ -230,9 +229,9 @@ something the package does not export.
 
 | Contract | Rule |
 |---|---|
-| `the core imports nothing outside it` | the core never imports integrations/runtimes/serving/evals/console/cli/config-wiring |
+| `the core imports nothing outside it` | the core never imports integrations/serving/evals/console/cli/config-wiring |
 | `the core's concepts only import downward` | the `layers` order above; imports made only under `TYPE_CHECKING` are exempt |
-| `adapters depend on the contracts and the engine's support libraries, not how it runs an agent` | integrations/runtimes may use the contracts plus `models/workspace/stores/safety/tools/runtime/telemetry`, never `agents`, the context window internals, or middleware implementations |
+| `adapters depend on the contracts and the engine's support libraries, not how it runs an agent` | integrations may use the contracts plus `models/workspace/stores/safety/tools/runtime/telemetry`, never `agents`, the context window internals, or middleware implementations |
 | `serving cannot import agents or integrations-that-were-capabilities` | serving/'s routes and services don't reach past its `factory.py`/`research_orchestrator.py` composition root |
 
 **Structure rows** (`tests/invariants/test_structure.py`): the core's third-party imports are exactly the allowed

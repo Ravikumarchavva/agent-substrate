@@ -5,7 +5,7 @@
 #
 # Layout-aware document parsing (PaddleOCR: chart/table detection + OCR).
 # Multimodal embedding and reranking are a separate service now — see
-# runtimes/embedding_reranker/ and docs/claude_docs/decisions.md for why.
+# apps/embedding-reranker/ and docs/claude_docs/decisions.md for why.
 # CPU-only — paddlepaddle's CPU wheel (~185MB) is used, no CUDA runtime
 # pulled in. Isolated from the main API image entirely — this is the only
 # place these dependencies get installed.
@@ -27,7 +27,9 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN uv pip install --system -e ".[document-intelligence]"
+COPY packages/inference-pool ./packages/inference-pool
+COPY apps/document-intelligence ./apps/document-intelligence
+RUN uv pip install --system -e "./apps/document-intelligence[paddle]"
 
 EXPOSE 8080
 
@@ -37,5 +39,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:8080/v1/health || exit 1
 
-ENTRYPOINT ["uvicorn", "substrate.runtimes.document_intelligence.service.app:app"]
+ENTRYPOINT ["uvicorn", "document_intelligence.app:app"]
 CMD ["--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]

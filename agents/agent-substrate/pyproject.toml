@@ -35,6 +35,10 @@ dependencies = [
 [project.optional-dependencies]
 # OpenAI and OpenAI-compatible chat/embedding clients (also vLLM, llama.cpp, Ollama, LM Studio)
 openai = ["openai>=2.15.0", "tiktoken>=0.12.0", "httpx>=0.27.0", "pillow>=10.4.0"]
+# clients for the heavy services you run yourself (document extraction, embedding/reranking) — by URL
+services = ["httpx2>=2.7.0"]
+# the JSON log formatter for `substrate.logger.setup_logging` — what an application (a service) uses to configure logging
+logging = ["python-json-logger>=2.0.7", "msgspec>=0.21.1"]
 # PostgreSQL as the store (integrations.database.postgres_store); vectors also need the pgvector extension
 postgres = ["asyncpg>=0.30.0"]
 # Redis: session cache, event bus
@@ -105,14 +109,12 @@ safety = [
 # pyjwt+cryptography for its own auth. None of these are needed to build
 # and run an agent object with substrate/integrations alone.
 server = [
-    "agent-substrate[serve,openai,anthropic,gemini,postgres,redis,scheduler,mcp,tts,tools,web,code,rag,s3,safety,sandbox]",
+    "agent-substrate[serve,openai,anthropic,gemini,postgres,redis,scheduler,mcp,tts,tools,services,logging,web,code,rag,s3,safety,sandbox]",
     "pydantic-settings>=2.12.0",
     "sqlalchemy>=2.0.46",
     "greenlet>=3.0.0",
     # SQLAlchemy resolves the monolith's `postgresql+psycopg://` DATABASE_URL dynamically — nothing imports it by name
     "psycopg[binary]>=3.2.0",
-    "python-json-logger>=2.0.7",
-    "msgspec>=0.21.1",
     # The engine only ever imports opentelemetry-api (a no-op until something configures an SDK);
     # the SDK, the OTLP exporter and the FastAPI instrumentation are what the reference server wires up.
     "opentelemetry-sdk>=1.20.0",
@@ -122,33 +124,6 @@ server = [
     "python-multipart>=0.0.9",
     "pyjwt>=2.12.0",
     "cryptography>=46.0.6",
-]
-# PaddleOCR layout/chart/table extraction, CPU wheel
-document-intelligence = [
-    "doc-firewall>=0.5.1",
-    "paddleocr[doc-parser]>=3.7.0",
-    "paddlepaddle==3.3.0",
-    # Mode raw_text's Tier 1 DOCX/PPTX conversion — pure Python (mammoth/
-    # python-pptx under the hood), no rendering engine, no LibreOffice
-    # needed for the common (born-digital) case. Scoped extras only, not
-    # [all] — this service has no use for markitdown's audio/HTML/zip/
-    # hosted-Azure-OCR support.
-    "markitdown[docx,pptx]>=0.1.0",
-    # Model provisioning (models.py) — HF Hub lookups/downloads for the
-    # PaddleOCR-VL GGUF files.
-    "huggingface-hub>=0.24.0",
-]
-# same, CUDA wheel — pick one, not both
-document-intelligence-gpu = [
-    "doc-firewall>=0.5.1",
-    "paddleocr[doc-parser]>=3.7.0",
-    "paddlepaddle-gpu==3.3.0",
-    "markitdown[docx,pptx]>=0.1.0",
-    "huggingface-hub>=0.24.0",
-    # hardware.py's GPU-detection chain — thin ctypes wrapper over
-    # libnvidia-ml.so.1, which the NVIDIA Container Toolkit mounts from
-    # the host driver; no CUDA dev toolkit needed at build or run time.
-    "nvidia-ml-py>=12.0",
 ]
 # local embedding provider (brings torch back)
 sentence-transformers = ["sentence-transformers>=3.0.0"]
@@ -169,29 +144,14 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "substrate"
 
-# Verified/pinned wheel indexes for the document-intelligence and
-# sentence-transformers extras — see
-# docs/claude_docs/architecture/optional-dependencies.md for why each one
-# is routed off plain PyPI (only applies when THIS repo is the active uv
-# project; a downstream consumer must replicate the entry it needs).
-[[tool.uv.index]]
-name = "paddle-cpu"
-url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
-explicit = true
-
-[[tool.uv.index]]
-name = "paddle-cu130"
-url = "https://www.paddlepaddle.org.cn/packages/stable/cu130/"
-explicit = true
-
+# The PyTorch CPU wheel index for the sentence-transformers extra (local embeddings). The PaddleOCR indexes moved with
+# the service that needs them: apps/document-intelligence/pyproject.toml.
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.uv.sources]
-paddlepaddle = { index = "paddle-cpu" }
-paddlepaddle-gpu = { index = "paddle-cu130" }
 torch = { index = "pytorch-cpu" }
 
 [dependency-groups]
@@ -229,7 +189,7 @@ exclude = ["notebooks/", "examples/", ".venv"]
 #
 #   substrate                 the engine: everything needed to run an agent
 #   substrate.types    what the engine needs from outside (pure)
-#   substrate.integrations / runtimes   adapters over the abstractions
+#   substrate.integrations             adapters over the abstractions (heavy services are reached by URL: integrations/services)
 #   substrate.serving / console / cli   wiring
 #
 # Run with: uv run lint-imports
@@ -261,7 +221,6 @@ source_modules = [
 forbidden_modules = [
     "substrate.evals",
     "substrate.integrations",
-    "substrate.runtimes",
     "substrate.serving",
     "substrate.server",
     "substrate.console",
@@ -279,7 +238,6 @@ source_modules = ["substrate.server"]
 forbidden_modules = [
     "substrate.agents",
     "substrate.integrations",
-    "substrate.runtimes",
     "substrate.serving",
     "substrate.console",
     "substrate.cli",
@@ -310,7 +268,7 @@ layers = [
 [[tool.importlinter.contracts]]
 name = "adapters depend on the contracts and the engine's support libraries, not how it runs an agent"
 type = "forbidden"
-# What an adapter (integrations/, runtimes/) may use from the core: the contracts it implements, and
+# What an adapter (integrations/) may use from the core: the contracts it implements, and
 #   models            capability registry, modality fitting, tool-argument parsing, error classification
 #   workspace         object-key layout, content-addressed store, scope
 #   stores            the folder stores that the cloud stores wrap or reuse, tenant binding
@@ -321,7 +279,7 @@ type = "forbidden"
 # These are pure or reusable by design. What it may not reach is how the engine runs an agent — the
 # agents, the context window, middleware — because depending on those is how an adapter ends up coupled
 # to behaviour that is free to change.
-source_modules = ["substrate.integrations", "substrate.runtimes"]
+source_modules = ["substrate.integrations"]
 forbidden_modules = [
     "substrate.agents",
     "substrate.context.builder",
@@ -445,18 +403,11 @@ ignore_imports = [
     # ingest)
     "substrate.serving.monolith.routes.files -> substrate.integrations.knowledge.session_ingest",
     "substrate.serving.monolith.routes.chat_context -> substrate.integrations.knowledge.session_ingest",
-    # Note: chat_context.py/files.py's ExtractionClient import, and
-    # runtimes/document_intelligence/service/{schemas,routes}.py's import of
-    # client.py/security_scan.py, no longer need an exception here —
-    # runtimes/ is a separate orthogonal top-level package (like serving/
-    # itself), not under integrations/, so this
-    # "serving cannot import agents or integrations" contract doesn't apply
-    # to those edges.
 ]
 
 # Orthogonal peers (not part of the layer stack):
 # serving/      — FastAPI monolith + microservices + its own factory.py wiring
-# runtimes/     — independently-deployable, heavy-dependency, HTTP-only
-#                 services (document_intelligence, embedding_reranker)
+# (the heavy services — document intelligence, embedding/reranking — are not part of this package at all:
+#  they are apps/ and packages/, reached by URL through integrations/services)
 # These carry cross-layer edges by design (e.g. serving/ wires the core's agents and
 # integrations together in lifespan).

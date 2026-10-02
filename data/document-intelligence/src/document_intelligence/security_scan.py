@@ -17,10 +17,11 @@ detection, pulls torch+transformers) is deliberately NOT installed.
 
 from __future__ import annotations
 
-from substrate.safety import SafetyVerdict, Severity
-from substrate.logger import setup_logging
+import logging
 
-logger = setup_logging("substrate.runtimes.document_intelligence.security_scan")
+from substrate.safety import SafetyVerdict, Severity
+
+logger = logging.getLogger(__name__)
 
 # Structural-only parsing risks (downgraded to warnings rather than blocking execution;
 # see docs/integrations/08-document-intelligence.md)

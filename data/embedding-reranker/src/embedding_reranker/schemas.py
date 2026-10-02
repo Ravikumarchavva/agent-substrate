@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from substrate.runtimes.embedding_reranker.client import (
+from substrate.integrations.services.embedding_reranker import (
     EmbedResponse,
     HealthResponse,
     RerankResponse,

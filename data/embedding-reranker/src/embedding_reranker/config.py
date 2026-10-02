@@ -37,7 +37,7 @@ class ServiceConfig(BaseSettings):
     # (docker-compose.yml's llama-embed/llama-rerank services), exactly as
     # before this field existed. "local" -- this process spawns and
     # supervises its OWN llama-embed/llama-rerank children via the shared
-    # LocalLlamaServerPool (runtimes/inference_pool/llama_pool.py, promoted
+    # LocalLlamaServerPool (packages/inference-pool/llama_pool.py, promoted
     # out of document_intelligence this session) instead of reaching a
     # sidecar over the network. See the local-mode fields below and
     # app.py's lifespan for the real wiring.

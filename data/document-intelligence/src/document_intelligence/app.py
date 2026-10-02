@@ -4,11 +4,11 @@ Deploy this as its own low-replica service (heavy paddlepaddle/llama.cpp
 runtime, model-loaded — see docker-compose.yml's `document-intelligence`
 profile, or the `document-intelligence-gpu` variant). The main backend
 calls it via HTTP through ExtractionClient
-(runtimes/document_intelligence/client.py), only when
+(integrations/services/document_extraction.py), only when
 DOCUMENT_INTELLIGENCE_SERVICE_URL is configured; otherwise chat attachments
 fall back to the lightweight pypdf path for PDFs and the local RAG backend
 has no chart-image extraction capability. Multimodal embedding/reranking is
-a separate service now — see runtimes/embedding_reranker/.
+a separate service now — see apps/embedding-reranker/.
 
 On boot: detect real hardware (hardware.py) -> resolve which extraction
 mode this pod should actually serve given that hardware and
@@ -19,7 +19,7 @@ actually running.
 
 Usage::
 
-    uvicorn substrate.runtimes.document_intelligence.service.app:app \
+    uvicorn document_intelligence.app:app \
         --host 0.0.0.0 --port 8080
 """
 
@@ -37,7 +37,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .autoconfig import resolve_runtime
 from .config import ServiceConfig
 from .engines.factory import build_engine
-from .hardware import detect as detect_hardware
+from inference_pool.hardware import detect as detect_hardware
 from .routes import router
 
 logging.basicConfig(
@@ -45,7 +45,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
-logger = setup_logging()
+setup_logging(service_name="document-intelligence")  # the application, not the library, configures logging
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager

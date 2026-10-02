@@ -143,7 +143,7 @@ class TestGeminiEmbeddingClient(EmbeddingModelConformance):
 
 # ---------------------------------------------------------------------- embedding-reranker service
 
-from substrate.runtimes.embedding_reranker.client import (  # noqa: E402
+from substrate.integrations.services.embedding_reranker import (  # noqa: E402
     EmbeddingRerankerClient,
     EmbeddingRerankerTextEmbeddingClient,
 )

@@ -83,7 +83,7 @@ def build_rag_backend(kind: str, **kwargs: Any) -> RagBackend:
 
         embedding_reranker_client = None
         if embedding_reranker_service_url:
-            from substrate.runtimes.embedding_reranker.client import (
+            from substrate.integrations.services.embedding_reranker import (
                 EmbeddingRerankerClient,
             )
 

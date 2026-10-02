@@ -90,7 +90,7 @@ RUN cmake -B build -DGGML_NATIVE=ON -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release -D
 # ─────────────────────────────────────────────────────────────────────────
 # Stage 2: model-build — bakes the quantized PaddleOCR-VL-1.6 GGUF files
 # (main LM + mmproj vision encoder) into the image, using the real
-# ensure_models() from src/substrate/runtimes/document_intelligence/service/
+# ensure_models() from apps/document-intelligence/src/document_intelligence/
 # models.py rather than reimplementing its download/quantize/naming logic.
 # Reuses llama-build's own Ubuntu base (already has the CUDA driver stub
 # workaround and apt cache warmed) instead of pulling in a second distinct
@@ -107,27 +107,17 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 RUN uv python install 3.13
 
-# huggingface-hub for ensure_models() itself, plus python-json-logger/msgspec
-# because models.py imports substrate.logger.setup_logging(), which needs
-# both (see pyproject.toml's core deps) -- not the full document-intelligence-gpu
-# extra (no paddle/torch here, this stage never runs any actual OCR/layout
-# code, just the model-provisioning function).
+# Just huggingface-hub for ensure_models() itself -- models.py imports nothing else (not the library, not paddle):
+# this stage never runs any OCR/layout code, only the model-provisioning function.
 RUN uv venv --python 3.13 /opt/venv && \
-    uv pip install --python /opt/venv/bin/python \
-        "huggingface-hub>=0.24.0" "python-json-logger>=2.0.7" "msgspec>=0.21.1"
+    uv pip install --python /opt/venv/bin/python "huggingface-hub>=0.24.0"
 ENV PATH="/opt/venv/bin:${PATH}"
 
 WORKDIR /app
-# Only the one module ensure_models() actually needs (plus substrate.logger,
-# which it imports) — copying the whole src tree here would drag in paddle/
-# torch-importing modules this stage has no interpreter support for anyway.
-COPY src/substrate/runtimes/document_intelligence/service/models.py \
-    ./substrate/runtimes/document_intelligence/service/models.py
-COPY src/substrate/logger.py ./substrate/logger.py
-RUN touch ./substrate/__init__.py \
-    ./substrate/runtimes/__init__.py \
-    ./substrate/runtimes/document_intelligence/__init__.py \
-    ./substrate/runtimes/document_intelligence/service/__init__.py
+# Only the one module ensure_models() needs -- copying the whole service here would drag in modules this stage has no
+# interpreter support for anyway.
+COPY apps/document-intelligence/src/document_intelligence/models.py ./document_intelligence/models.py
+RUN touch ./document_intelligence/__init__.py
 
 ARG HF_TOKEN=""
 ENV HF_TOKEN=${HF_TOKEN}
@@ -138,7 +128,7 @@ ARG VL_MODEL_DIR="/models/paddleocr-vl"
 # PaddleOCR-VL's structured output, so this is the only safe value to bake.
 RUN PYTHONPATH=/app python -c "\
 import asyncio; \
-from substrate.runtimes.document_intelligence.service.models import ensure_models; \
+from document_intelligence.models import ensure_models; \
 asyncio.run(ensure_models( \
     model_dir='${VL_MODEL_DIR}', \
     quant='${VL_QUANT}', \
@@ -168,9 +158,11 @@ RUN uv python install 3.13
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY packages/inference-pool ./packages/inference-pool
+COPY apps/document-intelligence ./apps/document-intelligence
 RUN uv venv --python 3.13 /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
-RUN uv pip install --python /opt/venv/bin/python -e ".[document-intelligence-gpu]"
+RUN uv pip install --python /opt/venv/bin/python -e "./apps/document-intelligence[paddle-gpu]"
 
 COPY --from=llama-build /src/build/bin/llama-server /usr/local/bin/llama-server
 COPY --from=llama-build /src/build/bin/*.so /usr/local/lib/
@@ -197,5 +189,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=300s --retries=3 \
     CMD curl -f http://localhost:8080/v1/health || exit 1
 
-ENTRYPOINT ["uvicorn", "substrate.runtimes.document_intelligence.service.app:app"]
+ENTRYPOINT ["uvicorn", "document_intelligence.app:app"]
 CMD ["--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]

@@ -36,7 +36,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
-setup_logging(service_name="embedding-reranker")  # the application, not the library, configures logging
+setup_logging(
+    service_name="embedding-reranker"
+)  # the application, not the library, configures logging
 logger = logging.getLogger(__name__)
 
 # Estimated, not verified this session (unlike document_intelligence's

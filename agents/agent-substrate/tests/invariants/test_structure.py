@@ -35,7 +35,14 @@ SNAPSHOT = Path(__file__).parent / "public_api.json"
 # ``pypdfium2`` is the one parser in the base install: a plain ``pip install agent-substrate`` reads PDFs. ``rapidocr`` is the optional
 # OCR engine (the ``ocr`` extra). Both are admitted only as **lazy imports inside ``documents/reading/``** — a function body, never a
 # module level — so importing the engine loads neither; ``test_the_document_parsers_are_imported_lazily_and_only_by_the_reader`` holds that.
-_ALLOWED_THIRD_PARTY = {"pydantic", "typing_extensions", "opentelemetry", "confusable_homoglyphs", "pypdfium2", "rapidocr"}
+_ALLOWED_THIRD_PARTY = {
+    "pydantic",
+    "typing_extensions",
+    "opentelemetry",
+    "confusable_homoglyphs",
+    "pypdfium2",
+    "rapidocr",
+}
 _LAZY_ONLY = {"pypdfium2", "rapidocr"}
 
 
@@ -67,7 +74,9 @@ def test_i26_the_core_imports_only_its_allowed_third_party_set() -> None:
         third_party = {
             root
             for root in (m.split(".")[0] for m in _imports(path))
-            if root not in _ALLOWED_THIRD_PARTY and root != "substrate" and root not in sys.stdlib_module_names
+            if root not in _ALLOWED_THIRD_PARTY
+            and root != "substrate"
+            and root not in sys.stdlib_module_names
         }
         if third_party:
             offenders[str(path.relative_to(REPO_ROOT))] = third_party
@@ -99,8 +108,13 @@ def test_the_document_parsers_are_imported_lazily_and_only_by_the_reader() -> No
                     continue
                 inside_reader = "documents" in path.parts and "reading" in path.parts
                 if not inside_reader or id(node) in top_level:
-                    offenders.append(f"{path.relative_to(REPO_ROOT)}: imports {name}{' at module level' if id(node) in top_level else ''}")
-    assert not offenders, "document parsers must be lazy imports under documents/reading/:\n  " + "\n  ".join(offenders)
+                    offenders.append(
+                        f"{path.relative_to(REPO_ROOT)}: imports {name}{' at module level' if id(node) in top_level else ''}"
+                    )
+    assert not offenders, (
+        "document parsers must be lazy imports under documents/reading/:\n  "
+        + "\n  ".join(offenders)
+    )
 
 
 def test_the_core_imports_nothing_outside_itself() -> None:
@@ -110,9 +124,12 @@ def test_the_core_imports_nothing_outside_itself() -> None:
         f"{path.relative_to(REPO_ROOT)}: {module}"
         for path in core_files(include_testing=True)
         for module in _imports(path)
-        if module.startswith("substrate") and ".".join(module.split(".")[:2]) not in allowed
+        if module.startswith("substrate")
+        and ".".join(module.split(".")[:2]) not in allowed
     }
-    assert not offenders, "the core imports from outside it:\n  " + "\n  ".join(sorted(offenders))
+    assert not offenders, "the core imports from outside it:\n  " + "\n  ".join(
+        sorted(offenders)
+    )
 
 
 def test_concepts_only_import_the_concepts_below_them() -> None:
@@ -127,9 +144,16 @@ def test_concepts_only_import_the_concepts_below_them() -> None:
             continue
         for module in _imports(path, type_checking=False):
             parts = module.split(".")
-            if parts[0] == "substrate" and len(parts) > 1 and parts[1] in rank and rank[parts[1]] > rank[own]:
+            if (
+                parts[0] == "substrate"
+                and len(parts) > 1
+                and parts[1] in rank
+                and rank[parts[1]] > rank[own]
+            ):
                 offenders.add(f"{path.relative_to(REPO_ROOT)}: {own} imports {module}")
-    assert not offenders, "a concept imports one above it:\n  " + "\n  ".join(sorted(offenders))
+    assert not offenders, "a concept imports one above it:\n  " + "\n  ".join(
+        sorted(offenders)
+    )
 
 
 def test_the_core_never_imports_its_own_test_support() -> None:
@@ -153,9 +177,15 @@ def test_i27_the_contracts_never_import_the_engine() -> None:
     offenders: set[str] = set()
     for path in contract_files():
         for module in _imports(path):
-            if module.startswith("substrate.") and module not in contracts and module != "substrate.types":
+            if (
+                module.startswith("substrate.")
+                and module not in contracts
+                and module != "substrate.types"
+            ):
                 offenders.add(f"{path.relative_to(REPO_ROOT)}: {module}")
-    assert not offenders, "a contract imports the engine:\n  " + "\n  ".join(sorted(offenders))
+    assert not offenders, "a contract imports the engine:\n  " + "\n  ".join(
+        sorted(offenders)
+    )
 
 
 def test_i28_the_public_api_matches_its_snapshot() -> None:
@@ -175,9 +205,12 @@ def test_i28_the_public_api_matches_its_snapshot() -> None:
         current = set(getattr(importlib.import_module(name), "__all__", ()))
         wanted = set(expected.get(name, ()))
         if current != wanted:
-            problems.append(f"{name}\n    added:   {sorted(current - wanted)}\n    removed: {sorted(wanted - current)}")
+            problems.append(
+                f"{name}\n    added:   {sorted(current - wanted)}\n    removed: {sorted(wanted - current)}"
+            )
     assert not problems, (
-        "the public API changed:\n  " + "\n  ".join(problems)
+        "the public API changed:\n  "
+        + "\n  ".join(problems)
         + f"\nIf intended, update {SNAPSHOT.relative_to(REPO_ROOT)} in this commit."
     )
 
@@ -214,7 +247,11 @@ def _suite_classes() -> dict[str, str]:
 
 
 def _bases(node: ast.ClassDef) -> set[str]:
-    return {b.id if isinstance(b, ast.Name) else b.attr for b in node.bases if isinstance(b, (ast.Name, ast.Attribute))}
+    return {
+        b.id if isinstance(b, ast.Name) else b.attr
+        for b in node.bases
+        if isinstance(b, (ast.Name, ast.Attribute))
+    }
 
 
 def _classes_running(suite: str) -> list[str]:
@@ -241,29 +278,59 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
     For each port that has a suite, every shipped implementation must be run through it.
     """
     suites = _suite_classes()
-    assert "RuntimeStore" in suites, "the runtime-store conformance suite has gone missing"
-    assert "MemoryStore" in suites, "the memory-store conformance suite has gone missing"
-    assert "ShortTermMemory" in suites, "the short-term-memory conformance suite has gone missing"
-    assert "ThreadStore" in suites, "the history-provider conformance suite has gone missing"
+    assert "RuntimeStore" in suites, (
+        "the runtime-store conformance suite has gone missing"
+    )
+    assert "MemoryStore" in suites, (
+        "the memory-store conformance suite has gone missing"
+    )
+    assert "ShortTermMemory" in suites, (
+        "the short-term-memory conformance suite has gone missing"
+    )
+    assert "ThreadStore" in suites, (
+        "the history-provider conformance suite has gone missing"
+    )
     assert "FileStore" in suites, "the FileStore conformance suite has gone missing"
     assert "TaskStore" in suites, "the TaskStore conformance suite has gone missing"
-    assert "WorkspaceStore" in suites, "the WorkspaceStore conformance suite has gone missing"
+    assert "WorkspaceStore" in suites, (
+        "the WorkspaceStore conformance suite has gone missing"
+    )
     assert "GraphStore" in suites, "the GraphStore conformance suite has gone missing"
     for port in ("ChatModel", "EmbeddingModel", "DocumentExtractor", "Ocr", "Reranker"):
         assert port in suites, f"the {port} conformance suite has gone missing"
-    assert "VectorStore" in suites, "the vector-store conformance suite has gone missing"
+    assert "VectorStore" in suites, (
+        "the vector-store conformance suite has gone missing"
+    )
     shipped = {
         "RuntimeStore": ("SqlRuntimeStoreOnSqlite", "TestPostgresRuntimeStore"),
         "MemoryStore": ("TestMemory", "TestPostgresMemory"),
-        "ShortTermMemory": ("TestSessionState", "TestPostgresSessionState", "TestRedisSessionStore"),
+        "ShortTermMemory": (
+            "TestSessionState",
+            "TestPostgresSessionState",
+            "TestRedisSessionStore",
+        ),
         "ThreadStore": ("TestThreads", "TestPostgresThreads"),
         "FileStore": ("TestFiles", "TestPostgresFiles", "S3FileStore"),
         "TaskStore": ("TestTasks", "TestPostgresTasks"),
         "WorkspaceStore": ("TestWorkspaces", "TestPostgresWorkspaces"),
         "GraphStore": ("TestGraph", "TestPostgresGraph"),
-        "ChatModel": ("OpenAICompatibleClient", "OpenAIClient", "AnthropicClient", "GeminiClient"),
-        "EmbeddingModel": ("OpenAIEmbeddingClient", "GeminiEmbeddingClient", "SentenceTransformersEmbeddingClient", "RemoteEmbedder"),
-        "DocumentExtractor": ("TestIsolatedReader", "TestInProcessReader", "TestReaderByUrl"),
+        "ChatModel": (
+            "OpenAICompatibleClient",
+            "OpenAIClient",
+            "AnthropicClient",
+            "GeminiClient",
+        ),
+        "EmbeddingModel": (
+            "OpenAIEmbeddingClient",
+            "GeminiEmbeddingClient",
+            "SentenceTransformersEmbeddingClient",
+            "RemoteEmbedder",
+        ),
+        "DocumentExtractor": (
+            "TestIsolatedReader",
+            "TestInProcessReader",
+            "TestReaderByUrl",
+        ),
         "Ocr": ("TestTesseract", "TestRapidOcr"),
         "Reranker": ("TestRemoteReranker",),
         "VectorStore": ("TestVectors", "TestPostgresVectors"),
@@ -281,7 +348,9 @@ def test_i30_every_port_has_a_conformance_suite() -> None:
     assert not missing, f"ports with no conformance suite: {missing}"
 
 
-def test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports() -> None:
+def test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports() -> (
+    None
+):
     """The engine instruments itself through ``opentelemetry-api``, which does nothing until a
     host configures an SDK. The SDK, the exporter and the web-framework instrumentation are the
     host's choice — the platform (apps/substrate-cloud) installs them — so a plain install of the
@@ -289,15 +358,28 @@ def test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports
     import tomllib
 
     project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())["project"]
-    core = {d.split(">")[0].split("<")[0].split("=")[0].split("[")[0].strip() for d in project["dependencies"]}
+    core = {
+        d.split(">")[0].split("<")[0].split("=")[0].split("[")[0].strip()
+        for d in project["dependencies"]
+    }
     assert "opentelemetry-api" in core
-    exporting = sorted(d for d in core if d.startswith("opentelemetry-") and d != "opentelemetry-api")
-    assert not exporting, f"core dependencies that belong to the host, not the engine: {exporting}"
-    cloud = tomllib.loads((REPO_ROOT / "apps" / "substrate-cloud" / "pyproject.toml").read_text())["project"]
-    assert "opentelemetry-sdk" in " ".join(cloud["dependencies"]), "the platform lost the SDK it configures"
+    exporting = sorted(
+        d for d in core if d.startswith("opentelemetry-") and d != "opentelemetry-api"
+    )
+    assert not exporting, (
+        f"core dependencies that belong to the host, not the engine: {exporting}"
+    )
+    cloud = tomllib.loads(
+        (REPO_ROOT / "apps" / "substrate-cloud" / "pyproject.toml").read_text()
+    )["project"]
+    assert "opentelemetry-sdk" in " ".join(cloud["dependencies"]), (
+        "the platform lost the SDK it configures"
+    )
 
 
-def test_i26_importing_the_whole_engine_loads_only_the_allowed_third_party_set() -> None:
+def test_i26_importing_the_whole_engine_loads_only_the_allowed_third_party_set() -> (
+    None
+):
     """The AST check above sees what each file names; this one sees what actually loads. A module that
     reached a vendor SDK, a logging stack or a database driver through a helper would pass the first and
     fail this."""
@@ -310,9 +392,23 @@ def test_i26_importing_the_whole_engine_loads_only_the_allowed_third_party_set()
         "roots = {m.split('.')[0] for m in set(sys.modules) - before}\n"
         "print(sorted(r for r in roots if r not in sys.stdlib_module_names and not r.startswith('_') and r != 'substrate'))\n"
     )
-    out = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=True, cwd=REPO_ROOT).stdout
+    out = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=REPO_ROOT,
+    ).stdout
     loaded = set(ast.literal_eval(out.strip().splitlines()[-1]))
     # Dependencies of the allowed packages themselves: pydantic's, and opentelemetry-api's.
-    transitive = {"annotated_types", "pydantic_core", "typing_inspection", "importlib_metadata", "zipp"}
+    transitive = {
+        "annotated_types",
+        "pydantic_core",
+        "typing_inspection",
+        "importlib_metadata",
+        "zipp",
+    }
     unexpected = loaded - _ALLOWED_THIRD_PARTY - transitive
-    assert not unexpected, f"importing the core loaded packages outside its allowed set: {sorted(unexpected)}"
+    assert not unexpected, (
+        f"importing the core loaded packages outside its allowed set: {sorted(unexpected)}"
+    )

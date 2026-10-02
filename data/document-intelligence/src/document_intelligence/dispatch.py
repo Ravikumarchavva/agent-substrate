@@ -27,7 +27,10 @@ def _with_page_markers(result: ExtractionResult) -> ExtractionResult:
     """A layout engine's markdown, in the contract's shape: a ``<!-- page N -->`` marker before every page."""
     if not result.success or not result.pages or "<!-- page 1 -->" in result.markdown:
         return result
-    parts = [f"<!-- page {p.page_number} -->\n\n{(p.markdown or p.text).strip()}".rstrip() for p in result.pages]
+    parts = [
+        f"<!-- page {p.page_number} -->\n\n{(p.markdown or p.text).strip()}".rstrip()
+        for p in result.pages
+    ]
     return result.model_copy(update={"markdown": "\n\n".join(parts)})
 
 
@@ -48,23 +51,45 @@ async def read(
                 error="this is a legacy binary Office or RTF file; reading it needs LibreOffice, which is not available on this server. "
                 "Save it as DOCX, PPTX, XLSX or PDF and upload that.",
             )
-        data, filename, content_type = pdf, PurePath(filename).stem + ".pdf", "application/pdf"
+        data, filename, content_type = (
+            pdf,
+            PurePath(filename).stem + ".pdf",
+            "application/pdf",
+        )
 
-    layout = engine is not native and sniff(data, filename, content_type) in (Format.PDF, Format.IMAGE)
+    layout = engine is not native and sniff(data, filename, content_type) in (
+        Format.PDF,
+        Format.IMAGE,
+    )
     if not layout or strategy == "fast":
-        return await native.aextract(data, filename, content_type=content_type, strategy=strategy)
+        return await native.aextract(
+            data, filename, content_type=content_type, strategy=strategy
+        )
 
     if strategy == "auto":
-        first = await native.aextract(data, filename, content_type=content_type, strategy="auto")
+        first = await native.aextract(
+            data, filename, content_type=content_type, strategy="auto"
+        )
         if first.success and not first.needs_ocr:
             return first
     try:
         result = await engine.aextract(data, filename)
     except Exception as exc:  # noqa: BLE001 — an engine failure must degrade, not 500
         logger.warning("%s failed for %r: %s", engine.name, filename, exc)
-        result = ExtractionResult(success=False, engine=engine.name, error=str(exc)[:500])
-    if result.success and (result.markdown.strip() or any(p.images for p in result.pages)):
+        result = ExtractionResult(
+            success=False, engine=engine.name, error=str(exc)[:500]
+        )
+    if result.success and (
+        result.markdown.strip() or any(p.images for p in result.pages)
+    ):
         return _with_page_markers(result)
-    fallback = await native.aextract(data, filename, content_type=content_type, strategy="auto" if strategy == "hi_res" else strategy)
+    fallback = await native.aextract(
+        data,
+        filename,
+        content_type=content_type,
+        strategy="auto" if strategy == "hi_res" else strategy,
+    )
     note = f"{engine.name}: {result.error or 'found no content'}; read with the built-in reader"
-    return fallback.model_copy(update={"degraded_from": engine.name, "warnings": [*fallback.warnings, note]})
+    return fallback.model_copy(
+        update={"degraded_from": engine.name, "warnings": [*fallback.warnings, note]}
+    )

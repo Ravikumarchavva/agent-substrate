@@ -1,0 +1,17 @@
+{
+  "include": ["src"],
+  "exclude": [
+    "**/__pycache__",
+    "src/substrate/testing"
+  ],
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "none",
+  "reportMissingTypeStubs": false,
+  "reportOptionalMemberAccess": "none",
+  "reportOptionalSubscript": "none",
+  "reportAttributeAccessIssue": "warning",
+  "reportArgumentType": "warning",
+  "reportReturnType": "warning",
+  "reportAssignmentType": "warning"
+}

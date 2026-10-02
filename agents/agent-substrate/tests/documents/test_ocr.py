@@ -15,7 +15,9 @@ def invoice_png() -> bytes:
 
     from substrate.documents.reading.png import encode_png
 
-    document = pdfium.PdfDocument(build([Page([Line("Invoice 4417 total due 120 EUR", size=24)])]))
+    document = pdfium.PdfDocument(
+        build([Page([Line("Invoice 4417 total due 120 EUR", size=24)])])
+    )
     bitmap = document[0].render(scale=300 / 72, grayscale=True)
     pixels = bytes(bitmap.buffer)
     png = encode_png(bitmap.width, bitmap.height, pixels, stride=bitmap.stride)
@@ -31,7 +33,9 @@ class TestTesseract(OcrConformance):
         return TesseractOcr()
 
 
-@pytest.mark.skipif(not RapidOcr.available(), reason="rapidocr is not installed (the `ocr` extra)")
+@pytest.mark.skipif(
+    not RapidOcr.available(), reason="rapidocr is not installed (the `ocr` extra)"
+)
 class TestRapidOcr(OcrConformance):
     @pytest.fixture
     def ocr(self):
@@ -40,9 +44,13 @@ class TestRapidOcr(OcrConformance):
 
 def test_auto_prefers_rapidocr_then_tesseract_then_nothing(monkeypatch) -> None:
     monkeypatch.setattr(RapidOcr, "available", classmethod(lambda cls: False))
-    monkeypatch.setattr(TesseractOcr, "available", classmethod(lambda cls, binary=None: False))
+    monkeypatch.setattr(
+        TesseractOcr, "available", classmethod(lambda cls, binary=None: False)
+    )
     assert resolve_ocr("auto") is None and resolve_ocr(None) is None
-    monkeypatch.setattr(TesseractOcr, "available", classmethod(lambda cls, binary=None: True))
+    monkeypatch.setattr(
+        TesseractOcr, "available", classmethod(lambda cls, binary=None: True)
+    )
     assert resolve_ocr("auto").name == "tesseract"
     monkeypatch.setattr(RapidOcr, "available", classmethod(lambda cls: True))
     assert resolve_ocr("auto").name == "rapidocr"

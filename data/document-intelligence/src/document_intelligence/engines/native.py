@@ -11,7 +11,9 @@ from substrate.documents import ExtractionResult, ReadLimits, Reader, Strategy
 class NativeEngine:
     name = "native"
 
-    def __init__(self, *, max_bytes: int = 50 * 1024 * 1024, reader: Reader | None = None) -> None:
+    def __init__(
+        self, *, max_bytes: int = 50 * 1024 * 1024, reader: Reader | None = None
+    ) -> None:
         self.reader = reader or Reader(limits=ReadLimits(max_bytes=max_bytes))
 
     def accepts(self, filename: str, content_type: str) -> bool:
@@ -24,9 +26,16 @@ class NativeEngine:
         pass
 
     async def aextract(
-        self, data: bytes, filename: str, *, content_type: str | None = None, strategy: Strategy = "auto"
+        self,
+        data: bytes,
+        filename: str,
+        *,
+        content_type: str | None = None,
+        strategy: Strategy = "auto",
     ) -> ExtractionResult:
-        return await self.reader.read(data, filename, content_type=content_type or None, strategy=strategy)
+        return await self.reader.read(
+            data, filename, content_type=content_type or None, strategy=strategy
+        )
 
 
 __all__ = ["NativeEngine"]

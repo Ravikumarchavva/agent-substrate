@@ -86,7 +86,9 @@ class ModelCapabilities(KernelModel):
         )
         # Cache reads and writes are both inside input_tokens; each is billed at
         # its own rate, and the remainder at the plain input rate.
-        special = min(usage.cached_tokens + usage.cache_write_tokens, usage.input_tokens)
+        special = min(
+            usage.cached_tokens + usage.cache_write_tokens, usage.input_tokens
+        )
         uncached = max(usage.input_tokens - special, 0)
         return (
             uncached * self.input_cost_per_mtok
@@ -217,7 +219,9 @@ class EmbeddingModel(Protocol):
     max_input_tokens: int
     modalities: frozenset[Modality]
 
-    async def embed(self, inputs: Sequence[str | Sequence[ContentBlock]], *, query: bool = False) -> EmbeddingResult: ...
+    async def embed(
+        self, inputs: Sequence[str | Sequence[ContentBlock]], *, query: bool = False
+    ) -> EmbeddingResult: ...
 
 
 @runtime_checkable

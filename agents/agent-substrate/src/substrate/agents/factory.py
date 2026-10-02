@@ -168,4 +168,3 @@ def create_assistant_agent(
         approval_required_risk=approval_required_risk,
         middleware=MiddlewarePipeline(list(middleware or [])),
     )
-

@@ -20,7 +20,9 @@ from substrate.middleware.guardrails.max_token import MaxTokenMiddleware
 from substrate.middleware.guardrails.multimodal_safety import MultimodalSafetyMiddleware
 from substrate.middleware.guardrails.pii import PIIDetectionMiddleware
 from substrate.middleware.guardrails.prompt_injection import PromptInjectionMiddleware
-from substrate.middleware.guardrails.tool_call_validation import ToolCallValidationMiddleware
+from substrate.middleware.guardrails.tool_call_validation import (
+    ToolCallValidationMiddleware,
+)
 
 __all__ = [
     "ContentFilterMiddleware",

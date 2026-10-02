@@ -49,16 +49,24 @@ def _snapshot(row: Row | None) -> WorkspaceSnapshot | None:
 
 async def _head(tx: Tx, session_id: str, branch_id: str) -> str | None:
     row = await tx.fetchone(
-        "SELECT snapshot_id FROM workspace_heads WHERE session_id = ? AND branch_id = ?", session_id, branch_id
+        "SELECT snapshot_id FROM workspace_heads WHERE session_id = ? AND branch_id = ?",
+        session_id,
+        branch_id,
     )
     return row["snapshot_id"] if row else None
 
 
 async def _read(tx: Tx, snapshot_id: str) -> WorkspaceSnapshot | None:
-    return _snapshot(await tx.fetchone("SELECT snapshot_json FROM workspace_snapshots WHERE id = ?", snapshot_id))
+    return _snapshot(
+        await tx.fetchone(
+            "SELECT snapshot_json FROM workspace_snapshots WHERE id = ?", snapshot_id
+        )
+    )
 
 
-async def _first_head(tx: Tx, session_id: str, branch_id: str, snapshot_id: str) -> None:
+async def _first_head(
+    tx: Tx, session_id: str, branch_id: str, snapshot_id: str
+) -> None:
     """Give a branch its first head; refuse if it has one — a branch is created once."""
     created = await tx.execute(
         "INSERT INTO workspace_heads (session_id, branch_id, snapshot_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
@@ -67,7 +75,9 @@ async def _first_head(tx: Tx, session_id: str, branch_id: str, snapshot_id: str)
         snapshot_id,
     )
     if created == 0:
-        raise ValueError(f"Branch '{branch_id}' already has a snapshot pointer in session '{session_id}'")
+        raise ValueError(
+            f"Branch '{branch_id}' already has a snapshot pointer in session '{session_id}'"
+        )
 
 
 class Workspaces:
@@ -83,7 +93,9 @@ class Workspaces:
     async def get_snapshot(self, snapshot_id: str) -> WorkspaceSnapshot | None:
         return await self._run(lambda tx: _read(tx, snapshot_id))
 
-    async def get_branch_snapshot_head(self, session_id: str, branch_id: str) -> WorkspaceSnapshot | None:
+    async def get_branch_snapshot_head(
+        self, session_id: str, branch_id: str
+    ) -> WorkspaceSnapshot | None:
         async def op(tx: Tx) -> WorkspaceSnapshot | None:
             head = await _head(tx, session_id, branch_id)
             return await _read(tx, head) if head else None
@@ -99,9 +111,13 @@ class Workspaces:
         expected_parent_snapshot_id: str | None,
     ) -> WorkspaceSnapshot:
         if new_snapshot.session_id != session_id:
-            raise ValueError(f"Snapshot session '{new_snapshot.session_id}' does not match '{session_id}'")
+            raise ValueError(
+                f"Snapshot session '{new_snapshot.session_id}' does not match '{session_id}'"
+            )
         if new_snapshot.branch_id != branch_id:
-            raise ValueError(f"Snapshot branch '{new_snapshot.branch_id}' does not match '{branch_id}'")
+            raise ValueError(
+                f"Snapshot branch '{new_snapshot.branch_id}' does not match '{branch_id}'"
+            )
         if new_snapshot.parent_snapshot_id != expected_parent_snapshot_id:
             raise ValueError(
                 f"Snapshot parent '{new_snapshot.parent_snapshot_id}' does not match expected '{expected_parent_snapshot_id}'"
@@ -151,7 +167,9 @@ class Workspaces:
     ) -> WorkspaceSnapshot | None:
         async def op(tx: Tx) -> WorkspaceSnapshot | None:
             if await _head(tx, session_id, new_branch_id) is not None:
-                raise ValueError(f"Branch '{new_branch_id}' already has a snapshot pointer in session '{session_id}'")
+                raise ValueError(
+                    f"Branch '{new_branch_id}' already has a snapshot pointer in session '{session_id}'"
+                )
             head = await _head(tx, session_id, source_branch_id)
             if head is None:
                 return None
@@ -160,10 +178,14 @@ class Workspaces:
 
         return await self._run(op)
 
-    async def set_branch_snapshot_head(self, session_id: str, branch_id: str, snapshot_id: str) -> WorkspaceSnapshot:
+    async def set_branch_snapshot_head(
+        self, session_id: str, branch_id: str, snapshot_id: str
+    ) -> WorkspaceSnapshot:
         async def op(tx: Tx) -> WorkspaceSnapshot:
             if await _head(tx, session_id, branch_id) is not None:
-                raise ValueError(f"Branch '{branch_id}' already has a snapshot pointer in session '{session_id}'")
+                raise ValueError(
+                    f"Branch '{branch_id}' already has a snapshot pointer in session '{session_id}'"
+                )
             snapshot = await _read(tx, snapshot_id)
             if snapshot is None:
                 raise ValueError(f"Snapshot '{snapshot_id}' does not exist")
@@ -172,11 +194,14 @@ class Workspaces:
 
         return await self._run(op)
 
-    async def list_snapshots(self, session_id: str, branch_id: str | None = None) -> list[WorkspaceSnapshot]:
+    async def list_snapshots(
+        self, session_id: str, branch_id: str | None = None
+    ) -> list[WorkspaceSnapshot]:
         async def op(tx: Tx) -> list[WorkspaceSnapshot]:
             if branch_id is None:
                 rows = await tx.fetchall(
-                    "SELECT snapshot_json FROM workspace_snapshots WHERE session_id = ? ORDER BY created_at, seq", session_id
+                    "SELECT snapshot_json FROM workspace_snapshots WHERE session_id = ? ORDER BY created_at, seq",
+                    session_id,
                 )
             else:
                 rows = await tx.fetchall(
@@ -192,8 +217,12 @@ class Workspaces:
         """Remove every snapshot and branch head of ``session_id``."""
 
         async def op(tx: Tx) -> None:
-            await tx.execute("DELETE FROM workspace_heads WHERE session_id = ?", session_id)
-            await tx.execute("DELETE FROM workspace_snapshots WHERE session_id = ?", session_id)
+            await tx.execute(
+                "DELETE FROM workspace_heads WHERE session_id = ?", session_id
+            )
+            await tx.execute(
+                "DELETE FROM workspace_snapshots WHERE session_id = ?", session_id
+            )
 
         await self._run(op)
 

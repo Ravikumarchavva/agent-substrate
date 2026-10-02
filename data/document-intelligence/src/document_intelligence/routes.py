@@ -58,7 +58,9 @@ async def extract(body: ExtractRequest, request: Request, _: Authed) -> Response
         raise HTTPException(400, f"Invalid base64 content: {exc}") from exc
 
     if len(data) > cfg.max_upload_bytes:
-        raise HTTPException(413, f"File exceeds maximum size of {cfg.max_upload_bytes} bytes")
+        raise HTTPException(
+            413, f"File exceeds maximum size of {cfg.max_upload_bytes} bytes"
+        )
 
     # Structural/security scan on the RAW bytes, before any parser touches them. Only HIGH/CRITICAL (doc-firewall's own BLOCK
     # verdict — definitive evidence) rejects; MEDIUM (review-worthy heuristics) is logged and the read goes on.
@@ -68,12 +70,30 @@ async def extract(body: ExtractRequest, request: Request, _: Authed) -> Response
 
         verdict = await asyncio.to_thread(scan_document, data, filename=body.filename)
         if verdict.flagged:
-            logger.warning("doc-firewall flagged %r (%s): %s", body.filename, verdict.severity, verdict.detail)
+            logger.warning(
+                "doc-firewall flagged %r (%s): %s",
+                body.filename,
+                verdict.severity,
+                verdict.detail,
+            )
         if verdict.severity in (Severity.HIGH, Severity.CRITICAL):
-            return _json(ExtractionResult(success=False, engine="security-scan", error=f"Document failed security scan: {verdict.detail}"[:500]))
+            return _json(
+                ExtractionResult(
+                    success=False,
+                    engine="security-scan",
+                    error=f"Document failed security scan: {verdict.detail}"[:500],
+                )
+            )
 
     state = request.app.state
-    result = await dispatch.read(state.native, state.engine, data, body.filename, body.content_type, body.strategy)
+    result = await dispatch.read(
+        state.native,
+        state.engine,
+        data,
+        body.filename,
+        body.content_type,
+        body.strategy,
+    )
     return _json(result)
 
 

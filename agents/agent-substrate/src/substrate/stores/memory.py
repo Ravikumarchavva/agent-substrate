@@ -57,29 +57,35 @@ from substrate.types.ids import new_id
 class MemoryCategory(StrEnum):
     """Cognitive classification of memory records."""
 
-    DIRECTIVE = "directive"    # Standing preferences, behavioral rules, immutable constraints
-    SEMANTIC = "semantic"      # Distilled facts, world knowledge, entity properties
-    EPISODIC = "episodic"      # Interaction records, tool traces, historical events
+    DIRECTIVE = (
+        "directive"  # Standing preferences, behavioral rules, immutable constraints
+    )
+    SEMANTIC = "semantic"  # Distilled facts, world knowledge, entity properties
+    EPISODIC = "episodic"  # Interaction records, tool traces, historical events
     PROCEDURAL = "procedural"  # Reusable workflows, tool heuristics, execution patterns
 
 
 class MemoryStatus(StrEnum):
     """Lifecycle and consensus status of a memory record."""
 
-    ACTIVE = "active"          # Verified, canonical memory ready for retrieval
-    CANDIDATE = "candidate"    # Speculative or newly extracted memory awaiting promotion
+    ACTIVE = "active"  # Verified, canonical memory ready for retrieval
+    CANDIDATE = "candidate"  # Speculative or newly extracted memory awaiting promotion
     SUPERSEDED = "superseded"  # Replaced by newer or contradictory fact
-    REJECTED = "rejected"      # Evaluated and discarded
+    REJECTED = "rejected"  # Evaluated and discarded
 
 
 class ExtractionMethod(StrEnum):
     """How a memory record's content was produced."""
 
-    MANUAL = "manual"                    # Directly authored (e.g. a stated user preference)
-    LLM_REFLECTION = "llm_reflection"    # Distilled by an LLM reflecting on a conversation
-    TOOL_OUTPUT = "tool_output"          # Captured verbatim from a tool execution result
-    RULE_HEURISTIC = "rule_heuristic"    # Extracted by a deterministic rule, not an LLM
-    USER_CORRECTION = "user_correction"  # A user explicitly corrected/superseded a memory
+    MANUAL = "manual"  # Directly authored (e.g. a stated user preference)
+    LLM_REFLECTION = (
+        "llm_reflection"  # Distilled by an LLM reflecting on a conversation
+    )
+    TOOL_OUTPUT = "tool_output"  # Captured verbatim from a tool execution result
+    RULE_HEURISTIC = "rule_heuristic"  # Extracted by a deterministic rule, not an LLM
+    USER_CORRECTION = (
+        "user_correction"  # A user explicitly corrected/superseded a memory
+    )
 
 
 class MemoryNamespace(KernelModel):
@@ -157,7 +163,11 @@ class MemoryNamespace(KernelModel):
             return cls(tenant_id=tenant_id, user_id=actor.key, session_id=session_id)
         if actor.type == "agent":
             return cls(tenant_id=tenant_id, agent_id=actor.key, session_id=session_id)
-        return cls(tenant_id=tenant_id, agent_id=f"{actor.type}:{actor.key}", session_id=session_id)
+        return cls(
+            tenant_id=tenant_id,
+            agent_id=f"{actor.type}:{actor.key}",
+            session_id=session_id,
+        )
 
 
 class MemoryProvenance(KernelModel):
@@ -186,7 +196,9 @@ class MemoryRecord(KernelModel):
     content: BlockList = Field(default_factory=list)
     category: MemoryCategory = MemoryCategory.SEMANTIC
     status: MemoryStatus = MemoryStatus.ACTIVE
-    namespace: MemoryNamespace = Field(default_factory=lambda: MemoryNamespace(tenant_id="default"))
+    namespace: MemoryNamespace = Field(
+        default_factory=lambda: MemoryNamespace(tenant_id="default")
+    )
     provenance: MemoryProvenance = Field(default_factory=MemoryProvenance)
     metadata: JsonObject = Field(default_factory=dict)
     v: int = 1
@@ -339,7 +351,9 @@ class MemoryQuery(KernelModel):
     text_query: str | None = None
     embedding: Sequence[float] | None = None
     categories: Sequence[MemoryCategory] | None = None
-    statuses: Sequence[MemoryStatus] = Field(default_factory=lambda: (MemoryStatus.ACTIVE,))
+    statuses: Sequence[MemoryStatus] = Field(
+        default_factory=lambda: (MemoryStatus.ACTIVE,)
+    )
     limit: int = 10
     min_score: float = 0.0
     metadata_filter: JsonObject | None = None

@@ -103,4 +103,11 @@ class EntityFinder(Protocol):
     ) -> list[Entity]: ...
 
 
-__all__ = ["Entity", "Relationship", "SubGraph", "GraphStore", "CypherCapable", "EntityFinder"]
+__all__ = [
+    "Entity",
+    "Relationship",
+    "SubGraph",
+    "GraphStore",
+    "CypherCapable",
+    "EntityFinder",
+]

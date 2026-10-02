@@ -14,7 +14,12 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from substrate.models import FinishReason, GenerationOptions, LLMResponse, ModelCapabilities
+from substrate.models import (
+    FinishReason,
+    GenerationOptions,
+    LLMResponse,
+    ModelCapabilities,
+)
 from substrate.types import (
     ChatMessage,
     CompletionEvent,
@@ -57,22 +62,40 @@ class ScriptedModel:
         reply = self._replies[min(self._calls, len(self._replies) - 1)]
         self._calls += 1
         if isinstance(reply, ToolCall):
-            return [ToolUseBlock(call_id=f"call-{self._calls}", tool_name=reply.tool, arguments=reply.arguments)]
+            return [
+                ToolUseBlock(
+                    call_id=f"call-{self._calls}",
+                    tool_name=reply.tool,
+                    arguments=reply.arguments,
+                )
+            ]
         return [TextBlock(text=reply(messages) if callable(reply) else reply)]
 
     async def generate(
-        self, messages: list[ChatMessage], *, options: GenerationOptions = GenerationOptions(), ctx: Any = None
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions = GenerationOptions(),
+        ctx: Any = None,
     ) -> LLMResponse:
-        return LLMResponse(content=self._next(messages), usage=Usage(), finish_reason=FinishReason.STOP)
+        return LLMResponse(
+            content=self._next(messages), usage=Usage(), finish_reason=FinishReason.STOP
+        )
 
     async def generate_stream(
-        self, messages: list[ChatMessage], *, options: GenerationOptions = GenerationOptions(), ctx: Any = None
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions = GenerationOptions(),
+        ctx: Any = None,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
         content = self._next(messages)
         for block in content:
             if isinstance(block, TextBlock):
                 yield TextDelta(text=block.text)
-        yield CompletionEvent(content=content, usage=Usage(), finish_reason=FinishReason.STOP)
+        yield CompletionEvent(
+            content=content, usage=Usage(), finish_reason=FinishReason.STOP
+        )
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
         return sum(len(m.text) for m in messages) // 4

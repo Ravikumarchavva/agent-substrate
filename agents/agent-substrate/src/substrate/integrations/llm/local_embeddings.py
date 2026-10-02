@@ -64,8 +64,14 @@ class SentenceTransformersEmbeddingClient(BaseEmbeddingClient):
         self._model = SentenceTransformer(model, device=device)
         self._batch_size = batch_size
         self._device = device
-        dimensions = getattr(self._model, "get_sentence_embedding_dimension", lambda: None)()
-        super().__init__(model, dimensions, max_input_tokens=int(getattr(self._model, "max_seq_length", 0) or 256))
+        dimensions = getattr(
+            self._model, "get_sentence_embedding_dimension", lambda: None
+        )()
+        super().__init__(
+            model,
+            dimensions,
+            max_input_tokens=int(getattr(self._model, "max_seq_length", 0) or 256),
+        )
 
     async def _embed_texts(self, texts: list[str], *, query: bool) -> EmbeddingResult:
         loop = asyncio.get_running_loop()

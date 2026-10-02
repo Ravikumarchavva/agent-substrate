@@ -237,7 +237,8 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
         for _ in range(200):
             entries = list(await rt.read(run_id))
             if any(
-                e.kind == "assistant.message" and e.payload.get("text") == "post-resume reply"
+                e.kind == "assistant.message"
+                and e.payload.get("text") == "post-resume reply"
                 for e in entries
             ):
                 found_reply = True

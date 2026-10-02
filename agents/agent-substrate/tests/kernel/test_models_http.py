@@ -11,7 +11,13 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from substrate.models.http import check_url, join_url, request_json
-from substrate.types import AuthError, ContextLengthError, PermanentError, RateLimitedError, ServiceUnavailableError
+from substrate.types import (
+    AuthError,
+    ContextLengthError,
+    PermanentError,
+    RateLimitedError,
+    ServiceUnavailableError,
+)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -37,13 +43,23 @@ class _Handler(BaseHTTPRequestHandler):
         received = self.rfile.read(length) if length else b""
         path = self.path
         if path == "/echo":
-            self._send(200, json.dumps({"body": json.loads(received or b"null"), "auth": self.headers.get("Authorization")}).encode())
+            self._send(
+                200,
+                json.dumps(
+                    {
+                        "body": json.loads(received or b"null"),
+                        "auth": self.headers.get("Authorization"),
+                    }
+                ).encode(),
+            )
         elif path == "/limited":
             self._send(429, b"slow down", Retry_After="7")
         elif path == "/forbidden":
             self._send(403, b"no")
         elif path == "/too-long":
-            self._send(400, b'{"error": "this model\'s maximum context length is 8192 tokens"}')
+            self._send(
+                400, b'{"error": "this model\'s maximum context length is 8192 tokens"}'
+            )
         elif path == "/bad":
             self._send(400, b"nope")
         elif path == "/boom":
@@ -67,7 +83,9 @@ def server():
 
 
 async def test_json_round_trips_with_a_bearer_token(server) -> None:
-    out = await request_json("POST", join_url(server, "/echo"), json_body={"a": [1, 2]}, api_key="s3cret")
+    out = await request_json(
+        "POST", join_url(server, "/echo"), json_body={"a": [1, 2]}, api_key="s3cret"
+    )
     assert out == {"body": {"a": [1, 2]}, "auth": "Bearer s3cret"}
 
 
@@ -111,12 +129,23 @@ async def test_a_timeout_is_transient(server) -> None:
     sock.listen(1)
     try:
         with pytest.raises(ServiceUnavailableError):
-            await request_json("GET", f"http://127.0.0.1:{sock.getsockname()[1]}/x", timeout=0.3)
+            await request_json(
+                "GET", f"http://127.0.0.1:{sock.getsockname()[1]}/x", timeout=0.3
+            )
     finally:
         sock.close()
 
 
-@pytest.mark.parametrize("url", ["file:///etc/passwd", "ftp://example.com/x", "gopher://x", "/just/a/path", "http://"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "ftp://example.com/x",
+        "gopher://x",
+        "/just/a/path",
+        "http://",
+    ],
+)
 async def test_only_http_urls_are_ever_opened(url) -> None:
     with pytest.raises(ValueError):
         await request_json("GET", url)
@@ -125,4 +154,8 @@ async def test_only_http_urls_are_ever_opened(url) -> None:
 
 
 def test_join_url_has_exactly_one_slash() -> None:
-    assert join_url("http://h:8/", "/v1/x") == join_url("http://h:8", "v1/x") == "http://h:8/v1/x"
+    assert (
+        join_url("http://h:8/", "/v1/x")
+        == join_url("http://h:8", "v1/x")
+        == "http://h:8/v1/x"
+    )

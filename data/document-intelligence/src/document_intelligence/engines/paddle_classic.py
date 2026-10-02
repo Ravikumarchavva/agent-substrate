@@ -266,9 +266,7 @@ def _pages_from_results_for_pipeline(
             confidence = _nearest_score(score_by_bbox, getattr(block, "bbox", None))
             raw_content = (getattr(block, "content", "") or "").strip()
             # Convert structured table HTML to Markdown for plain-text search stream
-            md_table = (
-                _html_table_to_markdown(raw_content) if label == "table" else ""
-            )
+            md_table = _html_table_to_markdown(raw_content) if label == "table" else ""
             img_dict = getattr(block, "image", None)
             img_path = img_dict.get("path") if isinstance(img_dict, dict) else None
             pil_img = img_dict.get("img") if isinstance(img_dict, dict) else None

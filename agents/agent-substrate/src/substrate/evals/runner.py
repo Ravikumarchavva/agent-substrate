@@ -165,9 +165,15 @@ class EvalRunner:
                 record = await rt.get_run(run_id)
                 if record is not None and record.status.is_terminal:
                     # The run is over and left no reply: waiting longer cannot produce one.
-                    payload = await rt.store.consume(sentinel_run_id, f"reply:{cid}", f"eval-wait:{sentinel_run_id}:{cid}")
+                    payload = await rt.store.consume(
+                        sentinel_run_id,
+                        f"reply:{cid}",
+                        f"eval-wait:{sentinel_run_id}:{cid}",
+                    )
                     if payload is None:
-                        raise RuntimeError(f"agent run {record.status} without replying")
+                        raise RuntimeError(
+                            f"agent run {record.status} without replying"
+                        )
                     break
                 await asyncio.sleep(0.05)
             if payload is None:

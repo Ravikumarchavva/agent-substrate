@@ -39,7 +39,9 @@ def snippet(text: str, query_words: list[str], *, width: int = 240) -> str:
     """About ``width`` characters of ``text`` around the first place any of the words occurs (the start if none does)."""
     flat = " ".join(text.split())
     lower = flat.lower()
-    at = min((i for i in (lower.find(w.lower()) for w in query_words) if i >= 0), default=-1)
+    at = min(
+        (i for i in (lower.find(w.lower()) for w in query_words) if i >= 0), default=-1
+    )
     if at < 0 or len(flat) <= width:
         return flat[:width] + ("…" if len(flat) > width else "")
     start = max(0, at - width // 3)
@@ -73,7 +75,13 @@ END;
 
 
 def ranked(
-    dialect: str, *, index: str, table: str, alias: str, query_words: list[str], match: str = "all"
+    dialect: str,
+    *,
+    index: str,
+    table: str,
+    alias: str,
+    query_words: list[str],
+    match: str = "all",
 ) -> tuple[str, str, list[str]]:
     """``(from, where, params)`` for ``SELECT {alias}.*, <score> AS score FROM <from> WHERE <where>``: the rows of
     ``table`` (as ``alias``) that contain every word (``match="all"``) or any of them (``match="any"``), with their
@@ -84,7 +92,9 @@ def ranked(
     if match not in ("all", "any"):
         raise ValueError(f"match must be 'all' or 'any', got {match!r}")
     if dialect == "postgresql":
-        if match == "any":  # the words are \w+ only (see ``words``), so none of them can be query syntax
+        if (
+            match == "any"
+        ):  # the words are \w+ only (see ``words``), so none of them can be query syntax
             return (
                 f"{table} {alias}, to_tsquery('english', ?) AS query",
                 f"{alias}.tsv @@ query",
@@ -97,14 +107,24 @@ def ranked(
         )
     joiner = " OR " if match == "any" else " "
     quoted = joiner.join('"' + word.replace('"', '""') + '"' for word in query_words)
-    return f"{index} JOIN {table} {alias} ON {alias}.seq = {index}.rowid", f"{index} MATCH ?", [quoted]
+    return (
+        f"{index} JOIN {table} {alias} ON {alias}.seq = {index}.rowid",
+        f"{index} MATCH ?",
+        [quoted],
+    )
 
 
 def score(dialect: str, *, index: str, alias: str) -> str:
     """The relevance expression to select alongside ``ranked``."""
-    return f"ts_rank({alias}.tsv, query)" if dialect == "postgresql" else f"-bm25({index})"
+    return (
+        f"ts_rank({alias}.tsv, query)" if dialect == "postgresql" else f"-bm25({index})"
+    )
 
 
 def compact(dialect: str, *, index: str) -> str | None:
     """SQL that rewrites the index so deleted words are gone from it, not merely marked deleted (``None``: nothing to do)."""
-    return None if dialect == "postgresql" else f"INSERT INTO {index} ({index}) VALUES ('optimize')"
+    return (
+        None
+        if dialect == "postgresql"
+        else f"INSERT INTO {index} ({index}) VALUES ('optimize')"
+    )

@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-from tests.invariants.register import DOCUMENT, INVARIANTS_DIR, REPO_ROOT, collect, render
+from tests.invariants.register import (
+    DOCUMENT,
+    INVARIANTS_DIR,
+    REPO_ROOT,
+    collect,
+    render,
+)
 
 
 def test_the_register_document_matches_the_tests() -> None:
@@ -24,7 +30,9 @@ def test_the_register_document_matches_the_tests() -> None:
     )
 
 
-def test_the_register_lists_every_invariant_test(request: pytest.FixtureRequest) -> None:
+def test_the_register_lists_every_invariant_test(
+    request: pytest.FixtureRequest,
+) -> None:
     """Guards the collector against the gap it already had once.
 
     The register is built by parsing these files, so a shape it fails to
@@ -36,7 +44,8 @@ def test_the_register_lists_every_invariant_test(request: pytest.FixtureRequest)
         # while the register lists the one function `test_x`.
         item.name.split("[")[0]
         for item in request.session.items
-        if item.path.parent == INVARIANTS_DIR and item.path.name.startswith("test_")
+        if item.path.parent == INVARIANTS_DIR
+        and item.path.name.startswith("test_")
         # Tests inherited from a conformance suite are the suite's, listed in its own module.
         and item.cls is None
     }

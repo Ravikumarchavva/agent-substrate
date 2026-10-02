@@ -66,18 +66,26 @@ def _error_for(status: int, body: str, headers: Any, url: str) -> Exception:
     if status == 429:
         retry_after = None
         try:
-            retry_after = float(headers.get("Retry-After")) if headers is not None and headers.get("Retry-After") else None
+            retry_after = (
+                float(headers.get("Retry-After"))
+                if headers is not None and headers.get("Retry-After")
+                else None
+            )
         except ValueError:
             retry_after = None
         return RateLimitedError(message, retry_after=retry_after)
     if status in (401, 403):
         return AuthError(message)
-    if status in (400, 413, 422) and any(marker in body.lower() for marker in _CONTEXT_OVERFLOW_MARKERS):
+    if status in (400, 413, 422) and any(
+        marker in body.lower() for marker in _CONTEXT_OVERFLOW_MARKERS
+    ):
         return ContextLengthError(message)
     return PermanentError(message)
 
 
-def _call(method: str, url: str, data: bytes | None, headers: dict[str, str], timeout: float) -> tuple[int, bytes]:
+def _call(
+    method: str, url: str, data: bytes | None, headers: dict[str, str], timeout: float
+) -> tuple[int, bytes]:
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with _OPENER.open(request, timeout=timeout) as response:
@@ -86,7 +94,9 @@ def _call(method: str, url: str, data: bytes | None, headers: dict[str, str], ti
         body = exc.read(64 * 1024).decode("utf-8", "replace")
         raise _error_for(exc.code, body, exc.headers, url) from None
     except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
-        raise ServiceUnavailableError(f"{url} is unreachable: {getattr(exc, 'reason', exc)}", url=url) from exc
+        raise ServiceUnavailableError(
+            f"{url} is unreachable: {getattr(exc, 'reason', exc)}", url=url
+        ) from exc
 
 
 async def request_json(

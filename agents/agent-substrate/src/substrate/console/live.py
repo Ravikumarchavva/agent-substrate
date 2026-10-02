@@ -19,7 +19,14 @@ from rich.console import Console as RichConsole, Group, RenderableType
 from rich.live import Live
 
 from substrate.types import content_blocks_to_str
-from substrate.types import AgentProgress, AgentStep, CompletionEvent, ReasoningDelta, StreamDone, TextDelta
+from substrate.types import (
+    AgentProgress,
+    AgentStep,
+    CompletionEvent,
+    ReasoningDelta,
+    StreamDone,
+    TextDelta,
+)
 
 from .hitl import ConsoleHumanHandler, _HITLRequest, render_hitl_panel
 from .status import StatusLine
@@ -155,9 +162,7 @@ class LiveTurn:
 
         # Fire the signal to resume the suspended run.
         if self._store is not None and ev.run_id:
-            await self._store.signal(
-                ev.run_id, f"hitl:{ev.request_id}", signal_payload
-            )
+            await self._store.signal(ev.run_id, f"hitl:{ev.request_id}", signal_payload)
 
     # ── event handling ────────────────────────────────────────────────────
     def _handle(self, ev: Any) -> None:
@@ -213,7 +218,11 @@ class LiveTurn:
         if ev.step == AgentStep.TOOL_CALL:
             self._commit_streaming()  # a tool call ends the current text block
             self.status.tool_calls += 1
-            call = ToolCall(name=ev.content, agent_key=ev.agent_id.key or ev.agent_id.type, depth=ev.depth)
+            call = ToolCall(
+                name=ev.content,
+                agent_key=ev.agent_id.key or ev.agent_id.type,
+                depth=ev.depth,
+            )
             self._active_tools.append(call)
             if self._sequential:
                 self._seq_tool_running(call)

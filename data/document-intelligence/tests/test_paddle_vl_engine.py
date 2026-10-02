@@ -20,7 +20,10 @@ from document_intelligence.engines.paddle_vl import (
 )
 from inference_pool.pool_types import PoolWorker
 
-needs_paddlex = pytest.mark.skipif(importlib.util.find_spec("paddlex") is None, reason="needs the `paddle` extra (PaddleX)")
+needs_paddlex = pytest.mark.skipif(
+    importlib.util.find_spec("paddlex") is None,
+    reason="needs the `paddle` extra (PaddleX)",
+)
 
 
 class _FakeBlock:
@@ -70,9 +73,7 @@ class _FakePaddlexPipeline:
 
     def concatenate_markdown_pages(self, markdown_pages):
         return {
-            "markdown_texts": "\n\n".join(
-                p["markdown_texts"] for p in markdown_pages
-            )
+            "markdown_texts": "\n\n".join(p["markdown_texts"] for p in markdown_pages)
         }
 
 

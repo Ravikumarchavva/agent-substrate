@@ -159,7 +159,12 @@ async def chat(
     # 3. Build agent with restored memory + per-thread HITL bridge
     try:
         deps = await _get_agent_deps(ctx, str(body.thread_id))
-        file_block, image_inputs, attachments, new_attachments = await _build_file_context(
+        (
+            file_block,
+            image_inputs,
+            attachments,
+            new_attachments,
+        ) = await _build_file_context(
             db,
             body,
             request,

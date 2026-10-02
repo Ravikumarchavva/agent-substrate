@@ -66,7 +66,9 @@ def core_files(*, include_testing: bool = False) -> list[Path]:
     concepts = [c for c in CORE if include_testing or c != "testing"]
     files = [SRC / "version.py"]
     for concept in concepts:
-        files += [p for p in (SRC / concept).rglob("*.py") if "__pycache__" not in p.parts]
+        files += [
+            p for p in (SRC / concept).rglob("*.py") if "__pycache__" not in p.parts
+        ]
     return files
 
 
@@ -74,9 +76,15 @@ def contract_files() -> list[Path]:
     files: list[Path] = []
     for contract in CONTRACTS:
         path = SRC.joinpath(*contract.split("."))
-        files += [p for p in path.rglob("*.py") if "__pycache__" not in p.parts] if path.is_dir() else [path.with_suffix(".py")]
+        files += (
+            [p for p in path.rglob("*.py") if "__pycache__" not in p.parts]
+            if path.is_dir()
+            else [path.with_suffix(".py")]
+        )
     return files
 
 
 def module_name(path: Path) -> str:
-    return ".".join(("substrate", *path.relative_to(SRC).with_suffix("").parts)).removesuffix(".__init__")
+    return ".".join(
+        ("substrate", *path.relative_to(SRC).with_suffix("").parts)
+    ).removesuffix(".__init__")

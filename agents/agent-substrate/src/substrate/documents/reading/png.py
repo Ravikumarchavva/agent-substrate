@@ -6,15 +6,31 @@ import struct
 import zlib
 
 _SIGNATURE = b"\x89PNG\r\n\x1a\n"
-_MODES = {"L": (0, 1), "RGB": (2, 3), "RGBA": (6, 4)}  # mode -> (PNG colour type, bytes per pixel)
+_MODES = {
+    "L": (0, 1),
+    "RGB": (2, 3),
+    "RGBA": (6, 4),
+}  # mode -> (PNG colour type, bytes per pixel)
 
 
 def _chunk(kind: bytes, payload: bytes) -> bytes:
     body = kind + payload
-    return struct.pack(">I", len(payload)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+    return (
+        struct.pack(">I", len(payload))
+        + body
+        + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+    )
 
 
-def encode_png(width: int, height: int, pixels: bytes, *, mode: str = "L", stride: int | None = None, level: int = 6) -> bytes:
+def encode_png(
+    width: int,
+    height: int,
+    pixels: bytes,
+    *,
+    mode: str = "L",
+    stride: int | None = None,
+    level: int = 6,
+) -> bytes:
     """A PNG of ``width`` × ``height`` from raw ``pixels`` (rows of ``stride`` bytes, default tightly packed)."""
     colour, depth = _MODES[mode]
     row = width * depth
@@ -26,7 +42,12 @@ def encode_png(width: int, height: int, pixels: bytes, *, mode: str = "L", strid
         raw.append(0)  # filter: none
         raw += pixels[y * stride : y * stride + row]
     header = struct.pack(">IIBBBBB", width, height, 8, colour, 0, 0, 0)
-    return _SIGNATURE + _chunk(b"IHDR", header) + _chunk(b"IDAT", zlib.compress(bytes(raw), level)) + _chunk(b"IEND", b"")
+    return (
+        _SIGNATURE
+        + _chunk(b"IHDR", header)
+        + _chunk(b"IDAT", zlib.compress(bytes(raw), level))
+        + _chunk(b"IEND", b"")
+    )
 
 
 def png_size(data: bytes) -> tuple[int, int] | None:

@@ -258,7 +258,9 @@ async def test_vl_cpu_mode_never_calls_hardware_detect(
         return "/models/main.gguf", "/models/mmproj.gguf"
 
     monkeypatch.setattr(factory, "ensure_models", _fake_ensure_models)
-    monkeypatch.setattr(factory, "LocalLlamaServerPool", lambda **kw: _FakeLocalPool(**kw))
+    monkeypatch.setattr(
+        factory, "LocalLlamaServerPool", lambda **kw: _FakeLocalPool(**kw)
+    )
 
     resolved = ResolvedRuntime(
         mode="vl_cpu", worker_count=1, layout_device_for_worker=["cpu"]
@@ -276,7 +278,9 @@ async def test_remote_endpoint_skips_vram_admission_entirely(
     import inference_pool.hardware as hardware_mod
 
     def _fail_if_called():
-        raise AssertionError("hardware.detect() must not be called for a remote endpoint")
+        raise AssertionError(
+            "hardware.detect() must not be called for a remote endpoint"
+        )
 
     monkeypatch.setattr(hardware_mod, "detect", _fail_if_called)
 

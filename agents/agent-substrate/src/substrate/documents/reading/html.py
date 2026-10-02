@@ -8,9 +8,53 @@ from html.parser import HTMLParser
 
 from substrate.documents.reading.gfm import gfm_table
 
-_DROP = {"script", "style", "svg", "iframe", "noscript", "template", "object", "embed", "canvas", "select", "button", "nav", "footer"}
-_BLOCK = {"p", "div", "section", "article", "main", "header", "aside", "figure", "figcaption", "address", "dl", "dt", "dd", "details", "summary"}
-_VOID = {"br", "hr", "img", "meta", "link", "input", "area", "base", "col", "embed", "source", "track", "wbr"}
+_DROP = {
+    "script",
+    "style",
+    "svg",
+    "iframe",
+    "noscript",
+    "template",
+    "object",
+    "embed",
+    "canvas",
+    "select",
+    "button",
+    "nav",
+    "footer",
+}
+_BLOCK = {
+    "p",
+    "div",
+    "section",
+    "article",
+    "main",
+    "header",
+    "aside",
+    "figure",
+    "figcaption",
+    "address",
+    "dl",
+    "dt",
+    "dd",
+    "details",
+    "summary",
+}
+_VOID = {
+    "br",
+    "hr",
+    "img",
+    "meta",
+    "link",
+    "input",
+    "area",
+    "base",
+    "col",
+    "embed",
+    "source",
+    "track",
+    "wbr",
+}
 _MAX_DEPTH = 100
 
 
@@ -56,7 +100,10 @@ class _Parser(HTMLParser):
             return
         self._depth += 1
         if self._depth > _MAX_DEPTH:
-            self._drop, self._drop_tag = 1, "\0"  # too deeply nested: the rest is dropped
+            self._drop, self._drop_tag = (
+                1,
+                "\0",
+            )  # too deeply nested: the rest is dropped
             return
         if tag == "title":
             self._in_title = True
@@ -112,7 +159,11 @@ class _Parser(HTMLParser):
         self._depth = max(0, self._depth - 1)
         if tag == "title":
             self._in_title = False
-        elif tag in ("h1", "h2", "h3", "h4", "h5", "h6", "li") or tag in _BLOCK or tag == "blockquote":
+        elif (
+            tag in ("h1", "h2", "h3", "h4", "h5", "h6", "li")
+            or tag in _BLOCK
+            or tag == "blockquote"
+        ):
             self._flush("> " if tag == "blockquote" else "")
         elif tag in ("ul", "ol"):
             self._flush()
@@ -175,8 +226,12 @@ def html_to_markdown(text: str) -> tuple[str, str | None]:
     out: list[str] = []
     for block in parser.blocks:
         is_item = block.lstrip().startswith(("- ", "1. "))
-        was_item = bool(out) and out[-1].rsplit("\n", 1)[-1].lstrip().startswith(("- ", "1. "))
-        out.append(block) if not (is_item and was_item) else out.__setitem__(-1, out[-1] + "\n" + block)
+        was_item = bool(out) and out[-1].rsplit("\n", 1)[-1].lstrip().startswith(
+            ("- ", "1. ")
+        )
+        out.append(block) if not (is_item and was_item) else out.__setitem__(
+            -1, out[-1] + "\n" + block
+        )
     markdown = "\n\n".join(out)
     return re.sub(r"\n{3,}", "\n\n", markdown).strip(), (parser.title.strip() or None)
 

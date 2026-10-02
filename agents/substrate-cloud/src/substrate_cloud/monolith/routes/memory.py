@@ -39,8 +39,14 @@ async def list_memories(
     # The user's own facts — what ``MemoryTool.remember()`` saved for them (see also
     # substrate_cloud/factory.py::build_user_memory_context_block()). Tenant-level facts are visible
     # to them too, but they are not the user's to list for deletion.
-    matches = await ctx.long_term_memory.query(MemoryQuery(namespace=_caller(user), limit=100))
-    return [MemoryOut(id=m.id, content=m.text) for m in matches if m.record.namespace.user_id == user.sub]
+    matches = await ctx.long_term_memory.query(
+        MemoryQuery(namespace=_caller(user), limit=100)
+    )
+    return [
+        MemoryOut(id=m.id, content=m.text)
+        for m in matches
+        if m.record.namespace.user_id == user.sub
+    ]
 
 
 @router.delete("/{memory_id}", status_code=204)

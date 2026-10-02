@@ -50,7 +50,10 @@ def _block_cost(block: ContentBlock) -> tuple[int, int]:
         return len(block.error_type) + len(block.message), 0
     if isinstance(block, MediaBlock):
         if block.type == "image":
-            return 0, _LOW_DETAIL_IMAGE_TOKENS if block.detail == "low" else _IMAGE_TOKENS
+            return (
+                0,
+                _LOW_DETAIL_IMAGE_TOKENS if block.detail == "low" else _IMAGE_TOKENS,
+            )
         return 0, _OTHER_MEDIA_TOKENS
     if isinstance(block, ToolResultBlock):
         chars = fixed = 0

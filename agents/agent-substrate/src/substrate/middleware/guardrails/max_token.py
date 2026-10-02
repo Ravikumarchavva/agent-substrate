@@ -31,7 +31,9 @@ class MaxTokenMiddleware:
         self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
         token_count = estimate_tokens(context.messages or [], self.chars_per_token)
-        token_count += int(len(context.system_instructions or "") / self.chars_per_token)
+        token_count += int(
+            len(context.system_instructions or "") / self.chars_per_token
+        )
 
         if token_count > self.max_tokens:
             raise MiddlewareTermination(

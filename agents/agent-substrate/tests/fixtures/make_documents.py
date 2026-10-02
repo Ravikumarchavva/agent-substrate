@@ -14,7 +14,9 @@ import sys
 from pathlib import Path
 
 OUT = Path(__file__).parent / "documents"
-WORK = Path(__file__).parent / "_work"  # inside the repo: a snap-packaged LibreOffice cannot see /tmp
+WORK = (
+    Path(__file__).parent / "_work"
+)  # inside the repo: a snap-packaged LibreOffice cannot see /tmp
 
 
 def docx(path: Path) -> None:
@@ -33,7 +35,9 @@ def docx(path: Path) -> None:
     d.add_paragraph("Second step", style="List Number")
     d.add_heading("Regional detail", 2)
     table = d.add_table(rows=3, cols=3)
-    for r, row in enumerate([("Region", "Q2", "Q3"), ("EMEA", "120", "140"), ("APAC", "80", "95")]):
+    for r, row in enumerate(
+        [("Region", "Q2", "Q3"), ("EMEA", "120", "140"), ("APAC", "80", "95")]
+    ):
         for c, value in enumerate(row):
             table.cell(r, c).text = value
     p = d.add_paragraph("Details are on the next page. See ")
@@ -91,7 +95,16 @@ def xlsx(path: Path) -> None:
 def convert(src: Path, fmt: str, outdir: Path) -> Path:
     profile = WORK / "profile"
     subprocess.run(
-        [shutil.which("soffice") or shutil.which("libreoffice") or "soffice", f"-env:UserInstallation=file://{profile}", "--headless", "--convert-to", fmt, "--outdir", str(outdir), str(src)],
+        [
+            shutil.which("soffice") or shutil.which("libreoffice") or "soffice",
+            f"-env:UserInstallation=file://{profile}",
+            "--headless",
+            "--convert-to",
+            fmt,
+            "--outdir",
+            str(outdir),
+            str(src),
+        ],
         check=True,
         capture_output=True,
         timeout=180,
@@ -104,15 +117,44 @@ def pdfs() -> None:
     sys.path.insert(0, str(Path(__file__).parent))
     from pdfs import Line, Page, build, scan_of  # noqa: PLC0415
 
-    scan = scan_of([Line("Invoice 4417 total due 120 EUR", 18), Line("Shipping to Rotterdam on Friday", 18, gap=10)])
-    (OUT / "scanned_page.pdf").write_bytes(build([Page(image=scan), Page([Line("Second page has a text layer", 14)])]))
-    body = [Line("Body text sits here and runs on for a while so that the body size is clear.", 11)]
+    scan = scan_of(
+        [
+            Line("Invoice 4417 total due 120 EUR", 18),
+            Line("Shipping to Rotterdam on Friday", 18, gap=10),
+        ]
+    )
+    (OUT / "scanned_page.pdf").write_bytes(
+        build([Page(image=scan), Page([Line("Second page has a text layer", 14)])])
+    )
+    body = [
+        Line(
+            "Body text sits here and runs on for a while so that the body size is clear.",
+            11,
+        )
+    ]
     pages = [
-        Page([Line("Chapter One", 24, bold=True), Line("Intro paragraph of chapter one.", 11, gap=8), *body]),
-        Page([Line("Background", 16, bold=True), *body, Line("Details", 16, bold=True, gap=14), *body]),
+        Page(
+            [
+                Line("Chapter One", 24, bold=True),
+                Line("Intro paragraph of chapter one.", 11, gap=8),
+                *body,
+            ]
+        ),
+        Page(
+            [
+                Line("Background", 16, bold=True),
+                *body,
+                Line("Details", 16, bold=True, gap=14),
+                *body,
+            ]
+        ),
     ]
     (OUT / "bookmarks.pdf").write_bytes(
-        build(pages, outline=[("Chapter One", 1, 0), ("Background", 2, 1), ("Details", 2, 1)], title="Chapter Book")
+        build(
+            pages,
+            outline=[("Chapter One", 1, 0), ("Background", 2, 1), ("Details", 2, 1)],
+            title="Chapter Book",
+        )
     )
 
 
@@ -129,7 +171,11 @@ def main() -> None:
     shutil.copy(convert(work / "raw.xlsx", "xlsx", recalculated), OUT / "sample.xlsx")
     shutil.copy(work / "sample.docx", OUT / "sample.docx")
     shutil.copy(work / "sample.pptx", OUT / "sample.pptx")
-    for src, fmt in [(OUT / "sample.docx", "odt"), (OUT / "sample.pptx", "odp"), (OUT / "sample.xlsx", "ods")]:
+    for src, fmt in [
+        (OUT / "sample.docx", "odt"),
+        (OUT / "sample.pptx", "odp"),
+        (OUT / "sample.xlsx", "ods"),
+    ]:
         shutil.copy(convert(src, fmt, work), OUT / f"sample.{fmt}")
     pdfs()
     shutil.rmtree(WORK, ignore_errors=True)

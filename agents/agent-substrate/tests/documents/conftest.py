@@ -8,7 +8,9 @@ from substrate.stores import Store
 from tests._postgres import schema_store
 
 
-@pytest.fixture(params=["folder", pytest.param("postgres", marks=pytest.mark.requires_postgres)])
+@pytest.fixture(
+    params=["folder", pytest.param("postgres", marks=pytest.mark.requires_postgres)]
+)
 async def store(request, tmp_path):
     if request.param == "folder":
         store = Store.at(tmp_path / "store")

@@ -22,7 +22,14 @@ from substrate.tools import ToolExecutionResult, ToolRisk
 from substrate.testing.runtime import ephemeral_runtime
 from substrate.tools import Toolbox
 
-from tests.invariants._harness.crash import CrashInjector, InjectedStoreFailure, Mode, Observation, WorkerDied, observe_run
+from tests.invariants._harness.crash import (
+    CrashInjector,
+    InjectedStoreFailure,
+    Mode,
+    Observation,
+    WorkerDied,
+    observe_run,
+)
 
 # Retry promptly (the recovery path is what is under test) and expire leases quickly
 # (a killed worker is only noticed when its lease runs out).
@@ -31,7 +38,9 @@ RUNTIME_OPTIONS = {"lease_s": 0.6, "poll_interval_s": 0.02}
 
 
 def boot_message(target: Actor) -> Message:
-    return Message(target=target, sender=Actor.system("crash-matrix"), payload=DataPayload(data={}))
+    return Message(
+        target=target, sender=Actor.system("crash-matrix"), payload=DataPayload(data={})
+    )
 
 
 class ChargeCard:
@@ -50,9 +59,13 @@ class ChargeCard:
     def __init__(self, ledger: list[int]) -> None:
         self._ledger = ledger
 
-    async def execute(self, *, ctx: object = None, amount: int = 0, **_: object) -> ToolExecutionResult:
+    async def execute(
+        self, *, ctx: object = None, amount: int = 0, **_: object
+    ) -> ToolExecutionResult:
         self._ledger.append(amount)
-        return ToolExecutionResult(name=self.name, content=[TextBlock(text=f"charged {amount}")])
+        return ToolExecutionResult(
+            name=self.name, content=[TextBlock(text=f"charged {amount}")]
+        )
 
 
 class PayingAgent:
@@ -93,14 +106,18 @@ class ParentAgent:
         await ctx.join(handle)
 
 
-def _quiet_worker_deaths(loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
+def _quiet_worker_deaths(
+    loop: asyncio.AbstractEventLoop, context: dict[str, Any]
+) -> None:
     """A simulated death leaves a task that ended in ``WorkerDied`` and is never awaited;
     that is the point, so don't report it."""
     if not isinstance(context.get("exception"), WorkerDied):
         loop.default_exception_handler(context)
 
 
-async def _drive(agents: list[Any], root: Any, ledger: list[Any], fail_at: int | None, mode: Mode) -> Observation:
+async def _drive(
+    agents: list[Any], root: Any, ledger: list[Any], fail_at: int | None, mode: Mode
+) -> Observation:
     asyncio.get_running_loop().set_exception_handler(_quiet_worker_deaths)
     async with ephemeral_runtime(**RUNTIME_OPTIONS) as runtime:
         injector = CrashInjector(runtime, fail_at=fail_at, mode=mode)
@@ -109,7 +126,9 @@ async def _drive(agents: list[Any], root: Any, ledger: list[Any], fail_at: int |
         terminal: str | None = None
         kinds: list[str] = []
         try:
-            run_id = await runtime.submit(root.id, boot_message(root.id), retry_policy=RETRY_NOW)
+            run_id = await runtime.submit(
+                root.id, boot_message(root.id), retry_policy=RETRY_NOW
+            )
         except (InjectedStoreFailure, WorkerDied):
             kinds = ["<submit-failed>"]
         else:

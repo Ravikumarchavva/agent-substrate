@@ -109,7 +109,9 @@ async def test_send_blocked_when_staging_still_in_progress():
 
     exc = None
     try:
-        await _build_file_context(db, _body("f1"), _request_with_redis(_FakeRedis()), _ctx(), _claims())
+        await _build_file_context(
+            db, _body("f1"), _request_with_redis(_FakeRedis()), _ctx(), _claims()
+        )
     except HTTPException as e:
         exc = e
 
@@ -118,11 +120,15 @@ async def test_send_blocked_when_staging_still_in_progress():
 
 
 async def test_send_blocked_when_staging_failed():
-    db = _db_with_rows([_staged_meta("f1", staged_at=None, staging_error="OCR crashed")])
+    db = _db_with_rows(
+        [_staged_meta("f1", staged_at=None, staging_error="OCR crashed")]
+    )
 
     exc = None
     try:
-        await _build_file_context(db, _body("f1"), _request_with_redis(_FakeRedis()), _ctx(), _claims())
+        await _build_file_context(
+            db, _body("f1"), _request_with_redis(_FakeRedis()), _ctx(), _claims()
+        )
     except HTTPException as e:
         exc = e
 
@@ -139,7 +145,9 @@ async def test_send_blocked_when_daily_quota_exceeded_and_quota_is_released():
 
     exc = None
     try:
-        await _build_file_context(db, _body("f1"), _request_with_redis(redis), _ctx(), _claims())
+        await _build_file_context(
+            db, _body("f1"), _request_with_redis(redis), _ctx(), _claims()
+        )
     except HTTPException as e:
         exc = e
 
@@ -161,7 +169,11 @@ async def test_send_skips_refiling_a_file_already_staged_this_thread():
     ctx = _ctx()
 
     _text, _images, attachments, _new = await _build_file_context(
-        _db_with_rows([meta]), _body("f1"), _request_with_redis(_FakeRedis()), ctx, _claims()
+        _db_with_rows([meta]),
+        _body("f1"),
+        _request_with_redis(_FakeRedis()),
+        ctx,
+        _claims(),
     )
 
     ctx.library.add.assert_not_awaited()
@@ -178,14 +190,24 @@ async def test_send_files_a_document_staged_under_a_different_thread():
     ctx = _ctx(download=b"pdf bytes")
 
     _text, _images, attachments, _new = await _build_file_context(
-        _db_with_rows([meta]), _body("f1"), _request_with_redis(_FakeRedis()), ctx, _claims()
+        _db_with_rows([meta]),
+        _body("f1"),
+        _request_with_redis(_FakeRedis()),
+        ctx,
+        _claims(),
     )
 
     ctx.library.add.assert_awaited_once()
     args, kwargs = ctx.library.add.await_args
     assert args == (b"pdf bytes", "invoice.pdf")
-    assert kwargs["collection"] == "tenants/t1/users/user-1/conversations/thread-1/documents"
-    assert kwargs["sha256"] == meta.checksum_sha256 and kwargs["metadata"]["thread_id"] == "thread-1"
+    assert (
+        kwargs["collection"]
+        == "tenants/t1/users/user-1/conversations/thread-1/documents"
+    )
+    assert (
+        kwargs["sha256"] == meta.checksum_sha256
+        and kwargs["metadata"]["thread_id"] == "thread-1"
+    )
     assert meta.rag_ingested_at is not None
     assert len(attachments) == 1
 
@@ -198,7 +220,13 @@ async def test_send_filing_failure_releases_quota():
 
     exc = None
     try:
-        await _build_file_context(_db_with_rows([meta]), _body("f1"), _request_with_redis(redis), ctx, _claims())
+        await _build_file_context(
+            _db_with_rows([meta]),
+            _body("f1"),
+            _request_with_redis(redis),
+            ctx,
+            _claims(),
+        )
     except RuntimeError as e:
         exc = e
 
@@ -216,7 +244,9 @@ async def test_send_multi_file_quota_blocks_both_when_insufficient_remaining():
 
     exc = None
     try:
-        await _build_file_context(db, _body("f1", "f2"), _request_with_redis(redis), ctx, _claims())
+        await _build_file_context(
+            db, _body("f1", "f2"), _request_with_redis(redis), ctx, _claims()
+        )
     except HTTPException as e:
         exc = e
 
@@ -233,7 +263,11 @@ async def test_send_skips_pre_validation_when_no_new_commits():
     ctx = _ctx()
 
     _text, _images, attachments, _new = await _build_file_context(
-        _db_with_rows([meta]), _body("f1"), _request_with_redis(_FakeRedis()), ctx, _claims()
+        _db_with_rows([meta]),
+        _body("f1"),
+        _request_with_redis(_FakeRedis()),
+        ctx,
+        _claims(),
     )
 
     ctx.library.add.assert_not_awaited()

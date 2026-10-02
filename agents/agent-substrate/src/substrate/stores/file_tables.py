@@ -119,7 +119,9 @@ class Files:
     def effective_quota(self, tenant_id: str) -> int | None:
         """The quota that applies to ``tenant_id`` — their override if one is set, else the store's default; ``None`` is
         unlimited."""
-        return self._store.file_quota_overrides.get(tenant_id, self._store.file_quota_bytes)
+        return self._store.file_quota_overrides.get(
+            tenant_id, self._store.file_quota_bytes
+        )
 
     def set_quota_override(self, tenant_id: str, quota_bytes: int | None) -> None:
         """Set (or, with ``None``, clear) ``tenant_id``'s quota override, effective on the next write. The host owns where
@@ -133,32 +135,48 @@ class Files:
         """Total bytes stored under this tenant. Always exact (``force`` exists for stores that cache)."""
 
         async def op(tx: Tx) -> int:
-            row = await tx.fetchone("SELECT COALESCE(SUM(size), 0) AS used FROM file_objects WHERE tenant_id = ?", tenant_id)
+            row = await tx.fetchone(
+                "SELECT COALESCE(SUM(size), 0) AS used FROM file_objects WHERE tenant_id = ?",
+                tenant_id,
+            )
             return int(row["used"])
 
         return await self._run(op)
 
-    async def _enforce(self, tx: Tx, tenant_id: str | None, adding: int, replacing: int) -> None:
+    async def _enforce(
+        self, tx: Tx, tenant_id: str | None, adding: int, replacing: int
+    ) -> None:
         quota = self.effective_quota(tenant_id) if tenant_id is not None else None
         if tenant_id is None or quota is None:
             return
         await tx.lock(f"file_quota:{tenant_id}")
-        row = await tx.fetchone("SELECT COALESCE(SUM(size), 0) AS used FROM file_objects WHERE tenant_id = ?", tenant_id)
+        row = await tx.fetchone(
+            "SELECT COALESCE(SUM(size), 0) AS used FROM file_objects WHERE tenant_id = ?",
+            tenant_id,
+        )
         used = int(row["used"])
         if used - replacing + adding > quota:
             raise WorkspaceQuotaExceededError(tenant_id, used, quota)
 
     # ── FileStore ────────────────────────────────────────────────────────────
 
-    async def upload(self, key: str, data: bytes, *, content_type: str = "application/octet-stream") -> None:
+    async def upload(
+        self, key: str, data: bytes, *, content_type: str = "application/octet-stream"
+    ) -> None:
         _check(key)
         blob = uuid.uuid4().hex
-        await asyncio.to_thread(_flush_to_disk, self._path(blob), data)  # the contents are on disk before any row names them
+        await asyncio.to_thread(
+            _flush_to_disk, self._path(blob), data
+        )  # the contents are on disk before any row names them
         tenant_id = _tenant_of(key)
 
         async def op(tx: Tx) -> str | None:
-            previous = await tx.fetchone("SELECT blob, size FROM file_objects WHERE key = ?", key)
-            await self._enforce(tx, tenant_id, len(data), previous["size"] if previous else 0)
+            previous = await tx.fetchone(
+                "SELECT blob, size FROM file_objects WHERE key = ?", key
+            )
+            await self._enforce(
+                tx, tenant_id, len(data), previous["size"] if previous else 0
+            )
             await tx.execute(
                 "INSERT INTO file_objects (key, tenant_id, blob, size, content_type, mtime) VALUES (?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT (key) DO UPDATE SET tenant_id = excluded.tenant_id, blob = excluded.blob, "
@@ -175,7 +193,9 @@ class Files:
         try:
             replaced = await self._run(op)
         except BaseException:
-            await asyncio.to_thread(_remove, self._path(blob))  # refused or failed: nothing may keep the contents
+            await asyncio.to_thread(
+                _remove, self._path(blob)
+            )  # refused or failed: nothing may keep the contents
             raise
         if replaced:
             await asyncio.to_thread(_remove, self._path(replaced))
@@ -201,7 +221,10 @@ class Files:
             return False
 
         async def op(tx: Tx) -> bool:
-            return await tx.fetchone("SELECT 1 FROM file_objects WHERE key = ?", key) is not None
+            return (
+                await tx.fetchone("SELECT 1 FROM file_objects WHERE key = ?", key)
+                is not None
+            )
 
         return await self._run(op)
 
@@ -228,7 +251,10 @@ class Files:
         clause, params = _under(prefix)
 
         async def op(tx: Tx) -> list[tuple[str, int, float]]:
-            rows = await tx.fetchall(f"SELECT key, size, mtime FROM file_objects WHERE {clause} ORDER BY key", *params)
+            rows = await tx.fetchall(
+                f"SELECT key, size, mtime FROM file_objects WHERE {clause} ORDER BY key",
+                *params,
+            )
             return [(row["key"], int(row["size"]), float(row["mtime"])) for row in rows]
 
         return await self._run(op)
@@ -240,7 +266,11 @@ class Files:
         stem = prefix.rstrip("/") or prefix
 
         async def op(tx: Tx) -> list[str]:
-            rows = await tx.fetchall(f"SELECT key, blob FROM file_objects WHERE key = ? OR {clause}", stem, *params)
+            rows = await tx.fetchall(
+                f"SELECT key, blob FROM file_objects WHERE key = ? OR {clause}",
+                stem,
+                *params,
+            )
             for row in rows:
                 await tx.execute("DELETE FROM file_objects WHERE key = ?", row["key"])
             return [row["blob"] for row in rows]
@@ -257,23 +287,35 @@ class Files:
         costs a row per file, not its bytes. Returns the number of files copied; refuses the whole copy if it would
         push the destination's tenant past quota.
         """
-        source, destination = source_prefix.rstrip("/") or source_prefix, dest_prefix.rstrip("/") or dest_prefix
+        source, destination = (
+            source_prefix.rstrip("/") or source_prefix,
+            dest_prefix.rstrip("/") or dest_prefix,
+        )
         _check(source), _check(destination)
         clause, params = _under(source)
         tenant_id = _tenant_of(destination)
         linked: list[str] = []
 
         async def op(tx: Tx) -> int:
-            rows = await tx.fetchall(f"SELECT key, blob, size, content_type FROM file_objects WHERE {clause} ORDER BY key", *params)
+            rows = await tx.fetchall(
+                f"SELECT key, blob, size, content_type FROM file_objects WHERE {clause} ORDER BY key",
+                *params,
+            )
             targets = [(destination + row["key"][len(source) :], row) for row in rows]
             replacing = 0
             for target, _row in targets:
-                previous = await tx.fetchone("SELECT size FROM file_objects WHERE key = ?", target)
+                previous = await tx.fetchone(
+                    "SELECT size FROM file_objects WHERE key = ?", target
+                )
                 replacing += previous["size"] if previous else 0
-            await self._enforce(tx, tenant_id, sum(row["size"] for _t, row in targets), replacing)
+            await self._enforce(
+                tx, tenant_id, sum(row["size"] for _t, row in targets), replacing
+            )
             for target, row in targets:
                 blob = uuid.uuid4().hex
-                await asyncio.to_thread(_link_or_copy, self._path(row["blob"]), self._path(blob))
+                await asyncio.to_thread(
+                    _link_or_copy, self._path(row["blob"]), self._path(blob)
+                )
                 linked.append(blob)
                 await tx.execute(
                     "INSERT INTO file_objects (key, tenant_id, blob, size, content_type, mtime) VALUES (?, ?, ?, ?, ?, ?) "
@@ -305,7 +347,9 @@ class Files:
         """Tenant ids that have stored a file."""
 
         async def op(tx: Tx) -> list[str]:
-            rows = await tx.fetchall("SELECT DISTINCT tenant_id FROM file_objects WHERE tenant_id IS NOT NULL ORDER BY tenant_id")
+            rows = await tx.fetchall(
+                "SELECT DISTINCT tenant_id FROM file_objects WHERE tenant_id IS NOT NULL ORDER BY tenant_id"
+            )
             return [row["tenant_id"] for row in rows]
 
         return await self._run(op)
@@ -316,15 +360,25 @@ class Files:
         globally unique, so no user segment is needed to tell them apart."""
 
         async def op(tx: Tx) -> list[tuple[str, int, int]]:
-            rows = await tx.fetchall("SELECT key, size FROM file_objects WHERE tenant_id = ? ORDER BY key", tenant_id)
+            rows = await tx.fetchall(
+                "SELECT key, size FROM file_objects WHERE tenant_id = ? ORDER BY key",
+                tenant_id,
+            )
             totals: dict[tuple[str, str], list[int]] = {}
             for row in rows:
                 parts = row["key"].split("/")
-                if len(parts) > 6 and parts[2] == "users" and parts[4] == "conversations":
+                if (
+                    len(parts) > 6
+                    and parts[2] == "users"
+                    and parts[4] == "conversations"
+                ):
                     entry = totals.setdefault((parts[3], parts[5]), [0, 0])
                     entry[0] += int(row["size"])
                     entry[1] += 1
-            return [(conversation, size, count) for (_user, conversation), (size, count) in sorted(totals.items())]
+            return [
+                (conversation, size, count)
+                for (_user, conversation), (size, count) in sorted(totals.items())
+            ]
 
         return await self._run(op)
 
@@ -336,7 +390,10 @@ class Files:
         """
 
         async def op(tx: Tx) -> set[str]:
-            return {row["blob"] for row in await tx.fetchall("SELECT blob FROM file_objects")}
+            return {
+                row["blob"]
+                for row in await tx.fetchall("SELECT blob FROM file_objects")
+            }
 
         referenced = await self._run(op)
 

@@ -57,7 +57,9 @@ class MemoryManager:
 
             # Check if text looks like a standing directive/preference
             is_directive = any(pattern.search(text) for pattern in _DIRECTIVE_PATTERNS)
-            category = MemoryCategory.DIRECTIVE if is_directive else MemoryCategory.SEMANTIC
+            category = (
+                MemoryCategory.DIRECTIVE if is_directive else MemoryCategory.SEMANTIC
+            )
 
             candidate = MemoryRecord.candidate(
                 text,
@@ -70,7 +72,9 @@ class MemoryManager:
 
         return candidates
 
-    async def promote(self, caller: MemoryNamespace, candidate_id: str) -> MemoryRecord | None:
+    async def promote(
+        self, caller: MemoryNamespace, candidate_id: str
+    ) -> MemoryRecord | None:
         """Promote a CANDIDATE record to ACTIVE canonical status."""
         record = await self._store.get(caller, candidate_id)
         if record is None:
@@ -134,4 +138,3 @@ class MemoryManager:
 
 
 __all__ = ["MemoryManager"]
-

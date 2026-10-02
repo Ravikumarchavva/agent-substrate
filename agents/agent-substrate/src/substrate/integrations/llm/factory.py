@@ -395,7 +395,10 @@ def provider_keys_from_env() -> dict[str, str]:
     ``create_model_client(..., api_keys=...)`` — so one call can build a client for any model whose key is set."""
     import os
 
-    return {provider: os.environ.get(var, "") for provider, var in _PROVIDER_KEY_VARS.items()}
+    return {
+        provider: os.environ.get(var, "")
+        for provider, var in _PROVIDER_KEY_VARS.items()
+    }
 
 
 def has_provider_api_key(
@@ -636,7 +639,13 @@ def create_embedding_client(
 # ── Embedding provider detection ──────────────────────────────────────────────
 
 
-_EMBEDDING_COMPATIBLE_PREFIXES = ("compatible", "vllm", "ollama", "lmstudio", "llamacpp")
+_EMBEDDING_COMPATIBLE_PREFIXES = (
+    "compatible",
+    "vllm",
+    "ollama",
+    "lmstudio",
+    "llamacpp",
+)
 
 
 def detect_embedding_provider(model: str) -> str:

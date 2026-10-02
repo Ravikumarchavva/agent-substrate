@@ -39,8 +39,12 @@ OWNER = AuthClaims(sub="owner-user", tenant_id=TENANT_A)
 STRANGER = AuthClaims(sub="stranger-user", tenant_id=TENANT_A)
 CROSS_TENANT_OWNER = AuthClaims(sub="owner-user", tenant_id=TENANT_B)
 ADMIN = AuthClaims(sub="admin-user", role="platform_admin", tenant_id=TENANT_B)
-TENANT_ADMIN = AuthClaims(sub="tenant-admin-user", role="tenant_admin", tenant_id=TENANT_A)
-CROSS_TENANT_ADMIN = AuthClaims(sub="tenant-admin-user", role="tenant_admin", tenant_id=TENANT_B)
+TENANT_ADMIN = AuthClaims(
+    sub="tenant-admin-user", role="tenant_admin", tenant_id=TENANT_A
+)
+CROSS_TENANT_ADMIN = AuthClaims(
+    sub="tenant-admin-user", role="tenant_admin", tenant_id=TENANT_B
+)
 
 
 @pytest.fixture
@@ -117,7 +121,9 @@ async def test_tenant_admin_sees_same_tenant_not_cross_tenant(db: AsyncSession) 
         await db.commit()
 
 
-async def test_deleted_thread_hidden_from_owner_visible_to_admin(db: AsyncSession) -> None:
+async def test_deleted_thread_hidden_from_owner_visible_to_admin(
+    db: AsyncSession,
+) -> None:
     thread = await create_thread(
         db, name="mine", user_identifier=OWNER.sub, tenant_id=OWNER.tenant_id
     )
@@ -137,7 +143,10 @@ async def test_list_threads_scoped_by_owner(db: AsyncSession) -> None:
         db, name="mine-scoped", user_identifier=OWNER.sub, tenant_id=OWNER.tenant_id
     )
     theirs = await create_thread(
-        db, name="theirs-scoped", user_identifier=STRANGER.sub, tenant_id=STRANGER.tenant_id
+        db,
+        name="theirs-scoped",
+        user_identifier=STRANGER.sub,
+        tenant_id=STRANGER.tenant_id,
     )
     try:
         rows = await list_threads(db, user_identifier=OWNER.sub, limit=200)
@@ -182,7 +191,10 @@ async def test_update_thread_cannot_touch_the_lock(db: AsyncSession) -> None:
         assert updated is not None
         assert updated.name == "renamed"
         assert updated.locked_at is not None
-        assert updated.locked_reason == "A file was deleted from this conversation's storage: x.txt"
+        assert (
+            updated.locked_reason
+            == "A file was deleted from this conversation's storage: x.txt"
+        )
     finally:
         await delete_thread(db, thread.id)
         await db.commit()

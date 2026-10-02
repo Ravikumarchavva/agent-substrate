@@ -31,7 +31,9 @@ class _FolderRuntimeStore(SqlRuntimeStore):
 
     def __init__(self, folder: str | Path | None, **options: Any) -> None:
         self._temporary = folder is None
-        self._folder = Path(tempfile.mkdtemp(prefix="substrate-test-") if folder is None else folder)
+        self._folder = Path(
+            tempfile.mkdtemp(prefix="substrate-test-") if folder is None else folder
+        )
         self._owner = Store.at(self._folder)
         super().__init__(self._owner.database, **options)
 

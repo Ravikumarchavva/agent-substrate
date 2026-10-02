@@ -33,7 +33,14 @@ import typing
 from collections.abc import Callable
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, create_model
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    create_model,
+)
 
 from substrate.tools.protocols import ToolExecutionResult, ToolRisk
 from substrate.types.content import (
@@ -49,7 +56,16 @@ from substrate.types.content import (
 
 _CTX = "ctx"
 _ANY: TypeAdapter[Any] = TypeAdapter(Any)
-_BLOCKS = (TextBlock, DataBlock, ErrorBlock, ReasoningBlock, MediaBlock, ToolUseBlock, ToolResultBlock, UnknownBlock)
+_BLOCKS = (
+    TextBlock,
+    DataBlock,
+    ErrorBlock,
+    ReasoningBlock,
+    MediaBlock,
+    ToolUseBlock,
+    ToolResultBlock,
+    UnknownBlock,
+)
 _ARGS_HEADER = re.compile(r"^\s*(Args|Arguments|Parameters):\s*$", re.IGNORECASE)
 _ARG_LINE = re.compile(r"^\s{0,12}(\*{0,2}\w+)\s*(?:\([^)]*\))?\s*:\s*(.+)$")
 
@@ -109,11 +125,22 @@ def _as_result(name: str, value: Any) -> ToolExecutionResult:
         return ToolExecutionResult(name=name, content=[TextBlock(text=value)])
     if isinstance(value, _BLOCKS):
         return ToolExecutionResult(name=name, content=[value])
-    if isinstance(value, list) and value and all(isinstance(item, _BLOCKS) for item in value):
+    if (
+        isinstance(value, list)
+        and value
+        and all(isinstance(item, _BLOCKS) for item in value)
+    ):
         return ToolExecutionResult(name=name, content=list(value))
     if isinstance(value, (bool, int, float)):
         return ToolExecutionResult(name=name, content=[TextBlock(text=str(value))])
-    return ToolExecutionResult(name=name, content=[TextBlock(text=json.dumps(_ANY.dump_python(value, mode="json", fallback=str)))])
+    return ToolExecutionResult(
+        name=name,
+        content=[
+            TextBlock(
+                text=json.dumps(_ANY.dump_python(value, mode="json", fallback=str))
+            )
+        ],
+    )
 
 
 class FunctionTool:
@@ -134,7 +161,9 @@ class FunctionTool:
         self.name = name or fn.__name__
         self.description = description or summary
         if not self.description:
-            raise ValueError(f"tool {self.name!r} needs a description — the model reads it: a docstring or description=")
+            raise ValueError(
+                f"tool {self.name!r} needs a description — the model reads it: a docstring or description="
+            )
         self.risk = ToolRisk(risk)
         self.idempotent = bool(idempotent)
         self.concurrency_safe = concurrency_safe
@@ -148,22 +177,38 @@ class FunctionTool:
             if param.name == _CTX:
                 continue
             if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
-                raise TypeError(f"tool {self.name!r}: *args and **kwargs cannot be described to a model; name each parameter")
+                raise TypeError(
+                    f"tool {self.name!r}: *args and **kwargs cannot be described to a model; name each parameter"
+                )
             annotation = hints.get(param.name, Any)
             default = ... if param.default is param.empty else param.default
-            fields[param.name] = (annotation, Field(default, description=argument_docs.get(param.name)))
+            fields[param.name] = (
+                annotation,
+                Field(default, description=argument_docs.get(param.name)),
+            )
         self._arguments: type[BaseModel] = create_model(
-            f"{self.name}_arguments", __config__=ConfigDict(extra="forbid", arbitrary_types_allowed=True), **fields
+            f"{self.name}_arguments",
+            __config__=ConfigDict(extra="forbid", arbitrary_types_allowed=True),
+            **fields,
         )
-        self.input_schema: dict[str, Any] = _without_titles(self._arguments.model_json_schema())
+        self.input_schema: dict[str, Any] = _without_titles(
+            self._arguments.model_json_schema()
+        )
         self.input_schema.setdefault("properties", {})
 
     async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:
         try:
             parsed = self._arguments.model_validate(kwargs)
         except ValidationError as exc:
-            problems = "; ".join(f"{'.'.join(map(str, e['loc'])) or 'arguments'}: {e['msg']}" for e in exc.errors())
-            return ToolExecutionResult(name=self.name, is_error=True, content=[TextBlock(text=f"invalid arguments — {problems}")])
+            problems = "; ".join(
+                f"{'.'.join(map(str, e['loc'])) or 'arguments'}: {e['msg']}"
+                for e in exc.errors()
+            )
+            return ToolExecutionResult(
+                name=self.name,
+                is_error=True,
+                content=[TextBlock(text=f"invalid arguments — {problems}")],
+            )
         arguments = {name: getattr(parsed, name) for name in type(parsed).model_fields}
         if self._wants_ctx:
             arguments[_CTX] = ctx
@@ -193,7 +238,12 @@ def tool(
 
     def decorate(fn: Callable[..., Any]) -> FunctionTool:
         return FunctionTool(
-            fn, risk=risk, idempotent=idempotent, name=name, description=description, concurrency_safe=concurrency_safe
+            fn,
+            risk=risk,
+            idempotent=idempotent,
+            name=name,
+            description=description,
+            concurrency_safe=concurrency_safe,
         )
 
     return decorate

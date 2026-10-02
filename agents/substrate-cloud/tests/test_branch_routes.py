@@ -88,7 +88,9 @@ async def test_list_and_fork_branches():
                 app.dependency_overrides[get_current_user] = lambda: claims
                 try:
                     transport = ASGITransport(app=app)
-                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    async with AsyncClient(
+                        transport=transport, base_url="http://test"
+                    ) as client:
                         # 1. List branches -> should return at least "main"
                         res = await client.get(f"/threads/{thread_id}/branches")
                         assert res.status_code == 200, res.text
@@ -127,7 +129,9 @@ async def test_list_and_fork_branches():
                         assert "feature-1" in branch_ids
 
                         # 5. Get branch details
-                        detail_res = await client.get(f"/threads/{thread_id}/branches/feature-1")
+                        detail_res = await client.get(
+                            f"/threads/{thread_id}/branches/feature-1"
+                        )
                         assert detail_res.status_code == 200
                         assert detail_res.json()["id"] == "feature-1"
 
@@ -143,7 +147,9 @@ async def test_list_and_fork_branches():
                         assert rename_data["name"] == "My Great Feature"
 
                         # 7. Non-existent branch
-                        missing_res = await client.get(f"/threads/{thread_id}/branches/non-existent")
+                        missing_res = await client.get(
+                            f"/threads/{thread_id}/branches/non-existent"
+                        )
                         assert missing_res.status_code == 404
                 finally:
                     app.dependency_overrides.pop(get_current_user, None)
@@ -179,7 +185,9 @@ async def test_fork_points_new_branch_at_the_same_workspace_snapshot():
                     )
 
                     transport = ASGITransport(app=app)
-                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    async with AsyncClient(
+                        transport=transport, base_url="http://test"
+                    ) as client:
                         fork_res = await client.post(
                             f"/threads/{thread_id}/branches/fork",
                             json={"source_branch_id": "main", "new_branch_id": "exp-1"},
@@ -209,20 +217,28 @@ async def test_delete_branch_removes_it_and_rejects_main():
                 app.dependency_overrides[get_current_user] = lambda: claims
                 try:
                     transport = ASGITransport(app=app)
-                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    async with AsyncClient(
+                        transport=transport, base_url="http://test"
+                    ) as client:
                         fork_res = await client.post(
                             f"/threads/{thread_id}/branches/fork",
                             json={"source_branch_id": "main", "new_branch_id": "exp-1"},
                         )
                         assert fork_res.status_code == 201, fork_res.text
 
-                        del_res = await client.delete(f"/threads/{thread_id}/branches/exp-1")
+                        del_res = await client.delete(
+                            f"/threads/{thread_id}/branches/exp-1"
+                        )
                         assert del_res.status_code == 204
 
-                        get_res = await client.get(f"/threads/{thread_id}/branches/exp-1")
+                        get_res = await client.get(
+                            f"/threads/{thread_id}/branches/exp-1"
+                        )
                         assert get_res.status_code == 404
 
-                        main_del_res = await client.delete(f"/threads/{thread_id}/branches/main")
+                        main_del_res = await client.delete(
+                            f"/threads/{thread_id}/branches/main"
+                        )
                         assert main_del_res.status_code == 400
                 finally:
                     app.dependency_overrides.pop(get_current_user, None)
@@ -239,14 +255,20 @@ async def test_branch_messages_ancestry():
                 app.dependency_overrides[get_current_user] = lambda: claims
                 try:
                     transport = ASGITransport(app=app)
-                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    async with AsyncClient(
+                        transport=transport, base_url="http://test"
+                    ) as client:
                         # Initially empty
-                        msg_res = await client.get(f"/threads/{thread_id}/branches/main/messages")
+                        msg_res = await client.get(
+                            f"/threads/{thread_id}/branches/main/messages"
+                        )
                         assert msg_res.status_code == 200
                         assert msg_res.json() == []
 
                         # Append two nodes to main branch in history
-                        history = bind_threads(app.state.ctx.history, Scope(tenant_id=TENANT))
+                        history = bind_threads(
+                            app.state.ctx.history, Scope(tenant_id=TENANT)
+                        )
                         await history.ensure_branch(thread_id, "main")
                         node1_id = f"msg1-{uuid.uuid4().hex[:8]}"
                         node2_id = f"msg2-{uuid.uuid4().hex[:8]}"
@@ -254,20 +276,30 @@ async def test_branch_messages_ancestry():
                             id=node1_id,
                             parent_id=None,
                             session_id=thread_id,
-                            payload=ChatMessage(role="user", content=[TextBlock(text="hello")]),
+                            payload=ChatMessage(
+                                role="user", content=[TextBlock(text="hello")]
+                            ),
                         )
-                        await history.append_and_advance(node1, "main", expected_head_id=None)
+                        await history.append_and_advance(
+                            node1, "main", expected_head_id=None
+                        )
 
                         node2 = MessageNode(
                             id=node2_id,
                             parent_id=node1_id,
                             session_id=thread_id,
-                            payload=ChatMessage(role="assistant", content=[TextBlock(text="hi there")]),
+                            payload=ChatMessage(
+                                role="assistant", content=[TextBlock(text="hi there")]
+                            ),
                         )
-                        await history.append_and_advance(node2, "main", expected_head_id=node1_id)
+                        await history.append_and_advance(
+                            node2, "main", expected_head_id=node1_id
+                        )
 
                         # Now check messages
-                        res = await client.get(f"/threads/{thread_id}/branches/main/messages")
+                        res = await client.get(
+                            f"/threads/{thread_id}/branches/main/messages"
+                        )
                         assert res.status_code == 200
                         messages = res.json()
                         assert len(messages) == 2
@@ -288,7 +320,9 @@ async def test_branch_messages_ancestry():
                         assert fork_res.status_code == 201
 
                         # The alternate branch should only see msg-1 in its resolved messages
-                        alt_res = await client.get(f"/threads/{thread_id}/branches/alternate/messages")
+                        alt_res = await client.get(
+                            f"/threads/{thread_id}/branches/alternate/messages"
+                        )
                         assert alt_res.status_code == 200
                         alt_msgs = alt_res.json()
                         assert len(alt_msgs) == 1
@@ -308,15 +342,21 @@ async def test_checkpoints_endpoints():
                 app.dependency_overrides[get_current_user] = lambda: claims
                 try:
                     transport = ASGITransport(app=app)
-                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    async with AsyncClient(
+                        transport=transport, base_url="http://test"
+                    ) as client:
                         # Append a node first so we have an anchor
-                        history = bind_threads(app.state.ctx.history, Scope(tenant_id=TENANT))
+                        history = bind_threads(
+                            app.state.ctx.history, Scope(tenant_id=TENANT)
+                        )
                         anchor_id = f"anchor-{uuid.uuid4().hex[:8]}"
                         node = MessageNode(
                             id=anchor_id,
                             parent_id=None,
                             session_id=thread_id,
-                            payload=ChatMessage(role="user", content=[TextBlock(text="anchor test")]),
+                            payload=ChatMessage(
+                                role="user", content=[TextBlock(text="anchor test")]
+                            ),
                         )
                         await history.append_node(node)
 
@@ -335,11 +375,15 @@ async def test_checkpoints_endpoints():
                         assert cp_data["summary"] == "Summary of turn 1"
 
                         # List checkpoints
-                        list_res = await client.get(f"/threads/{thread_id}/branches/main/checkpoints")
+                        list_res = await client.get(
+                            f"/threads/{thread_id}/branches/main/checkpoints"
+                        )
                         assert list_res.status_code == 200
                         checkpoints = list_res.json()
                         assert len(checkpoints) >= 1
-                        assert any(c["anchor_message_id"] == anchor_id for c in checkpoints)
+                        assert any(
+                            c["anchor_message_id"] == anchor_id for c in checkpoints
+                        )
                 finally:
                     app.dependency_overrides.pop(get_current_user, None)
 
@@ -359,7 +403,9 @@ async def test_tenant_and_owner_isolation():
                 # Stranger in same tenant -> 404
                 app.dependency_overrides[get_current_user] = lambda: stranger_claims
                 try:
-                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    async with AsyncClient(
+                        transport=transport, base_url="http://test"
+                    ) as client:
                         res = await client.get(f"/threads/{thread_id}/branches")
                         assert res.status_code == 404
                 finally:
@@ -368,7 +414,9 @@ async def test_tenant_and_owner_isolation():
                 # Same user in different tenant -> 404
                 app.dependency_overrides[get_current_user] = lambda: cross_tenant_claims
                 try:
-                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    async with AsyncClient(
+                        transport=transport, base_url="http://test"
+                    ) as client:
                         res = await client.get(f"/threads/{thread_id}/branches")
                         assert res.status_code == 404
                 finally:

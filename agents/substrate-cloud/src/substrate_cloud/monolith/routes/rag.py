@@ -84,7 +84,10 @@ class DeleteCollectionResponse(BaseModel):
 def _knowledge(request: Request):
     knowledge = getattr(request.app.state, "knowledge", None)
     if knowledge is None:
-        raise HTTPException(status_code=503, detail="Knowledge bases are not configured: no store or object storage.")
+        raise HTTPException(
+            status_code=503,
+            detail="Knowledge bases are not configured: no store or object storage.",
+        )
     return knowledge
 
 
@@ -99,13 +102,22 @@ def _collection(claims: AuthClaims, name: str) -> str:
 
 
 @router.post("/ingest", response_model=IngestResponse)
-async def ingest(body: IngestRequest, request: Request, claims: AuthClaims = Depends(get_current_user)) -> IngestResponse:
+async def ingest(
+    body: IngestRequest,
+    request: Request,
+    claims: AuthClaims = Depends(get_current_user),
+) -> IngestResponse:
     """Add text to a knowledge base."""
     knowledge = _knowledge(request)
     metadata = dict(body.metadata or {})
     metadata.setdefault("filename", body.filename)
     try:
-        added = await knowledge.add(body.content.encode("utf-8"), body.filename, collection=_collection(claims, body.knowledge_base), metadata=metadata)
+        added = await knowledge.add(
+            body.content.encode("utf-8"),
+            body.filename,
+            collection=_collection(claims, body.knowledge_base),
+            metadata=metadata,
+        )
     except DocumentError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return IngestResponse(
@@ -119,10 +131,17 @@ async def ingest(body: IngestRequest, request: Request, claims: AuthClaims = Dep
 
 
 @router.post("/query", response_model=QueryResponse)
-async def query(body: QueryRequest, request: Request, claims: AuthClaims = Depends(get_current_user)) -> QueryResponse:
+async def query(
+    body: QueryRequest, request: Request, claims: AuthClaims = Depends(get_current_user)
+) -> QueryResponse:
     """Search a knowledge base: the sections that answer the question, best first."""
     knowledge = _knowledge(request)
-    hits = await knowledge.find(collection=_collection(claims, body.knowledge_base), query=body.question, document=body.document, limit=body.limit)
+    hits = await knowledge.find(
+        collection=_collection(claims, body.knowledge_base),
+        query=body.question,
+        document=body.document,
+        limit=body.limit,
+    )
     return QueryResponse(
         results=[
             QueryResult(
@@ -147,18 +166,28 @@ async def query(body: QueryRequest, request: Request, claims: AuthClaims = Depen
 
 
 @router.get("/collections", response_model=CollectionListResponse)
-async def list_collections(request: Request, claims: AuthClaims = Depends(get_current_user)) -> CollectionListResponse:
+async def list_collections(
+    request: Request, claims: AuthClaims = Depends(get_current_user)
+) -> CollectionListResponse:
     """The caller's tenant's knowledge bases (and only theirs)."""
     knowledge = _knowledge(request)
     root = f"{tenant_prefix(claims.tenant_id)}/knowledge/"
     found = await knowledge.collections(under=root)
     return CollectionListResponse(
-        collections=[KnowledgeBase(name=collection[len(root) :].removesuffix("/library"), documents=count) for collection, count in found if collection.endswith("/library")]
+        collections=[
+            KnowledgeBase(
+                name=collection[len(root) :].removesuffix("/library"), documents=count
+            )
+            for collection, count in found
+            if collection.endswith("/library")
+        ]
     )
 
 
 @router.delete("/collections/{name}", response_model=DeleteCollectionResponse)
-async def delete_collection(name: str, request: Request, claims: AuthClaims = Depends(get_current_user)) -> DeleteCollectionResponse:
+async def delete_collection(
+    name: str, request: Request, claims: AuthClaims = Depends(get_current_user)
+) -> DeleteCollectionResponse:
     """Remove a knowledge base — its documents' bundles, catalog and vectors. Only the caller's tenant's."""
     knowledge = _knowledge(request)
     deleted = await knowledge.erase_under(_collection(claims, name))

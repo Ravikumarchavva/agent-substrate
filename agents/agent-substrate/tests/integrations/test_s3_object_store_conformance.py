@@ -18,7 +18,9 @@ class _Client:
 
     async def head_object(self, *, Bucket: str, Key: str) -> dict:
         if Key not in self._objects:
-            raise botocore.exceptions.ClientError({"Error": {"Code": "404", "Message": "Not Found"}}, "HeadObject")
+            raise botocore.exceptions.ClientError(
+                {"Error": {"Code": "404", "Message": "Not Found"}}, "HeadObject"
+            )
         return {}
 
 
@@ -42,6 +44,12 @@ class Bucket(FakeConnector):
 class TestS3FileStore(FileStoreConformance):
     @pytest.fixture
     async def store(self):
-        fs = S3FileStore(endpoint_url="http://localhost:9000", access_key="k", secret_key="s", bucket="test", user_quota_bytes=10**9)
+        fs = S3FileStore(
+            endpoint_url="http://localhost:9000",
+            access_key="k",
+            secret_key="s",
+            bucket="test",
+            user_quota_bytes=10**9,
+        )
         fs._connector = Bucket()  # type: ignore[assignment]
         return fs

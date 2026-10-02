@@ -17,7 +17,18 @@ CHILD = Path(__file__).resolve().parents[1] / "examples" / "child-project"
 def test_the_child_project_runs_on_the_library_alone(tmp_path: Path) -> None:
     env = {**os.environ, "PYTHONPATH": str(CHILD / "src")}
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(CHILD), "-c", str(CHILD / "pyproject.toml")],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "--rootdir",
+            str(CHILD),
+            "-c",
+            str(CHILD / "pyproject.toml"),
+        ],
         cwd=CHILD,
         env=env,
         capture_output=True,

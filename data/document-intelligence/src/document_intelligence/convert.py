@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 
 def is_legacy(data: bytes, filename: str, content_type: str | None) -> bool:
     """A binary Office file (OLE: ``.doc``, ``.ppt``, ``.xls``) or RTF — decided from the bytes, like everything else the reader sees."""
-    return data[:5] == b"{\\rtf" or sniff(data, filename, content_type or "") == Format.OLE
+    return (
+        data[:5] == b"{\\rtf" or sniff(data, filename, content_type or "") == Format.OLE
+    )
 
 
 async def convert_via_libreoffice(

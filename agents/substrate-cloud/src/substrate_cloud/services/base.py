@@ -33,7 +33,9 @@ def create_service_app(
     - Health and readiness endpoints
     - OpenTelemetry instrumentation (when available)
     """
-    setup_logging(service_name=title.lower().replace(" ", "-"))  # the application, not the library, configures logging
+    setup_logging(
+        service_name=title.lower().replace(" ", "-")
+    )  # the application, not the library, configures logging
     app = FastAPI(title=title, version=version, lifespan=lifespan)
 
     # CORS

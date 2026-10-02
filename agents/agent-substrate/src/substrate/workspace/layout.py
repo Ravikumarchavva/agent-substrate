@@ -111,7 +111,9 @@ def agent_private_prefix(
 ) -> str:
     """An agent's (or subagent's) private scratch dir, invisible to other
     agents sharing the same branch workspace."""
-    workspace = conversation_workspace_prefix(tenant_id, user_id, conversation_id, branch_id)
+    workspace = conversation_workspace_prefix(
+        tenant_id, user_id, conversation_id, branch_id
+    )
     if parent_agent_id:
         return (
             f"{workspace}/agents/{_id(parent_agent_id, 'parent agent id')}"
@@ -154,7 +156,9 @@ def conversation_artifacts_prefix(
     return f"{conversation_prefix(tenant_id, user_id, conversation_id)}/artifacts"
 
 
-def conversation_documents_prefix(tenant_id: str, user_id: str, conversation_id: str) -> str:
+def conversation_documents_prefix(
+    tenant_id: str, user_id: str, conversation_id: str
+) -> str:
     """The conversation's ``Library`` collection: documents a user gave it, as an OKF bundle (``substrate.documents.Library``).
 
     A sibling of ``workspace`` and ``artifacts``, outside ``workspace/shared`` for the same reason: that prefix is mounted into the

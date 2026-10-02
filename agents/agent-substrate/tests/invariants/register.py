@@ -124,7 +124,9 @@ def main() -> None:
     DOCUMENT.parent.mkdir(parents=True, exist_ok=True)
     DOCUMENT.write_text(render(rows))
     enforced = sum(1 for row in rows if not row.pending_reason)
-    print(f"wrote {DOCUMENT.relative_to(REPO_ROOT)}: {enforced} enforced, {len(rows) - enforced} pending")
+    print(
+        f"wrote {DOCUMENT.relative_to(REPO_ROOT)}: {enforced} enforced, {len(rows) - enforced} pending"
+    )
 
 
 if __name__ == "__main__":

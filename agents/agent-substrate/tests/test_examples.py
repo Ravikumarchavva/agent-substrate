@@ -32,12 +32,19 @@ EXPECTED = {
 
 def test_every_example_is_covered() -> None:
     present = {p.name for p in EXAMPLES.glob("*.py") if not p.name.startswith("_")}
-    assert present == set(EXPECTED), f"examples without a check, or checks without an example: {present ^ set(EXPECTED)}"
+    assert present == set(EXPECTED), (
+        f"examples without a check, or checks without an example: {present ^ set(EXPECTED)}"
+    )
 
 
 @pytest.mark.parametrize("example", sorted(EXPECTED))
 def test_example_runs_offline(example: str, tmp_path: Path) -> None:
-    env = {**os.environ, "SUBSTRATE_EXAMPLES_OFFLINE": "1", "PYTHONPATH": str(EXAMPLES), "OPENAI_API_KEY": ""}
+    env = {
+        **os.environ,
+        "SUBSTRATE_EXAMPLES_OFFLINE": "1",
+        "PYTHONPATH": str(EXAMPLES),
+        "OPENAI_API_KEY": "",
+    }
     result = subprocess.run(
         [sys.executable, str(EXAMPLES / example)],
         cwd=tmp_path,  # ``./.substrate`` lands here

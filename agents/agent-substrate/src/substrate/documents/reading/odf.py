@@ -42,8 +42,19 @@ def _inline(node: ET.Element, links: bool = True) -> str:
         elif tag == _q("text", "a"):
             text = _inline(child)
             href = child.get(_q("xlink", "href"), "")
-            parts.append(f"[{text}]({href})" if links and href.startswith(("http://", "https://", "mailto:")) and text.strip() else text)
-        elif tag in (_q("text", "span"), _q("text", "bookmark-ref"), _q("text", "meta"), _q("text", "ruby")):
+            parts.append(
+                f"[{text}]({href})"
+                if links
+                and href.startswith(("http://", "https://", "mailto:"))
+                and text.strip()
+                else text
+            )
+        elif tag in (
+            _q("text", "span"),
+            _q("text", "bookmark-ref"),
+            _q("text", "meta"),
+            _q("text", "ruby"),
+        ):
             parts.append(_inline(child, links))
         elif tag == _q("text", "note"):
             continue  # footnotes are collected by the document reader
@@ -59,8 +70,13 @@ class _Content:
         self.numbered_lists: set[str] = set()
         self.hidden_tables: set[str] = set()
         styles_xml = pkg.xml("styles.xml")
-        for container in (root.find(_q("office", "automatic-styles")), styles_xml.find(_q("office", "styles")) if styles_xml is not None else None,
-                          styles_xml.find(_q("office", "automatic-styles")) if styles_xml is not None else None):
+        for container in (
+            root.find(_q("office", "automatic-styles")),
+            styles_xml.find(_q("office", "styles")) if styles_xml is not None else None,
+            styles_xml.find(_q("office", "automatic-styles"))
+            if styles_xml is not None
+            else None,
+        ):
             if container is None:
                 continue
             for style in container.findall(_q("style", "style")):
@@ -68,11 +84,16 @@ class _Content:
                 if props is not None and props.get(_q("fo", "break-before")) == "page":
                     self.break_styles.add(style.get(_q("style", "name"), ""))
                 table_props = style.find(_q("style", "table-properties"))
-                if table_props is not None and table_props.get(_q("table", "display")) == "false":
+                if (
+                    table_props is not None
+                    and table_props.get(_q("table", "display")) == "false"
+                ):
                     self.hidden_tables.add(style.get(_q("style", "name"), ""))
             for lst in container.findall(_q("text", "list-style")):
                 first = next(iter(lst), None)
-                if first is not None and first.tag == _q("text", "list-level-style-number"):
+                if first is not None and first.tag == _q(
+                    "text", "list-level-style-number"
+                ):
                     self.numbered_lists.add(lst.get(_q("style", "name"), ""))
         self.footnotes: list[tuple[str, str]] = []
         self.first_heading: str | None = None
@@ -84,7 +105,11 @@ class _Content:
             href = image.get(_q("xlink", "href"), "")
             if href.lower().endswith((".svm", ".emf", ".wmf", ".svg")):
                 continue  # a vector replacement/preview of an object, not a picture a model can be shown
-            if not href or href.startswith(("http:", "https:", "/", "..")) or image_type(href) is None:
+            if (
+                not href
+                or href.startswith(("http:", "https:", "/", ".."))
+                or image_type(href) is None
+            ):
                 self.out.skipped_images += 1
                 continue
             data = self.pkg.read(href.lstrip("./"), limit=MAX_MEDIA_BYTES)
@@ -102,7 +127,13 @@ class _Content:
         for note in node.iter(_q("text", "note")):
             body = note.find(_q("text", "note-body"))
             ident = str(len(self.footnotes) + 1)
-            text = " ".join(" ".join(_inline(p).split()) for p in body.findall(_q("text", "p"))) if body is not None else ""
+            text = (
+                " ".join(
+                    " ".join(_inline(p).split()) for p in body.findall(_q("text", "p"))
+                )
+                if body is not None
+                else ""
+            )
             self.footnotes.append((ident, text))
             marks.append(f"[^{ident}]")
         return "".join(marks)
@@ -118,7 +149,11 @@ class _Content:
         if not text:
             return
         if node.tag == _q("text", "h") or style == "Title":
-            level = 1 if style == "Title" else min(6, int(node.get(_q("text", "outline-level"), 1) or 1))
+            level = (
+                1
+                if style == "Title"
+                else min(6, int(node.get(_q("text", "outline-level"), 1) or 1))
+            )
             flat = " ".join(text.split())
             self.first_heading = self.first_heading or (flat if level == 1 else None)
             self.out.block("#" * level + " " + flat)
@@ -127,10 +162,14 @@ class _Content:
 
     def list(self, node: ET.Element, depth: int = 0) -> None:
         numbered = node.get(_q("text", "style-name"), "") in self.numbered_lists
-        for item in node.findall(_q("text", "list-item")) + node.findall(_q("text", "list-header")):
+        for item in node.findall(_q("text", "list-item")) + node.findall(
+            _q("text", "list-header")
+        ):
             for child in item:
                 if child.tag in (_q("text", "p"), _q("text", "h")):
-                    self.paragraph(child, prefix="  " * depth + ("1. " if numbered else "- "))
+                    self.paragraph(
+                        child, prefix="  " * depth + ("1. " if numbered else "- ")
+                    )
                 elif child.tag == _q("text", "list"):
                     self.list(child, depth + 1)
 
@@ -140,10 +179,15 @@ class _Content:
             repeat = min(int(row.get(_q("table", "number-rows-repeated"), 1)), 100)
             cells: list[str] = []
             for cell in row:
-                if cell.tag not in (_q("table", "table-cell"), _q("table", "covered-table-cell")):
+                if cell.tag not in (
+                    _q("table", "table-cell"),
+                    _q("table", "covered-table-cell"),
+                ):
                     continue
                 span = int(cell.get(_q("table", "number-columns-repeated"), 1))
-                text = " ".join(" ".join(_inline(p).split()) for p in cell.iter(_q("text", "p"))).strip()
+                text = " ".join(
+                    " ".join(_inline(p).split()) for p in cell.iter(_q("text", "p"))
+                ).strip()
                 if not text and span > _REPEAT_CAP:
                     continue
                 cells.extend([text] * min(span, _REPEAT_CAP))
@@ -164,7 +208,11 @@ class _Content:
                 self.list(child)
             elif tag == _q("table", "table"):
                 self.out.block(gfm_table(self.table(child)))
-            elif tag in (_q("text", "section"), _q("text", "tracked-changes"), _q("text", "table-of-content")):
+            elif tag in (
+                _q("text", "section"),
+                _q("text", "tracked-changes"),
+                _q("text", "table-of-content"),
+            ):
                 if tag != _q("text", "tracked-changes"):
                     self.body(child)
             elif tag == _q("draw", "frame"):
@@ -193,7 +241,11 @@ def read_odf(pkg: Package, kind: str) -> tuple[list, str | None, list[str]]:
                 content.body(text)
         elif kind == "odp":
             presentation = office_body.find(_q("office", "presentation"))
-            slides = presentation.findall(_q("draw", "page")) if presentation is not None else []
+            slides = (
+                presentation.findall(_q("draw", "page"))
+                if presentation is not None
+                else []
+            )
             for number, page in enumerate(slides, start=1):
                 if number > 1:
                     content.out.new_page()
@@ -203,24 +255,41 @@ def read_odf(pkg: Package, kind: str) -> tuple[list, str | None, list[str]]:
                     box = frame.find(_q("draw", "text-box"))
                     cls = frame.get(_q("presentation", "class"), "")
                     if frame.find(_q("table", "table")) is not None:
-                        content.out.block(gfm_table(content.table(frame.find(_q("table", "table")))))  # type: ignore[arg-type]
+                        content.out.block(
+                            gfm_table(content.table(frame.find(_q("table", "table"))))
+                        )  # type: ignore[arg-type]
                     elif box is not None and cls == "title":
-                        title = " ".join(" ".join(_inline(p).split()) for p in box.iter(_q("text", "p"))).strip()
-                    elif box is not None and cls not in ("footer", "page-number", "date-time", "header"):
+                        title = " ".join(
+                            " ".join(_inline(p).split())
+                            for p in box.iter(_q("text", "p"))
+                        ).strip()
+                    elif box is not None and cls not in (
+                        "footer",
+                        "page-number",
+                        "date-time",
+                        "header",
+                    ):
                         content.body(box)
                     elif frame.find(_q("draw", "image")) is not None:
                         content._image(frame)  # noqa: SLF001
-                content.out._blocks[-1].insert(before, f"## {title or f'Slide {number}'}")  # noqa: SLF001
+                content.out._blocks[-1].insert(
+                    before, f"## {title or f'Slide {number}'}"
+                )  # noqa: SLF001
                 first_slide = first_slide or title
                 notes = page.find(_q("presentation", "notes"))
                 if notes is not None:
-                    note = " ".join(" ".join(_inline(p).split()) for p in notes.iter(_q("text", "p"))).strip()
+                    note = " ".join(
+                        " ".join(_inline(p).split())
+                        for p in notes.iter(_q("text", "p"))
+                    ).strip()
                     if note:
                         content.out.block("> Notes: " + note)
         else:
             sheets = office_body.find(_q("office", "spreadsheet"))
             first = True
-            for table in (sheets.findall(_q("table", "table")) if sheets is not None else []):
+            for table in (
+                sheets.findall(_q("table", "table")) if sheets is not None else []
+            ):
                 name = table.get(_q("table", "name"), "Sheet")
                 if table.get(_q("table", "style-name"), "") in content.hidden_tables:
                     warnings.append(f"hidden sheet {name!r} was skipped")
@@ -231,14 +300,20 @@ def read_odf(pkg: Package, kind: str) -> tuple[list, str | None, list[str]]:
                 content.out.block(f"## {name}")
                 rows = content.table(table)
                 if len(rows) > MAX_TABLE_ROWS:
-                    warnings.append(f"sheet {name!r} truncated to {MAX_TABLE_ROWS} rows")
+                    warnings.append(
+                        f"sheet {name!r} truncated to {MAX_TABLE_ROWS} rows"
+                    )
                     rows = rows[:MAX_TABLE_ROWS]
                 content.out.block(gfm_table(rows) or "_(empty sheet)_")
     if content.footnotes:
         content.out.block("\n".join(f"[^{i}]: {t}" for i, t in content.footnotes))
     if content.out.skipped_images:
         warnings.append(f"{content.out.skipped_images} image(s) could not be extracted")
-    return content.out.pages(keep_empty=True), _meta_title(pkg) or content.first_heading or first_slide, warnings
+    return (
+        content.out.pages(keep_empty=True),
+        _meta_title(pkg) or content.first_heading or first_slide,
+        warnings,
+    )
 
 
 __all__ = ["read_odf"]

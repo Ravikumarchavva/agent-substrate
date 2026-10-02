@@ -38,7 +38,9 @@ def _shared_strings(pkg: Package) -> list[str]:
     root = pkg.xml("xl/sharedStrings.xml")
     if root is None:
         return []
-    return ["".join(t.text or "" for t in si.iter(_s("t"))) for si in root.findall(_s("si"))]
+    return [
+        "".join(t.text or "" for t in si.iter(_s("t"))) for si in root.findall(_s("si"))
+    ]
 
 
 def _date_styles(pkg: Package) -> set[int]:
@@ -56,7 +58,10 @@ def _date_styles(pkg: Package) -> set[int]:
     if xfs is not None:
         for index, xf in enumerate(xfs.findall(_s("xf"))):
             number = int(xf.get("numFmtId", 0))
-            if number in _BUILTIN_DATES or (number in custom and _DATE_TOKENS.search(_QUOTED.sub("", custom[number]))):
+            if number in _BUILTIN_DATES or (
+                number in custom
+                and _DATE_TOKENS.search(_QUOTED.sub("", custom[number]))
+            ):
                 out.add(index)
     return out
 
@@ -79,7 +84,11 @@ def _date(text: str) -> str:
         return text
     if serial < 1:
         return moment.strftime("%H:%M")
-    return moment.strftime("%Y-%m-%d") if serial == int(serial) else moment.strftime("%Y-%m-%d %H:%M")
+    return (
+        moment.strftime("%Y-%m-%d")
+        if serial == int(serial)
+        else moment.strftime("%Y-%m-%d %H:%M")
+    )
 
 
 def _cell_value(cell: ET.Element, strings: list[str], dates: set[int]) -> str:
@@ -104,7 +113,13 @@ def _cell_value(cell: ET.Element, strings: list[str], dates: set[int]) -> str:
     return _number(text)
 
 
-def _sheet_rows(root: ET.Element, strings: list[str], dates: set[int], warnings: list[str], name: str) -> list[list[str]]:
+def _sheet_rows(
+    root: ET.Element,
+    strings: list[str],
+    dates: set[int],
+    warnings: list[str],
+    name: str,
+) -> list[list[str]]:
     rows: dict[int, dict[int, str]] = {}
     truncated_rows = truncated_cols = False
     data = root.find(_s("sheetData"))
@@ -145,7 +160,7 @@ def read_xlsx(pkg: Package) -> tuple[list, str | None, list[str]]:
     builder, warnings = PageBuilder(), []
     sheets = workbook.find(_s("sheets"))
     first = True
-    for sheet in (sheets.findall(_s("sheet")) if sheets is not None else []):
+    for sheet in sheets.findall(_s("sheet")) if sheets is not None else []:
         name = sheet.get("name", "Sheet")
         if sheet.get("state", "visible") != "visible":
             warnings.append(f"hidden sheet {name!r} was skipped")

@@ -16,7 +16,13 @@ from typing import Any, Protocol, Sequence, runtime_checkable
 
 from pydantic import Field
 
-from substrate.types.content import ContentBlock, JsonObject, KernelModel, TextBlock, content_blocks_to_str
+from substrate.types.content import (
+    ContentBlock,
+    JsonObject,
+    KernelModel,
+    TextBlock,
+    content_blocks_to_str,
+)
 from substrate.types.ids import new_id
 
 

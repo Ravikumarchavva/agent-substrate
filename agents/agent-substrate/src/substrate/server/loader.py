@@ -23,7 +23,9 @@ def load(reference: str, *, cwd: Path | None = None) -> Any:
         try:
             target = getattr(target, part)
         except AttributeError:
-            raise ValueError(f"{module_name!r} has no attribute {attribute!r}") from None
+            raise ValueError(
+                f"{module_name!r} has no attribute {attribute!r}"
+            ) from None
     return target
 
 

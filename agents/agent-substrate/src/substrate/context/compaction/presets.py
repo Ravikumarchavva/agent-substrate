@@ -15,8 +15,12 @@ def build_token_budget_pipeline(*, token_budget: int = 50_000) -> CompactionPipe
     """Compaction pipeline used by chat-facing agents: trims tool results and
     older tool-call groups before truncating outright, keeping recent
     context intact until the token budget is actually under pressure."""
-    from substrate.context.compaction.selective_tool_call import SelectiveToolCallCompactionStrategy
-    from substrate.context.compaction.token_budget_composed import TokenBudgetComposedStrategy
+    from substrate.context.compaction.selective_tool_call import (
+        SelectiveToolCallCompactionStrategy,
+    )
+    from substrate.context.compaction.token_budget_composed import (
+        TokenBudgetComposedStrategy,
+    )
     from substrate.context.compaction.tool_result import ToolResultCompactionStrategy
     from substrate.context.compaction.truncation import TruncationStrategy
 

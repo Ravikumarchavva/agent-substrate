@@ -170,13 +170,20 @@ class LocalLlamaServerPool:
         argv += self._extra_args
         return argv
 
-    async def _drain_stream(self, stream: asyncio.StreamReader, index: int, tag: str) -> None:
+    async def _drain_stream(
+        self, stream: asyncio.StreamReader, index: int, tag: str
+    ) -> None:
         try:
             while True:
                 line = await stream.readline()
                 if not line:
                     break
-                logger.debug("vl-worker-%d[%s]: %s", index, tag, line.decode(errors="replace").rstrip())
+                logger.debug(
+                    "vl-worker-%d[%s]: %s",
+                    index,
+                    tag,
+                    line.decode(errors="replace").rstrip(),
+                )
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - draining must never crash the pool
@@ -217,7 +224,9 @@ class LocalLlamaServerPool:
         return False
 
     async def _start_worker(self, index: int, device: str) -> None:
-        state = _LocalWorkerState(index=index, port=self._base_port + index, gpu_device=device)
+        state = _LocalWorkerState(
+            index=index, port=self._base_port + index, gpu_device=device
+        )
         self._states[index] = state
 
         proc = await self._spawn(index, device)
@@ -233,7 +242,9 @@ class LocalLlamaServerPool:
             state.stopping_intentionally = True
             await self._terminate_proc(proc)
             state.dead = True
-            raise RuntimeError(f"vl-worker-{index} on device {device} never became healthy")
+            raise RuntimeError(
+                f"vl-worker-{index} on device {device} never became healthy"
+            )
 
         state.supervisor_task = asyncio.create_task(self._supervise(state))
         self._queue.put_nowait(self._make_pool_worker(state))
@@ -261,7 +272,9 @@ class LocalLlamaServerPool:
                 return
 
             logger.warning(
-                "vl-worker-%d exited unexpectedly (code=%s)", state.index, state.proc.returncode
+                "vl-worker-%d exited unexpectedly (code=%s)",
+                state.index,
+                state.proc.returncode,
             )
             for task in state.drain_tasks:
                 task.cancel()
@@ -286,25 +299,41 @@ class LocalLlamaServerPool:
                 state.proc = proc
                 assert proc.stdout is not None and proc.stderr is not None
                 state.drain_tasks = [
-                    asyncio.create_task(self._drain_stream(proc.stdout, state.index, "stdout")),
-                    asyncio.create_task(self._drain_stream(proc.stderr, state.index, "stderr")),
+                    asyncio.create_task(
+                        self._drain_stream(proc.stdout, state.index, "stdout")
+                    ),
+                    asyncio.create_task(
+                        self._drain_stream(proc.stderr, state.index, "stderr")
+                    ),
                 ]
                 healthy = await self._wait_healthy(state.port)
                 if not healthy:
-                    logger.warning("vl-worker-%d restart did not become healthy, retrying", state.index)
+                    logger.warning(
+                        "vl-worker-%d restart did not become healthy, retrying",
+                        state.index,
+                    )
                     state.stopping_intentionally = True
                     await self._terminate_proc(proc)
                     state.stopping_intentionally = False
                     continue
-                logger.info("vl-worker-%d restarted successfully (attempt %d)", state.index, restarts)
+                logger.info(
+                    "vl-worker-%d restarted successfully (attempt %d)",
+                    state.index,
+                    restarts,
+                )
                 self._queue.put_nowait(self._make_pool_worker(state))
             except OSError as exc:
-                logger.warning("vl-worker-%d restart spawn failed: %s", state.index, exc)
+                logger.warning(
+                    "vl-worker-%d restart spawn failed: %s", state.index, exc
+                )
                 continue
 
     async def start(self) -> None:
         results = await asyncio.gather(
-            *(self._start_worker(i, device) for i, device in enumerate(self._gpu_devices)),
+            *(
+                self._start_worker(i, device)
+                for i, device in enumerate(self._gpu_devices)
+            ),
             return_exceptions=True,
         )
         failures = [(i, r) for i, r in enumerate(results) if isinstance(r, Exception)]
@@ -314,7 +343,9 @@ class LocalLlamaServerPool:
         self.worker_count = len(self._gpu_devices) - len(failures)
         self.ready = self.worker_count > 0
         if not self.ready:
-            logger.error("LocalLlamaServerPool: 0-of-%d workers healthy", len(self._gpu_devices))
+            logger.error(
+                "LocalLlamaServerPool: 0-of-%d workers healthy", len(self._gpu_devices)
+            )
 
     async def acquire(self) -> PoolWorker:
         return await self._queue.get()
@@ -375,15 +406,21 @@ class RemoteInferencePool:
     client on first use, same as any other misconfigured remote endpoint in
     this codebase. Implements :class:`InferencePool`."""
 
-    def __init__(self, endpoints: list[InferenceEndpoint], *, layout_devices: list[str]) -> None:
+    def __init__(
+        self, endpoints: list[InferenceEndpoint], *, layout_devices: list[str]
+    ) -> None:
         self._endpoints = endpoints
         self._layout_devices = layout_devices
         self.ready = True
         self.worker_count = len(endpoints)
         self._queue: asyncio.Queue[PoolWorker] = asyncio.Queue()
         for i, endpoint in enumerate(endpoints):
-            layout_device = layout_devices[i % len(layout_devices)] if layout_devices else "cpu"
-            self._queue.put_nowait(PoolWorker(index=i, endpoint=endpoint, layout_device=layout_device))
+            layout_device = (
+                layout_devices[i % len(layout_devices)] if layout_devices else "cpu"
+            )
+            self._queue.put_nowait(
+                PoolWorker(index=i, endpoint=endpoint, layout_device=layout_device)
+            )
 
     async def start(self) -> None:
         return None

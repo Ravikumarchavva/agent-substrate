@@ -26,11 +26,19 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-TERMINAL_KINDS = frozenset({"run.completed", "run.failed", "run.cancelled", "run.truncated"})
+TERMINAL_KINDS = frozenset(
+    {"run.completed", "run.failed", "run.cancelled", "run.truncated"}
+)
 Mode = Literal["blip", "death"]
 
 # Every method that writes to the store.
-_WRITES: tuple[str, ...] = ("commit", "create_run", "deliver", "signal", "request_cancel")
+_WRITES: tuple[str, ...] = (
+    "commit",
+    "create_run",
+    "deliver",
+    "signal",
+    "request_cancel",
+)
 
 
 class InjectedStoreFailure(Exception):
@@ -71,7 +79,9 @@ def _describe(method: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> str
 class CrashInjector:
     """Records every write to a runtime's store, and fails the ``fail_at``-th."""
 
-    def __init__(self, runtime: Any, *, fail_at: int | None = None, mode: Mode = "blip") -> None:
+    def __init__(
+        self, runtime: Any, *, fail_at: int | None = None, mode: Mode = "blip"
+    ) -> None:
         self.calls: list[DurableCall] = []
         self.fail_at = fail_at
         self.mode = mode
@@ -81,7 +91,9 @@ class CrashInjector:
             original = getattr(store, method)
             setattr(store, method, self._wrap(method, original))
 
-    def _wrap(self, method: str, original: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+    def _wrap(
+        self, method: str, original: Callable[..., Awaitable[Any]]
+    ) -> Callable[..., Awaitable[Any]]:
         async def wrapped(*args: Any, **kwargs: Any) -> Any:
             call = DurableCall(method, _describe(method, args, kwargs))
             index = len(self.calls)
@@ -117,11 +129,14 @@ class Observation:
         where = f"#{self.index} {self.crashed_at}" if self.crashed_at else "no crash"
         return (
             f"[{self.mode} {where}] terminal={self.terminal} terminal_entries={self.terminal_entries} "
-            f"side_effects={len(self.side_effects)}" + (" TIMED_OUT" if self.timed_out else "")
+            f"side_effects={len(self.side_effects)}"
+            + (" TIMED_OUT" if self.timed_out else "")
         )
 
 
-async def observe_run(runtime: Any, run_id: str, *, timeout: float = 8.0, settle: float = 0.4) -> tuple[str | None, list[str]]:
+async def observe_run(
+    runtime: Any, run_id: str, *, timeout: float = 8.0, settle: float = 0.4
+) -> tuple[str | None, list[str]]:
     """Wait for a terminal entry, then read the whole durable log.
 
     Reads on after the first terminal entry on purpose: a duplicated terminal entry is
@@ -141,7 +156,9 @@ async def observe_run(runtime: Any, run_id: str, *, timeout: float = 8.0, settle
     except asyncio.TimeoutError:
         timed_out = True
     await asyncio.sleep(settle)
-    kinds = [str(e.kind) for e in await runtime.store.read_events(run_id, durable_only=True)]
+    kinds = [
+        str(e.kind) for e in await runtime.store.read_events(run_id, durable_only=True)
+    ]
     if timed_out:
         kinds.append("<timed-out>")
     return terminal, kinds
@@ -150,7 +167,9 @@ async def observe_run(runtime: Any, run_id: str, *, timeout: float = 8.0, settle
 Scenario = Callable[[int | None, Mode], Awaitable[Observation]]
 
 
-async def crash_matrix(scenario: Scenario, *, mode: Mode = "blip", limit: int | None = None) -> list[Observation]:
+async def crash_matrix(
+    scenario: Scenario, *, mode: Mode = "blip", limit: int | None = None
+) -> list[Observation]:
     """Run ``scenario`` clean, then once per write, failing that write."""
     clean = await scenario(None, mode)
     points = len(clean.calls) if limit is None else min(len(clean.calls), limit)

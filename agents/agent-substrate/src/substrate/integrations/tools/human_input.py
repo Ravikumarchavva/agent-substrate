@@ -477,7 +477,9 @@ class AskHumanTool:
                 await ctx.log_once(RunLogKind.INPUT_REQUESTED, log_payload)
             except Exception:
                 pass
-            signal_payload = await ctx.sleep_until_signal(approval_signal(request.request_id))
+            signal_payload = await ctx.sleep_until_signal(
+                approval_signal(request.request_id)
+            )
             self._request_count += 1
             return self._shape_result(request, signal_payload)
 

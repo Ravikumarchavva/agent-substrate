@@ -75,7 +75,9 @@ async def lifespan(app):
         app.state.event_bus = event_bus
 
         app.state.history = store.threads
-        app.state.short_term_memory = await build_short_term_memory(store=store, redis_url=redis_url)
+        app.state.short_term_memory = await build_short_term_memory(
+            store=store, redis_url=redis_url
+        )
 
         app.state.model_client = create_model_client(
             os.environ.get("MODEL_NAME", "gpt-4o"),

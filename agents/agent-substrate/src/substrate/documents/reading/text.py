@@ -44,7 +44,9 @@ def plain_text(markdown: str) -> str:
     return re.sub(r"[ \t]+", " ", re.sub(r"\n{3,}", "\n\n", text)).strip()
 
 
-def csv_to_markdown(text: str, *, delimiter: str | None = None) -> tuple[str, list[str]]:
+def csv_to_markdown(
+    text: str, *, delimiter: str | None = None
+) -> tuple[str, list[str]]:
     """A CSV/TSV document as a GFM table (sniffing the delimiter), and any truncation warnings."""
     warnings: list[str] = []
     sample = text[:8192]
@@ -77,4 +79,11 @@ def json_to_markdown(text: str) -> str:
     return "```json\n" + text + "\n```"
 
 
-__all__ = ["MAX_TABLE_COLUMNS", "MAX_TABLE_ROWS", "csv_to_markdown", "decode_text", "json_to_markdown", "plain_text"]
+__all__ = [
+    "MAX_TABLE_COLUMNS",
+    "MAX_TABLE_ROWS",
+    "csv_to_markdown",
+    "decode_text",
+    "json_to_markdown",
+    "plain_text",
+]

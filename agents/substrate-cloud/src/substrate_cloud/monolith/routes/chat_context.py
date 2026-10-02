@@ -119,7 +119,9 @@ def _library_metadata(meta: Any, thread_id: str) -> dict[str, str]:
     }
 
 
-async def _library_context(library: Any, collection: str | None, meta: Any) -> str | None:
+async def _library_context(
+    library: Any, collection: str | None, meta: Any
+) -> str | None:
     """What the model is shown of a filed document: its text if it is small, else its outline and how to read the rest."""
     if not collection or not meta.checksum_sha256:
         return None
@@ -132,7 +134,9 @@ async def _library_context(library: Any, collection: str | None, meta: Any) -> s
     if not outline.more and total <= INLINE_DOCUMENT_TOKENS:
         parts = []
         for section in outline.sections:
-            passage = await library.read(collection=collection, document=document, section=section.position)
+            passage = await library.read(
+                collection=collection, document=document, section=section.position
+            )
             if passage is not None:
                 parts.append(passage.text)
         if parts:
@@ -141,7 +145,10 @@ async def _library_context(library: Any, collection: str | None, meta: Any) -> s
         f"[File: {meta.original_name} — {info.pages} pages, {info.sections} sections, too long to include; "
         f"read it with the documents tool (document id: {document})]"
     ]
-    lines += [f"{s.position}. {s.title} (pp. {s.first_page}–{s.last_page})" for s in outline.sections]
+    lines += [
+        f"{s.position}. {s.title} (pp. {s.first_page}–{s.last_page})"
+        for s in outline.sections
+    ]
     if outline.more:
         lines.append(f"(+{outline.more} more sections)")
     return "\n".join(lines)
@@ -322,7 +329,9 @@ async def _build_file_context(
             # `documents` tool; a small one is also put in front of the model here, a large one as its outline. Cache hit: already
             # filed (files are immutable once uploaded), nothing to redo on every later reference.
             if ctx.library is not None:
-                collection = documents_collection(claims.tenant_id, claims.sub, str(body.thread_id))
+                collection = documents_collection(
+                    claims.tenant_id, claims.sub, str(body.thread_id)
+                )
                 if meta.rag_ingested_at is None:
                     already_staged_for_this_thread = (
                         meta.staged_at is not None
@@ -332,7 +341,9 @@ async def _build_file_context(
                     if not already_staged_for_this_thread:
                         # Not staged at upload (thread_id wasn't known then), or referenced from a different thread than it was
                         # uploaded under — file it now, under *this* message's real thread_id.
-                        data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
+                        data = await ctx.files_for(claims.tenant_id).download(
+                            meta.object_key
+                        )
                         try:
                             await ctx.library.add(
                                 data,

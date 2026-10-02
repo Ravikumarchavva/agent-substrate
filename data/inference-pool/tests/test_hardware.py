@@ -19,7 +19,9 @@ def _no_cuda_visible_devices_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 
 
-def test_detect_never_raises_with_everything_failing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_detect_never_raises_with_everything_failing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(hardware, "_detect_gpus_pynvml", lambda: None)
     monkeypatch.setattr(hardware, "_detect_gpus_nvidia_smi", lambda: None)
     monkeypatch.setattr(hardware, "_detect_gpus_paddle", lambda: None)
@@ -32,7 +34,9 @@ def test_detect_never_raises_with_everything_failing(monkeypatch: pytest.MonkeyP
     assert profile.cpu_count >= 1
 
 
-def test_cuda_visible_devices_empty_string_means_zero_gpus(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cuda_visible_devices_empty_string_means_zero_gpus(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
 
     # Even if pynvml would report GPUs, the override should short-circuit.
@@ -48,7 +52,9 @@ def test_cuda_visible_devices_empty_string_means_zero_gpus(monkeypatch: pytest.M
     assert profile.source == "cuda_visible_devices_override"
 
 
-def test_pynvml_not_installed_falls_back_to_nvidia_smi(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pynvml_not_installed_falls_back_to_nvidia_smi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     real_import = builtins.__import__
 
     def _fake_import(name: str, *args: object, **kwargs: object) -> object:
@@ -60,7 +66,9 @@ def test_pynvml_not_installed_falls_back_to_nvidia_smi(monkeypatch: pytest.Monke
     monkeypatch.setattr(
         hardware,
         "_detect_gpus_nvidia_smi",
-        lambda: [hardware.GpuInfo(index=0, name="stub-gpu", total_mib=4096, free_mib=3000)],
+        lambda: [
+            hardware.GpuInfo(index=0, name="stub-gpu", total_mib=4096, free_mib=3000)
+        ],
     )
     monkeypatch.setattr(hardware, "_detect_gpus_paddle", lambda: None)
 
@@ -89,10 +97,14 @@ def test_nvidia_smi_parses_csv_output(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert gpus is not None
     assert len(gpus) == 2
-    assert gpus[0] == hardware.GpuInfo(index=0, name="NVIDIA A100", total_mib=40960, free_mib=39000)
+    assert gpus[0] == hardware.GpuInfo(
+        index=0, name="NVIDIA A100", total_mib=40960, free_mib=39000
+    )
 
 
-def test_paddle_fallback_used_last_and_assumes_conservative_vram(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_paddle_fallback_used_last_and_assumes_conservative_vram(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(hardware, "_detect_gpus_pynvml", lambda: None)
     monkeypatch.setattr(hardware, "_detect_gpus_nvidia_smi", lambda: None)
 
@@ -136,7 +148,9 @@ def test_paddle_fallback_used_last_and_assumes_conservative_vram(monkeypatch: py
     assert all(g.total_mib == 4096 for g in profile.gpus)
 
 
-def test_gpu_detector_raising_unexpectedly_does_not_crash_detect(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpu_detector_raising_unexpectedly_does_not_crash_detect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def _boom() -> None:
         raise RuntimeError("simulated crash inside a detector")
 
@@ -149,7 +163,9 @@ def test_gpu_detector_raising_unexpectedly_does_not_crash_detect(monkeypatch: py
     assert profile.gpus == []
 
 
-def test_cpu_count_never_raises_and_is_at_least_one(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cpu_count_never_raises_and_is_at_least_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Simulate no /sys/fs/cgroup/cpu.max (not in a container / cgroup v1) by
     # making `open` raise for that specific path only.
     real_open = builtins.open
@@ -166,7 +182,9 @@ def test_cpu_count_never_raises_and_is_at_least_one(monkeypatch: pytest.MonkeyPa
     assert count >= 1
 
 
-def test_cpu_count_respects_cgroup_quota(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cpu_count_respects_cgroup_quota(
+    tmp_path: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Cleanly injectable: _detect_cpu_count() opens a hardcoded path, so we
     # monkeypatch `open` to redirect just that path to a tmp file simulating
     # cgroup v2's cpu.max content ("<quota> <period>").
@@ -187,14 +205,18 @@ def test_cpu_count_respects_cgroup_quota(tmp_path: object, monkeypatch: pytest.M
     # constraint being tested.
     monkeypatch.setattr(hardware.os, "cpu_count", lambda: 32)
     if hasattr(hardware.os, "sched_getaffinity"):
-        monkeypatch.setattr(hardware.os, "sched_getaffinity", lambda _pid: set(range(32)))
+        monkeypatch.setattr(
+            hardware.os, "sched_getaffinity", lambda _pid: set(range(32))
+        )
 
     count = hardware._detect_cpu_count()
 
     assert count == 2
 
 
-def test_ram_detection_defaults_when_meminfo_unreadable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ram_detection_defaults_when_meminfo_unreadable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     real_open = builtins.open
 
     def _fake_open(path: object, *args: object, **kwargs: object) -> object:
@@ -209,7 +231,9 @@ def test_ram_detection_defaults_when_meminfo_unreadable(monkeypatch: pytest.Monk
     assert ram == hardware._DEFAULT_RAM_MIB
 
 
-def test_avx512_defaults_false_when_cpuinfo_unreadable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_avx512_defaults_false_when_cpuinfo_unreadable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     real_open = builtins.open
 
     def _fake_open(path: object, *args: object, **kwargs: object) -> object:

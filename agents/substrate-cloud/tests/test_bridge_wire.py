@@ -31,5 +31,3 @@ def test_bridge_input_request() -> None:
 
 def test_bridge_unknown_returns_none() -> None:
     assert bridge_event_to_wire({"type": "something_else"}) is None
-
-

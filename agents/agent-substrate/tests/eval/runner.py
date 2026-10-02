@@ -68,7 +68,9 @@ async def run_retrieval_eval(
 
     for eval_query in dataset.queries:
         relevant = eval_query.relevant_doc_ids
-        query_vec = (await embedding_client.embed([eval_query.query], query=True)).embeddings[0]
+        query_vec = (
+            await embedding_client.embed([eval_query.query], query=True)
+        ).embeddings[0]
 
         dense = await store.search(query_vec, collection=collection, limit=dense_k)
         lexical = await store.lexical_search(
@@ -84,8 +86,15 @@ async def run_retrieval_eval(
         )
         prefiltered = sorted(hybrid, key=lambda r: r.score, reverse=True)[:rerank_top_n]
         if reranker is not None and prefiltered:
-            scores = await reranker.rerank(eval_query.query, [r.to_text() for r in prefiltered])
-            final = [r for _s, r in sorted(zip(scores, prefiltered, strict=True), key=lambda pair: -pair[0])][:final_k]
+            scores = await reranker.rerank(
+                eval_query.query, [r.to_text() for r in prefiltered]
+            )
+            final = [
+                r
+                for _s, r in sorted(
+                    zip(scores, prefiltered, strict=True), key=lambda pair: -pair[0]
+                )
+            ][:final_k]
         else:
             final = prefiltered[:final_k]
 

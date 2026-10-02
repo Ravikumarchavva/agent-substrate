@@ -37,11 +37,21 @@ async def test_extract_candidates_directive_and_semantic(
     prov = MemoryProvenance(source_session_id="s1", source_branch_id="main")
 
     messages = [
-        ChatMessage(role=Role.USER, content=[TextBlock(text="Please always use TypeScript with strict null checks.")]),
-        ChatMessage(role=Role.USER, content=[TextBlock(text="The database runs PostgreSQL 16 on port 5432.")]),
+        ChatMessage(
+            role=Role.USER,
+            content=[
+                TextBlock(text="Please always use TypeScript with strict null checks.")
+            ],
+        ),
+        ChatMessage(
+            role=Role.USER,
+            content=[TextBlock(text="The database runs PostgreSQL 16 on port 5432.")],
+        ),
     ]
 
-    candidates = await manager.extract_candidates(messages, namespace=ns, provenance=prov)
+    candidates = await manager.extract_candidates(
+        messages, namespace=ns, provenance=prov
+    )
     assert len(candidates) == 2
 
     # First is a DIRECTIVE candidate
@@ -55,17 +65,23 @@ async def test_extract_candidates_directive_and_semantic(
     assert "PostgreSQL 16" in candidates[1].to_text()
 
     # Verify they were saved as CANDIDATE in store
-    cand_matches = await store.query(MemoryQuery(namespace=ns, statuses=(MemoryStatus.CANDIDATE,)))
+    cand_matches = await store.query(
+        MemoryQuery(namespace=ns, statuses=(MemoryStatus.CANDIDATE,))
+    )
     assert len(cand_matches) == 2
 
     # Verify no ACTIVE memories exist yet
-    active_matches = await store.query(MemoryQuery(namespace=ns, statuses=(MemoryStatus.ACTIVE,)))
+    active_matches = await store.query(
+        MemoryQuery(namespace=ns, statuses=(MemoryStatus.ACTIVE,))
+    )
     assert len(active_matches) == 0
 
 
 async def test_promote_candidate(manager: MemoryManager, store: Memory) -> None:
     ns = MemoryNamespace(tenant_id="acme", user_id="user-1")
-    cand = MemoryRecord.candidate("User prefers dark mode.", category=MemoryCategory.DIRECTIVE, namespace=ns)
+    cand = MemoryRecord.candidate(
+        "User prefers dark mode.", category=MemoryCategory.DIRECTIVE, namespace=ns
+    )
     await store.save(cand)
 
     # Promote to ACTIVE
@@ -134,4 +150,3 @@ async def test_discard_branch(manager: MemoryManager, store: Memory) -> None:
 
     # Main active memory remains
     assert await store.get(ns, active_main.id) is not None
-

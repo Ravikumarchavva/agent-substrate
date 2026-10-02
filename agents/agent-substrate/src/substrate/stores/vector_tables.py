@@ -77,7 +77,11 @@ CREATE TABLE IF NOT EXISTS vector_spaces (
     space TEXT NOT NULL,
     dims INTEGER NOT NULL
 );
-""" + ("ALTER TABLE vector_docs ALTER COLUMN embedding DROP NOT NULL;\n" if database.dialect == "postgresql" else "")
+""" + (
+        "ALTER TABLE vector_docs ALTER COLUMN embedding DROP NOT NULL;\n"
+        if database.dialect == "postgresql"
+        else ""
+    )
 
 
 SCHEMA = [_vector_schema, _spaces_schema]
@@ -123,12 +127,19 @@ def _embedding(row: Row) -> list[float] | None:
 
 def _document(row: Row) -> Document:
     data = json.loads(row["document_json"])
-    return Document(id=row["id"], content=data["content"], metadata=data["metadata"], embedding=_embedding(row))
+    return Document(
+        id=row["id"],
+        content=data["content"],
+        metadata=data["metadata"],
+        embedding=_embedding(row),
+    )
 
 
 def _result(row: Row, score: float) -> SearchResult:
     data = json.loads(row["document_json"])
-    return SearchResult(id=row["id"], content=data["content"], score=score, metadata=data["metadata"])
+    return SearchResult(
+        id=row["id"], content=data["content"], score=score, metadata=data["metadata"]
+    )
 
 
 def _matches(row: Row, filter: dict[str, Any] | None) -> bool:
@@ -166,9 +177,17 @@ class Vectors:
 
     async def _ensure_index(self, dims: int) -> None:
         """PostgreSQL: the HNSW index for vectors of this width, created the first time one is stored."""
-        if not self._pg or dims > _ANN_MAX_DIMS or (name := f"vector_ann_{dims}") in self._store._ensured:
+        if (
+            not self._pg
+            or dims > _ANN_MAX_DIMS
+            or (name := f"vector_ann_{dims}") in self._store._ensured
+        ):
             return
-        kind, ops = ("halfvec", "halfvec_cosine_ops") if dims > _HALF_ABOVE else ("vector", "vector_cosine_ops")
+        kind, ops = (
+            ("halfvec", "halfvec_cosine_ops")
+            if dims > _HALF_ABOVE
+            else ("vector", "vector_cosine_ops")
+        )
         await self._store.database.script(
             f"CREATE INDEX IF NOT EXISTS {name} ON vector_docs USING hnsw ((embedding::{kind}({dims})) {ops}) WHERE dims = {dims}"
         )
@@ -176,17 +195,39 @@ class Vectors:
 
     # ── write ────────────────────────────────────────────────────────────────
 
-    async def add(self, documents: list[Document], *, collection: str = "default", space: str | None = None) -> list[str]:
+    async def add(
+        self,
+        documents: list[Document],
+        *,
+        collection: str = "default",
+        space: str | None = None,
+    ) -> list[str]:
         """Insert documents that are not there yet; one already stored under the same id is left as it is."""
         return await self._write(documents, collection, replace=False, space=space)
 
-    async def upsert(self, documents: list[Document], *, collection: str = "default", space: str | None = None) -> list[str]:
+    async def upsert(
+        self,
+        documents: list[Document],
+        *,
+        collection: str = "default",
+        space: str | None = None,
+    ) -> list[str]:
         """Insert documents, replacing any stored under the same id."""
         return await self._write(documents, collection, replace=True, space=space)
 
-    async def _write(self, documents: list[Document], collection: str, *, replace: bool, space: str | None) -> list[str]:
+    async def _write(
+        self,
+        documents: list[Document],
+        collection: str,
+        *,
+        replace: bool,
+        space: str | None,
+    ) -> list[str]:
         async def op(tx: Tx) -> list[str]:
-            known = await tx.fetchone("SELECT dims FROM vector_docs WHERE collection = ? AND dims > 0 LIMIT 1", collection)
+            known = await tx.fetchone(
+                "SELECT dims FROM vector_docs WHERE collection = ? AND dims > 0 LIMIT 1",
+                collection,
+            )
             width = known["dims"] if known else None
             for doc in documents:
                 if doc.embedding is None:
@@ -218,7 +259,9 @@ class Vectors:
                     collection,
                     doc.id,
                     doc.to_text(),
-                    json.dumps({"content": dumped["content"], "metadata": dumped["metadata"]}),
+                    json.dumps(
+                        {"content": dumped["content"], "metadata": dumped["metadata"]}
+                    ),
                     json.dumps(dumped["metadata"]),
                     stored,
                     len(vector) if vector is not None else 0,
@@ -227,17 +270,28 @@ class Vectors:
             return [doc.id for doc in documents]
 
         written = await self._run(op)
-        embedded = next((doc.embedding for doc in documents if doc.embedding is not None), None)
+        embedded = next(
+            (doc.embedding for doc in documents if doc.embedding is not None), None
+        )
         if embedded is not None:
             await self._ensure_index(len(embedded))
         return written
 
     @staticmethod
-    async def _check_space(tx: Tx, collection: str, space: str, width: int, *, record: bool) -> None:
-        row = await tx.fetchone("SELECT space, dims FROM vector_spaces WHERE collection = ?", collection)
+    async def _check_space(
+        tx: Tx, collection: str, space: str, width: int, *, record: bool
+    ) -> None:
+        row = await tx.fetchone(
+            "SELECT space, dims FROM vector_spaces WHERE collection = ?", collection
+        )
         if row is None:
             if record:
-                await tx.execute("INSERT INTO vector_spaces (collection, space, dims) VALUES (?, ?, ?)", collection, space, width)
+                await tx.execute(
+                    "INSERT INTO vector_spaces (collection, space, dims) VALUES (?, ?, ?)",
+                    collection,
+                    space,
+                    width,
+                )
             return
         if row["space"] != space or int(row["dims"]) != width:
             raise VectorSpaceError(
@@ -250,12 +304,16 @@ class Vectors:
         """``(embedder, width)`` the collection's vectors came from, if a writer named it; ``None`` if it never did."""
 
         async def op(tx: Tx) -> tuple[str, int] | None:
-            row = await tx.fetchone("SELECT space, dims FROM vector_spaces WHERE collection = ?", collection)
+            row = await tx.fetchone(
+                "SELECT space, dims FROM vector_spaces WHERE collection = ?", collection
+            )
             return (row["space"], int(row["dims"])) if row else None
 
         return await self._run(op)
 
-    async def unembedded(self, *, collection: str = "default", limit: int = 500) -> list[Document]:
+    async def unembedded(
+        self, *, collection: str = "default", limit: int = 500
+    ) -> list[Document]:
         """Documents stored without an embedding (the embedder was unavailable), oldest first, ``limit`` at a time."""
 
         async def op(tx: Tx) -> list[Document]:
@@ -268,14 +326,23 @@ class Vectors:
 
         return await self._run(op)
 
-    async def delete_where(self, *, collection: str = "default", filter: dict[str, Any]) -> int:
+    async def delete_where(
+        self, *, collection: str = "default", filter: dict[str, Any]
+    ) -> int:
         """Delete the documents of ``collection`` whose metadata has every key of ``filter`` equal to its value. Returns the count."""
 
         async def op(tx: Tx) -> int:
-            rows = await tx.fetchall("SELECT id, metadata_json FROM vector_docs WHERE collection = ?", collection)
+            rows = await tx.fetchall(
+                "SELECT id, metadata_json FROM vector_docs WHERE collection = ?",
+                collection,
+            )
             ids = [row["id"] for row in rows if _matches(row, filter)]
             for doc_id in ids:
-                await tx.execute("DELETE FROM vector_docs WHERE collection = ? AND id = ?", collection, doc_id)
+                await tx.execute(
+                    "DELETE FROM vector_docs WHERE collection = ? AND id = ?",
+                    collection,
+                    doc_id,
+                )
             return len(ids)
 
         return await self._run(op)
@@ -284,14 +351,20 @@ class Vectors:
         async def op(tx: Tx) -> int:
             removed = 0
             for doc_id in ids:
-                removed += await tx.execute("DELETE FROM vector_docs WHERE collection = ? AND id = ?", collection, doc_id)
+                removed += await tx.execute(
+                    "DELETE FROM vector_docs WHERE collection = ? AND id = ?",
+                    collection,
+                    doc_id,
+                )
             return removed
 
         return await self._run(op)
 
     # ── read ─────────────────────────────────────────────────────────────────
 
-    async def get(self, ids: list[str], *, collection: str = "default") -> list[Document]:
+    async def get(
+        self, ids: list[str], *, collection: str = "default"
+    ) -> list[Document]:
         async def op(tx: Tx) -> list[Document]:
             found: list[Document] = []
             for doc_id in ids:
@@ -321,19 +394,34 @@ class Vectors:
 
         async def op(tx: Tx) -> list[SearchResult]:
             if space is not None:
-                await self._check_space(tx, collection, space, len(query_embedding), record=False)
-            return [_result(row, score) for score, row in await self._rank(tx, query_embedding, collection, limit, filter)]
+                await self._check_space(
+                    tx, collection, space, len(query_embedding), record=False
+                )
+            return [
+                _result(row, score)
+                for score, row in await self._rank(
+                    tx, query_embedding, collection, limit, filter
+                )
+            ]
 
         return await self._run(op)
 
     async def _rank(
-        self, tx: Tx, query: list[float], collection: str, limit: int, filter: dict[str, Any] | None
+        self,
+        tx: Tx,
+        query: list[float],
+        collection: str,
+        limit: int,
+        filter: dict[str, Any] | None,
     ) -> list[tuple[float, Row]]:
         if self._pg:
             return await self._rank_pg(tx, query, collection, limit, filter)
         q = array("f", query)
         q_norm = _norm(query)
-        rows = await tx.fetchall("SELECT * FROM vector_docs WHERE collection = ? AND dims > 0 ORDER BY seq", collection)
+        rows = await tx.fetchall(
+            "SELECT * FROM vector_docs WHERE collection = ? AND dims > 0 ORDER BY seq",
+            collection,
+        )
         if len(rows) > _SCAN_WARN_ROWS and collection not in self._warned:
             self._warned.add(collection)
             logger.warning(
@@ -351,14 +439,26 @@ class Vectors:
                     # than disappearing, so it can still be returned when nothing is closer.
                     out.append((0.0, -position, row))
                 else:
-                    out.append((sum(map(mul, q, _unpack(row["embedding"]))) / (q_norm * row["norm"]), -position, row))
+                    out.append(
+                        (
+                            sum(map(mul, q, _unpack(row["embedding"])))
+                            / (q_norm * row["norm"]),
+                            -position,
+                            row,
+                        )
+                    )
             return out
 
         best = heapq.nlargest(limit, scored(), key=lambda item: (item[0], item[1]))
         return [(score, row) for score, _position, row in best]
 
     async def _rank_pg(
-        self, tx: Tx, query: list[float], collection: str, limit: int, filter: dict[str, Any] | None
+        self,
+        tx: Tx,
+        query: list[float],
+        collection: str,
+        limit: int,
+        filter: dict[str, Any] | None,
     ) -> list[tuple[float, Row]]:
         """The nearest by cosine, in the database. The distance expression is the HNSW index's own, so the index is used;
         a document with no direction (a zero vector) scores 0, as in the exact search."""
@@ -377,7 +477,9 @@ class Vectors:
         kind = "halfvec" if dims > _HALF_ABOVE else "vector"
         distance = f"d.embedding::{kind}({dims}) <=> ?::text::{kind}({dims})"
         text = _vector_text(query)
-        await tx.execute("SET LOCAL hnsw.iterative_scan = strict_order")  # keep filling the limit past rows the filter drops
+        await tx.execute(
+            "SET LOCAL hnsw.iterative_scan = strict_order"
+        )  # keep filling the limit past rows the filter drops
         rows = await tx.fetchall(
             f"SELECT {light}, CASE WHEN d.norm = 0 THEN 0.0 ELSE 1 - ({distance}) END AS score FROM vector_docs d "
             f"WHERE d.collection = ? AND d.dims = {int(dims)}{where} ORDER BY {distance} LIMIT ?",
@@ -403,19 +505,35 @@ class Vectors:
         one query, not across queries."""
 
         async def op(tx: Tx) -> list[SearchResult]:
-            return [_result(row, score) for row, score in await self._lexical(tx, query_text, collection, limit, filter, match)]
+            return [
+                _result(row, score)
+                for row, score in await self._lexical(
+                    tx, query_text, collection, limit, filter, match
+                )
+            ]
 
         return await self._run(op)
 
     async def _lexical(
-        self, tx: Tx, query_text: str, collection: str, limit: int, filter: dict[str, Any] | None, match_mode: str = "all"
+        self,
+        tx: Tx,
+        query_text: str,
+        collection: str,
+        limit: int,
+        filter: dict[str, Any] | None,
+        match_mode: str = "all",
     ) -> list[tuple[Row, float]]:
         query_words = textsearch.terms(query_text)
         if not query_words:
             return []
         dialect = self._store.database.dialect
         source, match, match_params = textsearch.ranked(
-            dialect, index="vector_fts", table="vector_docs", alias="d", query_words=query_words, match=match_mode
+            dialect,
+            index="vector_fts",
+            table="vector_docs",
+            alias="d",
+            query_words=query_words,
+            match=match_mode,
         )
         score = textsearch.score(dialect, index="vector_fts", alias="d")
         if self._pg:
@@ -458,9 +576,13 @@ class Vectors:
 
         async def op(tx: Tx) -> list[SearchResult]:
             if space is not None:
-                await self._check_space(tx, collection, space, len(query_embedding), record=False)
+                await self._check_space(
+                    tx, collection, space, len(query_embedding), record=False
+                )
             dense = await self._rank(tx, query_embedding, collection, dense_k, filter)
-            lexical = await self._lexical(tx, query_text, collection, lexical_k, filter, "any")
+            lexical = await self._lexical(
+                tx, query_text, collection, lexical_k, filter, "any"
+            )
             fused: dict[str, tuple[float, Row]] = {}
             for rank, (_score, row) in enumerate(dense, start=1):
                 fused[row["id"]] = (1.0 / (rrf_k + rank), row)
@@ -476,14 +598,23 @@ class Vectors:
 
     async def list_collections(self) -> list[str]:
         async def op(tx: Tx) -> list[str]:
-            return [row["collection"] for row in await tx.fetchall("SELECT DISTINCT collection FROM vector_docs ORDER BY collection")]
+            return [
+                row["collection"]
+                for row in await tx.fetchall(
+                    "SELECT DISTINCT collection FROM vector_docs ORDER BY collection"
+                )
+            ]
 
         return await self._run(op)
 
     async def delete_collection(self, collection: str) -> int:
         async def op(tx: Tx) -> int:
-            await tx.execute("DELETE FROM vector_spaces WHERE collection = ?", collection)
-            return await tx.execute("DELETE FROM vector_docs WHERE collection = ?", collection)
+            await tx.execute(
+                "DELETE FROM vector_spaces WHERE collection = ?", collection
+            )
+            return await tx.execute(
+                "DELETE FROM vector_docs WHERE collection = ?", collection
+            )
 
         return await self._run(op)
 
@@ -496,9 +627,13 @@ class Vectors:
                 new,
                 old,
             )
-            moved = await tx.execute("UPDATE vector_docs SET collection = ? WHERE collection = ?", new, old)
+            moved = await tx.execute(
+                "UPDATE vector_docs SET collection = ? WHERE collection = ?", new, old
+            )
             await tx.execute("DELETE FROM vector_spaces WHERE collection = ?", new)
-            await tx.execute("UPDATE vector_spaces SET collection = ? WHERE collection = ?", new, old)
+            await tx.execute(
+                "UPDATE vector_spaces SET collection = ? WHERE collection = ?", new, old
+            )
             return moved
 
         return await self._run(op)
@@ -508,9 +643,15 @@ class Vectors:
         clause, params = under("collection", name)
 
         async def op(tx: Tx) -> int:
-            erased = await tx.execute(f"DELETE FROM vector_docs WHERE {clause}", *params)
+            erased = await tx.execute(
+                f"DELETE FROM vector_docs WHERE {clause}", *params
+            )
             await tx.execute(f"DELETE FROM vector_spaces WHERE {clause}", *params)
-            if erased and (compact := textsearch.compact(self._store.database.dialect, index="vector_fts")):
+            if erased and (
+                compact := textsearch.compact(
+                    self._store.database.dialect, index="vector_fts"
+                )
+            ):
                 # The delete trigger only marks index entries deleted; rewriting the index drops the words themselves.
                 await tx.execute(compact)
             return erased

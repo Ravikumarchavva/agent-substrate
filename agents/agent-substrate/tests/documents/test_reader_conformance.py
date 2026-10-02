@@ -10,7 +10,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from substrate.documents import Reader
-from substrate.testing.conformance.document_extractor import DocumentExtractorConformance, pdf
+from substrate.testing.conformance.document_extractor import (
+    DocumentExtractorConformance,
+    pdf,
+)
 from tests.documents._files import fixture
 
 
@@ -55,7 +58,12 @@ class _Handler(BaseHTTPRequestHandler):
 
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         result = asyncio.run(
-            self.reader.read(base64.b64decode(body["content_base64"]), body["filename"], content_type=body["content_type"] or None, strategy=body["strategy"])
+            self.reader.read(
+                base64.b64decode(body["content_base64"]),
+                body["filename"],
+                content_type=body["content_type"] or None,
+                strategy=body["strategy"],
+            )
         )
         payload = result.model_dump_json().encode()
         self.send_response(200)

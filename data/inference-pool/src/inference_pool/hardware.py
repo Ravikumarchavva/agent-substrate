@@ -169,7 +169,12 @@ def _detect_gpus_paddle() -> list[GpuInfo] | None:
     try:
         count = paddle.device.cuda.device_count()
         return [
-            GpuInfo(index=i, name="unknown", total_mib=_ASSUMED_VRAM_MIB, free_mib=_ASSUMED_VRAM_MIB)
+            GpuInfo(
+                index=i,
+                name="unknown",
+                total_mib=_ASSUMED_VRAM_MIB,
+                free_mib=_ASSUMED_VRAM_MIB,
+            )
             for i in range(count)
         ]
     except Exception:
@@ -177,7 +182,9 @@ def _detect_gpus_paddle() -> list[GpuInfo] | None:
         return None
 
 
-def _filter_by_allowlist(gpus: list[GpuInfo], allowlist: list[int] | None) -> list[GpuInfo]:
+def _filter_by_allowlist(
+    gpus: list[GpuInfo], allowlist: list[int] | None
+) -> list[GpuInfo]:
     if allowlist is None:
         return gpus
     return [g for g in gpus if g.index in allowlist]

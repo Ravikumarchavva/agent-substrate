@@ -38,7 +38,9 @@ def create_access_token(
     )
 
 
-def create_refresh_token(user_id: str, tenant_id: str = "") -> tuple[str, str, datetime]:
+def create_refresh_token(
+    user_id: str, tenant_id: str = ""
+) -> tuple[str, str, datetime]:
     return _jwt.create_refresh_token(
         user_id,
         _SECRET,

@@ -35,14 +35,24 @@ class _CostedLLM:
     def __init__(self, tokens_per_call: int) -> None:
         self._tokens = tokens_per_call
 
-    async def generate(self, messages: Any, *, options: Any = None, ctx: Any = None) -> Any:
+    async def generate(
+        self, messages: Any, *, options: Any = None, ctx: Any = None
+    ) -> Any:
         raise NotImplementedError
 
-    def generate_stream(self, messages: list[ChatMessage], *, options: GenerationOptions = GenerationOptions(), ctx: Any = None) -> AsyncIterator[CompletionEvent]:  # noqa: B008
+    def generate_stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions = GenerationOptions(),
+        ctx: Any = None,
+    ) -> AsyncIterator[CompletionEvent]:  # noqa: B008
         return self._stream()
 
     async def _stream(self) -> AsyncIterator[CompletionEvent]:
-        yield CompletionEvent(content=[TextBlock(text="x")], usage=Usage(input_tokens=self._tokens))
+        yield CompletionEvent(
+            content=[TextBlock(text="x")], usage=Usage(input_tokens=self._tokens)
+        )
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
         return 0
@@ -69,16 +79,24 @@ class _Boss:
         self._cap = cap
 
     async def run(self, ctx: Any, inbox: list[Message]) -> None:
-        supervision = Supervision.root(self.id, execution_budget=ExecutionBudget(max_tokens=self._cap))
+        supervision = Supervision.root(
+            self.id, execution_budget=ExecutionBudget(max_tokens=self._cap)
+        )
         handles = [
-            await ctx.spawn(w.id, boot=Message(target=w.id, sender=self.id, payload=DataPayload(data={})), supervision=supervision)
+            await ctx.spawn(
+                w.id,
+                boot=Message(target=w.id, sender=self.id, payload=DataPayload(data={})),
+                supervision=supervision,
+            )
             for w in self._workers
         ]
         for handle in handles:
             await ctx.join(handle)
 
 
-async def _run(children: int, calls: int, tokens: int, cap: int) -> tuple[int, int, int]:
+async def _run(
+    children: int, calls: int, tokens: int, cap: int
+) -> tuple[int, int, int]:
     """(tokens spent by the tree, children that failed, children that finished)."""
     workers = [_Worker(f"w{i}", calls, tokens) for i in range(children)]
     boss = _Boss(workers, cap)
@@ -86,12 +104,26 @@ async def _run(children: int, calls: int, tokens: int, cap: int) -> tuple[int, i
         for w in workers:
             await rt.register(w)
         await rt.register(boss)
-        run_id = await rt.submit(boss.id, Message(target=boss.id, sender=Actor.system("t"), payload=DataPayload(data={})), max_retries=0)
+        run_id = await rt.submit(
+            boss.id,
+            Message(
+                target=boss.id, sender=Actor.system("t"), payload=DataPayload(data={})
+            ),
+            max_retries=0,
+        )
         async for entry in rt.tail(run_id):
             if entry.kind in (RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED):
                 break
-        child_runs = [r for w in workers for r in await rt.store.find_runs(agent=w.id, active_only=False)]
-        spent = (await rt.store.tree_spend(child_runs[0].run_id)).tokens if child_runs else 0
+        child_runs = [
+            r
+            for w in workers
+            for r in await rt.store.find_runs(agent=w.id, active_only=False)
+        ]
+        spent = (
+            (await rt.store.tree_spend(child_runs[0].run_id)).tokens
+            if child_runs
+            else 0
+        )
         failed = sum(1 for r in child_runs if r.status == "failed")
         return spent, failed, len(child_runs) - failed
 
@@ -103,8 +135,12 @@ async def _run(children: int, calls: int, tokens: int, cap: int) -> tuple[int, i
     tokens=st.integers(min_value=10, max_value=60),
     cap=st.integers(min_value=1, max_value=400),
 )
-def test_i20_total_spend_never_exceeds_the_cap_by_more_than_the_calls_in_flight(children: int, calls: int, tokens: int, cap: int) -> None:
-    spent, failed, finished = asyncio.run(asyncio.wait_for(_run(children, calls, tokens, cap), 30))
+def test_i20_total_spend_never_exceeds_the_cap_by_more_than_the_calls_in_flight(
+    children: int, calls: int, tokens: int, cap: int
+) -> None:
+    spent, failed, finished = asyncio.run(
+        asyncio.wait_for(_run(children, calls, tokens, cap), 30)
+    )
 
     # Every child can have one call in flight at the moment the cap is reached.
     assert spent <= cap + children * tokens, (
@@ -112,13 +148,17 @@ def test_i20_total_spend_never_exceeds_the_cap_by_more_than_the_calls_in_flight(
     )
     demand = children * calls * tokens
     if demand <= cap:
-        assert failed == 0 and spent == demand, "a tree under its budget was stopped, or mis-counted"
+        assert failed == 0 and spent == demand, (
+            "a tree under its budget was stopped, or mis-counted"
+        )
     if spent > cap:
         assert failed >= 1, "the cap was passed and nothing stopped"
 
 
 def test_i20_spawning_more_agents_is_not_a_way_around_a_cap() -> None:
     """The same budget, split across many children, stops the tree as one agent would."""
-    spent, failed, _ = asyncio.run(asyncio.wait_for(_run(children=4, calls=4, tokens=50, cap=200), 30))
+    spent, failed, _ = asyncio.run(
+        asyncio.wait_for(_run(children=4, calls=4, tokens=50, cap=200), 30)
+    )
     assert spent <= 200 + 4 * 50
     assert failed >= 1

@@ -21,16 +21,32 @@ def builder() -> DefaultContextBuilder:
     return DefaultContextBuilder(chars_per_token=4.0)
 
 
-async def test_policy_budget_allocation_and_tagging(policy: DefaultMemoryExposurePolicy) -> None:
+async def test_policy_budget_allocation_and_tagging(
+    policy: DefaultMemoryExposurePolicy,
+) -> None:
     ns = MemoryNamespace(tenant_id="test-tenant", user_id="user-1")
 
     directives = [
-        MemoryRecord.from_text("Always reply concisely.", category=MemoryCategory.DIRECTIVE, namespace=ns),
-        MemoryRecord.from_text("Prefer Python 3.13 syntax.", category=MemoryCategory.DIRECTIVE, namespace=ns),
+        MemoryRecord.from_text(
+            "Always reply concisely.", category=MemoryCategory.DIRECTIVE, namespace=ns
+        ),
+        MemoryRecord.from_text(
+            "Prefer Python 3.13 syntax.",
+            category=MemoryCategory.DIRECTIVE,
+            namespace=ns,
+        ),
     ]
 
-    fact1 = MemoryRecord.from_text("User is working on Substrate framework.", category=MemoryCategory.SEMANTIC, namespace=ns)
-    fact2 = MemoryRecord.from_text("User deployed SeaweedFS at port 9101.", category=MemoryCategory.SEMANTIC, namespace=ns)
+    fact1 = MemoryRecord.from_text(
+        "User is working on Substrate framework.",
+        category=MemoryCategory.SEMANTIC,
+        namespace=ns,
+    )
+    fact2 = MemoryRecord.from_text(
+        "User deployed SeaweedFS at port 9101.",
+        category=MemoryCategory.SEMANTIC,
+        namespace=ns,
+    )
 
     matches = [
         MemoryMatch(record=fact1, score=0.92, rank=1, retrieval_method="hybrid"),
@@ -59,7 +75,11 @@ async def test_policy_budget_allocation_and_tagging(policy: DefaultMemoryExposur
 async def test_policy_xml_escaping(policy: DefaultMemoryExposurePolicy) -> None:
     ns = MemoryNamespace(tenant_id="test-tenant", user_id="user-1")
     directives = [
-        MemoryRecord.from_text('User says: if x < 10 && y > 20 then "ok"', category=MemoryCategory.DIRECTIVE, namespace=ns),
+        MemoryRecord.from_text(
+            'User says: if x < 10 && y > 20 then "ok"',
+            category=MemoryCategory.DIRECTIVE,
+            namespace=ns,
+        ),
     ]
     injection = await policy.select_for_context(directives, [], token_budget=500)
     text = injection.directives[0].text
@@ -72,8 +92,16 @@ async def test_context_builder_with_memory_injection(
     builder: DefaultContextBuilder,
 ) -> None:
     ns = MemoryNamespace(tenant_id="test-tenant", user_id="user-1")
-    directives = [MemoryRecord.from_text("Direct concise replies.", category=MemoryCategory.DIRECTIVE, namespace=ns)]
-    fact = MemoryRecord.from_text("Active project is Agent Substrate.", category=MemoryCategory.SEMANTIC, namespace=ns)
+    directives = [
+        MemoryRecord.from_text(
+            "Direct concise replies.", category=MemoryCategory.DIRECTIVE, namespace=ns
+        )
+    ]
+    fact = MemoryRecord.from_text(
+        "Active project is Agent Substrate.",
+        category=MemoryCategory.SEMANTIC,
+        namespace=ns,
+    )
     matches = [MemoryMatch(record=fact, score=0.9, rank=1)]
 
     injection = await policy.select_for_context(directives, matches, token_budget=500)
@@ -82,7 +110,9 @@ async def test_context_builder_with_memory_injection(
         MessageNode(
             id="n1",
             session_id="s1",
-            payload=ChatMessage(role=Role.USER, content=[TextBlock(text="What is the current project?")]),
+            payload=ChatMessage(
+                role=Role.USER, content=[TextBlock(text="What is the current project?")]
+            ),
         ),
     ]
 

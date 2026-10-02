@@ -167,7 +167,9 @@ def parse(text: str) -> Concept:
     # is idempotent rather than accreting a newline per round-trip.
     body = rest[end + len(_FRONTMATTER_FENCE) + 1 :].strip()
 
-    loaded = _frontmatter.load_mapping(raw_yaml)  # never raises: what it cannot read is kept as raw text
+    loaded = _frontmatter.load_mapping(
+        raw_yaml
+    )  # never raises: what it cannot read is kept as raw text
 
     concept_type = loaded.get("type")
     if not isinstance(concept_type, str) or not concept_type.strip():

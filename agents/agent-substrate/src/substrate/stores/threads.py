@@ -44,12 +44,14 @@ class MessageNode(KernelModel):
 class Branch(KernelModel):
     """A named, movable pointer to a head node in the conversation DAG."""
 
-    id: str                       # e.g., "main", "what-if-experiment"
+    id: str  # e.g., "main", "what-if-experiment"
     session_id: str
-    name: str | None = None       # Human-readable display name
+    name: str | None = None  # Human-readable display name
     head_message_id: str | None = None  # Current leaf message of this branch
-    forked_from_message_id: str | None = None  # Ancestor node where this branch diverged
-    version: int = 0              # Monotonically increasing version for optimistic concurrency
+    forked_from_message_id: str | None = (
+        None  # Ancestor node where this branch diverged
+    )
+    version: int = 0  # Monotonically increasing version for optimistic concurrency
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -61,8 +63,8 @@ class HistoryCheckpoint(KernelModel):
 
     id: str = Field(default_factory=lambda: new_id())
     session_id: str
-    anchor_message_id: str        # Boundary node covered by this summary
-    summary: str                  # Consolidated natural language / structured summary
+    anchor_message_id: str  # Boundary node covered by this summary
+    summary: str  # Consolidated natural language / structured summary
     state: JsonObject = Field(default_factory=dict)
     parent_checkpoint_id: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

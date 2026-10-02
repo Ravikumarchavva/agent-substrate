@@ -32,35 +32,69 @@ def _loaded_by(*imports: str) -> set[str]:
         f"for name in {list(imports)!r}: importlib.import_module(name)\n"
         "print(' '.join(sorted({m.split('.')[0] for m in sys.modules})))"
     )
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=REPO_ROOT)
+    out = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=REPO_ROOT,
+    )
     return set(out.stdout.split())
 
 
 def test_i31_the_core_install_is_the_engine_and_nothing_else() -> None:
     """``pip install agent-substrate`` brings pydantic, the OpenTelemetry API and ``pypdfium2`` (so a plain install reads PDFs). A driver,
     an SDK or a web framework in the base dependencies is installed by every user who wanted none of them."""
-    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    names = {d.split("[")[0].split(">")[0].split("=")[0].split("<")[0].strip().lower() for d in project["dependencies"]}
-    assert names == {"pydantic", "opentelemetry-api", "pypdfium2"}, f"the base dependencies are {sorted(names)}"
+    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
+    names = {
+        d.split("[")[0].split(">")[0].split("=")[0].split("<")[0].strip().lower()
+        for d in project["dependencies"]
+    }
+    assert names == {"pydantic", "opentelemetry-api", "pypdfium2"}, (
+        f"the base dependencies are {sorted(names)}"
+    )
 
 
 def test_i31_importing_the_engine_loads_no_driver_sdk_or_framework() -> None:
     """Every concept package of the core, imported in a fresh interpreter, loads none of what an extra provides."""
     loaded = _loaded_by("substrate", *[f"substrate.{c}" for c in _CORE])
-    assert not loaded & set(_NOT_THE_ENGINES), f"the engine imported {sorted(loaded & set(_NOT_THE_ENGINES))}"
+    assert not loaded & set(_NOT_THE_ENGINES), (
+        f"the engine imported {sorted(loaded & set(_NOT_THE_ENGINES))}"
+    )
 
 
 def test_i32_an_adapter_package_imports_only_what_it_is_asked_for() -> None:
     """``substrate.integrations`` and its vendor packages import nothing until a name is used: asking for the
     Anthropic client must not require the OpenAI SDK, nor MCP, nor Redis."""
-    loaded = _loaded_by("substrate.integrations", "substrate.integrations.llm", "substrate.integrations.tools")
-    leaked = loaded & {"openai", "anthropic", "google", "mcp", "redis", "kokoro", "tiktoken", "asyncpg", "fastapi"}
+    loaded = _loaded_by(
+        "substrate.integrations",
+        "substrate.integrations.llm",
+        "substrate.integrations.tools",
+    )
+    leaked = loaded & {
+        "openai",
+        "anthropic",
+        "google",
+        "mcp",
+        "redis",
+        "kokoro",
+        "tiktoken",
+        "asyncpg",
+        "fastapi",
+    }
     assert not leaked, f"importing the adapter packages loaded {sorted(leaked)}"
 
 
 def _mentions_setup_logging(path: Path) -> list[ast.AST]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    return [n for n in ast.walk(tree) if (isinstance(n, ast.Name) and n.id == "setup_logging") or (isinstance(n, ast.alias) and n.name == "setup_logging")]
+    return [
+        n
+        for n in ast.walk(tree)
+        if (isinstance(n, ast.Name) and n.id == "setup_logging")
+        or (isinstance(n, ast.alias) and n.name == "setup_logging")
+    ]
 
 
 #: The application entry points that may configure logging: the terminal console (and the logger module itself). The
@@ -89,10 +123,13 @@ def test_i33_an_entry_point_configures_logging_when_started_not_when_imported() 
         tree = ast.parse((SRC / rel).read_text(encoding="utf-8"))
         for node in tree.body:
             if isinstance(node, (ast.Expr, ast.Assign)) and any(
-                isinstance(n, ast.Call) and getattr(n.func, "id", "") == "setup_logging" for n in ast.walk(node)
+                isinstance(n, ast.Call) and getattr(n.func, "id", "") == "setup_logging"
+                for n in ast.walk(node)
             ):
                 offenders.append(rel)
-    assert not offenders, f"modules that configure logging as they are imported: {offenders}"
+    assert not offenders, (
+        f"modules that configure logging as they are imported: {offenders}"
+    )
 
 
 def test_i34_importing_substrate_installs_no_log_handler() -> None:
@@ -103,7 +140,13 @@ def test_i34_importing_substrate_installs_no_log_handler() -> None:
         "handlers = logging.getLogger('substrate').handlers\n"
         "print(sorted(type(h).__name__ for h in handlers), logging.getLogger().handlers == [])"
     )
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=REPO_ROOT).stdout
+    out = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=REPO_ROOT,
+    ).stdout
     assert out.strip() == "['NullHandler'] True", out
 
 
@@ -119,6 +162,14 @@ def test_i35_every_name_the_package_exports_resolves() -> None:
         "    except ImportError: missing.append(name)\n"
         "print(' '.join(missing), '|', ' '.join(n for n, (mod, _) in substrate._LAZY.items() if mod.startswith(('substrate.integrations', 'substrate.server'))))"
     )
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=REPO_ROOT).stdout
+    out = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=REPO_ROOT,
+    ).stdout
     missing, adapters = (part.split() for part in out.split("|"))
-    assert set(missing) <= set(adapters), f"names the engine itself should provide do not resolve: {sorted(set(missing) - set(adapters))}"
+    assert set(missing) <= set(adapters), (
+        f"names the engine itself should provide do not resolve: {sorted(set(missing) - set(adapters))}"
+    )

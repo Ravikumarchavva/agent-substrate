@@ -61,7 +61,14 @@ def _lines(markdown: str) -> list[_Line]:
         if _FENCE.match(text):
             fenced = not fenced
         heading = None if fenced else _HEADING.match(text)
-        out.append(_Line(text, page, len(heading.group(1)) if heading else 0, heading.group(2) if heading else ""))
+        out.append(
+            _Line(
+                text,
+                page,
+                len(heading.group(1)) if heading else 0,
+                heading.group(2) if heading else "",
+            )
+        )
     return out
 
 
@@ -75,7 +82,9 @@ def split(markdown: str, *, title: str = "Document") -> list[Section]:
     if not any(line.text.strip() for line in lines):
         return []
     headings = [line for line in lines if line.level]
-    by_level = {level: sum(1 for h in headings if h.level == level) for level in range(1, 7)}
+    by_level = {
+        level: sum(1 for h in headings if h.level == level) for level in range(1, 7)
+    }
     level = next((lv for lv in range(1, 7) if by_level[lv] >= 2), 0)
     chunks = _cut_at_level(lines, level) if level else _cut_by_pages(lines)
     sections = [s for chunk in chunks for s in _fit(chunk, level)]
@@ -89,15 +98,27 @@ def _cut_at_level(lines: list[_Line], level: int) -> list[list[_Line]]:
     """Cut before every heading of ``level`` or shallower; what precedes the first cut is the preamble."""
     chunks: list[list[_Line]] = [[]]
     for line in lines:
-        if line.level and line.level <= level and any(item.text.strip() and not _PAGE.match(item.text) for item in chunks[-1]):
+        if (
+            line.level
+            and line.level <= level
+            and any(
+                item.text.strip() and not _PAGE.match(item.text) for item in chunks[-1]
+            )
+        ):
             # A page marker (and the blank lines around it) that precedes the heading belongs to the page the heading starts: it moves
             # with it, so the new section knows what page it begins on.
             carried: list[_Line] = []
-            while chunks[-1] and (not chunks[-1][-1].text.strip() or _PAGE.match(chunks[-1][-1].text)):
+            while chunks[-1] and (
+                not chunks[-1][-1].text.strip() or _PAGE.match(chunks[-1][-1].text)
+            ):
                 carried.insert(0, chunks[-1].pop())
             chunks.append([item for item in carried if _PAGE.match(item.text)][-1:])
         chunks[-1].append(line)
-    return [c for c in chunks if any(item.text.strip() and not _PAGE.match(item.text) for item in c)]
+    return [
+        c
+        for c in chunks
+        if any(item.text.strip() and not _PAGE.match(item.text) for item in c)
+    ]
 
 
 def _pages(lines: list[_Line]) -> list[list[_Line]]:
@@ -130,7 +151,11 @@ def _fit(chunk: list[_Line], level: int) -> list[list[_Line]]:
     if tokens(_join(chunk)) <= HARD_MAX_TOKENS:
         return [chunk]
     deeper = next(
-        (lv for lv in range(level + 1, 7) if sum(1 for line in chunk if line.level == lv) >= 2),
+        (
+            lv
+            for lv in range(level + 1, 7)
+            if sum(1 for line in chunk if line.level == lv) >= 2
+        ),
         0,
     )
     if deeper:
@@ -158,7 +183,9 @@ def _by_paragraphs(chunk: list[_Line]) -> list[list[_Line]]:
             pieces.append([])
             size = 0
             continue
-        if size + cost > HARD_MAX_TOKENS and size:  # a single paragraph longer than the cap: cut between lines
+        if (
+            size + cost > HARD_MAX_TOKENS and size
+        ):  # a single paragraph longer than the cap: cut between lines
             pieces.append([])
             size = 0
         pieces[-1].append(line)
@@ -178,7 +205,11 @@ def _cut_long_lines(chunk: list[_Line]) -> list[_Line]:
             out.append(_Line(text[:cut], line.page))
             out.append(_Line("", line.page))
             text = text[cut:].lstrip()
-        out.append(_Line(text, line.page, line.level, line.title) if text is line.text else _Line(text, line.page))
+        out.append(
+            _Line(text, line.page, line.level, line.title)
+            if text is line.text
+            else _Line(text, line.page)
+        )
     return out
 
 
@@ -198,7 +229,11 @@ def _merge_small(chunks: list[list[_Line]]) -> list[list[_Line]]:
     drafts: list[_Draft] = []
     for chunk in chunks:
         draft = _Draft(chunk)
-        if drafts and (draft.tokens < MIN_TOKENS or drafts[-1].tokens < MIN_TOKENS) and drafts[-1].tokens + draft.tokens <= TARGET_MAX_TOKENS:
+        if (
+            drafts
+            and (draft.tokens < MIN_TOKENS or drafts[-1].tokens < MIN_TOKENS)
+            and drafts[-1].tokens + draft.tokens <= TARGET_MAX_TOKENS
+        ):
             drafts[-1].lines.extend(chunk)
         else:
             drafts.append(draft)
@@ -212,7 +247,9 @@ def _opens_with_heading(chunk: list[_Line]) -> _Line | None:
     return None
 
 
-def _label(chunks: list[list[_Line]], document_title: str, *, by_pages: bool = False) -> list[Section]:
+def _label(
+    chunks: list[list[_Line]], document_title: str, *, by_pages: bool = False
+) -> list[Section]:
     sections: list[Section] = []
     path: list[tuple[int, str]] = []
     seen: dict[str, int] = {}
@@ -233,7 +270,11 @@ def _label(chunks: list[list[_Line]], document_title: str, *, by_pages: bool = F
             first, last = (min(pages), max(pages)) if pages else (1, 1)
             title = f"Page {first}" if first == last else f"Pages {first}–{last}"
         else:
-            title = opening.title if opening else (heading_path[-1] if heading_path else document_title)
+            title = (
+                opening.title
+                if opening
+                else (heading_path[-1] if heading_path else document_title)
+            )
         seen[title] = seen.get(title, 0) + 1
         sections.append(
             Section(
@@ -247,4 +288,11 @@ def _label(chunks: list[list[_Line]], document_title: str, *, by_pages: bool = F
     return sections
 
 
-__all__ = ["HARD_MAX_TOKENS", "MIN_TOKENS", "TARGET_MAX_TOKENS", "Section", "split", "tokens"]
+__all__ = [
+    "HARD_MAX_TOKENS",
+    "MIN_TOKENS",
+    "TARGET_MAX_TOKENS",
+    "Section",
+    "split",
+    "tokens",
+]

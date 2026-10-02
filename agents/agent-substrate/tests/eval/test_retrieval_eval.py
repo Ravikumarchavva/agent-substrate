@@ -65,8 +65,13 @@ async def _run(store, capsys) -> None:
     collection = f"eval-{id(object())}"
 
     try:
-        vectors = (await embedding_client.embed([doc.to_text() for doc in dataset.documents])).embeddings
-        embedded_docs = [replace(doc, embedding=vector) for doc, vector in zip(dataset.documents, vectors, strict=True)]
+        vectors = (
+            await embedding_client.embed([doc.to_text() for doc in dataset.documents])
+        ).embeddings
+        embedded_docs = [
+            replace(doc, embedding=vector)
+            for doc, vector in zip(dataset.documents, vectors, strict=True)
+        ]
         await store.add(embedded_docs, collection=collection)
 
         report = await run_retrieval_eval(

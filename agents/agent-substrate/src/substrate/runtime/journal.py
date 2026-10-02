@@ -45,7 +45,12 @@ from typing import Any, TypeVar
 
 from substrate.types.content import JsonObject
 from substrate.types.error_info import ErrorInfo
-from substrate.types.errors import ControlSignal, KernelError, NonDeterminismError, OrphanedEffectError
+from substrate.types.errors import (
+    ControlSignal,
+    KernelError,
+    NonDeterminismError,
+    OrphanedEffectError,
+)
 from substrate.runtime.effects import Effect, args_digest
 from substrate.types.run_log import RunLogEntry, RunLogKind
 from substrate.runtime.store import NewEntry
@@ -62,10 +67,14 @@ OFFLOAD_BYTES = 64 * 1024
 _OUTCOME_ATTEMPTS = 3
 _OUTCOME_BACKOFF_S = 0.05
 
-_current_effect: ContextVar[str | None] = ContextVar("substrate_current_effect", default=None)
+_current_effect: ContextVar[str | None] = ContextVar(
+    "substrate_current_effect", default=None
+)
 # Concurrent journaled calls (a tool batch) each need their own path stack. Keyed by
 # the journal so an unrelated run's task never picks it up.
-_scope_override: ContextVar[tuple[int, list[int]] | None] = ContextVar("substrate_scope_override", default=None)
+_scope_override: ContextVar[tuple[int, list[int]] | None] = ContextVar(
+    "substrate_scope_override", default=None
+)
 
 Commit = Callable[[Sequence[NewEntry]], Awaitable[Any]]
 
@@ -124,7 +133,9 @@ class Journal:
             self._by_path[payload["path"]] = (payload["kind"], payload["digest"])
             current = self._known.get(effect_id)
             if current is None or current.state != "completed":
-                self._known[effect_id] = _Known("pending", payload["kind"], payload["digest"])
+                self._known[effect_id] = _Known(
+                    "pending", payload["kind"], payload["digest"]
+                )
         elif entry.kind == RunLogKind.EFFECT_RESULT:
             effect_id = payload["effect_id"]
             if payload["status"] == "ok":
@@ -137,7 +148,10 @@ class Journal:
                     artifact_ref=payload.get("artifact_ref"),
                 )
                 if "path" in payload:
-                    self._by_path[payload["path"]] = (payload.get("kind", ""), payload.get("digest", ""))
+                    self._by_path[payload["path"]] = (
+                        payload.get("kind", ""),
+                        payload.get("digest", ""),
+                    )
             else:
                 # Failed or interrupted: not done, and not in doubt. Run it again.
                 self._known[effect_id] = _Known("absent")
@@ -204,7 +218,8 @@ class Journal:
         if prior is not None and prior != (kind, digest):
             raise NonDeterminismError(
                 f"replay diverged from the journal at path {path!r}: recorded {prior[0]!r}, "
-                f"now {kind!r}" + (" with different arguments" if prior[0] == kind else ""),
+                f"now {kind!r}"
+                + (" with different arguments" if prior[0] == kind else ""),
                 path=path,
                 expected=f"{prior[0]}:{prior[1]}",
                 actual=f"{kind}:{digest}",
@@ -219,7 +234,9 @@ class Journal:
                     f"journaled value is offloaded ({known.artifact_ref}) but no blob store is configured"
                 )
             raw = await self._blob.resolve(known.artifact_ref)
-            return json.loads(raw.decode() if isinstance(raw, (bytes, bytearray)) else raw)
+            return json.loads(
+                raw.decode() if isinstance(raw, (bytes, bytearray)) else raw
+            )
         return known.value or {}
 
     async def _offload(self, value: JsonObject) -> tuple[JsonObject, str | None]:
@@ -316,8 +333,12 @@ class Journal:
                 payload["artifact_ref"] = ref
             else:
                 payload["value"] = stored
-            await self._record([NewEntry(kind=RunLogKind.EFFECT_RESULT, payload=payload)])
-            self._known[effect_id] = _Known("completed", kind, digest, value=value, artifact_ref=None)
+            await self._record(
+                [NewEntry(kind=RunLogKind.EFFECT_RESULT, payload=payload)]
+            )
+            self._known[effect_id] = _Known(
+                "completed", kind, digest, value=value, artifact_ref=None
+            )
             return Outcome(value, False, effect_id)
         finally:
             self.exit_scope()
@@ -326,20 +347,37 @@ class Journal:
         self._known[effect_id] = _Known("absent")
         try:
             await self._record(
-                [NewEntry(kind=RunLogKind.EFFECT_RESULT, payload={"effect_id": effect_id, "status": "aborted", "reason": reason})]
+                [
+                    NewEntry(
+                        kind=RunLogKind.EFFECT_RESULT,
+                        payload={
+                            "effect_id": effect_id,
+                            "status": "aborted",
+                            "reason": reason,
+                        },
+                    )
+                ]
             )
         except Exception:  # noqa: BLE001 - the interruption itself must not be masked
             pass
 
     async def _fail(self, effect_id: str, exc: BaseException) -> None:
         self._known[effect_id] = _Known("absent")
-        info = exc.to_info() if isinstance(exc, KernelError) else ErrorInfo(code="effect_failed", message=str(exc)[:500])
+        info = (
+            exc.to_info()
+            if isinstance(exc, KernelError)
+            else ErrorInfo(code="effect_failed", message=str(exc)[:500])
+        )
         try:
             await self._record(
                 [
                     NewEntry(
                         kind=RunLogKind.EFFECT_RESULT,
-                        payload={"effect_id": effect_id, "status": "error", "error": info.model_dump(mode="json")},
+                        payload={
+                            "effect_id": effect_id,
+                            "status": "error",
+                            "error": info.model_dump(mode="json"),
+                        },
                     )
                 ]
             )
@@ -369,7 +407,14 @@ class Journal:
         value, do_commit = await built if inspect.isawaitable(built) else built
         outcome = NewEntry(
             kind=RunLogKind.EFFECT_RESULT,
-            payload={"effect_id": effect_id, "path": path, "kind": kind, "digest": digest, "status": "ok", "value": value},
+            payload={
+                "effect_id": effect_id,
+                "path": path,
+                "kind": kind,
+                "digest": digest,
+                "status": "ok",
+                "value": value,
+            },
             dedup_key=f"effect:{effect_id}",
         )
         await do_commit([outcome])
@@ -384,7 +429,9 @@ class Journal:
         """
         path, effect_id, _ = self._identify(kind, args)
         known = self._known.get(effect_id)
-        value = known.value if known is not None and known.state == "completed" else None
+        value = (
+            known.value if known is not None and known.state == "completed" else None
+        )
         return path, effect_id, value
 
 

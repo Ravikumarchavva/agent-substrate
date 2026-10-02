@@ -61,12 +61,16 @@ def _canonical_default(value: Any) -> Any:
         return {"__datetime__": value.isoformat()}
     if isinstance(value, (set, frozenset)):
         return {"__set__": sorted(value, key=repr)}
-    raise TypeError(f"{type(value).__name__} has no canonical encoding for effect identity")
+    raise TypeError(
+        f"{type(value).__name__} has no canonical encoding for effect identity"
+    )
 
 
 def canonical_json(value: Any) -> str:
     """Stable JSON: sorted keys, no whitespace, deterministic for any supported value."""
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=_canonical_default)
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), default=_canonical_default
+    )
 
 
 def args_digest(args: Any) -> str:
@@ -74,6 +78,7 @@ def args_digest(args: Any) -> str:
     that arrives with different arguments is detected instead of served the old
     call's result."""
     return hashlib.sha256(canonical_json(args).encode()).hexdigest()[:32]
+
 
 class Effect(BaseModel):
     """A description of an external side-effect to be executed at-most-once.

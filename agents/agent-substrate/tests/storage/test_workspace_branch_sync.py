@@ -19,7 +19,9 @@ async def test_workspace_branch_file_synchronization_and_isolation(tmp_path: Pat
     user_id = "user-1"
     conversation_id = "conv-1"
 
-    main_prefix = conversation_workspace_prefix(tenant_id, user_id, conversation_id, "main")
+    main_prefix = conversation_workspace_prefix(
+        tenant_id, user_id, conversation_id, "main"
+    )
 
     # Upload files to main
     await store.upload(f"{main_prefix}/shared/script.py", b"print('main branch')")
@@ -29,7 +31,9 @@ async def test_workspace_branch_file_synchronization_and_isolation(tmp_path: Pat
     assert await store.exists(f"{main_prefix}/shared/notes.txt")
 
     # Fork to experiment branch
-    exp_prefix = conversation_workspace_prefix(tenant_id, user_id, conversation_id, "experiment")
+    exp_prefix = conversation_workspace_prefix(
+        tenant_id, user_id, conversation_id, "experiment"
+    )
     assert exp_prefix != main_prefix
 
     copied = await store.copy_prefix(main_prefix, exp_prefix)
@@ -38,14 +42,25 @@ async def test_workspace_branch_file_synchronization_and_isolation(tmp_path: Pat
     # Verify files exist in experiment branch
     assert await store.exists(f"{exp_prefix}/shared/script.py")
     assert await store.exists(f"{exp_prefix}/shared/notes.txt")
-    assert await store.download(f"{exp_prefix}/shared/script.py") == b"print('main branch')"
+    assert (
+        await store.download(f"{exp_prefix}/shared/script.py")
+        == b"print('main branch')"
+    )
 
     # Mutate in experiment branch
-    await store.upload(f"{exp_prefix}/shared/script.py", b"print('experiment branch modified')")
+    await store.upload(
+        f"{exp_prefix}/shared/script.py", b"print('experiment branch modified')"
+    )
 
     # Main branch is isolated and unchanged
-    assert await store.download(f"{main_prefix}/shared/script.py") == b"print('main branch')"
-    assert await store.download(f"{exp_prefix}/shared/script.py") == b"print('experiment branch modified')"
+    assert (
+        await store.download(f"{main_prefix}/shared/script.py")
+        == b"print('main branch')"
+    )
+    assert (
+        await store.download(f"{exp_prefix}/shared/script.py")
+        == b"print('experiment branch modified')"
+    )
 
 
 @pytest.mark.asyncio
@@ -65,4 +80,3 @@ async def test_workspace_copy_prefix_quota_enforcement(tmp_path: Path):
     # Copying 30 bytes more will exceed the 50 byte quota (30 + 30 = 60 > 50)
     with pytest.raises(WorkspaceQuotaExceededError):
         await store.copy_prefix(main_p, exp_p)
-

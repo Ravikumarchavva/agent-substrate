@@ -21,7 +21,9 @@ class FileStoreConformance:
     async def store(self) -> FileStore:  # pragma: no cover - supplied by subclasses
         raise NotImplementedError
 
-    async def test_bytes_round_trip_and_are_replaced_on_upload(self, store: FileStore) -> None:
+    async def test_bytes_round_trip_and_are_replaced_on_upload(
+        self, store: FileStore
+    ) -> None:
         await store.upload(T1 + "a.bin", b"one")
         assert await store.download(T1 + "a.bin") == b"one"
         await store.upload(T1 + "a.bin", b"two!")
@@ -36,24 +38,36 @@ class FileStoreConformance:
         assert await store.exists(T1 + "a.bin") is True
         assert await store.exists(T1 + "b.bin") is False
 
-    async def test_delete_removes_the_key_and_a_missing_key_is_a_no_op(self, store: FileStore) -> None:
+    async def test_delete_removes_the_key_and_a_missing_key_is_a_no_op(
+        self, store: FileStore
+    ) -> None:
         await store.upload(T1 + "a.bin", b"x")
         await store.delete(T1 + "a.bin")
         assert await store.exists(T1 + "a.bin") is False
         await store.delete(T1 + "a.bin")
 
-    async def test_list_prefix_reports_key_size_and_mtime_for_that_prefix_only(self, store: FileStore) -> None:
+    async def test_list_prefix_reports_key_size_and_mtime_for_that_prefix_only(
+        self, store: FileStore
+    ) -> None:
         await store.upload(T1 + "docs/a.bin", b"12345")
         await store.upload(T1 + "docs/sub/b.bin", b"123")
         await store.upload(T1 + "other/c.bin", b"1")
-        listed = {key: size for key, size, _mtime in await store.list_prefix(T1 + "docs/")}
+        listed = {
+            key: size for key, size, _mtime in await store.list_prefix(T1 + "docs/")
+        }
         assert listed == {T1 + "docs/a.bin": 5, T1 + "docs/sub/b.bin": 3}
-        assert all(isinstance(m, float) for _k, _s, m in await store.list_prefix(T1 + "docs/"))
+        assert all(
+            isinstance(m, float) for _k, _s, m in await store.list_prefix(T1 + "docs/")
+        )
 
-    async def test_listing_an_empty_prefix_finds_nothing(self, store: FileStore) -> None:
+    async def test_listing_an_empty_prefix_finds_nothing(
+        self, store: FileStore
+    ) -> None:
         assert await store.list_prefix(T1 + "nothing/") == []
 
-    async def test_delete_prefix_removes_only_that_prefix_and_counts_it(self, store: FileStore) -> None:
+    async def test_delete_prefix_removes_only_that_prefix_and_counts_it(
+        self, store: FileStore
+    ) -> None:
         await store.upload(T1 + "docs/a.bin", b"a")
         await store.upload(T1 + "docs/b.bin", b"b")
         await store.upload(T1 + "keep/c.bin", b"c")
@@ -63,7 +77,9 @@ class FileStoreConformance:
         assert await store.exists(T1 + "keep/c.bin") is True
         assert await store.exists(T2 + "docs/a.bin") is True
 
-    async def test_copy_prefix_keeps_relative_paths_and_leaves_the_source(self, store: FileStore) -> None:
+    async def test_copy_prefix_keeps_relative_paths_and_leaves_the_source(
+        self, store: FileStore
+    ) -> None:
         await store.upload(T1 + "src/a.bin", b"a")
         await store.upload(T1 + "src/deep/b.bin", b"b")
         assert await store.copy_prefix(T1 + "src/", T1 + "dst/") == 2
@@ -83,14 +99,25 @@ class FileStoreConformance:
         await store.upload(T1 + "a.bin", b"x")
         assert isinstance(await store.presign_url(T1 + "a.bin"), str)
 
-    @pytest.mark.parametrize("hostile", ["tenants/t1/../../../etc/passwd", "../../outside", "tenants/t1/users/u1/../../../t2/users/u1/secret"])
-    async def test_a_hostile_key_is_refused_or_inert_never_an_escape(self, store: FileStore, hostile: str) -> None:
+    @pytest.mark.parametrize(
+        "hostile",
+        [
+            "tenants/t1/../../../etc/passwd",
+            "../../outside",
+            "tenants/t1/users/u1/../../../t2/users/u1/secret",
+        ],
+    )
+    async def test_a_hostile_key_is_refused_or_inert_never_an_escape(
+        self, store: FileStore, hostile: str
+    ) -> None:
         await store.upload(T2 + "secret", b"keep me")
         try:
             await store.upload(hostile, b"attack")
         except ValueError:
             pass  # refused outright
-        assert await store.download(T2 + "secret") == b"keep me", "a hostile key overwrote another tenant's object"
+        assert await store.download(T2 + "secret") == b"keep me", (
+            "a hostile key overwrote another tenant's object"
+        )
 
 
 __all__ = ["FileStoreConformance"]

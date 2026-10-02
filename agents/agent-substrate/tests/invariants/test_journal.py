@@ -33,7 +33,9 @@ class _StreamingLLM:
         self.capabilities = ModelCapabilities(model_id="scripted")
         self._chunks = chunks
 
-    async def generate(self, messages: list[ChatMessage], *, options: Any = None, ctx: Any = None) -> Any:
+    async def generate(
+        self, messages: list[ChatMessage], *, options: Any = None, ctx: Any = None
+    ) -> Any:
         raise NotImplementedError
 
     def generate_stream(
@@ -72,7 +74,11 @@ async def _journal_rows(chunks: int) -> int:
         await runtime.register(agent)
         run_id = await runtime.submit(
             agent.id,
-            Message(target=agent.id, sender=Actor.system("test"), payload=DataPayload(data={})),
+            Message(
+                target=agent.id,
+                sender=Actor.system("test"),
+                payload=DataPayload(data={}),
+            ),
         )
         async for entry in runtime.tail(run_id):
             if entry.kind in ("run.completed", "run.failed"):

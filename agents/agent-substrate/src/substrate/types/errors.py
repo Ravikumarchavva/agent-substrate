@@ -146,7 +146,9 @@ class TransientError(KernelError):
 class ConcurrentAppendError(TransientError):
     """``EventLog.append`` found the log had moved on: another writer won."""
 
-    def __init__(self, message: str, *, run_id: str, expected_seq: int, actual_seq: int) -> None:
+    def __init__(
+        self, message: str, *, run_id: str, expected_seq: int, actual_seq: int
+    ) -> None:
         super().__init__(message)
         self.run_id = run_id
         self.expected_seq = expected_seq
@@ -202,7 +204,9 @@ class SnapshotConflictError(TransientError):
 class RateLimitedError(TransientError):
     """The provider is rate limiting us. ``retry_after`` is its own hint, in seconds."""
 
-    def __init__(self, message: str = "rate limited", *, retry_after: float | None = None) -> None:
+    def __init__(
+        self, message: str = "rate limited", *, retry_after: float | None = None
+    ) -> None:
         super().__init__(message)
         self.retry_after = retry_after
 
@@ -211,7 +215,9 @@ class ServiceUnavailableError(TransientError):
     """A service reached by URL (an embedder, a reranker, a document server) did not answer: connection refused, timed out,
     or a 5xx. Retrying, or falling back to something local, can help."""
 
-    def __init__(self, message: str = "service unavailable", *, url: str | None = None) -> None:
+    def __init__(
+        self, message: str = "service unavailable", *, url: str | None = None
+    ) -> None:
         super().__init__(message)
         self.url = url
 
@@ -252,7 +258,9 @@ class ToolDeclarationError(PermanentError, ValueError):
     refused when it is registered, not guessed about when it is called."""
 
     def __init__(self, tool: str, problems: tuple[str, ...]) -> None:
-        super().__init__(f"tool {tool!r} is not fit to register: " + "; ".join(problems))
+        super().__init__(
+            f"tool {tool!r} is not fit to register: " + "; ".join(problems)
+        )
         self.tool = tool
         self.problems = problems
 
@@ -261,7 +269,9 @@ class UnroutableMessageError(PermanentError):
     """A message arrived that no handler of the receiving agent accepts. Redelivering it
     cannot change that, so the run fails with the reason instead of retrying a poison message."""
 
-    def __init__(self, message: str, *, agent: str, payload_type: str, accepts: tuple[str, ...]) -> None:
+    def __init__(
+        self, message: str, *, agent: str, payload_type: str, accepts: tuple[str, ...]
+    ) -> None:
         super().__init__(message)
         self.agent = agent
         self.payload_type = payload_type
@@ -300,7 +310,9 @@ class ContextLengthError(PermanentError):
     """The prompt exceeded the model's context window. Compacting the history and
     trying again is the remedy, which is why this is not just a generic 400."""
 
-    def __init__(self, message: str = "context length exceeded", *, limit: int | None = None) -> None:
+    def __init__(
+        self, message: str = "context length exceeded", *, limit: int | None = None
+    ) -> None:
         super().__init__(message)
         self.limit = limit
 

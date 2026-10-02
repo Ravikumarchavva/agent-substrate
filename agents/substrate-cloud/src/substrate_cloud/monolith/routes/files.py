@@ -258,9 +258,7 @@ def render_page_marked_markdown(result: ExtractionResult) -> Optional[str]:
     for page in result.pages:
         for image in page.images:
             if image.caption and image.page_number is not None:
-                captions_by_page.setdefault(image.page_number, []).append(
-                    image.caption
-                )
+                captions_by_page.setdefault(image.page_number, []).append(image.caption)
 
     sections: list[str] = []
     for page in result.pages:
@@ -347,7 +345,9 @@ async def _stage_uploaded_doc(
         collection = documents_collection(tenant_id, owner_sub, session_id)
         if collection is None:
             raise DocumentError("this upload has no conversation to file it under")
-        result = await document_reader().read(data, original_name, content_type=content_type)
+        result = await document_reader().read(
+            data, original_name, content_type=content_type
+        )
         await ctx.library.add(
             result,
             original_name,
@@ -405,7 +405,9 @@ async def promote_pending_file(ctx: ServerDependencies, meta: FileMetadata) -> N
     if ctx.pending_for(meta.org_id) is None or ctx.files_for(meta.org_id) is None:
         return
     data = await ctx.pending_for(meta.org_id).download(meta.object_key)
-    await ctx.files_for(meta.org_id).upload(meta.object_key, data, content_type=meta.content_type)
+    await ctx.files_for(meta.org_id).upload(
+        meta.object_key, data, content_type=meta.content_type
+    )
     await ctx.pending_for(meta.org_id).delete(meta.object_key)
     sidecar_key = f"{meta.object_key}.extracted.md"
     if await ctx.pending_for(meta.org_id).exists(sidecar_key):
@@ -417,9 +419,7 @@ async def promote_pending_file(ctx: ServerDependencies, meta: FileMetadata) -> N
     meta.promoted_at = datetime.now(timezone.utc)
 
 
-async def sweep_stale_pending_uploads(
-    session_factory: Any, ttl_hours: float
-) -> int:
+async def sweep_stale_pending_uploads(session_factory: Any, ttl_hours: float) -> int:
     """Delete ``FileMetadata`` rows for attachments abandoned before ever
     being sent — never promoted, older than *ttl_hours*. Their bytes are
     already gone (or about to be, via ``PendingFileStore.sweep_stale``,
@@ -457,7 +457,11 @@ async def _read_stuck_upload_bytes(
     finished for some other reason). Never raises — a download failure
     (the object was itself swept/deleted independently) just skips this
     one row, logged, rather than crashing the whole reconciliation pass."""
-    store = ctx.pending_for(row.org_id) if row.promoted_at is None else ctx.files_for(row.org_id)
+    store = (
+        ctx.pending_for(row.org_id)
+        if row.promoted_at is None
+        else ctx.files_for(row.org_id)
+    )
     if store is None:
         return None
     try:
@@ -659,7 +663,9 @@ async def upload_file(
             raise HTTPException(
                 status_code=503, detail="Pending upload storage not configured"
             )
-        await ctx.pending_for(claims.tenant_id).upload(object_key, data, content_type=content_type)
+        await ctx.pending_for(claims.tenant_id).upload(
+            object_key, data, content_type=content_type
+        )
         promoted_at = None
     else:
         # No thread_id -> not a composer attachment (e.g. the settings
@@ -670,7 +676,9 @@ async def upload_file(
         if ctx.files_for(claims.tenant_id) is None:
             raise HTTPException(status_code=503, detail="File store not configured")
         try:
-            await ctx.files_for(claims.tenant_id).upload(object_key, data, content_type=content_type)
+            await ctx.files_for(claims.tenant_id).upload(
+                object_key, data, content_type=content_type
+            )
         except WorkspaceQuotaExceededError as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         promoted_at = datetime.now(timezone.utc)
@@ -860,7 +868,11 @@ async def download_file(
 ) -> StreamingResponse:
     """Download file bytes."""
     meta = await _get_meta(file_id, db, claims)
-    store = ctx.files_for(claims.tenant_id) if meta.promoted_at is not None else ctx.pending_for(claims.tenant_id)
+    store = (
+        ctx.files_for(claims.tenant_id)
+        if meta.promoted_at is not None
+        else ctx.pending_for(claims.tenant_id)
+    )
     if store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
     data = await store.download(meta.object_key)
@@ -895,7 +907,9 @@ async def get_file_url(
     if ctx.files_for(claims.tenant_id) is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
-    url = await ctx.files_for(claims.tenant_id).presign_url(meta.object_key, expires_in=expires_in)
+    url = await ctx.files_for(claims.tenant_id).presign_url(
+        meta.object_key, expires_in=expires_in
+    )
 
     if url.startswith("memory://"):
         url = f"/files/{file_id}/download"
@@ -912,7 +926,11 @@ async def delete_file(
 ) -> None:
     """Soft-delete metadata and remove object from store."""
     meta = await _get_meta(file_id, db, claims)
-    store = ctx.files_for(claims.tenant_id) if meta.promoted_at is not None else ctx.pending_for(claims.tenant_id)
+    store = (
+        ctx.files_for(claims.tenant_id)
+        if meta.promoted_at is not None
+        else ctx.pending_for(claims.tenant_id)
+    )
     if store is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
@@ -935,16 +953,29 @@ async def delete_file(
 
     await store.delete(meta.object_key)
     if meta.promoted_at is None and ctx.pending_for(claims.tenant_id) is not None:
-        await ctx.pending_for(claims.tenant_id).delete(f"{meta.object_key}.extracted.md")
+        await ctx.pending_for(claims.tenant_id).delete(
+            f"{meta.object_key}.extracted.md"
+        )
 
     # Gone from the conversation's documents too, so the model can no longer open or cite it. Best-effort: a failure here must not
     # surface as a failed delete, since the file itself is already gone from the store above.
     if ctx.library is not None and meta.thread_id is not None and meta.checksum_sha256:
         from substrate_cloud.documents_library import documents_collection
 
-        collection = documents_collection(claims.tenant_id, claims.sub, str(meta.thread_id))
+        collection = documents_collection(
+            claims.tenant_id, claims.sub, str(meta.thread_id)
+        )
         if collection is not None:
             try:
-                await ctx.library.delete(collection=collection, document=ctx.library.document_id(meta.original_name, meta.checksum_sha256))
+                await ctx.library.delete(
+                    collection=collection,
+                    document=ctx.library.document_id(
+                        meta.original_name, meta.checksum_sha256
+                    ),
+                )
             except Exception as exc:
-                logger.warning("Failed to remove deleted file %s from the conversation's documents: %s", file_id, exc)
+                logger.warning(
+                    "Failed to remove deleted file %s from the conversation's documents: %s",
+                    file_id,
+                    exc,
+                )

@@ -81,7 +81,9 @@ def _now() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
-def classify_failure(exc: BaseException, *, run_id: str, agent_id: Any) -> tuple[ErrorInfo, bool]:
+def classify_failure(
+    exc: BaseException, *, run_id: str, agent_id: Any
+) -> tuple[ErrorInfo, bool]:
     """How a failed attempt should be recorded, and whether trying again can help.
 
     A guardrail trip, an exhausted budget or a permanent error is a deterministic
@@ -89,7 +91,9 @@ def classify_failure(exc: BaseException, *, run_id: str, agent_id: Any) -> tuple
     Anything else is treated as transient — the default for an unexpected crash.
     """
     if isinstance(exc, MiddlewareTermination):
-        return ErrorInfo(code="guardrail_tripped", message=f"Request blocked: {exc.message or exc}"), False
+        return ErrorInfo(
+            code="guardrail_tripped", message=f"Request blocked: {exc.message or exc}"
+        ), False
     if isinstance(exc, BudgetExhaustedError):
         return ErrorInfo(code="budget_exhausted", message=str(exc)), False
     if isinstance(exc, KernelError):
@@ -103,7 +107,7 @@ def classify_failure(exc: BaseException, *, run_id: str, agent_id: Any) -> tuple
 def backoff(policy: RunRetryPolicy, retry_count: int) -> float:
     """Exponential backoff with jitter, capped at the policy's ceiling. Jitter keeps a
     batch of runs that failed together from retrying together."""
-    delay = min(policy.backoff_s * (2 ** retry_count), policy.max_backoff_s)
+    delay = min(policy.backoff_s * (2**retry_count), policy.max_backoff_s)
     return delay * random.uniform(0.8, 1.2) if delay else 0.0
 
 
@@ -142,7 +146,9 @@ class Worker:
     async def start(self) -> None:
         self._running = True
         self._poll_task = asyncio.create_task(self._poll(), name="worker-poll")
-        self._stats_task = asyncio.create_task(self._publish_stats(), name="worker-stats")
+        self._stats_task = asyncio.create_task(
+            self._publish_stats(), name="worker-stats"
+        )
 
     async def stop(self) -> None:
         self._running = False
@@ -182,7 +188,12 @@ class Worker:
             try:
                 free = self._max_concurrency - len(self._tasks)
                 leases = (
-                    await self._store.lease(worker_id=self._worker_id, capacity=free, lease_s=self._lease_s, now=_now())
+                    await self._store.lease(
+                        worker_id=self._worker_id,
+                        capacity=free,
+                        lease_s=self._lease_s,
+                        now=_now(),
+                    )
                     if free > 0
                     else []
                 )
@@ -192,9 +203,15 @@ class Worker:
                         # Nothing here can run it yet (a cold start before registration
                         # finishes). Holding the lease lets it expire and the run be
                         # reclaimed once the agent is registered.
-                        logger.warning("agent %s is not registered; leaving run %s to be reclaimed", lease.agent, lease.run_id)
+                        logger.warning(
+                            "agent %s is not registered; leaving run %s to be reclaimed",
+                            lease.agent,
+                            lease.run_id,
+                        )
                         continue
-                    self._tasks[lease.run_id] = asyncio.create_task(self._run(lease, agent), name=f"run-{lease.run_id[:8]}")
+                    self._tasks[lease.run_id] = asyncio.create_task(
+                        self._run(lease, agent), name=f"run-{lease.run_id[:8]}"
+                    )
             except Exception:  # noqa: BLE001
                 logger.exception("worker poll failed")
             await asyncio.sleep(self._poll_interval_s)
@@ -204,7 +221,10 @@ class Worker:
         from opentelemetry.metrics import Observation
 
         def observe(_options: Any) -> list[Observation]:
-            return [Observation(value, {"state": state}) for state, value in self._last_stats.items()]
+            return [
+                Observation(value, {"state": state})
+                for state, value in self._last_stats.items()
+            ]
 
         instruments().observe_queue(observe)
         while self._running:
@@ -236,7 +256,11 @@ class Worker:
         if lease.deadline is not None:
             cutoffs.append(lease.deadline)
         budget = lease.supervision.execution_budget if lease.supervision else None
-        if budget is not None and budget.deadline_s is not None and lease.started_at is not None:
+        if (
+            budget is not None
+            and budget.deadline_s is not None
+            and lease.started_at is not None
+        ):
             cutoffs.append(lease.started_at + timedelta(seconds=budget.deadline_s))
         return min(cutoffs) if cutoffs else None
 
@@ -259,7 +283,9 @@ class Worker:
             attributes[semconv.RUN_THREAD] = lease.thread_id
         heartbeat: asyncio.Task[None] | None = None
         try:
-            with span(semconv.SPAN_RUN, attributes=attributes, parent=lease.trace) as handle:
+            with span(
+                semconv.SPAN_RUN, attributes=attributes, parent=lease.trace
+            ) as handle:
                 try:
                     meta = RunMeta(
                         run_id=run_id,
@@ -273,7 +299,14 @@ class Worker:
                     events = await self._store.read_events(run_id, durable_only=True)
                     # The version a run started under is recorded in its own journal, so it
                     # is whatever agent actually ran it — however the run was created.
-                    pinned = next((e.payload.get("agent_version") for e in events if e.kind == RunLogKind.RUN_STARTED), None)
+                    pinned = next(
+                        (
+                            e.payload.get("agent_version")
+                            for e in events
+                            if e.kind == RunLogKind.RUN_STARTED
+                        ),
+                        None,
+                    )
                     if pinned is not None and pinned != version:
                         raise NonDeterminismError(
                             f"run {run_id} was started by agent version {pinned!r} but this worker has "
@@ -284,10 +317,14 @@ class Worker:
                         )
 
                     async def commit(entries: Any) -> Any:
-                        return await self._store.commit(lease, Commit(entries=tuple(entries)))
+                        return await self._store.commit(
+                            lease, Commit(entries=tuple(entries))
+                        )
 
                     blob_store = getattr(agent, "blob_store", None)
-                    journal = Journal(str(run_id), events, commit, blob_store=blob_store)
+                    journal = Journal(
+                        str(run_id), events, commit, blob_store=blob_store
+                    )
                     ctx = RunContext(
                         meta=meta,
                         lease=lease,
@@ -298,24 +335,37 @@ class Worker:
                         tool_invoker=self._build_tool_invoker(agent),
                         agent=agent,
                     )
-                    started_before = any(e.kind == RunLogKind.RUN_STARTED for e in events)
+                    started_before = any(
+                        e.kind == RunLogKind.RUN_STARTED for e in events
+                    )
                     await commit(
                         [
                             NewEntry(
-                                kind=RunLogKind.RUN_RESUMED if started_before else RunLogKind.RUN_STARTED,
-                                payload={"agent": str(lease.agent), "attempt": lease.attempt, "agent_version": version},
+                                kind=RunLogKind.RUN_RESUMED
+                                if started_before
+                                else RunLogKind.RUN_STARTED,
+                                payload={
+                                    "agent": str(lease.agent),
+                                    "attempt": lease.attempt,
+                                    "agent_version": version,
+                                },
                                 dedup_key=f"lease:{lease.epoch}",
                             )
                         ]
                     )
-                    heartbeat = asyncio.create_task(self._heartbeat(lease, token, asyncio.current_task()), name=f"hb-{run_id[:8]}")
+                    heartbeat = asyncio.create_task(
+                        self._heartbeat(lease, token, asyncio.current_task()),
+                        name=f"hb-{run_id[:8]}",
+                    )
 
                     drained = await self._journaled_drain(ctx, journal, lease)
                     await agent.run(ctx, drained)
                     await self._finish(lease, agent, drained, Complete())
                 except SuspendInterrupt as signal:
                     outcome_label = "suspended"
-                    await self._commit_end(lease, Commit(outcome=Suspend(wake=signal.wakeup)))
+                    await self._commit_end(
+                        lease, Commit(outcome=Suspend(wake=signal.wakeup))
+                    )
                     instruments().suspensions.add(1)
                 except LeaseLostError:
                     outcome_label = "lost"
@@ -334,19 +384,26 @@ class Worker:
                     pass
             if outcome_label in ("completed", "failed", "cancelled"):
                 instruments().runs.add(1, {semconv.RUN_OUTCOME: outcome_label})
-                instruments().run_duration.record((_now() - started).total_seconds(), {semconv.RUN_OUTCOME: outcome_label})
+                instruments().run_duration.record(
+                    (_now() - started).total_seconds(),
+                    {semconv.RUN_OUTCOME: outcome_label},
+                )
             self._tokens.pop(run_id, None)
             self._tasks.pop(run_id, None)
             self._stop_reason.pop(run_id, None)
 
-    async def _journaled_drain(self, ctx: RunContext, journal: Journal, lease: Lease) -> list[Any]:
+    async def _journaled_drain(
+        self, ctx: RunContext, journal: Journal, lease: Lease
+    ) -> list[Any]:
         """Drain the inbox once and remember which messages: a replay must process
         exactly the messages the first attempt saw, not whatever has arrived since."""
         fetched: list[Any] = []
 
         async def build(_path: str, _effect: str):
             fetched.extend(await self._store.drain(lease.agent, limit=100))
-            return {"msg_ids": [m.id for m in fetched]}, lambda entries: ctx._commit(entries)
+            return {"msg_ids": [m.id for m in fetched]}, lambda entries: ctx._commit(
+                entries
+            )
 
         outcome = await journal.record_atomic("inbox.drain", {}, build)
         if not outcome.replayed:
@@ -354,18 +411,27 @@ class Worker:
         by_id = {m.id: m for m in await self._store.drain(lease.agent, limit=1000)}
         return [by_id[i] for i in outcome.value["msg_ids"] if i in by_id]
 
-    async def _heartbeat(self, lease: Lease, token: CancellationToken, task: asyncio.Task[Any] | None) -> None:
+    async def _heartbeat(
+        self, lease: Lease, token: CancellationToken, task: asyncio.Task[Any] | None
+    ) -> None:
         interval = max(self._lease_s / 3, 0.05)
         failures = 0
         run_id = str(lease.run_id)
         while True:
             await asyncio.sleep(interval)
             try:
-                result = await self._store.heartbeat(lease, lease_s=self._lease_s, now=_now())
+                result = await self._store.heartbeat(
+                    lease, lease_s=self._lease_s, now=_now()
+                )
                 failures = 0
             except Exception:  # noqa: BLE001
                 failures += 1
-                logger.warning("heartbeat for run %s failed (%d)", run_id, failures, exc_info=failures == 1)
+                logger.warning(
+                    "heartbeat for run %s failed (%d)",
+                    run_id,
+                    failures,
+                    exc_info=failures == 1,
+                )
                 if failures < _HEARTBEAT_FAILURES_BEFORE_LOST:
                     continue
                 result = HeartbeatResult.LOST
@@ -392,11 +458,17 @@ class Worker:
         except LeaseLostError:
             logger.warning("lost the lease on run %s while ending it", lease.run_id)
 
-    async def _finish(self, lease: Lease, agent: Any, handled: list[Any], outcome: Complete) -> None:
-        await self._store.commit(lease, Commit(ack=tuple(m.id for m in handled), outcome=outcome))
+    async def _finish(
+        self, lease: Lease, agent: Any, handled: list[Any], outcome: Complete
+    ) -> None:
+        await self._store.commit(
+            lease, Commit(ack=tuple(m.id for m in handled), outcome=outcome)
+        )
         await self._clear_run_history(agent, str(lease.run_id), handled)
 
-    async def _on_stop(self, lease: Lease, agent: Any, stop: BaseException, token: CancellationToken) -> str:
+    async def _on_stop(
+        self, lease: Lease, agent: Any, stop: BaseException, token: CancellationToken
+    ) -> str:
         run_id = str(lease.run_id)
         reason = self._stop_reason.get(run_id, "")
         if reason == "lost":
@@ -407,7 +479,11 @@ class Worker:
             # it resumes on whichever worker next picks it up.
             raise stop
         if reason == "deadline" or "deadline" in str(stop):
-            error = ErrorInfo(code="deadline_exceeded", message="the run's deadline passed", retryable=False)
+            error = ErrorInfo(
+                code="deadline_exceeded",
+                message="the run's deadline passed",
+                retryable=False,
+            )
             await self._commit_end(lease, Commit(outcome=Fail(error=error)))
             return "failed"
         why = reason.removeprefix("cancel:") or str(stop) or "cancelled"
@@ -426,8 +502,12 @@ class Worker:
             # The messages stay in the inbox: the retry will find the same input.
             delay = backoff(lease.retry_policy, lease.retry_count)
             if isinstance(exc, RateLimitedError) and exc.retry_after is not None:
-                delay = max(delay, exc.retry_after)  # the provider said when to come back
-            await self._commit_end(lease, Commit(outcome=Retry(error=error, delay_s=delay)))
+                delay = max(
+                    delay, exc.retry_after
+                )  # the provider said when to come back
+            await self._commit_end(
+                lease, Commit(outcome=Retry(error=error, delay_s=delay))
+            )
             instruments().retries.add(1)
             return "retrying"
         if retryable:
@@ -435,7 +515,9 @@ class Worker:
             nacks = tuple(Nack(msg_id=m.id, error=error, final=True) for m in inbox)
             await self._commit_end(lease, Commit(nack=nacks, outcome=Fail(error=error)))
         else:
-            await self._commit_end(lease, Commit(ack=tuple(m.id for m in inbox), outcome=Fail(error=error)))
+            await self._commit_end(
+                lease, Commit(ack=tuple(m.id for m in inbox), outcome=Fail(error=error))
+            )
         return "failed"
 
     async def _safe_drain(self, lease: Lease) -> list[Any]:
@@ -444,14 +526,20 @@ class Worker:
         except Exception:  # noqa: BLE001
             return []
 
-    async def _clear_run_history(self, agent: Any, run_id: str, handled: list[Any]) -> None:
+    async def _clear_run_history(
+        self, agent: Any, run_id: str, handled: list[Any]
+    ) -> None:
         """Delete run-scoped history once the run has ended. After the commit, never
         before: a crash between the two leaks a transcript, whereas deleting first would
         lose one a retry still needs."""
         from substrate.types.supervision import HistoryRetention
 
         context_cfg = getattr(agent, "_context", None)
-        if context_cfg is None or getattr(context_cfg, "retention", HistoryRetention.PERMANENT) != HistoryRetention.RUN:
+        if (
+            context_cfg is None
+            or getattr(context_cfg, "retention", HistoryRetention.PERMANENT)
+            != HistoryRetention.RUN
+        ):
             return
         history = getattr(context_cfg, "history", None)
         if history is None:
@@ -467,7 +555,12 @@ class Worker:
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001
-                logger.warning("could not delete history for agent %s run %s session %s", agent.id, run_id, session_id)
+                logger.warning(
+                    "could not delete history for agent %s run %s session %s",
+                    agent.id,
+                    run_id,
+                    session_id,
+                )
 
 
 __all__ = ["Worker", "backoff", "classify_failure"]

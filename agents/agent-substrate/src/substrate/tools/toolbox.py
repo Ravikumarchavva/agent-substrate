@@ -23,7 +23,9 @@ def check_declaration(tool: object) -> None:
     if not isinstance(getattr(tool, "risk", None), ToolRisk):
         problems.append(f"risk must be a ToolRisk, got {getattr(tool, 'risk', None)!r}")
     if not isinstance(getattr(tool, "idempotent", None), bool):
-        problems.append(f"idempotent must be True or False, got {getattr(tool, 'idempotent', None)!r}")
+        problems.append(
+            f"idempotent must be True or False, got {getattr(tool, 'idempotent', None)!r}"
+        )
     if problems:
         raise ToolDeclarationError(str(getattr(tool, "name", tool)), tuple(problems))
 

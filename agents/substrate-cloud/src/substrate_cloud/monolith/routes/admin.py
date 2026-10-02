@@ -265,7 +265,9 @@ async def set_storage_quota(
         await db.commit()
 
     store.set_quota_override(tenant_id, body.quota_bytes)
-    logger.info("Admin set storage quota for tenant %s: %r", tenant_id, body.quota_bytes)
+    logger.info(
+        "Admin set storage quota for tenant %s: %r", tenant_id, body.quota_bytes
+    )
     return {
         "tenant_id": tenant_id,
         "quota_bytes": store.effective_quota(tenant_id),

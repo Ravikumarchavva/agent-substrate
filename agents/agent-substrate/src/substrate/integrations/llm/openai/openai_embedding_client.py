@@ -50,7 +50,9 @@ class OpenAIEmbeddingClient(BaseEmbeddingClient):
         timeout: Optional[float] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model=model, dimensions=dimensions, max_input_tokens=8191, **kwargs)
+        super().__init__(
+            model=model, dimensions=dimensions, max_input_tokens=8191, **kwargs
+        )
 
         client_kwargs: dict[str, Any] = {}
         if api_key:
@@ -77,12 +79,18 @@ class OpenAIEmbeddingClient(BaseEmbeddingClient):
         usage_tokens = 0
         served_model = self.model
         for start in range(0, len(texts), _MAX_INPUTS_PER_REQUEST):
-            response = await self.client.embeddings.create(**create_kwargs, input=texts[start : start + _MAX_INPUTS_PER_REQUEST])
+            response = await self.client.embeddings.create(
+                **create_kwargs, input=texts[start : start + _MAX_INPUTS_PER_REQUEST]
+            )
             # Sort by index to guarantee order matches input
-            embeddings.extend(item.embedding for item in sorted(response.data, key=lambda d: d.index))
+            embeddings.extend(
+                item.embedding for item in sorted(response.data, key=lambda d: d.index)
+            )
             usage_tokens += response.usage.total_tokens if response.usage else 0
             served_model = response.model
 
         if embeddings and self.dimensions is None:
             self.dimensions = len(embeddings[0])
-        return EmbeddingResult(embeddings=embeddings, model=served_model, usage_tokens=usage_tokens)
+        return EmbeddingResult(
+            embeddings=embeddings, model=served_model, usage_tokens=usage_tokens
+        )

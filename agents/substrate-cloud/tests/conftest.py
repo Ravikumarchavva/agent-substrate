@@ -27,8 +27,13 @@ os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-a-real-key-see-conftest")
 os.environ.setdefault("JWT_SECRET", "test-secret-" + "x" * 32)
 # The local dev infrastructure (`substrate-cloud up`, deployment/docker/docker-compose.yml): Postgres and Redis on localhost.
 # A .env in the working directory still wins, so a developer with their own settings is unaffected.
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb")
-os.environ.setdefault("ASYNC_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
+)
+os.environ.setdefault(
+    "ASYNC_DATABASE_URL",
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
+)
 
 import pytest
 
@@ -68,7 +73,11 @@ import re
 
 # asyncpg takes a plain ``postgresql://`` URL: drop whatever SQLAlchemy driver suffix (+asyncpg, +psycopg) the setting carries.
 _PG_URL = re.sub(
-    r"^(postgresql)\+\w+", r"\1", os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb")
+    r"^(postgresql)\+\w+",
+    r"\1",
+    os.environ.get(
+        "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb"
+    ),
 )
 _REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 

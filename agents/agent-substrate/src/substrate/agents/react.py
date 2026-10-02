@@ -10,10 +10,20 @@ from substrate.context.protocols import CompactionContext, CompactionPhase
 from substrate.middleware.stage import MiddlewareStage
 from substrate.types.run import RunScope
 from substrate.types.supervision import ExecutionBudget
-from substrate.types.content import ChatMessage, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types.content import (
+    ChatMessage,
+    Role,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 from substrate.types.finish_reason import FinishReason
 from substrate.types.identity import Actor, Topic
-from substrate.types.errors import BudgetExhaustedError, ContentFilterError, ContextLengthError
+from substrate.types.errors import (
+    BudgetExhaustedError,
+    ContentFilterError,
+    ContextLengthError,
+)
 from substrate.models.protocols import GenerationOptions, LLMResponse, ReasoningEffort
 from substrate.runtime.message import ChatPayload, DataPayload, Message
 from substrate.types.run_log import RunLogKind
@@ -26,7 +36,11 @@ from substrate.agents.base import BaseAgent
 from substrate.agents.routed import handle
 from substrate.context.compaction.sliding_window import SlidingWindowCompaction
 from substrate.context.context import ContextConfig
-from substrate.middleware._contracts import AgentRunResult, MiddlewareContext, ToolCallRecord
+from substrate.middleware._contracts import (
+    AgentRunResult,
+    MiddlewareContext,
+    ToolCallRecord,
+)
 from substrate.middleware.pipeline import MiddlewarePipeline
 
 logger = logging.getLogger(__name__)
@@ -95,7 +109,9 @@ class ReActAgent(BaseAgent):
         self._output_topic = output_topic
         self.approval_handler = approval_handler
         self.approval_required_risk = approval_required_risk
-        self.execution_budget = execution_budget  # what the engine enforces when no budget was inherited
+        self.execution_budget = (
+            execution_budget  # what the engine enforces when no budget was inherited
+        )
         self.middleware = middleware or MiddlewarePipeline()
         self._initial_tool_choice = initial_tool_choice
         self._reasoning = reasoning
@@ -168,10 +184,16 @@ class ReActAgent(BaseAgent):
             # The prompt did not fit. Say so to the pipeline's own strategies is not enough —
             # they already ran — so halve what is sent (oldest first, never splitting a tool
             # call from its result) and try once more. A second overflow is real and propagates.
-            smaller = await SlidingWindowCompaction(max_messages=max(2, len(llm_messages) // 2)).compact(llm_messages)
+            smaller = await SlidingWindowCompaction(
+                max_messages=max(2, len(llm_messages) // 2)
+            ).compact(llm_messages)
             if len(smaller) >= len(llm_messages):
                 raise
-            logger.warning("context window exceeded; retrying with %d of %d messages", len(smaller), len(llm_messages))
+            logger.warning(
+                "context window exceeded; retrying with %d of %d messages",
+                len(smaller),
+                len(llm_messages),
+            )
             resp = await ctx.llm(smaller, options=options)
         return resp
 
@@ -180,7 +202,9 @@ class ReActAgent(BaseAgent):
         tool that declared itself concurrency-safe."""
         if len(tool_calls) < 2 or self.tools is None:
             return False
-        return all(is_concurrency_safe(self.tools.get(tc.tool_name)) for tc in tool_calls)
+        return all(
+            is_concurrency_safe(self.tools.get(tc.tool_name)) for tc in tool_calls
+        )
 
     async def _execute_tool_calls(
         self, ctx: RunContext, tool_calls: list[ToolUseBlock]
@@ -195,7 +219,9 @@ class ReActAgent(BaseAgent):
         if self._batchable(runnable):
             ctx.check()
             t0 = time.monotonic()
-            batch = await ctx.tool_batch([(tc.tool_name, tc.arguments) for tc in runnable])
+            batch = await ctx.tool_batch(
+                [(tc.tool_name, tc.arguments) for tc in runnable]
+            )
             elapsed_ms = (time.monotonic() - t0) * 1000
             outcomes = {tc.call_id: (r, elapsed_ms) for tc, r in zip(runnable, batch)}
         else:
@@ -272,7 +298,9 @@ class ReActAgent(BaseAgent):
         content = [b for b in resp.content if not isinstance(b, ToolUseBlock)]
         if not any(isinstance(b, TextBlock) and b.text.strip() for b in content):
             content.append(
-                TextBlock(text=f"Stopped after {self._max_iterations} steps without a final answer.")
+                TextBlock(
+                    text=f"Stopped after {self._max_iterations} steps without a final answer."
+                )
             )
         return ChatMessage(role=Role.ASSISTANT, content=content)
 
@@ -358,7 +386,9 @@ class ReActAgent(BaseAgent):
                 options = base_options
 
                 if resp.finish_reason == FinishReason.CONTENT_FILTER:
-                    raise ContentFilterError("the provider withheld the response on content grounds")
+                    raise ContentFilterError(
+                        "the provider withheld the response on content grounds"
+                    )
 
                 assistant_turn = ChatMessage(role=Role.ASSISTANT, content=resp.content)
                 messages.append(assistant_turn)
@@ -368,7 +398,9 @@ class ReActAgent(BaseAgent):
                     if resp.finish_reason == FinishReason.LENGTH:
                         # A reply cut off at the token limit reads like a finished one. Say so.
                         status = "truncated"
-                        await ctx.log_once(RunLogKind.RUN_TRUNCATED, {"reason": "max_tokens"})
+                        await ctx.log_once(
+                            RunLogKind.RUN_TRUNCATED, {"reason": "max_tokens"}
+                        )
                     break
 
                 results, records = await self._execute_tool_calls(ctx, tool_calls)
@@ -379,7 +411,10 @@ class ReActAgent(BaseAgent):
                 status = "max_iterations"
                 await ctx.log_once(
                     RunLogKind.RUN_TRUNCATED,
-                    {"reason": "max_iterations", "max_iterations": self._max_iterations},
+                    {
+                        "reason": "max_iterations",
+                        "max_iterations": self._max_iterations,
+                    },
                 )
         except BudgetExhaustedError as exc:
             # The run still fails, but the conversation isn't erased: keep what

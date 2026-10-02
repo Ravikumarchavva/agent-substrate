@@ -41,7 +41,9 @@ class _Worker:
     def kill(self) -> None:
         try:
             if os.name == "posix":
-                os.killpg(self.proc.pid, signal.SIGKILL)  # the worker and anything it started (tesseract)
+                os.killpg(
+                    self.proc.pid, signal.SIGKILL
+                )  # the worker and anything it started (tesseract)
             else:
                 self.proc.kill()
         except (ProcessLookupError, PermissionError, OSError):
@@ -74,10 +76,17 @@ def _read_exact(stream, size: int) -> bytes | None:
 
 
 class WorkerPool:
-    def __init__(self, size: int | None = None, *, command: list[str] | None = None) -> None:
+    def __init__(
+        self, size: int | None = None, *, command: list[str] | None = None
+    ) -> None:
         """``command`` replaces the worker program (another interpreter, or a stub in a test); it must speak the frame protocol."""
         self.size = size or max(1, min(4, (os.cpu_count() or 2)))
-        self._command = command or [sys.executable, "-s", "-m", "substrate.documents.reading.worker"]
+        self._command = command or [
+            sys.executable,
+            "-s",
+            "-m",
+            "substrate.documents.reading.worker",
+        ]
         self._idle: list[_Worker] = []
         self._count = 0
         self._cond = threading.Condition()
@@ -105,7 +114,10 @@ class WorkerPool:
                 now = time.monotonic()
                 keep: list[_Worker] = []
                 for worker in self._idle:
-                    if worker.proc.poll() is not None or now - worker.last_used > IDLE_SECONDS:
+                    if (
+                        worker.proc.poll() is not None
+                        or now - worker.last_used > IDLE_SECONDS
+                    ):
                         worker.kill()
                         self._count -= 1
                     else:
@@ -119,14 +131,21 @@ class WorkerPool:
                         return self._spawn()
                     except OSError as exc:
                         self._count -= 1
-                        raise WorkerFailure(f"could not start a reader process: {exc}") from exc
+                        raise WorkerFailure(
+                            f"could not start a reader process: {exc}"
+                        ) from exc
                 self._cond.wait(timeout=1.0)
 
     def _release(self, worker: _Worker, *, healthy: bool) -> None:
         with self._cond:
             worker.jobs += 1
             worker.last_used = time.monotonic()
-            if healthy and worker.proc.poll() is None and worker.jobs < RECYCLE_AFTER and not self._closed:
+            if (
+                healthy
+                and worker.proc.poll() is None
+                and worker.jobs < RECYCLE_AFTER
+                and not self._closed
+            ):
                 self._idle.append(worker)
             else:
                 worker.kill()
@@ -156,7 +175,9 @@ class WorkerPool:
                 stdin.flush()  # type: ignore[union-attr]
                 size_bytes = _read_exact(stdout, 4)
                 if size_bytes is None:
-                    outcome["error"] = "the reader process died while reading this document (out of memory, or a crash in the parser)"
+                    outcome["error"] = (
+                        "the reader process died while reading this document (out of memory, or a crash in the parser)"
+                    )
                     return
                 payload = _read_exact(stdout, struct.unpack(">I", size_bytes)[0])
                 if payload is None:
@@ -173,7 +194,10 @@ class WorkerPool:
             worker.kill()
             thread.join(5)
             self._release(worker, healthy=False)
-            raise WorkerFailure(f"reading took longer than {timeout_s:g}s and was stopped", timed_out=True)
+            raise WorkerFailure(
+                f"reading took longer than {timeout_s:g}s and was stopped",
+                timed_out=True,
+            )
         if "payload" not in outcome:
             self._release(worker, healthy=False)
             raise WorkerFailure(str(outcome.get("error", "the reader process failed")))

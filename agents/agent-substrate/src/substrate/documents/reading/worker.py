@@ -41,9 +41,15 @@ def _limit(memory_bytes: int) -> None:
             baseline = int(handle.read().split()[0]) * os.sysconf("SC_PAGE_SIZE")
     except (OSError, ValueError):
         baseline = 0
-    for name, soft in (("RLIMIT_AS", baseline + memory_bytes), ("RLIMIT_FSIZE", 0), ("RLIMIT_CORE", 0)):
+    for name, soft in (
+        ("RLIMIT_AS", baseline + memory_bytes),
+        ("RLIMIT_FSIZE", 0),
+        ("RLIMIT_CORE", 0),
+    ):
         limit = getattr(resource, name, None)
-        if limit is None or sys.platform == "darwin" and name == "RLIMIT_AS":  # macOS does not enforce RLIMIT_AS
+        if (
+            limit is None or sys.platform == "darwin" and name == "RLIMIT_AS"
+        ):  # macOS does not enforce RLIMIT_AS
             continue
         try:
             resource.setrlimit(limit, (soft, soft))

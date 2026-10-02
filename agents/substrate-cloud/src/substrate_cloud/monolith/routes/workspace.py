@@ -27,7 +27,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.stores import WorkspacePathError
-from substrate.workspace.layout import conversation_shared_key, conversation_workspace_prefix, user_prefix
+from substrate.workspace.layout import (
+    conversation_shared_key,
+    conversation_workspace_prefix,
+    user_prefix,
+)
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
 from substrate_cloud.monolith.file_versioning import (
@@ -169,7 +173,12 @@ def _is_version_key(key: str) -> bool:
 def _session_id_from_key(key: str) -> str | None:
     parts = key.split("/")
     # tenants/{tid}/users/{uid}/conversations/{thread_id}/branches/{bid}/...
-    if len(parts) >= 6 and parts[0] == "tenants" and parts[2] == "users" and parts[4] == "conversations":
+    if (
+        len(parts) >= 6
+        and parts[0] == "tenants"
+        and parts[2] == "users"
+        and parts[4] == "conversations"
+    ):
         return parts[5]
     return None
 
@@ -234,7 +243,9 @@ async def list_files(
     # this, which used to list every conversation's shared files twice
     # (conversations now nest under users/{uid}/, so the per-thread loop's
     # results were already a subset of this single scan).
-    all_entries = await store.list_prefix(f"{user_prefix(claims.tenant_id, claims.sub)}/")
+    all_entries = await store.list_prefix(
+        f"{user_prefix(claims.tenant_id, claims.sub)}/"
+    )
 
     def _keep(key: str) -> bool:
         if not _is_listable_workspace_key(key):
@@ -300,9 +311,7 @@ async def list_files(
     return WorkspaceFilesResponse(files=files)
 
 
-async def _thread_owner(
-    db: AsyncSession, claims: AuthClaims, thread_id: str
-) -> str:
+async def _thread_owner(db: AsyncSession, claims: AuthClaims, thread_id: str) -> str:
     """The thread's actual owner (`Thread.user_identifier`), after
     confirming the *caller* may access it — same predicate as
     ``get_owned_thread`` (owner, or an admin: platform-wide, or
@@ -355,7 +364,9 @@ async def _resolve_session_key(
     if await store.exists(exact):
         return exact
     base = path.rsplit("/", 1)[-1]
-    shared_prefix = f"{conversation_workspace_prefix(tenant_id, user_id, thread_id)}/shared/"
+    shared_prefix = (
+        f"{conversation_workspace_prefix(tenant_id, user_id, thread_id)}/shared/"
+    )
     matches = [
         (key, mtime)
         for (key, _size, mtime) in await store.list_prefix(shared_prefix)
@@ -616,7 +627,9 @@ async def restore_version(
     history too)."""
     store = _require_workspace_store(ctx)
     owner_id = await _thread_owner(db, claims, body.thread_id)
-    key = await _resolve_session_key(store, claims.tenant_id, owner_id, body.thread_id, body.path)
+    key = await _resolve_session_key(
+        store, claims.tenant_id, owner_id, body.thread_id, body.path
+    )
     version = (
         await db.execute(
             select(FileVersion).where(
@@ -724,9 +737,10 @@ async def delete_file(
         # else's file).
         if not claims.is_admin:
             raise HTTPException(status_code=404, detail="File not found")
-        if thread_uuid is not None and await get_owned_thread(
-            db, thread_uuid, claims
-        ) is None:
+        if (
+            thread_uuid is not None
+            and await get_owned_thread(db, thread_uuid, claims) is None
+        ):
             raise HTTPException(status_code=404, detail="File not found")
 
     try:

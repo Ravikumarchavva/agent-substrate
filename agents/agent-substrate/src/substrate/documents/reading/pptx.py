@@ -33,24 +33,37 @@ def _paragraph_text(paragraph: ET.Element) -> str:
 
 
 class _Slide:
-    def __init__(self, pkg: Package, part: str, builder: PageBuilder, rels: dict) -> None:
+    def __init__(
+        self, pkg: Package, part: str, builder: PageBuilder, rels: dict
+    ) -> None:
         self.pkg, self.part, self.out, self.rels = pkg, part, builder, rels
         self.title: str | None = None
 
     def paragraphs(self, body: ET.Element, *, placeholder: str | None) -> list[str]:
         lines: list[str] = []
         for paragraph in body.findall(_a("p")):
-            text = " ".join(_paragraph_text(paragraph).split()) if placeholder in _TITLES else _paragraph_text(paragraph).strip()
+            text = (
+                " ".join(_paragraph_text(paragraph).split())
+                if placeholder in _TITLES
+                else _paragraph_text(paragraph).strip()
+            )
             if not text:
                 continue
             ppr = paragraph.find(_a("pPr"))
             level = int(ppr.get("lvl", 0)) if ppr is not None else 0
-            bulleted = ppr is not None and (ppr.find(_a("buChar")) is not None or ppr.find(_a("buAutoNum")) is not None)
+            bulleted = ppr is not None and (
+                ppr.find(_a("buChar")) is not None
+                or ppr.find(_a("buAutoNum")) is not None
+            )
             no_bullet = ppr is not None and ppr.find(_a("buNone")) is not None
             in_body = placeholder in ("body", "obj", None) and placeholder is not None
             if bulleted or (in_body and not no_bullet):
                 numbered = ppr is not None and ppr.find(_a("buAutoNum")) is not None
-                lines.append("  " * level + ("1. " if numbered else "- ") + text.replace("\n", " "))
+                lines.append(
+                    "  " * level
+                    + ("1. " if numbered else "- ")
+                    + text.replace("\n", " ")
+                )
             else:
                 lines.append(text.replace("\n", "  \n"))
         return lines
@@ -77,7 +90,9 @@ class _Slide:
             blip = node.find(f"{_p('blipFill')}/{_a('blip')}")
             rid = blip.get(f"{{{R}}}embed") if blip is not None else None
             rel = self.rels.get(rid or "")
-            alt = (node.find(f"{_p('nvPicPr')}/{_p('cNvPr')}") or ET.Element("x")).get("descr", "")
+            alt = (node.find(f"{_p('nvPicPr')}/{_p('cNvPr')}") or ET.Element("x")).get(
+                "descr", ""
+            )
             if rel is None or rel[2] or image_type(rel[1]) is None:
                 self.out.skipped_images += 1
                 return
@@ -87,7 +102,13 @@ class _Slide:
         elif tag == _p("graphicFrame"):
             for table in node.iter(_a("tbl")):
                 rows = [
-                    [" ".join(" ".join(_paragraph_text(p).split()) for p in tc.iter(_a("p"))).strip() for tc in tr.findall(_a("tc"))]
+                    [
+                        " ".join(
+                            " ".join(_paragraph_text(p).split())
+                            for p in tc.iter(_a("p"))
+                        ).strip()
+                        for tc in tr.findall(_a("tc"))
+                    ]
                     for tr in table.findall(_a("tr"))
                 ]
                 self.out.block(gfm_table(rows))
@@ -108,7 +129,10 @@ class _Slide:
                 if ph is not None and ph.get("type") == "body":
                     body = sp.find(_p("txBody"))
                     if body is not None:
-                        texts += [" ".join(_paragraph_text(p).split()) for p in body.findall(_a("p"))]
+                        texts += [
+                            " ".join(_paragraph_text(p).split())
+                            for p in body.findall(_a("p"))
+                        ]
             note = " ".join(t for t in texts if t)
             if note:
                 self.out.block("> Notes: " + note)
@@ -143,7 +167,13 @@ def read_pptx(pkg: Package) -> tuple[list, str | None, list[str]]:
         builder._blocks[-1].insert(before, heading)  # noqa: SLF001
         slide.notes()
         first_title = first_title or slide.title
-    warnings = [f"{builder.skipped_images} picture(s) in unsupported formats were not extracted"] if builder.skipped_images else []
+    warnings = (
+        [
+            f"{builder.skipped_images} picture(s) in unsupported formats were not extracted"
+        ]
+        if builder.skipped_images
+        else []
+    )
     return builder.pages(keep_empty=True), core_title(pkg) or first_title, warnings
 
 

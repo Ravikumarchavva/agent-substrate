@@ -106,7 +106,9 @@ async def test_remote_mode_never_calls_hardware_detect_or_constructs_pool(
         raise AssertionError("hardware.detect() must not be called in remote mode")
 
     def _fail_pool_ctor(**kwargs):
-        raise AssertionError("LocalLlamaServerPool must not be constructed in remote mode")
+        raise AssertionError(
+            "LocalLlamaServerPool must not be constructed in remote mode"
+        )
 
     import inference_pool.hardware as hardware_mod
 
@@ -144,7 +146,9 @@ async def test_local_mode_with_sufficient_vram_constructs_two_pools_and_wires_ur
 
     import inference_pool.llama_pool as llama_pool_mod
 
-    monkeypatch.setattr(llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool)
+    monkeypatch.setattr(
+        llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool
+    )
 
     monkeypatch.setenv("EMBEDDING_RERANKER_MODE", "local")
     fake_app = _fake_app()
@@ -159,8 +163,14 @@ async def test_local_mode_with_sufficient_vram_constructs_two_pools_and_wires_ur
         assert rerank_pool.kwargs["gpu_devices"] == ["gpu:0"]
 
         reranker = fake_app.state.engine
-        assert reranker.embed_server_url == f"http://127.0.0.1:{embed_pool.kwargs['base_port']}"
-        assert reranker.rerank_server_url == f"http://127.0.0.1:{rerank_pool.kwargs['base_port']}"
+        assert (
+            reranker.embed_server_url
+            == f"http://127.0.0.1:{embed_pool.kwargs['base_port']}"
+        )
+        assert (
+            reranker.rerank_server_url
+            == f"http://127.0.0.1:{rerank_pool.kwargs['base_port']}"
+        )
         assert fake_app.state.embed_pool is embed_pool
         assert fake_app.state.rerank_pool is rerank_pool
 
@@ -183,7 +193,9 @@ async def test_local_mode_with_insufficient_vram_degrades_to_cpu(
 
     import inference_pool.llama_pool as llama_pool_mod
 
-    monkeypatch.setattr(llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool)
+    monkeypatch.setattr(
+        llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool
+    )
 
     monkeypatch.setenv("EMBEDDING_RERANKER_MODE", "local")
     fake_app = _fake_app()
@@ -213,7 +225,9 @@ async def test_local_mode_passes_real_embed_and_rerank_flags_via_extra_args(
 
     import inference_pool.llama_pool as llama_pool_mod
 
-    monkeypatch.setattr(llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool)
+    monkeypatch.setattr(
+        llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool
+    )
 
     monkeypatch.setenv("EMBEDDING_RERANKER_MODE", "local")
     fake_app = _fake_app()
@@ -259,7 +273,9 @@ async def test_local_mode_with_no_gpu_detected_uses_cpu_without_reserving(
 
     import inference_pool.llama_pool as llama_pool_mod
 
-    monkeypatch.setattr(llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool)
+    monkeypatch.setattr(
+        llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool
+    )
 
     monkeypatch.setenv("EMBEDDING_RERANKER_MODE", "local")
     fake_app = _fake_app()

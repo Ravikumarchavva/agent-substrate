@@ -17,7 +17,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from substrate.workspace.protocols import WorkspaceFileEntry, WorkspaceManifest, WorkspaceSnapshot
+from substrate.workspace.protocols import (
+    WorkspaceFileEntry,
+    WorkspaceManifest,
+    WorkspaceSnapshot,
+)
 
 from .cas import BlobCAS
 

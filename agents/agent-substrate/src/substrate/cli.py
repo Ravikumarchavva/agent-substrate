@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 
+
 def cmd_chat(args: argparse.Namespace) -> None:
     """Launch an interactive CLI chat session with a ReAct agent."""
     # Late imports so the CLI stays fast for server commands
@@ -91,8 +92,16 @@ def cmd_serve(args: argparse.Namespace) -> None:
     from substrate.server import create_app, load
 
     target = load(args.target)
-    app = target if hasattr(target, "add_api_route") else create_app(target, store=args.store, agui_path=None if args.no_agui else "/agui")
-    print(f"serving {args.target} on http://{args.host}:{args.port}  (POST /chat, POST /agui, GET /health)")
+    app = (
+        target
+        if hasattr(target, "add_api_route")
+        else create_app(
+            target, store=args.store, agui_path=None if args.no_agui else "/agui"
+        )
+    )
+    print(
+        f"serving {args.target} on http://{args.host}:{args.port}  (POST /chat, POST /agui, GET /health)"
+    )
     uvicorn.run(app, host=args.host, port=args.port)
 
 
@@ -100,7 +109,9 @@ def cmd_serve(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="substrate", description="Chat with an agent, or serve one over HTTP")
+    parser = argparse.ArgumentParser(
+        prog="substrate", description="Chat with an agent, or serve one over HTTP"
+    )
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
     sub.required = True
 
@@ -130,13 +141,23 @@ def main() -> None:
 
     # ── serve ──────────────────────────────────────────────────────────────
     p_serve = sub.add_parser(
-        "serve", help="Serve your agent over HTTP: substrate serve my_module:agent (needs the `serve` and `server` extras)"
+        "serve",
+        help="Serve your agent over HTTP: substrate serve my_module:agent (needs the `serve` and `server` extras)",
     )
-    p_serve.add_argument("target", help="module:attribute — an agent, or a function that returns one (or a FastAPI app)")
-    p_serve.add_argument("--store", default="./.substrate", help="Folder of the store (default: ./.substrate)")
+    p_serve.add_argument(
+        "target",
+        help="module:attribute — an agent, or a function that returns one (or a FastAPI app)",
+    )
+    p_serve.add_argument(
+        "--store",
+        default="./.substrate",
+        help="Folder of the store (default: ./.substrate)",
+    )
     p_serve.add_argument("--host", default="127.0.0.1", help="Bind host")
     p_serve.add_argument("--port", type=int, default=8000, help="Bind port")
-    p_serve.add_argument("--no-agui", action="store_true", help="Do not mount the AG-UI endpoint")
+    p_serve.add_argument(
+        "--no-agui", action="store_true", help="Do not mount the AG-UI endpoint"
+    )
     p_serve.set_defaults(func=cmd_serve)
 
     args = parser.parse_args()

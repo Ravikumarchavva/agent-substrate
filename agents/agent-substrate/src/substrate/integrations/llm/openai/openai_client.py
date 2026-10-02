@@ -22,7 +22,13 @@ from substrate.models.modalities import fit_to_capabilities
 from substrate.models.registry import resolve_capabilities
 from substrate.types import RunMeta
 from substrate.types.finish_reason import FinishReason
-from substrate.models import GenerationOptions, ChatModel, LLMResponse, ModelCapabilities, ReasoningEffort
+from substrate.models import (
+    GenerationOptions,
+    ChatModel,
+    LLMResponse,
+    ModelCapabilities,
+    ReasoningEffort,
+)
 from substrate.types import Usage
 from substrate.types import ChatMessage, ContentBlock
 from substrate.tools import Tool, is_hosted_tool, is_provider_defined_tool
@@ -72,7 +78,9 @@ def _normalize_strict_json_schema(schema: Any) -> Any:
 
         if normalized.get("type") == "object":
             normalized.setdefault("additionalProperties", False)
-            if "properties" in normalized and isinstance(normalized["properties"], dict):
+            if "properties" in normalized and isinstance(
+                normalized["properties"], dict
+            ):
                 normalized["required"] = list(normalized["properties"].keys())
 
         for key in ("properties", "$defs", "definitions"):
@@ -132,7 +140,6 @@ def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str,
     ]
 
 
-
 def responses_finish_reason(response: object, content: list) -> FinishReason:
     """Why a Responses-API response stopped, from its status and ``incomplete_details``."""
     status = getattr(response, "status", None)
@@ -149,10 +156,12 @@ def responses_finish_reason(response: object, content: list) -> FinishReason:
         return FinishReason.TOOL_CALLS
     for item in getattr(response, "output", None) or []:
         if getattr(item, "type", None) == "message" and any(
-            getattr(part, "type", None) == "refusal" for part in getattr(item, "content", None) or []
+            getattr(part, "type", None) == "refusal"
+            for part in getattr(item, "content", None) or []
         ):
             return FinishReason.REFUSAL
     return FinishReason.STOP if status in ("completed", None) else FinishReason.OTHER
+
 
 class OpenAIClient(ChatModel):
     """OpenAI API client — text, vision, and audio in one place.
@@ -353,7 +362,9 @@ class OpenAIClient(ChatModel):
                 tool_calls.append(self._tool_use_block(item))
             elif item.type == "reasoning":
                 summaries.extend(
-                    part.text for part in (getattr(item, "summary", None) or []) if part.text
+                    part.text
+                    for part in (getattr(item, "summary", None) or [])
+                    if part.text
                 )
             # tool_search_call / tool_search_output are metadata items produced
             # by OpenAI hosted tool search (gpt-5.4+) — skipped; the actual

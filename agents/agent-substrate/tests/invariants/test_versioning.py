@@ -48,7 +48,12 @@ async def _suspend_under(path: Path, version: str) -> str:
     agent = Waiter(version)
     async with Runtime.open(path) as rt:
         await rt.register(agent)
-        run_id = await rt.submit(agent.id, Message(target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})))
+        run_id = await rt.submit(
+            agent.id,
+            Message(
+                target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})
+            ),
+        )
         for _ in range(300):
             if (await rt.get_run(run_id)).status == "suspended":
                 return str(run_id)
@@ -56,7 +61,9 @@ async def _suspend_under(path: Path, version: str) -> str:
     raise AssertionError("the run never suspended")
 
 
-async def test_i15_a_run_continues_under_the_version_that_started_it(tmp_path: Path) -> None:
+async def test_i15_a_run_continues_under_the_version_that_started_it(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "rt.sqlite3"
     run_id = await _suspend_under(path, "1")
 
@@ -79,5 +86,7 @@ async def test_i15_a_run_is_refused_by_a_different_version(tmp_path: Path) -> No
         await rt.store.signal(run_id, "go", {})
         kind, payload = await _terminal(rt, run_id)
 
-    assert kind == RunLogKind.RUN_FAILED and not changed.resumed, "the new code must not continue the old run"
+    assert kind == RunLogKind.RUN_FAILED and not changed.resumed, (
+        "the new code must not continue the old run"
+    )
     assert "version" in str(payload.get("error", "")), payload

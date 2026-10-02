@@ -36,7 +36,9 @@ STREAMING_KINDS = frozenset(
 )
 
 
-def wire_from_log(kind: str, payload: dict, *, history: bool = False) -> WireEvent | None:
+def wire_from_log(
+    kind: str, payload: dict, *, history: bool = False
+) -> WireEvent | None:
     """Return the wire event for a log entry, or None if it isn't streamable.
 
     A live view reads the token stream (``text.delta``). A *history* view reads a
@@ -46,7 +48,9 @@ def wire_from_log(kind: str, payload: dict, *, history: bool = False) -> WireEve
     """
     if history:
         if kind == RunLogKind.ASSISTANT_MESSAGE:
-            return _ADAPTER.validate_python({"type": RunLogKind.TEXT_DELTA, "text": payload.get("text", "")})
+            return _ADAPTER.validate_python(
+                {"type": RunLogKind.TEXT_DELTA, "text": payload.get("text", "")}
+            )
         if kind in (RunLogKind.TEXT_DELTA, RunLogKind.REASONING_DELTA):
             return None
     elif kind == RunLogKind.ASSISTANT_MESSAGE:

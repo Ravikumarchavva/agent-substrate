@@ -44,30 +44,57 @@ def paragraph_xml(text: str) -> bytes:
 
 def zip_bomb_docx() -> bytes:
     """A DOCX whose one huge part inflates ~1000:1 — a few hundred KB that wants hundreds of MB."""
-    return docx_with(b"<w:document " + W + b"><w:body>" + paragraph_xml("hi") + b"</w:body></w:document>", **{"word/bomb.bin": b"\x00" * (300 * 1024 * 1024)})
+    return docx_with(
+        b"<w:document "
+        + W
+        + b"><w:body>"
+        + paragraph_xml("hi")
+        + b"</w:body></w:document>",
+        **{"word/bomb.bin": b"\x00" * (300 * 1024 * 1024)},
+    )
 
 
 def entity_bomb_docx() -> bytes:
     lol = b'<!DOCTYPE lolz [<!ENTITY a "AAAAAAAAAA"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;"><!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;">]>'
-    return docx_with(lol + b"<w:document " + W + b"><w:body><w:p><w:r><w:t>&c;</w:t></w:r></w:p></w:body></w:document>")
+    return docx_with(
+        lol
+        + b"<w:document "
+        + W
+        + b"><w:body><w:p><w:r><w:t>&c;</w:t></w:r></w:p></w:body></w:document>"
+    )
 
 
 def external_entity_docx() -> bytes:
     xxe = b'<!DOCTYPE d [<!ENTITY x SYSTEM "file:///etc/passwd">]>'
-    return docx_with(xxe + b"<w:document " + W + b"><w:body><w:p><w:r><w:t>&x;</w:t></w:r></w:p></w:body></w:document>")
+    return docx_with(
+        xxe
+        + b"<w:document "
+        + W
+        + b"><w:body><w:p><w:r><w:t>&x;</w:t></w:r></w:p></w:body></w:document>"
+    )
 
 
 def deeply_nested_docx(depth: int = 5000) -> bytes:
     inner = b"<w:p>" * depth + b"<w:r><w:t>x</w:t></w:r>" + b"</w:p>" * depth
-    return docx_with(b"<w:document " + W + b"><w:body>" + inner + b"</w:body></w:document>")
+    return docx_with(
+        b"<w:document " + W + b"><w:body>" + inner + b"</w:body></w:document>"
+    )
 
 
 def many_members_docx(count: int = 6000) -> bytes:
-    return zip_of({**_MINIMAL_DOCX, "word/document.xml": b"<w:document " + W + b"/>", **{f"x/{i}.txt": b"a" for i in range(count)}})
+    return zip_of(
+        {
+            **_MINIMAL_DOCX,
+            "word/document.xml": b"<w:document " + W + b"/>",
+            **{f"x/{i}.txt": b"a" for i in range(count)},
+        }
+    )
 
 
 def encrypted_flag_docx() -> bytes:
-    return docx_with(b"<w:document " + W + b"><w:body/></w:document>", **{"word/secret.bin": b"x"})  # flag set below
+    return docx_with(
+        b"<w:document " + W + b"><w:body/></w:document>", **{"word/secret.bin": b"x"}
+    )  # flag set below
 
 
 def with_encryption_flag(data: bytes) -> bytes:

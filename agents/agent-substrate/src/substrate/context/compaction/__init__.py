@@ -13,14 +13,21 @@ TokenBudgetComposedStrategy          Configurable    Depends            Depends
 from __future__ import annotations
 
 from substrate.context.protocols import CompactionStrategy
-from substrate.context.compaction.coordinator import CompactionCoordinator, DefaultCompactionCoordinator
+from substrate.context.compaction.coordinator import (
+    CompactionCoordinator,
+    DefaultCompactionCoordinator,
+)
 from substrate.context.compaction.pipeline import CompactionPipeline
 from substrate.context.compaction.presets import build_token_budget_pipeline
-from substrate.context.compaction.selective_tool_call import SelectiveToolCallCompactionStrategy
+from substrate.context.compaction.selective_tool_call import (
+    SelectiveToolCallCompactionStrategy,
+)
 from substrate.context.compaction.sliding_window import SlidingWindowCompaction
 from substrate.context.compaction.summarization import SummarizationCompaction
 from substrate.context.compaction.threshold import ThresholdCheckpointStrategy
-from substrate.context.compaction.token_budget_composed import TokenBudgetComposedStrategy
+from substrate.context.compaction.token_budget_composed import (
+    TokenBudgetComposedStrategy,
+)
 from substrate.context.compaction.tool_result import ToolResultCompactionStrategy
 from substrate.context.compaction.truncation import TruncationStrategy
 
@@ -38,4 +45,3 @@ __all__ = [
     "TruncationStrategy",
     "TokenBudgetComposedStrategy",
 ]
-

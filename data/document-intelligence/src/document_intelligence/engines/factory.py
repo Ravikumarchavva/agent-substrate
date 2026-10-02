@@ -164,7 +164,9 @@ async def build_engine(cfg: Any, resolved: ResolvedRuntime) -> ExtractionEngine:
     startup, not on the first real request.
     """
     if resolved.mode == "raw_text":
-        return NativeEngine(max_bytes=getattr(cfg, "max_upload_bytes", 50 * 1024 * 1024))
+        return NativeEngine(
+            max_bytes=getattr(cfg, "max_upload_bytes", 50 * 1024 * 1024)
+        )
 
     if resolved.mode == "ocr_classic":
         # An explicit cfg.device override always wins over the

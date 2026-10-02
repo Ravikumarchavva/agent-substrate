@@ -16,14 +16,19 @@ from typing import Any
 
 from substrate.documents import Library
 from substrate.types.run import RunScope
-from substrate.workspace.layout import conversation_documents_prefix, knowledge_collection
+from substrate.workspace.layout import (
+    conversation_documents_prefix,
+    knowledge_collection,
+)
 
 from substrate_cloud.document_reader import document_reader
 
 logger = logging.getLogger(__name__)
 
 
-def documents_collection(tenant_id: str | None, user_id: str | None, thread_id: str | None) -> str | None:
+def documents_collection(
+    tenant_id: str | None, user_id: str | None, thread_id: str | None
+) -> str | None:
     """The collection of one conversation's documents, or ``None`` if the identity is incomplete (or not a valid id)."""
     if not (tenant_id and user_id and thread_id):
         return None
@@ -37,7 +42,9 @@ def collection_for_scope(scope: RunScope) -> str | None:
     return documents_collection(scope.tenant_id, scope.user_id, scope.thread_id)
 
 
-def knowledge_collection_for(tenant_id: str | None, knowledge_base_id: str) -> str | None:
+def knowledge_collection_for(
+    tenant_id: str | None, knowledge_base_id: str
+) -> str | None:
     """The collection of one tenant's knowledge base, or ``None`` if either id is missing or not a valid id."""
     if not (tenant_id and knowledge_base_id):
         return None
@@ -47,7 +54,9 @@ def knowledge_collection_for(tenant_id: str | None, knowledge_base_id: str) -> s
         return None
 
 
-def knowledge_collection_for_scope(scope: RunScope, knowledge_base_id: str) -> str | None:
+def knowledge_collection_for_scope(
+    scope: RunScope, knowledge_base_id: str
+) -> str | None:
     return knowledge_collection_for(scope.tenant_id, knowledge_base_id)
 
 
@@ -66,14 +75,22 @@ def build_embedder(cfg: Any) -> Any:
     if cfg.EMBEDDING_RERANKER_SERVICE_URL:
         from substrate.models.remote import RemoteEmbedder
 
-        return RemoteEmbedder(cfg.EMBEDDING_RERANKER_SERVICE_URL, api_key=cfg.EMBEDDING_RERANKER_AUTH_TOKEN, timeout=float(cfg.EMBEDDING_RERANKER_TIMEOUT_S))
+        return RemoteEmbedder(
+            cfg.EMBEDDING_RERANKER_SERVICE_URL,
+            api_key=cfg.EMBEDDING_RERANKER_AUTH_TOKEN,
+            timeout=float(cfg.EMBEDDING_RERANKER_TIMEOUT_S),
+        )
     if cfg.EMBEDDING_MODEL:
         try:
             from substrate.integrations.llm.factory import create_embedding_client
 
             return create_embedding_client(cfg.EMBEDDING_MODEL)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("embedding model %r unavailable, knowledge bases will be searched by words only: %s", cfg.EMBEDDING_MODEL, exc)
+            logger.warning(
+                "embedding model %r unavailable, knowledge bases will be searched by words only: %s",
+                cfg.EMBEDDING_MODEL,
+                exc,
+            )
     return None
 
 
@@ -81,7 +98,11 @@ def build_reranker(cfg: Any) -> Any:
     if cfg.EMBEDDING_RERANKER_SERVICE_URL:
         from substrate.models.remote import RemoteReranker
 
-        return RemoteReranker(cfg.EMBEDDING_RERANKER_SERVICE_URL, api_key=cfg.EMBEDDING_RERANKER_AUTH_TOKEN, timeout=float(cfg.EMBEDDING_RERANKER_TIMEOUT_S))
+        return RemoteReranker(
+            cfg.EMBEDDING_RERANKER_SERVICE_URL,
+            api_key=cfg.EMBEDDING_RERANKER_AUTH_TOKEN,
+            timeout=float(cfg.EMBEDDING_RERANKER_TIMEOUT_S),
+        )
     return None
 
 
@@ -89,7 +110,13 @@ def build_knowledge_library(store: Any, file_store: Any, cfg: Any) -> Library | 
     """The knowledge bases' library: the same store and object store, with the configured embedder and reranker."""
     if store is None or file_store is None:
         return None
-    return Library(store, files=file_store, reader=document_reader(cfg), embedder=build_embedder(cfg), reranker=build_reranker(cfg))
+    return Library(
+        store,
+        files=file_store,
+        reader=document_reader(cfg),
+        embedder=build_embedder(cfg),
+        reranker=build_reranker(cfg),
+    )
 
 
 __all__ = [

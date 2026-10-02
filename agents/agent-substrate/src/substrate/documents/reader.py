@@ -63,7 +63,9 @@ class Reader:
         if location is not None and engine is not None:
             raise ValueError("pass a location or an engine, not both")
         if isolate and ocr is not None and not isinstance(ocr, str):
-            raise ValueError("a custom Ocr instance runs in this process: pass isolate=False, or name an engine ('tesseract', 'rapidocr')")
+            raise ValueError(
+                "a custom Ocr instance runs in this process: pass isolate=False, or name an engine ('tesseract', 'rapidocr')"
+            )
         self.limits = limits or ReadLimits()
         self.languages = tuple(languages)
         self._engine = engine
@@ -85,13 +87,20 @@ class Reader:
     # -- the one method --------------------------------------------------------------------------------------------------
 
     async def read(
-        self, data: bytes, filename: str = "", *, content_type: str | None = None, strategy: Strategy = "auto"
+        self,
+        data: bytes,
+        filename: str = "",
+        *,
+        content_type: str | None = None,
+        strategy: Strategy = "auto",
     ) -> ExtractionResult:
         """Read ``data``. Never raises for a document it cannot read: the result says why (``success=False``, ``error``)."""
         if strategy not in _STRATEGIES:
             raise ValueError(f"strategy must be one of {_STRATEGIES}, got {strategy!r}")
         if self._engine is not None:
-            return await self._engine.read(data, filename, content_type=content_type, strategy=strategy)
+            return await self._engine.read(
+                data, filename, content_type=content_type, strategy=strategy
+            )
         if self._remote is not None:
             return await self._read_remote(data, filename, content_type, strategy)
         return await self._read_here(data, filename, content_type, strategy)
@@ -103,7 +112,9 @@ class Reader:
         pages = min(limits.max_pages, max(1, len(data) // 50_000))
         return min(limits.max_timeout_s, limits.timeout_s + limits.per_page_s * pages)
 
-    async def _read_here(self, data: bytes, filename: str, content_type: str | None, strategy: str) -> ExtractionResult:
+    async def _read_here(
+        self, data: bytes, filename: str, content_type: str | None, strategy: str
+    ) -> ExtractionResult:
         degraded = None
         if strategy == "hi_res":
             strategy, degraded = "auto", "hi_res"
@@ -119,12 +130,20 @@ class Reader:
                 "timeout_s": timeout_s,
             }
             try:
-                payload = await asyncio.to_thread(get_pool(self._workers).run, header, data, timeout_s=timeout_s)
+                payload = await asyncio.to_thread(
+                    get_pool(self._workers).run, header, data, timeout_s=timeout_s
+                )
                 result = ExtractionResult.model_validate_json(payload)
             except WorkerFailure as exc:
-                result = ExtractionResult(success=False, error=str(exc), engine="native")
+                result = ExtractionResult(
+                    success=False, error=str(exc), engine="native"
+                )
             except (ValueError, json.JSONDecodeError) as exc:
-                result = ExtractionResult(success=False, error=f"the reader process answered with something unreadable: {exc}", engine="native")
+                result = ExtractionResult(
+                    success=False,
+                    error=f"the reader process answered with something unreadable: {exc}",
+                    engine="native",
+                )
         else:
             if not self._ocr_resolved:
                 self._ocr_obj = resolve_ocr(self._ocr_spec)  # type: ignore[arg-type]
@@ -146,18 +165,37 @@ class Reader:
             result = result.model_copy(
                 update={
                     "degraded_from": degraded,
-                    "warnings": [*result.warnings, "hi_res needs a layout model, which only a document server has: read with strategy 'auto'"],
+                    "warnings": [
+                        *result.warnings,
+                        "hi_res needs a layout model, which only a document server has: read with strategy 'auto'",
+                    ],
                 }
             )
         return result
 
-    async def _read_remote(self, data: bytes, filename: str, content_type: str | None, strategy: str) -> ExtractionResult:
+    async def _read_remote(
+        self, data: bytes, filename: str, content_type: str | None, strategy: str
+    ) -> ExtractionResult:
         assert self._remote is not None
-        result = await self._remote.read(data, filename, content_type=content_type, strategy=strategy)  # type: ignore[arg-type]
-        if result.success or not self._fallback or result.degraded_from != "unreachable":
+        result = await self._remote.read(
+            data, filename, content_type=content_type, strategy=strategy
+        )  # type: ignore[arg-type]
+        if (
+            result.success
+            or not self._fallback
+            or result.degraded_from != "unreachable"
+        ):
             return result
         local = await self._read_here(data, filename, content_type, strategy)
-        return local.model_copy(update={"degraded_from": self._location, "warnings": [*local.warnings, f"{self._location} was unreachable: read locally"]})
+        return local.model_copy(
+            update={
+                "degraded_from": self._location,
+                "warnings": [
+                    *local.warnings,
+                    f"{self._location} was unreachable: read locally",
+                ],
+            }
+        )
 
     async def aclose(self) -> None:
         """Nothing is held open between reads; present so a ``Reader`` can be closed like every other service client."""

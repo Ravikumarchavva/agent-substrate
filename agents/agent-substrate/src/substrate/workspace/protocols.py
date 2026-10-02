@@ -55,7 +55,9 @@ class WorkspaceFileEntry(KernelModel):
         if path.startswith("/"):
             raise ValueError(f"workspace paths are relative, got {path!r}")
         if any(part in ("", ".", "..") for part in path.split("/")):
-            raise ValueError(f"workspace path {path!r} has an empty or traversing component")
+            raise ValueError(
+                f"workspace path {path!r} has an empty or traversing component"
+            )
         return path
 
 
@@ -77,12 +79,16 @@ class WorkspaceManifest(KernelModel):
 
     @field_validator("files")
     @classmethod
-    def _canonical_order(cls, files: dict[str, WorkspaceFileEntry]) -> dict[str, WorkspaceFileEntry]:
+    def _canonical_order(
+        cls, files: dict[str, WorkspaceFileEntry]
+    ) -> dict[str, WorkspaceFileEntry]:
         """Sorted by path, always: two manifests with the same content must
         serialise identically or dedup by hash silently fails."""
         for key, entry in files.items():
             if key != entry.path:
-                raise ValueError(f"manifest key {key!r} does not match its entry path {entry.path!r}")
+                raise ValueError(
+                    f"manifest key {key!r} does not match its entry path {entry.path!r}"
+                )
         return dict(sorted(files.items()))
 
 
@@ -184,4 +190,3 @@ __all__ = [
     "WorkspaceSnapshot",
     "WorkspaceStore",
 ]
-

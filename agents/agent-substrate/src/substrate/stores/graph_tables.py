@@ -55,7 +55,9 @@ CREATE INDEX IF NOT EXISTS graph_relationships_target_idx ON graph_relationships
 
 
 def _entity(row: Row) -> Entity:
-    return Entity(id=row["id"], label=row["label"], properties=json.loads(row["properties_json"]))
+    return Entity(
+        id=row["id"], label=row["label"], properties=json.loads(row["properties_json"])
+    )
 
 
 def _relationship(row: Row) -> Relationship:
@@ -75,7 +77,11 @@ def _in_namespace(namespace: str, alias: str = "") -> tuple[str, list[str]]:
 
 
 def _like(term: str) -> str:
-    return "%" + term.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    return (
+        "%"
+        + term.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        + "%"
+    )
 
 
 class Graph:
@@ -92,7 +98,9 @@ class Graph:
     async def _run(self, fn: Callable[[Tx], Awaitable[T]]) -> T:
         return await self._store.run(fn)
 
-    async def add_entities(self, entities: list[Entity], *, namespace: str = "") -> list[str]:
+    async def add_entities(
+        self, entities: list[Entity], *, namespace: str = ""
+    ) -> list[str]:
         async def op(tx: Tx) -> list[str]:
             for entity in entities:
                 name = entity.properties.get("name")
@@ -110,7 +118,9 @@ class Graph:
 
         return await self._run(op)
 
-    async def add_relationships(self, relationships: list[Relationship], *, namespace: str = "") -> list[str]:
+    async def add_relationships(
+        self, relationships: list[Relationship], *, namespace: str = ""
+    ) -> list[str]:
         async def op(tx: Tx) -> list[str]:
             for rel in relationships:
                 await tx.execute(
@@ -133,7 +143,11 @@ class Graph:
 
         async def op(tx: Tx) -> bool:
             visible, params = _in_namespace(namespace)
-            deleted = await tx.execute(f"DELETE FROM graph_entities WHERE id = ? AND {visible}", entity_id, *params)
+            deleted = await tx.execute(
+                f"DELETE FROM graph_entities WHERE id = ? AND {visible}",
+                entity_id,
+                *params,
+            )
             if deleted == 0:
                 return False
             await tx.execute(
@@ -146,10 +160,19 @@ class Graph:
 
         return await self._run(op)
 
-    async def delete_relationship(self, relationship_id: str, *, namespace: str = "") -> bool:
+    async def delete_relationship(
+        self, relationship_id: str, *, namespace: str = ""
+    ) -> bool:
         async def op(tx: Tx) -> bool:
             visible, params = _in_namespace(namespace)
-            return await tx.execute(f"DELETE FROM graph_relationships WHERE id = ? AND {visible}", relationship_id, *params) > 0
+            return (
+                await tx.execute(
+                    f"DELETE FROM graph_relationships WHERE id = ? AND {visible}",
+                    relationship_id,
+                    *params,
+                )
+                > 0
+            )
 
         return await self._run(op)
 
@@ -163,11 +186,20 @@ class Graph:
     ) -> SubGraph:
         async def op(tx: Tx) -> SubGraph:
             visible, ns = _in_namespace(namespace)
-            if await tx.fetchone(f"SELECT 1 FROM graph_entities WHERE id = ? AND {visible}", entity_id, *ns) is None:
+            if (
+                await tx.fetchone(
+                    f"SELECT 1 FROM graph_entities WHERE id = ? AND {visible}",
+                    entity_id,
+                    *ns,
+                )
+                is None
+            ):
                 return SubGraph()
 
             types = list(relationship_types) if relationship_types else []
-            type_clause = f" AND r.type IN ({', '.join('?' for _ in types)})" if types else ""
+            type_clause = (
+                f" AND r.type IN ({', '.join('?' for _ in types)})" if types else ""
+            )
             rel_ns, rel_params = _in_namespace(namespace, "r")
             # The nodes within ``depth`` hops, each with the fewest hops it took to reach it. UNION (not UNION ALL)
             # drops repeated (node, hops) pairs, so a cycle cannot make the walk run on.
@@ -202,7 +234,9 @@ class Graph:
 
         return await self._run(op)
 
-    async def find_entities(self, terms: Sequence[str], *, limit: int = 100, namespace: str = "") -> list[Entity]:
+    async def find_entities(
+        self, terms: Sequence[str], *, limit: int = 100, namespace: str = ""
+    ) -> list[Entity]:
         """Entities whose name — or id, for one with no name — contains any of ``terms``, case-insensitively."""
         terms = [t for t in terms if t]
         if not terms:
@@ -210,7 +244,10 @@ class Graph:
 
         async def op(tx: Tx) -> list[Entity]:
             visible, ns = _in_namespace(namespace)
-            match = " OR ".join("LOWER(CASE WHEN name <> '' THEN name ELSE id END) LIKE ? ESCAPE '\\'" for _ in terms)
+            match = " OR ".join(
+                "LOWER(CASE WHEN name <> '' THEN name ELSE id END) LIKE ? ESCAPE '\\'"
+                for _ in terms
+            )
             rows = await tx.fetchall(
                 f"SELECT * FROM graph_entities WHERE {visible} AND ({match}) ORDER BY seq LIMIT ?",
                 *ns,
@@ -227,7 +264,9 @@ class Graph:
 
         async def op(tx: Tx) -> int:
             await tx.execute(f"DELETE FROM graph_relationships WHERE {clause}", *params)
-            return await tx.execute(f"DELETE FROM graph_entities WHERE {clause}", *params)
+            return await tx.execute(
+                f"DELETE FROM graph_entities WHERE {clause}", *params
+            )
 
         erased = await self._run(op)
         if erased:

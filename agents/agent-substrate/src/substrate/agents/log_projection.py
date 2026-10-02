@@ -13,7 +13,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from substrate.types.content import ChatMessage, ContentBlock, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types.content import (
+    ChatMessage,
+    ContentBlock,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 from substrate.types.run_log import RunLogKind
 
 if TYPE_CHECKING:

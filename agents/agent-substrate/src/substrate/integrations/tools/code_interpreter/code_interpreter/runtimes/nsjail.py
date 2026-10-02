@@ -198,6 +198,7 @@ def _sandbox_env() -> dict[str, str]:
         "PYTHONUNBUFFERED": "1",
     }
 
+
 logger = logging.getLogger(__name__)
 
 # Max processes per sandbox (cgroup pids.max)
@@ -326,9 +327,7 @@ class NsjailRuntime:
                 f"nsjail cannot create a sandbox on this host: "
                 f"{(probe.stderr or '').strip()}{hint}"
             )
-        logger.info(
-            "nsjail preflight OK — cgroup v2 mount %s", self._cgroupv2_mount
-        )
+        logger.info("nsjail preflight OK — cgroup v2 mount %s", self._cgroupv2_mount)
 
     # ── execution ────────────────────────────────────────────────────────────
     async def execute(self, spec: SandboxSpec) -> ExecResult:

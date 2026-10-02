@@ -99,7 +99,9 @@ async def test_thread_filtering_excludes_scheduled_tasks(database_url: str) -> N
 
 
 @pytest.mark.asyncio
-async def test_execute_scheduled_task_pauses_when_thread_deleted(database_url: str) -> None:
+async def test_execute_scheduled_task_pauses_when_thread_deleted(
+    database_url: str,
+) -> None:
     """A task whose owning thread was soft-deleted (user deleted the
     conversation from the sidebar) must not keep running — it's paused on
     its next firing instead, before any agent/LLM work starts."""
@@ -130,7 +132,9 @@ async def test_execute_scheduled_task_pauses_when_thread_deleted(database_url: s
 
     # app_state is never touched: the deleted-thread check returns before
     # any of it is read.
-    await execute_scheduled_task(task_id, session_factory=session_factory, app_state=None)
+    await execute_scheduled_task(
+        task_id, session_factory=session_factory, app_state=None
+    )
 
     async with session_factory() as db:
         refreshed = await db.get(ScheduledTask, task_id)

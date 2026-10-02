@@ -66,9 +66,7 @@ class _FakeEngine:
         )
 
 
-def _client(
-    *, config: _FakeConfig | None = None, pipeline: _FakeEngine | None = None
-):
+def _client(*, config: _FakeConfig | None = None, pipeline: _FakeEngine | None = None):
     app = FastAPI()
     app.include_router(router)
     app.state.engine = pipeline or _FakeEngine()

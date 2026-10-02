@@ -255,7 +255,11 @@ class AgentStreamSession:
         yield HelloEvent()
 
         agent_task = asyncio.create_task(self._agent_worker())
-        bridge_task = asyncio.create_task(self._bridge_worker()) if self._bridge is not None else None
+        bridge_task = (
+            asyncio.create_task(self._bridge_worker())
+            if self._bridge is not None
+            else None
+        )
         terminal: WireEvent = RunCompletedEvent()
 
         try:

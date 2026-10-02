@@ -68,7 +68,9 @@ def _eligible_gpus(hw: HardwareProfile) -> list:
     return [g for g in hw.gpus if g.total_mib >= _GPU_ELIGIBLE_MIB]
 
 
-def _raw_text(*, degraded_from: str | None, reasons: list[str], cfg: Any) -> ResolvedRuntime:
+def _raw_text(
+    *, degraded_from: str | None, reasons: list[str], cfg: Any
+) -> ResolvedRuntime:
     return ResolvedRuntime(
         mode="raw_text",
         worker_count=0,
@@ -79,7 +81,9 @@ def _raw_text(*, degraded_from: str | None, reasons: list[str], cfg: Any) -> Res
     )
 
 
-def _vl_cpu(*, hw: HardwareProfile, cfg: Any, degraded_from: str | None, reasons: list[str]) -> ResolvedRuntime:
+def _vl_cpu(
+    *, hw: HardwareProfile, cfg: Any, degraded_from: str | None, reasons: list[str]
+) -> ResolvedRuntime:
     reasons = list(reasons)
     reasons.append(
         "llama_threads = max(1, cpu_count-1) is an unbenchmarked heuristic, unlike the "
@@ -100,9 +104,12 @@ def _vl_cpu(*, hw: HardwareProfile, cfg: Any, degraded_from: str | None, reasons
         llama_ctx=ctx if ctx is not None else _LLAMA_CTX,
         llama_slots=slots if slots is not None else _LLAMA_SLOTS_DEFAULT,
         quant=quant,
-        layout_batch_size=getattr(cfg, "layout_batch_size", None) or _LAYOUT_BATCH_SIZE_DEFAULT,
+        layout_batch_size=getattr(cfg, "layout_batch_size", None)
+        or _LAYOUT_BATCH_SIZE_DEFAULT,
         doc_preproc_batch_size=_DOC_PREPROC_BATCH_SIZE,
-        max_new_tokens=max_new_tokens if max_new_tokens is not None else _MAX_NEW_TOKENS_DEFAULT,
+        max_new_tokens=max_new_tokens
+        if max_new_tokens is not None
+        else _MAX_NEW_TOKENS_DEFAULT,
         max_pages_per_call=getattr(cfg, "max_pages_per_call", None),
         degraded_from=degraded_from,
         reasons=reasons,
@@ -147,7 +154,9 @@ def _vl_gpu(*, hw: HardwareProfile, cfg: Any, reasons: list[str]) -> ResolvedRun
             else (_LAYOUT_BATCH_SIZE_SCALED if scaled else _LAYOUT_BATCH_SIZE_DEFAULT)
         ),
         doc_preproc_batch_size=_DOC_PREPROC_BATCH_SIZE,
-        max_new_tokens=max_new_tokens if max_new_tokens is not None else _MAX_NEW_TOKENS_DEFAULT,
+        max_new_tokens=max_new_tokens
+        if max_new_tokens is not None
+        else _MAX_NEW_TOKENS_DEFAULT,
         max_pages_per_call=getattr(cfg, "max_pages_per_call", None),
         degraded_from=None,
         reasons=reasons,

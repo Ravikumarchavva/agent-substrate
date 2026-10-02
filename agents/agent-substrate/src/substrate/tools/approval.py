@@ -54,7 +54,9 @@ class ApprovalRequest(KernelModel):
     agent_id: Actor
     run_id: str
     context: JsonObject = Field(default_factory=dict)
-    requested_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    requested_at: datetime = Field(
+        default_factory=lambda: datetime.now(tz=timezone.utc)
+    )
 
 
 class ApprovalResult(KernelModel):
@@ -80,7 +82,10 @@ class ApprovalResult(KernelModel):
     def from_response(cls, data: Mapping[str, Any]) -> "ApprovalResult":
         """Read the response a front end (or a timeout) delivered. ``{action: approve|modify|deny}``,
         plus the stamped ``decided_by`` / ``decided_at``; a disconnect or timeout is a denial."""
-        stamp: dict[str, Any] = {"decided_by": data.get("decided_by"), "reason": data.get("reason") or None}
+        stamp: dict[str, Any] = {
+            "decided_by": data.get("decided_by"),
+            "reason": data.get("reason") or None,
+        }
         decided_at = data.get("decided_at")
         if isinstance(decided_at, str):
             decided_at = datetime.fromisoformat(decided_at)
@@ -89,7 +94,11 @@ class ApprovalResult(KernelModel):
             return cls(decision=ApprovalDecision.DENIED, **stamp)
         action = data.get("action", "deny")
         if action == "modify":
-            return cls(decision=ApprovalDecision.MODIFIED, modified_args=data.get("modified_arguments") or {}, **stamp)
+            return cls(
+                decision=ApprovalDecision.MODIFIED,
+                modified_args=data.get("modified_arguments") or {},
+                **stamp,
+            )
         if action == "approve":
             return cls(decision=ApprovalDecision.APPROVED, **stamp)
         return cls(decision=ApprovalDecision.DENIED, **stamp)
@@ -98,8 +107,13 @@ class ApprovalResult(KernelModel):
     def _args_only_when_modified(self) -> "ApprovalResult":
         if self.decision == ApprovalDecision.MODIFIED and self.modified_args is None:
             raise ValueError("a MODIFIED decision needs `modified_args`")
-        if self.decision != ApprovalDecision.MODIFIED and self.modified_args is not None:
-            raise ValueError("`modified_args` is only meaningful for a MODIFIED decision")
+        if (
+            self.decision != ApprovalDecision.MODIFIED
+            and self.modified_args is not None
+        ):
+            raise ValueError(
+                "`modified_args` is only meaningful for a MODIFIED decision"
+            )
         return self
 
 
@@ -137,8 +151,12 @@ class DurableApproval:
 
     suspends_via_signal = True
 
-    async def request(self, req: ApprovalRequest) -> ApprovalResult:  # pragma: no cover - the durable path is taken
-        raise RuntimeError("DurableApproval waits for a signal (runtime.decide); it is never asked directly")
+    async def request(
+        self, req: ApprovalRequest
+    ) -> ApprovalResult:  # pragma: no cover - the durable path is taken
+        raise RuntimeError(
+            "DurableApproval waits for a signal (runtime.decide); it is never asked directly"
+        )
 
 
 class AutoApprove:

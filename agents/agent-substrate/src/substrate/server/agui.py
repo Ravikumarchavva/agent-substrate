@@ -35,7 +35,9 @@ from substrate.types import RunLogEntry, RunLogKind
 
 
 class _Camel(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, extra="ignore"
+    )
 
 
 class AguiMessage(_Camel):
@@ -64,7 +66,11 @@ class RunAgentInput(_Camel):
             if isinstance(content, str):
                 return content
             if isinstance(content, list):  # multimodal: the text parts
-                return "".join(p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text")
+                return "".join(
+                    p.get("text", "")
+                    for p in content
+                    if isinstance(p, dict) and p.get("type") == "text"
+                )
             return None
         return None
 
@@ -77,7 +83,9 @@ def encode(event: dict[str, Any]) -> str:
 class Translator:
     """Turns one run's log entries into AG-UI events. Stateful only in what AG-UI itself is: an open message."""
 
-    def __init__(self, *, thread_id: str, run_id: str, engine_run_id: str | None = None) -> None:
+    def __init__(
+        self, *, thread_id: str, run_id: str, engine_run_id: str | None = None
+    ) -> None:
         """``run_id`` is the id the client sent (AG-UI echoes it); ``engine_run_id`` is the engine's, which the approval
         routes need and which is carried in the ``CUSTOM`` events as ``substrateRunId``."""
         self._thread = thread_id
@@ -95,7 +103,13 @@ class Translator:
             return []
         self._turn += 1
         self._message = f"{self._run}-m{self._turn}"
-        return [{"type": "TEXT_MESSAGE_START", "messageId": self._message, "role": "assistant"}]
+        return [
+            {
+                "type": "TEXT_MESSAGE_START",
+                "messageId": self._message,
+                "role": "assistant",
+            }
+        ]
 
     def _close(self) -> list[dict[str, Any]]:
         if self._message is None:
@@ -110,39 +124,122 @@ class Translator:
             if not text:
                 return []
             self._streamed = True
-            return [*self._open(), {"type": "TEXT_MESSAGE_CONTENT", "messageId": self._message, "delta": text}]
+            return [
+                *self._open(),
+                {
+                    "type": "TEXT_MESSAGE_CONTENT",
+                    "messageId": self._message,
+                    "delta": text,
+                },
+            ]
         if kind == RunLogKind.ASSISTANT_MESSAGE:
             events: list[dict[str, Any]] = []
             text = payload.get("text", "")
-            if text and not self._streamed:  # a model that does not stream: the whole reply is the message
-                events += [*self._open(), {"type": "TEXT_MESSAGE_CONTENT", "messageId": self._message, "delta": text}]
+            if (
+                text and not self._streamed
+            ):  # a model that does not stream: the whole reply is the message
+                events += [
+                    *self._open(),
+                    {
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "messageId": self._message,
+                        "delta": text,
+                    },
+                ]
             self._streamed = False
             return [*events, *self._close()]
         if kind == RunLogKind.TOOL_CALL:
             call_id = payload.get("call_id") or f"{self._run}-t{entry.seq}"
             events = self._close()
-            events.append({"type": "TOOL_CALL_START", "toolCallId": call_id, "toolCallName": payload.get("tool_name", "")})
-            events.append({"type": "TOOL_CALL_ARGS", "toolCallId": call_id, "delta": json.dumps(payload.get("args", {}), default=str)})
+            events.append(
+                {
+                    "type": "TOOL_CALL_START",
+                    "toolCallId": call_id,
+                    "toolCallName": payload.get("tool_name", ""),
+                }
+            )
+            events.append(
+                {
+                    "type": "TOOL_CALL_ARGS",
+                    "toolCallId": call_id,
+                    "delta": json.dumps(payload.get("args", {}), default=str),
+                }
+            )
             events.append({"type": "TOOL_CALL_END", "toolCallId": call_id})
             return events
         if kind == RunLogKind.TOOL_RESULT:
             call_id = payload.get("call_id") or f"{self._run}-t{entry.seq}"
-            content = payload.get("output", "") if payload.get("ok", True) else f"error: {payload.get('error') or payload.get('output', '')}"
-            return [{"type": "TOOL_CALL_RESULT", "messageId": f"{self._run}-r{entry.seq}", "toolCallId": call_id, "content": content, "role": "tool"}]
+            content = (
+                payload.get("output", "")
+                if payload.get("ok", True)
+                else f"error: {payload.get('error') or payload.get('output', '')}"
+            )
+            return [
+                {
+                    "type": "TOOL_CALL_RESULT",
+                    "messageId": f"{self._run}-r{entry.seq}",
+                    "toolCallId": call_id,
+                    "content": content,
+                    "role": "tool",
+                }
+            ]
         if kind == RunLogKind.APPROVAL_REQUESTED:
-            return [{"type": "CUSTOM", "name": "substrate.approval_requested", "value": {"substrateRunId": self._engine_run, **payload}}]
+            return [
+                {
+                    "type": "CUSTOM",
+                    "name": "substrate.approval_requested",
+                    "value": {"substrateRunId": self._engine_run, **payload},
+                }
+            ]
         if kind == RunLogKind.INPUT_REQUESTED:
-            return [{"type": "CUSTOM", "name": "substrate.input_requested", "value": {"substrateRunId": self._engine_run, **payload}}]
+            return [
+                {
+                    "type": "CUSTOM",
+                    "name": "substrate.input_requested",
+                    "value": {"substrateRunId": self._engine_run, **payload},
+                }
+            ]
         if kind == RunLogKind.SUBAGENT_START:
-            return [{"type": "STEP_STARTED", "stepName": str(payload.get("agent") or payload.get("name") or "subagent")}]
+            return [
+                {
+                    "type": "STEP_STARTED",
+                    "stepName": str(
+                        payload.get("agent") or payload.get("name") or "subagent"
+                    ),
+                }
+            ]
         if kind == RunLogKind.SUBAGENT_DONE:
-            return [{"type": "STEP_FINISHED", "stepName": str(payload.get("agent") or payload.get("name") or "subagent")}]
+            return [
+                {
+                    "type": "STEP_FINISHED",
+                    "stepName": str(
+                        payload.get("agent") or payload.get("name") or "subagent"
+                    ),
+                }
+            ]
         if kind == RunLogKind.RUN_COMPLETED:
-            return [*self._close(), {"type": "RUN_FINISHED", "threadId": self._thread, "runId": self._run}]
+            return [
+                *self._close(),
+                {"type": "RUN_FINISHED", "threadId": self._thread, "runId": self._run},
+            ]
         if kind == RunLogKind.RUN_FAILED:
-            return [*self._close(), {"type": "RUN_ERROR", "message": payload.get("error") or "agent run failed", "code": "run_failed"}]
+            return [
+                *self._close(),
+                {
+                    "type": "RUN_ERROR",
+                    "message": payload.get("error") or "agent run failed",
+                    "code": "run_failed",
+                },
+            ]
         if kind == RunLogKind.RUN_CANCELLED:
-            return [*self._close(), {"type": "RUN_ERROR", "message": "run cancelled", "code": "run_cancelled"}]
+            return [
+                *self._close(),
+                {
+                    "type": "RUN_ERROR",
+                    "message": "run cancelled",
+                    "code": "run_cancelled",
+                },
+            ]
         return []
 
     def translate_all(self, entries: Iterable[RunLogEntry]) -> list[dict[str, Any]]:

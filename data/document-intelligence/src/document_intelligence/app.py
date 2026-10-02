@@ -45,7 +45,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
-setup_logging(service_name="document-intelligence")  # the application, not the library, configures logging
+setup_logging(
+    service_name="document-intelligence"
+)  # the application, not the library, configures logging
 logger = logging.getLogger(__name__)
 
 
@@ -75,7 +77,11 @@ async def lifespan(app: FastAPI):
 
     app.state.engine = engine
     # What reads every non-PDF format, and the fallback when a layout engine fails (the engine itself when this pod has none).
-    app.state.native = engine if isinstance(engine, NativeEngine) else NativeEngine(max_bytes=svc_config.max_upload_bytes)
+    app.state.native = (
+        engine
+        if isinstance(engine, NativeEngine)
+        else NativeEngine(max_bytes=svc_config.max_upload_bytes)
+    )
     app.state.config = svc_config
     app.state.hardware = hw
     app.state.resolved = resolved

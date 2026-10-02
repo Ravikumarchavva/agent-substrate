@@ -45,7 +45,9 @@ class FakeRedis:
 @pytest.fixture
 async def db_factory(database_url: str):
     engine = create_async_engine(database_url)
-    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
     yield factory
     await engine.dispose()
 
@@ -136,8 +138,7 @@ async def test_erase_user_deletes_threads_metadata_and_the_user_row(
         assert summary.documents_deleted == 0
         assert own_key not in store.objects
         assert (
-            f"tenants/{tenant_id}/users/{user_uuid}/uploads/c.txt"
-            not in store.objects
+            f"tenants/{tenant_id}/users/{user_uuid}/uploads/c.txt" not in store.objects
         )
         assert other_key in store.objects  # the other user's file survives
         assert f"session:state:{thread.id}" not in redis.store
@@ -277,7 +278,9 @@ async def test_erase_tenant_deletes_every_thread_in_that_tenant_only(
 
 
 @pytest.mark.requires_postgres
-async def test_erasure_reaches_long_term_memory_and_the_run_journal(db: AsyncSession, db_factory, cfg, tmp_path):
+async def test_erasure_reaches_long_term_memory_and_the_run_journal(
+    db: AsyncSession, db_factory, cfg, tmp_path
+):
     """A deletion request must reach the raw conversation in the run journal and the person's
     long-term memory, not only the relational rows: the journal is where the text actually lives."""
     from substrate.types import Actor
@@ -294,27 +297,65 @@ async def test_erasure_reaches_long_term_memory_and_the_run_journal(db: AsyncSes
     await db.commit()
 
     memory = Store.at(tmp_path / "mem").memory
-    await memory.save(MemoryRecord.from_text("alice-secret-fact", namespace=MemoryNamespace(tenant_id=tenant, user_id="alice")))
-    await memory.save(MemoryRecord.from_text("bob-fact", namespace=MemoryNamespace(tenant_id=tenant, user_id="bob")))
+    await memory.save(
+        MemoryRecord.from_text(
+            "alice-secret-fact",
+            namespace=MemoryNamespace(tenant_id=tenant, user_id="alice"),
+        )
+    )
+    await memory.save(
+        MemoryRecord.from_text(
+            "bob-fact", namespace=MemoryNamespace(tenant_id=tenant, user_id="bob")
+        )
+    )
 
     runtime = runtime_store(tmp_path / "rt.sqlite3")
     await runtime.start()
     try:
         agent = Actor("agent", "a")
         for t, text in ((thread, "alice-secret-message"), (other, "bob-message")):
-            await runtime.create_run(RunSpec(agent=agent, tenant=tenant, thread_id=str(t.id)))
-            (lease,) = await runtime.lease(worker_id="w", capacity=1, lease_s=30, now=datetime.now(timezone.utc))
-            await runtime.commit(lease, Commit(entries=(NewEntry(kind="user.message", payload={"text": text}),), outcome=Complete()))
+            await runtime.create_run(
+                RunSpec(agent=agent, tenant=tenant, thread_id=str(t.id))
+            )
+            (lease,) = await runtime.lease(
+                worker_id="w", capacity=1, lease_s=30, now=datetime.now(timezone.utc)
+            )
+            await runtime.commit(
+                lease,
+                Commit(
+                    entries=(NewEntry(kind="user.message", payload={"text": text}),),
+                    outcome=Complete(),
+                ),
+            )
 
         summary = await erase_user(
-            db, store=FakeStore(), redis=None, tenant_id=tenant, user_id="alice", cfg=cfg, memory_store=memory, runtime_store=runtime
+            db,
+            store=FakeStore(),
+            redis=None,
+            tenant_id=tenant,
+            user_id="alice",
+            cfg=cfg,
+            memory_store=memory,
+            runtime_store=runtime,
         )
 
         assert summary.memories_deleted == 1 and summary.runs_deleted == 1
-        remaining = [str(e.payload) for run in await runtime.find_runs(active_only=False) for e in await runtime.read_events(run.run_id)]
-        assert not any("alice-secret-message" in r for r in remaining), "the raw conversation survived erasure"
-        assert any("bob-message" in r for r in remaining), "someone else's conversation was erased"
-        raw = b"".join(p.read_bytes() for p in (tmp_path).rglob("*") if p.is_file() and "mem" in str(p))
+        remaining = [
+            str(e.payload)
+            for run in await runtime.find_runs(active_only=False)
+            for e in await runtime.read_events(run.run_id)
+        ]
+        assert not any("alice-secret-message" in r for r in remaining), (
+            "the raw conversation survived erasure"
+        )
+        assert any("bob-message" in r for r in remaining), (
+            "someone else's conversation was erased"
+        )
+        raw = b"".join(
+            p.read_bytes()
+            for p in (tmp_path).rglob("*")
+            if p.is_file() and "mem" in str(p)
+        )
         assert b"alice-secret-fact" not in raw and b"bob-fact" in raw
     finally:
         await runtime.aclose()
@@ -343,10 +384,16 @@ async def test_erasure_reaches_the_conversation_history_tasks_vectors_and_graph(
 
     async def fill(t: str, conversation: str) -> str:
         view = folder.tenant(t)
-        node = MessageNode(session_id=conversation, payload=ChatMessage(role=Role.USER, content="alice-secret-sentence"))
+        node = MessageNode(
+            session_id=conversation,
+            payload=ChatMessage(role=Role.USER, content="alice-secret-sentence"),
+        )
         await view.threads.append_node(node)
         await view.tasks.create_task_list(conversation, ["a task"])
-        await view.vectors.add([Document.from_text("alice-secret-sentence", id="d", embedding=[1.0, 0.0])], collection="kb")
+        await view.vectors.add(
+            [Document.from_text("alice-secret-sentence", id="d", embedding=[1.0, 0.0])],
+            collection="kb",
+        )
         await view.graph.add_entities([Entity(id="e", label="P", name="alice")])
         return node.id
 
@@ -355,12 +402,23 @@ async def test_erasure_reaches_the_conversation_history_tasks_vectors_and_graph(
 
     try:
         user = await erase_user(
-            db, store=FakeStore(), redis=None, tenant_id=tenant, user_id="alice", cfg=cfg, folder=folder
+            db,
+            store=FakeStore(),
+            redis=None,
+            tenant_id=tenant,
+            user_id="alice",
+            cfg=cfg,
+            folder=folder,
         )
         assert user.thread_nodes_deleted == 1 and user.task_boards_deleted == 1
-        assert await folder.tenant(tenant).tasks.get_by_conversation(str(thread.id)) is None
+        assert (
+            await folder.tenant(tenant).tasks.get_by_conversation(str(thread.id))
+            is None
+        )
 
-        whole = await erase_tenant(db, store=FakeStore(), redis=None, tenant_id=tenant, cfg=cfg, folder=folder)
+        whole = await erase_tenant(
+            db, store=FakeStore(), redis=None, tenant_id=tenant, cfg=cfg, folder=folder
+        )
         assert whole.vectors_deleted == 1 and whole.graph_entities_deleted == 1
         assert await folder.tenant(tenant).vectors.list_collections() == []
         assert await folder.tenant(tenant).threads.get_node(mine) is None
@@ -378,7 +436,9 @@ async def test_erasure_reaches_the_conversation_history_tasks_vectors_and_graph(
         await folder.aclose()
 
 
-async def test_erasing_a_user_removes_the_documents_their_conversations_were_given(tmp_path):
+async def test_erasing_a_user_removes_the_documents_their_conversations_were_given(
+    tmp_path,
+):
     """The catalog rows and the bundles of the user's conversations go; another user's, in the same tenant, stay."""
     from substrate.documents import ExtractedPage, ExtractionResult, Library
     from substrate.stores import Store
@@ -389,7 +449,11 @@ async def test_erasing_a_user_removes_the_documents_their_conversations_were_giv
     await store.start()
     try:
         library = Library(store)
-        doc = ExtractionResult(pages=[ExtractedPage(page_number=1, text="t")], markdown="<!-- page 1 -->\n\n" + "word " * 400, engine="t")
+        doc = ExtractionResult(
+            pages=[ExtractedPage(page_number=1, text="t")],
+            markdown="<!-- page 1 -->\n\n" + "word " * 400,
+            engine="t",
+        )
         mine = conversation_documents_prefix("t1", "u1", "c1")
         theirs = conversation_documents_prefix("t1", "u2", "c2")
         await library.add(doc, "a.md", collection=mine)
@@ -401,6 +465,8 @@ async def test_erasing_a_user_removes_the_documents_their_conversations_were_giv
         assert len((await library.list(collection=theirs)).documents) == 1
         assert await store.files.list_prefix(mine + "/") == []
         assert await store.files.list_prefix(theirs + "/") != []
-        assert await _erase_documents(None, store.files, user_prefix("t1", "u2")) == 0  # no folder store: nothing to erase
+        assert (
+            await _erase_documents(None, store.files, user_prefix("t1", "u2")) == 0
+        )  # no folder store: nothing to erase
     finally:
         await store.aclose()

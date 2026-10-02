@@ -21,19 +21,36 @@ def read(data: bytes, **kw):
 
 def test_the_invoice_is_read_with_its_text_and_one_page() -> None:
     result = read(fixture("test_invoice.pdf"))
-    assert result.success and result.engine == "pdfium" and "<!-- page 1 -->" in result.markdown
+    assert (
+        result.success
+        and result.engine == "pdfium"
+        and "<!-- page 1 -->" in result.markdown
+    )
     assert len(result.pages) >= 1 and "Invoice #12345" in result.pages[0].text
 
 
 def test_bookmarks_make_the_headings() -> None:
     result = read(fixture("bookmarks.pdf"))
     headings = [line for line in result.markdown.splitlines() if line.startswith("#")]
-    assert headings and headings[0].startswith("# ") and any(line.startswith("## ") for line in headings)
+    assert (
+        headings
+        and headings[0].startswith("# ")
+        and any(line.startswith("## ") for line in headings)
+    )
 
 
 def test_without_bookmarks_larger_type_makes_the_headings() -> None:
     pages = [
-        Page([Line("Annual Report", size=24, bold=True), Line(BODY, gap=14), Line(BODY), Line("Findings", size=16, bold=True, gap=18), Line(BODY, gap=8), Line(BODY)]),
+        Page(
+            [
+                Line("Annual Report", size=24, bold=True),
+                Line(BODY, gap=14),
+                Line(BODY),
+                Line("Findings", size=16, bold=True, gap=18),
+                Line(BODY, gap=8),
+                Line(BODY),
+            ]
+        ),
     ]
     md = read(build(pages)).markdown
     assert "# Annual Report" in md and "## Findings" in md and md.count("#") == 3
@@ -42,19 +59,43 @@ def test_without_bookmarks_larger_type_makes_the_headings() -> None:
 
 def test_a_running_footer_is_dropped_but_page_text_stays() -> None:
     topics = ["shipping", "staffing", "budget", "risks"]
-    pages = [Page([Line(f"Section about {t}: " + BODY), Line("ACME Confidential", size=8, gap=680)]) for t in topics]
+    pages = [
+        Page(
+            [
+                Line(f"Section about {t}: " + BODY),
+                Line("ACME Confidential", size=8, gap=680),
+            ]
+        )
+        for t in topics
+    ]
     result = read(build(pages))
     assert "ACME Confidential" not in result.markdown
     assert all(f"Section about {t}" in result.markdown for t in topics)
 
 
 def test_a_hyphenated_word_is_joined_across_lines() -> None:
-    pages = [Page([Line("The shipment was dis-"), Line("tributed across the regional warehouses on Friday.")])]
+    pages = [
+        Page(
+            [
+                Line("The shipment was dis-"),
+                Line("tributed across the regional warehouses on Friday."),
+            ]
+        )
+    ]
     assert "distributed across" in read(build(pages)).pages[0].text
 
 
 def test_bullets_become_a_tight_list() -> None:
-    pages = [Page([Line("Next steps", size=18, bold=True), Line("\xb7 Ship the beta", gap=6), Line("\xb7 Invite customers"), Line("\xb7 Collect feedback")])]
+    pages = [
+        Page(
+            [
+                Line("Next steps", size=18, bold=True),
+                Line("\xb7 Ship the beta", gap=6),
+                Line("\xb7 Invite customers"),
+                Line("\xb7 Collect feedback"),
+            ]
+        )
+    ]
     md = read(build(pages)).markdown
     assert re.search(r"- Ship the beta\n- Invite customers\n- Collect feedback", md)
 
@@ -76,16 +117,27 @@ def test_a_scanned_page_without_ocr_is_reported_never_silently_empty() -> None:
 @pytest.mark.skipif(not TesseractOcr.available(), reason="tesseract is not installed")
 def test_a_scanned_page_is_recognised_when_there_is_ocr() -> None:
     result = read(fixture("scanned_page.pdf"), ocr=TesseractOcr())
-    assert "4417" in result.pages[0].text and result.pages[0].method == "ocr" and not result.needs_ocr
+    assert (
+        "4417" in result.pages[0].text
+        and result.pages[0].method == "ocr"
+        and not result.needs_ocr
+    )
 
 
 @pytest.mark.skipif(not TesseractOcr.available(), reason="tesseract is not installed")
 def test_fast_never_ocrs_and_ocr_only_reads_every_page() -> None:
-    assert read(fixture("scanned_page.pdf"), ocr=TesseractOcr(), strategy="fast").needs_ocr == [1]
+    assert read(
+        fixture("scanned_page.pdf"), ocr=TesseractOcr(), strategy="fast"
+    ).needs_ocr == [1]
     width, height, pixels = scan_of([Line("Invoice 4417 total due 120 EUR", size=24)])
-    mixed = build([Page([Line("Typed page " + BODY)]), Page(image=(width, height, pixels))])
+    mixed = build(
+        [Page([Line("Typed page " + BODY)]), Page(image=(width, height, pixels))]
+    )
     result = read(mixed, ocr=TesseractOcr(), strategy="ocr_only")
-    assert [p.method for p in result.pages] == ["ocr", "ocr"] and "4417" in result.pages[1].text
+    assert [p.method for p in result.pages] == [
+        "ocr",
+        "ocr",
+    ] and "4417" in result.pages[1].text
 
 
 def test_a_password_protected_pdf_fails_with_a_reason() -> None:

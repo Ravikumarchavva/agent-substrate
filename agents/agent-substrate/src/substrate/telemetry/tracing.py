@@ -53,7 +53,11 @@ def capture_content() -> bool:
 
     Off by default, and read per call so it can be switched without a restart.
     """
-    return os.environ.get("SUBSTRATE_CAPTURE_CONTENT", "").lower() in ("1", "true", "yes")
+    return os.environ.get("SUBSTRATE_CAPTURE_CONTENT", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
 
 def _clean(attributes: Mapping[str, Any] | None) -> dict[str, AttributeValue]:
@@ -69,7 +73,9 @@ def _clean(attributes: Mapping[str, Any] | None) -> dict[str, AttributeValue]:
             continue
         if isinstance(value, (str, int, float, bool)):
             cleaned[key] = value
-        elif isinstance(value, (list, tuple)) and all(isinstance(v, (str, int, float, bool)) for v in value):
+        elif isinstance(value, (list, tuple)) and all(
+            isinstance(v, (str, int, float, bool)) for v in value
+        ):
             cleaned[key] = list(value)  # type: ignore[assignment]
         else:
             cleaned[key] = str(value)
@@ -81,7 +87,9 @@ def _span_context(context: TraceContext) -> SpanContext:
         trace_id=int(context.trace_id, 16),
         span_id=int(context.span_id, 16),
         is_remote=True,
-        trace_flags=TraceFlags(TraceFlags.SAMPLED if context.sampled else TraceFlags.DEFAULT),
+        trace_flags=TraceFlags(
+            TraceFlags.SAMPLED if context.sampled else TraceFlags.DEFAULT
+        ),
     )
 
 

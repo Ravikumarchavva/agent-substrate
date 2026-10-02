@@ -215,9 +215,7 @@ async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
         ):
             thread_id = str(uuid.uuid4())
             async with _registered_thread(thread_id, owner=user_1):
-                app.dependency_overrides[get_current_user] = lambda: _claims_for(
-                    user_1
-                )
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(user_1)
                 try:
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
@@ -239,9 +237,7 @@ async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
 
                 # A second user, who doesn't own this thread, cannot see or
                 # delete the first user's file.
-                app.dependency_overrides[get_current_user] = lambda: _claims_for(
-                    user_2
-                )
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(user_2)
                 try:
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
@@ -279,9 +275,7 @@ async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None
         ):
             thread_id = str(uuid.uuid4())
             async with _registered_thread(thread_id, owner=user_1):
-                app.dependency_overrides[get_current_user] = lambda: _claims_for(
-                    user_1
-                )
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(user_1)
                 try:
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
@@ -297,9 +291,7 @@ async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None
                 finally:
                     app.dependency_overrides.pop(get_current_user, None)
 
-                app.dependency_overrides[get_current_user] = lambda: _claims_for(
-                    user_2
-                )
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(user_2)
                 try:
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
@@ -320,9 +312,7 @@ async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None
                     app.dependency_overrides.pop(get_current_user, None)
 
                 # The real content is untouched.
-                app.dependency_overrides[get_current_user] = lambda: _claims_for(
-                    user_1
-                )
+                app.dependency_overrides[get_current_user] = lambda: _claims_for(user_1)
                 try:
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
@@ -365,9 +355,7 @@ async def test_delete_file_locks_the_owners_own_thread(tmp_path) -> None:
                         upload_resp = await client.post(
                             "/files/upload",
                             data={"thread_id": thread_id},
-                            files={
-                                "file": ("report.txt", b"data", "text/plain")
-                            },
+                            files={"file": ("report.txt", b"data", "text/plain")},
                         )
                         await _promote_file(upload_resp.json()["id"])
 

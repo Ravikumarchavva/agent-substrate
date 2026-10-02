@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**122 enforced · 0 pending · 122 total**
+**123 enforced · 0 pending · 123 total**
 
 ## approvals
 
@@ -43,6 +43,8 @@ and the marker has to come off. That is what keeps this document honest.
   `test_the_documents_tool_takes_its_collection_from_the_run_scope_and_has_no_way_to_open_a_path`
 - ✅ **Delete every catalog row and ``reindex`` brings back the same outline and the same search hits from the markdown files alone — the bundle is the source of truth, so a lost or corrupted catalog is a rebuild, not a data loss.**
   `test_the_catalog_is_derived_from_the_bundle_and_can_be_rebuilt`
+- ✅ **The collection of a knowledge base is derived from the authenticated tenant and a validated name, so it is inside that tenant's prefix (where its erasure reaches it) and no name — a path, another tenant's collection — can make it point somewhere else.**
+  `test_a_knowledge_base_collection_is_always_under_its_tenants_prefix`
 
 ## durable execution
 

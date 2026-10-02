@@ -107,3 +107,15 @@ async def test_the_catalog_is_derived_from_the_bundle_and_can_be_rebuilt(tmp_pat
         assert [h.snippet for h in after[1]] == [h.snippet for h in before[1]]
     finally:
         await store.aclose()
+
+
+def test_a_knowledge_base_collection_is_always_under_its_tenants_prefix() -> None:
+    """The collection of a knowledge base is derived from the authenticated tenant and a validated name, so it is inside that tenant's prefix
+    (where its erasure reaches it) and no name — a path, another tenant's collection — can make it point somewhere else."""
+    from substrate.workspace.layout import knowledge_collection, tenant_prefix
+
+    assert knowledge_collection("acme", "hr") == "tenants/acme/knowledge/hr/library"
+    assert knowledge_collection("acme", "hr").startswith(tenant_prefix("acme") + "/")
+    for hostile in ["../evil/hr", "evil/knowledge/hr", "tenants/evil/knowledge/hr/library", "a/b", "", ".."]:
+        with pytest.raises(ValueError):
+            knowledge_collection("acme", hostile)

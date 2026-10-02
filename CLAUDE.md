@@ -100,11 +100,11 @@ src/substrate/
 │   ├── types/        content blocks (deep-immutable), Actor/Topic, ids, Usage, errors (stable `code`,
 │   │                 `retryable`), RunScope, supervision/budgets, RunLogEntry, Wakeup, streaming events
 │   ├── tools/        Tool/HostedTool/ProviderDefinedTool (protocols.py), ToolRisk, approval, chain, Toolbox
-│   ├── models/       ChatModel/EmbeddingModel (protocols.py), capability registry, modality fitting,
-│   │                 error classification (`classify_llm_error`), tool-argument parsing
+│   ├── models/       ChatModel/EmbeddingModel/Reranker (protocols.py), RemoteEmbedder/RemoteReranker (by URL), capability
+│   │                 registry, modality fitting, error classification (`classify_llm_error`), tool-argument parsing
 │   ├── stores/       Thread/Memory/Vector/Graph/File/Task contracts + Store (connect(folder): one database +
 │   │                 files/ — threads, memory, tasks, graph, vectors, files are its facets) + scoped.py (tenant binding)
-│   ├── documents/ workspace/ safety/    DocumentExtractor, branching/snapshots/CAS files, text normalisation
+│   ├── documents/        Reader (read any document), Library + DocumentsTool (navigate it), OKF; workspace/ safety/: branching/snapshots/CAS files, text normalisation
 │   ├── context/      context window, compaction, `history.py` (the linear view of a thread)
 │   ├── middleware/   Middleware contract + built-ins + guardrails
 │   ├── runtime/      RuntimeStore (the one durable port), Runtime, Worker, Journal, RunContext, SQLite store
@@ -124,20 +124,16 @@ src/substrate/
 │   │   ├── skills/       SKILL.md prompt-skill packages (SkillTool, SkillManager)
 │   │   ├── chain/        ToolChainTool + bridge + prelude (sandboxed code-mode chaining)
 │   │   ├── web/          WebSearchTool, WebSurferTool, ReadUrlTool, WikipediaTool
-│   │   ├── files/        DocumentAnalyzerTool, InvoiceExtractorTool
 │   │   ├── communication/EmailSenderTool, HttpRequestTool
 │   │   ├── compute/      CalculatorTool
 │   │   ├── database/     PostgresQueryTool (queries arbitrary user DBs)
-│   │   ├── ai/           ImageGeneratorTool, KnowledgeSearchTool
+│   │   ├── ai/           ImageGeneratorTool
 │   │   ├── utils/        CurrentTimeTool, ToolSearchTool
 │   │   ├── task_manager/ TaskManagerTool (Kanban board)
 │   │   └── code_interpreter/ CodeInterpreterTool + pluggable SandboxRuntime (nsjail/k8s/inprocess)
 │   ├── events/           EventBus (Redis pub/sub) + EventEnvelope (wire format)
 │   ├── tts/              text-to-speech provider adapters
-│   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore (cache), CachedShortTermMemory, MemoryManager, exposure policy
-│   ├── services/         clients, by URL, for the heavy services you run yourself: document extraction
-│   │                     (ExtractionClient, extract_document), embedding/reranking (no model code here)
 │   ├── storage/          S3Connector (raw client) + S3FileStore (FileStore Protocol impl built on top)
 │   ├── database/         PostgresDatabase + postgres_store(dsn) (the engine's whole state on PostgreSQL/pgvector),
 │   │                     PostgresConnector (asyncpg pool for direct queries)
@@ -159,8 +155,9 @@ Everything that is not the library is a project of its own (own `pyproject.toml`
 
 ```
 apps/substrate-cloud/        the multi-tenant platform: monolith API, 12 services, settings, GDPR, the composition root
-  src/substrate_cloud/       monolith/ services/ shared/ stream/ factory.py config.py gdpr/ session_index/ cli.py
-apps/document-intelligence/  OCR / layout service (PaddleOCR in extras)  — the library reaches it by URL
+  src/substrate_cloud/       monolith/ services/ shared/ stream/ factory.py config.py gdpr/ documents_library.py document_reader.py cli.py
+apps/document-intelligence/  layout/OCR document server (PaddleOCR in extras) — `Reader("http://…")` reaches it
+apps/embedding-reranker/     Qwen3-VL embedding + reranking (OpenAI embeddings wire, Jina rerank wire) — `Library(embedder="http://…")`
 apps/embedding-reranker/     multimodal embedding + reranking proxy       — the library reaches it by URL
 packages/inference-pool/     llama-server supervision + hardware detection, shared by the two services
 ```
@@ -255,7 +252,8 @@ new orchestration in `agents/flows.py`, a new port in the concept that owns it *
 | A new history backend | `integrations/history/<name>.py` — implement `ThreadStore` (`stores/threads.py`) |
 | A new vector or graph store | implement `VectorStore` (`stores/vector.py`) / `GraphStore` (`stores/graph.py`) and run its conformance suite — or, to put everything on another database, write a `Database` adapter (`stores/database.py`; see `integrations/database/postgres_database.py`) |
 | A new runtime store | implement `RuntimeStore` (`runtime/store.py`) — or a new `Database` adapter for `SqlRuntimeStore` — and run `RuntimeStoreConformance` against it |
-| A new document extractor | `integrations/document/<name>.py` — implement `DocumentExtractor` (`documents/protocols.py`) |
+| A new document reader / OCR engine | implement `DocumentExtractor` or `Ocr` (`documents/protocols.py`) and pass it: `Reader(engine=…)` / `Reader(ocr=…, isolate=False)`; run `DocumentExtractorConformance` / `OcrConformance` |
+| A new embedder / reranker | implement `EmbeddingModel` / `Reranker` (`models/protocols.py`) and pass it: `Library(store, embedder=…, reranker=…)`; run `EmbeddingModelConformance` / `RerankerConformance` (a URL needs no code: `RemoteEmbedder` speaks the OpenAI wire) |
 | A new tool | a typed function with `@tool(risk=…, idempotent=…)` (`substrate.tools`) — or, for a shipped one, `integrations/tools/<name>/tool.py` implementing `Tool`, **declaring `risk` and `idempotent`** (auto-scanned, no registration needed) |
 | A new skill | `integrations/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
 | A new agent flow | `agents/flows.py` — SequentialFlow / ParallelFlow / ConditionalFlow are `RoutedAgent`s |
@@ -408,31 +406,35 @@ the database's files (`secure_delete`, index rewrite, WAL truncate — `Database
 (`testing/conformance/memory_store.py`). Per-conversation state is `store.session_state` (`ShortTermMemory`, suite in
 `testing/conformance/short_term_memory.py`, also run by the Redis cache). The memory *tool* takes tenant
 and user from the run's `scope_of(ctx)`, never from model arguments.
-## Knowledge / RAG
+## Documents / Knowledge
 
-Vector and graph store contracts live in the core (`stores/`). Concrete implementations live in `integrations/`; `integrations/knowledge/` wires them into pipelines.
+Reading what a user hands an agent is the most user-facing thing the engine does, so it works on the **base install** (`pypdfium2` is a base
+dependency; Office/HTML are read natively with the standard library; Tesseract is used if the program is there, RapidOCR if the `ocr` extra is).
 
 ```python
-# Contracts (core)
-from substrate.stores.vector import VectorStore, Document, SearchResult
-from substrate.stores.graph import GraphStore, Entity, Relationship, SubGraph
+from substrate.documents import Reader, Library, DocumentsTool
 
-# Implementations: the store's own — on a folder, or on PostgreSQL (pgvector HNSW; graph by recursive query)
-from substrate.stores import Store
-from substrate.integrations.database import postgres_store
-
-store = Store.at("./.substrate")          # store.vectors, store.graph — nothing else to install or start
-# store = postgres_store("postgresql://…")   # the same facets, for workers on several machines
-
-# High-level RAG pipeline
-from substrate.integrations.knowledge import RAGPipeline, GraphRAGPipeline
-
-pipeline = RAGPipeline(embedding_client=embed_client, vector_store=store.vectors)
-await pipeline.ingest("Long document …", collection="kb")
-results = await pipeline.query("What is X?", collection="kb")
+result = await Reader().read(data, "q3.pdf")          # -> ExtractionResult: pages, markdown with <!-- page N --> markers, needs_ocr
+reader = Reader("http://doc-intel:8080")              # the same call, by URL: layout, tables, chart crops, PaddleOCR-VL
+library = Library(store)                              # a conversation's documents: OKF bundle + catalog, searched by words
+kb = Library(store, embedder="http://embedding-reranker:8080", reranker="http://embedding-reranker:8080")   # a knowledge base
+await library.add(data, "q3.pdf", collection=prefix)
+tool = DocumentsTool(library, collection=lambda scope: …)   # list / outline / read / find / view — collection from scope, never the model
 ```
 
-`Document` (RAG text chunk) and `DocumentBlock` (LLM message content) are distinct — never conflate them.
+* `Reader` runs the built-in engine in **isolated worker processes** by default (memory cap, no file writes, wall-clock kill); `isolate=False`
+  reads in a thread. Hostile files (zip/entity bombs, encryption) come back as `success=False` with a reason — `read` never raises. A page that
+  is only a picture is OCR'd or listed in `needs_ocr`, never silently empty. Limits are `ReadLimits`.
+* `Library` is the **only** document store: the OKF bundle in a `FileStore` is the source of truth, the catalog (`library_*` tables, full-text
+  index) is derived and rebuilt by `reindex`. With an `embedder`, sections are also chunked and embedded into `store.vectors` (one embedder per
+  collection — `VectorSpaceError` otherwise); `find` fuses similarity and words, reranks if there is a reranker, and degrades to words when the
+  service is down (chunks stored without a vector are embedded later by `reindex(missing_only=True)`).
+* A tool takes its collection from `scope_of(ctx)`; there is no action that adds a document or opens a path. Document text is returned inside
+  `<document>` tags — untrusted data.
+* Platform: a conversation's uploads are read once and filed under `conversation_documents_prefix`; a knowledge base is
+  `knowledge_collection(tenant, kb)` — `/rag` and `/internal/knowledge` always derive it from the authenticated tenant.
+* Vector/graph store contracts live in the core (`stores/`): `VectorStore`, `SearchableVectorStore` (lexical + hybrid), `GraphStore`.
+  `Document` (a stored chunk) and `DocumentBlock` (LLM message content) are distinct — never conflate them.
 
 ---
 

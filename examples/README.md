@@ -20,6 +20,7 @@ Set the key (and drop `SUBSTRATE_EXAMPLES_OFFLINE`) to talk to a real model. Eac
 | [07_mcp_tools](07_mcp_tools.py) | Any MCP server as tools. |
 | [08_serve_http](08_serve_http.py) | One endpoint on your own FastAPI app, streaming the run as SSE. |
 | [09_evals](09_evals.py) | Score an agent against a dataset with a judge model. |
+| [10_documents](10_documents.py) | Read any document with `Reader`; file it in a `Library` the model navigates with one tool. |
 
 `_model.py` holds `pick_model` and `ScriptedModel`. `ScriptedModel` is also the smallest possible `ChatModel` — the engine
 needs only `model`, `capabilities`, `generate`/`generate_stream` and `count_tokens` — so it doubles as the answer to

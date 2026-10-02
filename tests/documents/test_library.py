@@ -8,21 +8,12 @@ import pytest
 
 from substrate.documents import DocumentError, DocumentsTool, Library, Reader, okf
 from substrate.documents.types import ExtractedPage, ExtractionResult
-from substrate.stores import Store
 from substrate.types.run import RunScope
 from tests.documents._files import fixture, zip_bomb_docx
 from tests.fixtures.pdfs import Line, Page, build
 
 C = "tenants/acme/conversations/c1/documents"
 OTHER = "tenants/evil/conversations/c9/documents"
-
-
-@pytest.fixture
-async def store(tmp_path):
-    store = Store.at(tmp_path / "store")
-    await store.start()
-    yield store
-    await store.aclose()
 
 
 @pytest.fixture

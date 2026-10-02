@@ -813,3 +813,63 @@ application's job; that is now literally the app's `config.py` and `factory.py`.
 **Consequences:** the library's `server` extra is gone (its dependencies are the app's). `Tenant.erase` is the library's erase;
 the GDPR eraser, which also sweeps the platform's own tables and Redis, is the app's. The library's console reads provider
 keys from the environment (`provider_keys_from_env`). Root tests no longer include the platform's (261 moved with it).
+
+
+---
+
+## Documents first: one `Reader`, a navigable `Library`, knowledge bases by URL (2026-10-02)
+
+**Decision:** reading a user's document is a base-install capability with one entry point, and what the model does with it is
+navigation, not retrieval.
+
+* **`Reader`** (`substrate.documents`). `Reader()` reads in the process's own machine — PDFium (`pypdfium2`, a base dependency) for the
+  text layer, headings (bookmarks, else font size), tables, figures; the standard library for DOCX/PPTX/XLSX/ODF/HTML/Markdown/CSV/JSON;
+  OCR through the `tesseract` program, or RapidOCR with the `ocr` extra, only for pages with no text. `Reader("http://…")` is the
+  document-intelligence server (layout, chart crops, PaddleOCR-VL); `Reader(engine=…)` is anything implementing `DocumentExtractor`.
+  The same `ExtractionResult` comes back from all three, and that type's JSON *is* the server's wire format. There is no "local
+  extractor" and "online extractor" — a location picks the engine, as `Store.at(folder)` does.
+* **Isolation by default.** The built-in engine runs in a pool of worker processes (`python -s -m …reading.worker`): length-prefixed
+  JSON/bytes frames (never pickle), `RLIMIT_AS`/`RLIMIT_FSIZE`/`RLIMIT_CORE`, a wall clock the parent enforces by killing the process
+  group. A parser crash, a hang or a memory bomb ends a worker, not the host, and PDFium (not thread-safe) gets real parallelism.
+  `isolate=False` is the same code in a thread behind a lock. Hostile files (zip/entity bombs, encryption) are `success=False` with a
+  reason; `read` never raises. A scanned page is recognised or listed in `needs_ocr` — never silently empty.
+* **`Library`** replaces PageIndex/GraphRAG/the session vector index/`ask`/`DocumentIngestPipeline` and the old `Documents` facet. A
+  conversation's few documents need no embeddings, so they are filed the way a person would — an **Open Knowledge Format v0.2**
+  bundle in a `FileStore` (an index, one file per section with Prev/Up/Next links, figures as PNGs) and a catalog derived from it
+  (`library_documents`/`sections`/`images`, a full-text index) — and the model works through them with one tool, `documents`:
+  `list`, `outline`, `read`, `find`, `view`. The bundle is the source of truth (`reindex` rebuilds the catalog); there is **no action
+  that adds a document or opens a path**, which removes a class of bug (`KnowledgeSearchTool` treated model text as a file path and
+  read server disk; two tools read any absolute path and were marked SAFE). The collection comes from `scope_of(ctx)`, never an
+  argument. Document text comes back in `<document>` tags — untrusted data. OKF is implemented in the core with a small stdlib
+  frontmatter codec (JSON-valued YAML on write, lenient on read), tested against PyYAML; there is no OKF package to depend on.
+* **Knowledge bases** are the same `Library` with `embedder=` and `reranker=` — an `EmbeddingModel`/`Reranker`, or a URL
+  (`RemoteEmbedder`/`RemoteReranker`: the OpenAI embeddings wire and the Jina/Cohere rerank wire, so `apps/embedding-reranker`
+  (Qwen3-VL, text and images in one space) and llama.cpp/vLLM/Ollama/TEI all work). Sections are chunked to the embedder's
+  `max_input_tokens` (`documents/chunking.py`), stored in `store.vectors`, searched by similarity fused with any-word full text,
+  reranked, and folded back into sections with page citations. A service that is down degrades `find` to words with a note and
+  stores chunks without a vector for `reindex(missing_only=True)` — it never fails an add. With no embedder, search is words.
+* **Contracts.** `EmbeddingModel` is `model`, `dimensions`, `max_input_tokens`, `modalities` and one method,
+  `embed(inputs, *, query=False)` (`embed_single`/`embed_blocks` are gone); `Reranker` is a new port with a conformance suite; errors
+  are typed (`ServiceUnavailableError`, `VectorSpaceError`, `AuthError`, `RateLimitedError`, `ContextLengthError`) — nothing returns
+  `None` on failure. The vector store (migration 2) allows a document with no embedding and records which embedder a collection came
+  from (`vector_spaces`); mixing raises `VectorSpaceError`. `SearchableVectorStore` is the lexical/hybrid port, and tenant-scoped
+  stores forward it (they used to drop it silently).
+
+**Why:** a user's document is the most important input, and the engine could read only PDFs (DOCX/PPTX/XLSX/HTML silently came back
+empty without a Paddle server); extraction was written four times; retrieval could not run without an embedder and embedded one
+vector per page with no chunking; and several tools could read the server's disk. A model reading a document well does what a
+person does — look at the contents, open the chapter — which needs structure, not vectors; vectors earn their cost on a company's
+knowledge base, where nobody can read it all.
+
+**Consequences / what changed in behaviour:** `integrations/knowledge/`, `integrations/services/`, `integrations/document/`,
+`KnowledgeSearchTool`, `DocumentAnalyzerTool`, `InvoiceExtractorTool`, `vector_namespace`, and the `rag`, `services` and `chunking`
+extras are deleted; `pdfplumber`/`pytesseract` are no longer dependencies of anything but the sandbox's package list. The platform
+reads each upload once (`Reader`, by URL when `DOCUMENT_INTELLIGENCE_SERVICE_URL` is set), files it in
+`conversation_documents_prefix`, and writes the `.extracted.md` sidecar from the same read. **Security fix:** `/rag/*` took the
+collection from the request body, so any tenant could query, list and delete any other's; the collection is now always
+`knowledge_collection(claims.tenant_id, name)`. `EMBEDDING_MODEL` now defaults to empty (a knowledge base is then searched by words);
+the `RAG_BACKEND`, `RAG_*_EMBEDDING_DIM`, `RAG_CHUNK_*` and retrieval-tuning settings, and `SESSION_INDEX_LOCAL_PATH`, are gone. Existing
+per-user session indexes are abandoned: a file is filed again the next time a conversation references it. The chat's `knowledge` tool
+searches one knowledge base per tenant (`KNOWLEDGE_CHAT_BASE`); per-instance selection needs a knowledge-base id in `RunScope`.
+The exact scan on the folder store is about 1 s per 10,000 chunks at 2,048 dimensions (a warning is logged above that); large
+knowledge bases belong on `postgres_store` (HNSW).

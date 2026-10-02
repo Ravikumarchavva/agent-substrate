@@ -143,11 +143,6 @@ dev = [
     "pypdf>=6.13.0",
     "pyyaml>=6.0",
 ]
-docs = [
-    "mkdocs-material>=9.5.0",
-    "mkdocs-minify-plugin>=0.8.0",
-    "mkdocstrings[python]>=1.0.0",
-]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

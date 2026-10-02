@@ -245,7 +245,7 @@ class AgentStreamSession:
         """Yield the full wire-event stream for one run.
 
         ``bridge=None`` (a thin, HITL-free consumer -- e.g.
-        ``substrate.serve.add_routes``) skips the bridge worker entirely:
+        ``substrate.server.create_app``) skips the bridge worker entirely:
         the stream is then just the agent's own run -- hello, text/tool
         events, run.completed|failed|cancelled -- with no out-of-band
         approval or task-board events merged in. Pass a real
@@ -367,7 +367,7 @@ async def sse_lines(
 ) -> AsyncIterator[str]:
     """Frame *session*'s wire-event stream as SSE ``data:`` lines — the
     exact byte-for-byte framing both ``substrate_cloud/monolith/routes/chat.py``
-    and ``substrate.serve.add_routes`` need, extracted here once instead of
+    and ``substrate.server.create_app`` need, extracted here once instead of
     each maintaining its own copy of ``f"data: {json.dumps(...)}\\n\\n"``.
 
     ``include_done=True`` (the default) yields a final ``data: [DONE]\\n\\n``

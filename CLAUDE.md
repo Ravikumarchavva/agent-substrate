@@ -135,7 +135,7 @@ src/substrate/
 │   ├── events/           EventBus (Redis pub/sub) + EventEnvelope (wire format)
 │   ├── tts/              text-to-speech provider adapters
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
-│   ├── memory/           RedisSessionStore, DurableMemoryStore
+│   ├── memory/           RedisSessionStore (cache), CachedShortTermMemory, MemoryManager, exposure policy
 │   ├── vector/           PgVectorStore, LanceDB  (implement VectorStore Protocol)
 │   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
 │   ├── storage/          S3Connector (raw client) + S3FileStore (FileStore Protocol
@@ -410,9 +410,12 @@ await store.erase(MemoryNamespace(tenant_id="acme", user_id="alice"))   # everyt
 ```
 
 Ids are tenant-qualified (another tenant's same id is a different record); saving over another namespace's id in the
-same tenant raises `ScopeViolationError`; deleting requires owning the record (same user). Implementations:
-`LocalFilesystemMemoryStore` (default), `DurableMemoryStore` (Postgres, table `memory_records`), `LanceMemoryStore`;
-all three run `MemoryStoreConformance` (`testing/conformance/memory_store.py`). The memory *tool* takes tenant
+same tenant raises `ScopeViolationError`; deleting requires owning the record (same user). It is `store.memory`
+(`stores/memory_tables.py`): one implementation in the store's database, visibility enforced in the SQL itself, full-text
+search with stemming (SQLite FTS5; no embeddings), and `erase` that removes the rows, the index entries and every trace in
+the database's files (`secure_delete`, index rewrite, WAL truncate — `Database.reclaim`). It runs `MemoryStoreConformance`
+(`testing/conformance/memory_store.py`). Per-conversation state is `store.session_state` (`ShortTermMemory`, suite in
+`testing/conformance/short_term_memory.py`, also run by the Redis cache). The memory *tool* takes tenant
 and user from the run's `scope_of(ctx)`, never from model arguments.
 ## Knowledge / RAG
 

@@ -33,12 +33,6 @@ from substrate.stores.local.files import (
 from substrate.stores.local.graph import (
     LocalFilesystemGraphStore,
 )
-from substrate.stores.local.memory import (
-    LocalFilesystemMemoryStore,
-)
-from substrate.stores.local.short_term_memory import (
-    LocalFilesystemShortTermMemory,
-)
 from substrate.stores.local.tasks import (
     LocalFilesystemTaskStore,
 )
@@ -104,8 +98,6 @@ __all__ = [
     "HistoryCheckpoint",
     "ThreadStore",
     "LocalFilesystemGraphStore",
-    "LocalFilesystemMemoryStore",
-    "LocalFilesystemShortTermMemory",
     "LocalFilesystemTaskStore",
     "LocalFilesystemVectorStore",
     "MemoryCategory",

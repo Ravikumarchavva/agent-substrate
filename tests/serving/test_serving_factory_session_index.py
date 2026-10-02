@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from substrate.integrations.graph.lance_graph_store import LanceGraphStore
-from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
+from substrate.stores.memory_tables import Memory
 from substrate.integrations.vector.lancedb_store import LanceDBVectorStore
 from substrate.config import SubstrateConfig
 from substrate.serving.factory import (
@@ -56,21 +56,16 @@ def test_page_index_memory_local_mode_scopes_path(tmp_path) -> None:
     cfg = SubstrateConfig(SESSION_INDEX_LOCAL_PATH=str(tmp_path))
     memory = build_page_index_memory(cfg, "tenant-a", "user-a")
 
-    assert isinstance(memory, LanceMemoryStore)
-    assert memory._namespace_uri is None
-    assert memory._path == str(tmp_path / "tenants/tenant-a/users/user-a/index")
-    assert memory._table_name == "pageindex_trees"
+    assert isinstance(memory, Memory)
+    assert memory.store.root == tmp_path / "tenants/tenant-a/users/user-a/index"
 
 
-def test_page_index_memory_namespace_mode_scopes_path() -> None:
-    cfg = SubstrateConfig(
-        SESSION_INDEX_NAMESPACE_URI="http://seaweedfs:9101",
-        SESSION_INDEX_BUCKET="my-bucket",
-    )
+def test_page_index_memory_is_a_store_of_its_own_in_the_users_index_folder(tmp_path) -> None:
+    """Erasing a user's index is still removing one folder, because the trees live inside it — in any deployment."""
+    cfg = SubstrateConfig(SESSION_INDEX_NAMESPACE_URI="http://seaweedfs:9101", SESSION_INDEX_BUCKET="my-bucket", SESSION_INDEX_LOCAL_PATH=str(tmp_path))
     memory = build_page_index_memory(cfg, "tenant-a", "user-a")
 
-    assert memory._namespace_uri == "http://seaweedfs:9101"
-    assert memory._namespace_path == ["my-bucket", "tenant-a", "user-a"]
+    assert memory.store.root == tmp_path / "tenants/tenant-a/users/user-a/index"
 
 
 def test_session_graph_store_local_mode_scopes_path(tmp_path) -> None:

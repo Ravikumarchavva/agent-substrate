@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from substrate.config import SubstrateConfig
     from substrate.stores import Store, connect
     from substrate.workspace import LocalFilesystemWorkspaceStore
-    from substrate.stores import LocalFilesystemShortTermMemory
     from substrate.stores import WorkspaceFileStore
     from substrate.context import AgentContext, ContextConfig
     from substrate.context import SlidingWindowCompaction
@@ -67,7 +66,6 @@ __all__ = [
     "connect",
     "LocalFilesystemWorkspaceStore",
     "LocalWorkspaceStore",
-    "LocalFilesystemShortTermMemory",
     "WorkspaceFileStore",
     "LocalFileStore",
     # supporting types
@@ -130,10 +128,6 @@ _LAZY: dict[str, tuple[str, str]] = {
     "LocalWorkspaceStore": (
         "substrate.workspace.local_store",
         "LocalFilesystemWorkspaceStore",
-    ),
-    "LocalFilesystemShortTermMemory": (
-        "substrate.stores.local.short_term_memory",
-        "LocalFilesystemShortTermMemory",
     ),
     "WorkspaceFileStore": (
         "substrate.stores.local.files",

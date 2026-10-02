@@ -16,14 +16,14 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from substrate.stores import LocalFilesystemMemoryStore
+from substrate.stores import Store
 from substrate.stores import MemoryNamespace, MemoryQuery, MemoryRecord
 
 
 async def test_i03_a_record_is_not_readable_from_another_tenant(tmp_path: Path) -> None:
     """Ids come from request bodies and model output. An id alone must never be
     enough to address a record."""
-    store = LocalFilesystemMemoryStore(tmp_path)
+    store = Store.at(tmp_path).memory
     private = MemoryRecord.from_text("alice's medical note", tenant_id="acme", user_id="alice")
     await store.save(private)
 
@@ -36,7 +36,7 @@ async def test_i03_a_record_is_not_readable_from_another_tenant(tmp_path: Path) 
 
 async def test_i03_one_tenant_cannot_overwrite_another_tenants_record(tmp_path: Path) -> None:
     """``save`` is an upsert keyed by id, and the id is caller-supplied."""
-    store = LocalFilesystemMemoryStore(tmp_path)
+    store = Store.at(tmp_path).memory
     original = MemoryRecord.from_text("acme's fact", tenant_id="acme", user_id="alice")
     await store.save(original)
 
@@ -54,7 +54,7 @@ async def test_i03_one_tenant_cannot_overwrite_another_tenants_record(tmp_path: 
 async def test_i03_omitting_a_scope_field_is_not_a_wildcard(tmp_path: Path) -> None:
     """The dangerous default: forgetting a field widens the query instead of
     narrowing it, and nothing in the type system notices."""
-    store = LocalFilesystemMemoryStore(tmp_path)
+    store = Store.at(tmp_path).memory
     await store.save(MemoryRecord.from_text("alice's secret", tenant_id="acme", user_id="alice"))
 
     hits = await store.query(MemoryQuery(namespace=MemoryNamespace(tenant_id="acme")))
@@ -68,7 +68,7 @@ async def test_i04_a_scope_can_be_erased_completely(tmp_path: Path) -> None:
     """A deletion request has to reach every store, including the journal that
     holds the raw conversation. Today the GDPR eraser touches neither memory nor
     the event log."""
-    store = LocalFilesystemMemoryStore(tmp_path)
+    store = Store.at(tmp_path).memory
     await store.save(MemoryRecord.from_text("alice's secret", tenant_id="acme", user_id="alice"))
 
     assert await store.erase(MemoryNamespace(tenant_id="acme", user_id="alice")) == 1

@@ -8,10 +8,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from substrate.types import TextBlock
 from substrate.stores import Document
-from substrate.stores import MemoryNamespace, MemoryQuery, MemoryRecord
 from substrate.tools import ToolExecutionResult, ToolCallRequest
 
-from substrate.integrations.memory import DurableMemoryStore
 from substrate.integrations.vector import PgVectorStore
 from substrate.integrations.graph import AGEGraphStore
 
@@ -61,144 +59,6 @@ def test_tool_types_unification():
     assert req.name == "my_tool"
     assert req.arguments == {"x": 42}
     assert req.call_id == "call-1"
-
-
-# ── 2. DurableMemoryStore Tenancy Tests ─────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_postgres_memory_store_tenancy():
-    if not await check_db_available():
-        pytest.skip("PostgreSQL database not available")
-
-    db_url = get_db_url()
-    store = DurableMemoryStore(db_url)
-    await store.connect()
-    await store.create_tables()
-
-    ns_a = MemoryNamespace(tenant_id="tenant-a", agent_id="agent-1")
-    ns_b = MemoryNamespace(tenant_id="tenant-b", agent_id="agent-1")
-
-    try:
-        # Clear both namespaces
-        await store.erase(ns_a)
-        await store.erase(ns_b)
-
-        # Save to tenant-a
-        rec_a = MemoryRecord.from_text("Memory for A", namespace=ns_a)
-        id_a = await store.save(rec_a)
-
-        # Save to tenant-b
-        rec_b = MemoryRecord.from_text("Memory for B", namespace=ns_b)
-        id_b = await store.save(rec_b)
-
-        # Query tenant-a
-        matches_a = await store.query(MemoryQuery(namespace=ns_a, text_query="Memory"))
-        assert len(matches_a) == 1
-        assert matches_a[0].record.to_text() == "Memory for A"
-
-        # Query tenant-b
-        matches_b = await store.query(MemoryQuery(namespace=ns_b, text_query="Memory"))
-        assert len(matches_b) == 1
-        assert matches_b[0].record.to_text() == "Memory for B"
-
-        # Verify get retrieves record
-        assert await store.get(ns_a, id_a) is not None
-
-        # Delete from tenant-a
-        deleted = await store.delete(ns_a, id_a)
-        assert deleted is True
-
-        # Check id_a is deleted, id_b remains
-        assert await store.get(ns_a, id_a) is None
-        assert await store.get(ns_b, id_b) is not None
-    finally:
-        await store.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_durable_memory_store_query_paging():
-    """query() — ordering and limit semantics for standing-context injection."""
-    if not await check_db_available():
-        pytest.skip("PostgreSQL database not available")
-
-    db_url = get_db_url()
-    store = DurableMemoryStore(db_url)
-    await store.connect()
-    await store.create_tables()
-
-    ns_user = MemoryNamespace(tenant_id="preference", user_id="list-all-test-user")
-    ns_other = MemoryNamespace(tenant_id="preference", user_id="list-all-test-other-user")
-
-    try:
-        await store.erase(ns_user)
-        await store.erase(ns_other)
-
-        await store.save(MemoryRecord.from_text("Always answer in French", namespace=ns_user))
-        await store.save(MemoryRecord.from_text("Prefers concise answers", namespace=ns_user))
-        await store.save(
-            MemoryRecord.from_text("Not this user's memory", namespace=ns_other)
-        )
-
-        matches = await store.query(MemoryQuery(namespace=ns_user, limit=20))
-
-        assert len(matches) == 2
-        contents = {m.record.to_text() for m in matches}
-        assert contents == {"Always answer in French", "Prefers concise answers"}
-        # Most-recent-first ordering: the second save() is newer.
-        assert matches[0].record.to_text() == "Prefers concise answers"
-
-        # limit is honored.
-        capped = await store.query(MemoryQuery(namespace=ns_user, limit=1))
-        assert len(capped) == 1
-
-        # Doesn't leak across users.
-        other_matches = await store.query(MemoryQuery(namespace=ns_other))
-        assert len(other_matches) == 1
-        assert other_matches[0].record.to_text() == "Not this user's memory"
-    finally:
-        await store.erase(ns_user)
-        await store.erase(ns_other)
-        await store.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_durable_memory_store_multimodal():
-    if not await check_db_available():
-        pytest.skip("PostgreSQL database not available")
-
-    from substrate.types import DataBlock, MediaBlock, TextBlock
-
-    db_url = get_db_url()
-    store = DurableMemoryStore(db_url)
-    await store.connect()
-    await store.create_tables()
-
-    ns = MemoryNamespace(tenant_id="docs", user_id="multimodal-user")
-    try:
-        await store.erase(ns)
-        blocks = [
-            TextBlock(text="Invoice #1234 details"),
-            MediaBlock.image(url="https://example.com/receipt.jpg", media_type="image/jpeg"),
-            DataBlock(data={"amount": 420.50, "currency": "EUR"}),
-        ]
-        rec = MemoryRecord(content=blocks, namespace=ns)
-        mem_id = await store.save(rec)
-
-        # FTS search on the text representation
-        matches = await store.query(MemoryQuery(namespace=ns, text_query="Invoice"))
-        assert len(matches) == 1
-        retrieved = matches[0].record
-        assert retrieved.id == mem_id
-        assert len(retrieved.content) == 3
-        assert isinstance(retrieved.content[0], TextBlock)
-        assert isinstance(retrieved.content[1], MediaBlock)
-        assert retrieved.content[1].type == "image"
-        assert isinstance(retrieved.content[2], DataBlock)
-        assert retrieved.content[2].data["amount"] == 420.50
-    finally:
-        await store.erase(ns)
-        await store.disconnect()
 
 
 # ── 4. PgVectorStore Protocol Tests ──────────────────────────────────────────

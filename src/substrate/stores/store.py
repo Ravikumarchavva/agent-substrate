@@ -25,6 +25,7 @@ from typing import TypeVar
 
 from substrate.stores.database import Database, Tx, migrate
 from substrate.stores.sqlite import SqliteDatabase
+from substrate.stores.memory_tables import MEMORY_SCHEMA, Memory, SessionState
 from substrate.stores.thread_tables import SCHEMA as THREAD_SCHEMA
 from substrate.stores.thread_tables import Threads
 from substrate.version import __version__
@@ -66,6 +67,16 @@ class Store:
         reference counting and releases its connection at once, not whenever the cycle collector runs."""
         return Threads(self)
 
+    @property
+    def memory(self) -> Memory:
+        """Long-term memory (a ``MemoryStore``): records scoped to tenant, user, agent and session, with full-text search."""
+        return Memory(self)
+
+    @property
+    def session_state(self) -> SessionState:
+        """Small key/value state a conversation keeps across runs (a ``ShortTermMemory``)."""
+        return SessionState(self)
+
     @classmethod
     def at(cls, location: str | Path = "./.substrate") -> Store:
         """The store in the folder ``location``, not yet opened: ``start()`` (or ``async with``) opens it."""
@@ -80,6 +91,7 @@ class Store:
         self.index_dir.mkdir(parents=True, exist_ok=True)
         await migrate(self.database, "store", _LAYOUT)
         await migrate(self.database, "threads", THREAD_SCHEMA)
+        await migrate(self.database, "memory", MEMORY_SCHEMA)
         async with self.database.transaction() as tx:
             await tx.execute(
                 "INSERT INTO substrate_info (key, value) VALUES ('created_with', ?) ON CONFLICT DO NOTHING",

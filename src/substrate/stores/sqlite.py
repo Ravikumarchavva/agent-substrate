@@ -88,6 +88,8 @@ class SqliteDatabase:
         conn = sqlite3.connect(self._path, check_same_thread=False, timeout=30, isolation_level=None)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
+        # A deleted row's bytes are overwritten with zeros rather than left in a free page: erasure has to mean it.
+        conn.execute("PRAGMA secure_delete=ON")
         # FULL: the engine records an intent before it acts and the answer after, and both must outlive a
         # power cut — NORMAL could lose the last commits of a WAL.
         conn.execute("PRAGMA synchronous=FULL")
@@ -117,6 +119,13 @@ class SqliteDatabase:
                 raise
             else:
                 await asyncio.shield(db.call(lambda: db.conn.execute("COMMIT")))
+
+    async def reclaim(self) -> None:
+        """Fold the write-ahead log (which still holds the pre-delete pages) into the database and empty it."""
+        assert self._conn is not None, "database not started"
+        db = self._conn
+        async with self._lock:  # no transaction may be open
+            await db.call(lambda: db.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall())
 
     def is_unique_violation(self, exc: BaseException) -> bool:
         return isinstance(exc, sqlite3.IntegrityError)

@@ -158,6 +158,7 @@ _PORTS = (
     "RuntimeStore",
     "ThreadStore",
     "MemoryStore",
+    "ShortTermMemory",
     "VectorStore",
     "GraphStore",
     "FileStore",
@@ -203,6 +204,7 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
     suites = _suite_classes()
     assert "RuntimeStore" in suites, "the runtime-store conformance suite has gone missing"
     assert "MemoryStore" in suites, "the memory-store conformance suite has gone missing"
+    assert "ShortTermMemory" in suites, "the short-term-memory conformance suite has gone missing"
     assert "ThreadStore" in suites, "the history-provider conformance suite has gone missing"
     assert "FileStore" in suites, "the FileStore conformance suite has gone missing"
     assert "TaskStore" in suites, "the TaskStore conformance suite has gone missing"
@@ -212,7 +214,8 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
     assert "VectorStore" in suites, "the vector-store conformance suite has gone missing"
     shipped = {
         "RuntimeStore": ("SqlRuntimeStoreOnSqlite", "PostgresRuntimeStore"),
-        "MemoryStore": ("LocalFilesystemMemoryStore", "DurableMemoryStore", "LanceMemoryStore"),
+        "MemoryStore": ("TestMemory",),
+        "ShortTermMemory": ("TestSessionState", "TestRedisSessionStore"),
         "ThreadStore": ("TestThreads",),
         "FileStore": ("WorkspaceFileStore", "S3FileStore"),
         "TaskStore": ("LocalFilesystemTaskStore", "PgTaskStore"),

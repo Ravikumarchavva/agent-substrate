@@ -5,9 +5,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from substrate.integrations.memory.durable_memory_store import DurableMemoryStore  # noqa: F401
 from substrate.types import RunScope
-from substrate.stores import LocalFilesystemMemoryStore
+from substrate.stores import Store
 from substrate.serving.factory import build_memory_tool
 
 
@@ -37,7 +36,7 @@ def test_returns_a_tool_with_both_configured():
 async def test_a_users_long_term_facts_follow_them_across_threads(tmp_path):
     """The point of keying by user, not session: a fact saved in one thread is visible in
     another thread the same user opens later — and never to anyone else."""
-    store = LocalFilesystemMemoryStore(tmp_path)
+    store = Store.at(tmp_path).memory
     in_thread_1 = build_memory_tool("session-1", None, store)
     in_thread_2 = build_memory_tool("session-2", None, store)
 
@@ -55,7 +54,7 @@ async def test_a_users_long_term_facts_follow_them_across_threads(tmp_path):
 
 async def test_with_no_user_a_fact_is_kept_for_that_conversation_only(tmp_path):
     """No authenticated user degrades long-term memory to the conversation rather than erroring."""
-    store = LocalFilesystemMemoryStore(tmp_path)
+    store = Store.at(tmp_path).memory
     tool = build_memory_tool("session-1", None, store)
 
     await tool.execute(ctx=_ctx(None, "session-1"), action="remember", value="anonymous note")

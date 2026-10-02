@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from substrate.stores.memory_tables import Memory
+
 import pytest
 
-from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
+from substrate.stores import Store
 from substrate.integrations.memory.manager import MemoryManager
 from substrate.types import ChatMessage, Role, TextBlock
 from substrate.stores import (
@@ -18,18 +20,18 @@ from substrate.stores import (
 
 
 @pytest.fixture
-def store(tmp_path) -> LanceMemoryStore:
-    return LanceMemoryStore(path=tmp_path / "mem_manager_store")
+def store(tmp_path) -> Memory:
+    return Store.at(tmp_path / "mem_manager_store").memory
 
 
 @pytest.fixture
-def manager(store: LanceMemoryStore) -> MemoryManager:
+def manager(store: Memory) -> MemoryManager:
     return MemoryManager(store)
 
 
 async def test_extract_candidates_directive_and_semantic(
     manager: MemoryManager,
-    store: LanceMemoryStore,
+    store: Memory,
 ) -> None:
     ns = MemoryNamespace(tenant_id="acme", user_id="user-1")
     prov = MemoryProvenance(source_session_id="s1", source_branch_id="main")
@@ -61,7 +63,7 @@ async def test_extract_candidates_directive_and_semantic(
     assert len(active_matches) == 0
 
 
-async def test_promote_candidate(manager: MemoryManager, store: LanceMemoryStore) -> None:
+async def test_promote_candidate(manager: MemoryManager, store: Memory) -> None:
     ns = MemoryNamespace(tenant_id="acme", user_id="user-1")
     cand = MemoryRecord.candidate("User prefers dark mode.", category=MemoryCategory.DIRECTIVE, namespace=ns)
     await store.save(cand)
@@ -80,7 +82,7 @@ async def test_promote_candidate(manager: MemoryManager, store: LanceMemoryStore
 
 async def test_reconcile_contradiction_supersedes(
     manager: MemoryManager,
-    store: LanceMemoryStore,
+    store: Memory,
 ) -> None:
     ns = MemoryNamespace(tenant_id="acme", user_id="user-1")
 
@@ -104,7 +106,7 @@ async def test_reconcile_contradiction_supersedes(
     assert new_fetched.provenance.supersedes_id == old_record.id
 
 
-async def test_discard_branch(manager: MemoryManager, store: LanceMemoryStore) -> None:
+async def test_discard_branch(manager: MemoryManager, store: Memory) -> None:
     ns = MemoryNamespace(tenant_id="acme", user_id="user-1")
 
     # Candidate on exploratory branch

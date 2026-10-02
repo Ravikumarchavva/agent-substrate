@@ -68,6 +68,7 @@ class Infrastructure:
     long_term_memory: Any = None
     runtime_stack: AsyncExitStack | None = None
     safety_middleware: Any = None
+    store: Any = None  # the one Store behind history, short- and long-term memory; closed once, at shutdown
     task_store: Any = None
 
 
@@ -236,25 +237,20 @@ async def init_infrastructure(
     from substrate.integrations.vector.pgvector_store import PgVectorStore
     from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
-    history = await build_history_provider(store_path=cfg.STORE_PATH)
+    from substrate.stores import Store
+
+    store = Store.at(cfg.STORE_PATH)
+    history = store.threads
     workspace_store = await build_workspace_store(
         database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
         local_path=cfg.WORKSPACE_SNAPSHOT_STORAGE_PATH,
     )
 
-    short_term_memory = await build_short_term_memory(
-        redis_url=cfg.REDIS_URL,
-        database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
-        ttl=cfg.REDIS_SESSION_TTL,
-        local_path=f"{cfg.MEMORY_STORAGE_PATH}/short_term",
-    )
+    short_term_memory = await build_short_term_memory(store=store, redis_url=cfg.REDIS_URL, ttl=cfg.REDIS_SESSION_TTL)
     # User-scoped standing facts/preferences ("always answer in French") —
     # separate from short_term_memory's per-session scratch state. See
     # build_memory_tool() below for how this gets keyed by user, not thread.
-    long_term_memory = await build_long_term_memory(
-        cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
-        local_path=f"{cfg.MEMORY_STORAGE_PATH}/long_term",
-    )
+    long_term_memory = store.memory
 
     # Blocking I/O (HF Hub model download on first run + onnxruntime
     # session construction) — off the event loop via to_thread, same as
@@ -383,6 +379,7 @@ async def init_infrastructure(
         long_term_memory=long_term_memory,
         runtime_stack=runtime_stack,
         safety_middleware=safety_middleware,
+        store=store,
         task_store=task_store,
     )
 
@@ -954,14 +951,6 @@ def build_chat_tools(toolbox: Any, bridge: Any) -> list[Any]:
     return tools
 
 
-async def build_history_provider(*, store_path: str = "./.substrate") -> Any:
-    """The shared ``ThreadStore``: the threads of the store in ``store_path``, opened on first use."""
-    from substrate.stores import Store
-
-    logger.info("History backend: store at %s", store_path)
-    return Store.at(store_path).threads
-
-
 async def build_workspace_store(
     *,
     database_url: str = "",
@@ -969,7 +958,7 @@ async def build_workspace_store(
 ) -> Any:
     """Build the shared WorkspaceStore (branch-isolated workspace snapshots).
 
-    Same backend-selection rule as ``build_history_provider``: Postgres
+    Same backend-selection rule as the history store: Postgres
     when ``database_url`` is given, else durable local-filesystem JSON —
     never the in-memory reference implementation in production, which
     exists only for tests (see ``agents/context/workspace.py``).
@@ -989,40 +978,17 @@ async def build_workspace_store(
     return store
 
 
-async def build_short_term_memory(
-    *,
-    redis_url: str,
-    database_url: str,
-    ttl: int = 3600,
-    local_path: str = "./data/db/memory/short_term",
-) -> Any:
-    """Build and connect a durable ShortTermMemory.
+async def build_short_term_memory(*, store: Any, redis_url: str, ttl: int = 3600) -> Any:
+    """Per-session state: the store's ``session_state``, with a Redis cache in front when ``redis_url`` is set."""
+    primary = store.session_state
+    if not redis_url:
+        return primary
 
-    Uses Postgres + Redis when available, otherwise LocalFilesystemShortTermMemory in local_path.
-    """
-    from substrate.integrations.memory.factory import (
-        build_short_term_memory as _build,
-    )
+    from substrate.integrations.memory import CachedShortTermMemory, RedisSessionStore
 
-    return await _build(
-        database_url,
-        redis_url=redis_url or None,
-        ttl=ttl,
-        local_path=local_path,
-    )
-
-
-async def build_long_term_memory(
-    database_url: str,
-    *,
-    local_path: str = "./data/db/memory/long_term",
-) -> Any:
-    """Build and connect a durable LongTermMemory (Postgres full-text or Lance)."""
-    from substrate.integrations.memory.factory import (
-        build_long_term_memory as _build,
-    )
-
-    return await _build(database_url, local_path=local_path)
+    cache = RedisSessionStore(redis_url=redis_url, ttl=ttl)
+    await cache.connect()
+    return CachedShortTermMemory(primary=primary, cache=cache)
 
 
 def build_session_index_vector_store(
@@ -1164,33 +1130,19 @@ def build_session_rag_backend(
 
 
 def build_page_index_memory(cfg: SubstrateConfig, tenant_id: str, user_id: str) -> Any:
-    """Build the per-user ``LongTermMemory`` backing
-    ``PageIndexRAGPipeline``'s outline trees — the tree half of the per-user
+    """The per-user ``MemoryStore`` backing ``PageIndexRAGPipeline``'s outline trees — the tree half of the per-user
     index bundle, alongside ``build_session_index_vector_store`` above.
 
-    Deliberately its own store, not the shared Postgres ``LongTermMemory``
-    ``build_long_term_memory`` builds elsewhere for cross-session
-    user-preference facts — different data, different lifecycle, shouldn't
-    share a table. Same per-(tenant, user) factory shape as
-    ``build_session_index_vector_store`` and the same reason: the
-    namespace/path needs both ids, which aren't known until a real request
-    does.
+    A store of its own in the user's index folder (``user_index_prefix``), not the shared long-term memory: different
+    data, different lifecycle — and erasing a user's index is still removing that one folder. Same per-(tenant, user)
+    factory shape as the vector store, because both ids are only known once a request exists.
     """
-    from substrate.integrations.memory.lance_memory_store import LanceMemoryStore
-    from substrate.workspace.layout import user_index_prefix
-
-    key = user_index_prefix(tenant_id, user_id)
-    if cfg.SESSION_INDEX_NAMESPACE_URI:
-        return LanceMemoryStore(
-            namespace_uri=cfg.SESSION_INDEX_NAMESPACE_URI,
-            namespace_path=[cfg.SESSION_INDEX_BUCKET, tenant_id, user_id],
-            table_name="pageindex_trees",
-        )
     from pathlib import Path
 
-    return LanceMemoryStore(
-        path=Path(cfg.SESSION_INDEX_LOCAL_PATH) / key, table_name="pageindex_trees"
-    )
+    from substrate.stores import Store
+    from substrate.workspace.layout import user_index_prefix
+
+    return Store.at(Path(cfg.SESSION_INDEX_LOCAL_PATH) / user_index_prefix(tenant_id, user_id)).memory
 
 
 def build_session_graph_store(
@@ -1241,7 +1193,7 @@ def build_safety_middleware(cfg: SubstrateConfig) -> Any:
     own docstrings give for their internal eager session construction.
 
     Thin pass-through to concrete L1/L2 types, same "legal meeting point"
-    convention as ``build_short_term_memory``/``build_long_term_memory``
+    convention as ``build_short_term_memory``
     above — this module is the one place serving/'s dependency chain is
     allowed to construct agents/capabilities concrete types.
     """

@@ -47,9 +47,8 @@ pip install agent-substrate
 
 The examples below (`Runtime`, `ReActAgent`) run entirely in-process — no
 database, Redis, or Docker required. Extras for specific capabilities
-(web browsing, RAG, S3 storage, the sandboxed code interpreter, PDF
-extraction, ...) are documented in `pyproject.toml`'s
-`[project.optional-dependencies]`, e.g. `uv add "agent-substrate[openai,postgres]"`. The base install is the engine alone (`pydantic` and the OpenTelemetry API); each vendor client, database driver and tool stack is an extra.
+(web browsing, S3 storage, the sandboxed code interpreter, OCR with RapidOCR, ...) are documented in `pyproject.toml`'s
+`[project.optional-dependencies]`, e.g. `uv add "agent-substrate[openai,postgres]"`. The base install is the engine alone (`pydantic`, the OpenTelemetry API, and PDFium — it reads documents); each vendor client, database driver and tool stack is an extra.
 
 ### Running the reference server (optional)
 
@@ -198,17 +197,24 @@ client = MCPClient(url="http://localhost:9000/sse")
 tools = await MCPTool.from_mcp_client(client)   # list[MCPTool]
 ```
 
-### Knowledge / RAG
+### Documents
 
 ```python
+from substrate.documents import Reader, Library, DocumentsTool
 from substrate.stores import Store
-from substrate.integrations.knowledge import RAGPipeline
+
+result = await Reader().read(data, "q3.pdf")      # PDF, DOCX, PPTX, XLSX, ODF, HTML, Markdown, CSV — markdown pages, headings, tables
 
 store = Store.at("./.substrate")
-pipeline = RAGPipeline(embedding_client=embed_client, vector_store=store.vectors)
-await pipeline.ingest("Long document …", collection="kb")
-results = await pipeline.query("What is X?", collection="kb")
+library = Library(store)                          # filed as a folder of markdown the model can navigate (no embeddings needed)
+await library.add(data, "q3.pdf", collection="conversations/c1/documents")
+tool = DocumentsTool(library, collection=lambda scope: "conversations/c1/documents")    # list / outline / read / find / view
+
+# A knowledge base: the same, searched by meaning and words too, with Qwen3-VL embedding and reranking by URL
+kb = Library(store, embedder="http://embedding-reranker:8080", reranker="http://embedding-reranker:8080")
 ```
+
+See [`examples/10_documents.py`](examples/10_documents.py), which runs offline.
 
 ---
 

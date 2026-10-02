@@ -8,7 +8,8 @@ one-liner isn't enough.
 
 ## The base install
 
-`pip install agent-substrate` is the engine: `pydantic` and `opentelemetry-api`. Row I31 (`tests/invariants/test_library.py`)
+`pip install agent-substrate` is the engine: `pydantic`, `opentelemetry-api`, and `pypdfium2` — so a plain install **reads documents**
+(PDF through PDFium; DOCX/PPTX/XLSX/ODF/HTML/Markdown/CSV with the standard library). Row I31 (`tests/invariants/test_library.py`)
 fails the build if a driver, SDK or framework creeps into `dependencies`, or if importing any core concept package loads one.
 Everything else is an extra named for what it enables, and an adapter package imports nothing until a name is used (I32),
 so asking for one vendor's client needs that vendor's SDK and nothing else.
@@ -55,43 +56,15 @@ existed inside the sandbox container image. Install into the engine's own
 env (simplest), or into a dedicated venv and point `SANDBOX_PYTHON` at it to
 keep them out of the engine.
 
-## `rag`
-
-`PDFLoader` (the local, no-extraction-service fallback path). Vectors, memory and the graph need no extra: they are
-the folder store (`Store.vectors`, `.memory`, `.graph`), which uses SQLite from the standard library.
-
 ## `ocr`
 
-`LocalDocumentExtractor`'s (`agents/document/local_extractor.py`) bare-
-minimum OCR fallback for scanned/image-only pages — `pytesseract` (thin
-Python wrapper) + `pypdfium2` (page rasterization, pure-wheel, no system
-deps of its own). This is the *only* extra in this file that also needs a
-**system binary**: `tesseract-ocr` (`apt install tesseract-ocr` / `brew
-install tesseract`), not pip-installable. Both imports are lazy inside
-`LocalDocumentExtractor`, so a normal digital-text PDF never touches this
-extra or the binary at all — it only matters if you feed the extractor a
-scanned page. For real OCR/layout quality (multi-column reading order,
-chart/table detection), use the PaddleOCR-backed
-the document-intelligence service (`apps/document-intelligence`, reached by URL through
-`integrations/services`) instead — this tier is deliberately the bare minimum.
+RapidOCR for scanned pages: PaddleOCR's own small models on ONNX Runtime, **inside the wheel** (nothing is downloaded at read time) —
+`rapidocr` + `onnxruntime`, about 120–150 MB because `rapidocr` pins the full GUI build of OpenCV (`opencv-python`; on a headless server
+install `opencv-python-headless` first). It is preferred automatically over Tesseract when installed.
 
-## `chunking`
-
-Model-based sentence segmentation for the chunkers (`SaTSegmenter`, in
-`integrations/knowledge/segmentation.py`). `wtpsplit` pulls `transformers` +
-`huggingface-hub` + `scikit-learn` + `pandas`, and needs a backend to
-actually run a model — `torch` if present, otherwise `wtpsplit[onnx-cpu]`
-(what's pinned here). The default `RegexSegmenter` needs none of it, so
-this stays opt-in: install it only if punctuation is an unreliable boundary
-signal for your documents (OCR'd PDFs, headings, list items), which is
-where SaT earns its weight.
-
-The `onnx-cpu` sub-extra is not optional in practice: `wtpsplit` declares NO
-deep-learning backend of its own and fails at model construction with
-*"Please install `torch` to use WtP with a PyTorch model"* unless `torch` or
-`onnxruntime` is present. `onnxruntime` is ~50MB against `torch`'s ~2GB, so
-`SaTSegmenter` defaults to the ONNX path — see its docstring to opt back
-into `torch`.
+Without it the base install OCRs with the **`tesseract` program** if it is on the `PATH` (`apt install tesseract-ocr`), driven through its
+CLI, so it costs no Python package at all; with neither, a page that is only a picture is reported in `needs_ocr`, never returned silently
+empty. Both engines run in the reader's isolated worker process. For layout, tables and charts use the document server below.
 
 ## `s3`
 
@@ -121,14 +94,9 @@ Everything the reference monolith server (`substrate up && uv run start`)
 needs beyond the base install — the base `dependencies` already cover
 Postgres, Redis, FastAPI, and Pillow (this is a *deployable app* package,
 not a headless library), so `server` only adds the optional features layered
-on top: web search/browsing, the K8s sandbox runtime, local RAG, S3 storage,
+on top: web search/browsing, the K8s sandbox runtime, S3 storage,
 the safety guardrail, and the code-interpreter's data-science packages.
-Shorthand for `agent-substrate[web,code,rag,s3,safety,sandbox]`.
-
-## `services`
-
-`httpx2` — the clients in `integrations/services` that reach the heavy services by URL (document extraction, embedding and
-reranking). The services themselves are not in this package: see "Heavy services" below.
+Shorthand for `agent-substrate[web,code,s3,safety,sandbox]`.
 
 ## `logging`
 
@@ -137,15 +105,20 @@ needs to configure logging. A library never calls it.
 
 ## Heavy services (`apps/`, `packages/`)
 
-OCR, layout analysis, multimodal embedding — anything that needs gigabytes of dependencies or a GPU — runs as a server, and the
-library only holds the client (`integrations/services`: a base URL and a token in, a typed result out). Each server is a project
+Layout analysis and multimodal embedding — anything that needs gigabytes of dependencies or a GPU — runs as a server, and the library
+only holds the client, in the core and standard-library only: `Reader("http://…")` (`documents/remote.py`) and
+`RemoteEmbedder` / `RemoteReranker` (`models/remote.py`). A URL in, a typed result out; a server that is down is a typed
+`ServiceUnavailableError` (or, for a `Reader`, a fall-back to the built-in engine). Each server is a project
 of its own with its own `pyproject.toml`, environment, tests and Dockerfile, so installing the library never installs them and
 upgrading one never touches another:
 
-* `apps/document-intelligence` — PaddleOCR layout/chart/table extraction, Office conversion, a pre-parse security scan.
-  Extras `paddle` (CPU wheel) or `paddle-gpu`, pinned to the wheel versions verified on the target hardware and served from
-  PaddlePaddle's own indexes (declared in that project, not here).
-* `apps/embedding-reranker` — Qwen3-VL embedding and reranking, a thin proxy in front of llama-server. No model library at all.
+* `apps/document-intelligence` — the library's own `Reader` as the baseline (every format, isolated), PaddleOCR layout/chart/table
+  extraction for PDFs and images when asked for (`hi_res`) or when the baseline found scanned pages, LibreOffice for legacy
+  `.doc/.ppt/.xls/.rtf` only, and a pre-parse security scan. Extras `paddle` (CPU wheel) or `paddle-gpu`, pinned to the wheel
+  versions verified on the target hardware and served from PaddlePaddle's own indexes (declared in that project, not here).
+* `apps/embedding-reranker` — Qwen3-VL embedding and reranking, a thin proxy in front of llama-server, on the OpenAI embeddings
+  wire (`/v1/embeddings`, `/v1/models`) and the Jina/Cohere rerank wire (`/v1/rerank`). No model library at all. This is the
+  default knowledge-base backend; llama.cpp, vLLM, Ollama and TEI serve the same endpoints, so `RemoteEmbedder` works with them too.
 * `packages/inference-pool` — spawning, supervising and load-balancing llama-server children (or pointing at remote ones), and
   GPU/CPU/RAM detection; shared by both services.
 

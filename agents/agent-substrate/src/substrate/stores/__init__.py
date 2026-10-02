@@ -68,6 +68,7 @@ from substrate.stores.threads import (
 from substrate.stores.vector import (
     Document,
     SearchResult,
+    SearchableVectorStore,
     VectorStore,
 )
 
@@ -110,6 +111,7 @@ __all__ = [
     "TaskStatus",
     "TaskStore",
     "TenantWide",
+    "SearchableVectorStore",
     "VectorStore",
     "WorkspacePathError",
     "WorkspaceQuotaExceededError",

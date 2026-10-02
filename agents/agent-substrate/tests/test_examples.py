@@ -26,6 +26,7 @@ EXPECTED = {
     "07_mcp_tools.py": "19 + 23 = 42.",
     "08_serve_http.py": '"type":"RUN_FINISHED"',
     "09_evals.py": "Passed:    2 (66.7%)",
+    "10_documents.py": "Damaged goods can be returned within thirty days for a full refund [1].",
 }
 
 

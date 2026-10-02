@@ -161,6 +161,7 @@
     "MessageNode",
     "Relationship",
     "SearchResult",
+    "SearchableVectorStore",
     "ShortTermMemory",
     "Store",
     "StoreVersionError",

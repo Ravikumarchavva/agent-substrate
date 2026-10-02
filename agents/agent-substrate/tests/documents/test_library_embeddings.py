@@ -12,7 +12,6 @@ from substrate.documents import DocumentsTool, Library
 from substrate.documents.types import ExtractedImage, ExtractedImageLabel, ExtractedPage, ExtractionResult
 from substrate.models import Modality
 from substrate.models.protocols import EmbeddingResult
-from substrate.stores import Store
 from substrate.types import MediaBlock, TextBlock
 from substrate.types.errors import ContextLengthError, ServiceUnavailableError, VectorSpaceError
 from substrate.types.run import RunScope
@@ -76,14 +75,6 @@ HANDBOOK = (
 
 def handbook() -> ExtractionResult:
     return ExtractionResult(pages=[ExtractedPage(page_number=1, text="x"), ExtractedPage(page_number=2, text="y")], markdown=HANDBOOK, engine="test")
-
-
-@pytest.fixture
-async def store(tmp_path):
-    store = Store.at(tmp_path / "store")
-    await store.start()
-    yield store
-    await store.aclose()
 
 
 async def test_a_collection_with_an_embedder_is_searched_by_meaning_and_words_then_reranked(store):
@@ -201,9 +192,10 @@ async def test_figures_are_embedded_with_their_captions_in_the_same_space_when_t
     found = await tool.execute(ctx=SimpleNamespace(scope=RunScope(tenant_id="acme")), action="find", query="quarterly revenue by region chart")
     assert "figure img-p1-0" in found.text
 
-    text_only = Library(Store.at(store.root / "other"), embedder=FakeEmbedder(images=False))
-    added2 = await text_only.add(result, "report.pdf", collection=C)
-    assert await text_only._store.vectors.get([f"{added2.document}:img:img-p1-0"], collection=C) == []
+    other = "tenants/acme/knowledge/text-only"
+    text_only = Library(store, embedder=FakeEmbedder(images=False))
+    added2 = await text_only.add(result, "report.pdf", collection=other)
+    assert await store.vectors.get([f"{added2.document}:img:img-p1-0"], collection=other) == []
 
 
 async def test_deleting_and_erasing_remove_the_vectors_and_reindex_rebuilds_them(store):

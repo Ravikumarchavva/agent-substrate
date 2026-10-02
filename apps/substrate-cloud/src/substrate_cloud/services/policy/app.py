@@ -1,6 +1,6 @@
 """Policy Authorization Service — FastAPI application.
 
-Entry point: uvicorn substrate.serving.services.policy.app:app --port 8011
+Entry point: uvicorn substrate_cloud.services.policy.app:app --port 8011
 """
 
 from __future__ import annotations
@@ -11,11 +11,11 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
-from substrate.serving.services.base import create_service_app, init_service_db
-from substrate.serving.services.policy.routes import router
-from substrate.serving.shared.database.base import ServiceBase
+from substrate_cloud.services.base import create_service_app, init_service_db
+from substrate_cloud.services.policy.routes import router
+from substrate_cloud.shared.database.base import ServiceBase
 
-import substrate.serving.services.policy.models  # noqa: F401 — register ORM models before create_all
+import substrate_cloud.services.policy.models  # noqa: F401 — register ORM models before create_all
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ async def lifespan(app):
 
     # Seed default policies on startup
     async with session_factory() as db:
-        from substrate.serving.services.policy.service import seed_default_policies
+        from substrate_cloud.services.policy.service import seed_default_policies
 
         seeded = await seed_default_policies(db)
         await db.commit()

@@ -1,6 +1,6 @@
 """Agent Runtime — FastAPI application.
 
-Entry point: uvicorn substrate.serving.services.agent_runtime.app:app --port 8014
+Entry point: uvicorn substrate_cloud.services.agent_runtime.app:app --port 8014
 """
 
 from __future__ import annotations
@@ -14,16 +14,16 @@ from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
 from substrate.runtime import Runtime
-from substrate.serving.factory import (
+from substrate_cloud.factory import (
     build_runtime_default_tools,
     build_short_term_memory,
     open_store,
 )
 from substrate.integrations.llm.factory import create_model_client
-from substrate.serving.services.agent_runtime.routes import router
-from substrate.serving.services.base import create_service_app
-from substrate.serving.shared.events.factory import get_event_bus
-from substrate.serving.shared.settings import settings
+from substrate_cloud.services.agent_runtime.routes import router
+from substrate_cloud.services.base import create_service_app
+from substrate_cloud.shared.events.factory import get_event_bus
+from substrate_cloud.shared.settings import settings
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 """Admin Control Plane — FastAPI application.
 
-Entry point: uvicorn substrate.serving.services.admin.app:app --port 8019
+Entry point: uvicorn substrate_cloud.services.admin.app:app --port 8019
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
-from substrate.serving.services.admin.models import ServiceBase
-from substrate.serving.services.admin.routes import router
-from substrate.serving.services.base import create_service_app, init_service_db
-from substrate.serving.shared.events.factory import get_event_bus
+from substrate_cloud.services.admin.models import ServiceBase
+from substrate_cloud.services.admin.routes import router
+from substrate_cloud.services.base import create_service_app, init_service_db
+from substrate_cloud.shared.events.factory import get_event_bus
 
 logger = logging.getLogger(__name__)
 

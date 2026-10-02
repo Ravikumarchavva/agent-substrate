@@ -25,17 +25,17 @@ from substrate.stores import bind_threads
 from substrate.workspace import fork_branch, resolve_workspace_snapshot_id
 from substrate.types import BranchAlreadyExistsError, BranchNotFoundError, DAGIntegrityError
 from substrate.stores import HistoryCheckpoint
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.schemas import (
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.schemas import (
     BranchForkRequest,
     BranchOut,
     BranchRenameRequest,
     CheckpointCreateRequest,
     CheckpointOut,
 )
-from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
-from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
-from substrate.serving.monolith.services import get_owned_thread
+from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
+from substrate_cloud.monolith.services import get_owned_thread
 
 def _history(ctx: ServerDependencies, user: AuthClaims) -> ThreadStore:
     """The conversation store as the caller's tenant sees it: bound, so a branch, node or checkpoint id

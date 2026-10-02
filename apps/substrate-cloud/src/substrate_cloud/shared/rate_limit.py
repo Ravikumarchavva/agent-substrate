@@ -15,7 +15,7 @@ ZSET's natural expiry (it would grow forever without a TTL).
 
 Usage (FastAPI dependency)::
 
-    from substrate.serving.shared.rate_limit import rate_limit
+    from substrate_cloud.shared.rate_limit import rate_limit
 
     @router.post("/chat")
     async def chat(
@@ -42,8 +42,8 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
 
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.shared.auth.middleware import optional_current_user
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth.middleware import optional_current_user
 
 logger = logging.getLogger(__name__)
 

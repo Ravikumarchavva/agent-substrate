@@ -4,7 +4,7 @@ model accepts the field in isolation."""
 
 from __future__ import annotations
 
-from substrate.serving.shared.auth.jwt import create_access_token, verify_token
+from substrate_cloud.shared.auth.jwt import create_access_token, verify_token
 
 SECRET = "test-secret-not-for-production"
 

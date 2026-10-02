@@ -14,7 +14,7 @@ this identical path today):
      (``ctx.log_once``) and suspends via ``ctx.sleep_until_signal
      ("hitl:{request_id}")`` — see ``AskHumanTool.execute()`` and
      ``ToolInvoker._invoke_inner``'s approval branch.
-  2. The monolith's run-log tailing loop (``serving/stream/session.py``)
+  2. The monolith's run-log tailing loop (``substrate_cloud/stream/session.py``)
      converts the log entry to a wire event and calls
      ``bridge.register_signal_request()`` so ``resolve()`` knows which run
      to signal back.
@@ -126,7 +126,7 @@ class WebHITLBridge:
     ``ctx.sleep_until_signal()`` and the event flows through the normal
     run-log tail instead of the bridge queue. Tool approval has no
     equivalent pre-built handler here — construct
-    ``SSEApprovalHandler(bridge)`` (``serving/monolith/sse/approval.py``)
+    ``SSEApprovalHandler(bridge)`` (``substrate_cloud/monolith/sse/approval.py``)
     and pass it directly as ``ReActAgent(approval_handler=...)``; it calls
     ``bridge.request_and_wait()`` the same way ``_handle_human_input`` does.
 

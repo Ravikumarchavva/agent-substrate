@@ -12,8 +12,8 @@ import pytest
 from substrate.stores.graph_tables import Graph
 from substrate.stores.memory_tables import Memory
 from substrate.stores.vector_tables import Vectors
-from substrate.config import SubstrateConfig
-from substrate.serving.factory import (
+from substrate_cloud.config import SubstrateConfig
+from substrate_cloud.factory import (
     build_page_index_memory,
     build_session_graph_store,
     build_session_index_vector_store,

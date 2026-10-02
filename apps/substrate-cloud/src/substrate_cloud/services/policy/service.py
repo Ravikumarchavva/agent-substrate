@@ -11,8 +11,8 @@ import logging
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.services.policy.models import PolicyRule, WorkspaceGrant
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.services.policy.models import PolicyRule, WorkspaceGrant
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 logger = logging.getLogger(__name__)
 

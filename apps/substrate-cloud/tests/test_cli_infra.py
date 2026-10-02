@@ -1,4 +1,4 @@
-"""`substrate up`/`substrate down` — the packaged local-dev-infra compose
+"""`substrate-cloud up`/`down` — the packaged local-dev-infra compose
 file. Real, found-not-assumed motivation: `start_all_main` (a shipped
 entry point, `start-all` in pyproject.toml's [project.scripts]) used to
 shell out to `make infra-up-all`. `make` and the Makefile are never part
@@ -17,9 +17,11 @@ part of that proof that doesn't need Docker to verify on every run.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import yaml
 
-from substrate.cli import _INFRA_SERVICES, _infra_compose_path
+from substrate_cloud.cli import _INFRA_SERVICES, _infra_compose_path
 
 
 def test_packaged_compose_file_exists_and_is_valid_yaml() -> None:
@@ -79,20 +81,18 @@ def test_cmd_start_all_flag_no_longer_shells_out_to_make() -> None:
     Docker daemon."""
     import inspect
 
-    from substrate.cli import cmd_start
+    from substrate_cloud.cli import cmd_start
 
     src = inspect.getsource(cmd_start)
     assert '"make"' not in src
     assert "cmd_up" in src
 
 
-def test_start_and_start_all_scripts_are_gone_only_substrate_remains() -> None:
-    """The `start`/`start-all` console-script entry points were removed --
-    everything now goes through `substrate <command>` (`substrate start`,
-    `substrate start --all`), so pyproject.toml should declare exactly one
-    script."""
+def test_the_app_declares_exactly_one_script() -> None:
+    """Everything the platform does goes through `substrate-cloud <command>` (`start`, `start --all`, `up`, `down`), so the
+    app's pyproject.toml declares exactly one script (the library's own is `substrate chat|serve`)."""
     import tomllib
 
-    with open("pyproject.toml", "rb") as f:
+    with open(Path(__file__).parents[1] / "pyproject.toml", "rb") as f:
         scripts = tomllib.load(f)["project"]["scripts"]
-    assert scripts == {"substrate": "substrate.cli:main"}
+    assert scripts == {"substrate-cloud": "substrate_cloud.cli:main"}

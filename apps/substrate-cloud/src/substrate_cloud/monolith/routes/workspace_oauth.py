@@ -21,8 +21,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-from substrate.serving.monolith.security.deps import get_current_user
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 router = APIRouter(prefix="/auth/workspace", tags=["auth"])
 

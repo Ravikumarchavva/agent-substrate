@@ -174,7 +174,7 @@ class SessionDocumentSearchTool:
     async def _search_vector(
         self, tenant_id: str, user_id: str, query: str, *, limit: int, filter: dict | None
     ) -> list[SearchResult]:
-        from substrate.serving.factory import build_session_rag_backend
+        from substrate_cloud.factory import build_session_rag_backend
 
         backend = build_session_rag_backend(
             self._cfg, tenant_id, user_id, self._embedding_client, self._model_client
@@ -187,7 +187,7 @@ class SessionDocumentSearchTool:
         self, tenant_id: str, user_id: str, query: str, *, limit: int
     ) -> list[SearchResult]:
         from substrate.integrations.knowledge.page_pipeline import PageIndexRAGPipeline
-        from substrate.serving.factory import build_page_index_memory
+        from substrate_cloud.factory import build_page_index_memory
 
         memory = build_page_index_memory(self._cfg, tenant_id, user_id)
         pipeline = PageIndexRAGPipeline(model_client=self._model_client, memory_store=memory)
@@ -198,7 +198,7 @@ class SessionDocumentSearchTool:
     ) -> list[SearchResult]:
         from substrate.integrations.knowledge.graph_rag import GraphRAGPipeline
         from substrate.integrations.knowledge.pipeline import RAGPipeline
-        from substrate.serving.factory import (
+        from substrate_cloud.factory import (
             build_session_graph_store,
             build_session_index_vector_store,
         )

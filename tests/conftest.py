@@ -9,7 +9,7 @@ import os
 # every os.environ override below, and its module-level `settings =
 # ServerSettings()` singleton constructs at IMPORT time. So the real
 # OPENAI_API_KEY from .env loads into every test process the instant
-# anything imports substrate.serving.shared.settings, regardless of what
+# anything imports substrate_cloud.shared.settings, regardless of what
 # this file sets. A test that builds an embedding/LLM client from that
 # singleton instead of an explicitly mocked one would silently make a real,
 # billed API call.

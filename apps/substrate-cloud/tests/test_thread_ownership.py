@@ -24,14 +24,14 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from substrate.serving.monolith.services.thread_service import (
+from substrate_cloud.monolith.services.thread_service import (
     create_thread,
     delete_thread,
     get_owned_thread,
     list_threads,
     update_thread,
 )
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 TENANT_A = "tenant-a"
 TENANT_B = "tenant-b"

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from substrate.integrations.events.redis_event_bus import EventBus
 
 if TYPE_CHECKING:
-    from substrate.config import SubstrateConfig
+    from substrate_cloud.config import SubstrateConfig
 
 
 def get_event_bus(config: "SubstrateConfig | str") -> EventBus:

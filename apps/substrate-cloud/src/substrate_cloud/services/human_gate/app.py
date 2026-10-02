@@ -1,6 +1,6 @@
 """Human Gate Service — FastAPI application.
 
-Entry point: uvicorn substrate.serving.services.human_gate.app:app --port 8016
+Entry point: uvicorn substrate_cloud.services.human_gate.app:app --port 8016
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
-from substrate.serving.services.base import create_service_app, init_service_db
-from substrate.serving.services.human_gate.models import ServiceBase
-from substrate.serving.services.human_gate.routes import router
-from substrate.serving.shared.events.factory import get_event_bus
+from substrate_cloud.services.base import create_service_app, init_service_db
+from substrate_cloud.services.human_gate.models import ServiceBase
+from substrate_cloud.services.human_gate.routes import router
+from substrate_cloud.shared.events.factory import get_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,8 @@ async def lifespan(app):
     # read DATABASE_URL) — this is what lets resolve_request() wake a signal-suspended
     # run directly instead of only publishing on Redis.
     from substrate.runtime import Runtime
-    from substrate.serving.factory import open_store
-    from substrate.serving.shared.settings import settings
+    from substrate_cloud.factory import open_store
+    from substrate_cloud.shared.settings import settings
 
     store = open_store(settings)
     await store.start()

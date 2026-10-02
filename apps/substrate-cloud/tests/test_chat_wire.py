@@ -9,7 +9,7 @@ resolved for the request — the model always saw text-only content."""
 from __future__ import annotations
 
 from substrate.types import MediaBlock, TextBlock
-from substrate.serving.monolith.routes.chat_wire import _ImagePayload, build_user_blocks
+from substrate_cloud.monolith.routes.chat_wire import _ImagePayload, build_user_blocks
 
 
 def test_build_user_blocks_text_only():

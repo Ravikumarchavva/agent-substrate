@@ -18,10 +18,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.shared.database.dependency import get_db_session
-from substrate.serving.shared.events.types import job_cancel_requested
+from substrate_cloud.shared.database.dependency import get_db_session
+from substrate_cloud.shared.events.types import job_cancel_requested
 
-from substrate.serving.services.job_controller.service import (
+from substrate_cloud.services.job_controller.service import (
     cancel_run,
     create_run,
     dispatch_run,

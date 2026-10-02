@@ -6,9 +6,9 @@ primitive itself).
 
 from __future__ import annotations
 
-from substrate.serving.monolith.routes.chat import plan_quota_key
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.shared.doc_quota import check_and_increment
+from substrate_cloud.monolith.routes.chat import plan_quota_key
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.doc_quota import check_and_increment
 
 
 class _FakeRedis:

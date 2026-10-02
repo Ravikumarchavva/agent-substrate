@@ -9,8 +9,8 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.monolith.models import Thread, Feedback
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.monolith.models import Thread, Feedback
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 
 # ── Thread CRUD ──────────────────────────────────────────────────────────────

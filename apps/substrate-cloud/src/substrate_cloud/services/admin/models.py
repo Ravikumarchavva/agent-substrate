@@ -13,7 +13,7 @@ from sqlalchemy import DateTime, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from substrate.serving.shared.database.base import ServiceBase
+from substrate_cloud.shared.database.base import ServiceBase
 
 
 class AuditLog(ServiceBase):

@@ -18,9 +18,9 @@ import httpx2 as httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.services.job_controller.models import JobRun
+from substrate_cloud.services.job_controller.models import JobRun
 from substrate.integrations.events import EventBus
-from substrate.serving.shared.events.types import workflow_failed, workflow_started
+from substrate_cloud.shared.events.types import workflow_failed, workflow_started
 
 logger = logging.getLogger(__name__)
 

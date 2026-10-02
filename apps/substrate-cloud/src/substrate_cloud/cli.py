@@ -1,0 +1,421 @@
+"""substrate-cloud CLI — run the platform: dev infrastructure and the multi-tenant server.
+
+Usage:
+    substrate-cloud up              # start local dev infra (Postgres, Redis, SeaweedFS,
+                               # observability, MCP server) — no `make`, no clone needed
+    substrate-cloud down             # stop it
+    substrate-cloud start           # start server on default port 8000
+    substrate-cloud start --port 9000 --reload
+    substrate-cloud start --all --host 0.0.0.0 --foreground   # infra + server, one command
+                                                          # (container-entrypoint shape)
+    substrate-cloud stop           # stop a running server (via PID file)
+    substrate-cloud status         # check if server is running
+"""
+
+from __future__ import annotations
+
+import argparse
+import ctypes
+import importlib.resources
+import os
+import signal
+import subprocess
+import sys
+from pathlib import Path
+
+_PID_DIR = Path.home() / ".substrate"
+_PID_FILE = _PID_DIR / "server.pid"
+
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+
+def _read_pid() -> int | None:
+    try:
+        return int(_PID_FILE.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _write_pid(pid: int) -> None:
+    _PID_DIR.mkdir(parents=True, exist_ok=True)
+    _PID_FILE.write_text(str(pid))
+
+
+def _remove_pid() -> None:
+    try:
+        _PID_FILE.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _is_running(pid: int) -> bool:
+    """Return True if a process with *pid* is alive."""
+    if sys.platform == "win32":
+        # Windows: OpenProcess with limited info access to check existence
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        return False
+    else:
+        # POSIX: signal 0 checks process existence
+        try:
+            os.kill(pid, 0)
+            return True
+        except (ProcessLookupError, PermissionError):
+            return False
+
+
+# ── infra (up / down) ────────────────────────────────────────────────────────
+
+# Matches `make infra-up`'s service list (agent-substrate's own repo-root
+# Makefile) minus the services that need the full repo as build context
+# (backend, document-intelligence, GPU inference, ONLYOFFICE) — those build
+# agent-substrate's own images and aren't needed to just run against it as
+# a dependency.
+_INFRA_SERVICES = [
+    "postgres",
+    "redis",
+    "seaweedfs",
+    "seaweedfs-admin",
+    "loki",
+    "promtail",
+    "tempo",
+    "grafana",
+    "mcp-server",
+]
+
+
+def _infra_compose_path() -> Path:
+    """Real filesystem path to the docker-compose.yml shipped inside this
+    package (``deployment/docker/`` under ``src/substrate/`` — verified to
+    land in the built wheel, not just the source tree). Resolves correctly
+    regardless of where ``substrate`` was installed, so ``substrate up``
+    works for any project that depends on agent-substrate as a package,
+    with no clone of this repo and no ``make`` required.
+
+    Assumes a normal (non-zipped) install, which ``uv``/``pip`` always
+    produce — the compose file bind-mounts several sibling config files by
+    relative path (``./seaweedfs/s3.json``, etc.), which only resolves
+    against a real directory on disk, not a zip member.
+    """
+    return (
+        Path(str(importlib.resources.files("substrate_cloud")))
+        / "deployment"
+        / "docker"
+        / "docker-compose.yml"
+    )
+
+
+def cmd_up(args: argparse.Namespace) -> None:
+    """Start local dev infra: Postgres, Redis, SeaweedFS, observability
+    (Loki/Promtail/Tempo/Grafana), and the demo MCP server."""
+    compose_file = _infra_compose_path()
+    if not compose_file.exists():
+        print(f"Packaged compose file not found: {compose_file}")
+        print("This install may be missing package data — reinstall agent-substrate.")
+        sys.exit(1)
+
+    cmd = ["docker", "compose", "-f", str(compose_file)]
+    env_file = Path(args.env_file) if args.env_file else Path.cwd() / ".env"
+    if env_file.exists():
+        cmd += ["--env-file", str(env_file)]
+    cmd += ["up", "-d", "--remove-orphans", *_INFRA_SERVICES]
+
+    print(f"Starting local dev infra ({', '.join(_INFRA_SERVICES)})…")
+    subprocess.run(cmd, check=True)
+
+
+def cmd_down(args: argparse.Namespace) -> None:  # noqa: ARG001
+    """Stop local dev infra started by ``substrate up`` — data volumes are
+    kept (same as ``make infra-down``'s ``stop``, not a destructive ``down -v``)."""
+    compose_file = _infra_compose_path()
+    cmd = ["docker", "compose", "-f", str(compose_file), "stop", *_INFRA_SERVICES]
+    print("Stopping local dev infra…")
+    subprocess.run(cmd, check=True)
+
+
+# ── commands ─────────────────────────────────────────────────────────────────
+
+
+def cmd_start(args: argparse.Namespace) -> None:
+    """Start the uvicorn server and write its PID to the PID file.
+
+    ``--all`` brings up local dev infra first (same as ``substrate up``) —
+    the one-command replacement for what used to be the separate
+    ``start-all`` console script.
+    """
+    if getattr(args, "all", False):
+        cmd_up(argparse.Namespace(env_file=None))
+
+    pid = _read_pid()
+    if pid and _is_running(pid):
+        print(f"Agent Framework is already running (PID {pid}).")
+        print("  Run `substrate stop` to stop it first.")
+        sys.exit(1)
+
+    host = args.host
+    port = args.port
+    reload = args.reload
+    workers = args.workers
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        "substrate_cloud.monolith.app:app",
+        "--host",
+        host,
+        "--port",
+        str(port),
+    ]
+    if reload:
+        cmd.append("--reload")
+        cmd += ["--reload-dir", "src"]
+    elif workers > 1:
+        cmd += ["--workers", str(workers)]
+
+    # huggingface_hub/tokenizers read HF_TOKEN directly from the process env,
+    # not through ServerSettings — forward the one value ServerSettings
+    # already parsed from .env into the uvicorn subprocess's env so it's not
+    # duplicated by a second, separate .env parse here.
+    env = os.environ.copy()
+    from substrate_cloud.shared.settings import settings as server_settings
+
+    if server_settings.HF_TOKEN:
+        env["HF_TOKEN"] = server_settings.HF_TOKEN
+
+    if args.foreground or reload:
+        # Run in the foreground (Ctrl+C to stop); no PID file needed.
+        print(f"Starting Agent Framework on http://{host}:{port} (foreground)…")
+        try:
+            subprocess.run(cmd, check=True, env=env)
+        except KeyboardInterrupt:
+            pass
+        return
+
+    # Background mode — detach the process.
+    print(f"Starting Agent Framework on http://{host}:{port} (background)…")
+    kwargs: dict = {}
+    if sys.platform == "win32":
+        # Windows: use DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP
+        DETACHED_PROCESS = 0x00000008
+        CREATE_NEW_PROCESS_GROUP = 0x00000200
+        kwargs["creationflags"] = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        kwargs["close_fds"] = True
+    else:
+        kwargs["start_new_session"] = True
+
+    log_file = _PID_DIR / "server.log"
+    _PID_DIR.mkdir(parents=True, exist_ok=True)
+    log_fp = open(log_file, "a")  # noqa: SIM115  (intentionally kept open by child)
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=log_fp,
+        stderr=log_fp,
+        env=env,
+        **kwargs,
+    )
+    _write_pid(proc.pid)
+    print(f"  PID        : {proc.pid}")
+    print(f"  Log file   : {log_file}")
+
+    # Verify the process survives startup by polling the HTTP health endpoint.
+    import socket
+    import time
+
+    sys.stdout.write("  Starting   : ")
+    sys.stdout.flush()
+    deadline = time.monotonic() + 35.0
+    confirmed = False
+    while time.monotonic() < deadline:
+        time.sleep(0.3)
+        if not _is_running(proc.pid):
+            print("FAILED")
+            print(f"\n  Server exited. Last lines of {log_file}:")
+            try:
+                lines = log_file.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
+                for line in lines[-20:]:
+                    print(f"    {line}")
+            except OSError:
+                print("    (log unavailable)")
+            _remove_pid()
+            sys.exit(1)
+        try:
+            with socket.create_connection((host, port), timeout=0.2):
+                confirmed = True
+                break
+        except OSError:
+            sys.stdout.write(".")
+            sys.stdout.flush()
+
+    if confirmed:
+        print(f" OK  (http://{host}:{port})")
+        print("  Stop with  : substrate stop")
+    else:
+        # After deadline: differentiate between dead process vs slow startup
+        if not _is_running(proc.pid):
+            print(" FAILED")
+            print(f"\n  Server exited. Last lines of {log_file}:")
+            try:
+                lines = log_file.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
+                for line in lines[-20:]:
+                    print(f"    {line}")
+            except OSError:
+                print("    (log unavailable)")
+            _remove_pid()
+            sys.exit(1)
+        else:
+            print(
+                f" TIMEOUT  (process alive but port {port} still not responding after 15s)"
+            )
+            print(f"  Check logs : {log_file}")
+            print("  Stop with  : substrate stop")
+
+
+def cmd_stop(args: argparse.Namespace) -> None:
+    """Send SIGTERM (or SIGKILL with --force) to the server process."""
+    pid = _read_pid()
+    if pid is None:
+        print("No PID file found — is the server running?")
+        sys.exit(1)
+
+    if not _is_running(pid):
+        print(f"Process {pid} is not running. Cleaning up stale PID file.")
+        _remove_pid()
+        return
+
+    sig = (
+        getattr(signal, "SIGKILL", signal.SIGTERM)
+        if (hasattr(args, "force") and args.force)
+        else signal.SIGTERM
+    )
+    try:
+        os.kill(pid, sig)
+    except PermissionError:
+        print(f"Permission denied to kill PID {pid}.")
+        sys.exit(1)
+
+    # Wait up to 5 s for clean exit.
+    import time
+
+    for _ in range(50):
+        time.sleep(0.1)
+        if not _is_running(pid):
+            _remove_pid()
+            print(f"Agent Framework (PID {pid}) stopped.")
+            return
+
+    print(f"Process {pid} did not exit. Use `substrate stop --force` to kill it.")
+    sys.exit(1)
+
+
+def cmd_status(args: argparse.Namespace) -> None:  # noqa: ARG001
+    """Print running / stopped status."""
+    pid = _read_pid()
+    if pid is None:
+        print("Agent Framework: STOPPED (no PID file)")
+        return
+    if _is_running(pid):
+        print(f"Agent Framework: RUNNING  (PID {pid})")
+    else:
+        print(f"Agent Framework: STOPPED  (stale PID {pid})")
+        _remove_pid()
+
+
+# ── CLI entry point ───────────────────────────────────────────────────────────
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="substrate-cloud",
+        description="Run the Substrate platform",
+    )
+    sub = parser.add_subparsers(dest="command", metavar="COMMAND")
+    sub.required = True
+
+    # ── up / down ──────────────────────────────────────────────────────────
+    p_up = sub.add_parser(
+        "up",
+        help="Start local dev infra (Postgres, Redis, SeaweedFS, observability, MCP server)",
+    )
+    p_up.add_argument(
+        "--env-file", default=None, help="Path to .env (default: ./.env if present)"
+    )
+    p_up.set_defaults(func=cmd_up)
+
+    p_down = sub.add_parser(
+        "down", help="Stop local dev infra started by `substrate up`"
+    )
+    p_down.set_defaults(func=cmd_down)
+
+    # ── start ──────────────────────────────────────────────────────────────
+    p_start = sub.add_parser("start", help="Start the server")
+    p_start.add_argument(
+        "--host", default="127.0.0.1", help="Bind host  (default: 127.0.0.1)"
+    )
+    p_start.add_argument(
+        "--port", "-p", default=8000, type=int, help="Bind port  (default: 8000)"
+    )
+    p_start.add_argument(
+        "--reload",
+        action="store_true",
+        help="Enable auto-reload (dev mode, runs foreground)",
+    )
+    p_start.add_argument(
+        "--workers", default=1, type=int, help="Number of uvicorn workers (default: 1)"
+    )
+    p_start.add_argument(
+        "--foreground",
+        action="store_true",
+        help="Run in foreground instead of background",
+    )
+    p_start.add_argument(
+        "--all",
+        action="store_true",
+        help="Bring up local dev infra first (same as `substrate up`), then start",
+    )
+    p_start.set_defaults(func=cmd_start)
+
+    # ── stop ───────────────────────────────────────────────────────────────
+    p_stop = sub.add_parser("stop", help="Stop the running server")
+    p_stop.add_argument(
+        "--force", action="store_true", help="SIGKILL instead of SIGTERM"
+    )
+    p_stop.set_defaults(func=cmd_stop)
+
+    # ── status ─────────────────────────────────────────────────────────────
+    p_status = sub.add_parser("status", help="Show server status")
+    p_status.set_defaults(func=cmd_status)
+
+    # ── chat ───────────────────────────────────────────────────────────────
+    # ── restart ────────────────────────────────────────────────────────────
+    p_restart = sub.add_parser("restart", help="Stop then start the server")
+    p_restart.add_argument("--host", default="127.0.0.1", help="Bind host")
+    p_restart.add_argument("--port", "-p", default=8000, type=int, help="Bind port")
+    p_restart.add_argument("--reload", action="store_true")
+    p_restart.add_argument("--workers", default=1, type=int)
+    p_restart.add_argument("--foreground", action="store_true")
+    p_restart.add_argument("--force", action="store_true")
+
+    def cmd_restart(a: argparse.Namespace) -> None:
+        cmd_stop(a)
+        cmd_start(a)
+
+    p_restart.set_defaults(func=cmd_restart)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

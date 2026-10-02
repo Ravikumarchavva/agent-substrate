@@ -12,10 +12,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from substrate.stores import Store
-from substrate.serving.monolith.app import app
-from substrate.serving.monolith.models import WorkspaceQuota
-from substrate.serving.monolith.security.deps import get_current_user
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.monolith.app import app
+from substrate_cloud.monolith.models import WorkspaceQuota
+from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 
 def _admin_claims() -> AuthClaims:

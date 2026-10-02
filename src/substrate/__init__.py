@@ -33,7 +33,6 @@ if TYPE_CHECKING:
     from substrate.agents import ReActAgent
     from substrate.agents import OrchestratorAgent, SubAgentConfig
     from substrate.agents import UserProxyAgent
-    from substrate.config import SubstrateConfig
     from substrate.stores import Store, connect
     from substrate.context import AgentContext, ContextConfig
     from substrate.context import SlidingWindowCompaction
@@ -75,8 +74,6 @@ __all__ = [
     # runtime
     "Runtime",
     "RunOutcome",
-    # config
-    "SubstrateConfig",
     # native durable storage
     "Store",
     "connect",
@@ -139,8 +136,6 @@ _LAZY: dict[str, tuple[str, str]] = {
     # runtime
     "Runtime": ("substrate.runtime", "Runtime"),
     "RunOutcome": ("substrate.runtime", "RunOutcome"),
-    # config
-    "SubstrateConfig": ("substrate.config", "SubstrateConfig"),
     # native durable storage
     "Store": ("substrate.stores", "Store"),
     "connect": ("substrate.stores", "connect"),
@@ -226,10 +221,3 @@ def __getattr__(name: str) -> object:
         globals()[name] = obj
         return obj
     raise AttributeError(f"module 'substrate' has no attribute {name!r}")
-
-
-def main() -> None:
-    """Entry point — run ``uvicorn substrate.serving.monolith.app:app --port 8001 --reload``."""
-    print(
-        "substrate — run `uvicorn substrate.serving.monolith.app:app --port 8001 --reload`"
-    )

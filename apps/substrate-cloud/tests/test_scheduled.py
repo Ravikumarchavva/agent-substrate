@@ -8,15 +8,15 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession, create_async_engine
 
-from substrate.serving.monolith.app import app
-from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
-from substrate.serving.monolith.security.deps import get_current_user
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.monolith.services.scheduled_service import (
+from substrate_cloud.monolith.app import app
+from substrate_cloud.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
+from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.monolith.services.scheduled_service import (
     execute_scheduled_task,
     format_lookback_context,
 )
-from substrate.serving.monolith.services.thread_service import list_threads
+from substrate_cloud.monolith.services.thread_service import list_threads
 
 
 @pytest.fixture

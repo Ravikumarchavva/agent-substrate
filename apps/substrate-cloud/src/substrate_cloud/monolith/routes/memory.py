@@ -1,5 +1,5 @@
 """User long-term memory management — the HTTP surface for viewing/deleting
-the facts ``MemoryTool.remember()`` saves (see ``serving/factory
+the facts ``MemoryTool.remember()`` saves (see ``substrate_cloud/factory
 .py::build_memory_tool()`` for how those get keyed by user, not thread).
 
 Routes:
@@ -13,8 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from substrate.stores import MemoryNamespace, MemoryQuery
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 
 router = APIRouter(prefix="/me/memories", tags=["memory"])
 
@@ -37,7 +37,7 @@ async def list_memories(
     if ctx.long_term_memory is None:
         return []
     # The user's own facts — what ``MemoryTool.remember()`` saved for them (see also
-    # serving/factory.py::build_user_memory_context_block()). Tenant-level facts are visible
+    # substrate_cloud/factory.py::build_user_memory_context_block()). Tenant-level facts are visible
     # to them too, but they are not the user's to list for deletion.
     matches = await ctx.long_term_memory.query(MemoryQuery(namespace=_caller(user), limit=100))
     return [MemoryOut(id=m.id, content=m.text) for m in matches if m.record.namespace.user_id == user.sub]

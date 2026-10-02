@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from substrate.serving.stream.history import (
+from substrate_cloud.stream.history import (
     append_mcp_app_context,
     append_user_message,
     project_thread,
 )
-from substrate.serving.stream.session import (
+from substrate_cloud.stream.session import (
     AgentStreamSession,
     sse_lines,
     tail_wire_events,

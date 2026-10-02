@@ -63,13 +63,9 @@ def _mentions_setup_logging(path: Path) -> list[ast.AST]:
     return [n for n in ast.walk(tree) if (isinstance(n, ast.Name) and n.id == "setup_logging") or (isinstance(n, ast.alias) and n.name == "setup_logging")]
 
 
-#: The application entry points that may configure logging: the console, the service factory, the OTel bootstrap.
-_ENTRY_POINTS = {
-    "console/app.py",
-    "serving/services/base.py",
-    "serving/shared/observability/telemetry.py",
-    "logger.py",
-}
+#: The application entry points that may configure logging: the terminal console (and the logger module itself). The
+#: platform and the services in apps/ configure their own.
+_ENTRY_POINTS = {"console/app.py", "logger.py"}
 
 
 def test_i33_a_library_module_never_configures_logging() -> None:

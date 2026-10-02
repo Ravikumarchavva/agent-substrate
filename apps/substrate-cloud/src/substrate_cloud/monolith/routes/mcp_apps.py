@@ -20,12 +20,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.schemas import McpContextUpdate
-from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
-from substrate.serving.monolith.services import get_owned_thread
-from substrate.serving.stream import append_mcp_app_context
+from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.schemas import McpContextUpdate
+from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.monolith.services import get_owned_thread
+from substrate_cloud.stream import append_mcp_app_context
 
 logger = logging.getLogger(__name__)
 

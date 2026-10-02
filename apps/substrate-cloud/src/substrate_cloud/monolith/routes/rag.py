@@ -14,7 +14,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from substrate.serving.monolith.security.deps import get_current_user
+from substrate_cloud.monolith.security.deps import get_current_user
 
 router = APIRouter(
     prefix="/rag",

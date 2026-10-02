@@ -33,7 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.workspace.layout import conversation_version_key
-from substrate.serving.monolith.models import FileVersion
+from substrate_cloud.monolith.models import FileVersion
 
 # Per-user snapshot prefix, a sibling of `sessions/` and `uploads/` rather than
 # a directory inside them. routes/workspace.py::list_files hides it from the

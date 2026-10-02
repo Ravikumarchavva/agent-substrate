@@ -10,7 +10,7 @@ import pytest
 
 from substrate.stores import MemoryNamespace, MemoryRecord
 from substrate.stores import Store
-from substrate.serving.factory import build_user_memory_context_block
+from substrate_cloud.factory import build_user_memory_context_block
 
 TENANT = "acme"
 

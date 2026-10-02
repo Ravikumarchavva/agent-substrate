@@ -58,7 +58,7 @@ async def ingest_session_document(
     from substrate.integrations.knowledge.graph_rag import GraphRAGPipeline
     from substrate.integrations.knowledge.page_pipeline import PageIndexRAGPipeline
     from substrate.integrations.knowledge.pipeline import RAGPipeline
-    from substrate.serving.factory import (
+    from substrate_cloud.factory import (
         build_page_index_memory,
         build_session_graph_store,
         build_session_index_vector_store,

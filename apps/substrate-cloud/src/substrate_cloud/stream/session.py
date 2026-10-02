@@ -17,7 +17,7 @@ There is no inline persistence here anymore: the agent itself durably logs
 its own conversation (``ReActAgent``'s ``log_user_message``/journaled
 ``ctx.llm()``/``ctx.tool()`` calls) straight to the EventLogProtocol, the single
 source of truth for conversation history (see
-``serving/stream/history.py::project_thread()``). This session's only
+``substrate_cloud/stream/history.py::project_thread()``). This session's only
 remaining job is relaying that same log, live, to one SSE connection — a
 disconnect (or this process restarting) loses nothing, since the run keeps
 executing durably via its own Worker-owned Task regardless of whether
@@ -46,7 +46,7 @@ import json
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 from substrate.types import RunLogKind
-from substrate.serving.monolith.sse.bridge import (
+from substrate_cloud.monolith.sse.bridge import (
     BRIDGE_DONE,
     WebHITLBridge,
     bridge_event_to_wire,
@@ -366,7 +366,7 @@ async def sse_lines(
     session: AgentStreamSession, *, include_done: bool = True
 ) -> AsyncIterator[str]:
     """Frame *session*'s wire-event stream as SSE ``data:`` lines — the
-    exact byte-for-byte framing both ``serving/monolith/routes/chat.py``
+    exact byte-for-byte framing both ``substrate_cloud/monolith/routes/chat.py``
     and ``substrate.serve.add_routes`` need, extracted here once instead of
     each maintaining its own copy of ``f"data: {json.dumps(...)}\\n\\n"``.
 

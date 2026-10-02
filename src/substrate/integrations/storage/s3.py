@@ -148,7 +148,7 @@ class S3FileStore:
         )
 
     # ── workspace surface (mirrors Files, so the workspace
-    # management API in serving/monolith/routes/workspace.py works against
+    # management API in substrate_cloud/monolith/routes/workspace.py works against
     # either store) ──────────────────────────────────────────────────────────
 
     async def list_prefix(self, prefix: str) -> list[tuple[str, int, float]]:

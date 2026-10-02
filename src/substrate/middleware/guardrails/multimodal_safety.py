@@ -83,7 +83,7 @@ class MultimodalSafetyMiddleware:
     ``text_classifier``/``image_classifier`` are the kernel Protocols
     (``kernel/agent/safety.py``) — concrete instances (``PromptGuardClassifier``/
     ``ImageSafetyClassifier``) are constructed and injected from
-    ``serving/factory.py``, the orthogonal module allowed to
+    ``substrate_cloud/factory.py``, the orthogonal module allowed to
     import both L1 (this) and L2 (the concrete classifiers) — this module
     itself never imports a concrete classifier, only the Protocol.
     """

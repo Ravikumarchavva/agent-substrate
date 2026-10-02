@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import jwt
 
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 logger = logging.getLogger(__name__)
 

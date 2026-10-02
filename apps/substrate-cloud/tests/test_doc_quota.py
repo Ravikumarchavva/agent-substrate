@@ -4,7 +4,7 @@ logic under test is a handful of INCRBY/EXPIRE/GET calls, not Redis itself."""
 
 from __future__ import annotations
 
-from substrate.serving.shared.doc_quota import check_and_increment, peek, release
+from substrate_cloud.shared.doc_quota import check_and_increment, peek, release
 
 
 class _FakeRedis:

@@ -380,6 +380,24 @@ VISION_MODEL_FALLBACKS: tuple[str, ...] = (
 )
 
 
+_PROVIDER_KEY_VARS = {
+    "openai": "OPENAI_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GEMINI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "nvidia": "NVIDIA_API_KEY",
+}
+
+
+def provider_keys_from_env() -> dict[str, str]:
+    """Provider -> API key, read from the process environment (``OPENAI_API_KEY``, ``ANTHROPIC_API_KEY``, …), for
+    ``create_model_client(..., api_keys=...)`` — so one call can build a client for any model whose key is set."""
+    import os
+
+    return {provider: os.environ.get(var, "") for provider, var in _PROVIDER_KEY_VARS.items()}
+
+
 def has_provider_api_key(
     provider: str,
     api_keys: Optional[dict[str, str]] = None,

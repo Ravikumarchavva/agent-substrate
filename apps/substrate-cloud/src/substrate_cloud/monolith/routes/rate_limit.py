@@ -7,8 +7,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Request
 
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.shared.auth.middleware import optional_current_user
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth.middleware import optional_current_user
 from fastapi import Depends
 
 router = APIRouter(prefix="/rate-limit", tags=["rate-limit"])

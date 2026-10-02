@@ -1,6 +1,6 @@
 """Gateway BFF Service — FastAPI application.
 
-Entry point: uvicorn substrate.serving.services.gateway.app:app --port 8001
+Entry point: uvicorn substrate_cloud.services.gateway.app:app --port 8001
 
 The Gateway is the ONLY service exposed to the frontend. All client
 requests go through here and are routed to internal services.
@@ -14,8 +14,8 @@ import os
 import json as _json
 from contextlib import asynccontextmanager
 
-from substrate.serving.services.base import create_service_app
-from substrate.serving.services.gateway.clients import (
+from substrate_cloud.services.base import create_service_app
+from substrate_cloud.services.gateway.clients import (
     ArtifactClient,
     ConversationClient,
     HITLClient,
@@ -24,7 +24,7 @@ from substrate.serving.services.gateway.clients import (
     StreamClient,
     WorkflowClient,
 )
-from substrate.serving.services.gateway.routes import (
+from substrate_cloud.services.gateway.routes import (
     auth_router,
     chat_router,
     file_router,

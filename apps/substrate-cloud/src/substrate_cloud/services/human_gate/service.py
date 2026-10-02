@@ -17,7 +17,7 @@ import redis.asyncio as aioredis
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.services.human_gate.models import HITLRequest
+from substrate_cloud.services.human_gate.models import HITLRequest
 from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
 

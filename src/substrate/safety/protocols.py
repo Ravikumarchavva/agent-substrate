@@ -6,7 +6,7 @@ middleware (agents, L1) and its concrete model-backed implementation
 (integrations, L2) need the exact same shape — the classic reason kernel
 holds a Protocol: multiple layers need it, and it has zero I/O/deps of its
 own. The middleware never imports a concrete classifier; it only ever sees
-these two Protocols, injected from ``serving/factory.py``.
+these two Protocols, injected from ``substrate_cloud/factory.py``.
 
 Deliberately NOT here: any actual model, tokenizer, or inference code — all
 of that lives in ``integrations/safety/``.

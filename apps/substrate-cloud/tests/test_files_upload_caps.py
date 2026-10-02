@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from PIL import Image
 
-from substrate.serving.monolith.routes.files import get_doc_quota_status, upload_file
+from substrate_cloud.monolith.routes.files import get_doc_quota_status, upload_file
 
 _PDF_CONTENT_TYPE = "application/pdf"
 _THREAD_ID = uuid.uuid4()
@@ -103,7 +103,7 @@ class _FakeRedis:
 
 
 async def test_upload_rejects_pdf_over_page_limit(monkeypatch):
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_MAX_DOC_PAGES", 20)
     rag_backend = MagicMock()
@@ -128,7 +128,7 @@ async def test_upload_rejects_pdf_over_page_limit(monkeypatch):
 
 
 async def test_upload_allows_pdf_at_page_limit(monkeypatch):
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_MAX_DOC_PAGES", 20)
     rag_backend = MagicMock()
@@ -148,7 +148,7 @@ async def test_upload_allows_pdf_at_page_limit(monkeypatch):
 
 
 async def test_upload_rejects_doc_over_size_limit(monkeypatch):
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_MAX_DOC_MB", 1)
     rag_backend = MagicMock()
@@ -173,7 +173,7 @@ async def test_upload_rejects_doc_over_size_limit(monkeypatch):
 
 
 async def test_upload_rejects_when_upload_attempt_quota_exhausted(monkeypatch):
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
         files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
@@ -185,7 +185,7 @@ async def test_upload_rejects_when_upload_attempt_quota_exhausted(monkeypatch):
     data = _pdf_bytes(1)
 
     with patch(
-        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
+        "substrate_cloud.session_index.ingest.ingest_session_document",
         new=AsyncMock(),
     ):
         # First upload consumes the only slot.
@@ -219,7 +219,7 @@ async def test_upload_non_extractable_type_skips_all_new_checks(monkeypatch):
     """A non-PDF upload (e.g. a spreadsheet) must be completely unaffected —
     no page/size/quota checks, no eager staging — same as before this
     feature existed."""
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_MAX_DOC_MB", 1)
     rag_backend = MagicMock()
@@ -243,7 +243,7 @@ async def test_upload_non_extractable_type_skips_all_new_checks(monkeypatch):
 async def test_upload_non_local_backend_skips_upload_attempt_quota(monkeypatch):
     """The upload-attempt quota specifically bounds eager-staging compute
     abuse — a non-local backend never stages eagerly, so it shouldn't be gated by it."""
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_DAILY_UPLOAD_ATTEMPT_LIMIT", 1)
     rag_backend = MagicMock()
@@ -268,7 +268,7 @@ async def test_upload_triggers_eager_staging_for_local_backend(monkeypatch):
     indexing straight into the caller's per-user session-document index,
     tagged with that real thread_id (no temporary collection — see
     integrations/knowledge/session_ingest.py)."""
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
         files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
@@ -283,7 +283,7 @@ async def test_upload_triggers_eager_staging_for_local_backend(monkeypatch):
     data = _pdf_bytes(1)
 
     with patch(
-        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
+        "substrate_cloud.session_index.ingest.ingest_session_document",
         new=AsyncMock(),
     ) as mock_ingest:
         await upload_file(
@@ -310,7 +310,7 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
     written next to the original object, via the same file_store.upload
     path — so code_interpreter (which mounts the same session dir) can read
     it instead of re-parsing the PDF's raw bytes."""
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
         files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
@@ -327,7 +327,7 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
     ctx = _ctx_mock(rag_backend=rag_backend)
 
     with patch(
-        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
+        "substrate_cloud.session_index.ingest.ingest_session_document",
         new=AsyncMock(),
     ):
         await upload_file(
@@ -367,7 +367,7 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
 async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
     """The sidecar write is best-effort — a failure there must not surface
     as a staging_error on the file."""
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
         files_module, "get_owned_thread", AsyncMock(return_value=MagicMock())
@@ -390,7 +390,7 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
     ctx.pending_file_store.upload = AsyncMock(side_effect=_upload_side_effect)
 
     with patch(
-        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
+        "substrate_cloud.session_index.ingest.ingest_session_document",
         new=AsyncMock(),
     ):
         await upload_file(
@@ -407,7 +407,7 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
 
 
 async def test_upload_non_local_backend_skips_eager_staging(monkeypatch):
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     captured_coros = []
     monkeypatch.setattr(
@@ -434,7 +434,7 @@ async def test_upload_non_local_backend_skips_eager_staging(monkeypatch):
 
 
 async def test_doc_quota_status_reports_zero_used_for_fresh_user(monkeypatch):
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_DAILY_DOC_LIMIT", 20)
 
@@ -454,7 +454,7 @@ async def test_doc_quota_status_reports_zero_used_for_fresh_user(monkeypatch):
 async def test_doc_quota_status_reflects_prior_commits(monkeypatch):
     from datetime import datetime, timezone
 
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(files_module.settings, "RAG_DAILY_DOC_LIMIT", 20)
     redis = _FakeRedis()
@@ -482,7 +482,7 @@ async def test_doc_quota_status_disabled_without_redis():
 def _stuck_file_metadata(**overrides):
     from datetime import datetime, timedelta, timezone
 
-    from substrate.serving.monolith.models import FileMetadata
+    from substrate_cloud.monolith.models import FileMetadata
 
     defaults = dict(
         id=uuid.uuid4(),
@@ -545,7 +545,7 @@ def _session_ctx_mock(rows: list) -> MagicMock:
 
 
 async def test_sweep_redispatches_a_genuinely_stuck_upload(monkeypatch):
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     row = _stuck_file_metadata()
     ctx = _session_ctx_mock([row])
@@ -556,7 +556,7 @@ async def test_sweep_redispatches_a_genuinely_stuck_upload(monkeypatch):
     )
 
     with patch(
-        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
+        "substrate_cloud.session_index.ingest.ingest_session_document",
         new=AsyncMock(),
     ) as mock_ingest:
         dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
@@ -577,14 +577,14 @@ async def test_sweep_reads_from_file_store_when_already_promoted(monkeypatch):
     pending store (promotion already moved them)."""
     from datetime import datetime, timezone
 
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     row = _stuck_file_metadata(promoted_at=datetime.now(timezone.utc))
     ctx = _session_ctx_mock([row])
     monkeypatch.setattr(files_module.asyncio, "create_task", lambda coro: coro.close())
 
     with patch(
-        "substrate.integrations.knowledge.session_ingest.ingest_session_document",
+        "substrate_cloud.session_index.ingest.ingest_session_document",
         new=AsyncMock(),
     ):
         dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
@@ -595,7 +595,7 @@ async def test_sweep_reads_from_file_store_when_already_promoted(monkeypatch):
 
 
 async def test_sweep_skips_row_when_bytes_cannot_be_read(monkeypatch):
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     row = _stuck_file_metadata()
     ctx = _session_ctx_mock([row])
@@ -619,6 +619,6 @@ async def test_sweep_ignores_no_session_factory_or_rag_backend():
     ctx.session_factory = None
     ctx.rag_backend = MagicMock()
 
-    from substrate.serving.monolith.routes import files as files_module
+    from substrate_cloud.monolith.routes import files as files_module
 
     assert await files_module.sweep_stuck_staging_uploads(ctx) == 0

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from substrate.types import Actor
 from substrate.runtime import Commit, RunSpec, Suspend
 from substrate.types import Wakeup
-from substrate.serving.monolith.sse.bridge import BridgeRegistry
+from substrate_cloud.monolith.sse.bridge import BridgeRegistry
 from substrate.testing.runtime import runtime_store
 
 

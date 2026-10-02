@@ -12,9 +12,9 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from substrate.integrations.gdpr.eraser import erase_tenant, erase_user
-from substrate.config import SubstrateConfig
-from substrate.serving.monolith.models import FileMetadata, Thread, User
+from substrate_cloud.gdpr.eraser import erase_tenant, erase_user
+from substrate_cloud.config import SubstrateConfig
+from substrate_cloud.monolith.models import FileMetadata, Thread, User
 from substrate.testing.runtime import runtime_store
 
 

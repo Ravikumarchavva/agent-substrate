@@ -27,12 +27,12 @@ from typing import AsyncIterator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from substrate.serving.shared.contracts.conversation import (
+from substrate_cloud.shared.contracts.conversation import (
     ChatRequest,
     ThreadCreate,
     ThreadUpdate,
 )
-from substrate.serving.shared.contracts.human_gate import HITLResponse
+from substrate_cloud.shared.contracts.human_gate import HITLResponse
 
 logger = logging.getLogger(__name__)
 

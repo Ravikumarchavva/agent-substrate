@@ -19,9 +19,9 @@ import pytest
 
 from substrate.integrations.knowledge.backends.local import LocalRagBackend
 from substrate.integrations.knowledge.pipeline import RAGPipeline
-from substrate.integrations.knowledge.session_ingest import ingest_session_document
-from substrate.config import SubstrateConfig
-from substrate.serving.factory import (
+from substrate_cloud.session_index.ingest import ingest_session_document
+from substrate_cloud.config import SubstrateConfig
+from substrate_cloud.factory import (
     build_page_index_memory,
     build_session_graph_store,
     build_session_index_vector_store,
@@ -33,7 +33,7 @@ from substrate.types import ChatMessage, TextBlock
 from substrate.types import Usage
 from substrate.models import EmbeddingResult, GenerationOptions, LLMResponse
 
-FIXTURE_PDF = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
+FIXTURE_PDF = Path(__file__).parent / "fixtures" / "test_invoice.pdf"
 
 
 class StubChatModel:

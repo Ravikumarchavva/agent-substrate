@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.shared.settings import settings
+from substrate_cloud.shared.settings import settings
 from substrate.integrations.llm.factory import (
     CHAT_MODEL_FALLBACKS,
     create_model_client,
@@ -33,25 +33,25 @@ from substrate.integrations.llm.factory import (
     resolve_vision_model_for_available_credentials,
     strip_provider_prefix,
 )
-from substrate.serving.factory import build_agent_for_thread
+from substrate_cloud.factory import build_agent_for_thread
 
 # ContextVar that scopes TaskManagerTool to the active thread
 from substrate.types import ChatMessage as _ChatMessage, Role
 from substrate.types import Actor as _Actor
 from substrate.runtime import ChatPayload as _ChatPayload, Message as _Message
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
-from substrate.serving.monolith.hooks import ChatContext, hooks
-from substrate.serving.monolith.schemas import ChatRequest
-from substrate.serving.monolith.services import get_owned_thread
-from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
-from substrate.serving.monolith.sse.bridge import WebHITLBridge
-from substrate.serving.shared.rate_limit import rate_limit
-from substrate.serving.shared.doc_quota import check_and_increment, seconds_until_reset
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
+from substrate_cloud.monolith.hooks import ChatContext, hooks
+from substrate_cloud.monolith.schemas import ChatRequest
+from substrate_cloud.monolith.services import get_owned_thread
+from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.monolith.sse.bridge import WebHITLBridge
+from substrate_cloud.shared.rate_limit import rate_limit
+from substrate_cloud.shared.doc_quota import check_and_increment, seconds_until_reset
 from substrate.server.protocol import PROTOCOL_VERSION, HelloEvent
-from substrate.serving.stream import AgentStreamSession, sse_lines, tail_wire_events
+from substrate_cloud.stream import AgentStreamSession, sse_lines, tail_wire_events
 
-from substrate.serving.monolith.routes.chat_intents import (
+from substrate_cloud.monolith.routes.chat_intents import (
     _tool_name,
     _should_allow_task_planning,
     _should_force_task_planning,
@@ -62,8 +62,8 @@ from substrate.serving.monolith.routes.chat_intents import (
     attachments_block,
     custom_instructions_block,
 )
-from substrate.serving.monolith.routes.chat_wire import build_user_blocks
-from substrate.serving.monolith.routes.chat_context import (
+from substrate_cloud.monolith.routes.chat_wire import build_user_blocks
+from substrate_cloud.monolith.routes.chat_context import (
     _get_agent_deps,
     _build_file_context,
 )

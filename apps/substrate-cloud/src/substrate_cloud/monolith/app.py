@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-from substrate.serving.shared.settings import settings
-from substrate.serving.factory import (
+from substrate_cloud.shared.settings import settings
+from substrate_cloud.factory import (
     Infrastructure,
     ChatModels,
     RuntimeServices,
@@ -22,40 +22,40 @@ from substrate.serving.factory import (
     register_assistant_actor_factory,
     resume_pending_runs,
 )
-from substrate.serving.monolith.database import init_db
-from substrate.serving.monolith.dependencies import ServerDependencies
-from substrate.serving.monolith.routes.admin import router as admin_router
-from substrate.serving.monolith.routes.audio import router as audio_router
-from substrate.serving.monolith.routes.workspace_oauth import (
+from substrate_cloud.monolith.database import init_db
+from substrate_cloud.monolith.dependencies import ServerDependencies
+from substrate_cloud.monolith.routes.admin import router as admin_router
+from substrate_cloud.monolith.routes.audio import router as audio_router
+from substrate_cloud.monolith.routes.workspace_oauth import (
     router as workspace_oauth_router,
 )
-from substrate.serving.monolith.routes.cancel import router as cancel_router
-from substrate.serving.monolith.routes.chat import router as chat_router
-from substrate.serving.monolith.routes.feedback import router as feedback_router
-from substrate.serving.monolith.routes.files import router as files_router
-from substrate.serving.monolith.routes.hitl import router as hitl_router
-from substrate.serving.monolith.routes.mcp_apps import router as mcp_apps_router
-from substrate.serving.monolith.routes.pipelines import router as pipelines_router
-from substrate.serving.monolith.routes.rag import router as rag_router
-from substrate.serving.monolith.routes.rate_limit import router as rate_limit_router
-from substrate.serving.monolith.routes.connector_tokens import (
+from substrate_cloud.monolith.routes.cancel import router as cancel_router
+from substrate_cloud.monolith.routes.chat import router as chat_router
+from substrate_cloud.monolith.routes.feedback import router as feedback_router
+from substrate_cloud.monolith.routes.files import router as files_router
+from substrate_cloud.monolith.routes.hitl import router as hitl_router
+from substrate_cloud.monolith.routes.mcp_apps import router as mcp_apps_router
+from substrate_cloud.monolith.routes.pipelines import router as pipelines_router
+from substrate_cloud.monolith.routes.rag import router as rag_router
+from substrate_cloud.monolith.routes.rate_limit import router as rate_limit_router
+from substrate_cloud.monolith.routes.connector_tokens import (
     router as connector_tokens_router,
 )
-from substrate.serving.monolith.routes.tasks import router as tasks_router
-from substrate.serving.monolith.routes.threads import router as threads_router
-from substrate.serving.monolith.routes.artifacts import router as artifacts_router
-from substrate.serving.monolith.routes.memory import router as memory_router
-from substrate.serving.monolith.routes.triggers import router as triggers_router
-from substrate.serving.monolith.routes.scheduled import router as scheduled_router
-from substrate.serving.monolith.routes.workspace import router as workspace_router
-from substrate.serving.monolith.routes.branches import router as branches_router
-from substrate.serving.monolith.routes.gdpr import router as gdpr_router
-from substrate.serving.monolith.routes.knowledge import router as knowledge_router
-from substrate.serving.shared.observability.telemetry import (
+from substrate_cloud.monolith.routes.tasks import router as tasks_router
+from substrate_cloud.monolith.routes.threads import router as threads_router
+from substrate_cloud.monolith.routes.artifacts import router as artifacts_router
+from substrate_cloud.monolith.routes.memory import router as memory_router
+from substrate_cloud.monolith.routes.triggers import router as triggers_router
+from substrate_cloud.monolith.routes.scheduled import router as scheduled_router
+from substrate_cloud.monolith.routes.workspace import router as workspace_router
+from substrate_cloud.monolith.routes.branches import router as branches_router
+from substrate_cloud.monolith.routes.gdpr import router as gdpr_router
+from substrate_cloud.monolith.routes.knowledge import router as knowledge_router
+from substrate_cloud.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
 )
-from substrate.serving.shared.rate_limit import rate_limit_settings
+from substrate_cloud.shared.rate_limit import rate_limit_settings
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ async def lifespan(app: FastAPI):
     app.state.skill_manager = infra.skill_manager
     app.state.file_store = infra.file_store
 
-    from substrate.serving.monolith.routes.files import sweep_stale_pending_uploads
+    from substrate_cloud.monolith.routes.files import sweep_stale_pending_uploads
 
     app.state.pending_file_store = infra.pending_file_store
     app.state.artifact_store = infra.artifact_store
@@ -249,7 +249,7 @@ async def lifespan(app: FastAPI):
         embedding_client=app.state.embedding_client,
     )
 
-    from substrate.serving.monolith.routes.files import sweep_stuck_staging_uploads
+    from substrate_cloud.monolith.routes.files import sweep_stuck_staging_uploads
 
     dispatched = await sweep_stuck_staging_uploads(
         app.state.ctx, ttl_minutes=settings.STAGING_RECONCILIATION_TTL_MINUTES
@@ -264,7 +264,7 @@ async def lifespan(app: FastAPI):
         logging.getLogger(name).setLevel(logging.WARNING)
 
     # ── Load persistent scheduled tasks ──────────────────────────────────────
-    from substrate.serving.monolith.services.scheduled_service import (
+    from substrate_cloud.monolith.services.scheduled_service import (
         execute_scheduled_task,
         load_active_tasks_into_scheduler,
     )

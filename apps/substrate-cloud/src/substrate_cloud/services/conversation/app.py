@@ -1,6 +1,6 @@
 """Conversation Service — FastAPI application.
 
-Entry point: uvicorn substrate.serving.services.conversation.app:app --port 8012
+Entry point: uvicorn substrate_cloud.services.conversation.app:app --port 8012
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
-from substrate.serving.services.base import create_service_app, init_service_db
-from substrate.serving.services.conversation.models import ServiceBase
-from substrate.serving.services.conversation.routes import memory_router, thread_router
-from substrate.serving.shared.events.factory import get_event_bus
+from substrate_cloud.services.base import create_service_app, init_service_db
+from substrate_cloud.services.conversation.models import ServiceBase
+from substrate_cloud.services.conversation.routes import memory_router, thread_router
+from substrate_cloud.shared.events.factory import get_event_bus
 
 logger = logging.getLogger(__name__)
 

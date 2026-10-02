@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 from unittest.mock import patch
 
-from substrate.cli import cmd_start
+from substrate_cloud.cli import cmd_start
 
 
 def _base_args(**overrides) -> argparse.Namespace:
@@ -28,10 +28,10 @@ def test_cmd_start_forwards_hf_token_from_settings_into_subprocess_env(monkeypat
     monkeypatch.delenv("HF_TOKEN", raising=False)
 
     with (
-        patch("substrate.cli._read_pid", return_value=None),
-        patch("substrate.cli.subprocess.run") as mock_run,
+        patch("substrate_cloud.cli._read_pid", return_value=None),
+        patch("substrate_cloud.cli.subprocess.run") as mock_run,
         patch(
-            "substrate.serving.shared.settings.settings.HF_TOKEN",
+            "substrate_cloud.shared.settings.settings.HF_TOKEN",
             "hf_test_token",
         ),
     ):
@@ -46,9 +46,9 @@ def test_cmd_start_omits_hf_token_when_settings_has_none(monkeypatch):
     monkeypatch.delenv("HF_TOKEN", raising=False)
 
     with (
-        patch("substrate.cli._read_pid", return_value=None),
-        patch("substrate.cli.subprocess.run") as mock_run,
-        patch("substrate.serving.shared.settings.settings.HF_TOKEN", ""),
+        patch("substrate_cloud.cli._read_pid", return_value=None),
+        patch("substrate_cloud.cli.subprocess.run") as mock_run,
+        patch("substrate_cloud.shared.settings.settings.HF_TOKEN", ""),
     ):
         cmd_start(_base_args())
 

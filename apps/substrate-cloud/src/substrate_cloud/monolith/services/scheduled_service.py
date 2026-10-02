@@ -13,9 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from substrate.types import RunLogKind
-from substrate.serving.shared.settings import settings
-from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
-from substrate.serving.factory import (
+from substrate_cloud.shared.settings import settings
+from substrate_cloud.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
+from substrate_cloud.factory import (
     build_agent_for_thread,
     build_chat_tools,
 )
@@ -168,7 +168,7 @@ async def execute_scheduled_task(
             await app_state.runtime.register(agent)
             # thread_id=: tags this run so it appears in the thread's history
             # via project_thread() (the EventLogProtocol is the single source of
-            # truth for conversation history — see serving/stream/history.py
+            # truth for conversation history — see substrate_cloud/stream/history.py
             # — there's no separate steps-table write needed here anymore).
             run_id = await app_state.runtime.submit(
                 agent.id, msg, thread_id=str(task.thread_id)

@@ -26,7 +26,7 @@ so asking for one vendor's client needs that vendor's SDK and nothing else.
 | `console` | the interactive console (`rich`, `prompt-toolkit`, `pydantic-settings`) |
 | `serve` | `substrate.serve.add_routes` (`fastapi`) |
 | `testing` | the conformance suites in `substrate.testing` (`pytest`, `pytest-asyncio`, `httpx`) |
-| `server` | the reference monolith and services: all of the above plus SQLAlchemy, uvicorn, JWT, OpenTelemetry SDK |
+| *(no `server` extra)* | the multi-tenant platform is `apps/substrate-cloud`, a project of its own that depends on the extras above plus SQLAlchemy, uvicorn, JWT and the OpenTelemetry SDK |
 
 Logging follows the same rule (I33–I34): the library emits through `logging.getLogger(__name__)` and installs only a
 `NullHandler`; `substrate.logger.setup_logging` is for the application's entry point.
@@ -112,7 +112,7 @@ by default (`ENABLE_TEXT_SAFETY_GUARD=true`): `build_safety_middleware()`
 (`infrastructure/serving_factory.py`) already wraps classifier construction
 in a fail-open `try/except` — a missing package is handled exactly like a
 model-download failure on first run, logged loudly, guardrail disabled,
-monolith still boots. Installing `[safety]` (or `[server]`, which includes
+monolith still boots. Installing `[safety]` (or running the platform app, which includes
 it) is what keeps the guardrail actually active.
 
 ## `server`

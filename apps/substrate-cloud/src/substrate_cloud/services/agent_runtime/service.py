@@ -6,7 +6,7 @@ import logging
 
 from substrate.types import RunLogKind
 
-from substrate.serving.factory import (
+from substrate_cloud.factory import (
     build_agent_for_run,
     build_cached_history_for_thread,
 )

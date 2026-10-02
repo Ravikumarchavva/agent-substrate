@@ -21,8 +21,8 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 
@@ -63,7 +63,7 @@ class ArtifactPatch(BaseModel):
 
 def _to_out(slug: str, scope: str, concept: Any) -> ArtifactOut:
     # `concept` is a capabilities-layer OKF Concept, read structurally: the
-    # import-linter contract forbids serving/ importing integrations/, and
+    # import-linter contract forbids substrate_cloud/ importing integrations/, and
     # this module deliberately adds no exception to that list.
     return ArtifactOut(
         slug=slug,

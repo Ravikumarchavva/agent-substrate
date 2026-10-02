@@ -4,7 +4,7 @@ One Docker Compose file (`deployment/docker/docker-compose.yml`), three ways to 
 
 | You want to... | Command |
 |---|---|
-| **Develop** — infra in Docker, backend hot-reloading on your host | `make infra-up` then `uv run substrate start --reload` |
+| **Develop** — infra in Docker, backend hot-reloading on your host | `make infra-up` then `uv run --project apps/substrate-cloud substrate-cloud start --reload` |
 | **One-shot run** — the whole app in containers, nothing installed locally | `make docker-up` (or add `--profile ui` for the chat UI too) |
 | **Deploy** — a real internet-facing box with HTTPS | see [Deploy publicly](#deploy-publicly) below |
 
@@ -19,7 +19,7 @@ cp deploy.env.example ../../.env   # if you don't already have one — fill in a
 
 ```bash
 make infra-up          # Postgres, Redis, SeaweedFS, observability, MCP server
-uv run substrate start --reload
+uv run --project apps/substrate-cloud substrate-cloud start --reload
 ```
 
 This is the fast loop: the backend runs on your host with hot-reload, everything else is in Docker. See the root `CLAUDE.md` for the full command list (`make lint`, `make test`, etc.).
@@ -63,7 +63,7 @@ The sandbox executes an interpreter **on the backend container itself**
 with packages baked in. `pandas`, `matplotlib`, `openpyxl`, `python-docx`,
 `python-pptx`, `reportlab`, `scikit-learn`, `seaborn`, `plotly`, `polars`
 ship in the `sandbox` extra, already included in the backend image's
-`[server]` install. Point `SANDBOX_PYTHON` at a different interpreter to
+platform app's install. Point `SANDBOX_PYTHON` at a different interpreter to
 keep those packages out of the engine's own environment instead.
 
 ### Preflight
@@ -96,7 +96,7 @@ After=network.target docker.service
 User=substrate
 WorkingDirectory=/opt/agent-substrate
 EnvironmentFile=/opt/agent-substrate/.env
-ExecStart=/usr/local/bin/uv run substrate start --host 0.0.0.0 --foreground
+ExecStart=/usr/local/bin/uv run --project apps/substrate-cloud substrate-cloud start --host 0.0.0.0 --foreground
 Restart=always
 NoNewPrivileges=false     # nsjail needs to create user namespaces
 PrivateTmp=true

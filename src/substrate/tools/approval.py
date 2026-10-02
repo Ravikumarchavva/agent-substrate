@@ -10,7 +10,7 @@ forwarded over pub/sub, and resumed after a restart.
 ``ApprovalDecision`` is the typed response; ``MODIFIED`` carries edited
 arguments via ``ApprovalResult.modified_args`` rather than a separate
 request/response vocabulary — this is the single approval contract for the
-framework (see ``serving/monolith/sse/approval.py::SSEApprovalHandler`` for
+framework (see ``substrate_cloud/monolith/sse/approval.py::SSEApprovalHandler`` for
 the concrete web implementation).
 ``ApprovalHandler`` is the protocol any backend must implement.
 """
@@ -108,7 +108,7 @@ class ApprovalHandler(Protocol):
     """Protocol for approval backends.
 
     Implementations:
-    - ``SSEApprovalHandler`` (``serving/monolith/sse/approval.py``) — routes
+    - ``SSEApprovalHandler`` (``substrate_cloud/monolith/sse/approval.py``) — routes
       through the web SSE stream, waits for the user's decision.
     - A CLI/Slack/automated-policy handler can implement the same Protocol.
 

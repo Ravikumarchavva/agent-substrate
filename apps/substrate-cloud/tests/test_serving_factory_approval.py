@@ -22,15 +22,15 @@ import asyncio
 import uuid
 from typing import Any
 
-from substrate.config import SubstrateConfig
-from substrate.serving.factory import build_agent_for_thread
+from substrate_cloud.config import SubstrateConfig
+from substrate_cloud.factory import build_agent_for_thread
 from substrate.types import ChatMessage, Role, TextBlock, ToolUseBlock
 from substrate.types import Actor
 from substrate.types import Usage
 from substrate.runtime import ChatPayload, Message
 from substrate.types import CompletionEvent
 from substrate.tools import ToolExecutionResult, ToolRisk
-from substrate.serving.monolith.sse.bridge import WebHITLBridge
+from substrate_cloud.monolith.sse.bridge import WebHITLBridge
 from substrate.testing.runtime import ephemeral_runtime
 
 

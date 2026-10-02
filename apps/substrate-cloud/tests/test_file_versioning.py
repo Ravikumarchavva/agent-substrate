@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from substrate.serving.monolith.file_versioning import (
+from substrate_cloud.monolith.file_versioning import (
     capture_bytes,
     latest_version,
     list_versions,
@@ -25,8 +25,8 @@ from substrate.serving.monolith.file_versioning import (
     sha256_hex,
     _version_key,
 )
-from substrate.serving.monolith.models import FileVersion
-from substrate.serving.monolith.routes.workspace import _is_versionable
+from substrate_cloud.monolith.models import FileVersion
+from substrate_cloud.monolith.routes.workspace import _is_versionable
 
 
 class _FakeStore:

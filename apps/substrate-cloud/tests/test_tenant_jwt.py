@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import jwt
 
-from substrate.serving.shared.auth.jwt import create_access_token, verify_token
+from substrate_cloud.shared.auth.jwt import create_access_token, verify_token
 
 
 _SECRET = "a" * 32

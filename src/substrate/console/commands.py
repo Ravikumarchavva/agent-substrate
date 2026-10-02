@@ -90,11 +90,11 @@ async def _cmd_model(app: "Console", args: str) -> bool:
         app.console.print("  Usage: /model <provider/model-id>", style="info")
         return False
 
-    from substrate.config import SubstrateConfig
     from substrate.integrations.llm import (
         create_model_client,
         detect_provider,
         has_provider_api_key,
+        provider_keys_from_env,
     )
 
     try:
@@ -103,7 +103,7 @@ async def _cmd_model(app: "Console", args: str) -> bool:
         app.console.print(f"  [error]{exc}[/error]")
         return False
 
-    keys = SubstrateConfig().provider_keys
+    keys = provider_keys_from_env()
     if not has_provider_api_key(provider, keys):
         app.console.print(
             f"  [error]No API key for provider {provider!r} — add it to .env.[/error]"

@@ -1,6 +1,6 @@
 """Tool Executor — FastAPI application.
 
-Entry point: uvicorn substrate.serving.services.tool_executor.app:app --port 8015
+Entry point: uvicorn substrate_cloud.services.tool_executor.app:app --port 8015
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
-from substrate.serving.services.base import create_service_app
-from substrate.serving.services.tool_executor.executor import ToolRegistry
-from substrate.serving.services.tool_executor.routes import router
-from substrate.serving.shared.events.factory import get_event_bus
+from substrate_cloud.services.base import create_service_app
+from substrate_cloud.services.tool_executor.executor import ToolRegistry
+from substrate_cloud.services.tool_executor.routes import router
+from substrate_cloud.shared.events.factory import get_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ async def lifespan(app):
     app.state.event_bus = event_bus
 
     # Code interpreter — explicit, fail-closed runtime selection (same switch as
-    # the monolith's serving/factory.py wiring). Defaults to k8s
+    # the monolith's substrate_cloud/factory.py wiring). Defaults to k8s
     # here since this service only runs in cluster deployments.
     code_interpreter_tool = None
     try:
@@ -98,8 +98,8 @@ async def lifespan(app):
     app.state.artifact_url = artifact_url.rstrip("/")
 
     # Tool Registry
-    from substrate.serving.factory import open_store
-    from substrate.serving.shared.settings import settings
+    from substrate_cloud.factory import open_store
+    from substrate_cloud.shared.settings import settings
 
     store = open_store(settings)
     task_store = store.tasks

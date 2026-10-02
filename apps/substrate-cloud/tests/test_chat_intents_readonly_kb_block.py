@@ -4,7 +4,7 @@ sandbox_service.py's per-user SandboxTemplate for what actually mounts it)."""
 
 from __future__ import annotations
 
-from substrate.serving.monolith.routes.chat_intents import readonly_kb_block
+from substrate_cloud.monolith.routes.chat_intents import readonly_kb_block
 
 
 def test_empty_when_code_interpreter_has_no_workspace_access():

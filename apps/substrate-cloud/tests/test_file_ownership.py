@@ -28,17 +28,17 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from substrate.serving.monolith.database import get_db
-from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.models import FileMetadata, Thread, User
-from substrate.serving.monolith.routes.files import (
+from substrate_cloud.monolith.database import get_db
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.models import FileMetadata, Thread, User
+from substrate_cloud.monolith.routes.files import (
     _get_meta,
     _may_access,
     _may_access_key,
     router,
 )
-from substrate.serving.monolith.security.deps import get_current_user
-from substrate.serving.shared.auth.claims import AuthClaims
+from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.shared.auth.claims import AuthClaims
 
 TENANT_A = "tenant-a"
 TENANT_B = "tenant-b"

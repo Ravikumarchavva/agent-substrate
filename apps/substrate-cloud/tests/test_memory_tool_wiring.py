@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from substrate.types import RunScope
 from substrate.stores import Store
-from substrate.serving.factory import build_memory_tool
+from substrate_cloud.factory import build_memory_tool
 
 
 def _ctx(user: str | None, thread: str, tenant: str | None = "acme") -> SimpleNamespace:

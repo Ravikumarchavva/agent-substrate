@@ -19,7 +19,7 @@ from substrate.server.protocol.events import (
     TextDeltaEvent,
     UserMessageEvent,
 )
-from substrate.serving.stream.history import project_thread
+from substrate_cloud.stream.history import project_thread
 from substrate.testing.runtime import ephemeral_runtime
 
 

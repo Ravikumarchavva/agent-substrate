@@ -1,16 +1,16 @@
-"""substrate.serving.shared.auth — shared auth utilities."""
+"""substrate_cloud.shared.auth — shared auth utilities."""
 
 from __future__ import annotations
 
-from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.shared.auth.jwt import (
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth.jwt import (
     create_access_token,
     create_agent_context_token,
     create_refresh_token,
     create_service_token,
     verify_token,
 )
-from substrate.serving.shared.auth.middleware import (
+from substrate_cloud.shared.auth.middleware import (
     get_current_user,
     optional_current_user,
     require_role,

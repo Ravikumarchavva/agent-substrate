@@ -104,27 +104,6 @@ safety = [
     "huggingface-hub>=0.25.0",
     "confusable-homoglyphs>=3.3.1",
 ]
-# everything the reference monolith server needs beyond the base install --
-# uvicorn to actually run it, python-multipart for file-upload routes,
-# pyjwt+cryptography for its own auth. None of these are needed to build
-# and run an agent object with substrate/integrations alone.
-server = [
-    "agent-substrate[serve,openai,anthropic,gemini,postgres,redis,scheduler,mcp,tts,tools,services,logging,web,code,rag,s3,safety,sandbox]",
-    "pydantic-settings>=2.12.0",
-    "sqlalchemy>=2.0.46",
-    "greenlet>=3.0.0",
-    # SQLAlchemy resolves the monolith's `postgresql+psycopg://` DATABASE_URL dynamically — nothing imports it by name
-    "psycopg[binary]>=3.2.0",
-    # The engine only ever imports opentelemetry-api (a no-op until something configures an SDK);
-    # the SDK, the OTLP exporter and the FastAPI instrumentation are what the reference server wires up.
-    "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-otlp",
-    "opentelemetry-instrumentation-fastapi<0.60b1",
-    "uvicorn[standard]>=0.34.0",
-    "python-multipart>=0.0.9",
-    "pyjwt>=2.12.0",
-    "cryptography>=46.0.6",
-]
 # local embedding provider (brings torch back)
 sentence-transformers = ["sentence-transformers>=3.0.0"]
 
@@ -190,7 +169,7 @@ exclude = ["notebooks/", "examples/", ".venv"]
 #   substrate                 the engine: everything needed to run an agent
 #   substrate.types    what the engine needs from outside (pure)
 #   substrate.integrations             adapters over the abstractions (heavy services are reached by URL: integrations/services)
-#   substrate.serving / console / cli   wiring
+#   substrate.server / console / cli   the HTTP server and the terminal
 #
 # Run with: uv run lint-imports
 # ---------------------------------------------------------------------------
@@ -221,11 +200,9 @@ source_modules = [
 forbidden_modules = [
     "substrate.evals",
     "substrate.integrations",
-    "substrate.serving",
     "substrate.server",
     "substrate.console",
     "substrate.cli",
-    "substrate.config",
     "substrate.logger",
 ]
 
@@ -238,10 +215,8 @@ source_modules = ["substrate.server"]
 forbidden_modules = [
     "substrate.agents",
     "substrate.integrations",
-    "substrate.serving",
     "substrate.console",
     "substrate.cli",
-    "substrate.config",
     "substrate.evals",
 ]
 
@@ -301,113 +276,5 @@ forbidden_modules = [
 ]
 allow_indirect_imports = "true"
 
-[[tool.importlinter.contracts]]
-name = "serving cannot import agents or integrations-that-were-capabilities"
-type = "forbidden"
-# substrate.serving.factory and .research_orchestrator are deliberately NOT
-# listed here — they're serving/'s own composition root (formerly
-# infrastructure/serving_factory.py, an orthogonal module outside the layer
-# stack entirely), whose whole job is building the DI graph across every
-# layer. This contract restricts the rest of serving/ (routes, services)
-# from reaching past that composition root directly.
-source_modules = [
-    "substrate.serving.monolith",
-    "substrate.serving.services",
-    "substrate.serving.shared",
-    "substrate.serving.stream",
-]
-forbidden_modules = [
-    # the engine — serving's routes use the contracts; building the engine is factory.py's job
-    "substrate.agents",
-    "substrate.context.builder",
-    "substrate.context.compaction",
-    "substrate.context.context",
-    "substrate.context.tokens",
-    "substrate.middleware._contracts",
-    "substrate.middleware.audit_logger",
-    "substrate.middleware.cache",
-    "substrate.middleware.content_truncator",
-    "substrate.middleware.file_validator",
-    "substrate.middleware.guardrails",
-    "substrate.middleware.history_truncator",
-    "substrate.middleware.pipeline",
-    "substrate.middleware.rate_limiter",
-    "substrate.middleware.retry",
-    "substrate.middleware.schema_validator",
-    "substrate.models.client",
-    "substrate.models.errors",
-    "substrate.models.modalities",
-    "substrate.models.registry",
-    "substrate.models.tool_arguments",
-    "substrate.runtime.cancellation",
-    "substrate.runtime.context",
-    "substrate.runtime.journal",
-    "substrate.runtime.resolver",
-    "substrate.runtime.runtime",
-    "substrate.runtime.sql_store",
-    "substrate.runtime.tail",
-    "substrate.runtime.tool_invoker",
-    "substrate.runtime.worker",
-    "substrate.safety.normalize",
-    "substrate.stores.scoped",
-    "substrate.tools.toolbox",
-    "substrate.workspace.branching",
-    "substrate.workspace.cas",
-    "substrate.workspace.layout",
-    "substrate.workspace.materialize",
-    "substrate.workspace.scope",
-    "substrate.workspace.snapshots",
-    # These are the former `capabilities/` submodules, now merged into
-    # `integrations/` (Phase G of the layer-charter pass). serving/ was
-    # always freely allowed to import `integrations.llm`/`.events`/`.tts`/
-    # `.tools.mcp` directly (they were never under the old "capabilities"
-    # restriction) — deliberately NOT listed here, so that stays true.
-    "substrate.integrations.tools",
-    "substrate.integrations.knowledge",
-    "substrate.integrations.memory",
-    "substrate.integrations.history",
-    "substrate.integrations.storage",
-    "substrate.integrations.pipeline",
-    "substrate.integrations.triggers",
-    "substrate.integrations.safety",
-    "substrate.integrations.artifacts",
-    "substrate.integrations.gdpr",
-]
-# serving/'s own factory.py is orthogonal — it may cross-cut to agents/integrations by design.
-# We only want to catch DIRECT imports from serving/'s routes to agents/former-capabilities.
-allow_indirect_imports = "true"
-ignore_imports = [
-    # WebHITLBridge delivers human-input events; must know the capability type
-    "substrate.serving.monolith.sse.bridge -> substrate.integrations.tools.human_input",
-    # pipelines/triggers routes need DTOs defined in integrations (PipelineDef, TriggerDef, ConditionDef)
-    "substrate.serving.monolith.routes.pipelines -> substrate.integrations.pipeline.engine",
-    "substrate.serving.monolith.routes.triggers -> substrate.integrations.triggers.conditions",
-    "substrate.serving.monolith.routes.triggers -> substrate.integrations.triggers.scheduler",
-    # tool_executor IS a capability executor by design
-    "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.code_interpreter",
-    "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.factory",
-    "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.task_manager.tool",
-    "substrate.serving.services.tool_executor.app -> substrate.integrations.tools.web.surfer",
-    # files/workspace/knowledge routes build object keys with the canonical workspace layout
-    "substrate.serving.monolith.routes.workspace -> substrate.workspace.layout",
-    "substrate.serving.monolith.routes.files -> substrate.workspace.layout",
-    "substrate.serving.monolith.routes.knowledge -> substrate.workspace.layout",
-    # file_versioning builds version-snapshot keys with the same canonical
-    # layout helper routes/workspace.py uses for the working file's key —
-    # otherwise it has to hand-roll (and keep in sync) the same key shape.
-    "substrate.serving.monolith.file_versioning -> substrate.workspace.layout",
-    # gdpr route needs the erasure orchestrator itself
-    "substrate.serving.monolith.routes.gdpr -> substrate.integrations.gdpr.eraser",
-    # files/chat_context routes call the per-user session-document ingestion
-    # orchestrator directly (upload-time eager staging / send-time fallback
-    # ingest)
-    "substrate.serving.monolith.routes.files -> substrate.integrations.knowledge.session_ingest",
-    "substrate.serving.monolith.routes.chat_context -> substrate.integrations.knowledge.session_ingest",
-]
-
-# Orthogonal peers (not part of the layer stack):
-# serving/      — FastAPI monolith + microservices + its own factory.py wiring
-# (the heavy services — document intelligence, embedding/reranking — are not part of this package at all:
-#  they are apps/ and packages/, reached by URL through integrations/services)
-# These carry cross-layer edges by design (e.g. serving/ wires the core's agents and
-# integrations together in lifespan).
+# Not part of this package at all: the multi-tenant platform (apps/substrate-cloud — it carries its own import contract) and
+# the heavy services (apps/, packages/ — reached by URL through integrations/services).

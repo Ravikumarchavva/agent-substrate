@@ -240,7 +240,9 @@ class Cancel(KernelModel):
     reason: str = "cancelled"
 
 
-Outcome = Annotated[Suspend | Complete | Fail | Retry | Cancel, Field(discriminator="kind")]
+Outcome = Annotated[
+    Suspend | Complete | Fail | Retry | Cancel, Field(discriminator="kind")
+]
 
 
 class Commit(KernelModel):
@@ -352,7 +354,9 @@ class RuntimeStore(Protocol):
 
     async def children(self, run_id: RunId) -> list[RunRecord]: ...
 
-    async def request_cancel(self, run_id: RunId, *, reason: str, cascade: bool = True) -> list[RunId]:
+    async def request_cancel(
+        self, run_id: RunId, *, reason: str, cascade: bool = True
+    ) -> list[RunId]:
         """Cancel a run and, if ``cascade``, everything it spawned.
 
         A pending or suspended run is cancelled on the spot (journal entry, parent
@@ -364,14 +368,21 @@ class RuntimeStore(Protocol):
     # -- journal -------------------------------------------------------------
 
     async def read_events(
-        self, run_id: RunId, *, from_seq: int = 0, limit: int | None = None, durable_only: bool = False
+        self,
+        run_id: RunId,
+        *,
+        from_seq: int = 0,
+        limit: int | None = None,
+        durable_only: bool = False,
     ) -> list[RunLogEntry]: ...
 
     async def last_seq(self, run_id: RunId) -> int:
         """The highest ``seq`` in the run's log, or ``-1`` if it has none."""
         ...
 
-    async def wait_events(self, run_id: RunId, *, after_seq: int, timeout_s: float) -> None:
+    async def wait_events(
+        self, run_id: RunId, *, after_seq: int, timeout_s: float
+    ) -> None:
         """Return once the run's log has an entry beyond ``after_seq``, or after
         ``timeout_s``. A hint to stop a tail polling; it may return early."""
         ...
@@ -419,7 +430,9 @@ class RuntimeStore(Protocol):
         ``name``. Returns whether it woke the run."""
         ...
 
-    async def consume(self, run_id: RunId, name: str, claim_id: str) -> JsonObject | None:
+    async def consume(
+        self, run_id: RunId, name: str, claim_id: str
+    ) -> JsonObject | None:
         """Claim one buffered signal, exactly once per ``claim_id``: asking again
         with the same id returns the same payload."""
         ...

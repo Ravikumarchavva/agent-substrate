@@ -59,7 +59,7 @@ class CompactionStrategy(Protocol):
 class CompactionPhase(StrEnum):
     """Execution phases in the agent context lifecycle where compaction can occur."""
 
-    PRE_LLM = "pre_llm"      # Prompt window optimization before generation
+    PRE_LLM = "pre_llm"  # Prompt window optimization before generation
     POST_TOOL = "post_tool"  # Tool result truncation/compaction in-memory
     POST_TURN = "post_turn"  # Summary checkpoint generation after turn completes
 
@@ -95,16 +95,23 @@ class CompactionResult(KernelModel):
         if self.phase == CompactionPhase.PRE_LLM:
             if self.prompt_messages is None:
                 raise ValueError("prompt_messages is required for PRE_LLM phase")
-            if self.compacted_content is not None or self.checkpoint_proposal is not None:
+            if (
+                self.compacted_content is not None
+                or self.checkpoint_proposal is not None
+            ):
                 raise ValueError("Only prompt_messages may be set for PRE_LLM phase")
         elif self.phase == CompactionPhase.POST_TOOL:
             if self.compacted_content is None:
                 raise ValueError("compacted_content is required for POST_TOOL phase")
             if self.prompt_messages is not None or self.checkpoint_proposal is not None:
-                raise ValueError("Only compacted_content may be set for POST_TOOL phase")
+                raise ValueError(
+                    "Only compacted_content may be set for POST_TOOL phase"
+                )
         elif self.phase == CompactionPhase.POST_TURN:
             if self.prompt_messages is not None or self.compacted_content is not None:
-                raise ValueError("prompt_messages and compacted_content must be None for POST_TURN phase")
+                raise ValueError(
+                    "prompt_messages and compacted_content must be None for POST_TURN phase"
+                )
         return self
 
 

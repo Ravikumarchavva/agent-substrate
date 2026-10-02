@@ -43,7 +43,9 @@ class GeminiEmbeddingClient(BaseEmbeddingClient):
         dimensions: Optional[int] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model=model, dimensions=dimensions, max_input_tokens=2048, **kwargs)
+        super().__init__(
+            model=model, dimensions=dimensions, max_input_tokens=2048, **kwargs
+        )
         self.api_key = api_key
         self.client = genai.Client(api_key=api_key)
 
@@ -54,7 +56,9 @@ class GeminiEmbeddingClient(BaseEmbeddingClient):
         config_kwargs: dict[str, Any] = {}
         if effective_dims is not None:
             config_kwargs["output_dimensionality"] = effective_dims
-        config_kwargs["task_type"] = "RETRIEVAL_QUERY" if query else "RETRIEVAL_DOCUMENT"
+        config_kwargs["task_type"] = (
+            "RETRIEVAL_QUERY" if query else "RETRIEVAL_DOCUMENT"
+        )
         config = genai.types.EmbedContentConfig(**config_kwargs)
 
         embeddings: list[list[float]] = []
@@ -65,7 +69,11 @@ class GeminiEmbeddingClient(BaseEmbeddingClient):
                 contents=texts[start : start + _MAX_INPUTS_PER_REQUEST],  # type: ignore[arg-type]
                 config=config,
             )
-            vectors = [list(e.values) for e in (response.embeddings or []) if e.values is not None]
+            vectors = [
+                list(e.values)
+                for e in (response.embeddings or [])
+                if e.values is not None
+            ]
             if len(vectors) != len(texts[start : start + _MAX_INPUTS_PER_REQUEST]):
                 raise ValueError(
                     f"Gemini returned {len(vectors)} embeddings for {len(texts[start : start + _MAX_INPUTS_PER_REQUEST])} texts"

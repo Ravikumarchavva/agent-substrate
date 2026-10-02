@@ -30,7 +30,9 @@ _LANGS: dict[str, frozenset[str]] = {}
 class TesseractOcr:
     name = "tesseract"
 
-    def __init__(self, *, binary: str | None = None, timeout_s: float = 60.0, psm: int = 3) -> None:
+    def __init__(
+        self, *, binary: str | None = None, timeout_s: float = 60.0, psm: int = 3
+    ) -> None:
         self.binary = binary or shutil.which("tesseract") or "tesseract"
         self.timeout_s = timeout_s
         self.psm = psm
@@ -44,21 +46,46 @@ class TesseractOcr:
         with _LANGS_LOCK:
             if self.binary not in _LANGS:
                 try:
-                    out = subprocess.run([self.binary, "--list-langs"], capture_output=True, text=True, timeout=20, check=False)
-                    _LANGS[self.binary] = frozenset(line.strip() for line in out.stdout.splitlines()[1:] if line.strip())
+                    out = subprocess.run(
+                        [self.binary, "--list-langs"],
+                        capture_output=True,
+                        text=True,
+                        timeout=20,
+                        check=False,
+                    )
+                    _LANGS[self.binary] = frozenset(
+                        line.strip()
+                        for line in out.stdout.splitlines()[1:]
+                        if line.strip()
+                    )
                 except (OSError, subprocess.SubprocessError):
                     _LANGS[self.binary] = frozenset()
             return _LANGS[self.binary]
 
-    def recognize(self, png: bytes, *, languages: Sequence[str] = ("eng",)) -> OcrResult:
+    def recognize(
+        self, png: bytes, *, languages: Sequence[str] = ("eng",)
+    ) -> OcrResult:
         installed = self.languages()
-        wanted = [lang for lang in languages if lang in installed] or (["eng"] if "eng" in installed else [])
+        wanted = [lang for lang in languages if lang in installed] or (
+            ["eng"] if "eng" in installed else []
+        )
         if not wanted:
-            return OcrResult(error=f"tesseract has none of the language packs {list(languages)} installed")
+            return OcrResult(
+                error=f"tesseract has none of the language packs {list(languages)} installed"
+            )
         env = {**os.environ, "OMP_THREAD_LIMIT": "1"}
         try:
             run = subprocess.run(
-                [self.binary, "stdin", "stdout", "-l", "+".join(wanted), "--psm", str(self.psm), "tsv"],
+                [
+                    self.binary,
+                    "stdin",
+                    "stdout",
+                    "-l",
+                    "+".join(wanted),
+                    "--psm",
+                    str(self.psm),
+                    "tsv",
+                ],
                 input=png,
                 capture_output=True,
                 timeout=self.timeout_s,
@@ -70,7 +97,9 @@ class TesseractOcr:
         except OSError as exc:
             return OcrResult(error=f"tesseract could not run: {exc}")
         if run.returncode != 0:
-            return OcrResult(error=f"tesseract failed: {run.stderr.decode('utf-8', 'replace').strip()[:200]}")
+            return OcrResult(
+                error=f"tesseract failed: {run.stderr.decode('utf-8', 'replace').strip()[:200]}"
+            )
         return _from_tsv(run.stdout.decode("utf-8", "replace"))
 
 
@@ -105,7 +134,10 @@ def _from_tsv(tsv: str) -> OcrResult:
             out.append("")
         out.append(" ".join(lines[key]))
         previous = paragraph
-    return OcrResult(text="\n".join(out), confidence=sum(confidences) / len(confidences) if confidences else 0.0)
+    return OcrResult(
+        text="\n".join(out),
+        confidence=sum(confidences) / len(confidences) if confidences else 0.0,
+    )
 
 
 class RapidOcr:
@@ -124,10 +156,14 @@ class RapidOcr:
 
         self.recognize(encode_png(32, 32, bytes([255]) * 1024))
 
-    def recognize(self, png: bytes, *, languages: Sequence[str] = ("eng",)) -> OcrResult:
+    def recognize(
+        self, png: bytes, *, languages: Sequence[str] = ("eng",)
+    ) -> OcrResult:
         try:
             if self._engine is None:
-                from rapidocr import RapidOCR  # the `ocr` extra; models ship inside the wheel
+                from rapidocr import (
+                    RapidOCR,
+                )  # the `ocr` extra; models ship inside the wheel
 
                 self._engine = RapidOCR(params={"Global.log_level": "warning"})
             result = self._engine(png)  # type: ignore[operator]
@@ -135,7 +171,10 @@ class RapidOcr:
             scores = list(getattr(result, "scores", None) or [])
         except Exception as exc:  # noqa: BLE001 — an unreadable image or a broken install is a result, not a crash
             return OcrResult(error=f"rapidocr failed: {exc}")
-        return OcrResult(text="\n".join(texts), confidence=(sum(scores) / len(scores) * 100) if scores else 0.0)
+        return OcrResult(
+            text="\n".join(texts),
+            confidence=(sum(scores) / len(scores) * 100) if scores else 0.0,
+        )
 
 
 def resolve_ocr(spec: str | Ocr | None = "auto") -> Ocr | None:
@@ -152,13 +191,19 @@ def resolve_ocr(spec: str | Ocr | None = "auto") -> Ocr | None:
         return TesseractOcr() if TesseractOcr.available() else None
     if spec == "tesseract":
         if not TesseractOcr.available():
-            raise RuntimeError("ocr='tesseract' but no `tesseract` program is installed (apt install tesseract-ocr)")
+            raise RuntimeError(
+                "ocr='tesseract' but no `tesseract` program is installed (apt install tesseract-ocr)"
+            )
         return TesseractOcr()
     if spec == "rapidocr":
         if not RapidOcr.available():
-            raise RuntimeError("ocr='rapidocr' but it is not installed (pip install 'agent-substrate[ocr]')")
+            raise RuntimeError(
+                "ocr='rapidocr' but it is not installed (pip install 'agent-substrate[ocr]')"
+            )
         return RapidOcr()
-    raise ValueError(f"unknown OCR engine {spec!r}: use 'auto', 'tesseract', 'rapidocr', or an Ocr instance")
+    raise ValueError(
+        f"unknown OCR engine {spec!r}: use 'auto', 'tesseract', 'rapidocr', or an Ocr instance"
+    )
 
 
 __all__ = ["RapidOcr", "TesseractOcr", "resolve_ocr"]

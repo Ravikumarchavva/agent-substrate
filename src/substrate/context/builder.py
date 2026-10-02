@@ -49,15 +49,23 @@ class DefaultContextBuilder(ContextBuilder):
                 working_nodes = working_nodes[anchor_idx + 1 :]
 
         messages: list[ChatMessage] = [node.payload for node in working_nodes]
-        leaf_id = working_nodes[-1].id if working_nodes else (
-            checkpoint.anchor_message_id if checkpoint else (nodes[-1].id if nodes else None)
+        leaf_id = (
+            working_nodes[-1].id
+            if working_nodes
+            else (
+                checkpoint.anchor_message_id
+                if checkpoint
+                else (nodes[-1].id if nodes else None)
+            )
         )
 
         # Inject checkpoint summary message if checkpoint is provided and has summary content
         if checkpoint is not None and checkpoint.summary.strip():
             summary_msg = ChatMessage(
                 role=Role.USER,
-                content=[TextBlock(text=f"[Conversation Summary]:\n{checkpoint.summary}")],
+                content=[
+                    TextBlock(text=f"[Conversation Summary]:\n{checkpoint.summary}")
+                ],
                 metadata={
                     "is_checkpoint_summary": True,
                     "checkpoint_id": checkpoint.id,
@@ -127,9 +135,10 @@ class DefaultContextBuilder(ContextBuilder):
             prefix_msgs.append(working_msgs.pop(0))
 
         # Iteratively drop oldest delta messages until within budget
-        while working_msgs and estimate_tokens(
-            prefix_msgs + working_msgs, self._cpt
-        ) > token_budget:
+        while (
+            working_msgs
+            and estimate_tokens(prefix_msgs + working_msgs, self._cpt) > token_budget
+        ):
             working_msgs.pop(0)
             # Ensure the first non-system/non-summary message is not an orphaned tool turn
             while working_msgs and working_msgs[0].role == Role.TOOL:

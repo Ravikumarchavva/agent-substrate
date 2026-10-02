@@ -68,7 +68,10 @@ async def test_session_and_global_scopes_are_separate_prefixes():
     session = store.scope_prefix(TENANT, USER, conversation_id=CONVERSATION)
     global_ = store.scope_prefix(TENANT, user_id=USER)
 
-    assert session == f"tenants/{TENANT}/users/{USER}/conversations/{CONVERSATION}/artifacts"
+    assert (
+        session
+        == f"tenants/{TENANT}/users/{USER}/conversations/{CONVERSATION}/artifacts"
+    )
     assert global_ == f"tenants/{TENANT}/users/{USER}/artifacts"
 
     await store.save(session, "a", _memory("session fact"))
@@ -101,7 +104,9 @@ async def test_index_lists_concepts_with_type_and_description():
     store, blob = _store()
     prefix = store.scope_prefix(TENANT, user_id=USER)
     await store.save(
-        prefix, "terse", Concept(type="Memory", title="Terse", description="No summaries.")
+        prefix,
+        "terse",
+        Concept(type="Memory", title="Terse", description="No summaries."),
     )
     index = blob.objects[f"{prefix}/index.md"].decode()
     assert "[Terse](./terse.md)" in index
@@ -116,13 +121,16 @@ async def test_listing_filters_by_type_and_tags():
     await store.save(prefix, "m2", Concept(type="Memory", tags=["style"]))
     await store.save(prefix, "f1", Concept(type="File", tags=["style"]))
 
-    assert {r.slug for r in await store.list(prefix, scope="global", concept_type="Memory")} == {
+    assert {
+        r.slug for r in await store.list(prefix, scope="global", concept_type="Memory")
+    } == {
         "m1",
         "m2",
     }
     # Tag filter is conjunctive: every requested tag must be present.
     assert {
-        r.slug for r in await store.list(prefix, scope="global", tags=["style", "comms"])
+        r.slug
+        for r in await store.list(prefix, scope="global", tags=["style", "comms"])
     } == {"m1"}
 
 

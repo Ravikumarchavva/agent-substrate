@@ -35,7 +35,15 @@ class Format(StrEnum):
     UNKNOWN = "unknown"
 
 
-_IMAGE_MAGIC = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a", b"BM", b"II*\x00", b"MM\x00*")
+_IMAGE_MAGIC = (
+    b"\x89PNG\r\n\x1a\n",
+    b"\xff\xd8\xff",
+    b"GIF87a",
+    b"GIF89a",
+    b"BM",
+    b"II*\x00",
+    b"MM\x00*",
+)
 _ODF_TYPES = {
     "application/vnd.oasis.opendocument.text": Format.ODT,
     "application/vnd.oasis.opendocument.presentation": Format.ODP,
@@ -67,7 +75,8 @@ _BY_EXTENSION = {
     ".log": Format.TEXT,
 }
 _HTML_START = re.compile(
-    rb"^\s*(<!doctype\s+html|<html|<head|<body|<\?xml[^>]*>\s*<html|<(p|div|span|h[1-6]|table|ul|ol|a|section|article|br)[\s>/])", re.IGNORECASE
+    rb"^\s*(<!doctype\s+html|<html|<head|<body|<\?xml[^>]*>\s*<html|<(p|div|span|h[1-6]|table|ul|ol|a|section|article|br)[\s>/])",
+    re.IGNORECASE,
 )
 
 
@@ -80,7 +89,9 @@ def _zip_format(data: bytes) -> Format:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             names = set(archive.namelist())
             if "mimetype" in names:
-                declared = archive.read("mimetype")[:128].decode("ascii", "replace").strip()
+                declared = (
+                    archive.read("mimetype")[:128].decode("ascii", "replace").strip()
+                )
                 if declared in _ODF_TYPES:
                     return _ODF_TYPES[declared]
                 return Format.OTHER_ARCHIVE
@@ -121,10 +132,16 @@ def sniff(data: bytes, filename: str = "", content_type: str | None = None) -> F
     if any(head.startswith(m) for m in _IMAGE_MAGIC) or _is_webp(head):
         return Format.IMAGE
     declared = (content_type or "").split(";")[0].strip().lower()
-    extension = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename.rsplit("/", 1)[-1] else ""
+    extension = (
+        ("." + filename.rsplit(".", 1)[-1].lower())
+        if "." in filename.rsplit("/", 1)[-1]
+        else ""
+    )
     if not _looks_textual(data):
         return Format.UNKNOWN
-    if _HTML_START.match(decode_text(head).encode("utf-8")) or (declared in ("text/html", "application/xhtml+xml") and "<" in decode_text(head)):
+    if _HTML_START.match(decode_text(head).encode("utf-8")) or (
+        declared in ("text/html", "application/xhtml+xml") and "<" in decode_text(head)
+    ):
         return Format.HTML
     if declared in _BY_DECLARED and declared != "text/plain":
         return _BY_DECLARED[declared]

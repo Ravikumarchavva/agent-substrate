@@ -64,11 +64,21 @@ class _Reader:
 def test_the_document_reader_is_built_from_settings(monkeypatch):
     from substrate_cloud import document_reader as module
 
-    monkeypatch.setattr(module.settings, "DOCUMENT_INTELLIGENCE_SERVICE_URL", "http://extraction-test:8080")
-    monkeypatch.setattr(module.settings, "DOCUMENT_INTELLIGENCE_AUTH_TOKEN", "secret-token")
+    monkeypatch.setattr(
+        module.settings,
+        "DOCUMENT_INTELLIGENCE_SERVICE_URL",
+        "http://extraction-test:8080",
+    )
+    monkeypatch.setattr(
+        module.settings, "DOCUMENT_INTELLIGENCE_AUTH_TOKEN", "secret-token"
+    )
     monkeypatch.setattr(module.settings, "DOCUMENT_INTELLIGENCE_TIMEOUT_S", 42)
     reader = module.document_reader()
-    assert (reader._location, reader._api_key, reader._timeout) == ("http://extraction-test:8080", "secret-token", 42.0)
+    assert (reader._location, reader._api_key, reader._timeout) == (
+        "http://extraction-test:8080",
+        "secret-token",
+        42.0,
+    )
 
 
 def test_with_no_service_configured_the_built_in_reader_is_used(monkeypatch):
@@ -82,7 +92,11 @@ async def test_extraction_result_becomes_the_inline_text_and_engine():
     from substrate_cloud.monolith.routes import chat_context
 
     meta = _pdf_meta("f1", "invoice.pdf", "users/u1/uploads/f1/invoice.pdf", 1234)
-    reader = _Reader(ExtractionResult(pages=[], markdown="rich layout-aware text", engine="paddleocr-vl"))
+    reader = _Reader(
+        ExtractionResult(
+            pages=[], markdown="rich layout-aware text", engine="paddleocr-vl"
+        )
+    )
     with patch.object(chat_context, "document_reader", lambda: reader):
         text_block, _images, attachments, _new = await _run(meta)
 
@@ -117,7 +131,11 @@ async def test_extraction_truncates_over_configured_cap(monkeypatch):
     monkeypatch.setattr(chat_context.settings, "ATTACHMENT_PDF_MAX_CHARS", 5)
 
     meta = _pdf_meta("f4", "invoice.pdf", "users/u1/uploads/f4/invoice.pdf", 1234)
-    reader = _Reader(ExtractionResult(pages=[], markdown="a much longer body of extracted text", engine="raw_text"))
+    reader = _Reader(
+        ExtractionResult(
+            pages=[], markdown="a much longer body of extracted text", engine="raw_text"
+        )
+    )
     with patch.object(chat_context, "document_reader", lambda: reader):
         text_block, _images, _attachments, _new = await _run(meta)
 

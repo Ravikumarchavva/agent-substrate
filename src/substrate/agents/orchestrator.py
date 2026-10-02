@@ -13,7 +13,13 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from substrate.types.run import RunScope
 from substrate.types.supervision import Priority, SpawnBudget
-from substrate.types.content import ChatMessage, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types.content import (
+    ChatMessage,
+    Role,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 from substrate.types.identity import Actor
 from substrate.models.protocols import GenerationOptions
 from substrate.runtime.message import ChatPayload, DataPayload, Message

@@ -40,7 +40,9 @@ class FrozenDict(dict[str, Any]):
     __slots__ = ()
 
     def _immutable(self, *_args: object, **_kwargs: object) -> None:
-        raise TypeError("this mapping is immutable; copy it with dict(...) to change it")
+        raise TypeError(
+            "this mapping is immutable; copy it with dict(...) to change it"
+        )
 
     __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
     __ior__ = _immutable  # type: ignore[assignment]
@@ -212,7 +214,14 @@ class MediaBlock(KernelModel):
         media_type: str = "image/jpeg",
         **kwargs: Any,
     ) -> MediaBlock:
-        return cls(type="image", url=url, data=data, file_id=file_id, media_type=media_type, **kwargs)
+        return cls(
+            type="image",
+            url=url,
+            data=data,
+            file_id=file_id,
+            media_type=media_type,
+            **kwargs,
+        )
 
     @classmethod
     def audio(
@@ -224,7 +233,14 @@ class MediaBlock(KernelModel):
         media_type: str = "audio/wav",
         **kwargs: Any,
     ) -> MediaBlock:
-        return cls(type="audio", url=url, data=data, file_id=file_id, media_type=media_type, **kwargs)
+        return cls(
+            type="audio",
+            url=url,
+            data=data,
+            file_id=file_id,
+            media_type=media_type,
+            **kwargs,
+        )
 
     @classmethod
     def video(
@@ -236,7 +252,14 @@ class MediaBlock(KernelModel):
         media_type: str = "video/mp4",
         **kwargs: Any,
     ) -> MediaBlock:
-        return cls(type="video", url=url, data=data, file_id=file_id, media_type=media_type, **kwargs)
+        return cls(
+            type="video",
+            url=url,
+            data=data,
+            file_id=file_id,
+            media_type=media_type,
+            **kwargs,
+        )
 
     @classmethod
     def document(
@@ -248,7 +271,14 @@ class MediaBlock(KernelModel):
         media_type: str = "application/pdf",
         **kwargs: Any,
     ) -> MediaBlock:
-        return cls(type="document", url=url, data=data, file_id=file_id, media_type=media_type, **kwargs)
+        return cls(
+            type="document",
+            url=url,
+            data=data,
+            file_id=file_id,
+            media_type=media_type,
+            **kwargs,
+        )
 
     @property
     def is_image(self) -> bool:
@@ -310,7 +340,9 @@ class UnknownBlock(KernelModel):
 def _coerce_blocks(v: Any, info: ValidationInfo) -> Any:
     # Persisted and wire data (JSON) may carry block types a newer version
     # wrote; code constructing blocks in Python may not invent them.
-    forward_compatible = info.mode == "json" or bool((info.context or {}).get("forward_compatible"))
+    forward_compatible = info.mode == "json" or bool(
+        (info.context or {}).get("forward_compatible")
+    )
     if isinstance(v, str):
         return (TextBlock(text=v),)
     if isinstance(v, (BaseModel, dict)):
@@ -345,7 +377,11 @@ class ToolResultBlock(KernelModel):
     def __str__(self) -> str:
         inner = "\n".join(str(b) for b in self.content)
         prefix = "[ToolError" if self.is_error else "[ToolResult"
-        return f"{prefix}: {self.call_id}] {inner}" if inner else f"{prefix}: {self.call_id}] (empty)"
+        return (
+            f"{prefix}: {self.call_id}] {inner}"
+            if inner
+            else f"{prefix}: {self.call_id}] (empty)"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -414,7 +450,6 @@ def parse_content_block(data: Any, *, forward_compatible: bool = False) -> Conte
 def content_blocks_to_str(blocks: Sequence[ContentBlock]) -> str:
     """Human-readable string representation of content blocks."""
     return "\n".join(str(b) for b in blocks)
-
 
 
 # ---------------------------------------------------------------------------

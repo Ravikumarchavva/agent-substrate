@@ -20,8 +20,14 @@ def store(tmp_path) -> Memory:
     return Store.at(tmp_path).memory
 
 
-async def _remember(store: Memory, text: str, *, user: str = "user-1", tenant: str = TENANT) -> None:
-    await store.save(MemoryRecord.from_text(text, namespace=MemoryNamespace(tenant_id=tenant, user_id=user)))
+async def _remember(
+    store: Memory, text: str, *, user: str = "user-1", tenant: str = TENANT
+) -> None:
+    await store.save(
+        MemoryRecord.from_text(
+            text, namespace=MemoryNamespace(tenant_id=tenant, user_id=user)
+        )
+    )
 
 
 async def test_returns_empty_string_when_no_long_term_memory_configured():
@@ -64,7 +70,11 @@ async def test_only_this_users_facts_in_this_tenant_are_included(store):
     await _remember(store, "mine")
     await _remember(store, "someone else's", user="user-2")
     await _remember(store, "another tenant's", tenant="evilcorp")
-    await store.save(MemoryRecord.from_text("everyone in acme", namespace=MemoryNamespace(tenant_id=TENANT)))
+    await store.save(
+        MemoryRecord.from_text(
+            "everyone in acme", namespace=MemoryNamespace(tenant_id=TENANT)
+        )
+    )
 
     block = await build_user_memory_context_block(store, TENANT, "user-1")
 

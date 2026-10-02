@@ -11,7 +11,9 @@ from substrate.runtime.store import RuntimeStore
 _WAIT_S = 1.0
 
 
-async def tail(store: RuntimeStore, run_id: RunId | str, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]:
+async def tail(
+    store: RuntimeStore, run_id: RunId | str, *, from_seq: int = 0
+) -> AsyncIterator[RunLogEntry]:
     """A run's entries — live output included — as they are written.
 
     Never ends on its own: the caller stops iterating at the terminal entry it cares

@@ -18,15 +18,23 @@ import pytest
 from substrate.runtime import Runtime
 from substrate.stores import Store, StoreVersionError, connect, migrate
 
-COUNTER = ["CREATE TABLE IF NOT EXISTS counter (name TEXT PRIMARY KEY, n INTEGER NOT NULL);"]
+COUNTER = [
+    "CREATE TABLE IF NOT EXISTS counter (name TEXT PRIMARY KEY, n INTEGER NOT NULL);"
+]
 
 
-async def test_connecting_lays_out_the_folder_and_reopening_finds_what_was_written(tmp_path: Path) -> None:
+async def test_connecting_lays_out_the_folder_and_reopening_finds_what_was_written(
+    tmp_path: Path,
+) -> None:
     """Pointing at a folder is all it takes: the library creates what is inside it, and the same folder opened
     again is the same store."""
     folder = tmp_path / "state"
     store = await connect(folder)
-    assert (folder / "substrate.db").is_file() and (folder / "files").is_dir() and (folder / "index").is_dir()
+    assert (
+        (folder / "substrate.db").is_file()
+        and (folder / "files").is_dir()
+        and (folder / "index").is_dir()
+    )
     await migrate(store.database, "test", COUNTER)
     async with store.database.transaction() as tx:
         await tx.execute("INSERT INTO counter (name, n) VALUES ('x', 7)")
@@ -38,7 +46,9 @@ async def test_connecting_lays_out_the_folder_and_reopening_finds_what_was_writt
     assert row is not None and row["n"] == 7
 
 
-async def test_a_committed_transaction_survives_the_process_being_killed(tmp_path: Path) -> None:
+async def test_a_committed_transaction_survives_the_process_being_killed(
+    tmp_path: Path,
+) -> None:
     """Durable means a transaction that returned is on disk: the writer is killed without closing anything —
     no checkpoint, no flush — and a fresh process still reads it. A transaction killed half way is not there."""
     script = textwrap.dedent(
@@ -61,16 +71,24 @@ async def test_a_committed_transaction_survives_the_process_being_killed(tmp_pat
         asyncio.run(main())
         """
     )
-    result = subprocess.run([sys.executable, "-c", script, str(tmp_path / "state")], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path / "state")],
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 9, result.stderr
 
     async with Store.at(tmp_path / "state") as store:
         async with store.database.transaction() as tx:
-            names = {row["name"] for row in await tx.fetchall("SELECT name FROM counter")}
+            names = {
+                row["name"] for row in await tx.fetchall("SELECT name FROM counter")
+            }
     assert names == {"committed"}
 
 
-async def test_two_stores_on_one_folder_never_lose_each_others_writes(tmp_path: Path) -> None:
+async def test_two_stores_on_one_folder_never_lose_each_others_writes(
+    tmp_path: Path,
+) -> None:
     """Workers on one host share the folder. Every increment is a read-then-write in a transaction, from two
     independent connections at once; none may be lost."""
     first, second = Store.at(tmp_path / "state"), Store.at(tmp_path / "state")
@@ -84,7 +102,9 @@ async def test_two_stores_on_one_folder_never_lose_each_others_writes(tmp_path: 
         for _ in range(25):
             async with store.database.transaction() as tx:
                 row = await tx.fetchone("SELECT n FROM counter WHERE name = 'hits'")
-                await tx.execute("UPDATE counter SET n = ? WHERE name = 'hits'", row["n"] + 1)
+                await tx.execute(
+                    "UPDATE counter SET n = ? WHERE name = 'hits'", row["n"] + 1
+                )
 
     await asyncio.gather(*(bump(store) for store in (first, second, first, second)))
     async with first.database.transaction() as tx:
@@ -100,19 +120,27 @@ async def test_a_folder_written_by_a_newer_build_is_refused(tmp_path: Path) -> N
     async with Store.at(tmp_path / "state") as store:
         await migrate(store.database, "test", [*COUNTER, "SELECT 1;"])
     async with Store.at(tmp_path / "state") as store:
-        with pytest.raises(StoreVersionError, match=r"version 2.*only understands up to 1"):
+        with pytest.raises(
+            StoreVersionError, match=r"version 2.*only understands up to 1"
+        ):
             await migrate(store.database, "test", COUNTER)
 
 
-async def test_an_upgrade_that_crashed_half_way_is_resumed_not_repeated_wrongly(tmp_path: Path) -> None:
+async def test_an_upgrade_that_crashed_half_way_is_resumed_not_repeated_wrongly(
+    tmp_path: Path,
+) -> None:
     """Migrations are applied in order and recorded after they run, so a crash between the two — or two processes
     starting together — runs the script again; scripts are idempotent, and the version is recorded once."""
     async with Store.at(tmp_path / "state") as store:
-        await store.database.script(COUNTER[0])  # the crash: the script ran, the version was never recorded
+        await store.database.script(
+            COUNTER[0]
+        )  # the crash: the script ran, the version was never recorded
         await migrate(store.database, "test", COUNTER)
         await migrate(store.database, "test", COUNTER)
         async with store.database.transaction() as tx:
-            rows = await tx.fetchall("SELECT version FROM substrate_migrations WHERE component = 'test'")
+            rows = await tx.fetchall(
+                "SELECT version FROM substrate_migrations WHERE component = 'test'"
+            )
     assert [row["version"] for row in rows] == [1]
 
 
@@ -126,7 +154,9 @@ async def test_the_database_is_opened_for_durability(tmp_path: Path) -> None:
     assert journal[0] == "wal" and synchronous[0] == 2
 
 
-async def test_a_runtime_closes_a_store_it_opened_and_leaves_one_it_was_given(tmp_path: Path) -> None:
+async def test_a_runtime_closes_a_store_it_opened_and_leaves_one_it_was_given(
+    tmp_path: Path,
+) -> None:
     """``Runtime.open(folder)`` owns the store it made; ``Runtime(store)`` shares one, so closing the runtime must
     not pull the store out from under whoever else uses it."""
     async with Runtime.open(tmp_path / "owned") as runtime:
@@ -142,7 +172,9 @@ async def test_a_runtime_closes_a_store_it_opened_and_leaves_one_it_was_given(tm
             assert await tx.fetchone("SELECT 1 AS one") is not None
 
 
-async def test_hostile_thread_and_branch_names_are_just_data_and_touch_no_other_file(tmp_path: Path) -> None:
+async def test_hostile_thread_and_branch_names_are_just_data_and_touch_no_other_file(
+    tmp_path: Path,
+) -> None:
     """Names reach the store from request bodies. They are bound parameters, never paths and never part of a
     statement, so a traversal string or an injection attempt is stored and read back like any other name — and the
     folder gains nothing but the database's own files."""
@@ -161,10 +193,18 @@ async def test_hostile_thread_and_branch_names_are_just_data_and_touch_no_other_
 
     assert branch is not None and branch.head_message_id == node.id
     assert {p.name for p in tmp_path.iterdir()} == {"state"}
-    assert {p.name for p in (tmp_path / "state").iterdir()} <= {"substrate.db", "substrate.db-wal", "substrate.db-shm", "files", "index"}
+    assert {p.name for p in (tmp_path / "state").iterdir()} <= {
+        "substrate.db",
+        "substrate.db-wal",
+        "substrate.db-shm",
+        "files",
+        "index",
+    }
 
 
-async def test_a_turn_killed_between_two_appends_leaves_a_thread_that_is_whole(tmp_path: Path) -> None:
+async def test_a_turn_killed_between_two_appends_leaves_a_thread_that_is_whole(
+    tmp_path: Path,
+) -> None:
     """The branch head moves with the node in one transaction. A process killed after appending the first of two
     messages and half way through the second finds, on reopening, a thread ending at the first — never a head
     pointing at a node that is not there, nor a node the head skipped."""
@@ -192,18 +232,26 @@ async def test_a_turn_killed_between_two_appends_leaves_a_thread_that_is_whole(t
         asyncio.run(main())
         """
     )
-    result = subprocess.run([sys.executable, "-c", script, str(tmp_path / "state")], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path / "state")],
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 7, result.stderr
 
     async with Store.at(tmp_path / "state") as store:
         branch = await store.threads.get_branch("s", "main")
         head = await store.threads.get_node(branch.head_message_id)
         async with store.database.transaction() as tx:
-            nodes = await tx.fetchall("SELECT id FROM thread_nodes WHERE session_id = 's'")
+            nodes = await tx.fetchall(
+                "SELECT id FROM thread_nodes WHERE session_id = 's'"
+            )
     assert head is not None and head.payload.text == "first" and len(nodes) == 1
 
 
-def test_a_store_nobody_closed_exits_cleanly_and_keeps_what_was_committed(tmp_path: Path) -> None:
+def test_a_store_nobody_closed_exits_cleanly_and_keeps_what_was_committed(
+    tmp_path: Path,
+) -> None:
     """Most programs never call ``aclose`` on the store an agent opened for itself. Leaving the process must neither
     print a traceback nor lose anything: the connection is released at exit, after the thread pool is gone."""
     script = textwrap.dedent(
@@ -220,7 +268,11 @@ def test_a_store_nobody_closed_exits_cleanly_and_keeps_what_was_committed(tmp_pa
         asyncio.run(main())
         """
     )
-    result = subprocess.run([sys.executable, "-c", script, str(tmp_path / "state")], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path / "state")],
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 0 and result.stderr == "", result.stderr
 
     async def read() -> str:

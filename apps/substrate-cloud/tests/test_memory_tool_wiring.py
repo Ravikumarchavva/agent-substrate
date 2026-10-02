@@ -11,7 +11,9 @@ from substrate_cloud.factory import build_memory_tool
 
 
 def _ctx(user: str | None, thread: str, tenant: str | None = "acme") -> SimpleNamespace:
-    return SimpleNamespace(scope=RunScope(tenant_id=tenant, user_id=user, thread_id=thread))
+    return SimpleNamespace(
+        scope=RunScope(tenant_id=tenant, user_id=user, thread_id=thread)
+    )
 
 
 def test_returns_none_when_neither_backend_configured():
@@ -40,12 +42,22 @@ async def test_a_users_long_term_facts_follow_them_across_threads(tmp_path):
     in_thread_1 = build_memory_tool("session-1", None, store)
     in_thread_2 = build_memory_tool("session-2", None, store)
 
-    saved = await in_thread_1.execute(ctx=_ctx("user-42", "session-1"), action="remember", value="prefers French")
+    saved = await in_thread_1.execute(
+        ctx=_ctx("user-42", "session-1"), action="remember", value="prefers French"
+    )
     assert not saved.is_error
 
-    same_user = await in_thread_2.execute(ctx=_ctx("user-42", "session-2"), action="recall", query="French")
-    other_user = await in_thread_2.execute(ctx=_ctx("user-43", "session-2"), action="recall", query="French")
-    other_tenant = await in_thread_2.execute(ctx=_ctx("user-42", "session-2", tenant="evilcorp"), action="recall", query="French")
+    same_user = await in_thread_2.execute(
+        ctx=_ctx("user-42", "session-2"), action="recall", query="French"
+    )
+    other_user = await in_thread_2.execute(
+        ctx=_ctx("user-43", "session-2"), action="recall", query="French"
+    )
+    other_tenant = await in_thread_2.execute(
+        ctx=_ctx("user-42", "session-2", tenant="evilcorp"),
+        action="recall",
+        query="French",
+    )
 
     assert "prefers French" in same_user.content[0].text
     assert "No relevant memories" in other_user.content[0].text
@@ -57,9 +69,15 @@ async def test_with_no_user_a_fact_is_kept_for_that_conversation_only(tmp_path):
     store = Store.at(tmp_path).memory
     tool = build_memory_tool("session-1", None, store)
 
-    await tool.execute(ctx=_ctx(None, "session-1"), action="remember", value="anonymous note")
+    await tool.execute(
+        ctx=_ctx(None, "session-1"), action="remember", value="anonymous note"
+    )
 
-    same = await tool.execute(ctx=_ctx(None, "session-1"), action="recall", query="anonymous")
-    elsewhere = await tool.execute(ctx=_ctx(None, "session-2"), action="recall", query="anonymous")
+    same = await tool.execute(
+        ctx=_ctx(None, "session-1"), action="recall", query="anonymous"
+    )
+    elsewhere = await tool.execute(
+        ctx=_ctx(None, "session-2"), action="recall", query="anonymous"
+    )
     assert "anonymous note" in same.content[0].text
     assert "No relevant memories" in elsewhere.content[0].text

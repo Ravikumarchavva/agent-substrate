@@ -51,7 +51,10 @@ class AskOutcome(BaseModel):
             raise ValueError("a 'replied' outcome needs a result")
         if self.kind == "timed_out" and self.handle is None:
             raise ValueError("a 'timed_out' outcome needs the still-live run's handle")
-        if self.kind in ("target_failed", "target_cancelled") and self.result is not None:
+        if (
+            self.kind in ("target_failed", "target_cancelled")
+            and self.result is not None
+        ):
             raise ValueError(f"a {self.kind!r} outcome has no reply")
         return self
 

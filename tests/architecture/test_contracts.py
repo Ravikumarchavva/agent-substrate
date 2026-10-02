@@ -37,8 +37,13 @@ def test_contracts_have_no_vendor_strings() -> None:
         stripped = _strip_docstrings(path.read_text(encoding="utf-8"))
         for pattern in _VENDOR_PATTERNS:
             for match in re.finditer(pattern, stripped):
-                violations.append(f"{path.relative_to(REPO_ROOT)}: contains vendor string {match.group()!r}")
-    assert not violations, "Contracts must not contain vendor-specific strings:\n  " + "\n  ".join(violations)
+                violations.append(
+                    f"{path.relative_to(REPO_ROOT)}: contains vendor string {match.group()!r}"
+                )
+    assert not violations, (
+        "Contracts must not contain vendor-specific strings:\n  "
+        + "\n  ".join(violations)
+    )
 
 
 def test_contracts_import_only_pydantic_and_a_measured_stdlib_set() -> None:
@@ -76,14 +81,22 @@ def test_contracts_import_only_pydantic_and_a_measured_stdlib_set() -> None:
                 continue
             if "pydantic" in line or "typing_extensions" in line:
                 continue
-            if line.startswith("from substrate.") or line.startswith("import substrate."):
+            if line.startswith("from substrate.") or line.startswith(
+                "import substrate."
+            ):
                 continue
             if line.startswith("from .") or line.startswith("from .."):
                 continue
-            if any(line.startswith(f"import {prefix}") or line.startswith(f"from {prefix}") for prefix in stdlib_prefixes):
+            if any(
+                line.startswith(f"import {prefix}") or line.startswith(f"from {prefix}")
+                for prefix in stdlib_prefixes
+            ):
                 continue
             illegal.append(f"{path.relative_to(REPO_ROOT)}: {line.strip()}")
-    assert not illegal, "Contracts must stay at the protocol layer and use pydantic only for validation:\n  " + "\n  ".join(illegal[:20])
+    assert not illegal, (
+        "Contracts must stay at the protocol layer and use pydantic only for validation:\n  "
+        + "\n  ".join(illegal[:20])
+    )
 
 
 def test_message_round_trip() -> None:
@@ -169,4 +182,3 @@ def test_actor_factory_helpers() -> None:
     user_custom = Actor.user("alice")
     assert user_custom == Actor(type="user", key="alice")
     assert str(user_custom) == "user/alice"
-

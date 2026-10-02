@@ -117,7 +117,11 @@ class MemoryTool:
                     is_error=True,
                 )
             return await self._long_term_op(
-                action, value=value, query=query, memory_id=memory_id, owner=self._owner(ctx)
+                action,
+                value=value,
+                query=query,
+                memory_id=memory_id,
+                owner=self._owner(ctx),
             )
 
         return ToolExecutionResult(
@@ -162,11 +166,22 @@ class MemoryTool:
         this conversation alone."""
         scope = scope_of(ctx)
         if scope.user_id:
-            return MemoryNamespace(tenant_id=scope.tenant_id or "default", user_id=scope.user_id)
-        return MemoryNamespace(tenant_id=scope.tenant_id or "default", session_id=scope.thread_id or self._session_id)
+            return MemoryNamespace(
+                tenant_id=scope.tenant_id or "default", user_id=scope.user_id
+            )
+        return MemoryNamespace(
+            tenant_id=scope.tenant_id or "default",
+            session_id=scope.thread_id or self._session_id,
+        )
 
     async def _long_term_op(
-        self, action: str, *, value: str, query: str, memory_id: str, owner: MemoryNamespace
+        self,
+        action: str,
+        *,
+        value: str,
+        query: str,
+        memory_id: str,
+        owner: MemoryNamespace,
     ) -> ToolExecutionResult:
         assert self._long_term is not None
         if action == "remember":
@@ -175,7 +190,9 @@ class MemoryTool:
                     content=[TextBlock(text="'value' is required for remember.")],
                     is_error=True,
                 )
-            rec = MemoryRecord.from_text(value, namespace=owner, category=MemoryCategory.SEMANTIC)
+            rec = MemoryRecord.from_text(
+                value, namespace=owner, category=MemoryCategory.SEMANTIC
+            )
             mem_id = await self._long_term.save(rec)
             return ToolExecutionResult(
                 content=[TextBlock(text=f"Stored memory (id={mem_id}).")],

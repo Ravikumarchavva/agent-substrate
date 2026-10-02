@@ -62,14 +62,23 @@ class _PgTx:
         return await self._conn.fetch(_numbered(sql), *params)
 
     async def lock(self, key: str) -> None:
-        await self._conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", key)
+        await self._conn.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", key
+        )
 
 
 class PostgresDatabase:
     dialect = "postgresql"
     auto_pk = "BIGSERIAL PRIMARY KEY"
 
-    def __init__(self, dsn: str, *, schema: str | None = None, pool_min_size: int = 2, pool_max_size: int = 10) -> None:
+    def __init__(
+        self,
+        dsn: str,
+        *,
+        schema: str | None = None,
+        pool_min_size: int = 2,
+        pool_max_size: int = 10,
+    ) -> None:
         if schema is not None and not _SCHEMA_NAME.match(schema):
             raise ValueError(f"not a valid schema name: {schema!r}")
         self._dsn = dsn
@@ -90,8 +99,12 @@ class PostgresDatabase:
                 await conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{self._schema}"')
             finally:
                 await conn.close()
-            settings["search_path"] = f'"{self._schema}", public'  # public holds the pgvector extension
-        self._pool = await asyncpg.create_pool(self._dsn, min_size=self._min, max_size=self._max, server_settings=settings)
+            settings["search_path"] = (
+                f'"{self._schema}", public'  # public holds the pgvector extension
+            )
+        self._pool = await asyncpg.create_pool(
+            self._dsn, min_size=self._min, max_size=self._max, server_settings=settings
+        )
 
     async def aclose(self) -> None:
         if self._pool is not None:
@@ -103,7 +116,9 @@ class PostgresDatabase:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 # Several processes may start at once; only one should create the tables.
-                await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('substrate.schema', 0))")
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended('substrate.schema', 0))"
+                )
                 await conn.execute(ddl)
 
     @asynccontextmanager
@@ -128,7 +143,9 @@ class PostgresDatabase:
     def is_retryable(self, exc: BaseException) -> bool:
         import asyncpg
 
-        return isinstance(exc, (asyncpg.DeadlockDetectedError, asyncpg.SerializationError))
+        return isinstance(
+            exc, (asyncpg.DeadlockDetectedError, asyncpg.SerializationError)
+        )
 
 
 def postgres_store(
@@ -141,7 +158,9 @@ def postgres_store(
     pool_max_size: int = 10,
 ) -> Store:
     """The engine's state in PostgreSQL, not yet opened (``start()`` or ``async with`` opens it)."""
-    database = PostgresDatabase(dsn, schema=schema, pool_min_size=pool_min_size, pool_max_size=pool_max_size)
+    database = PostgresDatabase(
+        dsn, schema=schema, pool_min_size=pool_min_size, pool_max_size=pool_max_size
+    )
     return Store(database, files, file_quota_bytes=file_quota_bytes)
 
 

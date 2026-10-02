@@ -43,7 +43,12 @@ from substrate.types.trace import TraceContext
 from substrate.types.usage import Usage
 from substrate.types.errors import BudgetExhaustedError, ControlSignal, SuspendInterrupt
 from substrate.types.ids import new_id, new_run_id
-from substrate.models.protocols import FinishReason, GenerationOptions, ChatModel, LLMResponse
+from substrate.models.protocols import (
+    FinishReason,
+    GenerationOptions,
+    ChatModel,
+    LLMResponse,
+)
 from substrate.runtime.message import DataPayload, Message
 from substrate.types.stream import CompletionEvent, ReasoningDelta, TextDelta
 from substrate.runtime.agent import Agent as _KernelAgent
@@ -173,8 +178,12 @@ class RunContext:
 
     # ------------------------------------------------------------------ the record
 
-    async def _commit(self, entries: Sequence[NewEntry] = (), **parts: Any) -> CommitResult:
-        return await self._store.commit(self._lease, Commit(entries=tuple(entries), **parts))
+    async def _commit(
+        self, entries: Sequence[NewEntry] = (), **parts: Any
+    ) -> CommitResult:
+        return await self._store.commit(
+            self._lease, Commit(entries=tuple(entries), **parts)
+        )
 
     async def log(self, kind: str, payload: JsonObject | None = None) -> int:
         """Append an entry to this run's record. Not deduplicated: use ``log_once``
@@ -190,7 +199,13 @@ class RunContext:
         duplicate the entry (and the UI card built from it) each time.
         """
         path = self._journal.alloc_path()
-        result = await self._commit([NewEntry(kind=kind, payload=payload or {}, dedup_key=f"once:{path}:{kind}")])
+        result = await self._commit(
+            [
+                NewEntry(
+                    kind=kind, payload=payload or {}, dedup_key=f"once:{path}:{kind}"
+                )
+            ]
+        )
         return result.seqs[0]
 
     async def live(self, kind: str, payload: JsonObject | None = None) -> None:
@@ -227,21 +242,32 @@ class RunContext:
         def build(_p: str, _e: str):
             return {"value": _random.random()}, lambda entries: self._commit(entries)
 
-        return float((await self._journal.record_atomic("random", {}, build)).value["value"])
+        return float(
+            (await self._journal.record_atomic("random", {}, build)).value["value"]
+        )
 
     async def uuid(self) -> str:
         def build(_p: str, _e: str):
             return {"value": new_id()}, lambda entries: self._commit(entries)
 
-        return str((await self._journal.record_atomic("uuid", {}, build)).value["value"])
+        return str(
+            (await self._journal.record_atomic("uuid", {}, build)).value["value"]
+        )
 
     # ------------------------------------------------------------------ LLM
 
-    async def llm(self, messages: list[ChatMessage], *, options: GenerationOptions = GenerationOptions()) -> LLMResponse:  # noqa: B008
+    async def llm(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions = GenerationOptions(),
+    ) -> LLMResponse:  # noqa: B008
         """A journaled model call. A replay returns the recorded response and never re-bills."""
         client = self._llm_client
         if client is None:
-            raise RuntimeError("no LLM client: set agent.model before registering the agent")
+            raise RuntimeError(
+                "no LLM client: set agent.model before registering the agent"
+            )
 
         async def run() -> JsonObject:
             # Checked only when the call is really about to be made: a replay serves the recorded
@@ -250,7 +276,10 @@ class RunContext:
             return _serialize(await self._generate(client, messages, options))
 
         outcome = await self._journal.effect(
-            "llm", {"model": client.model, "msg_count": len(messages)}, run, idempotent=True
+            "llm",
+            {"model": client.model, "msg_count": len(messages)},
+            run,
+            idempotent=True,
         )
         response = _deserialize(outcome.value)
         # Written on a replay too (deduplicated), so the record exists even if the worker died
@@ -258,7 +287,14 @@ class RunContext:
         entries = [
             NewEntry(
                 kind=RunLogKind.ASSISTANT_MESSAGE,
-                payload={"text": response.text, "reasoning": "\n".join(b.text for b in response.content if isinstance(b, ReasoningBlock))},
+                payload={
+                    "text": response.text,
+                    "reasoning": "\n".join(
+                        b.text
+                        for b in response.content
+                        if isinstance(b, ReasoningBlock)
+                    ),
+                },
                 dedup_key=f"assistant.message:{outcome.effect_id}",
             )
         ]
@@ -274,7 +310,11 @@ class RunContext:
                     "finish_reason": response.finish_reason.value,
                 },
                 dedup_key=f"llm.call:{outcome.effect_id}",
-                spend=Spend(tokens=response.usage.total_tokens, cost_usd=response.cost_usd or 0.0, turns=1),
+                spend=Spend(
+                    tokens=response.usage.total_tokens,
+                    cost_usd=response.cost_usd or 0.0,
+                    turns=1,
+                ),
             )
         )
         await self._commit(entries)
@@ -292,8 +332,16 @@ class RunContext:
         flight when it was reached.
         """
         supervision = self._meta.supervision
-        budget = supervision.execution_budget if supervision else getattr(self.agent, "execution_budget", None)
-        if budget is None or (budget.max_tokens is None and budget.max_cost_usd is None and budget.max_turns is None):
+        budget = (
+            supervision.execution_budget
+            if supervision
+            else getattr(self.agent, "execution_budget", None)
+        )
+        if budget is None or (
+            budget.max_tokens is None
+            and budget.max_cost_usd is None
+            and budget.max_turns is None
+        ):
             return
         spent = await self._store.tree_spend(RunId(self.run_id))
 
@@ -301,13 +349,21 @@ class RunContext:
             return cap is not None and (used > cap if strict else used >= cap)
 
         if over(spent.tokens, budget.max_tokens):
-            raise BudgetExhaustedError(f"Token budget exceeded: {spent.tokens} {'>' if strict else '>='} {budget.max_tokens}")
+            raise BudgetExhaustedError(
+                f"Token budget exceeded: {spent.tokens} {'>' if strict else '>='} {budget.max_tokens}"
+            )
         if over(spent.cost_usd, budget.max_cost_usd):
-            raise BudgetExhaustedError(f"Cost budget exceeded: ${spent.cost_usd:.4f} {'>' if strict else '>='} ${budget.max_cost_usd:.4f}")
+            raise BudgetExhaustedError(
+                f"Cost budget exceeded: ${spent.cost_usd:.4f} {'>' if strict else '>='} ${budget.max_cost_usd:.4f}"
+            )
         if over(spent.turns, budget.max_turns):
-            raise BudgetExhaustedError(f"Turn limit exceeded: {spent.turns} {'>' if strict else '>='} {budget.max_turns}")
+            raise BudgetExhaustedError(
+                f"Turn limit exceeded: {spent.turns} {'>' if strict else '>='} {budget.max_turns}"
+            )
 
-    async def _generate(self, client: ChatModel, messages: list[ChatMessage], options: GenerationOptions) -> LLMResponse:
+    async def _generate(
+        self, client: ChatModel, messages: list[ChatMessage], options: GenerationOptions
+    ) -> LLMResponse:
         from substrate.models.errors import classify_llm_error
 
         started = time.monotonic()
@@ -322,7 +378,11 @@ class RunContext:
             except Exception as exc:
                 classified = classify_llm_error(exc)
                 instruments().llm_errors.add(
-                    1, {semconv.GEN_AI_REQUEST_MODEL: client.model, semconv.ERROR_CODE: getattr(classified, "code", "error")}
+                    1,
+                    {
+                        semconv.GEN_AI_REQUEST_MODEL: client.model,
+                        semconv.ERROR_CODE: getattr(classified, "code", "error"),
+                    },
                 )
                 if classified is exc:
                     raise
@@ -340,8 +400,14 @@ class RunContext:
                 }
             )
             instruments().llm_duration.record(elapsed, labels)
-            instruments().llm_tokens.record(response.usage.input_tokens, {**labels, semconv.GEN_AI_TOKEN_TYPE: "input"})
-            instruments().llm_tokens.record(response.usage.output_tokens, {**labels, semconv.GEN_AI_TOKEN_TYPE: "output"})
+            instruments().llm_tokens.record(
+                response.usage.input_tokens,
+                {**labels, semconv.GEN_AI_TOKEN_TYPE: "input"},
+            )
+            instruments().llm_tokens.record(
+                response.usage.output_tokens,
+                {**labels, semconv.GEN_AI_TOKEN_TYPE: "output"},
+            )
             if response.cost_usd:
                 instruments().llm_cost.add(response.cost_usd, labels)
             return response
@@ -369,10 +435,14 @@ class RunContext:
 
         await middleware.execute(chat_ctx, final)
         if chat_ctx.chat_result is None:
-            raise RuntimeError("the middleware pipeline finished without producing a chat result")
+            raise RuntimeError(
+                "the middleware pipeline finished without producing a chat result"
+            )
         return chat_ctx.chat_result
 
-    async def _stream(self, client: ChatModel, messages: list[ChatMessage], options: GenerationOptions) -> LLMResponse:
+    async def _stream(
+        self, client: ChatModel, messages: list[ChatMessage], options: GenerationOptions
+    ) -> LLMResponse:
         """Consume the client's stream, publishing live tokens in batches."""
         text: list[str] = []
         reasoning: list[str] = []
@@ -392,7 +462,9 @@ class RunContext:
                 await self._live(batch)
             last_flush = time.monotonic()
 
-        async for event in client.generate_stream(messages, options=options, ctx=self._meta):
+        async for event in client.generate_stream(
+            messages, options=options, ctx=self._meta
+        ):
             if isinstance(event, TextDelta):
                 text.append(event.text)
                 buffered[RunLogKind.TEXT_DELTA] += event.text
@@ -402,7 +474,9 @@ class RunContext:
             elif isinstance(event, CompletionEvent):
                 done = event
             size = sum(len(v) for v in buffered.values())
-            if size >= _STREAM_FLUSH_CHARS or (size and time.monotonic() - last_flush >= _STREAM_FLUSH_S):
+            if size >= _STREAM_FLUSH_CHARS or (
+                size and time.monotonic() - last_flush >= _STREAM_FLUSH_S
+            ):
                 await flush()
         if done is not None and not text:
             # A client that streams nothing and returns one completion: live viewers see
@@ -425,7 +499,9 @@ class RunContext:
 
     # ------------------------------------------------------------------ tools
 
-    async def tool(self, name: str, args: dict[str, Any] | None = None) -> InvocationResult:
+    async def tool(
+        self, name: str, args: dict[str, Any] | None = None
+    ) -> InvocationResult:
         """A journaled tool call.
 
         ``args`` is its own dict, not ``**kwargs``: it is whatever the model supplied
@@ -436,7 +512,9 @@ class RunContext:
 
         invoker = self._tool_invoker
         if invoker is None:
-            raise RuntimeError("no ToolInvoker: set agent.tools before registering the agent")
+            raise RuntimeError(
+                "no ToolInvoker: set agent.tools before registering the agent"
+            )
         if self._invoker_session is None:
             self._invoker_session = invoker.open_session()
         session = self._invoker_session
@@ -457,7 +535,10 @@ class RunContext:
             started = time.monotonic()
             with span(
                 semconv.SPAN_TOOL,
-                attributes={semconv.GEN_AI_TOOL_NAME: name, semconv.GEN_AI_OPERATION: "execute_tool"},
+                attributes={
+                    semconv.GEN_AI_TOOL_NAME: name,
+                    semconv.GEN_AI_OPERATION: "execute_tool",
+                },
             ) as handle:
                 result = await self._invoke_through_middleware(invoker, call, session)
                 outcome = "ok" if result.status == "ok" else result.status
@@ -468,15 +549,22 @@ class RunContext:
             return result.model_dump(mode="json")
 
         outcome = await self._journal.effect(
-            "tool", {"name": name, "args": args}, run, idempotent=_is_idempotent(invoker, name)
+            "tool",
+            {"name": name, "args": args},
+            run,
+            idempotent=_is_idempotent(invoker, name),
         )
         result = InvocationResult.model_validate(outcome.value)
         await self._log_tool_result(outcome.effect_id, name, result)
         return result
 
-    async def _invoke_through_middleware(self, invoker: Any, call: Any, session: Any) -> InvocationResult:
+    async def _invoke_through_middleware(
+        self, invoker: Any, call: Any, session: Any
+    ) -> InvocationResult:
         async def invoke() -> InvocationResult:
-            return await invoker.invoke(call, session=session, ctx=cast("RunContext", self))
+            return await invoker.invoke(
+                call, session=session, ctx=cast("RunContext", self)
+            )
 
         middleware = getattr(self.agent, "middleware", None)
         if middleware is None:
@@ -497,10 +585,14 @@ class RunContext:
 
         await middleware.execute(func_ctx, final)
         if func_ctx.tool_result is None:
-            raise RuntimeError("the middleware pipeline finished without producing a tool result")
+            raise RuntimeError(
+                "the middleware pipeline finished without producing a tool result"
+            )
         return func_ctx.tool_result
 
-    async def _log_tool_result(self, effect_id: str, name: str, result: InvocationResult) -> None:
+    async def _log_tool_result(
+        self, effect_id: str, name: str, result: InvocationResult
+    ) -> None:
         """Write the UI-facing ``tool.result`` entry — on replay too, so it exists
         even if the worker died between recording the step and writing this."""
         ok = result.status == "ok"
@@ -536,7 +628,9 @@ class RunContext:
             ]
         )
 
-    async def tool_batch(self, calls: list[tuple[str, dict[str, Any]]]) -> list[InvocationResult]:
+    async def tool_batch(
+        self, calls: list[tuple[str, dict[str, Any]]]
+    ) -> list[InvocationResult]:
         """Run several tool calls concurrently; results in call order.
 
         Each call is journaled under the path it would have had run one after another,
@@ -549,7 +643,10 @@ class RunContext:
             return [await self.tool(name, args) for name, args in calls]
         stacks = self._journal.fork_scopes(len(calls))
         outcomes = await asyncio.gather(
-            *(self._journal.in_scope(stack, lambda n=name, a=args: self.tool(n, a)) for stack, (name, args) in zip(stacks, calls)),
+            *(
+                self._journal.in_scope(stack, lambda n=name, a=args: self.tool(n, a))
+                for stack, (name, args) in zip(stacks, calls)
+            ),
             return_exceptions=True,
         )
         errors = [o for o in outcomes if isinstance(o, BaseException)]
@@ -561,21 +658,37 @@ class RunContext:
 
     async def send(self, target: Actor, msg: Message) -> None:
         """Fire-and-forget delivery; never suspends the caller."""
-        await self._commit(deliveries=(Delivery(agent=target, msg=msg, tenant=self.tenant_id or "default"),))
+        await self._commit(
+            deliveries=(
+                Delivery(agent=target, msg=msg, tenant=self.tenant_id or "default"),
+            )
+        )
 
     async def emit(self, topic: Topic, msg: Message) -> None:
         """Publish to every follower of ``topic``."""
         followers = await self._store.followers_of(topic)
         if followers:
-            await self._commit(deliveries=tuple(Delivery(agent=f, msg=msg, tenant=self.tenant_id or "default") for f in followers))
+            await self._commit(
+                deliveries=tuple(
+                    Delivery(agent=f, msg=msg, tenant=self.tenant_id or "default")
+                    for f in followers
+                )
+            )
 
     async def reply(self, to: Message, result: JsonObject) -> None:
         """Answer an ``ask``: signals the asker's run."""
         if to.reply_to:
-            await self._store.signal(RunId(to.reply_to), f"reply:{to.correlation_id}", result)
+            await self._store.signal(
+                RunId(to.reply_to), f"reply:{to.correlation_id}", result
+            )
 
     async def ask(
-        self, target: Actor | RunHandle, msg: Message, *, timeout: float, idempotency_key: str | None = None
+        self,
+        target: Actor | RunHandle,
+        msg: Message,
+        *,
+        timeout: float,
+        idempotency_key: str | None = None,
     ) -> AskOutcome:
         """Send ``msg`` and suspend until a reply, the deadline, or the target's end.
 
@@ -589,52 +702,128 @@ class RunContext:
         self.check()
         target_agent = target.agent_id if isinstance(target, RunHandle) else target
         target_run = target.run_id if isinstance(target, RunHandle) else None
-        handle = target if isinstance(target, RunHandle) else RunHandle(run_id=target_run or new_run_id(), agent_id=target_agent, parent_run=RunId(self.run_id))
+        handle = (
+            target
+            if isinstance(target, RunHandle)
+            else RunHandle(
+                run_id=target_run or new_run_id(),
+                agent_id=target_agent,
+                parent_run=RunId(self.run_id),
+            )
+        )
 
         if isinstance(target, RunHandle) and target.boot_correlation_id:
             correlation_id = target.boot_correlation_id
         else:
-            correlation_id = idempotency_key or f"{self.run_id}.{self._journal.peek_path()}"
-            enriched = msg.model_copy(update={"reply_to": self.run_id, "correlation_id": correlation_id})
+            correlation_id = (
+                idempotency_key or f"{self.run_id}.{self._journal.peek_path()}"
+            )
+            enriched = msg.model_copy(
+                update={"reply_to": self.run_id, "correlation_id": correlation_id}
+            )
 
             def build_send(_p: str, _e: str):
                 return {}, lambda entries: self._commit(
-                    [*entries, NewEntry(kind="ask.sent", payload={"target": str(target_agent), "correlation_id": correlation_id}, dedup_key=f"ask.sent:{correlation_id}")],
-                    deliveries=(Delivery(agent=target_agent, msg=enriched, tenant=self.tenant_id or "default"),),
+                    [
+                        *entries,
+                        NewEntry(
+                            kind="ask.sent",
+                            payload={
+                                "target": str(target_agent),
+                                "correlation_id": correlation_id,
+                            },
+                            dedup_key=f"ask.sent:{correlation_id}",
+                        ),
+                    ],
+                    deliveries=(
+                        Delivery(
+                            agent=target_agent,
+                            msg=enriched,
+                            tenant=self.tenant_id or "default",
+                        ),
+                    ),
                 )
 
-            await self._journal.record_atomic("ask.send", {"correlation_id": correlation_id}, build_send)
+            await self._journal.record_atomic(
+                "ask.send", {"correlation_id": correlation_id}, build_send
+            )
 
         def build_deadline(_p: str, _e: str):
             deadline = datetime.now(tz=timezone.utc) + timedelta(seconds=timeout)
-            return {"deadline": deadline.isoformat()}, lambda entries: self._commit(entries)
+            return {"deadline": deadline.isoformat()}, lambda entries: self._commit(
+                entries
+            )
 
         deadline = datetime.fromisoformat(
-            (await self._journal.record_atomic("ask.deadline", {"correlation_id": correlation_id}, build_deadline)).value["deadline"]
+            (
+                await self._journal.record_atomic(
+                    "ask.deadline", {"correlation_id": correlation_id}, build_deadline
+                )
+            ).value["deadline"]
         )
 
         reply_name = f"reply:{correlation_id}"
         names = [reply_name] + ([f"child:{target_run}"] if target_run else [])
-        _path, wait_id, _ = self._journal.peek("ask.wait", {"correlation_id": correlation_id})
+        _path, wait_id, _ = self._journal.peek(
+            "ask.wait", {"correlation_id": correlation_id}
+        )
         for name in names:
-            payload = await self._store.consume(RunId(self.run_id), name, f"{wait_id}:{name}")
+            payload = await self._store.consume(
+                RunId(self.run_id), name, f"{wait_id}:{name}"
+            )
             if payload is None:
                 continue
             if name == reply_name:
-                await self._commit([NewEntry(kind="ask.replied", payload={"correlation_id": correlation_id}, dedup_key=f"ask.replied:{correlation_id}")])
+                await self._commit(
+                    [
+                        NewEntry(
+                            kind="ask.replied",
+                            payload={"correlation_id": correlation_id},
+                            dedup_key=f"ask.replied:{correlation_id}",
+                        )
+                    ]
+                )
                 return AskOutcome(
                     kind="replied",
-                    result=RunResult(run_id=RunId(target_run or ""), status=RunStatus.COMPLETED, output=DataPayload(data=payload)),
+                    result=RunResult(
+                        run_id=RunId(target_run or ""),
+                        status=RunStatus.COMPLETED,
+                        output=DataPayload(data=payload),
+                    ),
                 )
             kind = payload.get("kind", "target_failed")
-            kind = kind if kind in ("target_failed", "target_cancelled") else "target_failed"
-            await self._commit([NewEntry(kind="ask.timeout", payload={"correlation_id": correlation_id, "kind": kind}, dedup_key=f"ask.timeout:{correlation_id}")])
+            kind = (
+                kind
+                if kind in ("target_failed", "target_cancelled")
+                else "target_failed"
+            )
+            await self._commit(
+                [
+                    NewEntry(
+                        kind="ask.timeout",
+                        payload={"correlation_id": correlation_id, "kind": kind},
+                        dedup_key=f"ask.timeout:{correlation_id}",
+                    )
+                ]
+            )
             return AskOutcome(kind=kind, handle=handle)
 
         if datetime.now(tz=timezone.utc) >= deadline:
-            await self._commit([NewEntry(kind="ask.timeout", payload={"correlation_id": correlation_id, "kind": "timed_out"}, dedup_key=f"ask.timeout:{correlation_id}")])
+            await self._commit(
+                [
+                    NewEntry(
+                        kind="ask.timeout",
+                        payload={"correlation_id": correlation_id, "kind": "timed_out"},
+                        dedup_key=f"ask.timeout:{correlation_id}",
+                    )
+                ]
+            )
             return AskOutcome(kind="timed_out", handle=handle)
-        raise SuspendInterrupt(self.run_id, Wakeup(kind="signal", signals=names, at=deadline), reason=f"ask:{correlation_id}")
+        raise SuspendInterrupt(
+            self.run_id,
+            Wakeup(kind="signal", signals=names, at=deadline),
+            reason=f"ask:{correlation_id}",
+        )
 
     async def status(self, handle: RunHandle) -> RunStatusSummary:
         """A one-off peek at a run's progress. Not a stream."""
@@ -645,7 +834,10 @@ class RunContext:
             entries = await self._store.read_events(handle.run_id, from_seq=last_seq)
             last_kind = entries[-1].kind if entries else None
         return RunStatusSummary(
-            run_id=handle.run_id, status=run.status if run else RunStatus.PENDING, last_seq=last_seq, last_milestone=last_kind
+            run_id=handle.run_id,
+            status=run.status if run else RunStatus.PENDING,
+            last_seq=last_seq,
+            last_milestone=last_kind,
         )
 
     async def follow(self, topic: Topic) -> None:
@@ -656,14 +848,22 @@ class RunContext:
 
     # ------------------------------------------------------------------ supervision
 
-    async def spawn(self, child_agent: Actor, *, boot: Message, supervision: Supervision | None = None) -> RunHandle:
+    async def spawn(
+        self,
+        child_agent: Actor,
+        *,
+        boot: Message,
+        supervision: Supervision | None = None,
+    ) -> RunHandle:
         """Spawn a child run at an address you already know — a flow's fixed steps, an
         orchestrator's configured sub-agents. For a *new* actor by type, use
         ``spawn_child``, which derives a collision-free address."""
         self.check()
         return await self._spawn(child_agent, boot=boot, supervision=supervision)
 
-    async def spawn_child(self, actor_type: str, *, boot: Message, supervision: Supervision | None = None) -> RunHandle:
+    async def spawn_child(
+        self, actor_type: str, *, boot: Message, supervision: Supervision | None = None
+    ) -> RunHandle:
         """Spawn a new actor of ``actor_type`` at an address derived from the tree, this
         run and this call's position, so two parents spawning the same type cannot land
         on one mailbox."""
@@ -671,9 +871,15 @@ class RunContext:
         root = self._meta.supervision.root_id if self._meta.supervision else None
         root_key = (root.key or root.type) if root is not None else self.run_id
         path = self._journal.peek_path()
-        return await self._spawn(Actor(type=actor_type, key=f"{root_key}/{self.run_id}.{path}"), boot=boot, supervision=supervision)
+        return await self._spawn(
+            Actor(type=actor_type, key=f"{root_key}/{self.run_id}.{path}"),
+            boot=boot,
+            supervision=supervision,
+        )
 
-    async def _spawn(self, child_agent: Actor, *, boot: Message, supervision: Supervision | None) -> RunHandle:
+    async def _spawn(
+        self, child_agent: Actor, *, boot: Message, supervision: Supervision | None
+    ) -> RunHandle:
         if supervision is not None:
             sup = supervision
         elif self._meta.supervision is not None:
@@ -686,7 +892,9 @@ class RunContext:
             # caller builds fresh each time: a later ``ask(handle)`` has to find the reply.
             correlation_id = f"{self.run_id}.{path}"
             child_run = new_run_id()
-            boot_msg = boot.model_copy(update={"reply_to": self.run_id, "correlation_id": correlation_id})
+            boot_msg = boot.model_copy(
+                update={"reply_to": self.run_id, "correlation_id": correlation_id}
+            )
             spec = RunSpec(
                 agent=child_agent,
                 tenant=self.tenant_id or "default",
@@ -696,12 +904,19 @@ class RunContext:
                 priority=sup.priority,
                 trace=self._trace_child(),
             )
-            value = {"run_id": str(child_run), "agent": str(child_agent), "correlation_id": correlation_id}
+            value = {
+                "run_id": str(child_run),
+                "agent": str(child_agent),
+                "correlation_id": correlation_id,
+            }
             return value, lambda entries: self._commit(
-                entries, spawns=(SpawnSpec(effect_id=effect_id, child=spec, boot=boot_msg),)
+                entries,
+                spawns=(SpawnSpec(effect_id=effect_id, child=spec, boot=boot_msg),),
             )
 
-        outcome = await self._journal.record_atomic("spawn", {"agent": str(child_agent)}, build)
+        outcome = await self._journal.record_atomic(
+            "spawn", {"agent": str(child_agent)}, build
+        )
         v = outcome.value
         return RunHandle(
             run_id=RunId(v["run_id"]),
@@ -718,16 +933,35 @@ class RunContext:
         """Suspend until the child reaches a terminal state, then return how it ended."""
         self.check()
         name = f"child:{handle.run_id}"
-        _path, claim_id, _ = self._journal.peek("join.wait", {"child_run": str(handle.run_id)})
+        _path, claim_id, _ = self._journal.peek(
+            "join.wait", {"child_run": str(handle.run_id)}
+        )
         payload = await self._store.consume(RunId(self.run_id), name, claim_id)
         if payload is not None:
             status = RunStatus(payload["status"])
             error = payload.get("error")
             await self._commit(
-                [NewEntry(kind="join.completed", payload={"child_run": str(handle.run_id), "status": status.value}, dedup_key=f"join:{handle.run_id}")]
+                [
+                    NewEntry(
+                        kind="join.completed",
+                        payload={
+                            "child_run": str(handle.run_id),
+                            "status": status.value,
+                        },
+                        dedup_key=f"join:{handle.run_id}",
+                    )
+                ]
             )
-            return RunResult(run_id=handle.run_id, status=status, error=str(error["message"]) if isinstance(error, dict) else None)
-        raise SuspendInterrupt(self.run_id, Wakeup(kind="signal", signals=[name]), reason=f"join:{handle.run_id}")
+            return RunResult(
+                run_id=handle.run_id,
+                status=status,
+                error=str(error["message"]) if isinstance(error, dict) else None,
+            )
+        raise SuspendInterrupt(
+            self.run_id,
+            Wakeup(kind="signal", signals=[name]),
+            reason=f"join:{handle.run_id}",
+        )
 
     async def sleep_until_signal(self, name: str) -> JsonObject:
         """Suspend until a named signal arrives. A replay re-claims the same payload
@@ -736,9 +970,21 @@ class RunContext:
         _path, claim_id, _ = self._journal.peek("signal.wait", {"name": name})
         payload = await self._store.consume(RunId(self.run_id), name, claim_id)
         if payload is not None:
-            await self._commit([NewEntry(kind=RunLogKind.RUN_RESUMED, payload={"signal": name}, dedup_key=f"resumed:{claim_id}")])
+            await self._commit(
+                [
+                    NewEntry(
+                        kind=RunLogKind.RUN_RESUMED,
+                        payload={"signal": name},
+                        dedup_key=f"resumed:{claim_id}",
+                    )
+                ]
+            )
             return payload
-        raise SuspendInterrupt(self.run_id, Wakeup(kind="signal", signals=[name]), reason=f"sleep_until_signal:{name}")
+        raise SuspendInterrupt(
+            self.run_id,
+            Wakeup(kind="signal", signals=[name]),
+            reason=f"sleep_until_signal:{name}",
+        )
 
     async def sleep_until(self, dt: datetime) -> None:
         """Suspend until a wall-clock time. Deliberately reads the real clock on every
@@ -746,7 +992,11 @@ class RunContext:
         self.check()
         if datetime.now(tz=timezone.utc) >= dt:
             return
-        raise SuspendInterrupt(self.run_id, Wakeup(kind="timer", at=dt), reason=f"sleep_until:{dt.isoformat()}")
+        raise SuspendInterrupt(
+            self.run_id,
+            Wakeup(kind="timer", at=dt),
+            reason=f"sleep_until:{dt.isoformat()}",
+        )
 
 
 def _serialize(resp: LLMResponse) -> JsonObject:
@@ -770,7 +1020,9 @@ def _deserialize(value: JsonObject) -> LLMResponse:
     usage = value["usage"]
     return LLMResponse(
         # Read back from the journal, which a newer version may have written.
-        content=[parse_content_block(d, forward_compatible=True) for d in value["content"]],
+        content=[
+            parse_content_block(d, forward_compatible=True) for d in value["content"]
+        ],
         usage=Usage(
             input_tokens=usage["input_tokens"],
             cached_tokens=usage["cached_tokens"],

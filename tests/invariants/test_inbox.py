@@ -22,7 +22,9 @@ AGENT = Actor("agent", "a")
 
 
 def _message() -> Message:
-    return Message(target=AGENT, sender=Actor.system("test"), payload=DataPayload(data={"n": 1}))
+    return Message(
+        target=AGENT, sender=Actor.system("test"), payload=DataPayload(data={"n": 1})
+    )
 
 
 async def test_redelivery_before_ack_is_deduplicated() -> None:
@@ -31,8 +33,12 @@ async def test_redelivery_before_ack_is_deduplicated() -> None:
     await store.start()
     try:
         message = _message()
-        assert (await store.deliver(Delivery(agent=AGENT, msg=message), wake=False)).accepted is True
-        assert (await store.deliver(Delivery(agent=AGENT, msg=message), wake=False)).accepted is False
+        assert (
+            await store.deliver(Delivery(agent=AGENT, msg=message), wake=False)
+        ).accepted is True
+        assert (
+            await store.deliver(Delivery(agent=AGENT, msg=message), wake=False)
+        ).accepted is False
         assert len(await store.drain(AGENT)) == 1
     finally:
         await store.aclose()
@@ -46,13 +52,21 @@ async def test_i12_redelivery_after_ack_is_rejected() -> None:
     try:
         message = _message()
         await store.deliver(Delivery(agent=AGENT, msg=message))
-        (lease,) = await store.lease(worker_id="w", capacity=1, lease_s=30, now=datetime.now(timezone.utc))
+        (lease,) = await store.lease(
+            worker_id="w", capacity=1, lease_s=30, now=datetime.now(timezone.utc)
+        )
         (drained,) = await store.drain(AGENT)
         await store.commit(lease, Commit(ack=(drained.id,), outcome=Complete()))
 
-        redelivered = await store.deliver(Delivery(agent=AGENT, msg=message), wake=False)
+        redelivered = await store.deliver(
+            Delivery(agent=AGENT, msg=message), wake=False
+        )
 
-        assert redelivered.accepted is False, "an already-processed message id was accepted again"
-        assert await store.drain(AGENT) == [], "an already-processed message was handed to the agent a second time"
+        assert redelivered.accepted is False, (
+            "an already-processed message id was accepted again"
+        )
+        assert await store.drain(AGENT) == [], (
+            "an already-processed message was handed to the agent a second time"
+        )
     finally:
         await store.aclose()

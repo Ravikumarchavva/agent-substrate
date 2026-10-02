@@ -157,7 +157,11 @@ class MCPTool:
 
     @classmethod
     async def from_mcp_client(
-        cls, client: MCPClient, *, risk: ToolRisk = ToolRisk.HIGH, idempotent: bool = False
+        cls,
+        client: MCPClient,
+        *,
+        risk: ToolRisk = ToolRisk.HIGH,
+        idempotent: bool = False,
     ) -> list["MCPTool"]:
         """Create MCPTool instances for all tools from an MCP server.
 

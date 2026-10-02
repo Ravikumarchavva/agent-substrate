@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING
 
 from substrate.types.content import ChatMessage, Role, TextBlock
 from substrate.models.protocols import GenerationOptions
-from substrate.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_message_tokens, estimate_tokens
+from substrate.context.tokens import (
+    DEFAULT_CHARS_PER_TOKEN,
+    estimate_message_tokens,
+    estimate_tokens,
+)
 
 if TYPE_CHECKING:
     from substrate.models.protocols import ChatModel

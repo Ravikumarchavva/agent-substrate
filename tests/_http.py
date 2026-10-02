@@ -23,11 +23,18 @@ def serve(handler: Handler) -> Iterator[str]:
         def _answer(self) -> None:
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length) if length else b""
-            request = httpx.Request(self.command, f"http://127.0.0.1{self.path}", headers=dict(self.headers), content=body)
+            request = httpx.Request(
+                self.command,
+                f"http://127.0.0.1{self.path}",
+                headers=dict(self.headers),
+                content=body,
+            )
             response = handler(request)
             payload = response.content
             self.send_response(response.status_code)
-            self.send_header("Content-Type", response.headers.get("content-type", "application/json"))
+            self.send_header(
+                "Content-Type", response.headers.get("content-type", "application/json")
+            )
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)

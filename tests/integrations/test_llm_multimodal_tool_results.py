@@ -9,7 +9,14 @@ from substrate.integrations.llm.anthropic.anthropic_client import AnthropicClien
 from substrate.integrations.llm.encoders import openai as openai_enc
 from substrate.integrations.llm.gemini.gemini_client import GeminiClient
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.types import ChatMessage, MediaBlock, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import (
+    ChatMessage,
+    MediaBlock,
+    Role,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 
@@ -31,7 +38,10 @@ def _plot(call_id: str = "c1") -> ToolResultBlock:
     return ToolResultBlock(
         call_id=call_id,
         name="plot",
-        content=[TextBlock(text="chart saved"), MediaBlock.image(data=PNG, media_type="image/png")],
+        content=[
+            TextBlock(text="chart saved"),
+            MediaBlock.image(data=PNG, media_type="image/png"),
+        ],
     )
 
 
@@ -61,7 +71,12 @@ def test_openai_text_only_tool_result_stays_a_plain_string():
 
 
 def test_openai_sends_documents_as_input_file_not_a_stub():
-    doc = MediaBlock(type="document", data=b"%PDF-1.4", media_type="application/pdf", filename="r.pdf")
+    doc = MediaBlock(
+        type="document",
+        data=b"%PDF-1.4",
+        media_type="application/pdf",
+        filename="r.pdf",
+    )
     msg = ChatMessage(role=Role.USER, content=[TextBlock(text="read this"), doc])
     _, items = OpenAIClient(model="gpt-4o", api_key="x")._serialize_messages([msg])
 
@@ -71,8 +86,12 @@ def test_openai_sends_documents_as_input_file_not_a_stub():
 
 
 def test_openai_flags_tool_errors():
-    err = ToolResultBlock(call_id="c1", name="t", is_error=True, content=[TextBlock(text="boom")])
-    _, items = OpenAIClient(model="gpt-4o", api_key="x")._serialize_messages(_conversation(err))
+    err = ToolResultBlock(
+        call_id="c1", name="t", is_error=True, content=[TextBlock(text="boom")]
+    )
+    _, items = OpenAIClient(model="gpt-4o", api_key="x")._serialize_messages(
+        _conversation(err)
+    )
     (out,) = [i for i in items if i["type"] == "function_call_output"]
     assert out["output"] == "Error: boom"
 
@@ -94,14 +113,18 @@ def test_openai_encoder_helpers_use_real_api_shapes():
         "input_audio": {"data": "UklGRg==", "format": "wav"},
     }
     video = MediaBlock.video(data=b"x", media_type="video/mp4")
-    assert openai_enc._encode_media_item(video)["type"] == "input_text"  # no video input exists
+    assert (
+        openai_enc._encode_media_item(video)["type"] == "input_text"
+    )  # no video input exists
 
 
 # ── Anthropic ────────────────────────────────────────────────────────────────
 
 
 def test_anthropic_tool_result_carries_image_and_error_flag():
-    err = ToolResultBlock(call_id="c2", name="plot", is_error=True, content=[TextBlock(text="boom")])
+    err = ToolResultBlock(
+        call_id="c2", name="plot", is_error=True, content=[TextBlock(text="boom")]
+    )
     _, msgs = AnthropicClient(model="claude-sonnet-4", api_key="x")._serialize_messages(
         _conversation(_plot("c1"), err)
     )
@@ -116,29 +139,34 @@ def test_anthropic_tool_result_carries_image_and_error_flag():
 
 
 def test_gemini_answers_parallel_calls_in_one_turn():
-    err = ToolResultBlock(call_id="c2", name="plot", is_error=True, content=[TextBlock(text="boom")])
-    _, contents = GeminiClient(model="gemini-2.5-flash", api_key="x")._serialize_messages(
-        _conversation(_plot("c1"), err)
+    err = ToolResultBlock(
+        call_id="c2", name="plot", is_error=True, content=[TextBlock(text="boom")]
     )
+    _, contents = GeminiClient(
+        model="gemini-2.5-flash", api_key="x"
+    )._serialize_messages(_conversation(_plot("c1"), err))
     tool_turn = contents[-1]
 
     assert tool_turn.role == "user"
     responses = [p.function_response for p in tool_turn.parts if p.function_response]
-    assert [r.response for r in responses] == [{"output": "chart saved"}, {"error": "boom"}]
+    assert [r.response for r in responses] == [
+        {"output": "chart saved"},
+        {"error": "boom"},
+    ]
 
 
 def test_gemini_3_embeds_media_in_the_function_response():
-    _, contents = GeminiClient(model="gemini-3.1-flash-lite", api_key="x")._serialize_messages(
-        _conversation(_plot())
-    )
+    _, contents = GeminiClient(
+        model="gemini-3.1-flash-lite", api_key="x"
+    )._serialize_messages(_conversation(_plot()))
     (part,) = contents[-1].parts
     assert part.function_response.parts[0].inline_data.mime_type == "image/png"
 
 
 def test_gemini_2_5_appends_media_to_the_same_turn():
-    _, contents = GeminiClient(model="gemini-2.5-flash", api_key="x")._serialize_messages(
-        _conversation(_plot())
-    )
+    _, contents = GeminiClient(
+        model="gemini-2.5-flash", api_key="x"
+    )._serialize_messages(_conversation(_plot()))
     fr, media = contents[-1].parts
     assert fr.function_response.parts is None
     assert media.inline_data.mime_type == "image/png"

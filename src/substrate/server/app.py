@@ -113,9 +113,13 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-        rt = runtime or Runtime(store if isinstance(store, Store) else Store.at(store or "./.substrate"))
+        rt = runtime or Runtime(
+            store if isinstance(store, Store) else Store.at(store or "./.substrate")
+        )
         built = agent
-        if callable(built) and not hasattr(built, "id"):  # a factory (an agent has an ``id``)
+        if callable(built) and not hasattr(
+            built, "id"
+        ):  # a factory (an agent has an ``id``)
             built = built()
             if inspect.isawaitable(built):
                 built = await built
@@ -132,7 +136,12 @@ def create_app(
 
     app = FastAPI(title=title, lifespan=lifespan)
     if cors_origins:
-        app.add_middleware(CORSMiddleware, allow_origins=list(cors_origins), allow_methods=["*"], allow_headers=["*"])
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(cors_origins),
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     router = APIRouter(dependencies=list(dependencies))
 
@@ -141,7 +150,9 @@ def create_app(
 
     async def owned_run(request: Request, run_id: str) -> Any:
         run = await rt_of(request).get_run(run_id)
-        if run is None or run.tenant != tenant(request):  # another tenant's run is indistinguishable from none
+        if run is None or run.tenant != tenant(
+            request
+        ):  # another tenant's run is indistinguishable from none
             raise HTTPException(404, "no such run")
         return run
 
@@ -151,16 +162,28 @@ def create_app(
 
     async def begin(request: Request, prompt: str, thread: str | None) -> str:
         try:
-            return await streaming.start(rt_of(request), request.app.state.agent, prompt, thread=thread, tenant=tenant(request))
+            return await streaming.start(
+                rt_of(request),
+                request.app.state.agent,
+                prompt,
+                thread=thread,
+                tenant=tenant(request),
+            )
         except ThreadBusyError:
-            raise HTTPException(409, f"thread {thread!r} already has an active run") from None
+            raise HTTPException(
+                409, f"thread {thread!r} already has an active run"
+            ) from None
 
     # -- SSE wire protocol -----------------------------------------------------------------------------------------
 
-    async def wire_frames(request: Request, run_id: str, from_seq: int, *, hello: bool) -> AsyncIterator[str]:
+    async def wire_frames(
+        request: Request, run_id: str, from_seq: int, *, hello: bool
+    ) -> AsyncIterator[str]:
         if hello:
             yield _frame(HelloEvent())
-        replay = await streaming.is_finished(rt_of(request), run_id)  # a finished run has no token deltas, only messages
+        replay = await streaming.is_finished(
+            rt_of(request), run_id
+        )  # a finished run has no token deltas, only messages
         terminal = False
         async for entry in streaming.follow(rt_of(request), run_id, from_seq=from_seq):
             payload = entry.payload or {}
@@ -173,7 +196,13 @@ def create_app(
                 yield _frame(wire)
         if not terminal and replay:  # resumed past the end: say how it ended
             run = await rt_of(request).get_run(run_id)
-            yield _frame(RunCompletedEvent() if run and run.status.value == "completed" else RunCancelledEvent() if run and run.status.value == "cancelled" else RunFailedEvent(error="run failed"))
+            yield _frame(
+                RunCompletedEvent()
+                if run and run.status.value == "completed"
+                else RunCancelledEvent()
+                if run and run.status.value == "cancelled"
+                else RunFailedEvent(error="run failed")
+            )
         yield "data: [DONE]\n\n"
 
     @router.post(chat_path)
@@ -186,10 +215,14 @@ def create_app(
         )
 
     @router.get("/runs/{run_id}/events")
-    async def run_events(run_id: str, request: Request, from_seq: int = 0) -> StreamingResponse:
+    async def run_events(
+        run_id: str, request: Request, from_seq: int = 0
+    ) -> StreamingResponse:
         await owned_run(request, run_id)
         return StreamingResponse(
-            kept_alive(wire_frames(request, run_id, from_seq, hello=True)), media_type="text/event-stream", headers=_SSE
+            kept_alive(wire_frames(request, run_id, from_seq, hello=True)),
+            media_type="text/event-stream",
+            headers=_SSE,
         )
 
     # -- AG-UI -----------------------------------------------------------------------------------------------------
@@ -197,12 +230,18 @@ def create_app(
     if agui_path is not None:
 
         @router.post(agui_path)
-        async def agui_run(body: agui.RunAgentInput, request: Request) -> StreamingResponse:
+        async def agui_run(
+            body: agui.RunAgentInput, request: Request
+        ) -> StreamingResponse:
             prompt = body.prompt()
             if prompt is None:
                 raise HTTPException(422, "RunAgentInput has no user message to run")
             run_id = await begin(request, prompt, body.thread_id)
-            translator = agui.Translator(thread_id=body.thread_id, run_id=body.run_id or run_id, engine_run_id=run_id)
+            translator = agui.Translator(
+                thread_id=body.thread_id,
+                run_id=body.run_id or run_id,
+                engine_run_id=run_id,
+            )
 
             async def frames() -> AsyncIterator[str]:
                 for event in translator.start():
@@ -212,7 +251,9 @@ def create_app(
                         yield agui.encode(event)
 
             return StreamingResponse(
-                kept_alive(frames()), media_type="text/event-stream", headers={**_SSE, "X-Run-Id": run_id}
+                kept_alive(frames()),
+                media_type="text/event-stream",
+                headers={**_SSE, "X-Run-Id": run_id},
             )
 
     # -- control and approvals -------------------------------------------------------------------------------------
@@ -220,25 +261,43 @@ def create_app(
     @router.post("/runs/{run_id}/cancel")
     async def cancel(run_id: str, request: Request) -> dict[str, Any]:
         await owned_run(request, run_id)
-        return {"cancelled": [str(r) for r in await rt_of(request).cancel(run_id, reason="user_requested")]}
+        return {
+            "cancelled": [
+                str(r)
+                for r in await rt_of(request).cancel(run_id, reason="user_requested")
+            ]
+        }
 
     @router.get("/runs/{run_id}/approvals")
     async def approvals(run_id: str, request: Request) -> list[dict[str, Any]]:
         await owned_run(request, run_id)
         return [
-            ApprovalRequestedEvent(request_id=p.request_id, tool_name=p.tool_name, args=p.args, risk=p.risk, summary=p.summary).model_dump()
+            ApprovalRequestedEvent(
+                request_id=p.request_id,
+                tool_name=p.tool_name,
+                args=p.args,
+                risk=p.risk,
+                summary=p.summary,
+            ).model_dump()
             for p in await rt_of(request).pending_approvals(run_id)
         ]
 
     @router.post("/runs/{run_id}/approvals/{request_id}")
-    async def decide(run_id: str, request_id: str, body: DecisionRequest, request: Request) -> dict[str, str]:
+    async def decide(
+        run_id: str, request_id: str, body: DecisionRequest, request: Request
+    ) -> dict[str, str]:
         await owned_run(request, run_id)
         rt = rt_of(request)
         if request_id not in {p.request_id for p in await rt.pending_approvals(run_id)}:
             raise HTTPException(404, "no such pending approval")
         try:
             await rt.decide(
-                run_id, request_id, body.decision, by=identity(request), reason=body.reason, modified_args=body.modified_args
+                run_id,
+                request_id,
+                body.decision,
+                by=identity(request),
+                reason=body.reason,
+                modified_args=body.modified_args,
             )
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None

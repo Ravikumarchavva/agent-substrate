@@ -20,7 +20,11 @@ from substrate_cloud.factory import (
     build_chat_tools,
 )
 from substrate.runtime import Message, ChatPayload
-from substrate.types import ChatMessage as KernelChatMessage, Role, TextBlock as KernelTextBlock
+from substrate.types import (
+    ChatMessage as KernelChatMessage,
+    Role,
+    TextBlock as KernelTextBlock,
+)
 from substrate.types import Actor
 
 logger = logging.getLogger(__name__)

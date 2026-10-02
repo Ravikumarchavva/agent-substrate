@@ -61,7 +61,9 @@ class CitationLedger:
         found = self._indices.get(key)
         if found is not None:
             return found
-        if len(self._indices) >= self._max:  # a long-lived tool must not grow without bound; renumbering later turns is harmless
+        if (
+            len(self._indices) >= self._max
+        ):  # a long-lived tool must not grow without bound; renumbering later turns is harmless
             self._indices.clear()
         self._indices[key] = len(self._indices) + 1
         return self._indices[key]

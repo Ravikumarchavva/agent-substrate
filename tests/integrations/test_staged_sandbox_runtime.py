@@ -90,9 +90,14 @@ async def _seed_branch(object_store, ws_store, files: dict[str, bytes]) -> None:
         (tmp_seed / name).parent.mkdir(parents=True, exist_ok=True)
         (tmp_seed / name).write_bytes(data)
     parent = await ws_store.get_branch_snapshot_head(CONVERSATION, BRANCH)
-    snap = await commit(cas, tmp_seed, session_id=CONVERSATION, branch_id=BRANCH, parent=parent)
+    snap = await commit(
+        cas, tmp_seed, session_id=CONVERSATION, branch_id=BRANCH, parent=parent
+    )
     await ws_store.commit_snapshot(
-        CONVERSATION, BRANCH, snap, expected_parent_snapshot_id=parent.id if parent else None
+        CONVERSATION,
+        BRANCH,
+        snap,
+        expected_parent_snapshot_id=parent.id if parent else None,
     )
 
 
@@ -107,7 +112,9 @@ def spec() -> SandboxSpec:
     )
 
 
-async def _runtime(tmp_path: Path, inner) -> tuple[StagedSandboxRuntime, Files, Workspaces]:
+async def _runtime(
+    tmp_path: Path, inner
+) -> tuple[StagedSandboxRuntime, Files, Workspaces]:
     store = Store.at(tmp_path / "objects", file_quota_bytes=10_000_000).files
     ws_store = Workspaces(Store.at(tmp_path / "ws_store"))
     runtime = StagedSandboxRuntime(
@@ -121,7 +128,9 @@ async def _runtime(tmp_path: Path, inner) -> tuple[StagedSandboxRuntime, Files, 
 
 async def test_stage_in_materialises_the_branchs_committed_files(tmp_path, spec):
     runtime, store, ws_store = await _runtime(tmp_path, FakeInner(tmp_path / "scratch"))
-    await _seed_branch(store, ws_store, {"data.csv": b"a,b\n1,2\n", "sub/notes.txt": b"hello"})
+    await _seed_branch(
+        store, ws_store, {"data.csv": b"a,b\n1,2\n", "sub/notes.txt": b"hello"}
+    )
 
     await runtime.execute(spec)
 
@@ -141,8 +150,12 @@ async def test_fresh_branch_with_no_snapshot_gets_an_empty_scratch_dir(tmp_path,
     assert result.ok
 
 
-async def test_stage_out_commits_a_new_snapshot_with_only_the_changed_files(tmp_path, spec):
-    inner = FakeInner(tmp_path / "scratch", outputs=[_inline("chart.png", b"PNG", "image/png")])
+async def test_stage_out_commits_a_new_snapshot_with_only_the_changed_files(
+    tmp_path, spec
+):
+    inner = FakeInner(
+        tmp_path / "scratch", outputs=[_inline("chart.png", b"PNG", "image/png")]
+    )
     runtime, store, ws_store = await _runtime(tmp_path, inner)
     await _seed_branch(store, ws_store, {"input.csv": b"untouched"})
 
@@ -150,7 +163,9 @@ async def test_stage_out_commits_a_new_snapshot_with_only_the_changed_files(tmp_
     # simulate what a real runtime would: the output file lands in scratch.
     async def _execute_and_write(spec):
         (tmp_path / "scratch" / SESSION_KEY / "chart.png").write_bytes(b"PNG")
-        return ExecResult(stdout="ran", output_files=[_inline("chart.png", b"PNG", "image/png")])
+        return ExecResult(
+            stdout="ran", output_files=[_inline("chart.png", b"PNG", "image/png")]
+        )
 
     inner.execute = _execute_and_write  # type: ignore[method-assign]
 
@@ -179,7 +194,9 @@ async def test_commit_conflict_does_not_fail_the_run(tmp_path, spec):
     assert snap_a is not None
 
     # Another writer commits to main, advancing the real head past snap_a.
-    await _seed_branch(store, ws_store, {"a.txt": b"v1", "b.txt": b"from another writer"})
+    await _seed_branch(
+        store, ws_store, {"a.txt": b"v1", "b.txt": b"from another writer"}
+    )
     snap_b = await ws_store.get_branch_snapshot_head(CONVERSATION, BRANCH)
     assert snap_b is not None and snap_b.id != snap_a.id
 
@@ -208,7 +225,9 @@ async def test_concurrent_runs_on_one_session_are_serialised(tmp_path, spec):
             order.append("end")
             return ExecResult(stdout="ran")
 
-    runtime, _store, _ws_store = await _runtime(tmp_path, SlowInner(tmp_path / "scratch"))
+    runtime, _store, _ws_store = await _runtime(
+        tmp_path, SlowInner(tmp_path / "scratch")
+    )
 
     await asyncio.gather(runtime.execute(spec), runtime.execute(spec))
 

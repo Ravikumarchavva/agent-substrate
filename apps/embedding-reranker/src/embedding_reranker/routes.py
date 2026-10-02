@@ -67,14 +67,18 @@ def _item(value: object) -> str | list[str | bytes]:
         return [_part(part) for part in value["content"]]
     if isinstance(value, dict) and "image" in value:
         return [_part(value)]
-    raise HTTPException(400, "an input is a string, {'image': '<base64>'} or {'content': [...]}")
+    raise HTTPException(
+        400, "an input is a string, {'image': '<base64>'} or {'content': [...]}"
+    )
 
 
 def _engine_failure(exc: Exception) -> HTTPException:
     """A sidecar that cannot be reached or answers nonsense is 503 (the caller may retry or fall back); too long an input is 400."""
     text = str(exc)
     if "exceeds the available context" in text or "too long" in text.lower():
-        return HTTPException(400, f"input exceeds the maximum context length: {text[:300]}")
+        return HTTPException(
+            400, f"input exceeds the maximum context length: {text[:300]}"
+        )
     return HTTPException(503, text[:300])
 
 
@@ -85,12 +89,16 @@ async def embeddings(body: EmbeddingsRequest, request: Request, _: Authed):
     items = [_item(value) for value in body.input]
     try:
         vectors = await request.app.state.engine.embed_batch(
-            items, query=body.input_type == "query", instruction=getattr(cfg, "query_instruction", "")
+            items,
+            query=body.input_type == "query",
+            instruction=getattr(cfg, "query_instruction", ""),
         )
     except EngineError as exc:
         raise _engine_failure(exc) from exc
     return EmbeddingsResponse(
-        data=[EmbeddingRow(index=i, embedding=vector) for i, vector in enumerate(vectors)],
+        data=[
+            EmbeddingRow(index=i, embedding=vector) for i, vector in enumerate(vectors)
+        ],
         model=getattr(cfg, "embed_model_name", "qwen3-vl-embedding"),
     )
 
@@ -103,8 +111,14 @@ async def rerank(body: RerankRequest, request: Request, _: Authed):
         scores = await request.app.state.engine.rerank(body.query, body.documents)
     except EngineError as exc:
         raise _engine_failure(exc) from exc
-    rows = sorted((RerankRow(index=i, relevance_score=s) for i, s in enumerate(scores)), key=lambda r: -r.relevance_score)
-    return RerankResponse(results=rows[: body.top_n] if body.top_n else rows, model=getattr(cfg, "rerank_model_name", "qwen3-vl-reranker"))
+    rows = sorted(
+        (RerankRow(index=i, relevance_score=s) for i, s in enumerate(scores)),
+        key=lambda r: -r.relevance_score,
+    )
+    return RerankResponse(
+        results=rows[: body.top_n] if body.top_n else rows,
+        model=getattr(cfg, "rerank_model_name", "qwen3-vl-reranker"),
+    )
 
 
 @router.get("/models", response_model=ModelsResponse)

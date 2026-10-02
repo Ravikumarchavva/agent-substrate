@@ -40,7 +40,9 @@ async def upload_document(
     prefix = knowledge_document_prefix(claims.tenant_id, knowledge_base_id, document_id)
     storage_key = f"{prefix}/original/{name}"
     content_type = file.content_type or "application/octet-stream"
-    await ctx.files_for(claims.tenant_id).upload(storage_key, data, content_type=content_type)
+    await ctx.files_for(claims.tenant_id).upload(
+        storage_key, data, content_type=content_type
+    )
     checksum = hashlib.sha256(data).hexdigest()
 
     # File it in the knowledge base (read once; chunked and embedded if an embedder is configured). The original is kept either way: a
@@ -55,13 +57,27 @@ async def upload_document(
                 resource=storage_key,
                 content_type=content_type,
                 sha256=checksum,
-                metadata={"document_id": document_id, "knowledge_base_id": knowledge_base_id},
+                metadata={
+                    "document_id": document_id,
+                    "knowledge_base_id": knowledge_base_id,
+                },
             )
-            indexed = {"indexed": True, "library_document": added.document, "sections": added.sections, "pages": added.pages, "warnings": list(added.warnings)}
+            indexed = {
+                "indexed": True,
+                "library_document": added.document,
+                "sections": added.sections,
+                "pages": added.pages,
+                "warnings": list(added.warnings),
+            }
         except DocumentError as exc:
             indexed = {"indexed": False, "error": str(exc)}
         except Exception as exc:  # noqa: BLE001 — the original is stored; a failure to index must not lose the upload
-            logger.warning("indexing %s into knowledge base %s failed: %s", name, knowledge_base_id, exc)
+            logger.warning(
+                "indexing %s into knowledge base %s failed: %s",
+                name,
+                knowledge_base_id,
+                exc,
+            )
             indexed = {"indexed": False, "error": "the document could not be indexed"}
     return {
         "document_id": document_id,

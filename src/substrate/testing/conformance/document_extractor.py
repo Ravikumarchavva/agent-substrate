@@ -21,7 +21,11 @@ import pytest
 from substrate.documents.protocols import DocumentExtractor
 from substrate.documents.types import ExtractionResult
 
-PAGES = ["Invoice 4417 total due 120 EUR", "Second page: shipping to Rotterdam", "Third page: terms and conditions"]
+PAGES = [
+    "Invoice 4417 total due 120 EUR",
+    "Second page: shipping to Rotterdam",
+    "Third page: terms and conditions",
+]
 
 
 class Provider(Protocol):
@@ -46,7 +50,13 @@ def pdf(pages: list[str]) -> bytes:
     n = len(pages)
     page_ids = [3 + 2 * i for i in range(n)]
     objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
-    objects.append(("<< /Type /Pages /Kids [" + " ".join(f"{p} 0 R" for p in page_ids) + f"] /Count {n} >>").encode())
+    objects.append(
+        (
+            "<< /Type /Pages /Kids ["
+            + " ".join(f"{p} 0 R" for p in page_ids)
+            + f"] /Count {n} >>"
+        ).encode()
+    )
     font_id = 3 + 2 * n
     for i, text in enumerate(pages):
         content_id = 4 + 2 * i
@@ -55,7 +65,13 @@ def pdf(pages: list[str]) -> bytes:
         )
         escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
         stream = f"BT /F1 14 Tf 72 720 Td ({escaped}) Tj ET".encode()
-        objects.append(b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream")
+        objects.append(
+            b"<< /Length "
+            + str(len(stream)).encode()
+            + b" >>\nstream\n"
+            + stream
+            + b"\nendstream"
+        )
     objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
     out = b"%PDF-1.4\n"
     offsets = []
@@ -75,30 +91,44 @@ class DocumentExtractorConformance:
     def provider(self) -> Provider:  # pragma: no cover - supplied by subclasses
         raise NotImplementedError
 
-    async def read(self, provider: Provider, pages: list[str] = PAGES) -> ExtractionResult:
+    async def read(
+        self, provider: Provider, pages: list[str] = PAGES
+    ) -> ExtractionResult:
         data, filename = provider.document(pages)
         return await provider.extractor().read(data, filename)
 
-    async def test_every_pages_text_comes_out_in_order(self, provider: Provider) -> None:
+    async def test_every_pages_text_comes_out_in_order(
+        self, provider: Provider
+    ) -> None:
         result = await self.read(provider)
         assert result.success and result.error is None
         body = result.markdown or " ".join(p.text for p in result.pages)
-        positions = [body.find(token) for token in ("4417", "Rotterdam", "terms and conditions")]
+        positions = [
+            body.find(token) for token in ("4417", "Rotterdam", "terms and conditions")
+        ]
         assert all(p >= 0 for p in positions), f"text went missing: {positions}"
         assert positions == sorted(positions), "pages were reordered"
 
-    async def test_pages_are_numbered_from_one_in_order(self, provider: Provider) -> None:
+    async def test_pages_are_numbered_from_one_in_order(
+        self, provider: Provider
+    ) -> None:
         result = await self.read(provider)
         numbers = [p.page_number for p in result.pages]
         assert numbers == sorted(numbers) and len(set(numbers)) == len(numbers)
         if provider.paged:
             assert numbers == [1, 2, 3]
-            assert "4417" in result.pages[0].text and "Rotterdam" in result.pages[1].text
+            assert (
+                "4417" in result.pages[0].text and "Rotterdam" in result.pages[1].text
+            )
 
-    async def test_the_engine_that_did_the_work_is_named(self, provider: Provider) -> None:
+    async def test_the_engine_that_did_the_work_is_named(
+        self, provider: Provider
+    ) -> None:
         assert (await self.read(provider)).engine
 
-    async def test_the_markdown_marks_each_page_in_order(self, provider: Provider) -> None:
+    async def test_the_markdown_marks_each_page_in_order(
+        self, provider: Provider
+    ) -> None:
         result = await self.read(provider)
         if not provider.paged or not getattr(provider, "marks_pages", True):
             return
@@ -107,13 +137,19 @@ class DocumentExtractorConformance:
         assert positions == sorted(positions)
 
     @pytest.mark.parametrize("strategy", ["fast", "auto", "hi_res", "ocr_only"])
-    async def test_every_strategy_is_accepted_and_a_content_type_is_only_a_hint(self, provider: Provider, strategy: str) -> None:
+    async def test_every_strategy_is_accepted_and_a_content_type_is_only_a_hint(
+        self, provider: Provider, strategy: str
+    ) -> None:
         data, filename = provider.document(PAGES)
-        result = await provider.extractor().read(data, filename, content_type="application/octet-stream", strategy=strategy)  # type: ignore[arg-type]
+        result = await provider.extractor().read(
+            data, filename, content_type="application/octet-stream", strategy=strategy
+        )  # type: ignore[arg-type]
         assert isinstance(result, ExtractionResult)
         assert result.success or result.error
 
-    async def test_a_scanned_page_is_recognised_or_reported_never_silently_empty(self, provider: Provider) -> None:
+    async def test_a_scanned_page_is_recognised_or_reported_never_silently_empty(
+        self, provider: Provider
+    ) -> None:
         scanned = provider.scanned() if hasattr(provider, "scanned") else None
         if scanned is None:
             pytest.skip("this extractor does not read pictures of text")
@@ -121,31 +157,52 @@ class DocumentExtractorConformance:
         result = await provider.extractor().read(data, filename)
         assert result.success, result.error
         page = result.pages[0]
-        assert "4417" in page.text or page.needs_ocr, f"a scanned page came back empty without saying so: {page.model_dump(exclude={'images'})}"
+        assert "4417" in page.text or page.needs_ocr, (
+            f"a scanned page came back empty without saying so: {page.model_dump(exclude={'images'})}"
+        )
 
-    async def test_a_corrupt_document_is_a_failure_not_an_exception(self, provider: Provider) -> None:
+    async def test_a_corrupt_document_is_a_failure_not_an_exception(
+        self, provider: Provider
+    ) -> None:
         data, filename = provider.document(PAGES)
         result = await provider.extractor().read(data[: len(data) // 3], filename)
         assert isinstance(result, ExtractionResult)
         assert result.success or result.error, "a failure must say why"
 
-    async def test_empty_bytes_are_a_failure_not_an_exception(self, provider: Provider) -> None:
+    async def test_empty_bytes_are_a_failure_not_an_exception(
+        self, provider: Provider
+    ) -> None:
         _, filename = provider.document(PAGES)
         result = await provider.extractor().read(b"", filename)
         assert isinstance(result, ExtractionResult)
         assert not result.success or not any(p.text.strip() for p in result.pages)
 
-    async def test_arbitrary_bytes_are_a_failure_not_an_exception(self, provider: Provider) -> None:
+    async def test_arbitrary_bytes_are_a_failure_not_an_exception(
+        self, provider: Provider
+    ) -> None:
         _, filename = provider.document(PAGES)
         result = await provider.extractor().read(bytes(range(256)) * 40, filename)
         assert isinstance(result, ExtractionResult)
         if provider.rejects_garbage:
             assert not result.success and result.error
 
-    @pytest.mark.parametrize("hostile", ["../../etc/passwd.pdf", "a\x00b.pdf", "x' OR '1'='1.pdf", "ünï-çødé 日本語.pdf", "a" * 300 + ".pdf", ".pdf", ""])
-    async def test_a_hostile_filename_is_data_not_a_path(self, provider: Provider, hostile: str) -> None:
+    @pytest.mark.parametrize(
+        "hostile",
+        [
+            "../../etc/passwd.pdf",
+            "a\x00b.pdf",
+            "x' OR '1'='1.pdf",
+            "ünï-çødé 日本語.pdf",
+            "a" * 300 + ".pdf",
+            ".pdf",
+            "",
+        ],
+    )
+    async def test_a_hostile_filename_is_data_not_a_path(
+        self, provider: Provider, hostile: str
+    ) -> None:
         data, filename = provider.document(PAGES)
-        suffix = filename[filename.rfind("."):]
+        suffix = filename[filename.rfind(".") :]
         name = hostile if hostile.endswith(suffix) else hostile + suffix
         result = await provider.extractor().read(data, name)
         assert isinstance(result, ExtractionResult)

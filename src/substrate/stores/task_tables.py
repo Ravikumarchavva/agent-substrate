@@ -71,7 +71,10 @@ def _titles(titles: list[str]) -> list[str]:
 
 
 async def _board(tx: Tx, row: Row) -> TaskList:
-    items = await tx.fetchall(f"SELECT {_TASK} FROM task_items WHERE board_id = ? ORDER BY position, seq", row["id"])
+    items = await tx.fetchall(
+        f"SELECT {_TASK} FROM task_items WHERE board_id = ? ORDER BY position, seq",
+        row["id"],
+    )
     return TaskList(
         id=row["id"],
         conversation_id=row["conversation_id"],
@@ -86,7 +89,11 @@ async def _board(tx: Tx, row: Row) -> TaskList:
 
 
 async def _read_task(tx: Tx, board_id: str, task_id: str) -> Task | None:
-    row = await tx.fetchone(f"SELECT {_TASK} FROM task_items WHERE board_id = ? AND id = ?", board_id, task_id)
+    row = await tx.fetchone(
+        f"SELECT {_TASK} FROM task_items WHERE board_id = ? AND id = ?",
+        board_id,
+        task_id,
+    )
     return _task(row) if row else None
 
 
@@ -162,12 +169,16 @@ class Tasks:
 
     async def get_task_list(self, task_list_id: str) -> TaskList | None:
         async def op(tx: Tx) -> TaskList | None:
-            row = await tx.fetchone("SELECT * FROM task_boards WHERE id = ?", task_list_id)
+            row = await tx.fetchone(
+                "SELECT * FROM task_boards WHERE id = ?", task_list_id
+            )
             return await _board(tx, row) if row else None
 
         return await self._run(op)
 
-    async def get_boards_by_conversation(self, conversation_id: str, branch_id: str = "main") -> list[TaskList]:
+    async def get_boards_by_conversation(
+        self, conversation_id: str, branch_id: str = "main"
+    ) -> list[TaskList]:
         async def op(tx: Tx) -> list[TaskList]:
             rows = await tx.fetchall(
                 "SELECT * FROM task_boards WHERE conversation_id = ? AND branch_id = ? ORDER BY created_at, seq",
@@ -178,10 +189,14 @@ class Tasks:
 
         return await self._run(op)
 
-    async def get_by_conversation(self, conversation_id: str, branch_id: str = "main") -> TaskList | None:
+    async def get_by_conversation(
+        self, conversation_id: str, branch_id: str = "main"
+    ) -> TaskList | None:
         """The root board (``agent_id == ""``), else the earliest board for this conversation on this branch."""
         boards = await self.get_boards_by_conversation(conversation_id, branch_id)
-        return next((b for b in boards if b.agent_id == ""), boards[0] if boards else None)
+        return next(
+            (b for b in boards if b.agent_id == ""), boards[0] if boards else None
+        )
 
     async def settle_conversation(self, conversation_id: str) -> list[TaskList]:
         """Flip any lingering ``in_progress`` task on the main branch to ``succeeded`` when a run ends, so the board
@@ -205,7 +220,9 @@ class Tasks:
 
         return await self._run(op)
 
-    async def update_status(self, task_list_id: str, task_id: str, status: TaskStatus, note: str = "") -> Task | None:
+    async def update_status(
+        self, task_list_id: str, task_id: str, status: TaskStatus, note: str = ""
+    ) -> Task | None:
         async def op(tx: Tx) -> Task | None:
             changed = await tx.execute(
                 "UPDATE task_items SET status = ?, note = CASE WHEN ? <> '' THEN ? ELSE note END "
@@ -223,12 +240,25 @@ class Tasks:
     async def add_tasks(self, task_list_id: str, titles: list[str]) -> list[Task]:
         async def op(tx: Tx) -> list[Task]:
             await tx.lock(f"task_board:{task_list_id}")
-            if await tx.fetchone("SELECT 1 FROM task_boards WHERE id = ?", task_list_id) is None:
+            if (
+                await tx.fetchone(
+                    "SELECT 1 FROM task_boards WHERE id = ?", task_list_id
+                )
+                is None
+            ):
                 return []
-            row = await tx.fetchone("SELECT COALESCE(MAX(position) + 1, 0) AS next FROM task_items WHERE board_id = ?", task_list_id)
+            row = await tx.fetchone(
+                "SELECT COALESCE(MAX(position) + 1, 0) AS next FROM task_items WHERE board_id = ?",
+                task_list_id,
+            )
             added: list[Task] = []
             for offset, title in enumerate(_titles(titles)):
-                task = Task(id=str(uuid4()), title=title, status=TaskStatus.PLANNED, order=row["next"] + offset)
+                task = Task(
+                    id=str(uuid4()),
+                    title=title,
+                    status=TaskStatus.PLANNED,
+                    order=row["next"] + offset,
+                )
                 await tx.execute(
                     "INSERT INTO task_items (id, board_id, title, status, position, retry_count, note) "
                     "VALUES (?, ?, ?, ?, ?, 0, '')",
@@ -245,7 +275,14 @@ class Tasks:
 
     async def delete_task(self, task_list_id: str, task_id: str) -> bool:
         async def op(tx: Tx) -> bool:
-            return await tx.execute("DELETE FROM task_items WHERE board_id = ? AND id = ?", task_list_id, task_id) > 0
+            return (
+                await tx.execute(
+                    "DELETE FROM task_items WHERE board_id = ? AND id = ?",
+                    task_list_id,
+                    task_id,
+                )
+                > 0
+            )
 
         return await self._run(op)
 
@@ -282,10 +319,15 @@ class Tasks:
 
         return await self._run(op)
 
-    async def update_task_title(self, task_list_id: str, task_id: str, title: str) -> Task | None:
+    async def update_task_title(
+        self, task_list_id: str, task_id: str, title: str
+    ) -> Task | None:
         async def op(tx: Tx) -> Task | None:
             changed = await tx.execute(
-                "UPDATE task_items SET title = ? WHERE board_id = ? AND id = ?", title.strip(), task_list_id, task_id
+                "UPDATE task_items SET title = ? WHERE board_id = ? AND id = ?",
+                title.strip(),
+                task_list_id,
+                task_id,
             )
             return await _read_task(tx, task_list_id, task_id) if changed else None
 
@@ -296,7 +338,10 @@ class Tasks:
         clause, params = under("conversation_id", name)
 
         async def op(tx: Tx) -> int:
-            await tx.execute(f"DELETE FROM task_items WHERE board_id IN (SELECT id FROM task_boards WHERE {clause})", *params)
+            await tx.execute(
+                f"DELETE FROM task_items WHERE board_id IN (SELECT id FROM task_boards WHERE {clause})",
+                *params,
+            )
             return await tx.execute(f"DELETE FROM task_boards WHERE {clause}", *params)
 
         erased = await self._run(op)

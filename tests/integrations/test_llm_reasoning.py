@@ -33,7 +33,9 @@ class _Schema(BaseModel):
 
 
 def test_openai_reasoning_effort_and_summary_for_a_reasoning_model():
-    params = OpenAIClient(model="o3", api_key="x")._build_params(MSGS, HIGH, stream=False)
+    params = OpenAIClient(model="o3", api_key="x")._build_params(
+        MSGS, HIGH, stream=False
+    )
     assert params["reasoning"] == {"effort": "high", "summary": "auto"}
     assert "temperature" not in params  # reasoning models reject it
 
@@ -48,7 +50,9 @@ def test_openai_reasoning_is_opt_in_and_ignored_for_non_reasoning_models():
 
 def test_openai_off_maps_to_the_lowest_effort_the_model_accepts():
     off = GenerationOptions(reasoning=ReasoningEffort.OFF)
-    gpt5 = OpenAIClient(model="gpt-5", api_key="x")._build_params(MSGS, off, stream=False)
+    gpt5 = OpenAIClient(model="gpt-5", api_key="x")._build_params(
+        MSGS, off, stream=False
+    )
     o3 = OpenAIClient(model="o3", api_key="x")._build_params(MSGS, off, stream=False)
     assert gpt5["reasoning"] == {"effort": "minimal"}
     assert o3["reasoning"] == {"effort": "low"}
@@ -72,12 +76,18 @@ def test_openai_parses_reasoning_summary_ahead_of_the_answer():
         output=[
             SimpleNamespace(
                 type="reasoning",
-                summary=[SimpleNamespace(text="thought A"), SimpleNamespace(text="thought B")],
+                summary=[
+                    SimpleNamespace(text="thought A"),
+                    SimpleNamespace(text="thought B"),
+                ],
             )
         ],
     )
     blocks = OpenAIClient(model="o3", api_key="x")._parse_output(response, None)
-    assert isinstance(blocks[0], ReasoningBlock) and blocks[0].text == "thought A\n\nthought B"
+    assert (
+        isinstance(blocks[0], ReasoningBlock)
+        and blocks[0].text == "thought A\n\nthought B"
+    )
     assert blocks[1].text == "42"
 
 
@@ -92,8 +102,16 @@ def test_openai_usage_reads_the_responses_api_field_names():
             )
         )
     )
-    assert (usage.input_tokens, usage.cached_tokens, usage.output_tokens, usage.reasoning_tokens) == (
-        1000, 600, 200, 150,
+    assert (
+        usage.input_tokens,
+        usage.cached_tokens,
+        usage.output_tokens,
+        usage.reasoning_tokens,
+    ) == (
+        1000,
+        600,
+        200,
+        150,
     )
 
 
@@ -111,20 +129,28 @@ def test_chat_completions_sends_reasoning_effort_only_to_openai_itself():
 
 
 def test_anthropic_reasoning_becomes_a_thinking_budget_and_drops_temperature():
-    params = AnthropicClient(model="claude-sonnet-4", api_key="x")._build_params(MSGS, HIGH)
+    params = AnthropicClient(model="claude-sonnet-4", api_key="x")._build_params(
+        MSGS, HIGH
+    )
     assert params["thinking"] == {"type": "enabled", "budget_tokens": 24_000}
     assert params["max_tokens"] > 24_000  # the API rejects max_tokens <= the budget
     assert "temperature" not in params
 
 
 def test_anthropic_ignores_reasoning_on_a_model_without_thinking():
-    params = AnthropicClient(model="claude-3-5-sonnet", api_key="x")._build_params(MSGS, HIGH)
+    params = AnthropicClient(model="claude-3-5-sonnet", api_key="x")._build_params(
+        MSGS, HIGH
+    )
     assert "thinking" not in params and "temperature" in params
 
 
 def test_anthropic_explicit_extra_wins_over_the_typed_level():
-    opts = GenerationOptions(reasoning=ReasoningEffort.LOW, extra={"thinking_budget": 5_000})
-    params = AnthropicClient(model="claude-sonnet-4", api_key="x")._build_params(MSGS, opts)
+    opts = GenerationOptions(
+        reasoning=ReasoningEffort.LOW, extra={"thinking_budget": 5_000}
+    )
+    params = AnthropicClient(model="claude-sonnet-4", api_key="x")._build_params(
+        MSGS, opts
+    )
     assert params["thinking"]["budget_tokens"] == 5_000
 
 
@@ -132,12 +158,16 @@ def test_anthropic_drops_a_forced_tool_choice_while_thinking():
     opts = GenerationOptions(
         reasoning=ReasoningEffort.MEDIUM, tools=[_Tool()], tool_choice="required"
     )
-    params = AnthropicClient(model="claude-sonnet-4", api_key="x")._build_params(MSGS, opts)
+    params = AnthropicClient(model="claude-sonnet-4", api_key="x")._build_params(
+        MSGS, opts
+    )
     assert "tool_choice" not in params  # the API rejects any/tool with thinking on
 
 
 def test_anthropic_input_tokens_include_cached_ones():
-    usage = AnthropicClient._usage(input_tokens=100, cache_read=900, cache_creation=50, output_tokens=7)
+    usage = AnthropicClient._usage(
+        input_tokens=100, cache_read=900, cache_creation=50, output_tokens=7
+    )
     assert (usage.input_tokens, usage.cached_tokens) == (1050, 900)
 
 
@@ -173,8 +203,12 @@ async def test_gemini_thought_parts_become_reasoning_not_answer_text():
             SimpleNamespace(
                 content=SimpleNamespace(
                     parts=[
-                        SimpleNamespace(text="let me think", thought=True, function_call=None),
-                        SimpleNamespace(text="The answer is 4.", thought=None, function_call=None),
+                        SimpleNamespace(
+                            text="let me think", thought=True, function_call=None
+                        ),
+                        SimpleNamespace(
+                            text="The answer is 4.", thought=None, function_call=None
+                        ),
                     ]
                 )
             )

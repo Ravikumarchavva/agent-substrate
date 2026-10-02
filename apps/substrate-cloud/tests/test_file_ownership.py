@@ -111,7 +111,9 @@ async def test_anon_uploader_may_access_via_owned_thread_fallback(database_url: 
     intent. Fixed by falling back to thread ownership, same signal
     `_may_access_key` already uses for conversation-scoped artifacts."""
     engine = create_async_engine(database_url)
-    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
     anon_claims = AuthClaims(sub="anon-uploader", tenant_id=TENANT_A)
     thread_id = uuid.uuid4()
     async with factory() as session:
@@ -175,12 +177,12 @@ async def test_key_outside_any_recognized_namespace_denied():
 
 async def test_conversation_key_allowed_for_the_owning_thread(database_url: str):
     engine = create_async_engine(database_url)
-    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
     thread_id = uuid.uuid4()
     async with factory() as session:
-        session.add(
-            Thread(id=thread_id, user_identifier=OWNER.sub, tenant_id=TENANT_A)
-        )
+        session.add(Thread(id=thread_id, user_identifier=OWNER.sub, tenant_id=TENANT_A))
         await session.commit()
     try:
         async with factory() as session:
@@ -220,20 +222,22 @@ def object_route_app():
     app.dependency_overrides.clear()
 
 
-async def test_object_route_serves_the_owners_key(
-    object_route_app, database_url: str
-):
+async def test_object_route_serves_the_owners_key(object_route_app, database_url: str):
     app, file_store = object_route_app
     key = f"tenants/{TENANT_A}/users/{OWNER.sub}/uploads/p1.png"
     await file_store.upload(key, b"PNGBYTES")
     app.dependency_overrides[get_current_user] = lambda: OWNER
     engine = create_async_engine(database_url)
-    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
     app.dependency_overrides[get_db] = lambda: factory()
 
     try:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as http:
             resp = await http.get("/files/object", params={"key": key})
         assert resp.status_code == 200
         assert resp.content == b"PNGBYTES"
@@ -249,12 +253,16 @@ async def test_object_route_denies_a_key_under_another_users_prefix(
     await file_store.upload(key, b"PNGBYTES")
     app.dependency_overrides[get_current_user] = lambda: STRANGER
     engine = create_async_engine(database_url)
-    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
     app.dependency_overrides[get_db] = lambda: factory()
 
     try:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as http:
             resp = await http.get("/files/object", params={"key": key})
         # 404, not 403: this must not become an existence oracle for keys that
         # leak into logs/URLs (same rationale as _get_meta above).
@@ -271,12 +279,16 @@ async def test_object_route_serves_a_kb_key_to_any_same_tenant_caller(
     await file_store.upload(key, b"CHARTBYTES")
     app.dependency_overrides[get_current_user] = lambda: STRANGER
     engine = create_async_engine(database_url)
-    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
     app.dependency_overrides[get_db] = lambda: factory()
 
     try:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as http:
             resp = await http.get("/files/object", params={"key": key})
         assert resp.status_code == 200
         assert resp.content == b"CHARTBYTES"
@@ -292,12 +304,16 @@ async def test_object_route_denies_a_kb_key_across_tenants(
     await file_store.upload(key, b"CHARTBYTES")
     app.dependency_overrides[get_current_user] = lambda: CROSS_TENANT_STRANGER
     engine = create_async_engine(database_url)
-    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
     app.dependency_overrides[get_db] = lambda: factory()
 
     try:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as http:
             resp = await http.get("/files/object", params={"key": key})
         assert resp.status_code == 404
     finally:
@@ -311,13 +327,19 @@ async def test_object_route_denies_a_key_outside_any_recognized_namespace(
     await file_store.upload("shared/reference.bin", b"SECRETBYTES")
     app.dependency_overrides[get_current_user] = lambda: STRANGER
     engine = create_async_engine(database_url)
-    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
     app.dependency_overrides[get_db] = lambda: factory()
 
     try:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
-            resp = await http.get("/files/object", params={"key": "shared/reference.bin"})
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as http:
+            resp = await http.get(
+                "/files/object", params={"key": "shared/reference.bin"}
+            )
         assert resp.status_code == 404
     finally:
         await engine.dispose()
@@ -329,15 +351,21 @@ async def test_object_route_404s_on_a_missing_key_not_a_500(
     app, _file_store = object_route_app
     app.dependency_overrides[get_current_user] = lambda: OWNER
     engine = create_async_engine(database_url)
-    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
     app.dependency_overrides[get_db] = lambda: factory()
 
     try:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as http:
             resp = await http.get(
                 "/files/object",
-                params={"key": f"tenants/{TENANT_A}/users/{OWNER.sub}/uploads/missing.png"},
+                params={
+                    "key": f"tenants/{TENANT_A}/users/{OWNER.sub}/uploads/missing.png"
+                },
             )
         assert resp.status_code == 404
     finally:
@@ -437,7 +465,9 @@ def app_with_overrides():
 
 async def _seed_file(db_session_factory, file_store, *, owner: AuthClaims):
     owner_uuid = uuid.uuid4()
-    object_key = f"tenants/{owner.tenant_id}/users/{owner.sub}/uploads/secret-{uuid.uuid4()}.pdf"
+    object_key = (
+        f"tenants/{owner.tenant_id}/users/{owner.sub}/uploads/secret-{uuid.uuid4()}.pdf"
+    )
     await file_store.upload(object_key, b"pdf bytes", content_type="application/pdf")
     async with db_session_factory() as session:
         session.add(User(id=owner_uuid, identifier=f"owner-{owner_uuid}"))

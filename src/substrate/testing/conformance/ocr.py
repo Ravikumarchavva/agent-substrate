@@ -29,6 +29,8 @@ class OcrConformance:
         result = ocr.recognize(blank, languages=("eng",))
         assert result.text.strip() == ""
 
-    def test_bytes_that_are_not_an_image_are_an_error_not_an_exception(self, ocr: Ocr) -> None:
+    def test_bytes_that_are_not_an_image_are_an_error_not_an_exception(
+        self, ocr: Ocr
+    ) -> None:
         result = ocr.recognize(b"definitely not a png", languages=("eng",))
         assert result.error or not result.text.strip()

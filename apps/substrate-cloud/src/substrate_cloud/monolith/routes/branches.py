@@ -23,7 +23,11 @@ from substrate.stores import ThreadStore
 from substrate.context import DefaultHistoryResolver
 from substrate.stores import bind_threads
 from substrate.workspace import fork_branch, resolve_workspace_snapshot_id
-from substrate.types import BranchAlreadyExistsError, BranchNotFoundError, DAGIntegrityError
+from substrate.types import (
+    BranchAlreadyExistsError,
+    BranchNotFoundError,
+    DAGIntegrityError,
+)
 from substrate.stores import HistoryCheckpoint
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
 from substrate_cloud.monolith.schemas import (
@@ -36,6 +40,7 @@ from substrate_cloud.monolith.schemas import (
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.services import get_owned_thread
+
 
 def _history(ctx: ServerDependencies, user: AuthClaims) -> ThreadStore:
     """The conversation store as the caller's tenant sees it: bound, so a branch, node or checkpoint id
@@ -102,13 +107,17 @@ async def fork_branch_endpoint(
     session_id = str(thread_id)
 
     if not hasattr(_history(ctx, user), "fork_branch"):
-        raise HTTPException(status_code=501, detail="History provider does not support branching")
+        raise HTTPException(
+            status_code=501, detail="History provider does not support branching"
+        )
 
     # Ensure source branch exists before forking if it was implicit
     if hasattr(_history(ctx, user), "ensure_branch"):
         await _history(ctx, user).ensure_branch(session_id, body.source_branch_id)
 
-    source_branch = await _history(ctx, user).get_branch(session_id, body.source_branch_id)
+    source_branch = await _history(ctx, user).get_branch(
+        session_id, body.source_branch_id
+    )
     source_head_id = source_branch.head_message_id if source_branch else None
 
     target_fork_node_id = body.fork_from_message_id
@@ -186,10 +195,16 @@ async def get_branch_endpoint(
 
     session_id = str(thread_id)
     if not hasattr(_history(ctx, user), "get_branch"):
-        raise HTTPException(status_code=501, detail="History provider does not support branching")
+        raise HTTPException(
+            status_code=501, detail="History provider does not support branching"
+        )
 
     branch = await _history(ctx, user).get_branch(session_id, branch_id)
-    if not branch and branch_id == "main" and hasattr(_history(ctx, user), "ensure_branch"):
+    if (
+        not branch
+        and branch_id == "main"
+        and hasattr(_history(ctx, user), "ensure_branch")
+    ):
         branch = await _history(ctx, user).ensure_branch(session_id, "main")
 
     if not branch:
@@ -226,10 +241,14 @@ async def rename_branch_endpoint(
 
     session_id = str(thread_id)
     if not hasattr(_history(ctx, user), "rename_branch"):
-        raise HTTPException(status_code=501, detail="History provider does not support branch renaming")
+        raise HTTPException(
+            status_code=501, detail="History provider does not support branch renaming"
+        )
 
     try:
-        updated = await _history(ctx, user).rename_branch(session_id, branch_id, new_name)
+        updated = await _history(ctx, user).rename_branch(
+            session_id, branch_id, new_name
+        )
     except BranchNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -265,7 +284,9 @@ async def delete_branch_endpoint(
         raise HTTPException(status_code=404, detail="Thread not found")
 
     if not hasattr(_history(ctx, user), "delete_branch"):
-        raise HTTPException(status_code=501, detail="History provider does not support branch deletion")
+        raise HTTPException(
+            status_code=501, detail="History provider does not support branch deletion"
+        )
 
     session_id = str(thread_id)
     try:
@@ -303,10 +324,16 @@ async def get_branch_messages_endpoint(
 
     session_id = str(thread_id)
     if not hasattr(_history(ctx, user), "get_branch"):
-        raise HTTPException(status_code=501, detail="History provider does not support branching")
+        raise HTTPException(
+            status_code=501, detail="History provider does not support branching"
+        )
 
     branch = await _history(ctx, user).get_branch(session_id, branch_id)
-    if not branch and branch_id == "main" and hasattr(_history(ctx, user), "ensure_branch"):
+    if (
+        not branch
+        and branch_id == "main"
+        and hasattr(_history(ctx, user), "ensure_branch")
+    ):
         branch = await _history(ctx, user).ensure_branch(session_id, "main")
 
     if not branch:
@@ -379,7 +406,9 @@ async def create_checkpoint_endpoint(
 
     session_id = str(thread_id)
     if not hasattr(_history(ctx, user), "save_checkpoint"):
-        raise HTTPException(status_code=501, detail="History provider does not support checkpoints")
+        raise HTTPException(
+            status_code=501, detail="History provider does not support checkpoints"
+        )
 
     cp = HistoryCheckpoint(
         id=uuid4().hex,
@@ -403,4 +432,3 @@ async def create_checkpoint_endpoint(
         parent_checkpoint_id=cp.parent_checkpoint_id,
         created_at=cp.created_at,
     )
-

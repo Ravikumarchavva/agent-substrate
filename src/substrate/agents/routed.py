@@ -86,7 +86,10 @@ class RoutedAgent:
         for msg in inbox:
             ctx.check()
             handler = self._handler_for(msg)
-            attributes = {semconv.RUN_AGENT: str(self.id), "substrate.handler.payload": type(msg.payload).__name__}
+            attributes = {
+                semconv.RUN_AGENT: str(self.id),
+                "substrate.handler.payload": type(msg.payload).__name__,
+            }
             with span(semconv.SPAN_HANDLER, attributes=attributes):
                 await handler(ctx, msg)
 

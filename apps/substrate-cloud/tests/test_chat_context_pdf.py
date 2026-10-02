@@ -234,7 +234,9 @@ async def _run_build_file_context_for_workspace_path(object_key: str):
     return attachments[0]
 
 
-async def test_file_context_includes_thread_files_with_no_file_ids_this_turn(monkeypatch):
+async def test_file_context_includes_thread_files_with_no_file_ids_this_turn(
+    monkeypatch,
+):
     """Regression: a file attached on turn 1 must still be visible on turn 2,
     even though the composer only sends `file_ids` on the turn it staged the
     attachment (substrate-ui's doSendMessage clears its local attachment
@@ -280,7 +282,12 @@ async def test_file_context_includes_thread_files_with_no_file_ids_this_turn(mon
     body.file_ids = None  # exactly what a follow-up turn sends
     body.thread_id = thread_id
 
-    _text, _images, attachments, _new_attachments = await chat_context._build_file_context(
+    (
+        _text,
+        _images,
+        attachments,
+        _new_attachments,
+    ) = await chat_context._build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
     assert len(attachments) == 1
@@ -344,7 +351,12 @@ async def test_new_attachments_stays_narrow_while_model_context_stays_broad():
     body.file_ids = [new_file_id]  # only this turn's actual attachment
     body.thread_id = thread_id
 
-    _text, _images, attachments, new_attachments = await chat_context._build_file_context(
+    (
+        _text,
+        _images,
+        attachments,
+        new_attachments,
+    ) = await chat_context._build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
 
@@ -381,7 +393,12 @@ async def test_file_context_still_empty_with_no_file_ids_and_no_thread_files():
     body.file_ids = None
     body.thread_id = "thread-empty"
 
-    text, images, attachments, _new_attachments = await chat_context._build_file_context(
+    (
+        text,
+        images,
+        attachments,
+        _new_attachments,
+    ) = await chat_context._build_file_context(
         db, body, request=MagicMock(), ctx=ctx, claims=MagicMock()
     )
     assert text == ""
@@ -711,12 +728,16 @@ def _claims():
     return SimpleNamespace(tenant_id="t1", sub="u1")
 
 
-async def test_build_file_context_files_the_pdf_in_the_conversations_documents_and_inlines_it(tmp_path):
+async def test_build_file_context_files_the_pdf_in_the_conversations_documents_and_inlines_it(
+    tmp_path,
+):
     """With a documents library, an extractable file is filed under the conversation (reading it once), and a small one is put in front of
     the model whole; the file's id and path travel with it so a citation can open the exact file later."""
     data = _FIXTURE.read_bytes()
     file_id = "55555555-5555-5555-5555-555555555555"
-    meta = _pdf_meta(file_id, "invoice.pdf", f"users/u1/uploads/{file_id}/invoice.pdf", len(data))
+    meta = _pdf_meta(
+        file_id, "invoice.pdf", f"users/u1/uploads/{file_id}/invoice.pdf", len(data)
+    )
     meta.checksum_sha256 = hashlib.sha256(data).hexdigest()
     _staged_under_another_thread(meta)
     ctx = _documents_ctx(tmp_path, data)
@@ -725,10 +746,16 @@ async def test_build_file_context_files_the_pdf_in_the_conversations_documents_a
     body.file_ids = [file_id]
     db = _db_with(meta)
 
-    text_block, image_inputs, attachments, _new = await _build_file_context(db, body, request=_request_without_redis(), ctx=ctx, claims=_claims())
+    text_block, image_inputs, attachments, _new = await _build_file_context(
+        db, body, request=_request_without_redis(), ctx=ctx, claims=_claims()
+    )
 
     assert "[File: invoice.pdf]" in text_block and "Invoice #12345" in text_block
-    assert image_inputs == [] and len(attachments) == 1 and attachments[0]["name"] == "invoice.pdf"
+    assert (
+        image_inputs == []
+        and len(attachments) == 1
+        and attachments[0]["name"] == "invoice.pdf"
+    )
     collection = "tenants/t1/users/u1/conversations/thread-abc/documents"
     listing = await ctx.library.list(collection=collection)
     assert [d.filename for d in listing.documents] == ["invoice.pdf"]
@@ -737,12 +764,17 @@ async def test_build_file_context_files_the_pdf_in_the_conversations_documents_a
     assert info.resource == meta.object_key
     assert info.meta["file_id"] == file_id
     # object_key is "users/u1/uploads/{id}/invoice.pdf" — not a thread session path, so session_path falls back to original_name.
-    assert info.meta["session_path"] == "invoice.pdf" and info.meta["thread_id"] == "thread-abc"
+    assert (
+        info.meta["session_path"] == "invoice.pdf"
+        and info.meta["thread_id"] == "thread-abc"
+    )
     assert meta.rag_ingested_at is not None
     db.commit.assert_awaited_once()
 
 
-async def test_build_file_context_documents_metadata_uses_the_real_session_path(tmp_path):
+async def test_build_file_context_documents_metadata_uses_the_real_session_path(
+    tmp_path,
+):
     """A file uploaded scoped to this thread keeps its real session-relative path with the document — what a citation's "open this file"
     click needs (routes/workspace.py::serve_file), not just the original filename."""
     data = _FIXTURE.read_bytes()
@@ -760,9 +792,19 @@ async def test_build_file_context_documents_metadata_uses_the_real_session_path(
     body.thread_id = "thread-xyz"
     body.file_ids = [file_id]
 
-    await _build_file_context(_db_with(meta), body, request=_request_without_redis(), ctx=ctx, claims=_claims())
+    await _build_file_context(
+        _db_with(meta),
+        body,
+        request=_request_without_redis(),
+        ctx=ctx,
+        claims=_claims(),
+    )
 
-    info = (await ctx.library.list(collection="tenants/t1/users/u1/conversations/thread-xyz/documents")).documents[0]
+    info = (
+        await ctx.library.list(
+            collection="tenants/t1/users/u1/conversations/thread-xyz/documents"
+        )
+    ).documents[0]
     assert info.meta["session_path"] == "uploads/invoice-1.pdf"
 
 
@@ -770,17 +812,23 @@ async def test_build_file_context_does_not_file_a_document_twice(tmp_path):
     """A file already filed must not be downloaded and read again on every later reference in the same thread."""
     data = _FIXTURE.read_bytes()
     file_id = "66666666-6666-6666-6666-666666666666"
-    meta = _pdf_meta(file_id, "invoice.pdf", f"users/u1/uploads/{file_id}/invoice.pdf", len(data))
+    meta = _pdf_meta(
+        file_id, "invoice.pdf", f"users/u1/uploads/{file_id}/invoice.pdf", len(data)
+    )
     meta.checksum_sha256 = hashlib.sha256(data).hexdigest()
     meta.rag_ingested_at = "already set"
     ctx = _documents_ctx(tmp_path, data)
-    ctx.file_store.download = AsyncMock(side_effect=AssertionError("must not download an already-filed file"))
+    ctx.file_store.download = AsyncMock(
+        side_effect=AssertionError("must not download an already-filed file")
+    )
     body = MagicMock()
     body.thread_id = "thread-abc"
     body.file_ids = [file_id]
     db = _db_with(meta)
 
-    text_block, _images, attachments, _new = await _build_file_context(db, body, request=_request_without_redis(), ctx=ctx, claims=_claims())
+    text_block, _images, attachments, _new = await _build_file_context(
+        db, body, request=_request_without_redis(), ctx=ctx, claims=_claims()
+    )
 
     assert len(attachments) == 1
     db.commit.assert_not_awaited()
@@ -792,19 +840,35 @@ async def test_build_file_context_gives_a_large_document_as_its_outline(tmp_path
     file_id = "88888888-8888-8888-8888-888888888888"
     checksum = "ab12cd" * 10
     sections = "\n\n".join(f"## Chapter {n}\n\n" + "word " * 2500 for n in range(1, 6))
-    big = ExtractionResult(pages=[ExtractedPage(page_number=1, text="x")], markdown=f"<!-- page 1 -->\n\n{sections}", engine="t")
+    big = ExtractionResult(
+        pages=[ExtractedPage(page_number=1, text="x")],
+        markdown=f"<!-- page 1 -->\n\n{sections}",
+        engine="t",
+    )
     ctx = _documents_ctx(tmp_path, b"unused")
     collection = "tenants/t1/users/u1/conversations/thread-abc/documents"
     await ctx.library.add(big, "handbook.pdf", collection=collection, sha256=checksum)
-    meta = _pdf_meta(file_id, "handbook.pdf", f"users/u1/uploads/{file_id}/handbook.pdf", 1234)
+    meta = _pdf_meta(
+        file_id, "handbook.pdf", f"users/u1/uploads/{file_id}/handbook.pdf", 1234
+    )
     meta.checksum_sha256 = checksum
     meta.rag_ingested_at = "already set"
     body = MagicMock()
     body.thread_id = "thread-abc"
     body.file_ids = [file_id]
 
-    text_block, _images, attachments, _new = await _build_file_context(_db_with(meta), body, request=_request_without_redis(), ctx=ctx, claims=_claims())
+    text_block, _images, attachments, _new = await _build_file_context(
+        _db_with(meta),
+        body,
+        request=_request_without_redis(),
+        ctx=ctx,
+        claims=_claims(),
+    )
 
-    assert "too long to include" in text_block and f"document id: {ctx.library.document_id('handbook.pdf', checksum)}" in text_block
+    assert (
+        "too long to include" in text_block
+        and f"document id: {ctx.library.document_id('handbook.pdf', checksum)}"
+        in text_block
+    )
     assert "Chapter 1" in text_block and "word word word" not in text_block
     assert len(attachments) == 1

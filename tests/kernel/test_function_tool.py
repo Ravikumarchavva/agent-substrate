@@ -26,14 +26,20 @@ async def word_count(text: str, ignore_case: bool = False) -> int:
     return len(text.split())
 
 
-async def test_the_schema_comes_from_the_signature_and_the_docs_from_the_docstring() -> None:
+async def test_the_schema_comes_from_the_signature_and_the_docs_from_the_docstring() -> (
+    None
+):
     assert word_count.name == "word_count"
     assert word_count.description == "Count the words in a piece of text."
     assert word_count.input_schema == {
         "type": "object",
         "properties": {
             "text": {"type": "string", "description": "The text to count."},
-            "ignore_case": {"type": "boolean", "default": False, "description": "Treat upper and lower case alike."},
+            "ignore_case": {
+                "type": "boolean",
+                "default": False,
+                "description": "Treat upper and lower case alike.",
+            },
         },
         "required": ["text"],
         "additionalProperties": False,
@@ -43,11 +49,19 @@ async def test_the_schema_comes_from_the_signature_and_the_docs_from_the_docstri
 
 async def test_calling_it_runs_the_function_with_validated_arguments() -> None:
     result = await word_count.execute(text="to be or not to be")
-    assert isinstance(result, ToolExecutionResult) and result.text == "6" and result.name == "word_count"
-    assert await word_count("a b c") == 3  # still plain code: calling the tool calls the function
+    assert (
+        isinstance(result, ToolExecutionResult)
+        and result.text == "6"
+        and result.name == "word_count"
+    )
+    assert (
+        await word_count("a b c") == 3
+    )  # still plain code: calling the tool calls the function
 
 
-async def test_bad_arguments_come_back_as_an_error_the_model_can_read_not_a_crash() -> None:
+async def test_bad_arguments_come_back_as_an_error_the_model_can_read_not_a_crash() -> (
+    None
+):
     result = await word_count.execute(text=["not", "text"])
     assert result.is_error and "text" in result.text
     result = await word_count.execute(text="x", surprise=1)
@@ -90,12 +104,20 @@ class Point(BaseModel):
 
 async def test_rich_parameter_types_are_described_and_coerced() -> None:
     @tool(risk=ToolRisk.SAFE, idempotent=True)
-    def paint(colour: Colour, where: Point, mode: Literal["fill", "outline"] = "fill", tags: list[str] | None = None) -> dict:
+    def paint(
+        colour: Colour,
+        where: Point,
+        mode: Literal["fill", "outline"] = "fill",
+        tags: list[str] | None = None,
+    ) -> dict:
         """Paint a point."""
         return {"colour": colour.value, "x": where.x, "mode": mode, "tags": tags}
 
     properties = paint.input_schema["properties"]
-    assert properties["mode"]["enum"] == ["fill", "outline"] and "$ref" in properties["colour"]
+    assert (
+        properties["mode"]["enum"] == ["fill", "outline"]
+        and "$ref" in properties["colour"]
+    )
     assert set(paint.input_schema["required"]) == {"colour", "where"}
     result = await paint.execute(colour="red", where={"x": 3, "y": 4}, tags=["a"])
     assert result.text == '{"colour": "red", "x": 3, "mode": "fill", "tags": ["a"]}'
@@ -111,7 +133,9 @@ async def test_results_may_be_text_numbers_json_blocks_or_a_full_result() -> Non
             "float": 1.5,
             "block": TextBlock(text="block"),
             "blocks": [TextBlock(text="a"), TextBlock(text="b")],
-            "full": ToolExecutionResult(content=[TextBlock(text="full")], metadata={"k": 1}),
+            "full": ToolExecutionResult(
+                content=[TextBlock(text="full")], metadata={"k": 1}
+            ),
         }[kind]
 
     assert (await shapes.execute(kind="text")).text == "plain"
@@ -153,11 +177,23 @@ async def test_a_synchronous_function_does_not_block_the_event_loop() -> None:
 
 
 def test_name_description_and_concurrency_can_be_set_explicitly() -> None:
-    @tool(risk=ToolRisk.HIGH, idempotent=False, name="send", description="Send a message.", concurrency_safe=True)
+    @tool(
+        risk=ToolRisk.HIGH,
+        idempotent=False,
+        name="send",
+        description="Send a message.",
+        concurrency_safe=True,
+    )
     def _impl(to: str) -> str:
         return to
 
-    assert (_impl.name, _impl.description, _impl.risk, _impl.idempotent, _impl.concurrency_safe) == (
+    assert (
+        _impl.name,
+        _impl.description,
+        _impl.risk,
+        _impl.idempotent,
+        _impl.concurrency_safe,
+    ) == (
         "send",
         "Send a message.",
         ToolRisk.HIGH,

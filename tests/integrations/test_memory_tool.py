@@ -63,10 +63,14 @@ async def test_memory_tool_short_term_ops(short_term: FakeShortTermMemory) -> No
 
 async def test_memory_tool_long_term_ops(memory_store: Memory) -> None:
     tool = MemoryTool("sess-1", long_term=memory_store)
-    ctx = SimpleNamespace(scope=RunScope(tenant_id="acme", user_id="user-123", thread_id="sess-1"))
+    ctx = SimpleNamespace(
+        scope=RunScope(tenant_id="acme", user_id="user-123", thread_id="sess-1")
+    )
 
     # Remember
-    res = await tool.execute(ctx=ctx, action="remember", value="User prefers dark theme")
+    res = await tool.execute(
+        ctx=ctx, action="remember", value="User prefers dark theme"
+    )
     assert not res.is_error
     mem_id = res.structured_content["memory_id"]
     assert mem_id
@@ -91,4 +95,3 @@ async def test_memory_tool_long_term_ops(memory_store: Memory) -> None:
     res = await tool.execute(ctx=ctx, action="forget", memory_id=mem_id)
     assert res.is_error
     assert f"Memory {mem_id} not found" in res.content[0].text
-

@@ -28,7 +28,9 @@ class EmbeddingsResponse(BaseModel):
     object: str = "list"
     data: list[EmbeddingRow]
     model: str
-    usage: dict[str, int] = Field(default_factory=lambda: {"prompt_tokens": 0, "total_tokens": 0})
+    usage: dict[str, int] = Field(
+        default_factory=lambda: {"prompt_tokens": 0, "total_tokens": 0}
+    )
 
 
 class RerankRequest(BaseModel):

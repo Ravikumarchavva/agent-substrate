@@ -85,10 +85,13 @@ async def _execute(
                 siblings.append(program[index])
                 index += 1
             stacks = allocator.fork_scopes(len(siblings))
+
             async def _one(sibling: Call, stack: list[int]) -> None:
                 async def _body() -> None:
                     await _run_one(allocator, sibling, hits=hits, observed=observed)
+
                 await allocator.in_scope(stack, _body)
+
             await asyncio.gather(*(_one(s, st_) for s, st_ in zip(siblings, stacks)))
             continue
         await _run_one(allocator, call, hits=hits, observed=observed)
@@ -158,7 +161,9 @@ def test_i06_no_two_calls_share_a_path(program: list[Call]) -> None:
     the other's cached result."""
     _number(program)
     observed = _paths_for(program, frozenset())
-    collisions = [p for p in set(observed.values()) if list(observed.values()).count(p) > 1]
+    collisions = [
+        p for p in set(observed.values()) if list(observed.values()).count(p) > 1
+    ]
     assert not collisions, (
         f"distinct calls share paths {collisions}: "
         f"{ {uid: p for uid, p in observed.items() if p in collisions} }"
@@ -187,8 +192,13 @@ _OPS = st.sampled_from(["uuid", "now", "random", "tool"])
 
 
 @settings(max_examples=25, deadline=None)
-@given(program=st.lists(_OPS, min_size=1, max_size=6), crash_after=st.integers(min_value=0, max_value=6))
-def test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect(program: list[str], crash_after: int) -> None:
+@given(
+    program=st.lists(_OPS, min_size=1, max_size=6),
+    crash_after=st.integers(min_value=0, max_value=6),
+)
+def test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect(
+    program: list[str], crash_after: int
+) -> None:
     """Run a program of journaled operations, kill the attempt after an arbitrary prefix, and
     let the retry replay. The retry must see exactly the values the first attempt saw for the
     prefix, and a tool must have run once per call in the program — never again for a call the
@@ -207,13 +217,20 @@ def test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect(program: li
     class Counter:
         name = "count"
         description = "counts executions"
-        input_schema: dict = {"type": "object", "properties": {"i": {"type": "integer"}}}
+        input_schema: dict = {
+            "type": "object",
+            "properties": {"i": {"type": "integer"}},
+        }
         risk = ToolRisk.SAFE
         idempotent = True
 
-        async def execute(self, *, ctx: object = None, i: int = 0, **_: object) -> ToolExecutionResult:
+        async def execute(
+            self, *, ctx: object = None, i: int = 0, **_: object
+        ) -> ToolExecutionResult:
             executed.append(i)
-            return ToolExecutionResult(name=self.name, content=[TextBlock(text=f"ran {i}")])
+            return ToolExecutionResult(
+                name=self.name, content=[TextBlock(text=f"ran {i}")]
+            )
 
     class Prog:
         def __init__(self) -> None:
@@ -244,7 +261,11 @@ def test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect(program: li
             await rt.register(agent)
             run_id = await rt.submit(
                 agent.id,
-                Message(target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})),
+                Message(
+                    target=agent.id,
+                    sender=Actor.system("t"),
+                    payload=DataPayload(data={}),
+                ),
                 retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.0),
             )
             async for entry in rt.tail(run_id):
@@ -259,6 +280,10 @@ def test_i14_a_replay_makes_the_same_decisions_and_repeats_no_effect(program: li
         assert len(agent.attempts) == 1  # nothing killed it
         return
     first, replay = agent.attempts
-    assert replay[: len(first)] == first, "the replay saw different values than the first attempt did for the same calls"
+    assert replay[: len(first)] == first, (
+        "the replay saw different values than the first attempt did for the same calls"
+    )
     tool_calls = [i for i, op in enumerate(program) if op == "tool"]
-    assert sorted(executed) == tool_calls, f"a tool ran {executed} for program {program}: once per call, never again on replay"
+    assert sorted(executed) == tool_calls, (
+        f"a tool ran {executed} for program {program}: once per call, never again on replay"
+    )

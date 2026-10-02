@@ -17,21 +17,34 @@ from typing import Any
 from substrate.runtime import ChatPayload, Message, Runtime
 from substrate.types import Actor, ChatMessage, Role, RunLogEntry, RunLogKind, TextBlock
 
-TERMINAL = frozenset({RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED})
+TERMINAL = frozenset(
+    {RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED}
+)
 
 
-async def start(runtime: Runtime, agent: Any, prompt: str, *, thread: str | None, tenant: str = "default") -> str:
+async def start(
+    runtime: Runtime,
+    agent: Any,
+    prompt: str,
+    *,
+    thread: str | None,
+    tenant: str = "default",
+) -> str:
     """Submit ``prompt`` to ``agent`` (on ``thread``, if given) and return the run's id.
 
     Raises ``ThreadBusyError`` if the thread already has an active run — before anything is written."""
     message = Message(
         target=agent.id,
         sender=Actor(type="http_proxy"),
-        payload=ChatPayload(message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])),
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
+        ),
     )
     if thread is not None:
         message = message.model_copy(update={"correlation_id": thread})
-    run_id = await runtime.submit(agent.id, message, tenant=tenant, max_retries=0, thread_id=thread)
+    run_id = await runtime.submit(
+        agent.id, message, tenant=tenant, max_retries=0, thread_id=thread
+    )
     return str(run_id)
 
 
@@ -40,7 +53,9 @@ async def is_finished(runtime: Runtime, run_id: str) -> bool:
     return run is not None and run.status.is_terminal
 
 
-async def follow(runtime: Runtime, run_id: str, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]:
+async def follow(
+    runtime: Runtime, run_id: str, *, from_seq: int = 0
+) -> AsyncIterator[RunLogEntry]:
     """The run's entries from ``from_seq`` on, ending after its terminal entry.
 
     A run that has already finished is replayed from its durable record (its live token deltas are gone by then — the
@@ -55,7 +70,9 @@ async def follow(runtime: Runtime, run_id: str, *, from_seq: int = 0) -> AsyncIt
             return
 
 
-async def with_keepalive(events: AsyncIterator[Any], interval: float) -> AsyncIterator[Any | None]:
+async def with_keepalive(
+    events: AsyncIterator[Any], interval: float
+) -> AsyncIterator[Any | None]:
     """``events``, with ``None`` yielded whenever ``interval`` seconds pass without one — so a run that is quietly waiting
     for a person (a suspended approval) still sends bytes and a proxy does not close the connection."""
     pending: asyncio.Task | None = None

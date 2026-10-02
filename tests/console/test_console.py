@@ -24,7 +24,14 @@ from substrate.console.subagents import SubagentTracker
 from substrate.console.status import StatusLine
 from substrate.console.theme import DEFAULT_THEME
 from substrate.types import Actor
-from substrate.types import AgentProgress, AgentStep, CompletionEvent, ReasoningDelta, StreamDone, TextDelta
+from substrate.types import (
+    AgentProgress,
+    AgentStep,
+    CompletionEvent,
+    ReasoningDelta,
+    StreamDone,
+    TextDelta,
+)
 from substrate.types import RunLogEntry
 
 

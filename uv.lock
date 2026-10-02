@@ -112,6 +112,9 @@ sentence-transformers = [
 serve = [
     { name = "fastapi" },
 ]
+server = [
+    { name = "fastapi" },
+]
 testing = [
     { name = "httpx" },
     { name = "pytest" },
@@ -163,6 +166,7 @@ requires-dist = [
     { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.14.4" },
     { name = "exa-py", marker = "extra == 'web'", specifier = ">=2.14.0" },
     { name = "fastapi", marker = "extra == 'serve'", specifier = ">=0.128.0" },
+    { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.128.0" },
     { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=1.73.0" },
     { name = "httpx", marker = "extra == 'openai'", specifier = ">=0.27.0" },
     { name = "httpx", marker = "extra == 'testing'", specifier = ">=0.27.0" },
@@ -209,7 +213,7 @@ requires-dist = [
     { name = "tiktoken", marker = "extra == 'openai'", specifier = ">=0.12.0" },
     { name = "tokenizers", marker = "extra == 'safety'", specifier = ">=0.20.0" },
 ]
-provides-extras = ["openai", "logging", "postgres", "redis", "scheduler", "mcp", "tts", "tools", "console", "serve", "testing", "web", "code", "sandbox", "ocr", "anthropic", "gemini", "s3", "safety", "sentence-transformers"]
+provides-extras = ["openai", "logging", "postgres", "redis", "scheduler", "mcp", "tts", "tools", "console", "serve", "server", "testing", "web", "code", "sandbox", "ocr", "anthropic", "gemini", "s3", "safety", "sentence-transformers"]
 
 [package.metadata.requires-dev]
 dev = [

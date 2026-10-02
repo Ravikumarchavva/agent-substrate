@@ -77,8 +77,12 @@ CREATE INDEX IF NOT EXISTS thread_checkpoints_session_idx ON thread_checkpoints 
 """
 ]
 
-_NODE = "id, session_id, parent_id, run_id, payload_json, workspace_snapshot_id, created_at"
-_BRANCH = "session_id, id, name, head_message_id, forked_from_message_id, version, created_at"
+_NODE = (
+    "id, session_id, parent_id, run_id, payload_json, workspace_snapshot_id, created_at"
+)
+_BRANCH = (
+    "session_id, id, name, head_message_id, forked_from_message_id, version, created_at"
+)
 _CHECKPOINT = "id, session_id, anchor_message_id, summary, state_json, parent_checkpoint_id, created_at"
 
 
@@ -128,7 +132,11 @@ async def _read_node(tx: Tx, node_id: str) -> MessageNode | None:
 
 
 async def _read_branch(tx: Tx, session_id: str, branch_id: str) -> Branch | None:
-    row = await tx.fetchone(f"SELECT {_BRANCH} FROM thread_branches WHERE session_id = ? AND id = ?", session_id, branch_id)
+    row = await tx.fetchone(
+        f"SELECT {_BRANCH} FROM thread_branches WHERE session_id = ? AND id = ?",
+        session_id,
+        branch_id,
+    )
     return _branch(row) if row else None
 
 
@@ -154,10 +162,13 @@ async def _append_node(tx: Tx, node: MessageNode) -> None:
             existing.parent_id == node.parent_id
             and existing.session_id == node.session_id
             and existing.run_id == node.run_id
-            and existing.payload.model_dump(mode="json") == node.payload.model_dump(mode="json")
+            and existing.payload.model_dump(mode="json")
+            == node.payload.model_dump(mode="json")
         ):
             return
-        raise DAGIntegrityError(f"Node '{node.id}' already exists with different contents")
+        raise DAGIntegrityError(
+            f"Node '{node.id}' already exists with different contents"
+        )
 
     if node.parent_id is not None:
         if node.parent_id == node.id:
@@ -184,8 +195,16 @@ async def _append_node(tx: Tx, node: MessageNode) -> None:
         await _append_node(tx, node)
 
 
-def _conflict(message: str, session_id: str, branch_id: str, expected: Any, actual: Any) -> BranchHeadConflictError:
-    return BranchHeadConflictError(message, session_id=session_id, branch_id=branch_id, expected=expected, actual=actual)
+def _conflict(
+    message: str, session_id: str, branch_id: str, expected: Any, actual: Any
+) -> BranchHeadConflictError:
+    return BranchHeadConflictError(
+        message,
+        session_id=session_id,
+        branch_id=branch_id,
+        expected=expected,
+        actual=actual,
+    )
 
 
 def _check_expectations(
@@ -216,7 +235,9 @@ def _check_expectations(
         )
 
 
-async def _advance(tx: Tx, branch: Branch, head_id: str, *, name: str | None = None) -> Branch:
+async def _advance(
+    tx: Tx, branch: Branch, head_id: str, *, name: str | None = None
+) -> Branch:
     """Move ``branch`` to ``head_id`` if nobody else moved it since it was read — the compare-and-swap."""
     moved = await tx.execute(
         "UPDATE thread_branches SET head_message_id = ?, name = ?, version = version + 1 "
@@ -271,16 +292,25 @@ class Threads:
     async def list_branches(self, session_id: str) -> list[Branch]:
         async def op(tx: Tx) -> list[Branch]:
             rows = await tx.fetchall(
-                f"SELECT {_BRANCH} FROM thread_branches WHERE session_id = ? ORDER BY created_at, id", session_id
+                f"SELECT {_BRANCH} FROM thread_branches WHERE session_id = ? ORDER BY created_at, id",
+                session_id,
             )
             return [_branch(row) for row in rows]
 
         return await self._run(op)
 
-    async def ensure_branch(self, session_id: str, branch_id: str, *, head_message_id: str | None = None) -> Branch:
+    async def ensure_branch(
+        self, session_id: str, branch_id: str, *, head_message_id: str | None = None
+    ) -> Branch:
         async def op(tx: Tx) -> Branch:
             await _insert_branch(
-                tx, Branch(id=branch_id, session_id=session_id, head_message_id=head_message_id, version=0)
+                tx,
+                Branch(
+                    id=branch_id,
+                    session_id=session_id,
+                    head_message_id=head_message_id,
+                    version=0,
+                ),
             )
             branch = await _read_branch(tx, session_id, branch_id)
             assert branch is not None
@@ -298,10 +328,14 @@ class Threads:
     ) -> Branch:
         async def op(tx: Tx) -> Branch:
             if await _read_branch(tx, session_id, new_branch_id) is not None:
-                raise BranchAlreadyExistsError(f"Branch '{new_branch_id}' already exists in session '{session_id}'")
+                raise BranchAlreadyExistsError(
+                    f"Branch '{new_branch_id}' already exists in session '{session_id}'"
+                )
             source = await _read_branch(tx, session_id, source_branch_id)
             if source is None:
-                raise BranchNotFoundError(f"Source branch '{source_branch_id}' not found in session '{session_id}'")
+                raise BranchNotFoundError(
+                    f"Source branch '{source_branch_id}' not found in session '{session_id}'"
+                )
 
             target_id: str | None
             if source.head_message_id is None:
@@ -315,7 +349,9 @@ class Threads:
             else:
                 target = await _read_node(tx, fork_from_message_id)
                 if target is None:
-                    raise DAGIntegrityError(f"Fork node '{fork_from_message_id}' does not exist")
+                    raise DAGIntegrityError(
+                        f"Fork node '{fork_from_message_id}' does not exist"
+                    )
                 if target.session_id != session_id:
                     raise DAGIntegrityError(
                         f"Fork node belongs to session '{target.session_id}', expected '{session_id}'"
@@ -343,16 +379,22 @@ class Threads:
                 version=0,
             )
             if not await _insert_branch(tx, forked):
-                raise BranchAlreadyExistsError(f"Branch '{new_branch_id}' already exists in session '{session_id}'")
+                raise BranchAlreadyExistsError(
+                    f"Branch '{new_branch_id}' already exists in session '{session_id}'"
+                )
             return forked
 
         return await self._run(op)
 
-    async def rename_branch(self, session_id: str, branch_id: str, new_name: str) -> Branch:
+    async def rename_branch(
+        self, session_id: str, branch_id: str, new_name: str
+    ) -> Branch:
         async def op(tx: Tx) -> Branch:
             branch = await _read_branch(tx, session_id, branch_id)
             if branch is None:
-                raise BranchNotFoundError(f"Branch '{branch_id}' not found in session '{session_id}'")
+                raise BranchNotFoundError(
+                    f"Branch '{branch_id}' not found in session '{session_id}'"
+                )
             renamed = await tx.execute(
                 "UPDATE thread_branches SET name = ?, version = version + 1 "
                 "WHERE session_id = ? AND id = ? AND version = ?",
@@ -362,7 +404,13 @@ class Threads:
                 branch.version,
             )
             if renamed == 0:
-                raise _conflict(f"Branch '{branch_id}' was changed concurrently", session_id, branch_id, branch.version, "changed")
+                raise _conflict(
+                    f"Branch '{branch_id}' was changed concurrently",
+                    session_id,
+                    branch_id,
+                    branch.version,
+                    "changed",
+                )
             updated = await _read_branch(tx, session_id, branch_id)
             assert updated is not None
             return updated
@@ -381,13 +429,24 @@ class Threads:
         async def op(tx: Tx) -> Branch:
             branch = await _read_branch(tx, session_id, branch_id)
             if branch is None:
-                raise BranchNotFoundError(f"Branch '{branch_id}' not found in session '{session_id}'")
-            _check_expectations(branch, session_id, branch_id, expected_head_id, expected_version, on_advance=False)
+                raise BranchNotFoundError(
+                    f"Branch '{branch_id}' not found in session '{session_id}'"
+                )
+            _check_expectations(
+                branch,
+                session_id,
+                branch_id,
+                expected_head_id,
+                expected_version,
+                on_advance=False,
+            )
             head = await _read_node(tx, new_head_id)
             if head is None:
                 raise DAGIntegrityError(f"New head node '{new_head_id}' does not exist")
             if head.session_id != session_id:
-                raise DAGIntegrityError(f"New head node belongs to session '{head.session_id}', expected '{session_id}'")
+                raise DAGIntegrityError(
+                    f"New head node belongs to session '{head.session_id}', expected '{session_id}'"
+                )
             return await _advance(tx, branch, new_head_id)
 
         return await self._run(op)
@@ -402,7 +461,12 @@ class Threads:
     ) -> Branch:
         async def op(tx: Tx) -> Branch:
             existing = await _read_branch(tx, node.session_id, branch_id)
-            branch = existing or Branch(id=branch_id, session_id=node.session_id, head_message_id=None, version=0)
+            branch = existing or Branch(
+                id=branch_id,
+                session_id=node.session_id,
+                head_message_id=None,
+                version=0,
+            )
             # The new node must extend the head: advancing past a node that is not its parent would
             # silently orphan whatever the head pointed at.
             if node.parent_id != branch.head_message_id:
@@ -414,13 +478,28 @@ class Threads:
                     branch.head_message_id,
                     node.parent_id,
                 )
-            _check_expectations(branch, node.session_id, branch_id, expected_head_id, expected_version, on_advance=True)
+            _check_expectations(
+                branch,
+                node.session_id,
+                branch_id,
+                expected_head_id,
+                expected_version,
+                on_advance=True,
+            )
             await _append_node(tx, node)
             if existing is not None:
                 return await _advance(tx, branch, node.id)
-            created = branch.model_copy(update={"head_message_id": node.id, "version": 1})
+            created = branch.model_copy(
+                update={"head_message_id": node.id, "version": 1}
+            )
             if not await _insert_branch(tx, created):
-                raise _conflict(f"Branch '{branch_id}' was created concurrently", node.session_id, branch_id, None, "created")
+                raise _conflict(
+                    f"Branch '{branch_id}' was created concurrently",
+                    node.session_id,
+                    branch_id,
+                    None,
+                    "created",
+                )
             return created
 
         return await self._run(op)
@@ -431,7 +510,9 @@ class Threads:
         async def op(tx: Tx) -> None:
             anchor = await _read_node(tx, checkpoint.anchor_message_id)
             if anchor is None:
-                raise DAGIntegrityError(f"Checkpoint anchor node '{checkpoint.anchor_message_id}' does not exist")
+                raise DAGIntegrityError(
+                    f"Checkpoint anchor node '{checkpoint.anchor_message_id}' does not exist"
+                )
             if anchor.session_id != checkpoint.session_id:
                 raise DAGIntegrityError(
                     f"Checkpoint anchor belongs to session '{anchor.session_id}', expected '{checkpoint.session_id}'"
@@ -455,7 +536,10 @@ class Threads:
 
     async def get_checkpoint(self, checkpoint_id: str) -> HistoryCheckpoint | None:
         async def op(tx: Tx) -> HistoryCheckpoint | None:
-            row = await tx.fetchone(f"SELECT {_CHECKPOINT} FROM thread_checkpoints WHERE id = ?", checkpoint_id)
+            row = await tx.fetchone(
+                f"SELECT {_CHECKPOINT} FROM thread_checkpoints WHERE id = ?",
+                checkpoint_id,
+            )
             return _checkpoint(row) if row else None
 
         return await self._run(op)
@@ -463,7 +547,8 @@ class Threads:
     async def list_checkpoints(self, session_id: str) -> list[HistoryCheckpoint]:
         async def op(tx: Tx) -> list[HistoryCheckpoint]:
             rows = await tx.fetchall(
-                f"SELECT {_CHECKPOINT} FROM thread_checkpoints WHERE session_id = ? ORDER BY created_at, id", session_id
+                f"SELECT {_CHECKPOINT} FROM thread_checkpoints WHERE session_id = ? ORDER BY created_at, id",
+                session_id,
             )
             return [_checkpoint(row) for row in rows]
 
@@ -476,15 +561,25 @@ class Threads:
             raise ValueError("cannot delete the main branch")
 
         async def op(tx: Tx) -> None:
-            await tx.execute("DELETE FROM thread_branches WHERE session_id = ? AND id = ?", session_id, branch_id)
+            await tx.execute(
+                "DELETE FROM thread_branches WHERE session_id = ? AND id = ?",
+                session_id,
+                branch_id,
+            )
 
         await self._run(op)
 
     async def delete_session(self, session_id: str) -> None:
         async def op(tx: Tx) -> None:
-            await tx.execute("DELETE FROM thread_checkpoints WHERE session_id = ?", session_id)
-            await tx.execute("DELETE FROM thread_branches WHERE session_id = ?", session_id)
-            await tx.execute("DELETE FROM thread_nodes WHERE session_id = ?", session_id)
+            await tx.execute(
+                "DELETE FROM thread_checkpoints WHERE session_id = ?", session_id
+            )
+            await tx.execute(
+                "DELETE FROM thread_branches WHERE session_id = ?", session_id
+            )
+            await tx.execute(
+                "DELETE FROM thread_nodes WHERE session_id = ?", session_id
+            )
 
         await self._run(op)
 

@@ -35,7 +35,8 @@ def build_user_blocks(
     message the agent actually sees."""
     blocks: list[TextBlock | MediaBlock] = [TextBlock(text=text)]
     blocks.extend(
-        MediaBlock.image(data=img.data, media_type=img.media_type) for img in image_inputs
+        MediaBlock.image(data=img.data, media_type=img.media_type)
+        for img in image_inputs
     )
     return blocks
 

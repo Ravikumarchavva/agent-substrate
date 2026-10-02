@@ -47,7 +47,12 @@ if TYPE_CHECKING:
     from substrate.agents.orchestrator import SubAgentConfig
 
 _TERMINAL_KINDS = frozenset(
-    {RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED, RunLogKind.RUN_TRUNCATED}
+    {
+        RunLogKind.RUN_COMPLETED,
+        RunLogKind.RUN_FAILED,
+        RunLogKind.RUN_CANCELLED,
+        RunLogKind.RUN_TRUNCATED,
+    }
 )
 
 
@@ -158,7 +163,9 @@ class Runtime:
         ``ThreadBusyError`` and leaves nothing behind. ``recipe`` is opaque to the engine:
         whatever a host needs to rebuild this run's agent after a restart.
         """
-        await self._resolver.resolve(agent_id)  # an unknown agent is refused here, not after a lease
+        await self._resolver.resolve(
+            agent_id
+        )  # an unknown agent is refused here, not after a lease
         run = await self._store.create_run(
             RunSpec(
                 agent=agent_id,
@@ -173,7 +180,14 @@ class Runtime:
         )
         return run.run_id
 
-    async def run(self, agent: Any, prompt: str, *, tenant: str = "default", thread: str | None = None) -> RunOutcome:
+    async def run(
+        self,
+        agent: Any,
+        prompt: str,
+        *,
+        tenant: str = "default",
+        thread: str | None = None,
+    ) -> RunOutcome:
         """Run an agent on one prompt and wait for its answer.
 
         Each call is a conversation of its own unless you name a ``thread``: runs on the same thread share
@@ -187,7 +201,9 @@ class Runtime:
         message = _chat(Actor(type="user", key="run"), agent.id, prompt)
         if thread is not None:
             message = message.model_copy(update={"correlation_id": thread})
-        run_id = await self.submit(agent.id, message, tenant=tenant, max_retries=0, thread_id=thread)
+        run_id = await self.submit(
+            agent.id, message, tenant=tenant, max_retries=0, thread_id=thread
+        )
         text = ""
         async for entry in self.tail(run_id):
             payload = entry.payload or {}
@@ -196,14 +212,29 @@ class Runtime:
             elif entry.kind == RunLogKind.ASSISTANT_MESSAGE:
                 text = payload.get("text", "")
             elif entry.kind == RunLogKind.RUN_COMPLETED:
-                return RunOutcome(run_id=run_id, status=RunStatus.COMPLETED, output=text or None)
+                return RunOutcome(
+                    run_id=run_id, status=RunStatus.COMPLETED, output=text or None
+                )
             elif entry.kind == RunLogKind.RUN_FAILED:
-                return RunOutcome(run_id=run_id, status=RunStatus.FAILED, error=payload.get("error", "agent run failed"))
+                return RunOutcome(
+                    run_id=run_id,
+                    status=RunStatus.FAILED,
+                    error=payload.get("error", "agent run failed"),
+                )
             elif entry.kind == RunLogKind.RUN_CANCELLED:
                 return RunOutcome(run_id=run_id, status=RunStatus.CANCELLED)
-        return RunOutcome(run_id=run_id, status=RunStatus.COMPLETED, output=text or None)
+        return RunOutcome(
+            run_id=run_id, status=RunStatus.COMPLETED, output=text or None
+        )
 
-    async def ask(self, agent: Any, prompt: str, *, timeout: float = 120.0, tenant: str = "default") -> RunOutcome:
+    async def ask(
+        self,
+        agent: Any,
+        prompt: str,
+        *,
+        timeout: float = 120.0,
+        tenant: str = "default",
+    ) -> RunOutcome:
         """Run an agent that answers with ``ctx.reply`` (a flow, say) and wait for the reply.
 
         Such agents do not stream text, so ``run`` cannot capture their output. This
@@ -212,23 +243,36 @@ class Runtime:
         """
         await self.register(agent)
         sentinel = RunId(new_id())
-        msg = _chat(Actor(type="user", key="ask"), agent.id, prompt).model_copy(update={"reply_to": sentinel})
+        msg = _chat(Actor(type="user", key="ask"), agent.id, prompt).model_copy(
+            update={"reply_to": sentinel}
+        )
         run_id = await self.submit(agent.id, msg, tenant=tenant, max_retries=0)
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
         while loop.time() < deadline:
-            payload = await self._store.consume(sentinel, f"reply:{msg.correlation_id}", f"runtime-ask:{sentinel}")
+            payload = await self._store.consume(
+                sentinel, f"reply:{msg.correlation_id}", f"runtime-ask:{sentinel}"
+            )
             if payload is not None:
-                return RunOutcome(run_id=run_id, status=RunStatus.COMPLETED, output=payload.get("text") or None, error=payload.get("error") or None)
+                return RunOutcome(
+                    run_id=run_id,
+                    status=RunStatus.COMPLETED,
+                    output=payload.get("text") or None,
+                    error=payload.get("error") or None,
+                )
             await asyncio.sleep(0.02)
-        return RunOutcome(run_id=run_id, status=RunStatus.FAILED, error="timed out waiting for reply")
+        return RunOutcome(
+            run_id=run_id, status=RunStatus.FAILED, error="timed out waiting for reply"
+        )
 
     async def follow(self, follower: Actor, topic_type: str, topic_source: str) -> None:
         await self._store.follow(follower, Topic(f"{topic_type}/{topic_source}"))
 
     async def publish(self, topic_type: str, topic_source: str, msg: Message) -> None:
         """Deliver ``msg`` to every follower of the topic."""
-        for follower in await self._store.followers_of(Topic(f"{topic_type}/{topic_source}")):
+        for follower in await self._store.followers_of(
+            Topic(f"{topic_type}/{topic_source}")
+        ):
             await self._store.deliver(Delivery(agent=follower, msg=msg))
 
     # ------------------------------------------------------------------ observing
@@ -237,14 +281,20 @@ class Runtime:
     def store(self) -> RuntimeStore:
         return self._store
 
-    def tail(self, run_id: RunId | str, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]:
+    def tail(
+        self, run_id: RunId | str, *, from_seq: int = 0
+    ) -> AsyncIterator[RunLogEntry]:
         """A run's entries — live output included — as they happen. Never ends on its own:
         stop iterating when you see the terminal entry you care about."""
         return tail(self._store, run_id, from_seq=from_seq)
 
-    async def read(self, run_id: RunId | str, *, from_seq: int = 0) -> list[RunLogEntry]:
+    async def read(
+        self, run_id: RunId | str, *, from_seq: int = 0
+    ) -> list[RunLogEntry]:
         """A run's durable entries so far (no live output): what a replay would see."""
-        return await self._store.read_events(RunId(run_id), from_seq=from_seq, durable_only=True)
+        return await self._store.read_events(
+            RunId(run_id), from_seq=from_seq, durable_only=True
+        )
 
     async def get_run(self, run_id: RunId | str) -> RunRecord | None:
         return await self._store.get_run(RunId(run_id))
@@ -259,7 +309,9 @@ class Runtime:
 
     # ------------------------------------------------------------------ control
 
-    async def cancel(self, run_id: RunId | str, *, reason: str = "cancelled") -> list[RunId]:
+    async def cancel(
+        self, run_id: RunId | str, *, reason: str = "cancelled"
+    ) -> list[RunId]:
         """Cancel a run and everything it spawned. A run on this worker is interrupted
         now; one on another worker notices at its next heartbeat."""
         affected = await self._store.request_cancel(RunId(run_id), reason=reason)
@@ -302,9 +354,11 @@ class Runtime:
         ``by`` is journaled with the decision — an approval nobody can be held to is not a control. ``MODIFIED`` runs the
         call with ``modified_args`` instead of what the model asked for.
         """
-        action = {ApprovalDecision.APPROVED: "approve", ApprovalDecision.DENIED: "deny", ApprovalDecision.MODIFIED: "modify"}.get(
-            ApprovalDecision(decision)
-        )
+        action = {
+            ApprovalDecision.APPROVED: "approve",
+            ApprovalDecision.DENIED: "deny",
+            ApprovalDecision.MODIFIED: "modify",
+        }.get(ApprovalDecision(decision))
         if action is None:
             raise ValueError(f"{decision!r} is not a decision a person can make")
         if action == "modify" and modified_args is None:
@@ -351,7 +405,9 @@ def _chat(sender: Actor, target: Actor, prompt: str) -> Message:
     return Message(
         target=target,
         sender=sender,
-        payload=ChatPayload(message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])),
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
+        ),
     )
 
 

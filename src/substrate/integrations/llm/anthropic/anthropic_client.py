@@ -14,7 +14,13 @@ from substrate.models.modalities import fit_to_capabilities
 from substrate.models.registry import resolve_capabilities
 from substrate.types import RunMeta
 from substrate.types.finish_reason import FinishReason
-from substrate.models import GenerationOptions, ChatModel, LLMResponse, ModelCapabilities, ReasoningEffort
+from substrate.models import (
+    GenerationOptions,
+    ChatModel,
+    LLMResponse,
+    ModelCapabilities,
+    ReasoningEffort,
+)
 from substrate.types import Usage
 from substrate.types import ChatMessage, ContentBlock
 from substrate.tools import Tool, is_hosted_tool, is_provider_defined_tool
@@ -50,7 +56,6 @@ def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str,
     ]
 
 
-
 _ANTHROPIC_FINISH = {
     "end_turn": FinishReason.STOP,
     "stop_sequence": FinishReason.STOP,
@@ -66,6 +71,7 @@ def anthropic_finish_reason(stop_reason: str | None) -> FinishReason:
     if stop_reason is None:
         return FinishReason.UNSPECIFIED
     return _ANTHROPIC_FINISH.get(stop_reason, FinishReason.OTHER)
+
 
 class AnthropicClient(ChatModel):
     """Anthropic Claude API client — text and vision.
@@ -179,7 +185,9 @@ class AnthropicClient(ChatModel):
             self._fit_max_tokens(params)
         else:
             params["temperature"] = (
-                options.temperature if options.temperature is not None else self.temperature
+                options.temperature
+                if options.temperature is not None
+                else self.temperature
             )
 
         tools = self._serialize_tools(_tools_from_options(options))
@@ -307,7 +315,9 @@ class AnthropicClient(ChatModel):
         return LLMResponse(
             content=final_blocks,
             usage=usage,
-            finish_reason=anthropic_finish_reason(getattr(response, "stop_reason", None)),
+            finish_reason=anthropic_finish_reason(
+                getattr(response, "stop_reason", None)
+            ),
             response_id=getattr(response, "id", None),
             served_model=getattr(response, "model", None),
         )
@@ -356,7 +366,9 @@ class AnthropicClient(ChatModel):
                     if u is not None:
                         input_tokens = getattr(u, "input_tokens", 0) or 0
                         cache_read = getattr(u, "cache_read_input_tokens", 0) or 0
-                        cache_creation = getattr(u, "cache_creation_input_tokens", 0) or 0
+                        cache_creation = (
+                            getattr(u, "cache_creation_input_tokens", 0) or 0
+                        )
 
                 elif event_type == "content_block_start":
                     block = event_any.content_block
@@ -420,9 +432,14 @@ class AnthropicClient(ChatModel):
                         current_tool_json = ""
 
                 elif event_type == "message_delta":
-                    stop_reason = getattr(getattr(event_any, "delta", None), "stop_reason", None) or stop_reason
+                    stop_reason = (
+                        getattr(getattr(event_any, "delta", None), "stop_reason", None)
+                        or stop_reason
+                    )
                     if hasattr(event_any, "usage"):
-                        output_tokens = getattr(event_any.usage, "output_tokens", 0) or 0
+                        output_tokens = (
+                            getattr(event_any.usage, "output_tokens", 0) or 0
+                        )
 
         # Build final message. Anthropic requires thinking blocks to appear
         # first in the assistant turn (before text/tool_use) when continuing a

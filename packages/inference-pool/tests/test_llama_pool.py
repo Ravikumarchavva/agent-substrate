@@ -53,7 +53,9 @@ def _argv_patch(monkeypatch: pytest.MonkeyPatch, pool: LocalLlamaServerPool) -> 
     monkeypatch.setattr(pool, "_argv", patched)
 
 
-async def test_pool_starts_n_workers_and_becomes_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_pool_starts_n_workers_and_becomes_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pool = _make_pool(["gpu:0", "gpu:1"], base_port=18100)
     _argv_patch(monkeypatch, pool)
     try:
@@ -64,7 +66,9 @@ async def test_pool_starts_n_workers_and_becomes_ready(monkeypatch: pytest.Monke
         await pool.aclose()
 
 
-async def test_acquire_release_cycle_returns_a_real_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_acquire_release_cycle_returns_a_real_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pool = _make_pool(["gpu:0"], base_port=18110)
     _argv_patch(monkeypatch, pool)
     try:
@@ -140,7 +144,9 @@ async def test_worker_crash_triggers_restart_or_degrades_worker_count(
         await pool.aclose()
 
 
-async def test_aclose_leaves_no_orphaned_children(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_aclose_leaves_no_orphaned_children(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pool = _make_pool(["gpu:0", "gpu:1"], base_port=18140)
     _argv_patch(monkeypatch, pool)
     await pool.start()
@@ -161,7 +167,9 @@ async def test_aclose_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     await pool.aclose()  # must not raise or hang the second time
 
 
-async def test_zero_of_n_workers_healthy_leaves_pool_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_zero_of_n_workers_healthy_leaves_pool_not_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Point at a binary that will genuinely fail to bind/health-check in
     time — a real, guaranteed-to-be-missing binary name triggers
     FileNotFoundError inside _spawn, which _start_worker lets propagate,
@@ -194,7 +202,9 @@ def test_argv_includes_m_and_mmproj_when_both_given() -> None:
     )
     argv = pool._argv(18090)
     assert "-m" in argv and argv[argv.index("-m") + 1] == "/models/main.gguf"
-    assert "--mmproj" in argv and argv[argv.index("--mmproj") + 1] == "/models/mmproj.gguf"
+    assert (
+        "--mmproj" in argv and argv[argv.index("--mmproj") + 1] == "/models/mmproj.gguf"
+    )
 
 
 def test_argv_omits_m_and_mmproj_when_both_none() -> None:
@@ -217,10 +227,22 @@ def test_argv_appends_extra_args_after_universal_flags() -> None:
         gpu_devices=["gpu:0"],
         base_port=18090,
         slots=2,
-        extra_args=["--hf-repo", "org/Repo-GGUF", "--hf-file", "model.gguf", "--embedding"],
+        extra_args=[
+            "--hf-repo",
+            "org/Repo-GGUF",
+            "--hf-file",
+            "model.gguf",
+            "--embedding",
+        ],
     )
     argv = pool._argv(18090)
-    assert argv[-5:] == ["--hf-repo", "org/Repo-GGUF", "--hf-file", "model.gguf", "--embedding"]
+    assert argv[-5:] == [
+        "--hf-repo",
+        "org/Repo-GGUF",
+        "--hf-file",
+        "model.gguf",
+        "--embedding",
+    ]
     # slots still covers -np, no double --parallel from extra_args in this test
     assert "-np" in argv and argv[argv.index("-np") + 1] == "2"
 
@@ -238,7 +260,13 @@ async def test_pool_with_no_gguf_files_and_extra_args_still_spawns_and_becomes_h
         gpu_devices=["gpu:0"],
         base_port=18170,
         startup_timeout_s=10.0,
-        extra_args=["--hf-repo", "org/Repo-GGUF", "--hf-file", "model.gguf", "--embedding"],
+        extra_args=[
+            "--hf-repo",
+            "org/Repo-GGUF",
+            "--hf-file",
+            "model.gguf",
+            "--embedding",
+        ],
     )
     _argv_patch(monkeypatch, pool)
     await pool.start()
@@ -251,8 +279,12 @@ async def test_pool_with_no_gguf_files_and_extra_args_still_spawns_and_becomes_h
 
 async def test_remote_pool_cycles_preconfigured_endpoints() -> None:
     endpoints = [
-        InferenceEndpoint(model="compatible/PaddleOCR-VL-1.6", base_url="http://vl-a:9000"),
-        InferenceEndpoint(model="compatible/PaddleOCR-VL-1.6", base_url="http://vl-b:9000"),
+        InferenceEndpoint(
+            model="compatible/PaddleOCR-VL-1.6", base_url="http://vl-a:9000"
+        ),
+        InferenceEndpoint(
+            model="compatible/PaddleOCR-VL-1.6", base_url="http://vl-b:9000"
+        ),
     ]
     pool = RemoteInferencePool(endpoints, layout_devices=["cpu"])
     await pool.start()
@@ -262,7 +294,10 @@ async def test_remote_pool_cycles_preconfigured_endpoints() -> None:
 
     w1 = await pool.acquire()
     w2 = await pool.acquire()
-    assert {w1.endpoint.base_url, w2.endpoint.base_url} == {"http://vl-a:9000", "http://vl-b:9000"}
+    assert {w1.endpoint.base_url, w2.endpoint.base_url} == {
+        "http://vl-a:9000",
+        "http://vl-b:9000",
+    }
     pool.release(w1)
     pool.release(w2)
 

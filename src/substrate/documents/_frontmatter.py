@@ -28,7 +28,10 @@ _YAML_WORDS = {"true", "false", "yes", "no", "on", "off", "null", "y", "n", "~"}
 def load_mapping(text: str) -> dict[str, Any]:
     """The top-level mapping in ``text``. Lines that are not ``key: value`` at column 0 are ignored; a value that cannot be
     parsed is kept as its raw text."""
-    lines = [line.rstrip() for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    lines = [
+        line.rstrip()
+        for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    ]
     result: dict[str, Any] = {}
     i = 0
     while i < len(lines):
@@ -72,7 +75,11 @@ def _split_key(content: str) -> tuple[str | None, str]:
                 break
             end += 1
         after = content[end + 1 :]
-        if end < len(content) and after.startswith(":") and (len(after) == 1 or after[1] == " "):
+        if (
+            end < len(content)
+            and after.startswith(":")
+            and (len(after) == 1 or after[1] == " ")
+        ):
             return _quoted(content[: end + 1]), after[1:].strip()
         return None, content
     if content[:1] in "[{-#" and not content.startswith("-" * 3):
@@ -95,20 +102,28 @@ def _value(lines: list[str], i: int, indent: int, rest: str) -> tuple[Any, int]:
     """The value whose first text is ``rest`` (the remainder of line ``i``); returns it and the next line to read."""
     rest = _strip_comment(rest) if rest[:1] not in ("|", ">") else rest
     if rest[:1] in ("|", ">"):
-        return _block_scalar(lines, i + 1, indent, folded=rest[0] == ">", chomp=rest[1:2])
+        return _block_scalar(
+            lines, i + 1, indent, folded=rest[0] == ">", chomp=rest[1:2]
+        )
     if rest:
         value, tail = _flow(rest, 0)
-        if tail.strip():  # trailing text after a complete value: it was a plain scalar after all
+        if (
+            tail.strip()
+        ):  # trailing text after a complete value: it was a plain scalar after all
             return _plain(rest), i + 1
         return value, i + 1
     # no inline value: a nested block follows (deeper), or a sequence at the same indent
     j = i + 1
-    while j < len(lines) and (not lines[j].strip() or lines[j].lstrip().startswith("#")):
+    while j < len(lines) and (
+        not lines[j].strip() or lines[j].lstrip().startswith("#")
+    ):
         j += 1
     if j >= len(lines):
         return None, j
     nxt = lines[j]
-    if _indent(nxt) > indent or (_indent(nxt) == indent and nxt.lstrip().startswith("- ") or nxt.strip() == "-"):
+    if _indent(nxt) > indent or (
+        _indent(nxt) == indent and nxt.lstrip().startswith("- ") or nxt.strip() == "-"
+    ):
         return _block(lines, j, _indent(nxt))
     return None, i + 1
 
@@ -143,7 +158,9 @@ def _sequence(lines: list[str], i: int, indent: int) -> tuple[list[Any], int]:
         if not line.strip() or line.lstrip().startswith("#"):
             i += 1
             continue
-        if _indent(line) != indent or not (line.lstrip().startswith("- ") or line.strip() == "-"):
+        if _indent(line) != indent or not (
+            line.lstrip().startswith("- ") or line.strip() == "-"
+        ):
             break
         item = line.lstrip()[1:]
         content = item.strip()
@@ -173,7 +190,9 @@ def _sequence(lines: list[str], i: int, indent: int) -> tuple[list[Any], int]:
     return out, i
 
 
-def _block_scalar(lines: list[str], i: int, indent: int, *, folded: bool, chomp: str) -> tuple[str, int]:
+def _block_scalar(
+    lines: list[str], i: int, indent: int, *, folded: bool, chomp: str
+) -> tuple[str, int]:
     body: list[str] = []
     width: int | None = None
     while i < len(lines):
@@ -297,9 +316,15 @@ def _scalar(value: Any) -> str:
         return str(value)
     if isinstance(value, float):
         text = repr(value)
-        return text.replace("e", ".0e", 1) if ("e" in text and "." not in text) else text
+        return (
+            text.replace("e", ".0e", 1) if ("e" in text and "." not in text) else text
+        )
     text = str(value)
-    if _PLAIN_SAFE.match(text) and text.lower() not in _YAML_WORDS and not text.endswith(" "):
+    if (
+        _PLAIN_SAFE.match(text)
+        and text.lower() not in _YAML_WORDS
+        and not text.endswith(" ")
+    ):
         return text
     return json.dumps(text, ensure_ascii=False)
 
@@ -315,7 +340,9 @@ def dump_mapping(data: dict[str, Any]) -> str:
     lines = []
     for key, value in data.items():
         name = str(key)
-        lines.append(f"{name if _PLAIN_KEY.match(name) else json.dumps(name, ensure_ascii=False)}: {_render(value)}")
+        lines.append(
+            f"{name if _PLAIN_KEY.match(name) else json.dumps(name, ensure_ascii=False)}: {_render(value)}"
+        )
     return "\n".join(lines)
 
 

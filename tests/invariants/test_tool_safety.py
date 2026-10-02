@@ -26,7 +26,9 @@ def _tool(**declared: Any) -> object:
         "name": "probe",
         "description": "d",
         "input_schema": {"type": "object", "properties": {}},
-        "execute": lambda self, **kw: ToolExecutionResult(name="probe", content=[TextBlock(text="ok")]),
+        "execute": lambda self, **kw: ToolExecutionResult(
+            name="probe", content=[TextBlock(text="ok")]
+        ),
         **declared,
     }
     return type("Probe", (), attrs)()
@@ -61,7 +63,9 @@ def _shipped_tool_classes() -> list[type]:
     import substrate.integrations.tools as package
 
     found: list[type] = []
-    for module_info in pkgutil.walk_packages(package.__path__, prefix=f"{package.__name__}."):
+    for module_info in pkgutil.walk_packages(
+        package.__path__, prefix=f"{package.__name__}."
+    ):
         try:
             module = importlib.import_module(module_info.name)
         except ImportError:  # an optional dependency this environment lacks
@@ -72,10 +76,21 @@ def _shipped_tool_classes() -> list[type]:
         for node in ast.parse(open(source_path, encoding="utf-8").read()).body:
             if not isinstance(node, ast.ClassDef):
                 continue
-            has_execute = any(isinstance(b, ast.AsyncFunctionDef) and b.name == "execute" for b in node.body)
+            has_execute = any(
+                isinstance(b, ast.AsyncFunctionDef) and b.name == "execute"
+                for b in node.body
+            )
             declares_shape = any(
-                (isinstance(b, ast.AnnAssign) and getattr(b.target, "id", "") in ("input_schema",))
-                or (isinstance(b, ast.Assign) and any(getattr(t, "id", "") in ("input_schema",) for t in b.targets))
+                (
+                    isinstance(b, ast.AnnAssign)
+                    and getattr(b.target, "id", "") in ("input_schema",)
+                )
+                or (
+                    isinstance(b, ast.Assign)
+                    and any(
+                        getattr(t, "id", "") in ("input_schema",) for t in b.targets
+                    )
+                )
                 for b in node.body
             )
             if has_execute and (declares_shape or node.name.endswith("Tool")):
@@ -85,22 +100,40 @@ def _shipped_tool_classes() -> list[type]:
 
 def test_i22_every_shipped_tool_declares_its_risk_and_idempotency() -> None:
     classes = _shipped_tool_classes()
-    assert len(classes) >= 15, f"the scan found only {len(classes)} tools; it has stopped finding them"
+    assert len(classes) >= 15, (
+        f"the scan found only {len(classes)} tools; it has stopped finding them"
+    )
     # MCPTool takes both at construction, with a deny-by-default value: checked separately below.
     undeclared = {
         cls.__qualname__: (getattr(cls, "risk", None), getattr(cls, "idempotent", None))
         for cls in classes
         if cls.__name__ != "MCPTool"
-        and not (isinstance(getattr(cls, "risk", None), ToolRisk) and isinstance(getattr(cls, "idempotent", None), bool))
+        and not (
+            isinstance(getattr(cls, "risk", None), ToolRisk)
+            and isinstance(getattr(cls, "idempotent", None), bool)
+        )
     }
-    assert not undeclared, f"tools that do not declare risk and idempotent: {undeclared}"
+    assert not undeclared, (
+        f"tools that do not declare risk and idempotent: {undeclared}"
+    )
 
 
-def test_i22_a_tool_from_an_mcp_server_needs_approval_unless_the_operator_says_otherwise() -> None:
+def test_i22_a_tool_from_an_mcp_server_needs_approval_unless_the_operator_says_otherwise() -> (
+    None
+):
     from substrate.integrations.tools.mcp.tool import MCPTool
 
-    server_tool = MCPTool(client=object(), name="rm", description="d", input_schema={"type": "object"})  # type: ignore[arg-type]
+    server_tool = MCPTool(
+        client=object(), name="rm", description="d", input_schema={"type": "object"}
+    )  # type: ignore[arg-type]
     assert server_tool.risk is ToolRisk.HIGH and server_tool.idempotent is False
 
-    vouched = MCPTool(client=object(), name="read", description="d", input_schema={"type": "object"}, risk=ToolRisk.SAFE, idempotent=True)  # type: ignore[arg-type]
+    vouched = MCPTool(
+        client=object(),
+        name="read",
+        description="d",
+        input_schema={"type": "object"},
+        risk=ToolRisk.SAFE,
+        idempotent=True,
+    )  # type: ignore[arg-type]
     assert vouched.risk is ToolRisk.SAFE and vouched.idempotent is True

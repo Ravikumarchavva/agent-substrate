@@ -84,7 +84,9 @@ def sandbox_result_to_tool_result(result: dict[str, Any]) -> ToolExecutionResult
         if mime.startswith("image/") and content_b64:
             try:
                 media.append(
-                    MediaBlock.image(data=base64.b64decode(content_b64), media_type=mime)
+                    MediaBlock.image(
+                        data=base64.b64decode(content_b64), media_type=mime
+                    )
                 )
                 text_parts.append(f"[Generated {name}]")
             except Exception:

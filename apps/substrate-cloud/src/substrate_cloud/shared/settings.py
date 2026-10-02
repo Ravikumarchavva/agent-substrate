@@ -35,6 +35,7 @@ class ServerSettings(SubstrateConfig):
         if not self.PENDING_UPLOAD_LOCAL_PATH:
             self.PENDING_UPLOAD_LOCAL_PATH = f"{root}/blobs/pending"
         return self
+
     FILE_MAX_UPLOAD_BYTES: int = 200 * 1024 * 1024
     # routes/files.py::sweep_stuck_staging_uploads -- a startup-time
     # reconciliation pass for uploads whose eager staging (extraction +

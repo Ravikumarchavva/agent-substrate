@@ -29,7 +29,11 @@ def under(column: str, name: str) -> tuple[str, list[Any]]:
     as in ``FileStore.delete_prefix``. A prefix test by ``substr`` rather than ``LIKE``, so ``%`` and ``_`` in a
     tenant's id are just characters."""
     stem = name.rstrip("/") or name
-    return f"({column} = ? OR substr({column}, 1, ?) = ?)", [stem, len(stem) + 1, stem + "/"]
+    return f"({column} = ? OR substr({column}, 1, ?) = ?)", [
+        stem,
+        len(stem) + 1,
+        stem + "/",
+    ]
 
 
 class Tx(Protocol):
@@ -87,7 +91,9 @@ Script = str | Callable[["Database"], str]
 """A migration: SQL, or a function of the database that returns it, for a part whose DDL differs by dialect."""
 
 
-async def migrate(database: Database, component: str, scripts: Sequence[Script]) -> None:
+async def migrate(
+    database: Database, component: str, scripts: Sequence[Script]
+) -> None:
     """Bring ``component``'s tables up to ``len(scripts)``.
 
     ``scripts[i]`` is version ``i + 1``. A script may use ``{pk}`` for the database's auto-increment column
@@ -98,7 +104,9 @@ async def migrate(database: Database, component: str, scripts: Sequence[Script])
     await database.start()
     await database.script(_MIGRATIONS_TABLE)
     async with database.transaction() as tx:
-        rows = await tx.fetchall("SELECT version FROM substrate_migrations WHERE component = ?", component)
+        rows = await tx.fetchall(
+            "SELECT version FROM substrate_migrations WHERE component = ?", component
+        )
     applied = max((int(row["version"]) for row in rows), default=0)
     if applied > len(scripts):
         raise StoreVersionError(

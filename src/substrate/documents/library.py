@@ -101,7 +101,9 @@ CREATE TABLE IF NOT EXISTS library_sections (
     UNIQUE (collection, document, position)
 );
 """
-        + textsearch.ddl(database.dialect, index="library_sections_fts", table="library_sections")
+        + textsearch.ddl(
+            database.dialect, index="library_sections_fts", table="library_sections"
+        )
         + """
 CREATE TABLE IF NOT EXISTS library_images (
     seq {pk},
@@ -264,8 +266,12 @@ class Library:
         self._store = store
         self._files: FileStore = files if files is not None else store.files
         self._reader = reader or Reader()
-        self._embedder: EmbeddingModel | None = RemoteEmbedder(embedder) if isinstance(embedder, str) else embedder
-        self._reranker: Reranker | None = RemoteReranker(reranker) if isinstance(reranker, str) else reranker
+        self._embedder: EmbeddingModel | None = (
+            RemoteEmbedder(embedder) if isinstance(embedder, str) else embedder
+        )
+        self._reranker: Reranker | None = (
+            RemoteReranker(reranker) if isinstance(reranker, str) else reranker
+        )
         self._chunk_tokens = chunk_tokens
 
     async def _run(self, fn):
@@ -299,17 +305,28 @@ class Library:
         the original bytes as ``sha256`` if you have it: the document's id (``document_id``) is derived from it. Raises ``DocumentError`` for a file that could
         not be read or has no readable text."""
         if isinstance(source, ExtractionResult):
-            result, digest = source, sha256 or hashlib.sha256(source.markdown.encode("utf-8")).hexdigest()
+            result, digest = (
+                source,
+                sha256 or hashlib.sha256(source.markdown.encode("utf-8")).hexdigest(),
+            )
         else:
             digest = hashlib.sha256(source).hexdigest()
-            result = await self._reader.read(source, filename, content_type=content_type)
+            result = await self._reader.read(
+                source, filename, content_type=content_type
+            )
         if not result.success:
             raise DocumentError(result.error or "the document could not be read")
         images = [image for page in result.pages for image in page.images]
         text = _PAGE_MARKER_LINE.sub("", result.markdown).strip()
         if not text and not images:
-            where = f" (pages {', '.join(map(str, result.needs_ocr))} are pictures of text and OCR is not available)" if result.needs_ocr else ""
-            raise DocumentError(f"{filename or 'the document'} has no readable text{where}")
+            where = (
+                f" (pages {', '.join(map(str, result.needs_ocr))} are pictures of text and OCR is not available)"
+                if result.needs_ocr
+                else ""
+            )
+            raise DocumentError(
+                f"{filename or 'the document'} has no readable text{where}"
+            )
 
         stem = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0] or "document"
         document = self.document_id(filename, digest)
@@ -317,22 +334,52 @@ class Library:
         if await self._exists(collection, document):
             info = await self.info(collection, document)
             assert info is not None
-            return Added(document, info.title, info.filename, info.pages, info.sections, info.images, info.needs_ocr, duplicate=True)
+            return Added(
+                document,
+                info.title,
+                info.filename,
+                info.pages,
+                info.sections,
+                info.images,
+                info.needs_ocr,
+                duplicate=True,
+            )
 
-        title = result.title or next((h[1] for h in _headings_in(result.markdown) if h[0] <= 2), "") or stem
+        title = (
+            result.title
+            or next((h[1] for h in _headings_in(result.markdown) if h[0] <= 2), "")
+            or stem
+        )
         image_ids: dict[tuple[int, int], str] = {}
         for page in result.pages:
             for k, image in enumerate(page.images):
-                image_ids[(page.page_number, k)] = image.id or f"img-p{page.page_number}-{k}"
+                image_ids[(page.page_number, k)] = (
+                    image.id or f"img-p{page.page_number}-{k}"
+                )
         markdown = _CID.sub(lambda m: f"(images/{m.group(1)}.png)", result.markdown)
-        sections = split(markdown, title=title) or [Section(title, (title,), 1, max(1, len(result.pages)), "")]
+        sections = split(markdown, title=title) or [
+            Section(title, (title,), 1, max(1, len(result.pages)), "")
+        ]
         base = f"{collection}/{document}"
 
-        unembedded = await self._index_vectors(collection, document, title, filename, sections, result, image_ids, metadata or {})
+        unembedded = await self._index_vectors(
+            collection,
+            document,
+            title,
+            filename,
+            sections,
+            result,
+            image_ids,
+            metadata or {},
+        )
 
         for page in result.pages:
             for k, image in enumerate(page.images):
-                await self._files.upload(f"{base}/images/{image_ids[(page.page_number, k)]}.png", image.data, content_type=image.media_type)
+                await self._files.upload(
+                    f"{base}/images/{image_ids[(page.page_number, k)]}.png",
+                    image.data,
+                    content_type=image.media_type,
+                )
         names = [f"{n:02d}-{slug(s.title)}.md" for n, s in enumerate(sections, start=1)]
         for n, (section, name) in enumerate(zip(sections, names, strict=True), start=1):
             body = _with_navigation(section, names, n)
@@ -342,9 +389,19 @@ class Library:
                 description=f"{_pages_label(section.first_page, section.last_page)} · ~{section.tokens} tokens",
                 resource=resource,
                 body=body,
-                extra={"document": document, "section": n, "parent": "index.md", "heading_path": list(section.heading_path), "pages": [section.first_page, section.last_page]},
+                extra={
+                    "document": document,
+                    "section": n,
+                    "parent": "index.md",
+                    "heading_path": list(section.heading_path),
+                    "pages": [section.first_page, section.last_page],
+                },
             )
-            await self._files.upload(f"{base}/{name}", okf.serialize(concept).encode("utf-8"), content_type="text/markdown")
+            await self._files.upload(
+                f"{base}/{name}",
+                okf.serialize(concept).encode("utf-8"),
+                content_type="text/markdown",
+            )
         needs_ocr = list(result.needs_ocr)
         pages = max([p.page_number for p in result.pages] or [1])
         index = okf.Concept(
@@ -363,10 +420,41 @@ class Library:
                 "metadata": metadata or {},
             },
         )
-        await self._files.upload(f"{base}/index.md", okf.serialize(index).encode("utf-8"), content_type="text/markdown")
+        await self._files.upload(
+            f"{base}/index.md",
+            okf.serialize(index).encode("utf-8"),
+            content_type="text/markdown",
+        )
 
-        info = DocumentInfo(document, title, filename, pages, len(sections), len(images), tuple(needs_ocr), result.engine, resource, metadata or {})
-        await self._catalog(collection, info, digest, sections, [(image_ids[(p.page_number, k)], p.page_number, i.label.value, i.caption, i.media_type) for p in result.pages for k, i in enumerate(p.images)])
+        info = DocumentInfo(
+            document,
+            title,
+            filename,
+            pages,
+            len(sections),
+            len(images),
+            tuple(needs_ocr),
+            result.engine,
+            resource,
+            metadata or {},
+        )
+        await self._catalog(
+            collection,
+            info,
+            digest,
+            sections,
+            [
+                (
+                    image_ids[(p.page_number, k)],
+                    p.page_number,
+                    i.label.value,
+                    i.caption,
+                    i.media_type,
+                )
+                for p in result.pages
+                for k, i in enumerate(p.images)
+            ],
+        )
         await self._write_collection_index(collection)
         warnings = list(result.warnings)
         if unembedded:
@@ -374,20 +462,52 @@ class Library:
                 f"{unembedded} passage{'s' if unembedded != 1 else ''} could not be embedded (the embedding service was unavailable) and "
                 "will be found by their words only until reindex(missing_only=True) embeds them"
             )
-        return Added(document, title, filename, pages, len(sections), len(images), tuple(needs_ocr), warnings=tuple(warnings))
+        return Added(
+            document,
+            title,
+            filename,
+            pages,
+            len(sections),
+            len(images),
+            tuple(needs_ocr),
+            warnings=tuple(warnings),
+        )
 
     async def _exists(self, collection: str, document: str) -> bool:
         async def op(tx: Tx) -> bool:
-            row = await tx.fetchone("SELECT 1 AS found FROM library_documents WHERE collection = ? AND document = ?", collection, document)
+            row = await tx.fetchone(
+                "SELECT 1 AS found FROM library_documents WHERE collection = ? AND document = ?",
+                collection,
+                document,
+            )
             return row is not None
 
         return await self._run(op)
 
-    async def _catalog(self, collection: str, info: DocumentInfo, digest: str, sections: Sequence[Section], images: Sequence[tuple[str, int, str, str | None, str]]) -> None:
+    async def _catalog(
+        self,
+        collection: str,
+        info: DocumentInfo,
+        digest: str,
+        sections: Sequence[Section],
+        images: Sequence[tuple[str, int, str, str | None, str]],
+    ) -> None:
         async def op(tx: Tx) -> None:
-            await tx.execute("DELETE FROM library_sections WHERE collection = ? AND document = ?", collection, info.document)
-            await tx.execute("DELETE FROM library_images WHERE collection = ? AND document = ?", collection, info.document)
-            await tx.execute("DELETE FROM library_documents WHERE collection = ? AND document = ?", collection, info.document)
+            await tx.execute(
+                "DELETE FROM library_sections WHERE collection = ? AND document = ?",
+                collection,
+                info.document,
+            )
+            await tx.execute(
+                "DELETE FROM library_images WHERE collection = ? AND document = ?",
+                collection,
+                info.document,
+            )
+            await tx.execute(
+                "DELETE FROM library_documents WHERE collection = ? AND document = ?",
+                collection,
+                info.document,
+            )
             await tx.execute(
                 "INSERT INTO library_documents (collection, document, title, filename, resource, engine, pages, sections, images, needs_ocr, sha256, meta_json, added_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -410,15 +530,30 @@ class Library:
     async def _write_collection_index(self, collection: str) -> None:
         listing = await self.list(collection=collection, limit=INDEX_LISTING)
         total = await self._count(collection)
-        lines = [f"- [{d.title}]({d.document}/index.md) — {d.filename or d.document}, {d.pages} page{'s' if d.pages != 1 else ''}" for d in listing.documents]
+        lines = [
+            f"- [{d.title}]({d.document}/index.md) — {d.filename or d.document}, {d.pages} page{'s' if d.pages != 1 else ''}"
+            for d in listing.documents
+        ]
         if total > len(lines):
             lines.append(f"- … and {total - len(lines)} more")
-        concept = okf.Concept(type="Index", title="Documents", description=f"{total} document{'s' if total != 1 else ''}", body="\n".join(lines))
-        await self._files.upload(f"{collection}/index.md", okf.serialize(concept).encode("utf-8"), content_type="text/markdown")
+        concept = okf.Concept(
+            type="Index",
+            title="Documents",
+            description=f"{total} document{'s' if total != 1 else ''}",
+            body="\n".join(lines),
+        )
+        await self._files.upload(
+            f"{collection}/index.md",
+            okf.serialize(concept).encode("utf-8"),
+            content_type="text/markdown",
+        )
 
     async def _count(self, collection: str) -> int:
         async def op(tx: Tx) -> int:
-            row = await tx.fetchone("SELECT COUNT(*) AS n FROM library_documents WHERE collection = ?", collection)
+            row = await tx.fetchone(
+                "SELECT COUNT(*) AS n FROM library_documents WHERE collection = ?",
+                collection,
+            )
             return int(row["n"]) if row else 0
 
         return await self._run(op)
@@ -455,22 +590,33 @@ class Library:
         collection = collection.strip("/")
 
         async def op(tx: Tx) -> DocumentInfo | None:
-            row = await tx.fetchone("SELECT * FROM library_documents WHERE collection = ? AND document = ?", collection, document)
+            row = await tx.fetchone(
+                "SELECT * FROM library_documents WHERE collection = ? AND document = ?",
+                collection,
+                document,
+            )
             return self._doc(row) if row else None
 
         return await self._run(op)
 
-    async def list(self, *, collection: str, limit: int = MAX_LIST, after: str | None = None) -> Listing:
+    async def list(
+        self, *, collection: str, limit: int = MAX_LIST, after: str | None = None
+    ) -> Listing:
         """The documents of ``collection``, oldest first, ``limit`` (at most ``MAX_LIST``) at a time."""
         collection, limit = collection.strip("/"), max(1, min(limit, MAX_LIST))
         cursor = int(after) if after and after.isdigit() else 0
 
         async def op(tx: Tx) -> tuple[list[DocumentInfo], int | None]:
             rows = await tx.fetchall(
-                "SELECT * FROM library_documents WHERE collection = ? AND seq > ? ORDER BY seq LIMIT ?", collection, cursor, limit + 1
+                "SELECT * FROM library_documents WHERE collection = ? AND seq > ? ORDER BY seq LIMIT ?",
+                collection,
+                cursor,
+                limit + 1,
             )
             page = rows[:limit]
-            return [self._doc(r) for r in page], (int(page[-1]["seq"]) if len(rows) > limit else None)
+            return [self._doc(r) for r in page], (
+                int(page[-1]["seq"]) if len(rows) > limit else None
+            )
 
         documents, last = await self._run(op)
         return Listing(tuple(documents), str(last) if last is not None else None)
@@ -488,23 +634,37 @@ class Library:
 
         return await self._run(op)
 
-    async def outline(self, *, collection: str, document: str, section: int | None = None) -> Outline | None:
+    async def outline(
+        self, *, collection: str, document: str, section: int | None = None
+    ) -> Outline | None:
         """A document's sections — or, with ``section``, the headings inside that one. ``None`` if there is no such document or section."""
         collection = collection.strip("/")
 
         async def op(tx: Tx) -> Outline | None:
-            doc_row = await tx.fetchone("SELECT * FROM library_documents WHERE collection = ? AND document = ?", collection, document)
+            doc_row = await tx.fetchone(
+                "SELECT * FROM library_documents WHERE collection = ? AND document = ?",
+                collection,
+                document,
+            )
             if doc_row is None:
                 return None
             info = self._doc(doc_row)
             if section is not None:
                 row = await tx.fetchone(
-                    "SELECT * FROM library_sections WHERE collection = ? AND document = ? AND position = ?", collection, document, section
+                    "SELECT * FROM library_sections WHERE collection = ? AND document = ? AND position = ?",
+                    collection,
+                    document,
+                    section,
                 )
                 if row is None:
                     return None
                 headings = _headings_in(row["text"])
-                return Outline(info, (self._section(row),), more=max(0, len(headings) - MAX_OUTLINE), headings=tuple(headings[:MAX_OUTLINE]))
+                return Outline(
+                    info,
+                    (self._section(row),),
+                    more=max(0, len(headings) - MAX_OUTLINE),
+                    headings=tuple(headings[:MAX_OUTLINE]),
+                )
             rows = await tx.fetchall(
                 "SELECT position, title, heading_path, first_page, last_page, tokens, text FROM library_sections "
                 "WHERE collection = ? AND document = ? ORDER BY position LIMIT ?",
@@ -512,9 +672,15 @@ class Library:
             )  # fmt: skip
             sections = []
             for row in rows:
-                inside = tuple(h[1] for h in _headings_in(row["text"]) if h[1] != row["title"])[:6]
-                sections.append(SectionInfo(**{**self._section(row).__dict__, "headings": inside}))
-            return Outline(info, tuple(sections), more=max(0, info.sections - len(sections)))
+                inside = tuple(
+                    h[1] for h in _headings_in(row["text"]) if h[1] != row["title"]
+                )[:6]
+                sections.append(
+                    SectionInfo(**{**self._section(row).__dict__, "headings": inside})
+                )
+            return Outline(
+                info, tuple(sections), more=max(0, info.sections - len(sections))
+            )
 
         return await self._run(op)
 
@@ -532,7 +698,11 @@ class Library:
         collection = collection.strip("/")
 
         async def op(tx: Tx) -> Passage | None:
-            doc_row = await tx.fetchone("SELECT * FROM library_documents WHERE collection = ? AND document = ?", collection, document)
+            doc_row = await tx.fetchone(
+                "SELECT * FROM library_documents WHERE collection = ? AND document = ?",
+                collection,
+                document,
+            )
             if doc_row is None:
                 return None
             if pages is not None:
@@ -544,7 +714,10 @@ class Library:
                 text = _slice_pages("\n\n".join(r["text"] for r in rows), first, last)
             else:
                 row = await tx.fetchone(
-                    "SELECT * FROM library_sections WHERE collection = ? AND document = ? AND position = ?", collection, document, section or 1
+                    "SELECT * FROM library_sections WHERE collection = ? AND document = ? AND position = ?",
+                    collection,
+                    document,
+                    section or 1,
                 )
                 rows = [row] if row else []
                 text = row["text"] if row else ""
@@ -553,11 +726,25 @@ class Library:
             offset_ = max(0, min(offset, len(text)))
             chunk = text[offset_ : offset_ + MAX_READ_CHARS]
             end = offset_ + len(chunk)
-            return Passage(self._doc(doc_row), self._section(rows[0]), chunk, offset_, end if end < len(text) else None, len(text))
+            return Passage(
+                self._doc(doc_row),
+                self._section(rows[0]),
+                chunk,
+                offset_,
+                end if end < len(text) else None,
+                len(text),
+            )
 
         return await self._run(op)
 
-    async def find(self, *, collection: str, query: str, document: str | None = None, limit: int = 8) -> Hits:
+    async def find(
+        self,
+        *,
+        collection: str,
+        query: str,
+        document: str | None = None,
+        limit: int = 8,
+    ) -> Hits:
         """The sections that answer ``query``, best first.
 
         By words: every word first, relaxing to any word when no section has them all. With an embedder, similarity and words are fused over the
@@ -572,13 +759,17 @@ class Library:
                 if hits:
                     return hits
             except ServiceUnavailableError as exc:
-                logger.warning("semantic search unavailable, matching words only: %s", exc)
+                logger.warning(
+                    "semantic search unavailable, matching words only: %s", exc
+                )
                 note = "The embedding service is unavailable, so these were matched by their words only; a relevant passage may be missing."
         hits = Hits(await self._find_lexical(collection, query, document, limit))
         hits.note = note
         return hits
 
-    async def _find_lexical(self, collection: str, query: str, document: str | None, limit: int) -> list[Hit]:
+    async def _find_lexical(
+        self, collection: str, query: str, document: str | None, limit: int
+    ) -> list[Hit]:
         query_words = textsearch.terms(query)
         if not query_words:
             return []
@@ -586,27 +777,49 @@ class Library:
         async def op(tx: Tx) -> list[Hit]:
             for mode in ("all", "any"):
                 source, where, params = textsearch.ranked(
-                    tx_dialect(self), index="library_sections_fts", table="library_sections", alias="s", query_words=query_words, match=mode
+                    tx_dialect(self),
+                    index="library_sections_fts",
+                    table="library_sections",
+                    alias="s",
+                    query_words=query_words,
+                    match=mode,
                 )
-                score = textsearch.score(tx_dialect(self), index="library_sections_fts", alias="s")
+                score = textsearch.score(
+                    tx_dialect(self), index="library_sections_fts", alias="s"
+                )
                 sql = f"SELECT s.*, {score} AS score FROM {source} WHERE {where} AND s.collection = ?"
                 args: list[Any] = [*params, collection]
                 if document:
                     sql += " AND s.document = ?"
                     args.append(document)
-                rows = await tx.fetchall(sql + " ORDER BY score DESC LIMIT ?", *args, limit)
+                rows = await tx.fetchall(
+                    sql + " ORDER BY score DESC LIMIT ?", *args, limit
+                )
                 if rows:
                     hits = []
                     for row in rows:
-                        doc_row = await tx.fetchone("SELECT * FROM library_documents WHERE collection = ? AND document = ?", collection, row["document"])
+                        doc_row = await tx.fetchone(
+                            "SELECT * FROM library_documents WHERE collection = ? AND document = ?",
+                            collection,
+                            row["document"],
+                        )
                         if doc_row is not None:
-                            hits.append(Hit(self._doc(doc_row), self._section(row), textsearch.snippet(row["text"], query_words), float(row["score"])))
+                            hits.append(
+                                Hit(
+                                    self._doc(doc_row),
+                                    self._section(row),
+                                    textsearch.snippet(row["text"], query_words),
+                                    float(row["score"]),
+                                )
+                            )
                     return hits
             return []
 
         return await self._run(op)
 
-    async def _find_semantic(self, collection: str, query: str, document: str | None, limit: int) -> Hits:
+    async def _find_semantic(
+        self, collection: str, query: str, document: str | None, limit: int
+    ) -> Hits:
         assert self._embedder is not None
         vectors = self._store.vectors
         embedded = await self._embedder.embed([query], query=True)
@@ -622,7 +835,9 @@ class Library:
         scores = [r.score for r in found]
         if self._reranker is not None and len(found) > 1:
             try:
-                scores = await self._reranker.rerank(query, [r.to_text() for r in found])
+                scores = await self._reranker.rerank(
+                    query, [r.to_text() for r in found]
+                )
             except ServiceUnavailableError as exc:
                 logger.warning("rerank unavailable, keeping the fused order: %s", exc)
                 note = "The reranking service is unavailable, so these are in the order the search found them."
@@ -632,7 +847,11 @@ class Library:
         picked: list[tuple[float, Any, str | None]] = []
         for score, result in ranked:
             meta = result.metadata
-            key = (str(meta.get("document", "")), int(meta.get("section", 0) or 0), str(meta.get("image", "")))
+            key = (
+                str(meta.get("document", "")),
+                int(meta.get("section", 0) or 0),
+                str(meta.get("image", "")),
+            )
             if key in seen:
                 continue
             seen.add(key)
@@ -644,7 +863,11 @@ class Library:
             hits: list[Hit] = []
             for score, result, image in picked:
                 meta = result.metadata
-                doc_row = await tx.fetchone("SELECT * FROM library_documents WHERE collection = ? AND document = ?", collection, meta.get("document"))
+                doc_row = await tx.fetchone(
+                    "SELECT * FROM library_documents WHERE collection = ? AND document = ?",
+                    collection,
+                    meta.get("document"),
+                )
                 if doc_row is None:
                     continue  # a chunk whose document was deleted from the catalog: not a hit
                 if image:
@@ -659,27 +882,48 @@ class Library:
                         collection, meta.get("document"), int(meta.get("section", 1)),
                     )  # fmt: skip
                 if row is not None:
-                    hits.append(Hit(self._doc(doc_row), self._section(row), textsearch.snippet(result.to_text(), query_words), float(score), image=image))
+                    hits.append(
+                        Hit(
+                            self._doc(doc_row),
+                            self._section(row),
+                            textsearch.snippet(result.to_text(), query_words),
+                            float(score),
+                            image=image,
+                        )
+                    )
             return hits
 
         hits = Hits(await self._run(op))
         hits.note = note
         return hits
 
-    async def view(self, *, collection: str, image: str | None = None, document: str | None = None, page: int | None = None) -> Picture | None:
+    async def view(
+        self,
+        *,
+        collection: str,
+        image: str | None = None,
+        document: str | None = None,
+        page: int | None = None,
+    ) -> Picture | None:
         """One picture: by its id, or the first one on ``page`` of ``document``. ``None`` if there is none (or it is too large to show)."""
         collection = collection.strip("/")
 
         async def op(tx: Tx) -> Any:
             if image:
-                sql, args = "SELECT * FROM library_images WHERE collection = ? AND image = ?", [collection, image]
+                sql, args = (
+                    "SELECT * FROM library_images WHERE collection = ? AND image = ?",
+                    [collection, image],
+                )
                 if document:
                     sql += " AND document = ?"
                     args.append(document)
                 return await tx.fetchone(sql + " ORDER BY seq LIMIT 1", *args)
             if document and page is not None:
                 return await tx.fetchone(
-                    "SELECT * FROM library_images WHERE collection = ? AND document = ? AND page = ? ORDER BY seq LIMIT 1", collection, document, page
+                    "SELECT * FROM library_images WHERE collection = ? AND document = ? AND page = ? ORDER BY seq LIMIT 1",
+                    collection,
+                    document,
+                    page,
                 )
             return None
 
@@ -693,7 +937,15 @@ class Library:
             return None
         if len(data) > MAX_IMAGE_BYTES:
             return None
-        return Picture(data, row["media_type"], row["document"], row["image"], int(row["page"]), row["label"], row["caption"])
+        return Picture(
+            data,
+            row["media_type"],
+            row["document"],
+            row["image"],
+            int(row["page"]),
+            row["label"],
+            row["caption"],
+        )
 
     # -------------------------------------------------------------------------------------------------------- removing
 
@@ -702,11 +954,17 @@ class Library:
         collection = collection.strip("/")
         existed = await self._exists(collection, document)
         await self._files.delete_prefix(f"{collection}/{document}/")
-        await self._store.vectors.delete_where(collection=collection, filter={"document": document})
+        await self._store.vectors.delete_where(
+            collection=collection, filter={"document": document}
+        )
 
         async def op(tx: Tx) -> None:
             for table in ("library_sections", "library_images", "library_documents"):
-                await tx.execute(f"DELETE FROM {table} WHERE collection = ? AND document = ?", collection, document)  # noqa: S608 — fixed names
+                await tx.execute(
+                    f"DELETE FROM {table} WHERE collection = ? AND document = ?",
+                    collection,
+                    document,
+                )  # noqa: S608 — fixed names
 
         await self._run(op)
         if existed:
@@ -721,10 +979,16 @@ class Library:
 
         async def op(tx: Tx) -> list[tuple[str, str]]:
             rows = await tx.fetchall(
-                "SELECT collection, document FROM library_documents WHERE collection = ? OR collection LIKE ?", prefix, prefix + "/%"
+                "SELECT collection, document FROM library_documents WHERE collection = ? OR collection LIKE ?",
+                prefix,
+                prefix + "/%",
             )
             for table in ("library_sections", "library_images", "library_documents"):
-                await tx.execute(f"DELETE FROM {table} WHERE collection = ? OR collection LIKE ?", prefix, prefix + "/%")  # noqa: S608
+                await tx.execute(
+                    f"DELETE FROM {table} WHERE collection = ? OR collection LIKE ?",
+                    prefix,
+                    prefix + "/%",
+                )  # noqa: S608
             return [(r["collection"], r["document"]) for r in rows]
 
         removed = await self._run(op)
@@ -755,14 +1019,35 @@ class Library:
         if embedder is None:
             return 0
         size = self._chunk_tokens or chunk_size_for(embedder.max_input_tokens)
-        base = {"document": document, "title": title, "filename": filename, **{k: v for k, v in metadata.items() if isinstance(v, (str, int, float, bool))}}
-        pending: list[tuple[Document, Any]] = []  # a document, and what to embed for it: a string, or content blocks (a figure)
+        base = {
+            "document": document,
+            "title": title,
+            "filename": filename,
+            **{
+                k: v
+                for k, v in metadata.items()
+                if isinstance(v, (str, int, float, bool))
+            },
+        }
+        pending: list[
+            tuple[Document, Any]
+        ] = []  # a document, and what to embed for it: a string, or content blocks (a figure)
         for n, section in enumerate(sections, start=1):
-            for i, chunk in enumerate(chunk_section(section.markdown, heading=section.title, max_tokens=size)):
+            for i, chunk in enumerate(
+                chunk_section(section.markdown, heading=section.title, max_tokens=size)
+            ):
                 doc = Document.from_text(
                     chunk.text,
                     id=f"{document}:{n}:{i}",
-                    metadata={**base, "kind": "text", "section": n, "chunk": i, "pages": [chunk.first_page, chunk.last_page], "heading": section.title, "heading_path": list(section.heading_path)},
+                    metadata={
+                        **base,
+                        "kind": "text",
+                        "section": n,
+                        "chunk": i,
+                        "pages": [chunk.first_page, chunk.last_page],
+                        "heading": section.title,
+                        "heading_path": list(section.heading_path),
+                    },
                 )
                 pending.append((doc, chunk.embedding_text(title, section.heading_path)))
         if result is not None and Modality.IMAGE in embedder.modalities:
@@ -773,24 +1058,41 @@ class Library:
                     doc = Document.from_text(
                         caption or f"{image.label.value} on page {page.page_number}",
                         id=f"{document}:img:{ident}",
-                        metadata={**base, "kind": "image", "image": ident, "pages": [page.page_number, page.page_number], "label": image.label.value},
+                        metadata={
+                            **base,
+                            "kind": "image",
+                            "image": ident,
+                            "pages": [page.page_number, page.page_number],
+                            "label": image.label.value,
+                        },
                     )
-                    blocks: list[Any] = [MediaBlock.image(data=image.data, media_type=image.media_type)]
+                    blocks: list[Any] = [
+                        MediaBlock.image(data=image.data, media_type=image.media_type)
+                    ]
                     if caption:
                         blocks.append(TextBlock(text=caption))
                     pending.append((doc, blocks))
         return await self._embed_and_store(collection, pending)
 
-    async def _embed_and_store(self, collection: str, pending: list[tuple[Document, Any]]) -> int:
+    async def _embed_and_store(
+        self, collection: str, pending: list[tuple[Document, Any]]
+    ) -> int:
         assert self._embedder is not None
         stored: list[Document] = []
         for start in range(0, len(pending), EMBED_BATCH):
             batch = pending[start : start + EMBED_BATCH]
             vectors = await self._embed_batch([item for _doc, item in batch])
-            stored.extend(doc.model_copy(update={"embedding": vector}) for (doc, _item), vector in zip(batch, vectors, strict=True))
+            stored.extend(
+                doc.model_copy(update={"embedding": vector})
+                for (doc, _item), vector in zip(batch, vectors, strict=True)
+            )
         embedded = sum(1 for d in stored if d.embedding is not None)
         if stored:
-            await self._store.vectors.upsert(stored, collection=collection, space=(self._embedder.model or None) if embedded else None)
+            await self._store.vectors.upsert(
+                stored,
+                collection=collection,
+                space=(self._embedder.model or None) if embedded else None,
+            )
         return len(stored) - embedded
 
     async def _embed_batch(self, inputs: list[Any]) -> list[list[float] | None]:
@@ -800,7 +1102,11 @@ class Library:
         try:
             return list((await self._embedder.embed(inputs)).embeddings)
         except ServiceUnavailableError as exc:
-            logger.warning("embedding service unavailable: %d passages stored without vectors (%s)", len(inputs), exc)
+            logger.warning(
+                "embedding service unavailable: %d passages stored without vectors (%s)",
+                len(inputs),
+                exc,
+            )
             return [None] * len(inputs)
         except ContextLengthError:
             out: list[list[float] | None] = []
@@ -808,7 +1114,10 @@ class Library:
                 try:
                     out.append((await self._embedder.embed([item])).embeddings[0])
                 except (ContextLengthError, ServiceUnavailableError) as exc:
-                    logger.warning("a passage could not be embedded and is stored without a vector: %s", exc)
+                    logger.warning(
+                        "a passage could not be embedded and is stored without a vector: %s",
+                        exc,
+                    )
                     out.append(None)
             return out
 
@@ -820,11 +1129,17 @@ class Library:
             raise ValueError("this library has no embedder")
         vectors = self._store.vectors
         while True:
-            batch = await vectors.unembedded(collection=collection, limit=EMBED_BATCH * 4)
+            batch = await vectors.unembedded(
+                collection=collection, limit=EMBED_BATCH * 4
+            )
             if not batch:
                 return 0
-            if await self._embed_and_store(collection, [(doc, _embedding_input(doc)) for doc in batch]):
-                return len(await vectors.unembedded(collection=collection, limit=1_000_000))  # the service is still down: stop, say how many
+            if await self._embed_and_store(
+                collection, [(doc, _embedding_input(doc)) for doc in batch]
+            ):
+                return len(
+                    await vectors.unembedded(collection=collection, limit=1_000_000)
+                )  # the service is still down: stop, say how many
 
     # ------------------------------------------------------------------------------------------------------- rebuilding
 
@@ -842,33 +1157,80 @@ class Library:
         for key, _size, _mtime in entries:
             relative = key[len(collection) + 1 :]
             if "/" in relative:
-                by_doc.setdefault(relative.split("/", 1)[0], []).append(relative.split("/", 1)[1])
+                by_doc.setdefault(relative.split("/", 1)[0], []).append(
+                    relative.split("/", 1)[1]
+                )
 
         async def clear(tx: Tx) -> None:
             for table in ("library_sections", "library_images", "library_documents"):
-                await tx.execute(f"DELETE FROM {table} WHERE collection = ?", collection)  # noqa: S608
+                await tx.execute(
+                    f"DELETE FROM {table} WHERE collection = ?", collection
+                )  # noqa: S608
 
         await self._run(clear)
         count = 0
         for document, names in sorted(by_doc.items()):
             if "index.md" not in names:
                 continue
-            index = okf.parse((await self._files.download(f"{collection}/{document}/index.md")).decode("utf-8", "replace"))
+            index = okf.parse(
+                (
+                    await self._files.download(f"{collection}/{document}/index.md")
+                ).decode("utf-8", "replace")
+            )
             sections: list[Section] = []
-            for name in sorted(n for n in names if n != "index.md" and "/" not in n and n.endswith(".md")):
-                concept = okf.parse((await self._files.download(f"{collection}/{document}/{name}")).decode("utf-8", "replace"))
+            for name in sorted(
+                n
+                for n in names
+                if n != "index.md" and "/" not in n and n.endswith(".md")
+            ):
+                concept = okf.parse(
+                    (
+                        await self._files.download(f"{collection}/{document}/{name}")
+                    ).decode("utf-8", "replace")
+                )
                 pages = concept.extra.get("pages") or [1, 1]
-                sections.append(Section(concept.title or name, tuple(concept.extra.get("heading_path") or ()), int(pages[0]), int(pages[-1]), _strip_navigation(concept.body)))
-            images = [(n.rsplit("/", 1)[-1].removesuffix(".png"), _page_of(n), "figure", None, "image/png") for n in names if n.startswith("images/")]
+                sections.append(
+                    Section(
+                        concept.title or name,
+                        tuple(concept.extra.get("heading_path") or ()),
+                        int(pages[0]),
+                        int(pages[-1]),
+                        _strip_navigation(concept.body),
+                    )
+                )
+            images = [
+                (
+                    n.rsplit("/", 1)[-1].removesuffix(".png"),
+                    _page_of(n),
+                    "figure",
+                    None,
+                    "image/png",
+                )
+                for n in names
+                if n.startswith("images/")
+            ]
             extra = index.extra
             info = DocumentInfo(
                 document, index.title or document, str(extra.get("filename", "")), int(extra.get("pages", 1)), len(sections), len(images),
                 tuple(int(p) for p in extra.get("needs_ocr", [])), str(extra.get("engine", "")), index.resource, dict(extra.get("metadata") or {}),
             )  # fmt: skip
-            await self._catalog(collection, info, str(extra.get("sha256", "")), sections, images)
+            await self._catalog(
+                collection, info, str(extra.get("sha256", "")), sections, images
+            )
             if self._embedder is not None:
-                await self._store.vectors.delete_where(collection=collection, filter={"document": document})
-                await self._index_vectors(collection, document, info.title, info.filename, sections, None, {}, info.meta)
+                await self._store.vectors.delete_where(
+                    collection=collection, filter={"document": document}
+                )
+                await self._index_vectors(
+                    collection,
+                    document,
+                    info.title,
+                    info.filename,
+                    sections,
+                    None,
+                    {},
+                    info.meta,
+                )
             count += 1
         if count:
             await self._write_collection_index(collection)
@@ -880,7 +1242,11 @@ def _embedding_input(doc: Document) -> Any:
     meta = doc.metadata
     if meta.get("kind") == "image":
         return doc.to_text()
-    trail = " › ".join(str(part) for part in (meta.get("title", ""), *meta.get("heading_path", [])) if part)
+    trail = " › ".join(
+        str(part)
+        for part in (meta.get("title", ""), *meta.get("heading_path", []))
+        if part
+    )
     return f"{trail}\n\n{doc.to_text()}" if trail else doc.to_text()
 
 
@@ -908,18 +1274,31 @@ def _strip_navigation(body: str) -> str:
     return head if sep and "](" in tail and "Up" in tail else body
 
 
-def _document_index(sections: Sequence[Section], names: Sequence[str], image_ids: dict[tuple[int, int], str], result: ExtractionResult) -> str:
+def _document_index(
+    sections: Sequence[Section],
+    names: Sequence[str],
+    image_ids: dict[tuple[int, int], str],
+    result: ExtractionResult,
+) -> str:
     lines = ["## Sections", ""]
     for n, (section, name) in enumerate(zip(sections, names, strict=True), start=1):
-        lines.append(f"{n}. [{section.title}]({name}) — {_pages_label(section.first_page, section.last_page)}, ~{section.tokens} tokens")
+        lines.append(
+            f"{n}. [{section.title}]({name}) — {_pages_label(section.first_page, section.last_page)}, ~{section.tokens} tokens"
+        )
     if image_ids:
         lines += ["", "## Images", ""]
         for page in result.pages:
             for k, image in enumerate(page.images):
                 ident = image_ids[(page.page_number, k)]
-                lines.append(f"- [{ident}](images/{ident}.png) — {image.label.value}, p. {page.page_number}" + (f": {image.caption}" if image.caption else ""))
+                lines.append(
+                    f"- [{ident}](images/{ident}.png) — {image.label.value}, p. {page.page_number}"
+                    + (f": {image.caption}" if image.caption else "")
+                )
     if result.needs_ocr:
-        lines += ["", f"> Pages {', '.join(map(str, result.needs_ocr))} are pictures of text and were not read (no OCR was available)."]
+        lines += [
+            "",
+            f"> Pages {', '.join(map(str, result.needs_ocr))} are pictures of text and were not read (no OCR was available).",
+        ]
     return "\n".join(lines)
 
 
@@ -929,7 +1308,9 @@ def _slice_pages(text: str, first: int, last: int) -> str:
     start = next((pos for number, pos in markers if number >= first), None)
     if start is None:
         return ""
-    stop = next((pos for number, pos in markers if number > last and pos > start), len(text))
+    stop = next(
+        (pos for number, pos in markers if number > last and pos > start), len(text)
+    )
     return text[start:stop].strip()
 
 

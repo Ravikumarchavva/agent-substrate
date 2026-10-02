@@ -109,7 +109,9 @@ class ArtifactsTool:
         thread_id = run.thread_id
         if not thread_id or thread_id == _DEFAULT_SESSION:
             return None, "Session artifacts need an active conversation."
-        return self._store.scope_prefix(tenant_id, user_id, conversation_id=thread_id), None
+        return self._store.scope_prefix(
+            tenant_id, user_id, conversation_id=thread_id
+        ), None
 
     async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:
         action = str(kwargs.get("action") or "").strip()
@@ -138,7 +140,9 @@ class ArtifactsTool:
 
         return _error(f"Unknown action {action!r}.")
 
-    async def _save(self, prefix: str, scope: str, kw: dict[str, Any]) -> ToolExecutionResult:
+    async def _save(
+        self, prefix: str, scope: str, kw: dict[str, Any]
+    ) -> ToolExecutionResult:
         content = str(kw.get("content") or "").strip()
         if not content:
             return _error("save requires 'content'.")
@@ -155,7 +159,9 @@ class ArtifactsTool:
             content=[TextBlock(text=f"Saved {scope} artifact '{slug}'.")]
         )
 
-    async def _list(self, prefix: str, scope: str, kw: dict[str, Any]) -> ToolExecutionResult:
+    async def _list(
+        self, prefix: str, scope: str, kw: dict[str, Any]
+    ) -> ToolExecutionResult:
         refs = await self._store.list(
             prefix,
             scope=scope,
@@ -212,7 +218,9 @@ class ArtifactsTool:
         # Deprecate, not delete: a superseded fact keeps its history.
         if not await self._store.deprecate(prefix, slug):
             return _error(f"No artifact '{slug}'.")
-        return ToolExecutionResult(content=[TextBlock(text=f"Marked '{slug}' deprecated.")])
+        return ToolExecutionResult(
+            content=[TextBlock(text=f"Marked '{slug}' deprecated.")]
+        )
 
 
 __all__ = ["ArtifactsTool"]

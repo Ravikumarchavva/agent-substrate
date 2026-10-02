@@ -105,7 +105,9 @@ async def lifespan(app):
     task_store = store.tasks
     registry = ToolRegistry()
     registry.register_many(
-        _load_default_tools(code_interpreter_tool=code_interpreter_tool, task_store=task_store)
+        _load_default_tools(
+            code_interpreter_tool=code_interpreter_tool, task_store=task_store
+        )
     )
     app.state.tool_registry = registry
 

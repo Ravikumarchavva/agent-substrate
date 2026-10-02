@@ -96,7 +96,9 @@ async def delete_branch_workspace(
     snapshot/CAS path) is removed immediately. Returns the object count
     removed.
     """
-    prefix = conversation_workspace_prefix(tenant_id, user_id, conversation_id, branch_id)
+    prefix = conversation_workspace_prefix(
+        tenant_id, user_id, conversation_id, branch_id
+    )
     return await object_store.delete_prefix(prefix)
 
 

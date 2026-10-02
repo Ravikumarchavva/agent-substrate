@@ -157,9 +157,7 @@ async def test_cancel_pending_for_thread_signals_each_request(
     )
     await db_session.commit()
 
-    count = await cancel_pending_for_thread(
-        db_session, thread_id, store=store
-    )
+    count = await cancel_pending_for_thread(db_session, thread_id, store=store)
     await db_session.commit()
     assert count == 2
 

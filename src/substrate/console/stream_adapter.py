@@ -18,7 +18,14 @@ from substrate.types import RunLogKind
 from substrate.types import ChatMessage, Role, TextBlock
 from substrate.types import Actor
 from substrate.runtime import ChatPayload, Message
-from substrate.types import AgentProgress, AgentStep, CompletionEvent, StreamDone, TextDelta, ReasoningDelta
+from substrate.types import (
+    AgentProgress,
+    AgentStep,
+    CompletionEvent,
+    StreamDone,
+    TextDelta,
+    ReasoningDelta,
+)
 
 from substrate.integrations.tools.human_input import InputOption
 

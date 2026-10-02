@@ -33,7 +33,9 @@ class ServiceConfig(BaseSettings):
     embed_model_name: str = "qwen3-vl-embedding"
     rerank_model_name: str = "qwen3-vl-reranker"
     # Qwen3 embeds a search query as an instruction plus the query, and a passage as itself — the instruction is the task description.
-    query_instruction: str = "Given a search query, retrieve the passages and figures that answer it"
+    query_instruction: str = (
+        "Given a search query, retrieve the passages and figures that answer it"
+    )
 
     # ── Deployment mode ──────────────────────────────────────────────────
     # "remote" (default, unchanged behavior) -- embed_server_url/

@@ -58,7 +58,14 @@ if TYPE_CHECKING:
     from substrate.types import MiddlewareTermination
     from substrate.types import ChatMessage, TextBlock
     from substrate.tools import ToolExecutionResult
-    from substrate.tools import ApprovalDecision, AutoApprove, DurableApproval, Tool, ToolRisk, tool
+    from substrate.tools import (
+        ApprovalDecision,
+        AutoApprove,
+        DurableApproval,
+        Tool,
+        ToolRisk,
+        tool,
+    )
     from substrate.models import ChatModel
     from substrate.server import create_app
     from substrate.types import CompletionEvent, ReasoningDelta, StreamDone, TextDelta

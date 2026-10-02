@@ -17,7 +17,14 @@ from typing import Any
 from substrate.integrations.llm.encoders._media import bytes_to_base64
 
 from substrate.types import ChatMessage
-from substrate.types import DataBlock, ErrorBlock, MediaBlock, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import (
+    DataBlock,
+    ErrorBlock,
+    MediaBlock,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 
 
 def _make_optional_schema_nullable(schema: dict[str, Any]) -> dict[str, Any]:
@@ -141,9 +148,12 @@ def _encode_file(item: MediaBlock) -> dict[str, Any]:
 
 
 def _encode_audio(item: MediaBlock) -> dict[str, Any]:
-    fmt = {"audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "audio/mp3": "mp3"}.get(
-        item.media_type
-    )
+    fmt = {
+        "audio/wav": "wav",
+        "audio/x-wav": "wav",
+        "audio/mpeg": "mp3",
+        "audio/mp3": "mp3",
+    }.get(item.media_type)
     if item.data is None or fmt is None:
         return _note(item)
     return {
@@ -152,7 +162,9 @@ def _encode_audio(item: MediaBlock) -> dict[str, Any]:
     }
 
 
-def _encode_media_item(item: MediaBlock, *, in_tool_output: bool = False) -> dict[str, Any]:
+def _encode_media_item(
+    item: MediaBlock, *, in_tool_output: bool = False
+) -> dict[str, Any]:
     if item.type == "image":
         return _encode_image(item)
     if item.type == "document":
@@ -225,11 +237,18 @@ def _encode_tool_result(block: ToolResultBlock) -> list[dict[str, Any]]:
         elif isinstance(b, DataBlock):
             parts.append({"type": "input_text", "text": json.dumps(b.data)})
         elif isinstance(b, ErrorBlock):
-            parts.append({"type": "input_text", "text": f"[{b.error_type}]: {b.message}"})
+            parts.append(
+                {"type": "input_text", "text": f"[{b.error_type}]: {b.message}"}
+            )
         elif isinstance(b, MediaBlock):
             if b.type == "audio" and b.data is not None:
                 follow_up.append(_encode_media_item(b))
-                parts.append({"type": "input_text", "text": "[audio attached in the next message]"})
+                parts.append(
+                    {
+                        "type": "input_text",
+                        "text": "[audio attached in the next message]",
+                    }
+                )
             else:
                 parts.append(_encode_media_item(b, in_tool_output=True))
                 has_media = True

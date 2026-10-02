@@ -77,11 +77,15 @@ class RunLogKind(StrEnum):
 
     # Conversation and human-in-the-loop
     USER_MESSAGE = "user.message"
-    USER_MESSAGE_FLAGGED = "user.message.flagged"  # marker referencing a user.message seq
+    USER_MESSAGE_FLAGGED = (
+        "user.message.flagged"  # marker referencing a user.message seq
+    )
     MCP_APP_CONTEXT = "mcp_app_context"  # legacy underscore spelling — persisted, keep
     INPUT_REQUESTED = "input.requested"
     APPROVAL_REQUESTED = "approval.requested"
-    APPROVAL_DECIDED = "approval.decided"  # who decided, when and why; written once per request
+    APPROVAL_DECIDED = (
+        "approval.decided"  # who decided, when and why; written once per request
+    )
 
     # Supervision
     CHILD_SPAWNED = "child.spawned"

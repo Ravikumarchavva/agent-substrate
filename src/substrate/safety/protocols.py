@@ -36,13 +36,17 @@ class Severity(StrEnum):
         return self.rank < other.rank if isinstance(other, Severity) else NotImplemented
 
     def __le__(self, other: object) -> bool:
-        return self.rank <= other.rank if isinstance(other, Severity) else NotImplemented
+        return (
+            self.rank <= other.rank if isinstance(other, Severity) else NotImplemented
+        )
 
     def __gt__(self, other: object) -> bool:
         return self.rank > other.rank if isinstance(other, Severity) else NotImplemented
 
     def __ge__(self, other: object) -> bool:
-        return self.rank >= other.rank if isinstance(other, Severity) else NotImplemented
+        return (
+            self.rank >= other.rank if isinstance(other, Severity) else NotImplemented
+        )
 
 
 _ORDER = [

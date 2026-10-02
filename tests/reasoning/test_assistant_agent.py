@@ -155,7 +155,12 @@ async def run_agent(
     if error and not output:
         output = error
 
-    return {"status": status, "output": output, "run_id": run_id, "truncated": truncated}
+    return {
+        "status": status,
+        "output": output,
+        "run_id": run_id,
+        "truncated": truncated,
+    }
 
 
 def make_agent(

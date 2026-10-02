@@ -15,7 +15,14 @@ from typing import TYPE_CHECKING
 
 from substrate.stores.graph import GraphStore
 from substrate.stores.memory import MemoryNamespace
-from substrate.stores.scoped import _FencedFileStore, _tenant, bind_graph, bind_tasks, bind_threads, bind_vector
+from substrate.stores.scoped import (
+    _FencedFileStore,
+    _tenant,
+    bind_graph,
+    bind_tasks,
+    bind_threads,
+    bind_vector,
+)
 from substrate.stores.tasks import TaskStore
 from substrate.stores.threads import ThreadStore
 from substrate.stores.vector import VectorStore
@@ -90,5 +97,7 @@ class Tenant:
             vectors=await self._store.vectors.erase_under(name),
             graph_entities=await self._store.graph.erase_under(name),
             files=await self.files.erase(),
-            memories=await self._store.memory.erase(MemoryNamespace(tenant_id=self.scope.tenant_id)),
+            memories=await self._store.memory.erase(
+                MemoryNamespace(tenant_id=self.scope.tenant_id)
+            ),
         )

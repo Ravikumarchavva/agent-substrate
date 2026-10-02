@@ -37,8 +37,19 @@ from substrate.tools.protocols import (
     is_hosted_tool,
     is_provider_defined_tool,
 )
-from substrate.tools.approval import ApprovalDecision, ApprovalHandler, ApprovalRequest, ApprovalResult, approval_signal
-from substrate.tools.chain import ChainCallRecord, ChainFile, ChainPolicy, InvocationResult
+from substrate.tools.approval import (
+    ApprovalDecision,
+    ApprovalHandler,
+    ApprovalRequest,
+    ApprovalResult,
+    approval_signal,
+)
+from substrate.tools.chain import (
+    ChainCallRecord,
+    ChainFile,
+    ChainPolicy,
+    InvocationResult,
+)
 
 if TYPE_CHECKING:
     from substrate.tools.protocols import ToolExecutionResult
@@ -243,7 +254,9 @@ class ToolInvoker:
                 except Exception:
                     pass
                 decision_key = request_id
-                signal_payload = await ctx.sleep_until_signal(approval_signal(request_id))
+                signal_payload = await ctx.sleep_until_signal(
+                    approval_signal(request_id)
+                )
                 result: ApprovalResult = ApprovalResult.from_response(signal_payload)
             else:
                 from substrate.types.identity import Actor
@@ -270,7 +283,9 @@ class ToolInvoker:
                             "Call this tool directly outside the chain for interactive approval."
                         ),
                     )
-            await self._journal_decision(ctx, decision_key, tool_name, tool_risk, result)
+            await self._journal_decision(
+                ctx, decision_key, tool_name, tool_risk, result
+            )
             if result.decision == ApprovalDecision.MODIFIED:
                 call = call.model_copy(update={"arguments": result.modified_args or {}})
             elif result.decision != ApprovalDecision.APPROVED:
@@ -330,7 +345,12 @@ class ToolInvoker:
         )
 
     async def _journal_decision(
-        self, ctx: Any, request_id: str, tool_name: str, risk: ToolRisk, result: ApprovalResult
+        self,
+        ctx: Any,
+        request_id: str,
+        tool_name: str,
+        risk: ToolRisk,
+        result: ApprovalResult,
     ) -> None:
         """Record who decided what, and when, on the run's own journal. Written once per
         request however often the run replays; a run with no journal to write to (a bare
@@ -346,7 +366,9 @@ class ToolInvoker:
                 "risk": risk.value,
                 "decision": result.decision.value,
                 "decided_by": result.decided_by,
-                "decided_at": result.decided_at.isoformat() if result.decided_at else None,
+                "decided_at": result.decided_at.isoformat()
+                if result.decided_at
+                else None,
                 "reason": result.reason,
                 "modified": result.decision == ApprovalDecision.MODIFIED,
             },
@@ -394,7 +416,9 @@ class ToolInvoker:
                 [b for b in content if not isinstance(b, MediaBlock)]
             )
         else:
-            text = exec_result.text if hasattr(exec_result, "text") else str(exec_result)
+            text = (
+                exec_result.text if hasattr(exec_result, "text") else str(exec_result)
+            )
 
         # Offload to artifact store for chain runs when configured
         if media_blocks and self._store is not None:
@@ -461,7 +485,11 @@ def build_invoker(agent: Any) -> ToolInvoker:
 
             async def request(self, req: Any) -> ApprovalResult:
                 approved = await callback(req.call.name, req.call.arguments)
-                return ApprovalResult(decision=ApprovalDecision.APPROVED if approved else ApprovalDecision.DENIED)
+                return ApprovalResult(
+                    decision=ApprovalDecision.APPROVED
+                    if approved
+                    else ApprovalDecision.DENIED
+                )
 
         approval = _CallbackApproval()
 
@@ -471,7 +499,9 @@ def build_invoker(agent: Any) -> ToolInvoker:
         # Approval is required from ``required`` upward, so what may pass unapproved is
         # the level just below it.
         below = {ToolRisk.CRITICAL: ToolRisk.HIGH, ToolRisk.HIGH: ToolRisk.SAFE}
-        policy = policy.model_copy(update={"max_risk_unapproved": below.get(required, ToolRisk.SAFE)})
+        policy = policy.model_copy(
+            update={"max_risk_unapproved": below.get(required, ToolRisk.SAFE)}
+        )
     return ToolInvoker(
         registry=registry,
         approval_handler=approval,

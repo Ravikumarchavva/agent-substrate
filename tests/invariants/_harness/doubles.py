@@ -55,7 +55,9 @@ class ScriptedLLM:
     ) -> AsyncIterator[CompletionEvent]:
         return self._stream(messages)
 
-    async def _stream(self, messages: list[ChatMessage]) -> AsyncIterator[CompletionEvent]:
+    async def _stream(
+        self, messages: list[ChatMessage]
+    ) -> AsyncIterator[CompletionEvent]:
         self.calls += 1
         self.seen.append(list(messages))
         turn = self._turns.pop(0) if self._turns else [TextBlock(text="done")]

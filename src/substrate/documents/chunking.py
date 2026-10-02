@@ -60,7 +60,9 @@ def _blocks(markdown: str) -> list[_Block]:
     def flush() -> None:
         nonlocal current, kind
         if current:
-            out.append(_Block("\n".join(current).strip("\n"), page, table=kind == "table"))
+            out.append(
+                _Block("\n".join(current).strip("\n"), page, table=kind == "table")
+            )
         current, kind = [], ""
 
     for line in markdown.splitlines():
@@ -111,7 +113,9 @@ def _split_text(block: _Block, limit: int) -> list[_Block]:
     pieces: list[str] = []
     current = ""
     for sentence in _SENTENCE_END.split(block.text):
-        while tokens(sentence) > limit:  # a sentence with no break in it: cut at a space
+        while (
+            tokens(sentence) > limit
+        ):  # a sentence with no break in it: cut at a space
             cut = sentence.rfind(" ", 0, limit * 3)
             cut = cut if cut > 0 else limit * 3
             if current:
@@ -129,7 +133,9 @@ def _split_text(block: _Block, limit: int) -> list[_Block]:
     return [_Block(p, block.page) for p in pieces]
 
 
-def chunk_section(markdown: str, *, heading: str = "", max_tokens: int = DEFAULT_MAX_TOKENS) -> list[Chunk]:
+def chunk_section(
+    markdown: str, *, heading: str = "", max_tokens: int = DEFAULT_MAX_TOKENS
+) -> list[Chunk]:
     """``markdown`` (one section of a document) as chunks of at most about ``max_tokens``, in reading order."""
     blocks: list[_Block] = []
     for block in _blocks(markdown):
@@ -144,7 +150,14 @@ def chunk_section(markdown: str, *, heading: str = "", max_tokens: int = DEFAULT
 
     def emit() -> None:
         if parts:
-            chunks.append(Chunk("\n\n".join(b.text for b in parts), parts[0].page, parts[-1].page, heading))
+            chunks.append(
+                Chunk(
+                    "\n\n".join(b.text for b in parts),
+                    parts[0].page,
+                    parts[-1].page,
+                    heading,
+                )
+            )
             parts.clear()
 
     size = 0

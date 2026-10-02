@@ -56,7 +56,11 @@ def _spans() -> list[Any]:
     tools.add(ChargeCard([]))
     llm = ScriptedLLM(
         [
-            [ToolUseBlock(call_id="c1", tool_name="charge_card", arguments={"amount": 100})],
+            [
+                ToolUseBlock(
+                    call_id="c1", tool_name="charge_card", arguments={"amount": 100}
+                )
+            ],
             [TextBlock(text="all done")],
         ]
     )
@@ -76,7 +80,9 @@ def _spans() -> list[Any]:
                     target=agent.id,
                     sender=Actor(type="proxy", key="user"),
                     payload=ChatPayload(
-                        message=ChatMessage(role=Role.USER, content=[TextBlock(text=SECRET)])
+                        message=ChatMessage(
+                            role=Role.USER, content=[TextBlock(text=SECRET)]
+                        )
                     ),
                 ),
             )
@@ -114,7 +120,11 @@ def test_i24_only_the_run_span_is_a_root(spans: list[Any]) -> None:
     # The run span's parent is the context persisted at submission (the caller's side of
     # the trace), which is not itself an exported span: the top of what this engine emits.
     exported = {span.context.span_id for span in spans}
-    roots = [span.name for span in spans if span.parent is None or span.parent.span_id not in exported]
+    roots = [
+        span.name
+        for span in spans
+        if span.parent is None or span.parent.span_id not in exported
+    ]
     assert len(roots) == 1, f"expected a single root span, got roots: {roots}"
 
 

@@ -150,7 +150,11 @@ def open_store(cfg: SubstrateConfig) -> Any:
     if backend == "postgres":
         from substrate.integrations.database import postgres_store
 
-        logger.info("Store: PostgreSQL (schema %s), files under %s", cfg.STORE_PG_SCHEMA, cfg.STORE_PATH)
+        logger.info(
+            "Store: PostgreSQL (schema %s), files under %s",
+            cfg.STORE_PG_SCHEMA,
+            cfg.STORE_PATH,
+        )
         return postgres_store(
             (cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL).replace("+asyncpg", ""),
             files=cfg.STORE_PATH,
@@ -164,7 +168,9 @@ def open_store(cfg: SubstrateConfig) -> Any:
 
         logger.info("Store: folder %s", cfg.STORE_PATH)
         return Store.at(cfg.STORE_PATH, file_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES)
-    raise ValueError(f"STORE_BACKEND must be 'postgres' or 'local', got {cfg.STORE_BACKEND!r}")
+    raise ValueError(
+        f"STORE_BACKEND must be 'postgres' or 'local', got {cfg.STORE_BACKEND!r}"
+    )
 
 
 async def init_runtime(store: Any) -> tuple[Any, AsyncExitStack | None]:
@@ -230,7 +236,9 @@ async def init_infrastructure(
 
     workspace_store = Workspaces(store)
 
-    short_term_memory = await build_short_term_memory(store=store, redis_url=cfg.REDIS_URL, ttl=cfg.REDIS_SESSION_TTL)
+    short_term_memory = await build_short_term_memory(
+        store=store, redis_url=cfg.REDIS_URL, ttl=cfg.REDIS_SESSION_TTL
+    )
     # User-scoped standing facts/preferences ("always answer in French") —
     # separate from short_term_memory's per-session scratch state. See
     # build_memory_tool() below for how this gets keyed by user, not thread.
@@ -395,7 +403,11 @@ async def init_tool_registry(
         # pass — not a regression), just not yet per-branch; making it
         # branch-aware needs the in-pod server itself to materialize/commit
         # against the workspace store, a separate, untested-here change.
-        if cfg.SANDBOX_RUNTIME != "k8s" and file_store is not None and workspace_store is not None:
+        if (
+            cfg.SANDBOX_RUNTIME != "k8s"
+            and file_store is not None
+            and workspace_store is not None
+        ):
             sandbox_runtime = StagedSandboxRuntime(
                 sandbox_runtime,
                 object_store=file_store,
@@ -461,14 +473,19 @@ async def init_tool_registry(
         registry.add(code_interpreter_tool)
     if library is not None:
         from substrate.documents import DocumentsTool
-        from substrate_cloud.documents_library import collection_for_scope, knowledge_collection_for_scope
+        from substrate_cloud.documents_library import (
+            collection_for_scope,
+            knowledge_collection_for_scope,
+        )
 
         registry.add(DocumentsTool(library, collection=collection_for_scope))
         if knowledge is not None:
             registry.add(
                 DocumentsTool(
                     knowledge,
-                    collection=lambda scope: knowledge_collection_for_scope(scope, cfg.KNOWLEDGE_CHAT_BASE),
+                    collection=lambda scope: knowledge_collection_for_scope(
+                        scope, cfg.KNOWLEDGE_CHAT_BASE
+                    ),
                     name="knowledge",
                     description=(
                         "Search and read the organisation's knowledge base: its policies, handbooks and reference documents. "
@@ -714,7 +731,9 @@ async def build_agent_for_thread(
     # block — not merged into the base instructions — before the closure
     # below captures system_instructions for cold-store reseeding too, so
     # a reconstructed-from-EventLog turn sees the same block a live one does.
-    memory_context = await build_user_memory_context_block(long_term_memory, tenant_id, user_id)
+    memory_context = await build_user_memory_context_block(
+        long_term_memory, tenant_id, user_id
+    )
     if memory_context:
         system_instructions = system_instructions.rstrip() + "\n\n" + memory_context
 
@@ -853,7 +872,9 @@ def build_chat_tools(toolbox: Any, bridge: Any) -> list[Any]:
     return tools
 
 
-async def build_short_term_memory(*, store: Any, redis_url: str, ttl: int = 3600) -> Any:
+async def build_short_term_memory(
+    *, store: Any, redis_url: str, ttl: int = 3600
+) -> Any:
     """Per-session state: the store's ``session_state``, with a Redis cache in front when ``redis_url`` is set."""
     primary = store.session_state
     if not redis_url:
@@ -955,7 +976,9 @@ def build_memory_tool(
         return None
     from substrate.integrations.tools.memory import MemoryTool
 
-    return MemoryTool(session_id, short_term=short_term_memory, long_term=long_term_memory)
+    return MemoryTool(
+        session_id, short_term=short_term_memory, long_term=long_term_memory
+    )
 
 
 def _xml_escape(text: str) -> str:
@@ -972,7 +995,11 @@ def _xml_escape(text: str) -> str:
 
 
 async def build_user_memory_context_block(
-    long_term_memory: Any, tenant_id: str | None, user_id: str | None, *, limit: int = 20
+    long_term_memory: Any,
+    tenant_id: str | None,
+    user_id: str | None,
+    *,
+    limit: int = 20,
 ) -> str:
     """``<user_context>`` block appended to the system prompt — same
     labeled-block-appended-to-system-prompt pattern as
@@ -995,7 +1022,12 @@ async def build_user_memory_context_block(
     from substrate.stores import MemoryNamespace, MemoryQuery
 
     matches = await long_term_memory.query(
-        MemoryQuery(namespace=MemoryNamespace(tenant_id=tenant_id or "default", user_id=user_id), limit=limit)
+        MemoryQuery(
+            namespace=MemoryNamespace(
+                tenant_id=tenant_id or "default", user_id=user_id
+            ),
+            limit=limit,
+        )
     )
     memories = [m.record for m in matches]
     if not memories:
@@ -1008,7 +1040,9 @@ async def build_user_memory_context_block(
         "stale or wrong. -->"
     )
     for memory in memories:
-        content_str = memory.to_text() if hasattr(memory, "to_text") else str(memory.content)
+        content_str = (
+            memory.to_text() if hasattr(memory, "to_text") else str(memory.content)
+        )
         lines.append(f"  <fact>{_xml_escape(content_str)}</fact>")
     lines.append("</user_context>")
     return "\n".join(lines)

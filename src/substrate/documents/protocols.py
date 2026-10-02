@@ -16,7 +16,12 @@ class DocumentExtractor(Protocol):
     """
 
     async def read(
-        self, data: bytes, filename: str, *, content_type: str | None = None, strategy: Strategy = "auto"
+        self,
+        data: bytes,
+        filename: str,
+        *,
+        content_type: str | None = None,
+        strategy: Strategy = "auto",
     ) -> ExtractionResult: ...
 
 
@@ -30,7 +35,9 @@ class Ocr(Protocol):
 
     name: str
 
-    def recognize(self, png: bytes, *, languages: Sequence[str] = ("eng",)) -> OcrResult: ...
+    def recognize(
+        self, png: bytes, *, languages: Sequence[str] = ("eng",)
+    ) -> OcrResult: ...
 
 
 __all__ = [

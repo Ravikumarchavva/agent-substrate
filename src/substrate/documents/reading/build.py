@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from substrate.documents.reading.text import plain_text
-from substrate.documents.types import ExtractedImage, ExtractedImageLabel, ExtractedPage, PageMethod
+from substrate.documents.types import (
+    ExtractedImage,
+    ExtractedImageLabel,
+    ExtractedPage,
+    PageMethod,
+)
 
 IMAGE_TYPES = {
     "png": "image/png",
@@ -37,8 +42,16 @@ class PageBuilder:
     def block(self, markdown: str, *, tight: bool = False) -> None:
         """Add a block. ``tight`` joins it to the previous block with one newline instead of a blank line (list items)."""
         if markdown and markdown.strip():
-            previous = self._blocks[-1][-1].rsplit("\n", 1)[-1].lstrip() if self._blocks[-1] else ""
-            if tight and previous[:2] == markdown.lstrip()[:2] and previous.startswith(("- ", "1. ")):
+            previous = (
+                self._blocks[-1][-1].rsplit("\n", 1)[-1].lstrip()
+                if self._blocks[-1]
+                else ""
+            )
+            if (
+                tight
+                and previous[:2] == markdown.lstrip()[:2]
+                and previous.startswith(("- ", "1. "))
+            ):
                 self._blocks[-1][-1] += "\n" + markdown.rstrip()
             else:
                 self._blocks[-1].append(markdown.rstrip())
@@ -47,14 +60,28 @@ class PageBuilder:
         self._blocks.append([])
         self._images.append([])
 
-    def image(self, data: bytes, media_type: str, alt: str = "", *, label: ExtractedImageLabel = ExtractedImageLabel.FIGURE) -> str | None:
+    def image(
+        self,
+        data: bytes,
+        media_type: str,
+        alt: str = "",
+        *,
+        label: ExtractedImageLabel = ExtractedImageLabel.FIGURE,
+    ) -> str | None:
         """Attach an image to the current page and return its ``cid:`` id (``None`` if the page already has too many)."""
         if len(self._images[-1]) >= MAX_IMAGES_PER_PAGE:
             self.skipped_images += 1
             return None
         ident = f"img-p{self.number}-{len(self._images[-1]) + 1}"
         self._images[-1].append(
-            ExtractedImage(data=data, media_type=media_type, page_number=self.number, label=label, caption=alt or None, id=ident)
+            ExtractedImage(
+                data=data,
+                media_type=media_type,
+                page_number=self.number,
+                label=label,
+                caption=alt or None,
+                id=ident,
+            )
         )
         return ident
 
@@ -68,7 +95,12 @@ class PageBuilder:
         out: list[ExtractedPage] = []
         for index, blocks in enumerate(self._blocks):
             markdown = "\n\n".join(blocks)
-            if not markdown.strip() and not self._images[index] and not keep_empty and (out or index < len(self._blocks) - 1):
+            if (
+                not markdown.strip()
+                and not self._images[index]
+                and not keep_empty
+                and (out or index < len(self._blocks) - 1)
+            ):
                 continue
             out.append(
                 ExtractedPage(
@@ -80,7 +112,9 @@ class PageBuilder:
                 )
             )
         if not out:
-            out.append(ExtractedPage(page_number=1, text="", markdown="", method=self._method))
+            out.append(
+                ExtractedPage(page_number=1, text="", markdown="", method=self._method)
+            )
         return _renumber(out)
 
 
@@ -91,7 +125,9 @@ def _renumber(pages: list[ExtractedPage]) -> list[ExtractedPage]:
         if page.page_number == number:
             fixed.append(page)
             continue
-        old = {img.id: f"img-p{number}-{img.id.rsplit('-', 1)[-1]}" for img in page.images}
+        old = {
+            img.id: f"img-p{number}-{img.id.rsplit('-', 1)[-1]}" for img in page.images
+        }
         markdown = page.markdown
         for before, after in old.items():
             markdown = markdown.replace(f"cid:{before})", f"cid:{after})")
@@ -100,7 +136,12 @@ def _renumber(pages: list[ExtractedPage]) -> list[ExtractedPage]:
                 update={
                     "page_number": number,
                     "markdown": markdown,
-                    "images": [img.model_copy(update={"page_number": number, "id": old[img.id]}) for img in page.images],
+                    "images": [
+                        img.model_copy(
+                            update={"page_number": number, "id": old[img.id]}
+                        )
+                        for img in page.images
+                    ],
                 }
             )
         )
@@ -122,7 +163,16 @@ def join_blocks(blocks: list[str]) -> str:
 
 def document_markdown(pages: list[ExtractedPage]) -> str:
     """The whole document: each page after its ``<!-- page N -->`` marker."""
-    return "\n\n".join(f"<!-- page {p.page_number} -->\n\n{p.markdown}".rstrip() for p in pages)
+    return "\n\n".join(
+        f"<!-- page {p.page_number} -->\n\n{p.markdown}".rstrip() for p in pages
+    )
 
 
-__all__ = ["IMAGE_TYPES", "MAX_IMAGES_PER_PAGE", "PageBuilder", "document_markdown", "image_type", "join_blocks"]
+__all__ = [
+    "IMAGE_TYPES",
+    "MAX_IMAGES_PER_PAGE",
+    "PageBuilder",
+    "document_markdown",
+    "image_type",
+    "join_blocks",
+]

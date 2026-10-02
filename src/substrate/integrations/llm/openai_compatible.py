@@ -34,7 +34,12 @@ from substrate.models.registry import resolve_capabilities
 from substrate.types import ChatMessage, ContentBlock
 from substrate.types import RunMeta
 from substrate.types.finish_reason import FinishReason
-from substrate.models import GenerationOptions, LLMResponse, ModelCapabilities, ReasoningEffort
+from substrate.models import (
+    GenerationOptions,
+    LLMResponse,
+    ModelCapabilities,
+    ReasoningEffort,
+)
 from substrate.types import Usage
 from substrate.types import (
     DataBlock,
@@ -49,11 +54,18 @@ from substrate.types import CompletionEvent, ReasoningDelta, TextDelta
 
 logger = logging.getLogger(__name__)
 
-_AUDIO_FORMATS = {"audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "audio/mp3": "mp3"}
+_AUDIO_FORMATS = {
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+}
 
 
 def _data_uri(block: MediaBlock) -> str:
-    return f"data:{block.media_type};base64,{base64.b64encode(block.data or b'').decode()}"
+    return (
+        f"data:{block.media_type};base64,{base64.b64encode(block.data or b'').decode()}"
+    )
 
 
 def _media_part(block: MediaBlock) -> dict[str, Any] | None:
@@ -72,7 +84,10 @@ def _media_part(block: MediaBlock) -> dict[str, Any] | None:
             return None
         return {
             "type": "input_audio",
-            "input_audio": {"data": base64.b64encode(block.data).decode(), "format": fmt},
+            "input_audio": {
+                "data": base64.b64encode(block.data).decode(),
+                "format": fmt,
+            },
         }
     if block.type == "document":
         if block.file_id:
@@ -81,7 +96,10 @@ def _media_part(block: MediaBlock) -> dict[str, Any] | None:
             return None
         return {
             "type": "file",
-            "file": {"file_data": _data_uri(block), "filename": block.filename or "document"},
+            "file": {
+                "file_data": _data_uri(block),
+                "filename": block.filename or "document",
+            },
         }
     return None
 
@@ -211,7 +229,9 @@ def chat_finish_reason(reason: str | None, *, has_tool_calls: bool) -> FinishRea
     if reason is None:
         return FinishReason.UNSPECIFIED
     if reason == "stop" and has_tool_calls:
-        return FinishReason.TOOL_CALLS  # some servers say "stop" for a turn that ended in a tool call
+        return (
+            FinishReason.TOOL_CALLS
+        )  # some servers say "stop" for a turn that ended in a tool call
     return _CHAT_FINISH.get(reason, FinishReason.OTHER)
 
 
@@ -314,7 +334,10 @@ class OpenAICompatibleClient:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Attachments returned by the tool call(s) above:"},
+                            {
+                                "type": "text",
+                                "text": "Attachments returned by the tool call(s) above:",
+                            },
                             *pending_media,
                         ],
                     }
@@ -521,10 +544,14 @@ class OpenAICompatibleClient:
             and self.capabilities.supports_reasoning
         ):
             params["reasoning_effort"] = (
-                "minimal" if options.reasoning == ReasoningEffort.OFF else options.reasoning.value
+                "minimal"
+                if options.reasoning == ReasoningEffort.OFF
+                else options.reasoning.value
             )
 
-        max_tokens = options.max_tokens if options.max_tokens is not None else self.max_tokens
+        max_tokens = (
+            options.max_tokens if options.max_tokens is not None else self.max_tokens
+        )
         if max_tokens:
             # OpenAI deprecated max_tokens (reasoning models reject it);
             # most OpenAI-compatible servers only understand max_tokens.
@@ -607,7 +634,10 @@ class OpenAICompatibleClient:
             recovered = self._try_recover_tool_calls(exc)
             if recovered is not None:
                 tc_dict, _ = recovered
-                calls = [(tc["id"], tc["name"], tc["arguments"]) for _, tc in sorted(tc_dict.items())]
+                calls = [
+                    (tc["id"], tc["name"], tc["arguments"])
+                    for _, tc in sorted(tc_dict.items())
+                ]
                 return LLMResponse(content=self._tool_use_blocks(calls), usage=Usage())
             detail = self._format_error(exc)
             logger.exception("Chat completions request failed: %s", detail)
@@ -615,7 +645,9 @@ class OpenAICompatibleClient:
 
         msg = response.choices[0].message
         blocks: list[ContentBlock] = []
-        reasoning = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None)
+        reasoning = getattr(msg, "reasoning_content", None) or getattr(
+            msg, "reasoning", None
+        )
         if reasoning:
             blocks.append(ReasoningBlock(text=reasoning))
         if msg.content:
@@ -626,12 +658,16 @@ class OpenAICompatibleClient:
         ]
         blocks.extend(self._tool_use_blocks(calls))
         blocks.extend(
-            self._structured_block(options.response_format, msg.content or "", bool(calls))
+            self._structured_block(
+                options.response_format, msg.content or "", bool(calls)
+            )
         )
         return LLMResponse(
             content=blocks,
             usage=self._usage(getattr(response, "usage", None)),
-            finish_reason=chat_finish_reason(response.choices[0].finish_reason, has_tool_calls=bool(calls)),
+            finish_reason=chat_finish_reason(
+                response.choices[0].finish_reason, has_tool_calls=bool(calls)
+            ),
             response_id=getattr(response, "id", None),
             served_model=getattr(response, "model", None),
         )
@@ -720,7 +756,9 @@ class OpenAICompatibleClient:
         ]
         blocks.extend(self._tool_use_blocks(calls))
         blocks.extend(
-            self._structured_block(options.response_format, collected_content, bool(calls))
+            self._structured_block(
+                options.response_format, collected_content, bool(calls)
+            )
         )
         yield CompletionEvent(
             content=blocks,

@@ -19,7 +19,6 @@ from substrate.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
 logger = logging.getLogger(__name__)
 
 
-
 @runtime_checkable
 class CompactionCoordinator(Protocol):
     """Contract for phase-aware context compaction orchestration."""
@@ -28,8 +27,7 @@ class CompactionCoordinator(Protocol):
         self,
         phase: CompactionPhase,
         context: CompactionContext,
-    ) -> CompactionResult:
-        ...
+    ) -> CompactionResult: ...
 
 
 class DefaultCompactionCoordinator:
@@ -84,7 +82,9 @@ class DefaultCompactionCoordinator:
                     "Pre-LLM compaction strategy failed (%s); falling back to deterministic truncation",
                     exc,
                 )
-                messages = self._deterministic_fallback(context.messages, context.token_budget)
+                messages = self._deterministic_fallback(
+                    context.messages, context.token_budget
+                )
         else:
             messages = self._deterministic_fallback(messages, context.token_budget)
 
@@ -133,13 +133,17 @@ class DefaultCompactionCoordinator:
 
     async def _compact_post_tool(self, context: CompactionContext) -> CompactionResult:
         if context.tool_content is None:
-            raise ValueError("tool_content must be provided in CompactionContext for POST_TOOL phase")
+            raise ValueError(
+                "tool_content must be provided in CompactionContext for POST_TOOL phase"
+            )
 
         compacted: ContentBlock = context.tool_content
         if self._tool_strategy is not None:
             try:
                 if hasattr(self._tool_strategy, "compact_block"):
-                    compacted = await self._tool_strategy.compact_block(context.tool_content)
+                    compacted = await self._tool_strategy.compact_block(
+                        context.tool_content
+                    )
                 elif hasattr(self._tool_strategy, "compact"):
                     compacted = await self._tool_strategy.compact(context.tool_content)
             except Exception as exc:
@@ -176,4 +180,3 @@ class DefaultCompactionCoordinator:
 
 
 __all__ = ["CompactionCoordinator", "DefaultCompactionCoordinator"]
-

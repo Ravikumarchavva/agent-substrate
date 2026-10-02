@@ -43,7 +43,10 @@ from substrate.documents.okf import (
     utc_now_iso,
 )
 from substrate.documents.okf import human_actor as okf_human_actor
-from substrate.workspace.layout import conversation_artifacts_prefix, user_artifacts_prefix
+from substrate.workspace.layout import (
+    conversation_artifacts_prefix,
+    user_artifacts_prefix,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +58,9 @@ class _BlobStore(Protocol):
     """The subset of the file-store surface this needs — structural, so both
     ``Files`` and ``S3FileStore`` satisfy it without a base class."""
 
-    async def upload(self, key: str, data: bytes, *, content_type: str = ...) -> Any: ...
+    async def upload(
+        self, key: str, data: bytes, *, content_type: str = ...
+    ) -> Any: ...
     async def download(self, key: str) -> bytes: ...
     async def delete(self, key: str) -> None: ...
     async def exists(self, key: str) -> bool: ...
@@ -73,7 +78,7 @@ def slugify(text: str, *, fallback: str = "note") -> str:
     normalized = unicodedata.normalize("NFKD", text)
     ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
     slug = _SLUG_STRIP.sub("-", ascii_only.lower()).strip("-")
-    return (slug[:_MAX_SLUG_LEN].strip("-") or fallback)
+    return slug[:_MAX_SLUG_LEN].strip("-") or fallback
 
 
 @dataclass(frozen=True)
@@ -241,7 +246,9 @@ class ArtifactStore:
                 continue
             if concept_type and concept.type != concept_type:
                 continue
-            if wanted_tags and not wanted_tags.issubset({t.lower() for t in concept.tags}):
+            if wanted_tags and not wanted_tags.issubset(
+                {t.lower() for t in concept.tags}
+            ):
                 continue
             refs.append(ArtifactRef(slug=slug, scope=scope, concept=concept))
         return refs
@@ -287,7 +294,10 @@ class ArtifactStore:
 
         target_slug = await self.unique_slug(global_prefix, slug)
         promoted = Concept(**{**concept.__dict__})
-        promoted.extra = {**concept.extra, "promoted_from": f"{session_prefix}/{slug}.md"}
+        promoted.extra = {
+            **concept.extra,
+            "promoted_from": f"{session_prefix}/{slug}.md",
+        }
         await self.save(global_prefix, target_slug, promoted)
         await self._append_log(global_prefix, f"promoted `{target_slug}` from session")
 

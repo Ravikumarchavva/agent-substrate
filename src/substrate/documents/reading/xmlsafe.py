@@ -90,14 +90,24 @@ class Package:
             raise UnsafeDocument(f"not a readable zip container: {exc}") from exc
         infos = self._zip.infolist()
         if len(infos) > MAX_MEMBERS:
-            raise UnsafeDocument(f"archive has {len(infos)} members (limit {MAX_MEMBERS})")
+            raise UnsafeDocument(
+                f"archive has {len(infos)} members (limit {MAX_MEMBERS})"
+            )
         if sum(i.file_size for i in infos) > MAX_TOTAL_BYTES:
             raise UnsafeDocument("archive inflates to more than the size limit")
         for info in infos:
             if info.flag_bits & 0x1:
-                raise UnsafeDocument("the file is encrypted; this reader does not open encrypted documents")
-            if info.compress_size and info.file_size > 1_000_000 and info.file_size / info.compress_size > MAX_RATIO:
-                raise UnsafeDocument(f"{info.filename!r} is compressed {info.file_size // info.compress_size}:1 — refusing a zip bomb")
+                raise UnsafeDocument(
+                    "the file is encrypted; this reader does not open encrypted documents"
+                )
+            if (
+                info.compress_size
+                and info.file_size > 1_000_000
+                and info.file_size / info.compress_size > MAX_RATIO
+            ):
+                raise UnsafeDocument(
+                    f"{info.filename!r} is compressed {info.file_size // info.compress_size}:1 — refusing a zip bomb"
+                )
         self._names = {i.filename: i for i in infos}
 
     @property
@@ -114,7 +124,13 @@ class Package:
         try:
             with self._zip.open(info) as handle:
                 body = handle.read(limit + 1)
-        except (zipfile.BadZipFile, RuntimeError, NotImplementedError, OSError, EOFError) as exc:
+        except (
+            zipfile.BadZipFile,
+            RuntimeError,
+            NotImplementedError,
+            OSError,
+            EOFError,
+        ) as exc:
             raise UnsafeDocument(f"cannot read {name!r}: {exc}") from exc
         if len(body) > limit:
             raise UnsafeDocument(f"{name!r} inflates past {limit} bytes")

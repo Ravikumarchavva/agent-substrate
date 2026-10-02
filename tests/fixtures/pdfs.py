@@ -27,10 +27,20 @@ class Page:
 
 
 def _esc(text: str) -> bytes:
-    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)").encode("latin-1", "replace")
+    return (
+        text.replace("\\", "\\\\")
+        .replace("(", "\\(")
+        .replace(")", "\\)")
+        .encode("latin-1", "replace")
+    )
 
 
-def build(pages: list[Page], *, outline: list[tuple[str, int, int]] | None = None, title: str | None = None) -> bytes:
+def build(
+    pages: list[Page],
+    *,
+    outline: list[tuple[str, int, int]] | None = None,
+    title: str | None = None,
+) -> bytes:
     """A PDF of ``pages``. ``outline`` is ``[(title, level starting at 1, page index)]`` in document order."""
     objects: dict[int, bytes] = {}
     next_id = [3 + 2 * len(pages) + 2]  # after pages, contents, two fonts
@@ -43,7 +53,11 @@ def build(pages: list[Page], *, outline: list[tuple[str, int, int]] | None = Non
     n = len(pages)
     page_ids = [3 + 2 * i for i in range(n)]
     f1, f2 = 3 + 2 * n, 4 + 2 * n
-    objects[2] = ("<< /Type /Pages /Kids [" + " ".join(f"{p} 0 R" for p in page_ids) + f"] /Count {n} >>").encode()
+    objects[2] = (
+        "<< /Type /Pages /Kids ["
+        + " ".join(f"{p} 0 R" for p in page_ids)
+        + f"] /Count {n} >>"
+    ).encode()
     objects[f1] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
     objects[f2] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"
     for i, page in enumerate(pages):
@@ -75,13 +89,27 @@ def build(pages: list[Page], *, outline: list[tuple[str, int, int]] | None = Non
         y = 740.0
         for line in page.lines:
             y -= line.gap
-            stream += b"BT /" + (b"F2" if line.bold else b"F1") + f" {line.size:g} Tf 72 {y:.1f} Td (".encode() + _esc(line.text) + b") Tj ET\n"
+            stream += (
+                b"BT /"
+                + (b"F2" if line.bold else b"F1")
+                + f" {line.size:g} Tf 72 {y:.1f} Td (".encode()
+                + _esc(line.text)
+                + b") Tj ET\n"
+            )
             y -= line.size * 1.35
         if xobjects:
             resources += " /XObject << " + " ".join(xobjects) + " >>"
         content_id = 4 + 2 * i
-        objects[content_id] = b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"endstream"
-        objects[page_ids[i]] = f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents {content_id} 0 R /Resources << {resources} >> >>".encode()
+        objects[content_id] = (
+            b"<< /Length "
+            + str(len(stream)).encode()
+            + b" >>\nstream\n"
+            + stream
+            + b"endstream"
+        )
+        objects[page_ids[i]] = (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents {content_id} 0 R /Resources << {resources} >> >>".encode()
+        )
 
     catalog = "<< /Type /Catalog /Pages 2 0 R"
     if outline:
@@ -111,7 +139,9 @@ def build(pages: list[Page], *, outline: list[tuple[str, int, int]] | None = Non
                 entry += f" /First {ids[own[0]]} 0 R /Last {ids[own[-1]]} 0 R /Count {len(own)}"
             objects[ids[index]] = (entry + " >>").encode("latin-1")
         top = children[None]
-        objects[root] = f"<< /Type /Outlines /First {ids[top[0]]} 0 R /Last {ids[top[-1]]} 0 R /Count {len(top)} >>".encode()
+        objects[root] = (
+            f"<< /Type /Outlines /First {ids[top[0]]} 0 R /Last {ids[top[-1]]} 0 R /Count {len(top)} >>".encode()
+        )
         catalog += f" /Outlines {root} 0 R"
     info = ""
     if title:
@@ -128,7 +158,11 @@ def build(pages: list[Page], *, outline: list[tuple[str, int, int]] | None = Non
     xref = len(out)
     out += f"xref\n0 {size}\n".encode() + b"0000000000 65535 f \n"
     for ident in range(1, size):
-        out += (f"{offsets[ident]:010d} 00000 n \n" if ident in offsets else "0000000000 65535 f \n").encode()
+        out += (
+            f"{offsets[ident]:010d} 00000 n \n"
+            if ident in offsets
+            else "0000000000 65535 f \n"
+        ).encode()
     out += f"trailer\n<< /Size {size} /Root 1 0 R{info} >>\nstartxref\n{xref}\n%%EOF\n".encode()
     return out
 
@@ -139,7 +173,10 @@ def scan_of(lines: list[Line], *, dpi: int = 200) -> tuple[int, int, bytes]:
 
     document = pdfium.PdfDocument(build([Page(lines)]))
     bitmap = document[0].render(scale=dpi / 72, grayscale=True)
-    pixels = b"".join(bytes(bitmap.buffer)[y * bitmap.stride : y * bitmap.stride + bitmap.width] for y in range(bitmap.height))
+    pixels = b"".join(
+        bytes(bitmap.buffer)[y * bitmap.stride : y * bitmap.stride + bitmap.width]
+        for y in range(bitmap.height)
+    )
     width, height = bitmap.width, bitmap.height
     bitmap.close()
     document.close()

@@ -106,9 +106,7 @@ async def test_list_storage_tenants_and_conversations(tmp_path) -> None:
 
                 conv_resp = await client.get("/admin/storage/tenant1/conversations")
                 assert conv_resp.status_code == 200
-                by_conv = {
-                    row["conversation_id"]: row for row in conv_resp.json()
-                }
+                by_conv = {row["conversation_id"]: row for row in conv_resp.json()}
                 assert by_conv["c1"] == {
                     "conversation_id": "c1",
                     "size_bytes": 3,
@@ -173,7 +171,10 @@ async def test_storage_routes_501_for_non_workspace_backend() -> None:
 
     async with app.router.lifespan_context(app):
         app.state.ctx.file_store = S3FileStore(
-            endpoint_url="http://localhost:9000", access_key="k", secret_key="s", bucket="b"
+            endpoint_url="http://localhost:9000",
+            access_key="k",
+            secret_key="s",
+            bucket="b",
         )
         app.dependency_overrides[get_current_user] = lambda: _admin_claims()
         try:

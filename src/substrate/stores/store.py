@@ -47,12 +47,14 @@ DATABASE_FILE = "substrate.db"
 FILES_DIR = "files"
 INDEX_DIR = "index"
 
-_LAYOUT = ["""
+_LAYOUT = [
+    """
 CREATE TABLE IF NOT EXISTS substrate_info (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-"""]
+"""
+]
 
 
 class Store:
@@ -62,7 +64,13 @@ class Store:
     while the files and indexes stay in ``root``.
     """
 
-    def __init__(self, database: Database, root: str | Path, *, file_quota_bytes: int | None = None) -> None:
+    def __init__(
+        self,
+        database: Database,
+        root: str | Path,
+        *,
+        file_quota_bytes: int | None = None,
+    ) -> None:
         self.database = database
         self.root = Path(root)
         self.file_quota_bytes = file_quota_bytes
@@ -123,13 +131,24 @@ class Store:
 
     def tenant(self, tenant: str | Scope) -> Tenant:
         """The store as one tenant sees it — every facet confined to ``tenant`` — with ``erase()`` for its data."""
-        return Tenant(self, tenant if isinstance(tenant, Scope) else Scope(tenant_id=tenant))
+        return Tenant(
+            self, tenant if isinstance(tenant, Scope) else Scope(tenant_id=tenant)
+        )
 
     @classmethod
-    def at(cls, location: str | Path = "./.substrate", *, file_quota_bytes: int | None = None) -> Store:
+    def at(
+        cls,
+        location: str | Path = "./.substrate",
+        *,
+        file_quota_bytes: int | None = None,
+    ) -> Store:
         """The store in the folder ``location``, not yet opened: ``start()`` (or ``async with``) opens it."""
         root = Path(location).expanduser()
-        return cls(SqliteDatabase(root / DATABASE_FILE), root, file_quota_bytes=file_quota_bytes)
+        return cls(
+            SqliteDatabase(root / DATABASE_FILE),
+            root,
+            file_quota_bytes=file_quota_bytes,
+        )
 
     async def start(self) -> None:
         """Open it, creating whatever is missing. Idempotent."""
@@ -175,7 +194,12 @@ class Store:
         await self.start()
         return self
 
-    async def __aexit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         await self.aclose()
 
 

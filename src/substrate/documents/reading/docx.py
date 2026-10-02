@@ -32,14 +32,20 @@ def _val(element: ET.Element | None, tag: str = "val") -> str | None:
 def relationships(pkg: Package, part: str) -> dict[str, tuple[str, str, bool]]:
     """``{id: (type suffix, target path or URL, external)}`` of the relationships of ``part``."""
     directory, _, name = part.rpartition("/")
-    root = pkg.xml(f"{directory}/_rels/{name}.rels" if directory else f"_rels/{name}.rels")
+    root = pkg.xml(
+        f"{directory}/_rels/{name}.rels" if directory else f"_rels/{name}.rels"
+    )
     out: dict[str, tuple[str, str, bool]] = {}
     if root is None:
         return out
     for rel in root.findall(f"{{{REL}}}Relationship"):
         external = rel.get("TargetMode") == "External"
         target = rel.get("Target", "")
-        out[rel.get("Id", "")] = (rel.get("Type", "").rsplit("/", 1)[-1], target if external else resolve(part, target), external)
+        out[rel.get("Id", "")] = (
+            rel.get("Type", "").rsplit("/", 1)[-1],
+            target if external else resolve(part, target),
+            external,
+        )
     return out
 
 
@@ -67,24 +73,36 @@ class _Styles:
                 ppr = style.find(_w("pPr"))
                 if name == "title":
                     self.level[ident] = 1
-                elif (m := _HEADING_NAME.match(name)):
+                elif m := _HEADING_NAME.match(name):
                     self.level[ident] = min(6, int(m.group(1)))
-                elif ppr is not None and (o := _val(ppr.find(_w("outlineLvl")))) is not None and o.isdigit() and int(o) < 9:
+                elif (
+                    ppr is not None
+                    and (o := _val(ppr.find(_w("outlineLvl")))) is not None
+                    and o.isdigit()
+                    and int(o) < 9
+                ):
                     self.level[ident] = min(6, int(o) + 1)
                 based = _val(style.find(_w("basedOn")))
                 if based:
                     self._based[ident] = based
                 if ppr is not None and (num := ppr.find(_w("numPr"))) is not None:
-                    self.numbered[ident] = (_val(num.find(_w("numId"))) or "0", int(_val(num.find(_w("ilvl"))) or 0))
+                    self.numbered[ident] = (
+                        _val(num.find(_w("numId"))) or "0",
+                        int(_val(num.find(_w("ilvl"))) or 0),
+                    )
         numbering = pkg.xml("word/numbering.xml")
         if numbering is not None:
             abstract: dict[str, dict[int, str]] = {}
             for node in numbering.findall(_w("abstractNum")):
                 abstract[node.get(_w("abstractNumId"), "")] = {
-                    int(lvl.get(_w("ilvl"), 0)): _val(lvl.find(_w("numFmt"))) or "decimal" for lvl in node.findall(_w("lvl"))
+                    int(lvl.get(_w("ilvl"), 0)): _val(lvl.find(_w("numFmt")))
+                    or "decimal"
+                    for lvl in node.findall(_w("lvl"))
                 }
             for num in numbering.findall(_w("num")):
-                self.formats[num.get(_w("numId"), "")] = abstract.get(_val(num.find(_w("abstractNumId"))) or "", {})
+                self.formats[num.get(_w("numId"), "")] = abstract.get(
+                    _val(num.find(_w("abstractNumId"))) or "", {}
+                )
 
     def inherited(self, table: dict, style: str | None):
         for _ in range(10):
@@ -112,9 +130,15 @@ class _Reader:
         if root is None:
             return
         for note in root.findall(_w("footnote")):
-            if note.get(_w("type")) in ("separator", "continuationSeparator", "continuationNotice"):
+            if note.get(_w("type")) in (
+                "separator",
+                "continuationSeparator",
+                "continuationNotice",
+            ):
                 continue
-            text = " ".join(t for p in note.iter(_w("p")) if (t := self.paragraph_text(p).strip()))
+            text = " ".join(
+                t for p in note.iter(_w("p")) if (t := self.paragraph_text(p).strip())
+            )
             self.footnotes[note.get(_w("id"), "")] = text
 
     # -- paragraphs -------------------------------------------------------------------------------------------------
@@ -134,10 +158,20 @@ class _Reader:
                 self._runs(child, inner)
                 text = "".join(inner)
                 rel = self.rels.get(child.get(f"{{{R}}}id", ""))
-                parts.append(f"[{text}]({rel[1]})" if rel and rel[2] and text.strip() else text)
-            elif tag in (_w("ins"), _w("smartTag"), _w("fldSimple"), _w("sdtContent"), _w("sdt")):
+                parts.append(
+                    f"[{text}]({rel[1]})" if rel and rel[2] and text.strip() else text
+                )
+            elif tag in (
+                _w("ins"),
+                _w("smartTag"),
+                _w("fldSimple"),
+                _w("sdtContent"),
+                _w("sdt"),
+            ):
                 self._runs(child, parts)
-            elif tag == _w("pPr") and child.find(f"{_w('rPr')}/{_w('ins')}") is not None:
+            elif (
+                tag == _w("pPr") and child.find(f"{_w('rPr')}/{_w('ins')}") is not None
+            ):
                 continue
 
     def _run(self, run: ET.Element, parts: list[str]) -> None:
@@ -164,7 +198,12 @@ class _Reader:
                     rid = blip.get(f"{{{R}}}embed") or blip.get(f"{{{R}}}link")
                     alt = ""
                     for doc_pr in item.iter(f"{{{WP}}}docPr"):
-                        alt = doc_pr.get("descr") or doc_pr.get("title") or doc_pr.get("name") or ""
+                        alt = (
+                            doc_pr.get("descr")
+                            or doc_pr.get("title")
+                            or doc_pr.get("name")
+                            or ""
+                        )
                         break
                     if rid:
                         parts.append(f"{_IMG}{rid}\u0002{alt}{_IMG}")
@@ -180,7 +219,9 @@ class _Reader:
         if num is not None:
             num_id = _val(num.find(_w("numId")))
             ilvl = int(_val(num.find(_w("ilvl"))) or 0)
-            if num_id is None:  # numbering by style, with this paragraph supplying only the level
+            if (
+                num_id is None
+            ):  # numbering by style, with this paragraph supplying only the level
                 inherited = self.styles.inherited(self.styles.numbered, style)
                 num_id = inherited[0] if inherited else "0"
         else:
@@ -197,7 +238,9 @@ class _Reader:
         outline = _val(ppr.find(_w("outlineLvl")))
         if outline is not None and outline.isdigit():
             return min(6, int(outline) + 1) if int(outline) < 9 else 0
-        return self.styles.inherited(self.styles.level, _val(ppr.find(_w("pStyle")))) or 0
+        return (
+            self.styles.inherited(self.styles.level, _val(ppr.find(_w("pStyle")))) or 0
+        )
 
     # -- emitting -------------------------------------------------------------------------------------------------------
 
@@ -236,7 +279,11 @@ class _Reader:
     def paragraph(self, paragraph: ET.Element) -> None:
         text = self.paragraph_text(paragraph)
         ppr = paragraph.find(_w("pPr"))
-        if ppr is not None and ppr.find(_w("pageBreakBefore")) is not None and text.strip():
+        if (
+            ppr is not None
+            and ppr.find(_w("pageBreakBefore")) is not None
+            and text.strip()
+        ):
             self.out.new_page()
         level = self._heading_level(paragraph)
         flat = " ".join(text.replace(_PAGE, " ").split())
@@ -260,11 +307,18 @@ class _Reader:
             row: list[str] = []
             for tc in tr.findall(_w("tc")):
                 tcpr = tc.find(_w("tcPr"))
-                span = int(_val(tcpr.find(_w("gridSpan"))) or 1) if tcpr is not None else 1
+                span = (
+                    int(_val(tcpr.find(_w("gridSpan"))) or 1) if tcpr is not None else 1
+                )
                 vmerge = tcpr.find(_w("vMerge")) if tcpr is not None else None
-                text = "" if (vmerge is not None and _val(vmerge) in (None, "continue")) else " ".join(
-                    " ".join(self.paragraph_text(p).replace(_PAGE, " ").split()) for p in tc.iter(_w("p"))
-                ).strip()
+                text = (
+                    ""
+                    if (vmerge is not None and _val(vmerge) in (None, "continue"))
+                    else " ".join(
+                        " ".join(self.paragraph_text(p).replace(_PAGE, " ").split())
+                        for p in tc.iter(_w("p"))
+                    ).strip()
+                )
                 text = re.sub(f"{_IMG}[^{_IMG}]*{_IMG}", "", text)
                 row.append(text)
                 row.extend([""] * (span - 1))
@@ -278,7 +332,11 @@ class _Reader:
             elif child.tag == _w("tbl"):
                 self.table(child)
             elif child.tag in (_w("sdt"), _w("sdtContent"), _w("customXml")):
-                self.body(child if child.tag != _w("sdt") else (child.find(_w("sdtContent")) or child))
+                self.body(
+                    child
+                    if child.tag != _w("sdt")
+                    else (child.find(_w("sdtContent")) or child)
+                )
 
 
 def read_docx(pkg: Package) -> tuple[list, str | None, list[str]]:
@@ -291,8 +349,16 @@ def read_docx(pkg: Package) -> tuple[list, str | None, list[str]]:
     if body is not None:
         reader.body(body)
     if reader.cited:
-        reader.out.block("\n".join(f"[^{i}]: {reader.footnotes[i]}" for i in reader.cited))
-    warnings = [f"{reader.out.skipped_images} image(s) in unsupported formats or beyond the per-page limit were not extracted"] if reader.out.skipped_images else []
+        reader.out.block(
+            "\n".join(f"[^{i}]: {reader.footnotes[i]}" for i in reader.cited)
+        )
+    warnings = (
+        [
+            f"{reader.out.skipped_images} image(s) in unsupported formats or beyond the per-page limit were not extracted"
+        ]
+        if reader.out.skipped_images
+        else []
+    )
     return reader.out.pages(), core_title(pkg) or reader.first_heading, warnings
 
 

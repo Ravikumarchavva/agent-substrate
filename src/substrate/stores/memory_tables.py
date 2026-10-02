@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
+
 def _memory_schema(database: Database) -> str:
     return (
         """
@@ -82,7 +83,11 @@ _COLUMNS = (
 
 
 def _text_of(record: MemoryRecord) -> str:
-    return " ".join(block.text for block in record.content if isinstance(block, TextBlock) and block.text)
+    return " ".join(
+        block.text
+        for block in record.content
+        if isinstance(block, TextBlock) and block.text
+    )
 
 
 def _record(row: Row) -> MemoryRecord:
@@ -100,7 +105,12 @@ def _visible(caller: MemoryNamespace, alias: str = "") -> tuple[str, list[Any]]:
         f"{p}tenant_id = ? AND ({p}user_id IS NULL OR {p}user_id = ?) AND ({p}agent_id IS NULL OR {p}agent_id = ?) "
         f"AND ({p}session_id IS NULL OR {p}session_id = ?)"
     )
-    return clause, [caller.tenant_id, caller.user_id, caller.agent_id, caller.session_id]
+    return clause, [
+        caller.tenant_id,
+        caller.user_id,
+        caller.agent_id,
+        caller.session_id,
+    ]
 
 
 def _in(column: str, values: Sequence[Any]) -> tuple[str, list[Any]]:
@@ -131,7 +141,11 @@ class Memory:
                 ns.tenant_id,
                 record.id,
             )
-            if existing is not None and (existing["user_id"], existing["agent_id"], existing["session_id"]) != (
+            if existing is not None and (
+                existing["user_id"],
+                existing["agent_id"],
+                existing["session_id"],
+            ) != (
                 ns.user_id,
                 ns.agent_id,
                 ns.session_id,
@@ -154,7 +168,9 @@ class Memory:
                 record.status.value,
                 _text_of(record),
                 record.model_dump_json(),
-                record.last_accessed_at.isoformat() if record.last_accessed_at else None,
+                record.last_accessed_at.isoformat()
+                if record.last_accessed_at
+                else None,
                 record.access_count,
                 time.time(),
             )
@@ -165,7 +181,11 @@ class Memory:
     async def get(self, caller: MemoryNamespace, record_id: str) -> MemoryRecord | None:
         async def op(tx: Tx) -> MemoryRecord | None:
             visible, params = _visible(caller)
-            row = await tx.fetchone(f"SELECT * FROM memory_records WHERE {visible} AND id = ?", *params, record_id)
+            row = await tx.fetchone(
+                f"SELECT * FROM memory_records WHERE {visible} AND id = ?",
+                *params,
+                record_id,
+            )
             return _record(row) if row else None
 
         return await self._run(op)
@@ -173,10 +193,18 @@ class Memory:
     async def delete(self, caller: MemoryNamespace, record_id: str) -> bool:
         async def op(tx: Tx) -> bool:
             visible, params = _visible(caller)
-            row = await tx.fetchone(f"SELECT * FROM memory_records WHERE {visible} AND id = ?", *params, record_id)
+            row = await tx.fetchone(
+                f"SELECT * FROM memory_records WHERE {visible} AND id = ?",
+                *params,
+                record_id,
+            )
             if row is None or not _record(row).namespace.owned_by(caller):
                 return False
-            await tx.execute("DELETE FROM memory_records WHERE tenant_id = ? AND id = ?", caller.tenant_id, record_id)
+            await tx.execute(
+                "DELETE FROM memory_records WHERE tenant_id = ? AND id = ?",
+                caller.tenant_id,
+                record_id,
+            )
             return True
 
         return await self._run(op)
@@ -198,7 +226,9 @@ class Memory:
             if spec.categories is not None:
                 if not spec.categories:
                     return []
-                category, category_params = _in("r.category", [c.value for c in spec.categories])
+                category, category_params = _in(
+                    "r.category", [c.value for c in spec.categories]
+                )
                 clauses.append(category)
                 params += category_params
 
@@ -208,7 +238,11 @@ class Memory:
                     return []
                 dialect = self._store.database.dialect
                 source, match, match_params = textsearch.ranked(
-                    dialect, index="memory_fts", table="memory_records", alias="r", query_words=words
+                    dialect,
+                    index="memory_fts",
+                    table="memory_records",
+                    alias="r",
+                    query_words=words,
                 )
                 sql = (
                     f"SELECT r.*, {textsearch.score(dialect, index='memory_fts', alias='r')} AS score FROM {source} "
@@ -228,11 +262,20 @@ class Memory:
             matches: list[MemoryMatch] = []
             for row in rows:
                 record = _record(row)
-                if spec.metadata_filter and not all(record.metadata.get(k) == v for k, v in spec.metadata_filter.items()):
+                if spec.metadata_filter and not all(
+                    record.metadata.get(k) == v for k, v in spec.metadata_filter.items()
+                ):
                     continue
                 if row["score"] < spec.min_score:
                     continue
-                matches.append(MemoryMatch(record=record, score=float(row["score"]), rank=len(matches), retrieval_method=method))
+                matches.append(
+                    MemoryMatch(
+                        record=record,
+                        score=float(row["score"]),
+                        rank=len(matches),
+                        retrieval_method=method,
+                    )
+                )
                 if len(matches) >= spec.limit:
                     break
             return matches
@@ -257,14 +300,24 @@ class Memory:
 
     async def erase(self, within: MemoryNamespace) -> int:
         clauses, params = ["tenant_id = ?"], [within.tenant_id]
-        for column, value in (("user_id", within.user_id), ("agent_id", within.agent_id), ("session_id", within.session_id)):
+        for column, value in (
+            ("user_id", within.user_id),
+            ("agent_id", within.agent_id),
+            ("session_id", within.session_id),
+        ):
             if value is not None:
                 clauses.append(f"{column} = ?")
                 params.append(value)
 
         async def op(tx: Tx) -> int:
-            erased = await tx.execute(f"DELETE FROM memory_records WHERE {' AND '.join(clauses)}", *params)
-            if erased and (compact := textsearch.compact(self._store.database.dialect, index="memory_fts")):
+            erased = await tx.execute(
+                f"DELETE FROM memory_records WHERE {' AND '.join(clauses)}", *params
+            )
+            if erased and (
+                compact := textsearch.compact(
+                    self._store.database.dialect, index="memory_fts"
+                )
+            ):
                 # The delete trigger only marks index entries deleted; rewriting the index drops the words themselves.
                 await tx.execute(compact)
             return erased
@@ -287,7 +340,9 @@ class SessionState:
 
     async def get_state(self, session_id: str) -> dict[str, Any]:
         async def op(tx: Tx) -> dict[str, Any]:
-            row = await tx.fetchone("SELECT state_json FROM session_state WHERE session_id = ?", session_id)
+            row = await tx.fetchone(
+                "SELECT state_json FROM session_state WHERE session_id = ?", session_id
+            )
             return json.loads(row["state_json"]) if row else {}
 
         return await self._store.run(op)
@@ -301,7 +356,9 @@ class SessionState:
     async def update_state(self, session_id: str, patch: dict[str, Any]) -> None:
         async def op(tx: Tx) -> None:
             await tx.lock(f"session_state:{session_id}")
-            row = await tx.fetchone("SELECT state_json FROM session_state WHERE session_id = ?", session_id)
+            row = await tx.fetchone(
+                "SELECT state_json FROM session_state WHERE session_id = ?", session_id
+            )
             state = json.loads(row["state_json"]) if row else {}
             state.update(patch)
             await _write(tx, session_id, state)
@@ -310,7 +367,9 @@ class SessionState:
 
     async def clear(self, session_id: str) -> None:
         async def op(tx: Tx) -> None:
-            await tx.execute("DELETE FROM session_state WHERE session_id = ?", session_id)
+            await tx.execute(
+                "DELETE FROM session_state WHERE session_id = ?", session_id
+            )
 
         await self._store.run(op)
 

@@ -13,14 +13,14 @@ class FinishReason(StrEnum):
     refusal looks like an answer.
     """
 
-    STOP = "stop"                    # the model finished
-    TOOL_CALLS = "tool_calls"        # it stopped to call tools
-    LENGTH = "length"                # cut off by max_tokens or the context window
+    STOP = "stop"  # the model finished
+    TOOL_CALLS = "tool_calls"  # it stopped to call tools
+    LENGTH = "length"  # cut off by max_tokens or the context window
     CONTENT_FILTER = "content_filter"
-    REFUSAL = "refusal"              # the model declined to answer
+    REFUSAL = "refusal"  # the model declined to answer
     ERROR = "error"
-    OTHER = "other"                  # a provider reason with no equivalent here
-    UNSPECIFIED = "unspecified"      # the client did not say — a client bug
+    OTHER = "other"  # a provider reason with no equivalent here
+    UNSPECIFIED = "unspecified"  # the client did not say — a client bug
 
 
 __all__ = ["FinishReason"]

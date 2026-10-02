@@ -99,11 +99,15 @@ async def test_missing_scope_returns_error_without_crashing():
     runtime = _FakeRuntime(ExecResult(stdout="ok"))
     tool = CodeInterpreterTool(runtime, network=NetworkPolicy.DENY)
 
-    result = await tool.execute(ctx=_FakeCtx(RunScope(tenant_id=None, user_id="user-a")), code="print(1)")
+    result = await tool.execute(
+        ctx=_FakeCtx(RunScope(tenant_id=None, user_id="user-a")), code="print(1)"
+    )
 
     assert result.is_error
 
 
 async def test_no_ctx_at_all_returns_error_without_crashing():
-    tool = CodeInterpreterTool(_FakeRuntime(ExecResult(stdout="ok")), network=NetworkPolicy.DENY)
+    tool = CodeInterpreterTool(
+        _FakeRuntime(ExecResult(stdout="ok")), network=NetworkPolicy.DENY
+    )
     assert (await tool.execute(code="print(1)")).is_error

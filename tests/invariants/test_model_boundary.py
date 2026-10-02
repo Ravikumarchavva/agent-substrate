@@ -20,7 +20,14 @@ from hypothesis import strategies as st
 from substrate.context import SlidingWindowCompaction
 from substrate.context import ToolResultCompactionStrategy
 from substrate.models.modalities import fit_to_capabilities
-from substrate.types import ChatMessage, MediaBlock, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import (
+    ChatMessage,
+    MediaBlock,
+    Role,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 from substrate.types import Usage
 from substrate.models import Modality, ModelCapabilities
 
@@ -64,7 +71,9 @@ def _conversation(draw: st.DrawFn) -> list[ChatMessage]:
             )
         else:
             messages.append(
-                ChatMessage(role=Role.ASSISTANT, content=[TextBlock(text=f"answer {turn}")])
+                ChatMessage(
+                    role=Role.ASSISTANT, content=[TextBlock(text=f"answer {turn}")]
+                )
             )
     return messages
 
@@ -76,7 +85,9 @@ def _media_count(messages: list[ChatMessage]) -> int:
             if isinstance(block, MediaBlock):
                 total += 1
             elif isinstance(block, ToolResultBlock):
-                total += sum(1 for inner in block.content if isinstance(inner, MediaBlock))
+                total += sum(
+                    1 for inner in block.content if isinstance(inner, MediaBlock)
+                )
     return total
 
 
@@ -111,7 +122,9 @@ def test_i18_compaction_never_leaves_an_orphaned_tool_result(
 ) -> None:
     """A window that starts mid-turn must not keep a tool result whose call it
     dropped."""
-    kept = asyncio.run(SlidingWindowCompaction(max_messages=window).compact(list(messages)))
+    kept = asyncio.run(
+        SlidingWindowCompaction(max_messages=window).compact(list(messages))
+    )
     orphans = _orphaned_tool_results(kept)
     assert not orphans, (
         f"compaction to a {window}-message window left tool results with no "
@@ -127,7 +140,9 @@ def test_i18_truncating_a_tool_result_keeps_its_media(
     """Truncation is about text length. An image is not text and must survive
     it — this is the regression that made the model blind to its own charts."""
     before = _media_count(messages)
-    kept = asyncio.run(ToolResultCompactionStrategy(max_chars=max_chars).compact(list(messages)))
+    kept = asyncio.run(
+        ToolResultCompactionStrategy(max_chars=max_chars).compact(list(messages))
+    )
     assert _media_count(kept) == before, (
         f"truncating tool-result text to {max_chars} chars dropped media: "
         f"{before} -> {_media_count(kept)}"

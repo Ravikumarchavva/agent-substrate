@@ -18,7 +18,14 @@ from typing import Any, cast
 from google.genai import types as genai_types
 
 from substrate.types import ChatMessage
-from substrate.types import DataBlock, ErrorBlock, MediaBlock, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import (
+    DataBlock,
+    ErrorBlock,
+    MediaBlock,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 
 
 # ── Content encoding helpers ─────────────────────────────────────────────────
@@ -50,7 +57,9 @@ def _encode_media_item(item: MediaBlock | TextBlock) -> genai_types.Part:
         if item.file_id:
             return _encode_text(f"[Image file not sent: {item.file_id}]")
         return genai_types.Part(
-            inline_data=genai_types.Blob(mime_type=item.media_type, data=item.data or b"")
+            inline_data=genai_types.Blob(
+                mime_type=item.media_type, data=item.data or b""
+            )
         )
     if item.type in ("audio", "video", "document"):
         if item.data:
@@ -63,7 +72,9 @@ def _encode_media_item(item: MediaBlock | TextBlock) -> genai_types.Part:
                     file_uri=item.url, mime_type=item.media_type
                 )
             )
-        return _encode_text(f"[{item.type} not sent: {item.filename or item.media_type}]")
+        return _encode_text(
+            f"[{item.type} not sent: {item.filename or item.media_type}]"
+        )
     return _encode_text(f"[{item.type} not sent]")
 
 

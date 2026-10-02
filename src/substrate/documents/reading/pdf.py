@@ -25,12 +25,24 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from substrate.documents.protocols import Ocr
-from substrate.documents.reading.build import MAX_IMAGES_PER_PAGE, document_markdown, join_blocks
+from substrate.documents.reading.build import (
+    MAX_IMAGES_PER_PAGE,
+    document_markdown,
+    join_blocks,
+)
 from substrate.documents.reading.png import encode_png
 from substrate.documents.reading.text import plain_text
-from substrate.documents.types import ExtractedImage, ExtractedImageLabel, ExtractedPage, ExtractionResult, ReadLimits
+from substrate.documents.types import (
+    ExtractedImage,
+    ExtractedImageLabel,
+    ExtractedPage,
+    ExtractionResult,
+    ReadLimits,
+)
 
-PDFIUM_LOCK = threading.RLock()  # PDFium is not thread-safe: in-process reads take turns
+PDFIUM_LOCK = (
+    threading.RLock()
+)  # PDFium is not thread-safe: in-process reads take turns
 
 OCR_DPI = 300
 OCR_MAX_PIXELS = 12_000_000
@@ -89,22 +101,40 @@ def _page_lines(page: Any, raw: Any) -> _PageData:
     try:
         for i in range(textpage.count_rects()):
             left, bottom, right, top = textpage.get_rect(i)
-            text = textpage.get_text_bounded(left, bottom, right, top).replace("\r", "").replace("\n", " ")
+            text = (
+                textpage.get_text_bounded(left, bottom, right, top)
+                .replace("\r", "")
+                .replace("\n", " ")
+            )
             hyphenated = text.rstrip().endswith("\x02")
             text = _CONTROL.sub("", text).strip()
             if not text:
                 continue
             size, weight = float(top - bottom), 400
-            index = raw.FPDFText_GetCharIndexAtPos(textpage.raw, left + 1.0, (bottom + top) / 2, 4.0, max(2.0, top - bottom))
+            index = raw.FPDFText_GetCharIndexAtPos(
+                textpage.raw,
+                left + 1.0,
+                (bottom + top) / 2,
+                4.0,
+                max(2.0, top - bottom),
+            )
             if index >= 0:
                 # the effective size is the font size scaled by the text matrix (many PDFs say "font size 1" and scale it)
                 matrix = raw.FS_MATRIX()
-                scale = math.hypot(matrix.c, matrix.d) if raw.FPDFText_GetMatrix(textpage.raw, index, matrix) else 1.0
+                scale = (
+                    math.hypot(matrix.c, matrix.d)
+                    if raw.FPDFText_GetMatrix(textpage.raw, index, matrix)
+                    else 1.0
+                )
                 measured = raw.FPDFText_GetFontSize(textpage.raw, index) * scale
                 size = float(measured) if measured and measured >= 3 else size
                 w = raw.FPDFText_GetFontWeight(textpage.raw, index)
                 weight = int(w) if w and w > 0 else 400
-            data.lines.append(_Line(text, left, bottom, right, top, round(size, 1), weight, hyphenated))
+            data.lines.append(
+                _Line(
+                    text, left, bottom, right, top, round(size, 1), weight, hyphenated
+                )
+            )
             data.visible += sum(1 for ch in text if not ch.isspace())
             data.garbage += sum(1 for ch in text if ch == "�" or "" <= ch <= "")
     finally:
@@ -131,17 +161,23 @@ def _running_lines(pages: list[_PageData]) -> set[tuple[int, int]]:
             margin = page.height * 0.08
             if line.top >= page.height - margin or line.bottom <= margin:
                 seen.setdefault(_norm(line.text), set()).add(page.index)
-    repeated = {key for key, where in seen.items() if len(where) >= max(3, len(pages) // 2)}
+    repeated = {
+        key for key, where in seen.items() if len(where) >= max(3, len(pages) // 2)
+    }
     out: set[tuple[int, int]] = set()
     for page in pages:
         margin = page.height * 0.08
         for n, line in enumerate(page.lines):
-            if (line.top >= page.height - margin or line.bottom <= margin) and _norm(line.text) in repeated:
+            if (line.top >= page.height - margin or line.bottom <= margin) and _norm(
+                line.text
+            ) in repeated:
                 out.add((page.index, n))
     return out
 
 
-def _bookmark_levels(doc: Any, pages: list[_PageData]) -> tuple[dict[tuple[int, str], int], dict[tuple[int, str], str]]:
+def _bookmark_levels(
+    doc: Any, pages: list[_PageData]
+) -> tuple[dict[tuple[int, str], int], dict[tuple[int, str], str]]:
     """``({(page index, normalised title): level}, {same key: the title as written})`` from the PDF's outline."""
     levels: dict[tuple[int, str], int] = {}
     titles: dict[tuple[int, str], str] = {}
@@ -159,7 +195,9 @@ def _bookmark_levels(doc: Any, pages: list[_PageData]) -> tuple[dict[tuple[int, 
     return levels, titles
 
 
-def _size_levels(pages: list[_PageData], body: float, skip: set[tuple[int, int]]) -> dict[float, int]:
+def _size_levels(
+    pages: list[_PageData], body: float, skip: set[tuple[int, int]]
+) -> dict[float, int]:
     """Heading level by (rounded) font size, for lines that look like headings; empty when the guess is implausible."""
     candidates: Counter[float] = Counter()
     words = 0
@@ -178,7 +216,13 @@ def _size_levels(pages: list[_PageData], body: float, skip: set[tuple[int, int]]
 
 def _is_heading_shape(line: _Line, body: float) -> bool:
     text = line.text.strip()
-    if not text or len(text.split()) > 12 or _SENTENCE_END.search(text) or text.isdigit() or _BULLET.match(text):
+    if (
+        not text
+        or len(text.split()) > 12
+        or _SENTENCE_END.search(text)
+        or text.isdigit()
+        or _BULLET.match(text)
+    ):
         return False
     bigger = body > 0 and line.size >= body * 1.15
     bold = line.weight >= 600 and body > 0 and line.size >= body * 0.98
@@ -193,7 +237,13 @@ def _ocr_png(page: Any, width: float, height: float) -> bytes:
     scale = min(OCR_DPI / 72, math.sqrt(OCR_MAX_PIXELS / max(1.0, width * height)))
     bitmap = _render(page, scale=scale)
     try:
-        return encode_png(bitmap.width, bitmap.height, bytes(bitmap.buffer), mode="L", stride=bitmap.stride)
+        return encode_png(
+            bitmap.width,
+            bitmap.height,
+            bytes(bitmap.buffer),
+            mode="L",
+            stride=bitmap.stride,
+        )
     finally:
         bitmap.close()
 
@@ -214,20 +264,36 @@ def _paragraphs(lines: list[_Line]) -> list[str]:
         text = line.text.strip()
         if _BULLET.match(text) or _NUMBERED.match(text):
             flush()
-            marker = _BULLET.sub("- ", text, count=1) if _BULLET.match(text) else re.sub(r"^\s*\(?(\d{1,3})[.)]\s+", r"\1. ", text, count=1)
+            marker = (
+                _BULLET.sub("- ", text, count=1)
+                if _BULLET.match(text)
+                else re.sub(r"^\s*\(?(\d{1,3})[.)]\s+", r"\1. ", text, count=1)
+            )
             blocks.append(marker)
             previous = line
             continue
         gap = (previous.bottom - line.top) if previous else 0.0
-        new_paragraph = previous is None or line.top > previous.top + 2 or (gap > max(previous.size, line.size) * 0.75 and not previous.hyphenated)
+        new_paragraph = (
+            previous is None
+            or line.top > previous.top + 2
+            or (gap > max(previous.size, line.size) * 0.75 and not previous.hyphenated)
+        )
         if new_paragraph:
-            if blocks and blocks[-1].startswith(("- ", "1. ")) and previous is not None and gap <= max(previous.size, line.size) * 0.75 and line.left > previous.left:
+            if (
+                blocks
+                and blocks[-1].startswith(("- ", "1. "))
+                and previous is not None
+                and gap <= max(previous.size, line.size) * 0.75
+                and line.left > previous.left
+            ):
                 blocks[-1] += " " + text  # a wrapped list item
                 previous = line
                 continue
             flush()
         if current and previous is not None and previous.hyphenated:
-            current[-1] = current[-1] + text  # a word split across lines: no space, and the hyphen was only the wrap
+            current[-1] = (
+                current[-1] + text
+            )  # a word split across lines: no space, and the hyphen was only the wrap
         else:
             current.append(text)
         previous = line
@@ -235,7 +301,9 @@ def _paragraphs(lines: list[_Line]) -> list[str]:
     return blocks
 
 
-def _picture(page: Any, obj: Any, raw: Any, page_area: float) -> tuple[bytes, int, int, float, float] | None:
+def _picture(
+    page: Any, obj: Any, raw: Any, page_area: float
+) -> tuple[bytes, int, int, float, float] | None:
     """A large embedded image as ``(PNG, width, height, top y, share of the page it covers)``, or ``None`` if it is small, huge or unreadable."""
     try:
         left, bottom, right, top = obj.get_bounds()
@@ -247,12 +315,26 @@ def _picture(page: Any, obj: Any, raw: Any, page_area: float) -> tuple[bytes, in
         return None
     try:
         width, height = bitmap.width, bitmap.height
-        if width < IMAGE_MIN_SIDE or height < IMAGE_MIN_SIDE or width * height > IMAGE_MAX_PIXELS:
+        if (
+            width < IMAGE_MIN_SIDE
+            or height < IMAGE_MIN_SIDE
+            or width * height > IMAGE_MAX_PIXELS
+        ):
             return None
         buffer, stride, fmt = bytes(bitmap.buffer), bitmap.stride, bitmap.format
         if fmt == raw.FPDFBitmap_Gray:
-            return encode_png(width, height, buffer, mode="L", stride=stride), width, height, top, coverage
-        depth = {raw.FPDFBitmap_BGR: 3, raw.FPDFBitmap_BGRx: 4, raw.FPDFBitmap_BGRA: 4}.get(fmt)
+            return (
+                encode_png(width, height, buffer, mode="L", stride=stride),
+                width,
+                height,
+                top,
+                coverage,
+            )
+        depth = {
+            raw.FPDFBitmap_BGR: 3,
+            raw.FPDFBitmap_BGRx: 4,
+            raw.FPDFBitmap_BGRA: 4,
+        }.get(fmt)
         if depth is None:
             return None
         rgb = bytearray(width * height * 3)
@@ -262,7 +344,13 @@ def _picture(page: Any, obj: Any, raw: Any, page_area: float) -> tuple[bytes, in
             rgb[base : base + width * 3 : 3] = row[2::depth][:width]
             rgb[base + 1 : base + width * 3 : 3] = row[1::depth][:width]
             rgb[base + 2 : base + width * 3 : 3] = row[0::depth][:width]
-        return encode_png(width, height, bytes(rgb), mode="RGB"), width, height, top, coverage
+        return (
+            encode_png(width, height, bytes(rgb), mode="RGB"),
+            width,
+            height,
+            top,
+            coverage,
+        )
     except Exception:  # noqa: BLE001
         return None
     finally:
@@ -290,11 +378,24 @@ def _open(data: bytes) -> tuple[Any, ExtractionResult | None]:
     try:
         return pdfium.PdfDocument(data), None
     except pdfium.PdfiumError as exc:
-        reason = "the PDF is password-protected" if "password" in str(exc).lower() else f"not a readable PDF: {exc}"
-        return None, ExtractionResult(success=False, error=reason, engine="pdfium", content_type="application/pdf")
+        reason = (
+            "the PDF is password-protected"
+            if "password" in str(exc).lower()
+            else f"not a readable PDF: {exc}"
+        )
+        return None, ExtractionResult(
+            success=False, error=reason, engine="pdfium", content_type="application/pdf"
+        )
 
 
-def _read(data: bytes, limits: ReadLimits, ocr: Ocr | None, strategy: str, languages: tuple[str, ...], deadline: float | None) -> ExtractionResult:
+def _read(
+    data: bytes,
+    limits: ReadLimits,
+    ocr: Ocr | None,
+    strategy: str,
+    languages: tuple[str, ...],
+    deadline: float | None,
+) -> ExtractionResult:
     import pypdfium2.raw as raw  # noqa: PLC0415
 
     def check() -> None:
@@ -309,9 +410,16 @@ def _read(data: bytes, limits: ReadLimits, ocr: Ocr | None, strategy: str, langu
     try:
         count = len(doc)
         if count == 0:
-            return ExtractionResult(success=False, error="the PDF has no pages", engine="pdfium", content_type="application/pdf")
+            return ExtractionResult(
+                success=False,
+                error="the PDF has no pages",
+                engine="pdfium",
+                content_type="application/pdf",
+            )
         if count > limits.max_pages:
-            warnings.append(f"only the first {limits.max_pages} of {count} pages were read")
+            warnings.append(
+                f"only the first {limits.max_pages} of {count} pages were read"
+            )
             count = limits.max_pages
         pages: list[_PageData] = []
         for index in range(count):
@@ -324,11 +432,24 @@ def _read(data: bytes, limits: ReadLimits, ocr: Ocr | None, strategy: str, langu
         body = _body_size(pages)
         running = _running_lines(pages)
         for meta in pages:  # what a page really says, without its running header/footer
-            meta.visible = sum(len(line.text.replace(" ", "")) for n, line in enumerate(meta.lines) if (meta.index, n) not in running)
+            meta.visible = sum(
+                len(line.text.replace(" ", ""))
+                for n, line in enumerate(meta.lines)
+                if (meta.index, n) not in running
+            )
         bookmarks, bookmark_titles = _bookmark_levels(doc, pages)
         levels = {} if bookmarks else _size_levels(pages, body, running)
-        if not bookmarks and not levels and sum(1 for p in pages for line in p.lines if _is_heading_shape(line, body)) > 6:
-            warnings.append("heading detection was switched off: far too many lines looked like headings")
+        if (
+            not bookmarks
+            and not levels
+            and sum(
+                1 for p in pages for line in p.lines if _is_heading_shape(line, body)
+            )
+            > 6
+        ):
+            warnings.append(
+                "heading detection was switched off: far too many lines looked like headings"
+            )
 
         results: list[ExtractedPage] = []
         used_ocr: str | None = None
@@ -336,7 +457,9 @@ def _read(data: bytes, limits: ReadLimits, ocr: Ocr | None, strategy: str, langu
         low_confidence: list[int] = []
         image_total = 0
         first_heading: str | None = None
-        for number, (page, meta) in enumerate(zip(handles, pages, strict=True), start=1):
+        for number, (page, meta) in enumerate(
+            zip(handles, pages, strict=True), start=1
+        ):
             check()
             objects = list(page.get_objects(filter=[raw.FPDF_PAGEOBJ_IMAGE]))
             area = max(1.0, meta.width * meta.height)
@@ -349,30 +472,55 @@ def _read(data: bytes, limits: ReadLimits, ocr: Ocr | None, strategy: str, langu
                     return 0.0
 
             scanned = any(coverage(o) >= 0.5 for o in objects)
-            garbled = meta.garbage > 0 and meta.garbage / max(1, meta.visible + meta.garbage) > 0.3
-            wants_ocr = strategy == "ocr_only" or garbled or (meta.visible < 20 and scanned)
+            garbled = (
+                meta.garbage > 0
+                and meta.garbage / max(1, meta.visible + meta.garbage) > 0.3
+            )
+            wants_ocr = (
+                strategy == "ocr_only" or garbled or (meta.visible < 20 and scanned)
+            )
             method, needs_ocr, blocks = "text", False, []
-            if wants_ocr and strategy != "fast" and ocr is not None and ocr_pages < limits.max_ocr_pages:
+            if (
+                wants_ocr
+                and strategy != "fast"
+                and ocr is not None
+                and ocr_pages < limits.max_ocr_pages
+            ):
                 ocr_pages += 1
-                result = ocr.recognize(_ocr_png(page, meta.width, meta.height), languages=languages)
+                result = ocr.recognize(
+                    _ocr_png(page, meta.width, meta.height), languages=languages
+                )
                 used_ocr = ocr.name
                 if result.error:
                     warnings.append(f"OCR failed on page {number}: {result.error}")
                     needs_ocr = True
                 else:
                     method = "ocr"
-                    blocks = [p for p in (" ".join(chunk.split("\n")).strip() for chunk in result.text.split("\n\n")) if p]
+                    blocks = [
+                        p
+                        for p in (
+                            " ".join(chunk.split("\n")).strip()
+                            for chunk in result.text.split("\n\n")
+                        )
+                        if p
+                    ]
                     if result.text.strip() and result.confidence < LOW_OCR_CONFIDENCE:
                         low_confidence.append(number)
             elif wants_ocr and strategy != "ocr_only":
                 needs_ocr = True
                 if strategy != "fast" and ocr is not None:
-                    warnings.append(f"page {number} was not OCR'd: the {limits.max_ocr_pages}-page OCR limit was reached")
+                    warnings.append(
+                        f"page {number} was not OCR'd: the {limits.max_ocr_pages}-page OCR limit was reached"
+                    )
             if method == "text":
                 skip = {n for (p, n) in running if p == meta.index}
-                blocks = _heading_blocks(meta, body, levels, bookmarks, bookmark_titles, skip)
+                blocks = _heading_blocks(
+                    meta, body, levels, bookmarks, bookmark_titles, skip
+                )
                 if first_heading is None:
-                    first_heading = next((b[2:].strip() for b in blocks if b.startswith("# ")), None)
+                    first_heading = next(
+                        (b[2:].strip() for b in blocks if b.startswith("# ")), None
+                    )
             images: list[ExtractedImage] = []
             if image_total < MAX_IMAGES_PER_DOCUMENT:
                 found: list[tuple[float, bytes]] = []
@@ -384,9 +532,19 @@ def _read(data: bytes, limits: ReadLimits, ocr: Ocr | None, strategy: str, langu
                     picture = _picture(page, obj, raw, area)
                     if picture is not None:
                         found.append((picture[3], picture[0]))
-                for n, (_top, png) in enumerate(sorted(found, key=lambda f: -f[0]), start=1):
+                for n, (_top, png) in enumerate(
+                    sorted(found, key=lambda f: -f[0]), start=1
+                ):
                     ident = f"img-p{number}-{n}"
-                    images.append(ExtractedImage(data=png, media_type="image/png", page_number=number, label=ExtractedImageLabel.FIGURE, id=ident))
+                    images.append(
+                        ExtractedImage(
+                            data=png,
+                            media_type="image/png",
+                            page_number=number,
+                            label=ExtractedImageLabel.FIGURE,
+                            id=ident,
+                        )
+                    )
                     blocks.append(f"![figure](cid:{ident})")
                     image_total += 1
             markdown = join_blocks(blocks)
@@ -401,12 +559,18 @@ def _read(data: bytes, limits: ReadLimits, ocr: Ocr | None, strategy: str, langu
                 )
             )
         if low_confidence:
-            warnings.append(f"low OCR confidence on page(s) {', '.join(map(str, low_confidence[:10]))}: the text may contain errors")
+            warnings.append(
+                f"low OCR confidence on page(s) {', '.join(map(str, low_confidence[:10]))}: the text may contain errors"
+            )
         if any(p.needs_ocr for p in results):
             if strategy == "fast":
-                warnings.append("strategy='fast' does not run OCR: scanned pages are listed in needs_ocr")
+                warnings.append(
+                    "strategy='fast' does not run OCR: scanned pages are listed in needs_ocr"
+                )
             elif ocr is None:
-                warnings.append("some pages are scans with no text layer and no OCR engine is installed (apt install tesseract-ocr, or pip install 'agent-substrate[ocr]')")
+                warnings.append(
+                    "some pages are scans with no text layer and no OCR engine is installed (apt install tesseract-ocr, or pip install 'agent-substrate[ocr]')"
+                )
         try:
             metadata_title = (doc.get_metadata_value("Title") or "").strip()
         except Exception:  # noqa: BLE001
@@ -429,7 +593,12 @@ def _read(data: bytes, limits: ReadLimits, ocr: Ocr | None, strategy: str, langu
 
 
 def _heading_blocks(
-    meta: _PageData, body: float, levels: dict[float, int], bookmarks: dict[tuple[int, str], int], titles: dict[tuple[int, str], str], skip: set[int]
+    meta: _PageData,
+    body: float,
+    levels: dict[float, int],
+    bookmarks: dict[tuple[int, str], int],
+    titles: dict[tuple[int, str], str],
+    skip: set[int],
 ) -> list[str]:
     """The page's text as markdown blocks: headings (bookmarks, else by size), paragraphs and lists."""
     blocks: list[str] = []
@@ -448,7 +617,15 @@ def _heading_blocks(
         key = _alnum(line.text)
         if bookmarks:
             for (page_index, title), lvl in bookmarks.items():
-                if page_index == meta.index and key and (key == title or (len(key) >= 6 and title.startswith(key)) or (len(title) >= 6 and key.startswith(title))):
+                if (
+                    page_index == meta.index
+                    and key
+                    and (
+                        key == title
+                        or (len(key) >= 6 and title.startswith(key))
+                        or (len(title) >= 6 and key.startswith(title))
+                    )
+                ):
                     level = lvl
                     matched.add(title)
                     break
@@ -462,7 +639,11 @@ def _heading_blocks(
     flush()
     if bookmarks:
         # outline entries that start on this page but were not found among its lines still mark where the section begins
-        missing = [(titles.get((meta.index, t), t), lvl) for (p, t), lvl in bookmarks.items() if p == meta.index and t not in matched]
+        missing = [
+            (titles.get((meta.index, t), t), lvl)
+            for (p, t), lvl in bookmarks.items()
+            if p == meta.index and t not in matched
+        ]
         blocks = ["#" * lvl + " " + name for name, lvl in missing] + blocks
     return blocks
 

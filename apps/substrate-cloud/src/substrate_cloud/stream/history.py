@@ -40,7 +40,9 @@ async def project_thread(store: RuntimeStore, thread_id: str) -> list[WireEvent]
     return events
 
 
-async def _annotate_thread(store: RuntimeStore, thread_id: str, kind: str, payload: dict[str, Any]) -> bool:
+async def _annotate_thread(
+    store: RuntimeStore, thread_id: str, kind: str, payload: dict[str, Any]
+) -> bool:
     """Append an entry to the thread's active run, or its latest if none is active — for
     writes that do not come from a running agent (an MCP App context update, a note added
     between runs). ``False`` if the thread has no runs yet: there is nothing to attach to.
@@ -50,12 +52,18 @@ async def _annotate_thread(store: RuntimeStore, thread_id: str, kind: str, paylo
         runs = await store.find_runs(thread_id=thread_id, active_only=False)
     if not runs:
         return False
-    target = runs[0] if runs[0].status.value in ("pending", "running", "suspended") else runs[-1]
+    target = (
+        runs[0]
+        if runs[0].status.value in ("pending", "running", "suspended")
+        else runs[-1]
+    )
     await store.annotate(target.run_id, [NewEntry(kind=kind, payload=payload)])
     return True
 
 
-async def append_mcp_app_context(store: RuntimeStore, thread_id: str, payload: dict[str, Any]) -> None:
+async def append_mcp_app_context(
+    store: RuntimeStore, thread_id: str, payload: dict[str, Any]
+) -> None:
     """Log an interactive MCP App's context update to the thread's run. A no-op if the
     thread has no runs yet."""
     await _annotate_thread(store, thread_id, RunLogKind.MCP_APP_CONTEXT, payload)
@@ -65,7 +73,9 @@ async def append_user_message(store: RuntimeStore, thread_id: str, text: str) ->
     """Log an out-of-band user message to the thread's run (feedback added to a scheduled
     task between its runs, for lookback on the next execution). ``False`` if the thread
     has no runs yet."""
-    return await _annotate_thread(store, thread_id, RunLogKind.USER_MESSAGE, {"text": text, "attachments": []})
+    return await _annotate_thread(
+        store, thread_id, RunLogKind.USER_MESSAGE, {"text": text, "attachments": []}
+    )
 
 
 __all__ = ["project_thread", "append_mcp_app_context", "append_user_message"]

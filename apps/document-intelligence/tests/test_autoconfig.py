@@ -37,8 +37,16 @@ def _cfg(**overrides: object) -> SimpleNamespace:
     return SimpleNamespace(**defaults)
 
 
-def _hw(gpus: list[GpuInfo], *, cpu_count: int = 8, total_ram_mib: int = 16384) -> HardwareProfile:
-    return HardwareProfile(gpus=gpus, cpu_count=cpu_count, total_ram_mib=total_ram_mib, has_avx512=False, source="test")
+def _hw(
+    gpus: list[GpuInfo], *, cpu_count: int = 8, total_ram_mib: int = 16384
+) -> HardwareProfile:
+    return HardwareProfile(
+        gpus=gpus,
+        cpu_count=cpu_count,
+        total_ram_mib=total_ram_mib,
+        has_avx512=False,
+        source="test",
+    )
 
 
 HW_NO_GPU = _hw([])
@@ -51,7 +59,9 @@ HW_2X4GB = _hw(
     ]
 )
 HW_1X24GB = _hw([GpuInfo(index=0, name="24gb", total_mib=24576, free_mib=24000)])
-HW_6X24GB = _hw([GpuInfo(index=i, name="24gb", total_mib=24576, free_mib=24000) for i in range(6)])
+HW_6X24GB = _hw(
+    [GpuInfo(index=i, name="24gb", total_mib=24576, free_mib=24000) for i in range(6)]
+)
 
 
 # ── mode="auto" ──────────────────────────────────────────────────────────
@@ -213,7 +223,13 @@ def test_explicit_ocr_classic_falls_back_to_cpu_when_no_gpu() -> None:
 
 
 def test_cfg_overrides_win_over_defaults() -> None:
-    cfg = _cfg(mode="vl_gpu", vl_ctx_size=8192, vl_slots=4, vl_quant="q4_k_m", vl_max_new_tokens=500)
+    cfg = _cfg(
+        mode="vl_gpu",
+        vl_ctx_size=8192,
+        vl_slots=4,
+        vl_quant="q4_k_m",
+        vl_max_new_tokens=500,
+    )
     result = resolve_runtime(cfg, HW_1X4GB)
     assert result.llama_ctx == 8192
     assert result.llama_slots == 4
@@ -231,8 +247,12 @@ def test_max_pages_per_call_passed_through() -> None:
 
 
 def test_resolve_child_setting_explicit_value_wins() -> None:
-    assert resolve_child_setting("gpu:1", "gpu:0", local_selector_present=True) == "gpu:1"
-    assert resolve_child_setting("gpu:1", "gpu:0", local_selector_present=False) == "gpu:1"
+    assert (
+        resolve_child_setting("gpu:1", "gpu:0", local_selector_present=True) == "gpu:1"
+    )
+    assert (
+        resolve_child_setting("gpu:1", "gpu:0", local_selector_present=False) == "gpu:1"
+    )
 
 
 def test_resolve_child_setting_local_selector_beats_inherited() -> None:

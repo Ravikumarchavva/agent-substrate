@@ -33,13 +33,25 @@ async def test_i13_a_run_longer_than_its_lease_completes_once() -> None:
     agent = Slow(seconds=1.5)
     async with ephemeral_runtime(lease_s=0.4, poll_interval_s=0.02) as rt:
         await rt.register(agent)
-        run_id = await rt.submit(agent.id, Message(target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})), max_retries=0)
+        run_id = await rt.submit(
+            agent.id,
+            Message(
+                target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})
+            ),
+            max_retries=0,
+        )
 
         async def terminal() -> str:
             async for entry in rt.tail(run_id):
-                if entry.kind in (RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED):
+                if entry.kind in (
+                    RunLogKind.RUN_COMPLETED,
+                    RunLogKind.RUN_FAILED,
+                    RunLogKind.RUN_CANCELLED,
+                ):
                     return str(entry.kind)
             raise AssertionError("no terminal entry")
 
         assert await asyncio.wait_for(terminal(), 15) == RunLogKind.RUN_COMPLETED
-        assert agent.executions == 1, "the lease lapsed under a healthy run and it was started again"
+        assert agent.executions == 1, (
+            "the lease lapsed under a healthy run and it was started again"
+        )

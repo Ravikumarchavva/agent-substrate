@@ -38,29 +38,53 @@ vendor_specific: keep-me # a comment
 """
     got = load_mapping(text)
     assert got["title"] == "A: b"
-    assert got["verified"] == {"by": "human:ravi", "at": "2026-09-13T10:00:00Z"}  # timestamps stay strings
+    assert got["verified"] == {
+        "by": "human:ravi",
+        "at": "2026-09-13T10:00:00Z",
+    }  # timestamps stay strings
     assert got["tags"] == ["a", "b c"]
     assert got["sources"] == [{"file": "x.pdf", "pages": [1, 2]}, {"file": "y.pdf"}]
-    assert got["description"] == "line one\nline two\n" and got["note"] == "folded a folded b\n"
+    assert (
+        got["description"] == "line one\nline two\n"
+        and got["note"] == "folded a folded b\n"
+    )
     assert (got["n"], got["f"], got["flag"], got["nothing"]) == (12, 1.5, True, None)
     assert got["vendor_specific"] == "keep-me"
 
 
 def test_a_list_may_sit_at_the_same_indent_as_its_key_and_crlf_is_fine() -> None:
-    assert load_mapping("tags:\r\n- a\r\n- b\r\ntype: X\r\n") == {"tags": ["a", "b"], "type": "X"}
+    assert load_mapping("tags:\r\n- a\r\n- b\r\ntype: X\r\n") == {
+        "tags": ["a", "b"],
+        "type": "X",
+    }
 
 
 def test_a_colon_without_a_space_is_part_of_a_plain_scalar() -> None:
-    assert load_mapping("by: human:ravi\nurl: http://h:8080/x") == {"by": "human:ravi", "url": "http://h:8080/x"}
+    assert load_mapping("by: human:ravi\nurl: http://h:8080/x") == {
+        "by": "human:ravi",
+        "url": "http://h:8080/x",
+    }
 
 
 @pytest.mark.parametrize(
     "garbage",
-    ["key: [1, 2", "key: {a: 1", 'key: "unterminated', "key: 'also", "- stray\nkey: v", "\tkey: v", "{{{{", "key: [[[", "a: b: c"],
+    [
+        "key: [1, 2",
+        "key: {a: 1",
+        'key: "unterminated',
+        "key: 'also",
+        "- stray\nkey: v",
+        "\tkey: v",
+        "{{{{",
+        "key: [[[",
+        "a: b: c",
+    ],
 )
 def test_garbage_never_raises_and_what_can_be_read_is(garbage: str) -> None:
     got = load_mapping("type: Memory\n" + garbage + "\nafter: ok\n")
-    assert got["type"] == "Memory"  # the keys either side survive whatever sat between them
+    assert (
+        got["type"] == "Memory"
+    )  # the keys either side survive whatever sat between them
     assert got.get("after") == "ok" or "after" in str(got)
 
 
@@ -82,7 +106,10 @@ _LEAF = st.one_of(
 )
 _VALUE = st.recursive(
     _LEAF,
-    lambda inner: st.one_of(st.lists(inner, max_size=4), st.dictionaries(st.text(max_size=8), inner, max_size=3)),
+    lambda inner: st.one_of(
+        st.lists(inner, max_size=4),
+        st.dictionaries(st.text(max_size=8), inner, max_size=3),
+    ),
     max_leaves=8,
 )
 _MAPPING = st.dictionaries(_KEY, _VALUE, max_size=6)
@@ -94,11 +121,25 @@ def test_whatever_is_written_is_read_back_identically(data: dict) -> None:
     assert load_mapping(dump_mapping(data)) == data
 
 
-_SAFE_TEXT = st.text(alphabet=st.characters(min_codepoint=32, max_codepoint=0xD7FF, blacklist_categories=("Cs", "Cc", "Zl", "Zp")), max_size=30)
-_YAML_LEAF = st.one_of(st.none(), st.booleans(), st.integers(min_value=-(10**9), max_value=10**9), _SAFE_TEXT)
+_SAFE_TEXT = st.text(
+    alphabet=st.characters(
+        min_codepoint=32,
+        max_codepoint=0xD7FF,
+        blacklist_categories=("Cs", "Cc", "Zl", "Zp"),
+    ),
+    max_size=30,
+)
+_YAML_LEAF = st.one_of(
+    st.none(),
+    st.booleans(),
+    st.integers(min_value=-(10**9), max_value=10**9),
+    _SAFE_TEXT,
+)
 _YAML_VALUE = st.recursive(
     _YAML_LEAF,
-    lambda inner: st.one_of(st.lists(inner, max_size=3), st.dictionaries(_SAFE_TEXT, inner, max_size=3)),
+    lambda inner: st.one_of(
+        st.lists(inner, max_size=3), st.dictionaries(_SAFE_TEXT, inner, max_size=3)
+    ),
     max_leaves=6,
 )
 
@@ -111,7 +152,17 @@ def test_what_is_written_means_the_same_to_a_real_yaml_parser(data: dict) -> Non
 
 
 def test_strings_that_yaml_would_reinterpret_are_quoted() -> None:
-    data = {"a": "true", "b": "null", "c": "12", "d": "2030-01-01T00:00:00Z", "e": "no", "f": "~", "g": "", "h": "a: b", "i": " x"}
+    data = {
+        "a": "true",
+        "b": "null",
+        "c": "12",
+        "d": "2030-01-01T00:00:00Z",
+        "e": "no",
+        "f": "~",
+        "g": "",
+        "h": "a: b",
+        "i": " x",
+    }
     out = dump_mapping(data)
     assert load_mapping(out) == data
     yaml = pytest.importorskip("yaml")

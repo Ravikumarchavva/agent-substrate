@@ -50,7 +50,6 @@ class TaskManagerTool:
     update_title  – Rename a task.
     """
 
-
     ui: ToolUI = ToolUI(resource_uri="ui://kanban_board", prefers_border=True)
 
     name: str = "manage_tasks"

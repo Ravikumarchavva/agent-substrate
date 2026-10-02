@@ -185,7 +185,8 @@ class S3FileStore:
         if not force and cached is not None and now - cached[0] < _USAGE_CACHE_TTL:
             return cached[1]
         total = sum(
-            size for _key, size, _mtime in await self.list_prefix(f"tenants/{tenant_id}/")
+            size
+            for _key, size, _mtime in await self.list_prefix(f"tenants/{tenant_id}/")
         )
         self._usage_cache[tenant_id] = (now, total)
         return total

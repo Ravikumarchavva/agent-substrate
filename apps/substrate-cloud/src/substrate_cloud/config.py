@@ -57,7 +57,9 @@ class SubstrateConfig(BaseSettings):
     # ── The store's PostgreSQL pool and schema (STORE_BACKEND=postgres) ──────
     STORE_PG_POOL_MIN_SIZE: int = 2
     STORE_PG_POOL_MAX_SIZE: int = 10
-    STORE_PG_SCHEMA: str = "substrate"  # the engine's tables live here, apart from the application's
+    STORE_PG_SCHEMA: str = (
+        "substrate"  # the engine's tables live here, apart from the application's
+    )
 
     # ── Redis ────────────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"

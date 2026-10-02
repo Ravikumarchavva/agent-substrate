@@ -15,7 +15,12 @@ import logging
 
 from substrate.documents.types import ExtractionResult, Strategy
 from substrate.models.http import join_url, request_json
-from substrate.types.errors import AuthError, PermanentError, RateLimitedError, ServiceUnavailableError
+from substrate.types.errors import (
+    AuthError,
+    PermanentError,
+    RateLimitedError,
+    ServiceUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +32,12 @@ class RemoteExtractor:
         self._timeout = timeout
 
     async def read(
-        self, data: bytes, filename: str, *, content_type: str | None = None, strategy: Strategy = "auto"
+        self,
+        data: bytes,
+        filename: str,
+        *,
+        content_type: str | None = None,
+        strategy: Strategy = "auto",
     ) -> ExtractionResult:
         body = {
             "content_base64": base64.b64encode(data).decode("ascii"),
@@ -36,19 +46,43 @@ class RemoteExtractor:
             "strategy": strategy,
         }
         try:
-            answer = await request_json("POST", join_url(self.url, "/v1/extract"), json_body=body, api_key=self._api_key, timeout=self._timeout)
+            answer = await request_json(
+                "POST",
+                join_url(self.url, "/v1/extract"),
+                json_body=body,
+                api_key=self._api_key,
+                timeout=self._timeout,
+            )
             return ExtractionResult.model_validate(answer)
         except (ServiceUnavailableError, RateLimitedError) as exc:
             logger.warning("document server %s is unavailable: %s", self.url, exc)
-            return ExtractionResult(success=False, error=f"the document server is unavailable: {exc}", engine=self.url, degraded_from="unreachable")
+            return ExtractionResult(
+                success=False,
+                error=f"the document server is unavailable: {exc}",
+                engine=self.url,
+                degraded_from="unreachable",
+            )
         except (AuthError, PermanentError) as exc:
-            return ExtractionResult(success=False, error=f"the document server refused the request: {exc}", engine=self.url)
+            return ExtractionResult(
+                success=False,
+                error=f"the document server refused the request: {exc}",
+                engine=self.url,
+            )
         except ValueError as exc:
-            return ExtractionResult(success=False, error=f"the document server answered with something unreadable: {exc}", engine=self.url)
+            return ExtractionResult(
+                success=False,
+                error=f"the document server answered with something unreadable: {exc}",
+                engine=self.url,
+            )
 
     async def healthy(self) -> bool:
         try:
-            await request_json("GET", join_url(self.url, "/v1/health"), api_key=self._api_key, timeout=10)
+            await request_json(
+                "GET",
+                join_url(self.url, "/v1/health"),
+                api_key=self._api_key,
+                timeout=10,
+            )
             return True
         except Exception:  # noqa: BLE001
             return False

@@ -190,9 +190,7 @@ def _encode_tool_result(block: ToolResultBlock) -> dict[str, Any]:
                 except Exception as e:
                     import logging
 
-                    logging.getLogger(
-                        "substrate.messages.encoders.anthropic"
-                    ).warning(
+                    logging.getLogger("substrate.messages.encoders.anthropic").warning(
                         "Failed to encode media item for Anthropic tool result: %s", e
                     )
             elif isinstance(item, (DataBlock, ErrorBlock)):

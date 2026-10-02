@@ -25,18 +25,25 @@ from substrate.tools import Toolbox
 class WireMoney:
     name = "wire_money"
     description = "Wires money."
-    input_schema: dict[str, Any] = {"type": "object", "properties": {"amount": {"type": "integer"}}}
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {"amount": {"type": "integer"}},
+    }
     risk = ToolRisk.CRITICAL
     idempotent = False
 
     async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:
-        return ToolExecutionResult(name=self.name, content=[TextBlock(text=f"wired {kwargs.get('amount')}")])
+        return ToolExecutionResult(
+            name=self.name, content=[TextBlock(text=f"wired {kwargs.get('amount')}")]
+        )
 
 
 class SignalApproval:
     suspends_via_signal = True
 
-    async def request(self, req: ApprovalRequest) -> ApprovalResult:  # pragma: no cover - the durable path is used
+    async def request(
+        self, req: ApprovalRequest
+    ) -> ApprovalResult:  # pragma: no cover - the durable path is used
         raise AssertionError("the durable path must be used")
 
 
@@ -52,11 +59,18 @@ class Treasurer:
         self.results.append(await ctx.tool("wire_money", {"amount": 5000}))
 
 
-async def _decide(path: Path, response: dict[str, Any]) -> tuple[Treasurer, list[dict[str, Any]]]:
+async def _decide(
+    path: Path, response: dict[str, Any]
+) -> tuple[Treasurer, list[dict[str, Any]]]:
     agent = Treasurer()
     async with Runtime.open(path) as rt:
         await rt.register(agent)
-        run_id = await rt.submit(agent.id, Message(target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})))
+        run_id = await rt.submit(
+            agent.id,
+            Message(
+                target=agent.id, sender=Actor.system("t"), payload=DataPayload(data={})
+            ),
+        )
 
         async def requested() -> dict[str, Any]:
             async for entry in rt.tail(run_id):
@@ -73,40 +87,83 @@ async def _decide(path: Path, response: dict[str, Any]) -> tuple[Treasurer, list
                     return
 
         await asyncio.wait_for(finished(), 10)
-        decided = [dict(e.payload) for e in await rt.read(run_id) if e.kind == RunLogKind.APPROVAL_DECIDED]
+        decided = [
+            dict(e.payload)
+            for e in await rt.read(run_id)
+            if e.kind == RunLogKind.APPROVAL_DECIDED
+        ]
     return agent, decided
 
 
-async def test_i23_an_approval_is_journaled_with_who_when_and_why(tmp_path: Path) -> None:
+async def test_i23_an_approval_is_journaled_with_who_when_and_why(
+    tmp_path: Path,
+) -> None:
     when = datetime(2030, 5, 1, 12, 0, tzinfo=timezone.utc).isoformat()
     agent, decided = await _decide(
         tmp_path / "rt.sqlite3",
-        {"action": "approve", "decided_by": "user-42", "decided_at": when, "reason": "matches the invoice"},
+        {
+            "action": "approve",
+            "decided_by": "user-42",
+            "decided_at": when,
+            "reason": "matches the invoice",
+        },
     )
 
     (entry,) = decided
-    assert entry["decision"] == "approved" and entry["tool_name"] == "wire_money" and entry["risk"] == "critical"
-    assert entry["decided_by"] == "user-42" and entry["decided_at"] == when and entry["reason"] == "matches the invoice"
+    assert (
+        entry["decision"] == "approved"
+        and entry["tool_name"] == "wire_money"
+        and entry["risk"] == "critical"
+    )
+    assert (
+        entry["decided_by"] == "user-42"
+        and entry["decided_at"] == when
+        and entry["reason"] == "matches the invoice"
+    )
     assert agent.results[0].status == "ok"
 
 
 async def test_i23_a_denial_is_journaled_too(tmp_path: Path) -> None:
-    agent, decided = await _decide(tmp_path / "rt.sqlite3", {"action": "deny", "decided_by": "user-7", "reason": "wrong account"})
+    agent, decided = await _decide(
+        tmp_path / "rt.sqlite3",
+        {"action": "deny", "decided_by": "user-7", "reason": "wrong account"},
+    )
 
     (entry,) = decided
-    assert entry["decision"] == "denied" and entry["decided_by"] == "user-7" and entry["reason"] == "wrong account"
+    assert (
+        entry["decision"] == "denied"
+        and entry["decided_by"] == "user-7"
+        and entry["reason"] == "wrong account"
+    )
     assert agent.results[0].status == "denied"
 
 
 def test_the_result_carries_the_attribution_it_was_given() -> None:
-    result = ApprovalResult.from_response({"action": "approve", "decided_by": "u", "decided_at": "2030-01-01T00:00:00+00:00", "reason": "ok"})
-    assert result.decision is ApprovalDecision.APPROVED and result.decided_by == "u" and result.reason == "ok"
+    result = ApprovalResult.from_response(
+        {
+            "action": "approve",
+            "decided_by": "u",
+            "decided_at": "2030-01-01T00:00:00+00:00",
+            "reason": "ok",
+        }
+    )
+    assert (
+        result.decision is ApprovalDecision.APPROVED
+        and result.decided_by == "u"
+        and result.reason == "ok"
+    )
     assert result.decided_at == datetime(2030, 1, 1, tzinfo=timezone.utc)
 
 
 def test_a_disconnect_or_timeout_is_a_denial() -> None:
-    assert ApprovalResult.from_response({"timed_out": True}).decision is ApprovalDecision.DENIED
-    assert ApprovalResult.from_response({"session_disconnected": True}).decision is ApprovalDecision.DENIED
+    assert (
+        ApprovalResult.from_response({"timed_out": True}).decision
+        is ApprovalDecision.DENIED
+    )
+    assert (
+        ApprovalResult.from_response({"session_disconnected": True}).decision
+        is ApprovalDecision.DENIED
+    )
 
 
 async def test_i23_the_server_names_the_approver_not_the_client(tmp_path: Path) -> None:
@@ -124,11 +181,22 @@ async def test_i23_the_server_names_the_approver_not_the_client(tmp_path: Path) 
         """Wire money."""
         return f"wired {amount}"
 
-    agent = ReActAgent("t", model=ScriptedModel(ToolCall("wire", {"amount": 5}), "ok"), tools=[wire], approval_handler=DurableApproval())
-    app = create_app(agent, store=tmp_path, identity_of=lambda request: "the-real-caller")
+    agent = ReActAgent(
+        "t",
+        model=ScriptedModel(ToolCall("wire", {"amount": 5}), "ok"),
+        tools=[wire],
+        approval_handler=DurableApproval(),
+    )
+    app = create_app(
+        agent, store=tmp_path, identity_of=lambda request: "the-real-caller"
+    )
     async with app.router.lifespan_context(app):
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as client:
-            chat = asyncio.create_task(client.post("/chat", json={"message": "pay", "thread_id": "t"}))
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://t"
+        ) as client:
+            chat = asyncio.create_task(
+                client.post("/chat", json={"message": "pay", "thread_id": "t"})
+            )
             run_id, pending = "", []
             for _ in range(300):
                 await asyncio.sleep(0.02)
@@ -139,8 +207,13 @@ async def test_i23_the_server_names_the_approver_not_the_client(tmp_path: Path) 
                     if pending:
                         break
             await client.post(
-                f"/runs/{run_id}/approvals/{pending[0]['request_id']}", json={"decision": "approved", "decided_by": "the-cfo"}
+                f"/runs/{run_id}/approvals/{pending[0]['request_id']}",
+                json={"decision": "approved", "decided_by": "the-cfo"},
             )
             await asyncio.wait_for(chat, 10)
-        decided = [e.payload for e in await app.state.runtime.read(run_id) if e.kind == RunLogKind.APPROVAL_DECIDED]
+        decided = [
+            e.payload
+            for e in await app.state.runtime.read(run_id)
+            if e.kind == RunLogKind.APPROVAL_DECIDED
+        ]
     assert decided[0]["decided_by"] == "the-real-caller" and decided[0]["decided_at"]

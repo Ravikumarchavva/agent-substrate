@@ -123,7 +123,6 @@ class CheckpointCreateRequest(BaseModel):
     state: Optional[JsonObject] = None
 
 
-
 # ── Feedback schemas ─────────────────────────────────────────────────────────
 
 

@@ -56,14 +56,23 @@ class _RecordingEmbedder:
 
     async def embed(self, inputs, *, query: bool = False) -> EmbeddingResult:
         self.inputs.extend(inputs)
-        return EmbeddingResult(embeddings=[[float(i)] for i, _ in enumerate(inputs)], model="fake")
+        return EmbeddingResult(
+            embeddings=[[float(i)] for i, _ in enumerate(inputs)], model="fake"
+        )
 
 
-async def test_embed_accepts_a_string_and_blocks_embedded_together_as_one_vector() -> None:
+async def test_embed_accepts_a_string_and_blocks_embedded_together_as_one_vector() -> (
+    None
+):
     client = _RecordingEmbedder()
     assert isinstance(client, EmbeddingModel)
 
-    result = await client.embed(["a cat", [TextBlock(text="a cat"), MediaBlock(type="image", url="http://x/cat.png")]])
+    result = await client.embed(
+        [
+            "a cat",
+            [TextBlock(text="a cat"), MediaBlock(type="image", url="http://x/cat.png")],
+        ]
+    )
 
     assert len(result.embeddings) == 2 and client.inputs[0] == "a cat"
 
@@ -72,11 +81,19 @@ async def test_text_only_embedding_clients_reject_media_content() -> None:
     from substrate.integrations.llm.base import BaseEmbeddingClient
 
     class _TextOnlyClient(BaseEmbeddingClient):
-        async def _embed_texts(self, texts: list[str], *, query: bool) -> EmbeddingResult:
+        async def _embed_texts(
+            self, texts: list[str], *, query: bool
+        ) -> EmbeddingResult:
             return EmbeddingResult(embeddings=[[0.0] for _ in texts], model="fake")
 
     client = _TextOnlyClient(model="fake")
-    assert isinstance(client, EmbeddingModel) and client.modalities == frozenset({Modality.TEXT})
+    assert isinstance(client, EmbeddingModel) and client.modalities == frozenset(
+        {Modality.TEXT}
+    )
     with pytest.raises(UnsupportedContentError):
-        await client.embed([[TextBlock(text="hello"), MediaBlock(type="image", data=b"abc")]])
-    assert (await client.embed(["a", [TextBlock(text="b"), TextBlock(text="c")]])).embeddings == [[0.0], [0.0]]
+        await client.embed(
+            [[TextBlock(text="hello"), MediaBlock(type="image", data=b"abc")]]
+        )
+    assert (
+        await client.embed(["a", [TextBlock(text="b"), TextBlock(text="c")]])
+    ).embeddings == [[0.0], [0.0]]

@@ -52,9 +52,7 @@ async def test_role_is_not_a_superuser_and_does_not_bypass_rls(app_role_engine):
     async with app_role_engine.connect() as conn:
         row = (
             await conn.execute(
-                text(
-                    "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = :r"
-                ),
+                text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = :r"),
                 {"r": APP_DB_ROLE},
             )
         ).one()
@@ -86,7 +84,9 @@ async def test_no_tenant_guc_set_sees_nothing(app_role_engine, database_url):
             assert rows == []
     finally:
         async with admin_engine.begin() as conn:
-            await conn.execute(text("DELETE FROM threads WHERE id = :id"), {"id": thread_id})
+            await conn.execute(
+                text("DELETE FROM threads WHERE id = :id"), {"id": thread_id}
+            )
         await admin_engine.dispose()
     del tenant_b  # unused here, kept for symmetry with the next test
 
@@ -158,9 +158,7 @@ async def test_bypass_rls_guc_sees_every_tenant(app_role_engine, database_url):
             )
 
         async with app_role_engine.connect() as conn:
-            await conn.execute(
-                text("SELECT set_config('app.bypass_rls', 'on', false)")
-            )
+            await conn.execute(text("SELECT set_config('app.bypass_rls', 'on', false)"))
             ids = {
                 row.id
                 for row in (

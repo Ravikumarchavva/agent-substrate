@@ -32,7 +32,9 @@ async def test_start_task_auto_completes_prior_in_progress() -> None:
     await tool.execute(ctx=ctx, action="start_task")  # one -> in_progress
 
     # Skip complete_task; start the next task directly.
-    result = await tool.execute(ctx=ctx, action="start_task")  # auto-completes one, starts two
+    result = await tool.execute(
+        ctx=ctx, action="start_task"
+    )  # auto-completes one, starts two
     tasks = {t["title"]: t["status"] for t in _board(result)["tasks"]}
 
     assert tasks["one"] == TaskStatus.SUCCEEDED
@@ -45,9 +47,13 @@ async def test_add_task_skips_existing_titles() -> None:
     ctx = _ctx("conv-dup", "root")
     tool = TaskManagerTool(store=fs_tasks())
 
-    await tool.execute(ctx=ctx, action="create_list", tasks=["Research", "Compare", "Recommend"])
+    await tool.execute(
+        ctx=ctx, action="create_list", tasks=["Research", "Compare", "Recommend"]
+    )
     # Model re-adds two titles that already exist (different case / whitespace).
-    result = await tool.execute(ctx=ctx, action="add_task", tasks=["  compare ", "RECOMMEND"])
+    result = await tool.execute(
+        ctx=ctx, action="add_task", tasks=["  compare ", "RECOMMEND"]
+    )
 
     titles = [t["title"] for t in _board(result)["tasks"]]
     assert titles == ["Research", "Compare", "Recommend"]  # nothing appended

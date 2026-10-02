@@ -18,7 +18,14 @@ from datetime import datetime, timezone
 
 import pytest
 
-from substrate.types import ChatMessage, DataBlock, Role, TextBlock, ToolUseBlock, parse_content_block
+from substrate.types import (
+    ChatMessage,
+    DataBlock,
+    Role,
+    TextBlock,
+    ToolUseBlock,
+    parse_content_block,
+)
 from substrate.types import Actor
 from substrate.types import Usage
 
@@ -97,10 +104,16 @@ def test_structured_exceptions_survive_a_process_boundary() -> None:
     errors: list[Exception] = [
         ConcurrentAppendError("x", run_id="r", expected_seq=1, actual_seq=2),
         ThreadBusyError("x", thread_id="t"),
-        BranchHeadConflictError("x", session_id="s", branch_id="b", expected=1, actual=2),
+        BranchHeadConflictError(
+            "x", session_id="s", branch_id="b", expected=1, actual=2
+        ),
         AgentCrashError("x", run_id="r", agent_id=Actor("a")),
         SnapshotConflictError(
-            "x", session_id="s", branch_id="b", expected_parent_id=None, actual_parent_id="p"
+            "x",
+            session_id="s",
+            branch_id="b",
+            expected_parent_id=None,
+            actual_parent_id="p",
         ),
     ]
     for error in errors:

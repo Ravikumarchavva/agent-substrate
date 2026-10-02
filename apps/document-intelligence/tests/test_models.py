@@ -26,7 +26,9 @@ def _fail_create_subprocess_exec(*args: object, **kwargs: object):
 
 
 class _FakeProcess:
-    def __init__(self, returncode: int, stdout: bytes = b"", stderr: bytes = b"") -> None:
+    def __init__(
+        self, returncode: int, stdout: bytes = b"", stderr: bytes = b""
+    ) -> None:
         self.returncode = returncode
         self._stdout = stdout
         self._stderr = stderr
@@ -67,7 +69,11 @@ async def test_tier2_downloads_preexisting_quantized_upload(
     monkeypatch.setattr(
         huggingface_hub.HfApi,
         "list_repo_files",
-        lambda self, repo_id: [main_hf_name, mmproj_hf_name, "PaddleOCR-VL-1.6-GGUF.gguf"],
+        lambda self, repo_id: [
+            main_hf_name,
+            mmproj_hf_name,
+            "PaddleOCR-VL-1.6-GGUF.gguf",
+        ],
     )
 
     def _fake_download(*, repo_id: str, filename: str, local_dir: str) -> str:
@@ -106,7 +112,9 @@ async def test_tier3_downloads_fp16_and_quantizes_locally(
 
     quantize_calls: list[tuple[str, ...]] = []
 
-    async def _fake_create_subprocess_exec(*args: str, **kwargs: object) -> _FakeProcess:
+    async def _fake_create_subprocess_exec(
+        *args: str, **kwargs: object
+    ) -> _FakeProcess:
         quantize_calls.append(args)
         # args: (bin, input_path, output_path, quant_type)
         output_path = Path(args[2])
@@ -143,7 +151,9 @@ async def test_quantize_failure_raises_runtime_error(
 
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", _fake_download)
 
-    async def _fake_create_subprocess_exec(*args: str, **kwargs: object) -> _FakeProcess:
+    async def _fake_create_subprocess_exec(
+        *args: str, **kwargs: object
+    ) -> _FakeProcess:
         return _FakeProcess(returncode=1, stderr=b"quantize exploded")
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
@@ -173,7 +183,9 @@ async def test_q4_requests_logs_loud_warning(
     # codebase until that's fixed elsewhere.
     warnings: list[str] = []
     monkeypatch.setattr(
-        models.logger, "warning", lambda msg, *a, **kw: warnings.append(msg % a if a else msg)
+        models.logger,
+        "warning",
+        lambda msg, *a, **kw: warnings.append(msg % a if a else msg),
     )
 
     await models.ensure_models(str(tmp_path), quant="q4_k_m")

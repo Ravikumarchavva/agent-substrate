@@ -211,9 +211,7 @@ class ConditionalFlow(RoutedAgent):
         try:
             branch = self.if_true if self.predicate(text) else self.if_false
         except Exception as exc:
-            logger.warning(
-                "[%s] predicate raised %s — taking if_false", self.name, exc
-            )
+            logger.warning("[%s] predicate raised %s — taking if_false", self.name, exc)
             branch = self.if_false
         bm = _make_step_message(branch.id, text, sender=self.id)
         child: RunHandle = await ctx.spawn(branch.id, boot=bm)

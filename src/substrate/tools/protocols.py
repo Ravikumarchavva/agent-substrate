@@ -88,13 +88,17 @@ class ToolRisk(StrEnum):
         return self.rank < other.rank if isinstance(other, ToolRisk) else NotImplemented
 
     def __le__(self, other: object) -> bool:
-        return self.rank <= other.rank if isinstance(other, ToolRisk) else NotImplemented
+        return (
+            self.rank <= other.rank if isinstance(other, ToolRisk) else NotImplemented
+        )
 
     def __gt__(self, other: object) -> bool:
         return self.rank > other.rank if isinstance(other, ToolRisk) else NotImplemented
 
     def __ge__(self, other: object) -> bool:
-        return self.rank >= other.rank if isinstance(other, ToolRisk) else NotImplemented
+        return (
+            self.rank >= other.rank if isinstance(other, ToolRisk) else NotImplemented
+        )
 
 
 _RISK_RANK = {ToolRisk.SAFE: 0, ToolRisk.HIGH: 1, ToolRisk.CRITICAL: 2}

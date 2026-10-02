@@ -36,24 +36,34 @@ class TraceContext(KernelModel):
     @classmethod
     def _trace_id_is_hex32(cls, value: str) -> str:
         if not _HEX32.match(value) or value == "0" * 32:
-            raise ValueError("trace_id must be 32 lowercase hex characters, not all zero")
+            raise ValueError(
+                "trace_id must be 32 lowercase hex characters, not all zero"
+            )
         return value
 
     @field_validator("span_id")
     @classmethod
     def _span_id_is_hex16(cls, value: str) -> str:
         if not _HEX16.match(value) or value == "0" * 16:
-            raise ValueError("span_id must be 16 lowercase hex characters, not all zero")
+            raise ValueError(
+                "span_id must be 16 lowercase hex characters, not all zero"
+            )
         return value
 
     @classmethod
     def new(cls, *, sampled: bool = True) -> TraceContext:
         """The root of a brand-new trace."""
-        return cls(trace_id=secrets.token_hex(16), span_id=secrets.token_hex(8), sampled=sampled)
+        return cls(
+            trace_id=secrets.token_hex(16),
+            span_id=secrets.token_hex(8),
+            sampled=sampled,
+        )
 
     def child(self) -> TraceContext:
         """A new span in the same trace, for work this span causes."""
-        return TraceContext(trace_id=self.trace_id, span_id=secrets.token_hex(8), sampled=self.sampled)
+        return TraceContext(
+            trace_id=self.trace_id, span_id=secrets.token_hex(8), sampled=self.sampled
+        )
 
     def to_traceparent(self) -> str:
         return f"00-{self.trace_id}-{self.span_id}-{'01' if self.sampled else '00'}"

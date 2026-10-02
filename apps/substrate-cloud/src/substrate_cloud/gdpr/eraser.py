@@ -130,7 +130,11 @@ async def erase_user(
         objects += await pending_store.delete_prefix(user_prefix(tenant_id, user_id))
     redis_deleted = await _redis_sweep(redis, {user_id, *thread_ids})
     documents = await _erase_documents(folder, store, user_prefix(tenant_id, user_id))
-    memories = await memory_store.erase(MemoryNamespace(tenant_id=tenant_id, user_id=user_id)) if memory_store else 0
+    memories = (
+        await memory_store.erase(MemoryNamespace(tenant_id=tenant_id, user_id=user_id))
+        if memory_store
+        else 0
+    )
     runs = 0
     if runtime_store is not None:
         for thread_id in thread_ids:
@@ -141,7 +145,8 @@ async def erase_user(
         for thread_id in thread_ids:
             gone = await folder.tenant(tenant_id).erase_conversation(thread_id)
             erased = Erased(
-                thread_nodes=erased.thread_nodes + gone.thread_nodes, task_boards=erased.task_boards + gone.task_boards
+                thread_nodes=erased.thread_nodes + gone.thread_nodes,
+                task_boards=erased.task_boards + gone.task_boards,
             )
     return ErasureSummary(
         tenant_id,
@@ -189,8 +194,14 @@ async def erase_tenant(
         objects += await pending_store.delete_prefix(tenant_prefix(tenant_id))
     redis_deleted = await _redis_sweep(redis, thread_ids | users)
     documents = await _erase_documents(folder, store, tenant_prefix(tenant_id))
-    memories = erased.memories + (await memory_store.erase(MemoryNamespace(tenant_id=tenant_id)) if memory_store else 0)
-    runs = await runtime_store.erase(tenant=tenant_id) if runtime_store is not None else 0
+    memories = erased.memories + (
+        await memory_store.erase(MemoryNamespace(tenant_id=tenant_id))
+        if memory_store
+        else 0
+    )
+    runs = (
+        await runtime_store.erase(tenant=tenant_id) if runtime_store is not None else 0
+    )
     return ErasureSummary(
         tenant_id,
         None,

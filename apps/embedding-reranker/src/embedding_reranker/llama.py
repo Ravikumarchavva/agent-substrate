@@ -106,7 +106,13 @@ class LlamaEngine:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def embed_batch(self, items: Sequence[str | Sequence[str | bytes]], *, query: bool = False, instruction: str = "") -> list[list[float]]:
+    async def embed_batch(
+        self,
+        items: Sequence[str | Sequence[str | bytes]],
+        *,
+        query: bool = False,
+        instruction: str = "",
+    ) -> list[list[float]]:
         """One vector per item, in order: an item is a text, or a list of interleaved text and image parts embedded as one point.
 
         ``query=True`` prefixes each text item with ``instruction`` — Qwen3 embeds a search query as an instruction plus the query,
@@ -119,17 +125,26 @@ class LlamaEngine:
         vectors: list[list[float]] = []
         for item in items:
             if isinstance(item, str):
-                vectors.append(await self.embed_text(self._as_query(item, query, instruction)))
+                vectors.append(
+                    await self.embed_text(self._as_query(item, query, instruction))
+                )
             elif len(item) == 1 and isinstance(item[0], (bytes, bytearray)):
                 vectors.append(await self.embed_image(bytes(item[0])))
             else:
-                parts = [self._as_query(part, query, instruction) if isinstance(part, str) else part for part in item]
+                parts = [
+                    self._as_query(part, query, instruction)
+                    if isinstance(part, str)
+                    else part
+                    for part in item
+                ]
                 vectors.append(await self.embed_mixed(parts))
         return vectors
 
     @staticmethod
     def _as_query(text: str, query: bool, instruction: str) -> str:
-        return f"Instruct: {instruction}\nQuery: {text}" if query and instruction else text
+        return (
+            f"Instruct: {instruction}\nQuery: {text}" if query and instruction else text
+        )
 
     async def warmup(self) -> None:
         try:
@@ -280,9 +295,7 @@ class LlamaEngine:
         try:
             results = data["results"]
         except (KeyError, TypeError) as exc:
-            raise EngineError(
-                f"Unexpected /rerank response shape: {data!r}"
-            ) from exc
+            raise EngineError(f"Unexpected /rerank response shape: {data!r}") from exc
 
         scores = [0.0] * len(passages)
         try:

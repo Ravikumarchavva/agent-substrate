@@ -157,7 +157,6 @@ async def test_tool_approval_request_id_is_replay_stable(tmp_path: Path) -> None
     assert [r.payload["request_id"] for r in requests] == [first["request_id"]]
 
 
-
 async def _ask(runtime, agent):
     """Start the agent on a thread and wait until it is waiting on a person."""
     work = asyncio.create_task(runtime.run(agent, "go", thread="t"))
@@ -184,41 +183,78 @@ def _agent():
         from _model import ScriptedModel, ToolCall
     finally:
         sys.path.remove(str(EXAMPLES))
-    return ReActAgent("t", model=ScriptedModel(ToolCall("wire", {"amount": 5}), "done"), tools=[wire], approval_handler=DurableApproval())
+    return ReActAgent(
+        "t",
+        model=ScriptedModel(ToolCall("wire", {"amount": 5}), "done"),
+        tools=[wire],
+        approval_handler=DurableApproval(),
+    )
 
 
-async def test_pending_approvals_and_decide_close_the_loop_without_hand_rolled_signals(tmp_path: Path) -> None:
+async def test_pending_approvals_and_decide_close_the_loop_without_hand_rolled_signals(
+    tmp_path: Path,
+) -> None:
     """``runtime.pending_approvals`` lists what a run waits on and ``runtime.decide`` answers it, so a person reading the
     list never needs the signal name or its payload; the decision is journaled with who made it."""
     from substrate.tools import ApprovalDecision
 
     async with Runtime.open(tmp_path / "s") as runtime:
         work, run, pending = await _ask(runtime, _agent())
-        assert [(p.tool_name, p.args, p.risk) for p in pending] == [("wire", {"amount": 5}, "critical")]
-        await runtime.decide(run.run_id, pending[0].request_id, ApprovalDecision.APPROVED, by="alice", reason="ok")
+        assert [(p.tool_name, p.args, p.risk) for p in pending] == [
+            ("wire", {"amount": 5}, "critical")
+        ]
+        await runtime.decide(
+            run.run_id,
+            pending[0].request_id,
+            ApprovalDecision.APPROVED,
+            by="alice",
+            reason="ok",
+        )
         assert (await work).output == "done"
         assert await runtime.pending_approvals(run.run_id) == []
-        decided = [e.payload for e in await runtime.read(run.run_id) if e.kind == RunLogKind.APPROVAL_DECIDED]
-        assert [(d["decision"], d["decided_by"], d["reason"]) for d in decided] == [("approved", "alice", "ok")]
+        decided = [
+            e.payload
+            for e in await runtime.read(run.run_id)
+            if e.kind == RunLogKind.APPROVAL_DECIDED
+        ]
+        assert [(d["decision"], d["decided_by"], d["reason"]) for d in decided] == [
+            ("approved", "alice", "ok")
+        ]
 
 
-async def test_a_denied_call_never_runs_and_a_modified_one_runs_with_the_edited_arguments(tmp_path: Path) -> None:
+async def test_a_denied_call_never_runs_and_a_modified_one_runs_with_the_edited_arguments(
+    tmp_path: Path,
+) -> None:
     from substrate.tools import ApprovalDecision
 
     async with Runtime.open(tmp_path / "s") as runtime:
         work, run, pending = await _ask(runtime, _agent())
-        await runtime.decide(run.run_id, pending[0].request_id, ApprovalDecision.DENIED, by="bob")
+        await runtime.decide(
+            run.run_id, pending[0].request_id, ApprovalDecision.DENIED, by="bob"
+        )
         await work
-        results = [e.payload for e in await runtime.read(run.run_id) if e.kind == RunLogKind.TOOL_RESULT]
+        results = [
+            e.payload
+            for e in await runtime.read(run.run_id)
+            if e.kind == RunLogKind.TOOL_RESULT
+        ]
         assert results and all("wired" not in str(r) for r in results)
 
     async with Runtime.open(tmp_path / "s2") as runtime:
         work, run, pending = await _ask(runtime, _agent())
         await runtime.decide(
-            run.run_id, pending[0].request_id, ApprovalDecision.MODIFIED, by="bob", modified_args={"amount": 1}
+            run.run_id,
+            pending[0].request_id,
+            ApprovalDecision.MODIFIED,
+            by="bob",
+            modified_args={"amount": 1},
         )
         await work
-        results = [str(e.payload) for e in await runtime.read(run.run_id) if e.kind == RunLogKind.TOOL_RESULT]
+        results = [
+            str(e.payload)
+            for e in await runtime.read(run.run_id)
+            if e.kind == RunLogKind.TOOL_RESULT
+        ]
         assert any("wired 1" in r for r in results)
 
 
@@ -234,11 +270,29 @@ async def test_a_decision_a_person_cannot_make_is_refused(tmp_path: Path) -> Non
 
 
 async def test_auto_approve_allows_up_to_its_ceiling_and_says_why() -> None:
-    from substrate.tools import ApprovalDecision, ApprovalRequest, AutoApprove, ToolCallRequest
+    from substrate.tools import (
+        ApprovalDecision,
+        ApprovalRequest,
+        AutoApprove,
+        ToolCallRequest,
+    )
 
     policy = AutoApprove(ToolRisk.HIGH)
-    for risk, decision in ((ToolRisk.SAFE, ApprovalDecision.APPROVED), (ToolRisk.HIGH, ApprovalDecision.APPROVED), (ToolRisk.CRITICAL, ApprovalDecision.DENIED)):
+    for risk, decision in (
+        (ToolRisk.SAFE, ApprovalDecision.APPROVED),
+        (ToolRisk.HIGH, ApprovalDecision.APPROVED),
+        (ToolRisk.CRITICAL, ApprovalDecision.DENIED),
+    ):
         result = await policy.request(
-            ApprovalRequest(call=ToolCallRequest(name="t"), risk=risk, agent_id=Actor("agent", "a"), run_id="r")
+            ApprovalRequest(
+                call=ToolCallRequest(name="t"),
+                risk=risk,
+                agent_id=Actor("agent", "a"),
+                run_id="r",
+            )
         )
-        assert result.decision == decision and result.decided_by == "policy" and result.reason
+        assert (
+            result.decision == decision
+            and result.decided_by == "policy"
+            and result.reason
+        )

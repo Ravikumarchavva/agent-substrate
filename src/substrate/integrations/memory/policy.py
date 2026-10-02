@@ -84,7 +84,9 @@ class DefaultMemoryExposurePolicy:
                 text = rec.to_text().strip()
                 if not text:
                     continue
-                item_xml = f'  <preference id="{rec.id[:8]}">{_xml_escape(text)}</preference>'
+                item_xml = (
+                    f'  <preference id="{rec.id[:8]}">{_xml_escape(text)}</preference>'
+                )
                 cost = self._estimate_tokens(item_xml)
                 if cur_tokens + cost > directive_budget and selected_directives:
                     break
@@ -92,7 +94,13 @@ class DefaultMemoryExposurePolicy:
                 cur_tokens += cost
 
             if selected_directives:
-                all_directives_str = "<user_preferences>\n" + header + "\n" + "\n".join(selected_directives) + "\n</user_preferences>"
+                all_directives_str = (
+                    "<user_preferences>\n"
+                    + header
+                    + "\n"
+                    + "\n".join(selected_directives)
+                    + "\n</user_preferences>"
+                )
                 directive_tokens = self._estimate_tokens(all_directives_str)
                 directive_blocks.append(TextBlock(text=all_directives_str))
 
@@ -122,7 +130,13 @@ class DefaultMemoryExposurePolicy:
                 cur_tokens += cost
 
             if selected_memories:
-                all_memories_str = "<relevant_memories>\n" + header + "\n" + "\n".join(selected_memories) + "\n</relevant_memories>"
+                all_memories_str = (
+                    "<relevant_memories>\n"
+                    + header
+                    + "\n"
+                    + "\n".join(selected_memories)
+                    + "\n</relevant_memories>"
+                )
                 memory_tokens = self._estimate_tokens(all_memories_str)
                 memory_blocks.append(TextBlock(text=all_memories_str))
 
@@ -139,4 +153,3 @@ __all__ = [
     "MemoryExposurePolicy",
     "DefaultMemoryExposurePolicy",
 ]
-

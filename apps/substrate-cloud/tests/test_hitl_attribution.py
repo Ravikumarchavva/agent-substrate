@@ -21,7 +21,9 @@ async def test_i23_the_server_names_the_approver_not_the_client() -> None:
 
     ctx = SimpleNamespace(bridge_registry=Registry())
     claims = SimpleNamespace(sub="the-real-caller")
-    body = HITLResponse.model_validate({"action": "approve", "decided_by": "the-cfo", "reason": "ok"})
+    body = HITLResponse.model_validate(
+        {"action": "approve", "decided_by": "the-cfo", "reason": "ok"}
+    )
 
     await respond_to_hitl("req-1", body, ctx=ctx, user=claims)  # type: ignore[arg-type]
 

@@ -14,7 +14,13 @@ from substrate.models.modalities import fit_to_capabilities
 from substrate.models.registry import resolve_capabilities
 from substrate.types import RunMeta
 from substrate.types.finish_reason import FinishReason
-from substrate.models import GenerationOptions, ChatModel, LLMResponse, ModelCapabilities, ReasoningEffort
+from substrate.models import (
+    GenerationOptions,
+    ChatModel,
+    LLMResponse,
+    ModelCapabilities,
+    ReasoningEffort,
+)
 from substrate.types import Usage
 from substrate.types import ChatMessage, ContentBlock
 from substrate.tools import Tool, is_hosted_tool, is_provider_defined_tool
@@ -50,9 +56,16 @@ def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str,
     ]
 
 
-
 _GEMINI_BLOCKED = frozenset(
-    {"SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "RECITATION", "IMAGE_SAFETY", "LANGUAGE"}
+    {
+        "SAFETY",
+        "BLOCKLIST",
+        "PROHIBITED_CONTENT",
+        "SPII",
+        "RECITATION",
+        "IMAGE_SAFETY",
+        "LANGUAGE",
+    }
 )
 
 
@@ -71,6 +84,7 @@ def gemini_finish_reason(reason: object, *, has_tool_calls: bool) -> FinishReaso
     if name in ("MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL", "OTHER"):
         return FinishReason.ERROR if name != "OTHER" else FinishReason.OTHER
     return FinishReason.OTHER
+
 
 class GeminiClient(ChatModel):
     """Google Gemini API client — text and vision.
@@ -273,7 +287,9 @@ class GeminiClient(ChatModel):
         _, contents = self._serialize_messages(messages)
         config: dict[str, Any] = {
             "temperature": (
-                options.temperature if options.temperature is not None else self.temperature
+                options.temperature
+                if options.temperature is not None
+                else self.temperature
             )
         }
         max_tokens = options.max_tokens or self.max_tokens
@@ -359,7 +375,10 @@ class GeminiClient(ChatModel):
             content=final_blocks,
             usage=usage,
             finish_reason=gemini_finish_reason(
-                getattr(response.candidates[0], "finish_reason", None) if response.candidates else None, has_tool_calls=has_tool_calls
+                getattr(response.candidates[0], "finish_reason", None)
+                if response.candidates
+                else None,
+                has_tool_calls=has_tool_calls,
             ),
             response_id=getattr(response, "response_id", None),
             served_model=getattr(response, "model_version", None),

@@ -34,8 +34,14 @@ def _read_as(monkeypatch, pages: int = 2) -> None:
     class _Reader:
         async def read(self, data, filename="", *, content_type=None, strategy="auto"):
             return ExtractionResult(
-                pages=[ExtractedPage(page_number=n, text=f"text of page {n}") for n in range(1, pages + 1)],
-                markdown="\n\n".join(f"<!-- page {n} -->\n\ntext of page {n}" for n in range(1, pages + 1)),
+                pages=[
+                    ExtractedPage(page_number=n, text=f"text of page {n}")
+                    for n in range(1, pages + 1)
+                ],
+                markdown="\n\n".join(
+                    f"<!-- page {n} -->\n\ntext of page {n}"
+                    for n in range(1, pages + 1)
+                ),
                 engine="test",
             )
 
@@ -277,7 +283,9 @@ async def test_upload_non_local_backend_skips_upload_attempt_quota(monkeypatch):
         assert result.name == "doc.pdf"
 
 
-async def test_upload_triggers_eager_staging_into_the_conversations_documents(monkeypatch):
+async def test_upload_triggers_eager_staging_into_the_conversations_documents(
+    monkeypatch,
+):
     """A thread_id is known at upload time -> eager staging fires: the document is read once and filed in that conversation's
     documents (an OKF bundle and a catalog, no embeddings), with the file's id and path kept beside it."""
     from substrate_cloud.monolith.routes import files as files_module
@@ -308,9 +316,15 @@ async def test_upload_triggers_eager_staging_into_the_conversations_documents(mo
     library.add.assert_awaited_once()
     args, kwargs = library.add.await_args
     assert isinstance(args[0], ExtractionResult) and args[1] == "doc.pdf"
-    assert kwargs["collection"] == f"tenants/test-tenant/users/test-user/conversations/{_THREAD_ID}/documents"
+    assert (
+        kwargs["collection"]
+        == f"tenants/test-tenant/users/test-user/conversations/{_THREAD_ID}/documents"
+    )
     assert kwargs["sha256"] == hashlib.sha256(data).hexdigest()
-    assert kwargs["metadata"]["thread_id"] == str(_THREAD_ID) and kwargs["metadata"]["file_id"]
+    assert (
+        kwargs["metadata"]["thread_id"] == str(_THREAD_ID)
+        and kwargs["metadata"]["file_id"]
+    )
 
 
 async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
@@ -556,7 +570,10 @@ async def test_sweep_redispatches_a_genuinely_stuck_upload(monkeypatch):
     ctx.pending_file_store.download.assert_awaited_once_with(row.object_key)
     ctx.library.add.assert_awaited_once()
     kwargs = ctx.library.add.await_args.kwargs
-    assert kwargs["collection"] == f"tenants/test-tenant/users/{row.user_id}/conversations/{_THREAD_ID}/documents"
+    assert (
+        kwargs["collection"]
+        == f"tenants/test-tenant/users/{row.user_id}/conversations/{_THREAD_ID}/documents"
+    )
 
 
 async def test_sweep_reads_from_file_store_when_already_promoted(monkeypatch):
@@ -584,9 +601,11 @@ async def test_sweep_skips_row_when_bytes_cannot_be_read(monkeypatch):
     ctx = _session_ctx_mock([row])
     ctx.pending_file_store.download = AsyncMock(side_effect=FileNotFoundError("gone"))
     monkeypatch.setattr(
-        files_module.asyncio, "create_task", lambda coro: (_ for _ in ()).throw(
+        files_module.asyncio,
+        "create_task",
+        lambda coro: (_ for _ in ()).throw(
             AssertionError("must not dispatch when bytes can't be read")
-        )
+        ),
     )
 
     dispatched = await files_module.sweep_stuck_staging_uploads(ctx)

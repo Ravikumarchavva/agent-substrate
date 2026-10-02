@@ -62,7 +62,7 @@ async def test_react_agent_respects_execution_budget() -> None:
     from substrate.runtime import Message, ChatPayload
     from substrate.types import CompletionEvent
 
-    class MockLLMClient:
+    class MockChatModel:
         model = "mock-model"
         capabilities = ModelCapabilities(model_id="mock-model")
 
@@ -78,7 +78,7 @@ async def test_react_agent_respects_execution_budget() -> None:
                 usage=Usage(input_tokens=60, output_tokens=60),
             )
 
-    llm = MockLLMClient()
+    llm = MockChatModel()
 
     agent = ReActAgent(
         "BudgetBot",
@@ -122,7 +122,7 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
     from substrate.runtime import ChatPayload, DataPayload, Message
     from substrate.types import CompletionEvent
 
-    class MockLLMClient:
+    class MockChatModel:
         model = "mock-model"
         capabilities = ModelCapabilities(model_id="mock-model")
 
@@ -138,7 +138,7 @@ async def test_spawned_child_inherits_execution_budget_from_supervision() -> Non
                 usage=Usage(input_tokens=60, output_tokens=60),
             )
 
-    llm = MockLLMClient()
+    llm = MockChatModel()
     child_id = Actor(type="agent", key="budget-child")
     parent_id = Actor(type="agent", key="budget-parent")
 

@@ -1,4 +1,4 @@
-"""The DAG resolvers and the linear ``project_messages`` view over any ``HistoryProvider``."""
+"""The DAG resolvers and the linear ``project_messages`` view over any ``ThreadStore``."""
 
 from __future__ import annotations
 
@@ -6,15 +6,15 @@ from typing import Any
 
 from substrate.types.content import ChatMessage
 from substrate.types.errors import DAGIntegrityError
-from substrate.stores.threads import HistoryCheckpoint, HistoryProvider, MessageNode
+from substrate.stores.threads import HistoryCheckpoint, ThreadStore, MessageNode
 
 _UNSET: Any = object()
 
 
 class DefaultHistoryResolver:
-    """Walks parent pointers over a HistoryProvider."""
+    """Walks parent pointers over a ThreadStore."""
 
-    def __init__(self, provider: HistoryProvider) -> None:
+    def __init__(self, provider: ThreadStore) -> None:
         self._provider = provider
 
     async def resolve_ancestry(
@@ -64,7 +64,7 @@ class AncestryCheckpointResolver:
 
     def __init__(
         self,
-        provider: HistoryProvider,
+        provider: ThreadStore,
         history_resolver: DefaultHistoryResolver | None = None,
     ) -> None:
         self._provider = provider
@@ -103,7 +103,7 @@ class AncestryCheckpointResolver:
 
 
 async def project_messages(
-    history: HistoryProvider,
+    history: ThreadStore,
     session_id: str,
     *,
     branch_id: str = "main",
@@ -133,7 +133,7 @@ async def project_messages(
 
 
 __all__ = [
-    "HistoryProvider",
+    "ThreadStore",
     "DefaultHistoryResolver",
     "AncestryCheckpointResolver",
     "project_messages",

@@ -203,8 +203,8 @@ class EmbeddingRerankerClient:
 
 class EmbeddingRerankerTextEmbeddingClient:
     """Adapts ``EmbeddingRerankerClient.embed_text()`` to the kernel
-    ``EmbeddingClient`` Protocol (``embed``/``embed_single`` —
-    ``substrate.models.protocols.EmbeddingClient``).
+    ``EmbeddingModel`` Protocol (``embed``/``embed_single`` —
+    ``substrate.models.protocols.EmbeddingModel``).
 
     A shape unification, not a dimension one: this service's embedding
     space (``RAG_IMAGE_EMBEDDING_DIM``, 2048-dim — ``PgVectorStore``
@@ -212,7 +212,7 @@ class EmbeddingRerankerTextEmbeddingClient:
     2000 dims to accommodate it) stays intentionally distinct from the
     main text-embedding model's space (1536-dim, or whatever
     ``EMBEDDING_MODEL`` resolves to). This only lets code written
-    generically against ``EmbeddingClient`` call this service's text
+    generically against ``EmbeddingModel`` call this service's text
     embedding without a bespoke ``embed_text``-shaped call.
     """
 

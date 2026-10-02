@@ -45,7 +45,7 @@ class _DropDatabaseTool:
         return ToolExecutionResult(content=[TextBlock(text="dropped")])
 
 
-class _ScriptedLLMClient:
+class _ScriptedChatModel:
     """Emits a tool call once, then a plain text reply."""
 
     model = "mock-model"
@@ -72,7 +72,7 @@ class _ScriptedLLMClient:
 
 async def test_critical_tool_call_pauses_for_approval_and_resumes():
     bridge = WebHITLBridge(response_timeout=10.0)
-    llm = _ScriptedLLMClient()
+    llm = _ScriptedChatModel()
     thread_id = uuid.uuid4()
 
     async with Runtime.local(":memory:") as rt:
@@ -122,7 +122,7 @@ async def test_critical_tool_call_pauses_for_approval_and_resumes():
 
 async def test_critical_tool_call_denied_does_not_execute():
     bridge = WebHITLBridge(response_timeout=10.0)
-    llm = _ScriptedLLMClient()
+    llm = _ScriptedChatModel()
     thread_id = uuid.uuid4()
 
     async with Runtime.local(":memory:") as rt:

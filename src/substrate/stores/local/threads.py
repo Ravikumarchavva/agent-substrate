@@ -1,4 +1,4 @@
-"""LocalFilesystemHistoryProvider — JSON-file-backed conversation history.
+"""LocalFilesystemThreadStore — JSON-file-backed conversation history.
 
 Stores data in a local directory tree (default: ``./data/history``), mirroring
 the LanceDB / WorkspaceFileStore pattern of creating a folder on first use
@@ -16,7 +16,7 @@ Thread-safety: a single asyncio.Lock per (session_id, branch_id) pair guards
 branch head pointer updates (optimistic CAS). Node writes are idempotent and
 file-atomic (write-tmp-then-rename).
 
-This provider is the zero-infra default HistoryProvider
+This provider is the zero-infra default ThreadStore
 for local dev / experimentation — it does NOT require Postgres or Redis.
 """
 
@@ -39,8 +39,8 @@ from substrate.stores.local.fs import atomic_write_json, safe_name
 _UNSET: Any = object()
 
 
-class LocalFilesystemHistoryProvider:
-    """Filesystem-backed DAG HistoryProvider — stores data as JSON files.
+class LocalFilesystemThreadStore:
+    """Filesystem-backed DAG ThreadStore — stores data as JSON files.
 
     Suitable for local development and experimentation without requiring
     a running Postgres instance.  Inspired by how LanceDB creates a local
@@ -479,5 +479,5 @@ class LocalFilesystemHistoryProvider:
                 del self._branch_locks[key]
 
 
-__all__ = ["LocalFilesystemHistoryProvider"]
+__all__ = ["LocalFilesystemThreadStore"]
 

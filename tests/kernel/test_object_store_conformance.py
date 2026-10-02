@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from substrate.stores import WorkspaceFileStore
-from substrate.testing.conformance.object_store import ObjectStoreConformance
+from substrate.testing.conformance.file_store import FileStoreConformance
 
 
-class TestWorkspaceFileStore(ObjectStoreConformance):
+class TestWorkspaceFileStore(FileStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
         return WorkspaceFileStore(tmp_path, user_quota_bytes=10**9)

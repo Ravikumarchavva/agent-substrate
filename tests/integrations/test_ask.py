@@ -76,7 +76,7 @@ class _FakeEmbedder:
         return [1.0 for _ in documents]
 
 
-class _FakeLLMClient:
+class _FakeChatModel:
     model = "fake"
     capabilities = ModelCapabilities(model_id="fake")
 
@@ -97,7 +97,7 @@ async def _ask(results: list[SearchResult], **kwargs) -> "AskResult":  # noqa: F
         "what is in the chart?",
         store=_FakeStore(results),
         embedder=_FakeEmbedder(),
-        llm_client=_FakeLLMClient(),
+        llm_client=_FakeChatModel(),
         collection="kb",
         use_kb_filter=False,
         rerank=False,

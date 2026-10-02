@@ -29,7 +29,7 @@ from substrate.models import EmbeddingResult, GenerationOptions, LLMResponse
 FIXTURE_PDF = Path(__file__).parent.parent / "fixtures" / "test_invoice.pdf"
 
 
-class StubLLMClient:
+class StubChatModel:
     def __init__(self, response_text: str) -> None:
         self._response_text = response_text
 
@@ -74,7 +74,7 @@ async def _ingest_fixture(cfg, embedding_client) -> None:
         embedding_client=OpenAIEmbeddingClient(api_key="mock"), vector_store=None
     )
     rag_backend = LocalRagBackend(dummy_pipeline)
-    model_client = StubLLMClient(
+    model_client = StubChatModel(
         '{"entities": [{"label": "Company", "properties": {"name": "Acme"}}], '
         '"relationships": []}'
     )
@@ -94,7 +94,7 @@ async def _ingest_fixture(cfg, embedding_client) -> None:
 
 async def test_vector_mode_finds_ingested_document(cfg, embedding_client) -> None:
     await _ingest_fixture(cfg, embedding_client)
-    tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
+    tool = SessionDocumentSearchTool(cfg, embedding_client, StubChatModel("{}"))
 
     result = await tool.execute(ctx=_ctx(), query="invoice", mode="vector")
 
@@ -105,7 +105,7 @@ async def test_vector_mode_finds_ingested_document(cfg, embedding_client) -> Non
 
 async def test_tree_mode_finds_document_outline(cfg, embedding_client) -> None:
     await _ingest_fixture(cfg, embedding_client)
-    tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
+    tool = SessionDocumentSearchTool(cfg, embedding_client, StubChatModel("{}"))
 
     result = await tool.execute(ctx=_ctx(), query="invoice", mode="tree")
 
@@ -115,7 +115,7 @@ async def test_tree_mode_finds_document_outline(cfg, embedding_client) -> None:
 
 async def test_graph_mode_returns_vector_results_at_minimum(cfg, embedding_client) -> None:
     await _ingest_fixture(cfg, embedding_client)
-    tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
+    tool = SessionDocumentSearchTool(cfg, embedding_client, StubChatModel("{}"))
 
     result = await tool.execute(ctx=_ctx(), query="invoice", mode="graph")
 
@@ -124,13 +124,13 @@ async def test_graph_mode_returns_vector_results_at_minimum(cfg, embedding_clien
 
 
 async def test_missing_query_is_an_error(cfg, embedding_client) -> None:
-    tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
+    tool = SessionDocumentSearchTool(cfg, embedding_client, StubChatModel("{}"))
     result = await tool.execute(ctx=_ctx(), query="")
     assert result.is_error
 
 
 async def test_no_scope_without_a_signed_in_context(cfg, embedding_client) -> None:
-    tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
+    tool = SessionDocumentSearchTool(cfg, embedding_client, StubChatModel("{}"))
     result = await tool.execute(ctx=_ctx(RunScope()), query="anything")
     assert result.is_error
 
@@ -139,7 +139,7 @@ async def test_omitted_limit_uses_cfg_rag_final_k(cfg, embedding_client) -> None
     """Mirrors config.py's RAG_FINAL_K -- a caller omitting `limit` entirely
     should get the configured default, not a hardcoded 5."""
     cfg.RAG_FINAL_K = 17
-    tool = SessionDocumentSearchTool(cfg, embedding_client, StubLLMClient("{}"))
+    tool = SessionDocumentSearchTool(cfg, embedding_client, StubChatModel("{}"))
     captured = {}
 
     async def _fake_search_vector(tenant_id, user_id, query, *, limit, filter=None):

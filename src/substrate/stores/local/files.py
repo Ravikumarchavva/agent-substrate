@@ -1,9 +1,9 @@
 """Workspace-backed file store — a tenant-scoped directory tree on shared storage.
 
-The canonical zero-infra ``ObjectStore`` (``kernel/storage/objects.py``)
+The canonical zero-infra ``FileStore`` (``kernel/storage/objects.py``)
 implementation — moved here from ``integrations/storage/`` because it needs
 nothing beyond the local filesystem, same as every other storage Protocol's
-L1 default (``LocalFilesystemHistoryProvider``, `LocalFilesystemGraphStore`,
+L1 default (``LocalFilesystemThreadStore``, `LocalFilesystemGraphStore`,
 etc.). ``agents/workspace/``'s ``BlobCAS`` composes with this by default;
 ``integrations/storage/s3.py::S3FileStore`` is the L2 production upgrade for
 the same Protocol.
@@ -63,7 +63,7 @@ _USAGE_CACHE_TTL = 30.0  # seconds
 class WorkspaceFileStore:
     """Async file store backed by a plain directory tree.
 
-    Satisfies ``ObjectStore``, the same port as ``S3FileStore``:
+    Satisfies ``FileStore``, the same port as ``S3FileStore``:
     ``upload``/``download``/``delete``/``presign_url``/``connect``/``disconnect``,
     plus workspace-specific helpers (``usage_bytes``, ``list_prefix``)
     used by the workspace management API.

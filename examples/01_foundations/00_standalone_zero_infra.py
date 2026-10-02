@@ -58,7 +58,7 @@ async def main() -> None:
         model=model,
         # No tools, no integrations/ import — a toolless agent is still a
         # complete, runnable chatbot; see the L1 charter for why.
-        context=ContextConfig.default(),  # LocalFilesystemHistoryProvider — one JSON file
+        context=ContextConfig.default(),  # LocalFilesystemThreadStore — one JSON file
         system_instructions="You are a helpful assistant.",
         max_iterations=4,
     )

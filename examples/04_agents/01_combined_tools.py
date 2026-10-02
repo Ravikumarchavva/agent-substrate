@@ -22,7 +22,7 @@ from substrate.runtime import Runtime
 from substrate.context import ContextConfig
 from substrate.context import SlidingWindowCompaction
 from substrate.context import CompactionPipeline
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.integrations.llm import (
     create_model_client,
     detect_provider,
@@ -77,7 +77,7 @@ async def main() -> None:
         model=model,
         tools=[CalculatorTool(), CurrentTimeTool()],
         context=ContextConfig(
-            LocalFilesystemHistoryProvider(),
+            LocalFilesystemThreadStore(),
             pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
         ),
         max_iterations=5,
@@ -145,7 +145,7 @@ async def main() -> None:
             model=model,
             tools=[CelsiusToFahrenheitTool()],
             context=ContextConfig(
-                LocalFilesystemHistoryProvider(),
+                LocalFilesystemThreadStore(),
                 pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
             ),
             max_iterations=5,

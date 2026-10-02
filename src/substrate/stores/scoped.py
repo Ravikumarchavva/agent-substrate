@@ -17,8 +17,8 @@ from urllib.parse import quote
 
 from substrate.types.scope import Scope
 from substrate.stores.graph import Entity, GraphStore, Relationship, SubGraph
-from substrate.stores.threads import Branch, HistoryCheckpoint, HistoryProvider, MessageNode
-from substrate.stores.files import ObjectStore
+from substrate.stores.threads import Branch, HistoryCheckpoint, ThreadStore, MessageNode
+from substrate.stores.files import FileStore
 from substrate.stores.tasks import Task, TaskList, TaskStatus, TaskStore
 from substrate.stores.vector import Document, SearchResult, VectorStore
 
@@ -46,10 +46,10 @@ class _Prefixer:
 # ===================================================================== history
 
 
-class ScopedHistory:
-    """A ``HistoryProvider`` that sees only its tenant's sessions."""
+class ScopedThreadStore:
+    """A ``ThreadStore`` that sees only its tenant's sessions."""
 
-    def __init__(self, inner: HistoryProvider, scope: Scope) -> None:
+    def __init__(self, inner: ThreadStore, scope: Scope) -> None:
         self._inner = inner
         self._p = _Prefixer(scope)
 
@@ -214,10 +214,10 @@ def _relative_key(key: str) -> str:
     return key
 
 
-class ScopedObjectStore:
-    """An ``ObjectStore`` confined to ``tenants/<tenant>/``. Keys are relative to the tenant."""
+class ScopedFileStore:
+    """An ``FileStore`` confined to ``tenants/<tenant>/``. Keys are relative to the tenant."""
 
-    def __init__(self, inner: ObjectStore, scope: Scope) -> None:
+    def __init__(self, inner: FileStore, scope: Scope) -> None:
         self._inner = inner
         self._scope = scope
         self._root = f"tenants/{_tenant(scope)}/"
@@ -264,16 +264,16 @@ class ScopedObjectStore:
         return await self._inner.delete_prefix(self._root)
 
 
-class FencedObjectStore:
-    """An ``ObjectStore`` that keeps its callers' *absolute* keys but confines them to ``tenants/<tenant>/``.
+class FencedFileStore:
+    """An ``FileStore`` that keeps its callers' *absolute* keys but confines them to ``tenants/<tenant>/``.
 
-    ``ScopedObjectStore`` is for code that thinks in tenant-relative keys. Serving builds absolute keys through
+    ``ScopedFileStore`` is for code that thinks in tenant-relative keys. Serving builds absolute keys through
     ``workspace/layout`` and stores them in database rows, so what it needs is a fence: every key and prefix must
     be inside the tenant's subtree, with nothing that could climb out of it. Anything else raises ``ValueError``
     before the store is touched.
     """
 
-    def __init__(self, inner: ObjectStore, scope: Scope) -> None:
+    def __init__(self, inner: FileStore, scope: Scope) -> None:
         if "/" in scope.tenant_id or "\\" in scope.tenant_id:
             raise ValueError("a tenant id with a path separator cannot be fenced")
         self._inner = inner
@@ -377,8 +377,8 @@ class ScopedTaskStore:
         return await self._inner.update_task_title(task_list_id, task_id, title) if await self._owned(task_list_id) else None
 
 
-def bind_history(store: HistoryProvider, scope: Scope) -> HistoryProvider:
-    return ScopedHistory(store, scope)
+def bind_threads(store: ThreadStore, scope: Scope) -> ThreadStore:
+    return ScopedThreadStore(store, scope)
 
 
 def bind_vector(store: VectorStore, scope: Scope) -> ScopedVectorStore:
@@ -389,12 +389,12 @@ def bind_graph(store: GraphStore, scope: Scope) -> GraphStore:
     return ScopedGraphStore(store, scope)
 
 
-def bind_objects(store: ObjectStore, scope: Scope) -> ScopedObjectStore:
-    return ScopedObjectStore(store, scope)
+def bind_files(store: FileStore, scope: Scope) -> ScopedFileStore:
+    return ScopedFileStore(store, scope)
 
 
-def fence_objects(store: ObjectStore, scope: Scope) -> FencedObjectStore:
-    return FencedObjectStore(store, scope)
+def fence_objects(store: FileStore, scope: Scope) -> FencedFileStore:
+    return FencedFileStore(store, scope)
 
 
 def bind_tasks(store: TaskStore, scope: Scope) -> TaskStore:
@@ -402,15 +402,15 @@ def bind_tasks(store: TaskStore, scope: Scope) -> TaskStore:
 
 
 __all__ = [
-    "FencedObjectStore",
+    "FencedFileStore",
     "ScopedGraphStore",
-    "ScopedHistory",
-    "ScopedObjectStore",
+    "ScopedThreadStore",
+    "ScopedFileStore",
     "ScopedTaskStore",
     "ScopedVectorStore",
     "bind_graph",
-    "bind_history",
-    "bind_objects",
+    "bind_threads",
+    "bind_files",
     "bind_tasks",
     "bind_vector",
     "fence_objects",

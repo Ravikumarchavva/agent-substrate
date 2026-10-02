@@ -28,7 +28,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from substrate.models import EmbeddingClient, LLMClient
+from substrate.models import EmbeddingModel, ChatModel
 
 
 @dataclass
@@ -48,8 +48,8 @@ async def ingest_session_document(
     user_id: str,
     session_id: str,
     cfg: Any,
-    embedding_client: EmbeddingClient,
-    model_client: LLMClient,
+    embedding_client: EmbeddingModel,
+    model_client: ChatModel,
     rag_backend: Any,
 ) -> SessionIngestResult:
     """Extract, chunk, embed, and index one uploaded document into the

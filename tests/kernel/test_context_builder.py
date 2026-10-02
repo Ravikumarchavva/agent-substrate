@@ -99,7 +99,7 @@ async def test_context_builder_sliding_window_token_budget():
 
 
 # ---------------------------------------------------------------------------
-# 3. End-to-End: HistoryProvider -> HistoryResolver -> ContextBuilder
+# 3. End-to-End: ThreadStore -> HistoryResolver -> ContextBuilder
 # ---------------------------------------------------------------------------
 
 

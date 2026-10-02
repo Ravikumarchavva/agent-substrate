@@ -27,7 +27,7 @@ from tests.eval.metrics import ndcg_at_k, recall_at_k
 
 if TYPE_CHECKING:
     from substrate.integrations.vector.pgvector_store import PgVectorStore
-    from substrate.models import EmbeddingClient
+    from substrate.models import EmbeddingModel
 
 
 @dataclass(slots=True)
@@ -54,7 +54,7 @@ def _average(values: list[float]) -> float:
 async def run_retrieval_eval(
     *,
     store: "PgVectorStore",
-    embedding_client: "EmbeddingClient",
+    embedding_client: "EmbeddingModel",
     dataset: EvalDataset,
     collection: str,
     reranker: Any | None = None,

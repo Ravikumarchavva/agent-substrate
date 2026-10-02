@@ -43,7 +43,7 @@ from substrate.workspace.materialize import materialize as materialize_manifest
 from substrate.workspace import WorkspaceScope
 from substrate.workspace import commit_turn
 from substrate.types import SnapshotConflictError
-from substrate.stores import ObjectStore
+from substrate.stores import FileStore
 from substrate.workspace import WorkspaceStore
 from substrate.logger import setup_logging
 
@@ -65,7 +65,7 @@ class StagedSandboxRuntime:
         self,
         inner: Any,
         *,
-        object_store: ObjectStore,
+        object_store: FileStore,
         workspace_store: WorkspaceStore,
         scratch_root: str | Path,
     ) -> None:

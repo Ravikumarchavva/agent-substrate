@@ -11,8 +11,8 @@ from typing import Any, Optional
 
 from fastapi import Request
 
-from substrate.models import LLMClient
-from substrate.stores import HistoryProvider
+from substrate.models import ChatModel
+from substrate.stores import ThreadStore
 from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
 
@@ -28,8 +28,8 @@ class ServerDependencies:
     ``routes/chat.py`` and ``routes/cancel.py``.
     """
 
-    model_client: LLMClient
-    history: HistoryProvider
+    model_client: ChatModel
+    history: ThreadStore
     tools: Any
     bridge_registry: BridgeRegistry
     tools_requiring_approval: list[str]

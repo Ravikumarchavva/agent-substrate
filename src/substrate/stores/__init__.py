@@ -6,7 +6,7 @@ from substrate.stores.blob import (
     BlobStore,
 )
 from substrate.stores.files import (
-    ObjectStore,
+    FileStore,
 )
 from substrate.stores.graph import (
     CypherCapable,
@@ -33,7 +33,7 @@ from substrate.stores.local.tasks import (
     LocalFilesystemTaskStore,
 )
 from substrate.stores.local.threads import (
-    LocalFilesystemHistoryProvider,
+    LocalFilesystemThreadStore,
 )
 from substrate.stores.local.vector import (
     LocalFilesystemVectorStore,
@@ -55,8 +55,8 @@ from substrate.stores.memory import (
 )
 from substrate.stores.scoped import (
     bind_graph,
-    bind_history,
-    bind_objects,
+    bind_threads,
+    bind_files,
     bind_tasks,
     bind_vector,
     fence_objects,
@@ -70,7 +70,7 @@ from substrate.stores.tasks import (
 from substrate.stores.threads import (
     Branch,
     HistoryCheckpoint,
-    HistoryProvider,
+    ThreadStore,
     MessageNode,
 )
 from substrate.stores.vector import (
@@ -89,9 +89,9 @@ __all__ = [
     "ExtractionMethod",
     "GraphStore",
     "HistoryCheckpoint",
-    "HistoryProvider",
+    "ThreadStore",
     "LocalFilesystemGraphStore",
-    "LocalFilesystemHistoryProvider",
+    "LocalFilesystemThreadStore",
     "LocalFilesystemMemoryStore",
     "LocalFilesystemShortTermMemory",
     "LocalFilesystemTaskStore",
@@ -105,7 +105,7 @@ __all__ = [
     "MemoryStatus",
     "MemoryStore",
     "MessageNode",
-    "ObjectStore",
+    "FileStore",
     "Relationship",
     "SearchResult",
     "ShortTermMemory",
@@ -120,8 +120,8 @@ __all__ = [
     "WorkspacePathError",
     "WorkspaceQuotaExceededError",
     "bind_graph",
-    "bind_history",
-    "bind_objects",
+    "bind_threads",
+    "bind_files",
     "bind_tasks",
     "bind_vector",
     "cosine_similarity",

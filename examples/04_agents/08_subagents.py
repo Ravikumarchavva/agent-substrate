@@ -4,7 +4,7 @@ Demonstrates:
   • OrchestratorAgent routing tasks to specialist ReActAgents
   • SubAgentConfig — per-agent priority (HIGH / NORMAL)
   • Runtime message-passing for crash-isolated delegation
-  • StubLLMClient — run this example with no API key at all
+  • StubChatModel — run this example with no API key at all
 
 Run:
     cd agent-substrate
@@ -29,7 +29,7 @@ from typing import AsyncIterator
 from substrate.context import ContextConfig
 from substrate.context import SlidingWindowCompaction
 from substrate.context import CompactionPipeline
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.agents import ReActAgent
 from substrate.agents import OrchestratorAgent, SubAgentConfig
 from substrate.runtime import Runtime
@@ -45,12 +45,12 @@ from substrate.types import AgentId
 
 
 # ---------------------------------------------------------------------------
-# StubLLMClient — scripted responses, no API key needed
+# StubChatModel — scripted responses, no API key needed
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class StubLLMClient:
+class StubChatModel:
     """Scripted LLM stub for demo purposes.
 
     Orchestrator always delegates to the researcher, then the writer.
@@ -172,7 +172,7 @@ class StubLLMClient:
 
 def _context() -> ContextConfig:
     return ContextConfig(
-        LocalFilesystemHistoryProvider(),
+        LocalFilesystemThreadStore(),
         pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)]),
     )
 
@@ -240,7 +240,7 @@ async def run_demo(
     runtime: Runtime,
     orchestrator: OrchestratorAgent,
     query: str,
-    stub: StubLLMClient | None = None,
+    stub: StubChatModel | None = None,
 ) -> AgentRunResult:
     """Run the orchestrator on a single query, printing the handoff trace."""
     if stub is not None:
@@ -348,15 +348,15 @@ async def main() -> None:
         )
         print("Using OpenAI LLM")
     else:
-        model = StubLLMClient()
+        model = StubChatModel()
         print(
-            "No OPENAI_API_KEY found — running with StubLLMClient (scripted responses)"
+            "No OPENAI_API_KEY found — running with StubChatModel (scripted responses)"
         )
 
     async with Runtime.local() as rt:
         orchestrator = build_agents(rt, model)
 
-        stub = model if isinstance(model, StubLLMClient) else None
+        stub = model if isinstance(model, StubChatModel) else None
 
         # Demo 1 — research + writing task (orchestrator delegates to researcher → writer)
         await run_demo(

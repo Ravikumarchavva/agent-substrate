@@ -74,7 +74,7 @@ settings = SubstrateConfig()
 #     name="MyAgent",
 #     catalog=catalog,         # AgentCatalog with model + memory + tools
 #     tools=[CalculatorTool()],
-#     memory=LocalFilesystemHistoryProvider(),
+#     memory=LocalFilesystemThreadStore(),
 #     model_context=UnboundedContext(),
 # )
 # result = await agent.run("What is 2 ** 10?")
@@ -102,7 +102,7 @@ settings = SubstrateConfig()
 #
 # ### Persist memory in Redis
 # ```python
-# from substrate.integrations.history import RedisHistoryProvider  # ← integrations, not core!
+# from substrate.integrations.history import RedisThreadStore  # ← integrations, not core!
 #
 # mem = RedisMemory(session_id="my-chat", redis_url="redis://localhost:6379/0")
 # await mem.connect()

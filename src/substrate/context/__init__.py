@@ -43,7 +43,7 @@ from substrate.context.context import (
 from substrate.context.history import (
     AncestryCheckpointResolver,
     DefaultHistoryResolver,
-    HistoryProvider,
+    ThreadStore,
     project_messages,
 )
 from substrate.context.protocols import (
@@ -70,7 +70,7 @@ __all__ = [
     "DefaultCompactionCoordinator",
     "DefaultContextBuilder",
     "DefaultHistoryResolver",
-    "HistoryProvider",
+    "ThreadStore",
     "SelectiveToolCallCompactionStrategy",
     "SlidingWindowCompaction",
     "SummarizationCompaction",

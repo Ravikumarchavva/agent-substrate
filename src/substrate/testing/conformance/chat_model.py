@@ -1,4 +1,4 @@
-"""Conformance suite for ``LLMClient``.
+"""Conformance suite for ``ChatModel``.
 
 A client is exercised through a **real HTTP transport that is scripted**, not a mocked method: the
 vendor's own SDK builds the request and parses the response, so what is checked is what a provider would
@@ -27,7 +27,7 @@ import pytest
 from substrate.types.content import ChatMessage, MediaBlock, Role, TextBlock
 from substrate.types.finish_reason import FinishReason
 from substrate.types.errors import AuthError, ContentFilterError, ContextLengthError, RateLimitedError
-from substrate.models.protocols import LLMClient, ModelCapabilities
+from substrate.models.protocols import ChatModel, ModelCapabilities
 from substrate.types.stream import CompletionEvent, TextDelta
 from substrate.models.errors import classify_llm_error
 
@@ -37,7 +37,7 @@ Handler = Callable[[httpx.Request], httpx.Response]
 class Provider(Protocol):
     """What a vendor must say about itself for the suite to drive its client."""
 
-    def client(self, handler: Handler, *, capabilities: ModelCapabilities | None = None) -> LLMClient: ...
+    def client(self, handler: Handler, *, capabilities: ModelCapabilities | None = None) -> ChatModel: ...
 
     def text_response(self, text: str) -> httpx.Response:
         """A finished, non-streaming answer containing exactly ``text``."""
@@ -73,12 +73,12 @@ def user(*blocks: Any) -> list[ChatMessage]:
 TEXT_ONLY = ModelCapabilities(model_id="conformance-text", input_modalities=frozenset({"text"}))
 
 
-class LLMClientConformance:
+class ChatModelConformance:
     @pytest.fixture
     def provider(self) -> Provider:  # pragma: no cover - supplied by subclasses
         raise NotImplementedError
 
-    def build(self, provider: Provider, respond: Callable[[], httpx.Response], *, capabilities: ModelCapabilities | None = None) -> tuple[LLMClient, Wire]:
+    def build(self, provider: Provider, respond: Callable[[], httpx.Response], *, capabilities: ModelCapabilities | None = None) -> tuple[ChatModel, Wire]:
         wire = Wire()
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -172,4 +172,4 @@ class LLMClientConformance:
         assert getattr(error, "retryable", True) is not False, "a 503 must not be classified as permanent"
 
 
-__all__ = ["LLMClientConformance", "Provider", "Wire", "PNG", "TEXT_ONLY"]
+__all__ = ["ChatModelConformance", "Provider", "Wire", "PNG", "TEXT_ONLY"]

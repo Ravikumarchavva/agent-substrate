@@ -19,9 +19,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.types import Scope
-from substrate.stores import HistoryProvider
+from substrate.stores import ThreadStore
 from substrate.context import DefaultHistoryResolver
-from substrate.stores import bind_history
+from substrate.stores import bind_threads
 from substrate.workspace import fork_branch, resolve_workspace_snapshot_id
 from substrate.types import BranchAlreadyExistsError, BranchNotFoundError, DAGIntegrityError
 from substrate.stores import HistoryCheckpoint
@@ -37,10 +37,10 @@ from substrate.serving.monolith.security.deps import AuthClaims, get_current_use
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.services import get_owned_thread
 
-def _history(ctx: ServerDependencies, user: AuthClaims) -> HistoryProvider:
+def _history(ctx: ServerDependencies, user: AuthClaims) -> ThreadStore:
     """The conversation store as the caller's tenant sees it: bound, so a branch, node or checkpoint id
     belonging to another tenant resolves to nothing."""
-    return bind_history(ctx.history, Scope(tenant_id=user.tenant_id or "default"))
+    return bind_threads(ctx.history, Scope(tenant_id=user.tenant_id or "default"))
 
 
 router = APIRouter(
@@ -258,7 +258,7 @@ async def delete_branch_endpoint(
     branch's object-storage prefix is reclaimed immediately rather than
     waiting on a blob-level sweep (see agents/workspace/branching.py).
     Deleting the underlying DAG nodes is deliberately not part of this —
-    see HistoryProvider.delete_branch's own docstring.
+    see ThreadStore.delete_branch's own docstring.
     """
     thread = await get_owned_thread(db, thread_id, user)
     if not thread:

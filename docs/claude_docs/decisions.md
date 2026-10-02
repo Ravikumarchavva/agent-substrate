@@ -34,7 +34,7 @@ observe a run and `abstractions/exceptions.py` the one error taxonomy.
 
 ## No in-memory stores; the floor is a folder (2026-10-02)
 
-`InMemoryHistoryProvider`, `InMemoryVectorStore`, `InMemoryGraphStore`, `InMemoryFileStore` and the dict-based
+`InMemoryThreadStore`, `InMemoryVectorStore`, `InMemoryGraphStore`, `InMemoryFileStore` and the dict-based
 `TaskStore` are deleted (the kernel's task default is `LocalFilesystemTaskStore`). A store that forgets on exit
 cannot be what an agent's conversation, memory or tasks rest on, and a second implementation per port is a second
 thing to drift. Tests use `tmp_path` folders (`tests/_stores.py`); runtime tests use `Runtime.local(":memory:")`.
@@ -681,7 +681,7 @@ Makefile target added.
 
 **Also added in the same pass:** a `DocumentExtractor` kernel Protocol
 (`kernel/document/protocols.py`, mirroring `VectorStore`/`GraphStore`/
-`HistoryProvider`'s shape) with `ExtractionPipeline`
+`ThreadStore`'s shape) with `ExtractionPipeline`
 (`PPStructureV3`-backed, `runtimes/document_intelligence`) as one real
 implementation and a new `capabilities/knowledge/loaders/
 xycut_extractor.py` (pdfplumber word-level bboxes + a fixed
@@ -717,7 +717,7 @@ hop.
 
 **Decisions** (each is a fix for something verified broken, not a preference):
 
-- **`LLMClient.capabilities: ModelCapabilities` is required** (kernel). A client never sends content
+- **`ChatModel.capabilities: ModelCapabilities` is required** (kernel). A client never sends content
   outside `capabilities.input_modalities`; it calls `agents.llm.modalities.fit_to_capabilities`,
   which swaps unsupported media for a text note. `ModelProfile` derives `supports_vision`/audio from
   `modalities` (one source of truth) and exposes `.capabilities`. Unlisted models resolve to

@@ -17,7 +17,7 @@ from substrate.types.errors import BudgetExhaustedError, ContentFilterError, Con
 from substrate.models.protocols import GenerationOptions, LLMResponse, ReasoningEffort
 from substrate.runtime.message import ChatPayload, DataPayload, Message
 from substrate.types.run_log import RunLogKind
-from substrate.stores.threads import HistoryProvider
+from substrate.stores.threads import ThreadStore
 from substrate.tools.protocols import ToolRegistry, is_concurrency_safe
 from substrate.tools.approval import ApprovalHandler
 from substrate.tools.chain import ChainPolicy
@@ -32,7 +32,7 @@ from substrate.middleware.pipeline import MiddlewarePipeline
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from substrate.models.protocols import LLMClient
+    from substrate.models.protocols import ChatModel
     from substrate.tools.chain import InvocationResult
     from substrate.runtime.context import RunContext
 
@@ -60,7 +60,7 @@ class ReActAgent(BaseAgent):
         self,
         name: str,
         *,
-        model: LLMClient | None = None,
+        model: ChatModel | None = None,
         tools: ToolRegistry | list | None = None,
         context: ContextConfig | None = None,
         system_instructions: str = "",
@@ -103,7 +103,7 @@ class ReActAgent(BaseAgent):
         self.tool_policy = tool_policy
 
     @property
-    def history(self) -> HistoryProvider:
+    def history(self) -> ThreadStore:
         return self._context.history
 
     @handle(ChatPayload, DataPayload)

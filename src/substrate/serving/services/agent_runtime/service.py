@@ -14,7 +14,7 @@ from substrate.integrations.events.envelope import EventEnvelope
 from substrate.types import ChatMessage, Role
 from substrate.types import Actor
 from substrate.runtime import ChatPayload, Message
-from substrate.stores import HistoryProvider
+from substrate.stores import ThreadStore
 from substrate.types import TextBlock
 
 logger = setup_logging()
@@ -24,7 +24,7 @@ async def load_memory_for_thread(
     *,
     thread_id: str,
     system_instructions: str,
-    history: HistoryProvider | None,
+    history: ThreadStore | None,
     conversation_service_url: str,
 ) -> object:
     """Wrap the shared history cache so it self-heals from the conversation

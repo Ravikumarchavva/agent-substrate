@@ -10,7 +10,7 @@ from anthropic import AsyncAnthropic
 
 from substrate.integrations.llm.anthropic.anthropic_client import AnthropicClient
 from substrate.models import ModelCapabilities
-from substrate.testing.conformance.llm_client import LLMClientConformance
+from substrate.testing.conformance.chat_model import ChatModelConformance
 
 CAPS = ModelCapabilities(model_id="conformance-claude", input_modalities=frozenset({"text", "image"}))
 
@@ -64,7 +64,7 @@ class Messages:
         return httpx.Response(status, json={"type": "error", "error": {"type": kind, "message": message}}, headers=headers)
 
 
-class TestAnthropicClient(LLMClientConformance):
+class TestAnthropicClient(ChatModelConformance):
     @pytest.fixture
     def provider(self):
         return Messages()

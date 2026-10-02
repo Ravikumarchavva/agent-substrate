@@ -25,7 +25,7 @@ from substrate.agents import ReActAgent
 from substrate.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.agent_catalog import AgentCatalog
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 
 # Infrastructure:
 # - OPENAI_API_KEY environment variable required
@@ -40,7 +40,7 @@ def _make_agent(user_id: str) -> ReActAgent:
     catalog.register_model(
         "primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY)
     )
-    catalog.register_memory("memory", LocalFilesystemHistoryProvider())
+    catalog.register_memory("memory", LocalFilesystemThreadStore())
     for t in [CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(t)
 
@@ -123,7 +123,7 @@ async def main() -> None:
     # user/session ID and use RedisMemory for persistence across process
     # restarts:
     #
-    #   from substrate.integrations.history import RedisHistoryProvider
+    #   from substrate.integrations.history import RedisThreadStore
     #
     #   REDIS_URL = "redis://localhost:6379/0"
     #

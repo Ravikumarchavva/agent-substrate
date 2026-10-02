@@ -9,7 +9,7 @@ see the workspace plan's Context section for why the old mechanism never
 actually took effect).
 
 There is no rename here: renaming a branch changes ``Branch.name`` (a
-display label) in ``HistoryProvider``, never ``Branch.id`` — the workspace
+display label) in ``ThreadStore``, never ``Branch.id`` — the workspace
 snapshot chain is keyed by the immutable branch id and needs no touching on
 a rename. (The two ``rename_branch_snapshot`` methods that used to exist on
 ``WorkspaceStore`` implementations were dead code for exactly this reason —
@@ -18,15 +18,15 @@ removed, not fixed.)
 
 from __future__ import annotations
 
-from substrate.stores.threads import HistoryProvider
-from substrate.stores.files import ObjectStore
+from substrate.stores.threads import ThreadStore
+from substrate.stores.files import FileStore
 from substrate.workspace.protocols import WorkspaceSnapshot, WorkspaceStore
 
 from .layout import conversation_workspace_prefix
 
 
 async def resolve_workspace_snapshot_id(
-    history: HistoryProvider, node_id: str | None
+    history: ThreadStore, node_id: str | None
 ) -> str | None:
     """Walk a DAG node's ancestry to find the nearest turn-boundary snapshot.
 
@@ -79,7 +79,7 @@ async def fork_branch(
 
 
 async def delete_branch_workspace(
-    object_store: ObjectStore,
+    object_store: FileStore,
     *,
     tenant_id: str,
     user_id: str,

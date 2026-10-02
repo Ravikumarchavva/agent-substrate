@@ -23,7 +23,7 @@ from substrate.agents import ReActAgent
 from substrate.tools.builtin_tools import WebSearchTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.agent_catalog import AgentCatalog
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.messages._types import TextDeltaChunk
 
 # Infrastructure:
@@ -43,7 +43,7 @@ async def main() -> None:
     catalog.register_model(
         "primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY)
     )
-    catalog.register_memory("memory", LocalFilesystemHistoryProvider())
+    catalog.register_memory("memory", LocalFilesystemThreadStore())
     catalog.register_tool(WebSearchTool())
 
     agent = ReActAgent(

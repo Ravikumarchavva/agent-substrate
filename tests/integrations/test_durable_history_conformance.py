@@ -6,18 +6,18 @@ import os
 
 import pytest
 
-from substrate.integrations.history import DurableHistoryProvider
-from substrate.testing.conformance.history_provider import HistoryProviderConformance
+from substrate.integrations.history import DurableThreadStore
+from substrate.testing.conformance.thread_store import ThreadStoreConformance
 
 pytestmark = [pytest.mark.requires_postgres]
 
 _URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb")
 
 
-class TestDurableHistoryProvider(HistoryProviderConformance):
+class TestDurableThreadStore(ThreadStoreConformance):
     @pytest.fixture
     async def store(self):
-        provider = DurableHistoryProvider(_URL)
+        provider = DurableThreadStore(_URL)
         try:
             await provider.connect()
         except Exception as exc:  # noqa: BLE001

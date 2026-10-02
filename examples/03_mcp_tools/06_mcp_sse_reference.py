@@ -17,7 +17,7 @@ import asyncio
 from substrate.integrations.tools.mcp.client import MCPClient
 from substrate.integrations.tools.mcp.tool import MCPTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.context import project_messages
 from substrate.types import ChatMessage, Role, TextBlock
 from substrate.models import GenerationOptions
@@ -61,7 +61,7 @@ async def main():
             model=settings.CHAT_MODEL.split("/")[-1], api_key=settings.OPENAI_API_KEY
         )
         session_id = "mcp-sse-demo"
-        memory = LocalFilesystemHistoryProvider()
+        memory = LocalFilesystemThreadStore()
 
         user_node = MessageNode(
             session_id=session_id,

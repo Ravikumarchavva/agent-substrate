@@ -13,7 +13,7 @@ from substrate.models.modalities import fit_to_capabilities
 from substrate.models.registry import resolve_capabilities
 from substrate.types import RunMeta
 from substrate.types.finish_reason import FinishReason
-from substrate.models import GenerationOptions, LLMClient, LLMResponse, ModelCapabilities, ReasoningEffort
+from substrate.models import GenerationOptions, ChatModel, LLMResponse, ModelCapabilities, ReasoningEffort
 from substrate.types import Usage
 from substrate.types import ChatMessage, ContentBlock
 from substrate.tools import Tool, is_hosted_tool, is_provider_defined_tool
@@ -71,7 +71,7 @@ def gemini_finish_reason(reason: object, *, has_tool_calls: bool) -> FinishReaso
         return FinishReason.ERROR if name != "OTHER" else FinishReason.OTHER
     return FinishReason.OTHER
 
-class GeminiClient(LLMClient):
+class GeminiClient(ChatModel):
     """Google Gemini API client — text and vision.
 
     Uses the ``google-genai`` SDK for all operations:

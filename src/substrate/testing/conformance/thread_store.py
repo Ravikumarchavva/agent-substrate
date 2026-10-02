@@ -1,4 +1,4 @@
-"""Conformance suite for ``HistoryProvider``.
+"""Conformance suite for ``ThreadStore``.
 
 Every implementation — in-memory, local filesystem, Postgres, any a consumer writes — runs exactly
 these tests: the DAG's integrity rules, optimistic concurrency on branch heads, fork semantics, and
@@ -12,7 +12,7 @@ import pytest
 from substrate.types.content import ChatMessage, Role
 from substrate.types.errors import BranchAlreadyExistsError, BranchHeadConflictError, BranchNotFoundError
 from substrate.types.ids import new_id
-from substrate.stores.threads import HistoryCheckpoint, HistoryProvider, MessageNode
+from substrate.stores.threads import HistoryCheckpoint, ThreadStore, MessageNode
 
 
 def node(session: str, text: str, parent: MessageNode | None = None) -> MessageNode:
@@ -27,19 +27,19 @@ def node(session: str, text: str, parent: MessageNode | None = None) -> MessageN
 _SESSIONS = ("s", "t", "other", "mine", "theirs", "a", "b", "bystander", "x' OR '1'='1", "a'; DROP TABLE t; --", "../../etc/passwd", "a/b\\c", "..", "ünï-çødé")
 
 
-class HistoryProviderConformance:
+class ThreadStoreConformance:
     @pytest.fixture
-    async def store(self) -> HistoryProvider:  # pragma: no cover - supplied by subclasses
+    async def store(self) -> ThreadStore:  # pragma: no cover - supplied by subclasses
         raise NotImplementedError
 
     @pytest.fixture(autouse=True)
-    async def _clean_slate(self, store: HistoryProvider) -> None:
+    async def _clean_slate(self, store: ThreadStore) -> None:
         """Tests name their sessions, so a store that outlives a test (a database) must not carry
         one test's sessions into the next."""
         for session in _SESSIONS:
             await store.delete_session(session)
 
-    async def chain(self, store: HistoryProvider, session: str, n: int, branch: str = "main") -> list[MessageNode]:
+    async def chain(self, store: ThreadStore, session: str, n: int, branch: str = "main") -> list[MessageNode]:
         await store.ensure_branch(session, branch)
         nodes: list[MessageNode] = []
         for i in range(n):
@@ -49,34 +49,34 @@ class HistoryProviderConformance:
 
     # ==================================================================== nodes
 
-    async def test_a_node_round_trips(self, store: HistoryProvider) -> None:
+    async def test_a_node_round_trips(self, store: ThreadStore) -> None:
         n = node("s", "hello")
         await store.append_node(n)
         got = await store.get_node(n.id)
         assert got is not None and got.id == n.id and got.session_id == "s" and got.payload.text == "hello"
 
-    async def test_a_missing_node_is_none(self, store: HistoryProvider) -> None:
+    async def test_a_missing_node_is_none(self, store: ThreadStore) -> None:
         assert await store.get_node("nope") is None
 
-    async def test_appending_the_same_node_twice_is_idempotent(self, store: HistoryProvider) -> None:
+    async def test_appending_the_same_node_twice_is_idempotent(self, store: ThreadStore) -> None:
         n = node("s", "x")
         await store.append_node(n)
         await store.append_node(n)
         assert (await store.get_node(n.id)).payload.text == "x"
 
-    async def test_a_node_cannot_be_overwritten_with_different_content(self, store: HistoryProvider) -> None:
+    async def test_a_node_cannot_be_overwritten_with_different_content(self, store: ThreadStore) -> None:
         n = node("s", "original")
         await store.append_node(n)
         with pytest.raises(ValueError):
             await store.append_node(n.model_copy(update={"payload": ChatMessage(role=Role.USER, content="forged")}))
         assert (await store.get_node(n.id)).payload.text == "original"
 
-    async def test_a_node_cannot_be_its_own_parent(self, store: HistoryProvider) -> None:
+    async def test_a_node_cannot_be_its_own_parent(self, store: ThreadStore) -> None:
         n = node("s", "x")
         with pytest.raises(ValueError):
             await store.append_node(n.model_copy(update={"parent_id": n.id}))
 
-    async def test_a_node_needs_an_existing_parent_in_the_same_session(self, store: HistoryProvider) -> None:
+    async def test_a_node_needs_an_existing_parent_in_the_same_session(self, store: ThreadStore) -> None:
         other = node("other", "elsewhere")
         await store.append_node(other)
         with pytest.raises(ValueError):
@@ -86,43 +86,43 @@ class HistoryProviderConformance:
 
     # ==================================================================== branches
 
-    async def test_ensure_branch_creates_once_and_returns_the_same_branch(self, store: HistoryProvider) -> None:
+    async def test_ensure_branch_creates_once_and_returns_the_same_branch(self, store: ThreadStore) -> None:
         first = await store.ensure_branch("s", "main")
         again = await store.ensure_branch("s", "main")
         assert first.id == again.id == "main" and first.head_message_id is None
         assert [b.id for b in await store.list_branches("s")] == ["main"]
 
-    async def test_a_missing_branch_is_none(self, store: HistoryProvider) -> None:
+    async def test_a_missing_branch_is_none(self, store: ThreadStore) -> None:
         assert await store.get_branch("s", "nope") is None
 
-    async def test_append_and_advance_moves_the_head_and_bumps_the_version(self, store: HistoryProvider) -> None:
+    async def test_append_and_advance_moves_the_head_and_bumps_the_version(self, store: ThreadStore) -> None:
         nodes = await self.chain(store, "s", 3)
         branch = await store.get_branch("s", "main")
         assert branch.head_message_id == nodes[-1].id
         assert branch.version >= 3
 
-    async def test_append_and_advance_requires_the_node_to_extend_the_head(self, store: HistoryProvider) -> None:
+    async def test_append_and_advance_requires_the_node_to_extend_the_head(self, store: ThreadStore) -> None:
         nodes = await self.chain(store, "s", 2)
         stale = node("s", "branches off the first", nodes[0])
         with pytest.raises(BranchHeadConflictError):
             await store.append_and_advance(stale, "main")
         assert (await store.get_branch("s", "main")).head_message_id == nodes[-1].id
 
-    async def test_a_stale_expected_head_is_a_conflict(self, store: HistoryProvider) -> None:
+    async def test_a_stale_expected_head_is_a_conflict(self, store: ThreadStore) -> None:
         nodes = await self.chain(store, "s", 2)
         with pytest.raises(BranchHeadConflictError):
             await store.append_and_advance(node("s", "late", nodes[-1]), "main", expected_head_id=nodes[0].id)
         with pytest.raises(BranchHeadConflictError):
             await store.append_and_advance(node("s", "late", nodes[-1]), "main", expected_version=0)
 
-    async def test_set_branch_head_is_compare_and_set(self, store: HistoryProvider) -> None:
+    async def test_set_branch_head_is_compare_and_set(self, store: ThreadStore) -> None:
         nodes = await self.chain(store, "s", 3)
         moved = await store.set_branch_head("s", "main", nodes[0].id, expected_head_id=nodes[-1].id)
         assert moved.head_message_id == nodes[0].id
         with pytest.raises(BranchHeadConflictError):
             await store.set_branch_head("s", "main", nodes[1].id, expected_head_id=nodes[-1].id)
 
-    async def test_forking_copies_the_head_pointer(self, store: HistoryProvider) -> None:
+    async def test_forking_copies_the_head_pointer(self, store: ThreadStore) -> None:
         nodes = await self.chain(store, "s", 2)
         fork = await store.fork_branch("s", "main", "exp")
         assert fork.head_message_id == nodes[-1].id
@@ -130,12 +130,12 @@ class HistoryProviderConformance:
         assert (await store.get_branch("s", "main")).head_message_id == nodes[-1].id
         assert extended.head_message_id != nodes[-1].id
 
-    async def test_forking_from_an_ancestor_starts_there(self, store: HistoryProvider) -> None:
+    async def test_forking_from_an_ancestor_starts_there(self, store: ThreadStore) -> None:
         nodes = await self.chain(store, "s", 3)
         fork = await store.fork_branch("s", "main", "back", fork_from_message_id=nodes[0].id)
         assert fork.head_message_id == nodes[0].id and fork.forked_from_message_id == nodes[0].id
 
-    async def test_forking_from_a_node_that_is_not_an_ancestor_is_refused(self, store: HistoryProvider) -> None:
+    async def test_forking_from_a_node_that_is_not_an_ancestor_is_refused(self, store: ThreadStore) -> None:
         await self.chain(store, "s", 2)
         stranger = node("s", "off to the side")
         await store.append_node(stranger)
@@ -143,7 +143,7 @@ class HistoryProviderConformance:
             await store.fork_branch("s", "main", "bad", fork_from_message_id=stranger.id)
         assert await store.get_branch("s", "bad") is None
 
-    async def test_forking_needs_a_source_and_an_unused_name(self, store: HistoryProvider) -> None:
+    async def test_forking_needs_a_source_and_an_unused_name(self, store: ThreadStore) -> None:
         await self.chain(store, "s", 1)
         with pytest.raises(BranchNotFoundError):
             await store.fork_branch("s", "no-such", "x")
@@ -151,21 +151,21 @@ class HistoryProviderConformance:
         with pytest.raises(BranchAlreadyExistsError):
             await store.fork_branch("s", "main", "taken")
 
-    async def test_renaming_changes_the_display_name_only(self, store: HistoryProvider) -> None:
+    async def test_renaming_changes_the_display_name_only(self, store: ThreadStore) -> None:
         await store.ensure_branch("s", "main")
         renamed = await store.rename_branch("s", "main", "Primary")
         assert renamed.name == "Primary" and renamed.id == "main"
         with pytest.raises(BranchNotFoundError):
             await store.rename_branch("s", "no-such", "x")
 
-    async def test_deleting_a_branch_keeps_its_nodes(self, store: HistoryProvider) -> None:
+    async def test_deleting_a_branch_keeps_its_nodes(self, store: ThreadStore) -> None:
         nodes = await self.chain(store, "s", 2)
         await store.fork_branch("s", "main", "tmp")
         await store.delete_branch("s", "tmp")
         assert await store.get_branch("s", "tmp") is None
         assert await store.get_node(nodes[-1].id) is not None
 
-    async def test_the_main_branch_cannot_be_deleted_and_unknown_ones_are_a_no_op(self, store: HistoryProvider) -> None:
+    async def test_the_main_branch_cannot_be_deleted_and_unknown_ones_are_a_no_op(self, store: ThreadStore) -> None:
         await store.ensure_branch("s", "main")
         with pytest.raises(ValueError):
             await store.delete_branch("s", "main")
@@ -173,7 +173,7 @@ class HistoryProviderConformance:
 
     # ==================================================================== checkpoints
 
-    async def test_checkpoints_round_trip_and_list_per_session(self, store: HistoryProvider) -> None:
+    async def test_checkpoints_round_trip_and_list_per_session(self, store: ThreadStore) -> None:
         nodes = await self.chain(store, "s", 2)
         other = await self.chain(store, "t", 1)
         cp = HistoryCheckpoint(session_id="s", anchor_message_id=nodes[0].id, summary="so far", state={"k": 1})
@@ -186,7 +186,7 @@ class HistoryProviderConformance:
 
     # ==================================================================== sessions
 
-    async def test_sessions_are_isolated_and_deleting_one_leaves_the_other(self, store: HistoryProvider) -> None:
+    async def test_sessions_are_isolated_and_deleting_one_leaves_the_other(self, store: ThreadStore) -> None:
         mine = await self.chain(store, "mine", 2)
         theirs = await self.chain(store, "theirs", 2)
         await store.save_checkpoint(HistoryCheckpoint(session_id="mine", anchor_message_id=mine[0].id, summary="s"))
@@ -197,14 +197,14 @@ class HistoryProviderConformance:
         await store.delete_session("mine")  # idempotent
         await store.delete_session("never-existed")
 
-    async def test_the_same_branch_name_in_two_sessions_is_two_branches(self, store: HistoryProvider) -> None:
+    async def test_the_same_branch_name_in_two_sessions_is_two_branches(self, store: ThreadStore) -> None:
         a = await self.chain(store, "a", 1)
         b = await self.chain(store, "b", 2)
         assert (await store.get_branch("a", "main")).head_message_id == a[-1].id
         assert (await store.get_branch("b", "main")).head_message_id == b[-1].id
 
     @pytest.mark.parametrize("hostile", ["x' OR '1'='1", "a'; DROP TABLE t; --", "../../etc/passwd", "a/b\\c", "..", "ünï-çødé"])
-    async def test_a_hostile_session_or_branch_name_is_inert(self, store: HistoryProvider, hostile: str) -> None:
+    async def test_a_hostile_session_or_branch_name_is_inert(self, store: ThreadStore, hostile: str) -> None:
         bystander = await self.chain(store, "bystander", 1)
         mine = await self.chain(store, hostile, 2, branch="main")
         await store.fork_branch(hostile, "main", hostile)
@@ -215,4 +215,4 @@ class HistoryProviderConformance:
         assert mine  # silence unused
 
 
-__all__ = ["HistoryProviderConformance", "node"]
+__all__ = ["ThreadStoreConformance", "node"]

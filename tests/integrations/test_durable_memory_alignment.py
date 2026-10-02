@@ -14,7 +14,7 @@ from substrate.tools import ToolExecutionResult, ToolCallRequest
 
 from substrate.integrations.memory import DurableMemoryStore
 from substrate.context import project_messages
-from substrate.integrations.history import DurableHistoryProvider
+from substrate.integrations.history import DurableThreadStore
 from substrate.stores import MessageNode
 from substrate.integrations.vector import PgVectorStore
 from substrate.integrations.graph import AGEGraphStore
@@ -205,16 +205,16 @@ async def test_durable_memory_store_multimodal():
         await store.disconnect()
 
 
-# ── 3. DurableHistoryProvider Protocol Tests ────────────────────────────────
+# ── 3. DurableThreadStore Protocol Tests ────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_postgres_history_provider_conformance():
+async def test_postgres_thread_store_conformance():
     if not await check_db_available():
         pytest.skip("PostgreSQL database not available")
 
     db_url = get_db_url()
-    provider = DurableHistoryProvider(db_url)
+    provider = DurableThreadStore(db_url)
     await provider.connect()
 
     session_id = "sess-history-test"

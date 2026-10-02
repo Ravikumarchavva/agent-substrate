@@ -18,7 +18,7 @@ from substrate.models import GenerationOptions, LLMResponse
 from substrate.runtime import ChatPayload, Message
 
 
-class MockLLMClient:
+class MockChatModel:
     def __init__(self, responses: list[list[ContentBlock]]) -> None:
         self._queue = list(responses)
         self.model = "mock-model"
@@ -30,7 +30,7 @@ class MockLLMClient:
         *,
         options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
-        assert self._queue, "MockLLMClient: no more scripted responses"
+        assert self._queue, "MockChatModel: no more scripted responses"
         return LLMResponse(content=self._queue.pop(0), usage=Usage())
 
     async def _do_stream(
@@ -72,7 +72,7 @@ async def test_react_agent_post_turn_compaction_creates_checkpoint():
     )
     ctx_cfg = ContextConfig(history=history, coordinator=coordinator)
 
-    llm = MockLLMClient([
+    llm = MockChatModel([
         [TextBlock(text="Response to turn 1")],
         [TextBlock(text="Response to turn 2")],
     ])

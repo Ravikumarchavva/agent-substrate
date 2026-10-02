@@ -9,7 +9,7 @@ no kwargs soup.  One model, one key — done.
 
 System instructions are NOT passed through this layer.  They travel as an
 explicit ``system_instructions=`` kwarg on every ``generate()`` call (see
-``LLMClient.generate``).  The factory only handles connection wiring.
+``ChatModel.generate``).  The factory only handles connection wiring.
 
 Provider / model / cost table lives in ``substrate.models.models``.
 
@@ -60,7 +60,7 @@ from __future__ import annotations
 
 from typing import ClassVar, Optional, Any
 
-from substrate.models import EmbeddingClient, LLMClient
+from substrate.models import EmbeddingModel, ChatModel
 from substrate.models import ModelProfile, get_model_profile, list_models
 from substrate.logger import setup_logging
 
@@ -257,8 +257,8 @@ class LLMFactory:
     def build(
         self,
         **kwargs: Any,
-    ) -> LLMClient:
-        """Create and return the configured :class:`LLMClient`.
+    ) -> ChatModel:
+        """Create and return the configured :class:`ChatModel`.
 
         Args:
             **kwargs: Extra parameters passed to the client constructor
@@ -452,8 +452,8 @@ def build_client(
     api_key: Optional[str] = None,
     temperature: float = 0.7,
     **kwargs: Any,
-) -> LLMClient:
-    """Convenience: one-liner to build an LLMClient."""
+) -> ChatModel:
+    """Convenience: one-liner to build an ChatModel."""
     factory = LLMFactory(model=model, api_key=api_key or "sk-placeholder")
     return factory.build(temperature=temperature, **kwargs)
 
@@ -471,7 +471,7 @@ def create_model_client(
     openrouter_site_url: Optional[str] = None,
     openrouter_app_name: Optional[str] = None,
     **_kwargs: object,
-) -> LLMClient:
+) -> ChatModel:
     """Server helper: create a client from a multi-provider *api_keys* dict.
 
     Prefer ``LLMFactory(model, api_key).build()`` for direct use.
@@ -535,7 +535,7 @@ def create_embedding_client(
     api_keys: Optional[dict[str, str]] = None,
     dimensions: Optional[int] = None,
     base_url: Optional[str] = None,
-) -> EmbeddingClient:
+) -> EmbeddingModel:
     """Create an embedding client.
 
     Pass either ``api_key`` (direct) or ``api_keys`` dict (server multi-provider path).

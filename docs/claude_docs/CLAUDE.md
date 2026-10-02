@@ -15,7 +15,7 @@ The root `CLAUDE.md` links here — you should already be here if you followed i
 
 | File | Read it when... |
 |---|---|
-| [`architecture/kernel.md`](architecture/kernel.md) | You're touching `kernel/` — the engine, its runtime store, journal, budgets, tenancy, safety. Start here. |
+| [`architecture/kernel.md`](architecture/kernel.md) | You're touching the core (`types` … `agents`) — the engine, its runtime store, journal, budgets, tenancy, safety. Start here. |
 | [`architecture/invariants.md`](architecture/invariants.md) | You want to know which guarantees are *executed* tests rather than prose (generated; do not edit). |
 | [`architecture/hitl.md`](architecture/hitl.md) | You're touching human-in-the-loop: `ask_human`, tool approval, or the microservices `human_gate`. Explains all three mechanisms and why they currently diverge. |
 | [`architecture/prompt-and-skills.md`](architecture/prompt-and-skills.md) | You're adding/editing a system prompt section, a skill, a tool description, or a conditional instruction block in `chat_intents.py` — tells you which one owns a given piece of guidance, so it doesn't get restated in two places. |

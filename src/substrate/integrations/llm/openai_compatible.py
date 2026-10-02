@@ -1,6 +1,6 @@
-"""OpenAI-compatible Chat Completions client — the canonical default LLMClient.
+"""OpenAI-compatible Chat Completions client — the canonical default ChatModel.
 
-Implements the ``LLMClient`` kernel Protocol using the standard
+Implements the ``ChatModel`` kernel Protocol using the standard
 ``/v1/chat/completions`` endpoint.  Works with any provider that speaks
 this API — Groq, OpenRouter, Ollama, vLLM, LM Studio, Together,
 Fireworks, Mistral, DeepSeek, and vanilla OpenAI itself — including a
@@ -590,7 +590,7 @@ class OpenAICompatibleClient:
             return []
         return [DataBlock(data=parsed.model_dump(mode="json"))]
 
-    # ── LLMClient Protocol ────────────────────────────────────────────────────
+    # ── ChatModel Protocol ────────────────────────────────────────────────────
 
     async def generate(
         self,

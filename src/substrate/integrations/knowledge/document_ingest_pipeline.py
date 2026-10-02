@@ -15,7 +15,7 @@ Composes existing agent-substrate pieces without reimplementing any of them:
     ``backends/local.py``'s ``_store_image_bytes``/``_rehydrate_image``.
 
 Distinct from ``RAGPipeline`` (pipeline.py): that one is text-only, driven
-by the generic ``EmbeddingClient`` Protocol. This starts from raw PDF files
+by the generic ``EmbeddingModel`` Protocol. This starts from raw PDF files
 and produces multimodal (text + real image) ``Document`` objects via the
 multimodal-specific ``EmbeddingReranker``.
 

@@ -21,7 +21,7 @@ from substrate.models.modalities import fit_to_capabilities
 from substrate.models.registry import resolve_capabilities
 from substrate.types import RunMeta
 from substrate.types.finish_reason import FinishReason
-from substrate.models import GenerationOptions, LLMClient, LLMResponse, ModelCapabilities, ReasoningEffort
+from substrate.models import GenerationOptions, ChatModel, LLMResponse, ModelCapabilities, ReasoningEffort
 from substrate.types import Usage
 from substrate.types import ChatMessage, ContentBlock
 from substrate.tools import Tool, is_hosted_tool, is_provider_defined_tool
@@ -153,7 +153,7 @@ def responses_finish_reason(response: object, content: list) -> FinishReason:
             return FinishReason.REFUSAL
     return FinishReason.STOP if status in ("completed", None) else FinishReason.OTHER
 
-class OpenAIClient(LLMClient):
+class OpenAIClient(ChatModel):
     """OpenAI API client — text, vision, and audio in one place.
 
     A single ``AsyncOpenAI`` instance is used for all operations:

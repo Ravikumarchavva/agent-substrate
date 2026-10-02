@@ -46,7 +46,7 @@ class ReasoningEffort(StrEnum):
 
 class ModelCapabilities(KernelModel):
     """What a model can accept and what it costs — exposed by every
-    ``LLMClient`` as ``client.capabilities``.
+    ``ChatModel`` as ``client.capabilities``.
 
     ``input_modalities`` is what the model can actually *see*. Clients drop
     content outside it (replacing it with a text note) before encoding, so
@@ -98,11 +98,11 @@ class ModelCapabilities(KernelModel):
 
 @dataclass(frozen=True, slots=True)
 class LLMResponse:
-    """Return value of ``LLMClient.generate()``."""
+    """Return value of ``ChatModel.generate()``."""
 
     content: list[ContentBlock]
     usage: Usage
-    # Priced by the harness from ``LLMClient.capabilities`` — clients leave it 0.
+    # Priced by the harness from ``ChatModel.capabilities`` — clients leave it 0.
     cost_usd: float = 0.0
     finish_reason: FinishReason = FinishReason.UNSPECIFIED
     # The provider's own id for this response — what a support ticket needs.
@@ -147,7 +147,7 @@ class GenerationOptions:
 
 
 @runtime_checkable
-class LLMClient(Protocol):
+class ChatModel(Protocol):
     """Contract every LLM provider adapter must satisfy.
 
     ``capabilities`` describes what the model can see and what it costs. A
@@ -191,7 +191,7 @@ class LLMClient(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class EmbeddingResult:
-    """Return value of ``EmbeddingClient.embed()``."""
+    """Return value of ``EmbeddingModel.embed()``."""
 
     embeddings: list[list[float]]
     model: str
@@ -199,7 +199,7 @@ class EmbeddingResult:
 
 
 @runtime_checkable
-class EmbeddingClient(Protocol):
+class EmbeddingModel(Protocol):
     """Contract every embedding provider adapter must satisfy."""
 
     async def embed(self, texts: list[str]) -> EmbeddingResult: ...
@@ -211,9 +211,9 @@ class EmbeddingClient(Protocol):
 
 __all__ = [
     "GenerationOptions",
-    "LLMClient",
+    "ChatModel",
     "LLMResponse",
-    "EmbeddingClient",
+    "EmbeddingModel",
     "EmbeddingResult",
     "Usage",
     "Modality",

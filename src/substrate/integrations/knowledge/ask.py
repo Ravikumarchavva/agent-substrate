@@ -15,7 +15,7 @@ Two distinct filter layers — a real design decision, not incidental:
     instead of hoping semantic search alone surfaces that exact page.
 
 The multimodal counterpart to ``RAGPipeline.query_with_context`` (pipeline.py)
-— that one is text-only via the generic ``EmbeddingClient`` Protocol; this
+— that one is text-only via the generic ``EmbeddingModel`` Protocol; this
 takes the multimodal ``EmbeddingReranker`` and mixes text + image results.
 
 Usage::
@@ -43,7 +43,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from substrate.models import LLMClient
+    from substrate.models import ChatModel
     from substrate.stores import SearchResult, VectorStore
     from substrate.runtimes.embedding_reranker.service.embedding import (
         EmbeddingReranker,
@@ -132,7 +132,7 @@ async def list_catalog(
 
 
 async def _decide_kb_filter(
-    llm_client: LLMClient,
+    llm_client: ChatModel,
     question: str,
     catalog: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
@@ -234,7 +234,7 @@ async def ask(
     *,
     store: VectorStore,
     embedder: EmbeddingReranker,
-    llm_client: LLMClient,
+    llm_client: ChatModel,
     collection: str,
     user_filter: dict[str, Any] | None = None,
     use_kb_filter: bool = True,

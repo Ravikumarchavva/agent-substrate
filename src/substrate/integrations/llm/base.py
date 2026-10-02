@@ -14,7 +14,7 @@ class BaseEmbeddingClient:
     """Convenience base for concrete embedding provider integrations.
 
     Subclasses implement ``embed()``; ``embed_single`` and ``embed_batch``
-    are derived from it, satisfying the ``EmbeddingClient`` Protocol.
+    are derived from it, satisfying the ``EmbeddingModel`` Protocol.
     """
 
     def __init__(

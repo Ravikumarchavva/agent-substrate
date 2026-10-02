@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from substrate.models.protocols import EmbeddingClient, LLMClient
+from substrate.models.protocols import EmbeddingModel, ChatModel
 
-__all__ = ["LLMClient", "EmbeddingClient"]
+__all__ = ["ChatModel", "EmbeddingModel"]

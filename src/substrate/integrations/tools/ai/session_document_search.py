@@ -22,7 +22,7 @@ from substrate.integrations.knowledge.citations import CitationLedgerStore
 from substrate.integrations.knowledge.result_rendering import render_search_results
 from substrate.types import TextBlock
 from substrate.types import scope_of
-from substrate.models import EmbeddingClient, LLMClient
+from substrate.models import EmbeddingModel, ChatModel
 from substrate.stores import SearchResult
 from substrate.tools import ToolExecutionResult, ToolType
 from substrate.logger import setup_logging
@@ -82,8 +82,8 @@ class SessionDocumentSearchTool:
     def __init__(
         self,
         cfg,
-        embedding_client: EmbeddingClient,
-        model_client: LLMClient,
+        embedding_client: EmbeddingModel,
+        model_client: ChatModel,
     ) -> None:
         self._cfg = cfg
         self._embedding_client = embedding_client

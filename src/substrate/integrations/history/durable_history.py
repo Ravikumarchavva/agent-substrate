@@ -1,4 +1,4 @@
-"""DurableHistoryProvider — PostgreSQL-backed durable conversation history.
+"""DurableThreadStore — PostgreSQL-backed durable conversation history.
 
 Durable, queryable persistence for conversation DAGs using SQLAlchemy 2.0 async ORM.
 
@@ -287,11 +287,11 @@ def _checkpoint_from_row(row: HistoryCheckpointRecord) -> HistoryCheckpoint:
 
 
 # ---------------------------------------------------------------------------
-# DurableHistoryProvider
+# DurableThreadStore
 # ---------------------------------------------------------------------------
 
 
-class DurableHistoryProvider:
+class DurableThreadStore:
     """Async PostgreSQL-backed conversation-DAG history provider.
 
     Parameters:
@@ -334,19 +334,19 @@ class DurableHistoryProvider:
         migrated = await self._migrate_legacy_messages()
         if migrated:
             logger.info("Migrated %d legacy linear session(s) into the DAG", migrated)
-        logger.info("DurableHistoryProvider connected and tables ensured")
+        logger.info("DurableThreadStore connected and tables ensured")
 
     async def disconnect(self) -> None:
         if self._engine is not None:
             await self._engine.dispose()
             self._engine = None
             self._session_factory = None
-            logger.info("DurableHistoryProvider disconnected")
+            logger.info("DurableThreadStore disconnected")
 
     def _get_session(self) -> async_sessionmaker[AsyncSession]:
         if self._session_factory is None:
             raise RuntimeError(
-                "DurableHistoryProvider not connected. Call await connect() first."
+                "DurableThreadStore not connected. Call await connect() first."
             )
         return self._session_factory
 
@@ -832,7 +832,7 @@ def _session_id_from_storage_key(storage_key: str) -> str | None:
 
 
 __all__ = [
-    "DurableHistoryProvider",
+    "DurableThreadStore",
     "HistoryBase",
     "HistorySession",
     "HistoryMessage",

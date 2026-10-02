@@ -10,7 +10,7 @@ from substrate.types.errors import MiddlewareTermination
 from substrate.middleware._contracts import MiddlewareContext
 
 if TYPE_CHECKING:
-    from substrate.models.protocols import LLMClient
+    from substrate.models.protocols import ChatModel
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +30,10 @@ class LLMJudgeMiddleware:
     def __init__(
         self,
         *,
-        model_client: LLMClient,
+        model_client: ChatModel,
         judge_prompt: str | None = None,
     ):
-        self._model_client: LLMClient = model_client
+        self._model_client: ChatModel = model_client
         self._judge_prompt = judge_prompt or self._DEFAULT_JUDGE_PROMPT
 
     async def process(

@@ -13,7 +13,7 @@ from substrate.models.modalities import fit_to_capabilities
 from substrate.models.registry import resolve_capabilities
 from substrate.types import RunMeta
 from substrate.types.finish_reason import FinishReason
-from substrate.models import GenerationOptions, LLMClient, LLMResponse, ModelCapabilities, ReasoningEffort
+from substrate.models import GenerationOptions, ChatModel, LLMResponse, ModelCapabilities, ReasoningEffort
 from substrate.types import Usage
 from substrate.types import ChatMessage, ContentBlock
 from substrate.tools import Tool, is_hosted_tool, is_provider_defined_tool
@@ -66,7 +66,7 @@ def anthropic_finish_reason(stop_reason: str | None) -> FinishReason:
         return FinishReason.UNSPECIFIED
     return _ANTHROPIC_FINISH.get(stop_reason, FinishReason.OTHER)
 
-class AnthropicClient(LLMClient):
+class AnthropicClient(ChatModel):
     """Anthropic Claude API client — text and vision.
 
     Uses the ``anthropic`` SDK (``AsyncAnthropic``) for all operations:

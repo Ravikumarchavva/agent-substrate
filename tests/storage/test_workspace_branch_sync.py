@@ -9,7 +9,7 @@ from substrate.stores import WorkspaceFileStore, WorkspaceQuotaExceededError
 
 @pytest.mark.asyncio
 async def test_workspace_branch_file_synchronization_and_isolation(tmp_path: Path):
-    """copy_prefix as a generic ObjectStore primitive, still used for cases
+    """copy_prefix as a generic FileStore primitive, still used for cases
     outside conversation-branch forking (e.g. duplicating a workspace) even
     after Phase 3 switches branch forking itself to the O(1) CAS-manifest
     fork instead of copying bytes."""

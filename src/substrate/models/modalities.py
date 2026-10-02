@@ -1,6 +1,6 @@
 """Fit a conversation to what a model can actually see.
 
-Every ``LLMClient`` runs its messages through ``fit_to_capabilities`` before
+Every ``ChatModel`` runs its messages through ``fit_to_capabilities`` before
 encoding: any ``MediaBlock`` — in a user turn or inside a tool result — whose
 modality isn't in ``capabilities.input_modalities`` is replaced by a short
 text note, so a text-only model is told something was there instead of the

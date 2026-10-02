@@ -14,7 +14,7 @@ import asyncio
 from substrate.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from substrate.integrations.tools.mcp import MCPClient, MCPTool
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.stores import LocalFilesystemHistoryProvider
+from substrate.stores import LocalFilesystemThreadStore
 from substrate.messages.client_messages import UserMessage, SystemMessage, ToolExecutionResultMessage
 
 
@@ -50,7 +50,7 @@ async def main():
         client = OpenAIClient(
             model=settings.CHAT_MODEL.split("/")[-1], api_key=settings.OPENAI_API_KEY
         )
-        memory = LocalFilesystemHistoryProvider()
+        memory = LocalFilesystemThreadStore()
 
         # System message
         await memory.add_message(

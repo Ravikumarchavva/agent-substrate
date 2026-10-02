@@ -29,8 +29,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from substrate.config import SubstrateConfig
 from substrate.types import Actor
-from substrate.models import EmbeddingClient, LLMClient
-from substrate.stores import HistoryProvider
+from substrate.models import EmbeddingModel, ChatModel
+from substrate.stores import ThreadStore
 from substrate.tools import Tool, ToolRisk, is_hosted_tool, is_provider_defined_tool
 from substrate.logger import setup_logging
 
@@ -41,12 +41,12 @@ logger = setup_logging()
 
 
 @dataclass
-class LLMClients:
+class ChatModels:
     api_keys: dict[str, str]
     model_client_kwargs: dict[str, Any]
-    model_client: LLMClient
+    model_client: ChatModel
     chat_model: str
-    embedding_client: EmbeddingClient
+    embedding_client: EmbeddingModel
 
 
 @dataclass
@@ -94,7 +94,7 @@ class RuntimeServices:
 # ── LLM clients ───────────────────────────────────────────────────────────────
 
 
-def init_llm_clients(cfg: SubstrateConfig) -> LLMClients:
+def init_llm_clients(cfg: SubstrateConfig) -> ChatModels:
     """Create LLM model client, embedding client, and related config."""
     from substrate.integrations.llm.factory import (
         CHAT_MODEL_FALLBACKS,
@@ -136,7 +136,7 @@ def init_llm_clients(cfg: SubstrateConfig) -> LLMClients:
         startup_chat_model, api_keys=api_keys, **model_client_kwargs
     )
     embedding_client = create_embedding_client(cfg.EMBEDDING_MODEL, api_keys=api_keys)
-    return LLMClients(
+    return ChatModels(
         api_keys=api_keys,
         model_client_kwargs=model_client_kwargs,
         model_client=model_client,
@@ -216,7 +216,7 @@ def _init_pending_file_store(cfg: SubstrateConfig) -> Any:
 
 async def init_infrastructure(
     cfg: SubstrateConfig,
-    embedding_client: EmbeddingClient,
+    embedding_client: EmbeddingModel,
     *,
     engine: AsyncEngine,
     session_factory: async_sessionmaker,
@@ -410,7 +410,7 @@ async def init_tool_registry(
 ) -> ToolboxResult:
     """Create all tools and return a registry.
 
-    ``file_store`` (an ``ObjectStore``) and ``workspace_store`` (a kernel
+    ``file_store`` (an ``FileStore``) and ``workspace_store`` (a kernel
     ``WorkspaceStore``) are both needed to stage the code interpreter's
     branch workspace around every run — see ``StagedSandboxRuntime``, which
     now always wraps the sandbox runtime, not just for object-storage
@@ -739,11 +739,11 @@ async def resume_pending_runs(runtime: Any, *, registry: Any, model_client: Any)
 async def build_agent_for_thread(
     thread_id: uuid.UUID,
     *,
-    model_client: LLMClient,
+    model_client: ChatModel,
     tools: List[Tool],
     system_instructions: str,
     cfg: SubstrateConfig,
-    history: Optional[HistoryProvider] = None,
+    history: Optional[ThreadStore] = None,
     short_term_memory: Any = None,
     long_term_memory: Any = None,
     user_id: str | None = None,
@@ -789,7 +789,7 @@ async def build_agent_for_thread(
     this factory stays a leaf callers depend on, not a hub that reaches back
     into the rest of ``serving/``.
 
-    ``history`` (the shared HistoryProvider) is provided to the agent
+    ``history`` (the shared ThreadStore) is provided to the agent
     for session conversation history.
 
     ``bridge`` (the per-thread ``WebHITLBridge``, when given) wires
@@ -823,15 +823,15 @@ async def build_agent_for_thread(
         system_instructions = system_instructions.rstrip() + "\n\n" + memory_context
 
     if history is None:
-        from substrate.stores import LocalFilesystemHistoryProvider
+        from substrate.stores import LocalFilesystemThreadStore
 
-        history = LocalFilesystemHistoryProvider()
+        history = LocalFilesystemThreadStore()
         await history.connect()
     # Everything the agent reads or writes of the conversation goes through the tenant's bound handle.
     from substrate.types import Scope
-    from substrate.stores import bind_history
+    from substrate.stores import bind_threads
 
-    memory = bind_history(history, Scope(tenant_id=tenant_id or "default"))
+    memory = bind_threads(history, Scope(tenant_id=tenant_id or "default"))
 
     memory_tool = build_memory_tool(session_id, short_term_memory, long_term_memory)
     if memory_tool is not None:
@@ -880,10 +880,10 @@ def register_assistant_actor_factory(
     *,
     bridge_registry: Any,
     toolbox: Any,
-    model_client: LLMClient,
+    model_client: ChatModel,
     system_instructions: str,
     cfg: SubstrateConfig,
-    history: Optional[HistoryProvider] = None,
+    history: Optional[ThreadStore] = None,
     short_term_memory: Any = None,
     long_term_memory: Any = None,
     model_context_window: int = 40,
@@ -966,23 +966,23 @@ async def build_history_provider(
     max_messages: int = 200,
     local_path: str = "./data/db/sessions",
 ) -> Any:
-    """Build the shared HistoryProvider.
+    """Build the shared ThreadStore.
 
-    Uses DurableHistoryProvider when database_url is provided, else
-    LocalFilesystemHistoryProvider (JSON files in ``local_path``).
+    Uses DurableThreadStore when database_url is provided, else
+    LocalFilesystemThreadStore (JSON files in ``local_path``).
     The filesystem backend survives process restarts without requiring
     a running Postgres instance — 100% durable by default.
     """
     if database_url:
-        from substrate.integrations.history.durable_history import DurableHistoryProvider
+        from substrate.integrations.history.durable_history import DurableThreadStore
 
-        provider = DurableHistoryProvider(database_url=database_url)
+        provider = DurableThreadStore(database_url=database_url)
         await provider.connect()
         return provider
 
-    from substrate.stores import LocalFilesystemHistoryProvider
+    from substrate.stores import LocalFilesystemThreadStore
 
-    provider = LocalFilesystemHistoryProvider(root=local_path)
+    provider = LocalFilesystemThreadStore(root=local_path)
     await provider.connect()
     logger.info("History backend: local filesystem at %s", local_path)
     return provider
@@ -1320,9 +1320,9 @@ async def build_cached_history_for_thread(
     """Return the history provider for this thread."""
     if history is not None:
         return history
-    from substrate.stores import LocalFilesystemHistoryProvider
+    from substrate.stores import LocalFilesystemThreadStore
 
-    provider = LocalFilesystemHistoryProvider()
+    provider = LocalFilesystemThreadStore()
     await provider.connect()
     return provider
 

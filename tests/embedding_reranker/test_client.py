@@ -137,7 +137,7 @@ async def test_close_is_idempotent():
     await client.close()  # must not raise on a second call
 
 
-# ── EmbeddingRerankerTextEmbeddingClient (kernel EmbeddingClient adapter) ──
+# ── EmbeddingRerankerTextEmbeddingClient (kernel EmbeddingModel adapter) ──
 
 
 async def test_adapter_embed_batches_via_repeated_embed_text_calls():
@@ -246,7 +246,7 @@ async def test_embed_blocks_raises_on_unresolved_media_url():
 
 async def test_adapter_embed_raises_on_underlying_failure_not_silent_none():
     """Unlike the raw client's own embed_text() (which returns None on
-    failure for callers built to skip-and-continue), the EmbeddingClient
+    failure for callers built to skip-and-continue), the EmbeddingModel
     Protocol has no None-return contract -- an adapter caller expects a
     real EmbeddingResult or an exception, so a failure must raise."""
 

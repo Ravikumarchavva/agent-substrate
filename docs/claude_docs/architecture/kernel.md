@@ -1,29 +1,39 @@
-# The kernel — the engine
+# The core — the engine
 
 `substrate` is the engine: everything needed to run a durable agent. It is not a
 thin layer of contracts under a separate runtime; it does the work. What it needs from the
-outside world is declared in `kernel/abstractions`, and everything that touches the outside
-world — vendors, databases, HTTP — sits above it.
+outside world is declared by contracts inside each concept (`protocols.py`, the store contracts), and
+everything that touches the outside world — vendors, databases, HTTP — sits above it.
+
+One folder per concept, the contracts beside their built-in implementation, ordered bottom-up. A concept imports
+only the ones before it:
 
 ```
-kernel/abstractions   ports + value types. Pure: stdlib + pydantic. What an adapter implements.
-kernel/               the engine, built on those ports
-  agents/             RoutedAgent (+ @handle), ReActAgent, OrchestratorAgent, UserProxyAgent, flows' base
-  runtime/            Runtime, Worker, Journal, RunContext, SqlRuntimeStore (+ SQLite adapter)
-  telemetry/          spans and metrics at every chokepoint (opentelemetry-api only)
-  llm/                capability registry, modality fitting, error classification
-  context/ tools/ middleware/ limits/ safety/ storage/ workspace/ flows/ document/
-  testing/            conformance suites and doubles; never imported by production code
-evals/                the eval harness, a client of the kernel (not part of it)
+types        content blocks, messages, ids, usage, errors, run scope, supervision/budgets, run log
+telemetry    spans and metrics at every chokepoint (opentelemetry-api only)
+tools        Tool contracts, approval, chaining policy, skills, Toolbox
+models       ChatModel/EmbeddingModel, capability registry, modality fitting, error classification
+stores       History/Memory/Vector/Graph/Object/Task contracts; local/ = the folder implementations; scoped.py = tenant binding
+documents    DocumentExtractor/Chunker contracts, local document store
+workspace    branching, snapshots, content-addressed files
+safety       classifier contracts, text normalisation
+context      the context window, compaction, history (the linear view of a thread)
+middleware   Middleware contract, built-ins, guardrails
+runtime      RuntimeStore, Runtime, Worker, Journal, RunContext, SQLite adapter
+agents       RoutedAgent (+ @handle), ReActAgent, OrchestratorAgent, UserProxyAgent, flows, spawn limits
+testing      conformance suites and doubles; never imported by production code
+-------
+evals/                the eval harness, a client of the core (not part of it)
 integrations/ runtimes/   adapters: vendor LLM clients, Postgres/Redis/S3/Lance stores, MCP, tools
 serving/ console/ cli     wiring: FastAPI apps, the REPL, the CLI
 ```
 
 Enforced by `uv run lint-imports` (four contracts) and `tests/invariants/test_structure.py`:
-the kernel imports nothing above it; its only third-party imports are pydantic,
-`opentelemetry-api`, `confusable_homoglyphs` and `typing_extensions`; `abstractions` never
-imports the engine; adapters use `abstractions` and the engine's named support libraries
-(see the contract's comment in `pyproject.toml`), never `agents/context/flows/middleware/limits`.
+the core imports nothing outside itself and only imports downward; its only third-party imports are pydantic,
+`opentelemetry-api`, `confusable_homoglyphs` and `typing_extensions`; the contracts (`tests/_layout.py`) never
+import the engine; adapters use the contracts and the engine's named support libraries
+(see the contract's comment in `pyproject.toml`), never `agents`, the context window internals or middleware implementations.
+Import a public name from its concept package (`from substrate.runtime import Runtime`).
 
 ## Running an agent
 
@@ -72,11 +82,11 @@ test. The crash matrix (`tests/invariants/_harness/crash.py`) fails every durabl
 once, as a recoverable error and as a killed worker, and asserts the guarantees after recovery.
 A guarantee not yet true is `xfail(strict=True)` naming what fixes it.
 
-Conformance suites live in `kernel/testing/conformance/` and are run by every implementation of
+Conformance suites live in `testing/conformance/` and are run by every implementation of
 their port: `RuntimeStore` (SQLite, Postgres), `MemoryStore` (local, Postgres, Lance), `VectorStore` (local,
-pgvector, LanceDB), `HistoryProvider` (local, Postgres), `ObjectStore` (workspace folder, S3), `TaskStore` (local,
-Postgres), `GraphStore` (local, Lance), `LLMClient` (OpenAI chat + Responses, Anthropic, Gemini — through each vendor's real SDK over a
-scripted HTTP transport), `EmbeddingClient` (OpenAI, Gemini, local sentence-transformers, embedding-reranker service),
+pgvector, LanceDB), `ThreadStore` (local, Postgres), `FileStore` (workspace folder, S3), `TaskStore` (local,
+Postgres), `GraphStore` (local, Lance), `ChatModel` (OpenAI chat + Responses, Anthropic, Gemini — through each vendor's real SDK over a
+scripted HTTP transport), `EmbeddingModel` (OpenAI, Gemini, local sentence-transformers, embedding-reranker service),
 `DocumentExtractor` (local, document-intelligence service). There is no in-memory store: the minimum a durable agent rests on is a folder.
 Row I30 fails the build if an implementation of a port that has a suite does not run it.
 
@@ -90,7 +100,7 @@ Row I30 fails the build if an implementation of a port that has a suite does not
   an id alone addresses nothing — ids are tenant-qualified, taking over another namespace's id raises
   `ScopeViolationError`, and cross-user reads need an explicit `TenantWide(reason=…)`. `erase(within)`
   removes everything under a tenant/user/agent/session, and the GDPR eraser reaches memory and the run journal.
-* **Every store port has a scope-bound handle.** `bind_history/vector/graph/objects/tasks(store, scope)`
+* **Every store port has a scope-bound handle.** `bind_threads/vector/graph/objects/tasks(store, scope)`
   (`stores/scoped.py`, written once over the ports so it holds for every implementation) places each
   session, collection, conversation, key and namespace under the tenant (percent-encoded, so no name can look like
   another tenant's), refuses ids that resolve elsewhere, and rejects object keys that could climb out. `fence_objects` keeps serving's absolute `tenants/<t>/...` keys but refuses anything outside the tenant or containing `..`;
@@ -105,11 +115,12 @@ Row I30 fails the build if an implementation of a port that has a suite does not
   `ContentFilterError`, `AuthError`; a reply cut off at the token limit is marked `run.truncated`.
 * **Approvals are attributable:** the decider and time are stamped server-side and journaled as
   `approval.decided`.
-* **Telemetry** is one mechanism (`kernel/telemetry`): a run span (parent = the context persisted at
+* **Telemetry** is one mechanism (`telemetry/`): a run span (parent = the context persisted at
   submission, so a trace survives leases, children and replays), handler, LLM and tool spans, GenAI
   + `substrate.*` conventions, content attributes dropped unless `SUBSTRATE_CAPTURE_CONTENT` is set.
 
 ## Not done yet
 
-Nothing is pending in the register (95 enforced, 0 pending). What remains is outside the kernel: the plugin registry and
-host package, the `runtimes/` restructure, and the distribution split (see the plan in `decisions.md`).
+Nothing is pending in the register. What remains is the shape of the rest of the library — see the plan:
+interface renames (`ChatModel`→`ChatModel`, `ThreadStore`→`ThreadStore`, …), library hygiene (core dependencies,
+logging), the server package, and the split of integrations into packages.

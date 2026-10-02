@@ -26,8 +26,8 @@ from substrate.context.context import ContextConfig
 from substrate.agents.spawn import SpawnTracker
 
 if TYPE_CHECKING:
-    from substrate.models.protocols import LLMClient
-    from substrate.stores.threads import HistoryProvider
+    from substrate.models.protocols import ChatModel
+    from substrate.stores.threads import ThreadStore
     from substrate.runtime.context import Agent, RunContext
 
 
@@ -78,7 +78,7 @@ class OrchestratorAgent(BaseAgent):
         self,
         name: str,
         *,
-        model: LLMClient | None = None,
+        model: ChatModel | None = None,
         sub_agents: list[SubAgentConfig] | None = None,
         context: ContextConfig | None = None,
         system_instructions: str = (
@@ -101,7 +101,7 @@ class OrchestratorAgent(BaseAgent):
         self._spawn_budget = spawn_budget or SpawnBudget()
 
     @property
-    def history(self) -> HistoryProvider:
+    def history(self) -> ThreadStore:
         return self._context.history
 
     @handle(ChatPayload, DataPayload)

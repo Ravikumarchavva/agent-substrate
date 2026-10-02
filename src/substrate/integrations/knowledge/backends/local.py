@@ -17,7 +17,7 @@ logger = setup_logging("substrate.knowledge.local")
 if TYPE_CHECKING:
     from substrate.runtimes.embedding_reranker.client import EmbeddingRerankerClient
     from substrate.integrations.knowledge.pipeline import RAGPipeline
-    from substrate.models import LLMClient
+    from substrate.models import ChatModel
     from substrate.stores import VectorStore
 
 # Extensions the local (no-extraction-service) fallback can read
@@ -42,7 +42,7 @@ class LocalRagBackend:
         embedding_reranker_auth_token: str = "",
         embedding_reranker_timeout_s: int = 30,
         reranker: Any | None = None,
-        model_client: "LLMClient | None" = None,
+        model_client: "ChatModel | None" = None,
         embedding_reranker_client: "EmbeddingRerankerClient | None" = None,
         file_store: Any | None = None,
         dense_k: int = 50,

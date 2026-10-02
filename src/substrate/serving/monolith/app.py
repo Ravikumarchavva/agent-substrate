@@ -12,7 +12,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from substrate.serving.shared.settings import settings
 from substrate.serving.factory import (
     Infrastructure,
-    LLMClients,
+    ChatModels,
     RuntimeServices,
     ToolboxResult,
     init_infrastructure,
@@ -82,7 +82,7 @@ async def lifespan(app: FastAPI):
     app.state.session_factory = session_factory
 
     # LLM clients
-    llm: LLMClients = init_llm_clients(settings)
+    llm: ChatModels = init_llm_clients(settings)
     app.state.model_client = llm.model_client
     app.state.model_client_kwargs = llm.model_client_kwargs
     app.state.chat_model = llm.chat_model

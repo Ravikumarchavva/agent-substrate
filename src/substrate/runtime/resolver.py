@@ -9,7 +9,7 @@ address and drop them when idle. Memory tracks the active working set, not the
 total entity count.
 
 Eviction is safe here because an agent object holds no durable state: a
-``ReActAgent`` loads conversation history from its ``HistoryProvider`` at the
+``ReActAgent`` loads conversation history from its ``ThreadStore`` at the
 start of every run and writes it back at the end, so the object itself carries
 only configuration. Rebuilding it from the factory produces an identical actor.
 """

@@ -33,6 +33,8 @@ Or with explicit auth::
 
 from __future__ import annotations
 
+import logging
+
 import math
 import time
 import uuid
@@ -40,11 +42,10 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
 
-from substrate.logger import setup_logging
 from substrate.serving.shared.auth.claims import AuthClaims
 from substrate.serving.shared.auth.middleware import optional_current_user
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def _client_ip(request: Request) -> str:

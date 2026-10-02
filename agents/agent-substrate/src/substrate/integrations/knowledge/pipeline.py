@@ -16,7 +16,8 @@ Usage::
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from typing import TYPE_CHECKING, Any
 
@@ -26,7 +27,7 @@ from substrate.stores import Document, SearchResult, VectorStore
 if TYPE_CHECKING:
     from substrate.models import ChatModel, EmbeddingModel as BaseEmbeddingClient
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class RAGPipeline:

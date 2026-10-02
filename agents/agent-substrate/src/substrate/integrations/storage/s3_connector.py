@@ -8,14 +8,15 @@ S3, or any other S3-compatible service (Garage, R2, ...)."""
 
 from __future__ import annotations
 
+import logging
+
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
     from aiobotocore.session import AioSession
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class _NoopClientContext:

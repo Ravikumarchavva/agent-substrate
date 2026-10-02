@@ -122,9 +122,51 @@ class ApprovalHandler(Protocol):
         ...
 
 
+def approval_signal(request_id: str) -> str:
+    """The name of the signal that carries a decision for ``request_id`` to the run waiting on it."""
+    return f"hitl:{request_id}"
+
+
+class DurableApproval:
+    """The approval handler for a human who may take hours, or live in another process.
+
+    The engine journals the request, puts the run to sleep — no thread or memory held, and it survives a restart — and
+    resumes it when the decision arrives as a signal: ``await runtime.decide(run_id, request_id, ...)`` from any process
+    on the same store. ``runtime.pending_approvals(run_id)`` lists what is waiting.
+    """
+
+    suspends_via_signal = True
+
+    async def request(self, req: ApprovalRequest) -> ApprovalResult:  # pragma: no cover - the durable path is taken
+        raise RuntimeError("DurableApproval waits for a signal (runtime.decide); it is never asked directly")
+
+
+class AutoApprove:
+    """A policy, not a person: approve every call whose risk is at most ``up_to``, deny anything above.
+
+    For scripts, tests and unattended agents that should be able to do some risky things and never the worst.
+    """
+
+    def __init__(self, up_to: ToolRisk = ToolRisk.HIGH, *, by: str = "policy") -> None:
+        self._up_to = up_to
+        self._by = by
+
+    async def request(self, req: ApprovalRequest) -> ApprovalResult:
+        allowed = req.risk <= self._up_to
+        return ApprovalResult(
+            decision=ApprovalDecision.APPROVED if allowed else ApprovalDecision.DENIED,
+            decided_by=self._by,
+            decided_at=datetime.now(tz=timezone.utc),
+            reason=f"risk {req.risk.value} is {'within' if allowed else 'above'} {self._up_to.value}",
+        )
+
+
 __all__ = [
     "ApprovalDecision",
     "ApprovalRequest",
     "ApprovalResult",
     "ApprovalHandler",
+    "AutoApprove",
+    "DurableApproval",
+    "approval_signal",
 ]

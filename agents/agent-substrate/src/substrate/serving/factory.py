@@ -18,6 +18,8 @@ substrate.integrations are permitted here.
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import os
 import uuid
@@ -32,9 +34,8 @@ from substrate.types import Actor
 from substrate.models import EmbeddingModel, ChatModel
 from substrate.stores import ThreadStore
 from substrate.tools import Tool, ToolRisk, is_hosted_tool, is_provider_defined_tool
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # ── Return containers ─────────────────────────────────────────────────────────

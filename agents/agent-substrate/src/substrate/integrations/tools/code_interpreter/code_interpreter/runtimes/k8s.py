@@ -19,15 +19,16 @@ call is offloaded with ``asyncio.to_thread``.
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from typing import Any
 
-from substrate.logger import setup_logging
 
 from ..sandbox_service import CodeInterpreterConfig, CodeInterpreterService
 from .base import ExecResult, NetworkPolicy, SandboxSpec
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class K8sRuntime:

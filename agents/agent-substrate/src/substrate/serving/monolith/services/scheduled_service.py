@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import time
 import uuid
 from datetime import datetime, timezone
@@ -11,7 +13,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from substrate.types import RunLogKind
-from substrate.logger import setup_logging
 from substrate.serving.shared.settings import settings
 from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
 from substrate.serving.factory import (
@@ -22,7 +23,7 @@ from substrate.runtime import Message, ChatPayload
 from substrate.types import ChatMessage as KernelChatMessage, Role, TextBlock as KernelTextBlock
 from substrate.types import Actor
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def format_lookback_context(runs: list[ScheduledTaskRun]) -> str:

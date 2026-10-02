@@ -15,13 +15,14 @@ for user-defined triggers, not internal housekeeping.
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import time
 from typing import Any, Protocol
 
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class _Reapable(Protocol):

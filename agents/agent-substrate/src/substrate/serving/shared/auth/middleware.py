@@ -1,7 +1,8 @@
 """FastAPI auth middleware and dependencies shared by all services."""
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from typing import Optional
 
@@ -11,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from substrate.serving.shared.auth.claims import AuthClaims
 from substrate.serving.shared.auth import jwt as jwt_utils
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _bearer = HTTPBearer(auto_error=False)
 

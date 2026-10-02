@@ -4,7 +4,8 @@ Entry point: uvicorn substrate.serving.services.job_controller.app:app --port 80
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import os
 from contextlib import asynccontextmanager
@@ -15,7 +16,7 @@ from substrate.serving.services.job_controller.models import ServiceBase
 from substrate.serving.services.job_controller.routes import router
 from substrate.serving.shared.events.factory import get_event_bus
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager

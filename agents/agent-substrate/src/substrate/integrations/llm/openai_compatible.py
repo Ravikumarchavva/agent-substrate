@@ -19,6 +19,8 @@ No inheritance from provider-specific clients.  Only imports:
 
 from __future__ import annotations
 
+import logging
+
 import base64
 import json
 import re
@@ -44,9 +46,8 @@ from substrate.types import (
     ToolUseBlock,
 )
 from substrate.types import CompletionEvent, ReasoningDelta, TextDelta
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _AUDIO_FORMATS = {"audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "audio/mp3": "mp3"}
 

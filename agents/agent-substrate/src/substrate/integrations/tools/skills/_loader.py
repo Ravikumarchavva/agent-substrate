@@ -21,7 +21,8 @@ SKILL.md format expected:
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from pathlib import Path
 from typing import Dict, List
@@ -30,7 +31,7 @@ import yaml
 
 from substrate.integrations.tools.skills._models import SkillPackage, SkillMetadata
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def _default_skill_dirs() -> List[Path]:

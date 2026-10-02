@@ -1,7 +1,8 @@
 """OpenAI model client implementation."""
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import io
 import json
@@ -35,7 +36,7 @@ from substrate.integrations.llm.encoders.openai import (
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 # ── MIME helper ───────────────────────────────────────────────────────────────
 

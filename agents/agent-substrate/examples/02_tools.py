@@ -1,11 +1,15 @@
 """Tools: let the agent act.
 
-A tool is any object with a name, a description, a JSON schema for its arguments, and an ``execute`` method. Two
+The easiest tool is a typed function with ``@tool``. The model sees a JSON schema built from the signature and the
+docstring, and a call with bad arguments goes back to the model as an error instead of crashing the run. Two
 declarations are required, because the engine acts on them:
 
 * ``risk`` — whether a human must approve a call (``SAFE`` runs freely; ``HIGH`` and above wait for a yes).
 * ``idempotent`` — whether a call that may or may not have happened (the process died mid-call) can safely be made
   again. If not, the run fails with the journaled intent for you to compensate from, rather than guessing.
+
+A tool can also be a class (any object with ``name``, ``description``, ``input_schema``, ``risk``, ``idempotent`` and
+``execute``) — see ``integrations/tools/compute/calculator.py``.
 
     uv run python examples/02_tools.py
 """
@@ -13,31 +17,24 @@ declarations are required, because the engine acts on them:
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from _model import ToolCall, pick_model
 
 from substrate.agents import ReActAgent
 from substrate.integrations.tools.compute.calculator import CalculatorTool
 from substrate.runtime import Runtime
-from substrate.tools import ToolExecutionResult, ToolRisk
-from substrate.types import RunLogKind, TextBlock
+from substrate.tools import ToolRisk, tool
+from substrate.types import RunLogKind
 
 
-class WordCount:
-    name = "word_count"
-    description = "Count the words in a piece of text."
-    input_schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {"text": {"type": "string", "description": "The text to count."}},
-        "required": ["text"],
-    }
-    risk = ToolRisk.SAFE
-    idempotent = True
-    concurrency_safe = True  # a pure read: several calls in one turn may run at the same time
+@tool(risk=ToolRisk.SAFE, idempotent=True, concurrency_safe=True)  # a pure read: several calls in one turn may overlap
+def word_count(text: str) -> int:
+    """Count the words in a piece of text.
 
-    async def execute(self, *, ctx: Any = None, text: str, **_: Any) -> ToolExecutionResult:
-        return ToolExecutionResult(name=self.name, content=[TextBlock(text=str(len(text.split())))])
+    Args:
+        text: The text to count.
+    """
+    return len(text.split())
 
 
 async def main() -> None:
@@ -48,7 +45,7 @@ async def main() -> None:
             ToolCall("calculator", {"expression": "6 * 7"}),
             "The phrase has 6 words, and 6 * 7 is 42.",
         ),
-        tools=[WordCount(), CalculatorTool()],
+        tools=[word_count, CalculatorTool()],
         system_instructions="Use the tools for counting and arithmetic.",
     )
 

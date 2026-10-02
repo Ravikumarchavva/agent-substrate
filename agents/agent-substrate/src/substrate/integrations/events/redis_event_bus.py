@@ -6,6 +6,8 @@ Lives in ``integrations`` because it is a Redis-backed adapter.
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from typing import Any, AsyncIterator, Optional, cast
 
@@ -13,10 +15,9 @@ import redis.asyncio as aioredis
 from opentelemetry import trace
 from opentelemetry.propagate import extract, inject
 
-from substrate.logger import setup_logging
 from substrate.integrations.events.envelope import EventEnvelope
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class EventBus:

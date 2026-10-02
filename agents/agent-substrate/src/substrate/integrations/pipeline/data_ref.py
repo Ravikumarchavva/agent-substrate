@@ -14,7 +14,8 @@ Usage::
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import json
 import time
@@ -22,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Union
 from uuid import uuid4
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _DEFAULT_TTL = 3600  # 1 hour
 _DEFAULT_SIZE_THRESHOLD = 1_048_576  # 1 MB

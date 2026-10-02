@@ -4,7 +4,8 @@ Entry point: uvicorn substrate.serving.services.identity.app:app --port 8010
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import os
 from contextlib import asynccontextmanager
@@ -17,7 +18,7 @@ from substrate.serving.shared.events.factory import get_event_bus
 
 import substrate.serving.services.identity.models  # noqa: F401 — register ORM models before create_all
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager

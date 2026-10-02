@@ -39,6 +39,7 @@ from substrate.runtime.resolver import (
     ActorResolver,
 )
 from substrate.runtime.runtime import (
+    PendingApproval,
     RunOutcome,
     Runtime,
 )
@@ -105,6 +106,7 @@ __all__ = [
     "Retry",
     "RunContext",
     "RunHandle",
+    "PendingApproval",
     "RunOutcome",
     "RunRecord",
     "RunResult",

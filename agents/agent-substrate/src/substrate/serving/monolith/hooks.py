@@ -12,7 +12,8 @@ Hooks:
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import asyncio
 import uuid
@@ -21,7 +22,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # ── Context objects passed to hooks ──────────────────────────────────────────

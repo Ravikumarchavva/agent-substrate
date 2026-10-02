@@ -9,6 +9,8 @@ Routes:
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import hashlib
 import io
@@ -34,7 +36,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from substrate.workspace.layout import conversation_shared_key, user_upload_key
 from substrate.stores import WorkspaceQuotaExceededError
 from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.logger import setup_logging
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import FileMetadata, Thread, User
@@ -58,7 +59,7 @@ from substrate.serving.shared.settings import settings
 from substrate.documents import ExtractionResult
 from substrate.runtimes.document_intelligence.extract import extract_document
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/files",

@@ -5,7 +5,8 @@ instead of maintaining its own JWT logic.
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
@@ -15,7 +16,7 @@ import jwt
 
 from substrate.serving.shared.auth.claims import AuthClaims
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _DEFAULT_ALG = "HS256"
 

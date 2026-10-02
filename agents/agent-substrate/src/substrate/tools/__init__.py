@@ -7,6 +7,9 @@ from substrate.tools.approval import (
     ApprovalHandler,
     ApprovalRequest,
     ApprovalResult,
+    AutoApprove,
+    DurableApproval,
+    approval_signal,
 )
 from substrate.tools.chain import (
     ChainCallRecord,
@@ -15,6 +18,7 @@ from substrate.tools.chain import (
     ChainRunResult,
     InvocationResult,
 )
+from substrate.tools.function import FunctionTool, tool
 from substrate.tools.protocols import (
     AnyTool,
     HostedTool,
@@ -44,10 +48,13 @@ __all__ = [
     "ApprovalHandler",
     "ApprovalRequest",
     "ApprovalResult",
+    "AutoApprove",
     "ChainCallRecord",
     "ChainFile",
     "ChainPolicy",
     "ChainRunResult",
+    "FunctionTool",
+    "DurableApproval",
     "HostedTool",
     "InvocationResult",
     "PayloadBase",
@@ -61,7 +68,9 @@ __all__ = [
     "ToolType",
     "ToolUI",
     "Toolbox",
+    "approval_signal",
     "is_concurrency_safe",
     "is_hosted_tool",
     "is_provider_defined_tool",
+    "tool",
 ]

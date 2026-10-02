@@ -18,6 +18,8 @@ Usage pattern:
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Awaitable, Callable, Dict
 
 from substrate.types import RunMeta, scope_of
@@ -26,10 +28,9 @@ from substrate.stores import bind_tasks
 from substrate.stores import TaskStatus
 from substrate.tools import ToolExecutionResult, ToolUI
 from substrate.types import TextBlock
-from substrate.logger import setup_logging
 from substrate.tools import ToolRisk
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class TaskManagerTool:

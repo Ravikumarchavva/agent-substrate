@@ -1,7 +1,8 @@
 """Identity Auth Service — business logic."""
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from typing import Optional
 
@@ -13,7 +14,7 @@ from substrate.serving.shared.auth import jwt as jwt_utils
 from substrate.integrations.events import EventBus
 from substrate.serving.shared.events import types as events
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 async def get_or_create_user(

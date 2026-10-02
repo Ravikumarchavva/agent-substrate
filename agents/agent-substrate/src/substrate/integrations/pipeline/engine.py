@@ -23,6 +23,8 @@ Usage::
 
 from __future__ import annotations
 
+import logging
+
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -31,9 +33,8 @@ from typing import Any, Dict, List, cast
 from substrate.integrations.pipeline.data_ref import DataRefStore
 from substrate.tools import Toolbox
 from substrate.tools import Tool, is_hosted_tool, is_provider_defined_tool
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 @dataclass

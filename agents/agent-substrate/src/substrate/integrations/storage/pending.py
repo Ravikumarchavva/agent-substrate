@@ -15,12 +15,13 @@ just which ``FileMetadata.promoted_at`` state the row is in.
 
 from __future__ import annotations
 
+import logging
+
 import time
 from pathlib import Path
 
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class PendingFileStore:

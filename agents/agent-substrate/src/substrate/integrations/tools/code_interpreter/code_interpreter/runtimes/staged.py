@@ -34,6 +34,8 @@ makes it safe for the local tree to be a container's ephemeral disk.
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from pathlib import Path
 from typing import Any
@@ -45,11 +47,10 @@ from substrate.workspace import commit_turn
 from substrate.types import SnapshotConflictError
 from substrate.stores import FileStore
 from substrate.workspace import WorkspaceStore
-from substrate.logger import setup_logging
 
 from .base import ExecResult, SandboxSpec
 
-logger = setup_logging("substrate.code_interpreter.staged")
+logger = logging.getLogger(__name__)
 
 
 class StagedSandboxRuntime:

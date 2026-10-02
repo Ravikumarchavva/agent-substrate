@@ -8,7 +8,8 @@ Routes:
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import uuid
 from typing import Any, Dict, Optional
@@ -27,7 +28,7 @@ from substrate.serving.services.human_gate.service import (
     resolve_request,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/hitl", tags=["hitl"])
 

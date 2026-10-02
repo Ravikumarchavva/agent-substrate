@@ -10,7 +10,8 @@ handlers.
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import json
 import substrate
@@ -67,7 +68,7 @@ from substrate.serving.monolith.routes.chat_context import (
     _build_file_context,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["chat"],

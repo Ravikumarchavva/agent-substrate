@@ -5,7 +5,8 @@ Uses Redis pub/sub to deliver responses back to the waiting agent.
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import json
 import uuid
@@ -23,7 +24,7 @@ from substrate.integrations.events.envelope import EventEnvelope
 if TYPE_CHECKING:
     from substrate.runtime import RuntimeStore
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # Redis channel pattern for HITL responses

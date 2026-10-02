@@ -13,16 +13,17 @@ cross-conversation memory without an auditable step.
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 from substrate.integrations.artifacts.store import ArtifactStore
 from substrate.types import TextBlock
 from substrate.types import RunScope, scope_of
 from substrate.tools import ToolExecutionResult, ToolType
-from substrate.logger import setup_logging
 from substrate.tools import ToolRisk
 
-logger = setup_logging("substrate.integrations.tools.artifacts")
+logger = logging.getLogger(__name__)
 
 _DEFAULT_SESSION = "default"
 

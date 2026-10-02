@@ -56,9 +56,8 @@ from substrate.serving.shared.observability.telemetry import (
     shutdown_opentelemetry,
 )
 from substrate.serving.shared.rate_limit import rate_limit_settings
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -262,7 +261,7 @@ async def lifespan(app: FastAPI):
         )
 
     for name in ("httpx", "urllib3", "openai"):
-        setup_logging().setLevel(logging.WARNING)
+        logging.getLogger(name).setLevel(logging.WARNING)
 
     # ── Load persistent scheduled tasks ──────────────────────────────────────
     from substrate.serving.monolith.services.scheduled_service import (

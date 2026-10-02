@@ -9,7 +9,8 @@ Integration pattern (agentskills.io spec):
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from pathlib import Path
 from typing import Any, Dict, List
@@ -17,7 +18,7 @@ from typing import Any, Dict, List
 from substrate.integrations.tools.skills._loader import SkillLoader
 from substrate.integrations.tools.skills._models import SkillPackage, SkillMetadata
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class SkillManager:

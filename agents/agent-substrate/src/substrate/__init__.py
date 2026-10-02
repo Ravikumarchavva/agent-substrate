@@ -9,9 +9,14 @@ Quick-start for client apps::
 
 from __future__ import annotations
 
+import logging
+
 from substrate.version import __version__
 
 from typing import TYPE_CHECKING
+
+# A library installs no handler of its own: the application decides where records go (``substrate.logger.setup_logging``).
+logging.getLogger("substrate").addHandler(logging.NullHandler())
 
 if TYPE_CHECKING:
     from substrate.integrations.llm.factory import LLMFactory, create_model_client

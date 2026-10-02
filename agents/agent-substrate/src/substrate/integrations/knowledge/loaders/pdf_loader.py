@@ -9,6 +9,8 @@ in stronger extraction without changing this loader.
 
 from __future__ import annotations
 
+import logging
+
 import hashlib
 import uuid
 from pathlib import Path
@@ -19,9 +21,8 @@ from substrate.documents import DocumentExtractor
 from substrate.integrations.knowledge.loaders.base import BaseDocumentLoader
 from substrate.types import TextBlock
 from substrate.stores import Document
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def _page_id(source: str, page_number: int, text: str) -> str:

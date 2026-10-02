@@ -13,7 +13,8 @@ POST /chat/{thread_id}/cancel
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import uuid
 
@@ -25,7 +26,7 @@ from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.services import get_owned_thread
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["chat"],

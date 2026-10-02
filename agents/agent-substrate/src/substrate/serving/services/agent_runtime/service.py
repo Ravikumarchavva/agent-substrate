@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+
 from substrate.types import RunLogKind
-from substrate.logger import setup_logging
 
 from substrate.serving.factory import (
     build_agent_for_run,
@@ -17,7 +18,7 @@ from substrate.runtime import ChatPayload, Message
 from substrate.stores import ThreadStore
 from substrate.types import TextBlock
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 async def load_memory_for_thread(

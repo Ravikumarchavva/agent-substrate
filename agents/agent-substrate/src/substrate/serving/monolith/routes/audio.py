@@ -13,7 +13,8 @@ override them.
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import asyncio
 import json
@@ -48,7 +49,7 @@ from substrate.serving.monolith.schemas import (
 )
 from substrate.serving.monolith.security.deps import get_current_user
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/audio",

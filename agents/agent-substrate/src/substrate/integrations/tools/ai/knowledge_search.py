@@ -11,16 +11,17 @@ clickable, grounded source for it.
 
 from __future__ import annotations
 
+import logging
+
 from substrate.types import scope_of
 from substrate.integrations.knowledge.backends import RagBackend
 from substrate.integrations.knowledge.citations import CitationLedgerStore
 from substrate.integrations.knowledge.result_rendering import render_search_results
 from substrate.types import TextBlock
 from substrate.tools import ToolExecutionResult, ToolType
-from substrate.logger import setup_logging
 from substrate.tools import ToolRisk
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeSearchTool:

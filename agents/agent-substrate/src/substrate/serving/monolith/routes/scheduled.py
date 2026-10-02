@@ -13,6 +13,8 @@ Routes:
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import json
 import re
@@ -24,7 +26,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.logger import setup_logging
 from substrate.serving.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
@@ -42,7 +43,7 @@ from substrate.serving.monolith.services.scheduled_service import execute_schedu
 from substrate.serving.monolith.services.thread_service import create_thread
 from substrate.serving.stream import append_user_message
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/scheduled",

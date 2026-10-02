@@ -6,13 +6,14 @@ required, keeping capabilities independent of the serving layer.
 
 from __future__ import annotations
 
+import logging
+
 import json
 from typing import Any
 
 from substrate.integrations.pipeline.engine import PipelineDef
-from substrate.logger import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class PipelineStore:

@@ -6,14 +6,15 @@ Routes:
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/stream", tags=["stream"])
 

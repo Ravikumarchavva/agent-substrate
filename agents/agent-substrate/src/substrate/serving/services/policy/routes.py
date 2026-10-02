@@ -9,7 +9,8 @@ POST /policy/seed           Seed default policies
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from typing import Any, Dict, Optional
 
@@ -19,7 +20,7 @@ from pydantic import BaseModel
 from substrate.serving.shared.auth.claims import AuthClaims
 from substrate.serving.shared.auth.middleware import get_current_user, require_role
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/policy", tags=["policy"])
 
 

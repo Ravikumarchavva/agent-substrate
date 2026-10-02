@@ -4,7 +4,8 @@ Entry point: uvicorn substrate.serving.services.tool_executor.app:app --port 801
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import os
 from contextlib import asynccontextmanager
@@ -15,7 +16,7 @@ from substrate.serving.services.tool_executor.executor import ToolRegistry
 from substrate.serving.services.tool_executor.routes import router
 from substrate.serving.shared.events.factory import get_event_bus
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def _load_default_tools(code_interpreter_tool=None, task_store=None) -> list:

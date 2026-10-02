@@ -13,7 +13,8 @@ Usage::
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 from typing import Any, Optional
 
@@ -21,7 +22,7 @@ from google import genai
 
 from substrate.integrations.llm.base import BaseEmbeddingClient, EmbeddingResult
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # ``batchEmbedContents`` accepts at most this many inputs in one request.

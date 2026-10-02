@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import logging
+
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from substrate.workspace.layout import user_prefix
 from substrate.types import MediaBlock, TextBlock
 from substrate.stores import Document, SearchResult
-from substrate.logger import setup_logging
 
 from .base import IngestResult
 
-logger = setup_logging("substrate.knowledge.local")
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from substrate.runtimes.embedding_reranker.client import EmbeddingRerankerClient

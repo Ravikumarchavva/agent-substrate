@@ -6,7 +6,8 @@ and delivers to connected clients.
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import asyncio
 import json
@@ -16,7 +17,7 @@ import redis.asyncio as aioredis
 
 from substrate.integrations.events import EventBus
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class StreamProjector:

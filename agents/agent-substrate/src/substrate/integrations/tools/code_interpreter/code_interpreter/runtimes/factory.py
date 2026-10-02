@@ -11,16 +11,17 @@ host, this raises rather than silently downgrading to an unisolated backend.
 
 from __future__ import annotations
 
+import logging
+
 import os
 
-from substrate.logger import setup_logging
 
 from ..sandbox_service import CodeInterpreterConfig
 from .base import NetworkPolicy, SandboxRuntime, SandboxUnavailableError
 from .inprocess import InProcessRuntime
 from .nsjail import NsjailRuntime
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def network_policy(raw: str) -> NetworkPolicy:

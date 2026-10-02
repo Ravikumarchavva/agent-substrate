@@ -25,6 +25,8 @@ bytes.
 
 from __future__ import annotations
 
+import logging
+
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -42,9 +44,8 @@ from substrate.integrations.artifacts.okf import (
 )
 from substrate.integrations.artifacts.okf import human_actor as okf_human_actor
 from substrate.workspace.layout import conversation_artifacts_prefix, user_artifacts_prefix
-from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.integrations.artifacts.store")
+logger = logging.getLogger(__name__)
 
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 _MAX_SLUG_LEN = 60

@@ -174,7 +174,8 @@
     "bind_vector",
     "connect",
     "fence_objects",
-    "migrate"
+    "migrate",
+    "vector_namespace"
   ],
   "substrate.documents": [
     "DocumentChunk",

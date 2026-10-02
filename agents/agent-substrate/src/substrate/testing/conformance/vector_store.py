@@ -137,4 +137,87 @@ class VectorStoreConformance:
         assert [d.to_text() for d in await store.get(["a"], collection="victim")] == ["victim"]
 
 
-__all__ = ["VectorStoreConformance"]
+class SearchableVectorStoreConformance(VectorStoreConformance):
+    """What a store that also searches by words — ``lexical_search`` and ``hybrid_search``, beyond the port — promises:
+    word forms match, a query is only ever words, the two rankings fuse by rank, and a vector with no direction scores
+    zero instead of breaking the search. A collection holds one width of vector."""
+
+    async def test_a_collection_holds_one_width_of_vector(self, store) -> None:
+        await store.add([Document.from_text("a", id="a", embedding=[1.0, 0.0])], collection="kb")
+        with pytest.raises(ValueError, match="2-wide"):
+            await store.add([Document.from_text("b", id="b", embedding=[1.0, 0.0, 0.0])], collection="kb")
+        # the refused write left nothing behind, and another collection is free to use another width
+        assert [d.id for d in await store.get(["a", "b"], collection="kb")] == ["a"]
+        await store.add([Document.from_text("c", id="c", embedding=[1.0, 0.0, 0.0])], collection="wide")
+
+    async def test_adding_does_not_replace_but_upserting_does(self, store) -> None:
+        await store.add([Document.from_text("first", id="d", embedding=[1.0, 0.0])], collection="kb")
+        await store.add([Document.from_text("second", id="d", embedding=[0.0, 1.0])], collection="kb")
+        assert (await store.get(["d"], collection="kb"))[0].to_text() == "first"
+        await store.upsert([Document.from_text("third", id="d", embedding=[0.0, 1.0])], collection="kb")
+        assert (await store.get(["d"], collection="kb"))[0].to_text() == "third"
+
+    async def test_upserting_one_id_twice_in_a_call_keeps_the_last(self, store) -> None:
+        ids = await store.upsert(
+            [
+                Document.from_text("first", id="dup", embedding=[1.0, 0.0]),
+                Document.from_text("second (should win)", id="dup", embedding=[1.0, 0.0]),
+            ],
+            collection="kb",
+        )
+        assert ids == ["dup", "dup"]
+        assert [d.to_text() for d in await store.get(["dup"], collection="kb")] == ["second (should win)"]
+
+    async def test_lexical_search_finds_stemmed_words_and_treats_the_query_as_words_only(self, store) -> None:
+        await store.add(
+            [
+                Document.from_text("Quarterly revenue grew while costs were running flat", id="a", embedding=[1.0, 0.0]),
+                Document.from_text("The cat sat on the mat", id="b", embedding=[0.0, 1.0]),
+            ],
+            collection="kb",
+        )
+        assert [r.id for r in await store.lexical_search("run revenue", collection="kb")] == ["a"]
+        for syntax in ['"', "revenue OR cat", "NEAR(a b)", "rev*", "text:cat", "-cat"]:
+            assert all(r.id in {"a", "b"} for r in await store.lexical_search(syntax, collection="kb"))
+        assert await store.lexical_search("OR OR", collection="kb") == []
+
+    async def test_a_metadata_filter_narrows_dense_and_lexical_search(self, store) -> None:
+        await store.add(
+            [
+                Document.from_text("invoice one", id="x", embedding=[1.0, 0.0], metadata={"file": "a"}),
+                Document.from_text("invoice two", id="y", embedding=[0.9, 0.1], metadata={"file": "b"}),
+            ],
+            collection="kb",
+        )
+        assert [r.id for r in await store.search([1.0, 0.0], collection="kb", filter={"file": "b"})] == ["y"]
+        assert [r.id for r in await store.lexical_search("invoice", collection="kb", filter={"file": "b"})] == ["y"]
+        assert await store.lexical_search("invoice", collection="kb", filter={"file": "zzz"}) == []
+
+    async def test_hybrid_search_surfaces_what_only_one_of_the_two_rankings_found(self, store) -> None:
+        """The fused score looks only at rank positions. A chunk the embedding misses but the words find (and the reverse)
+        is still returned, and one both rank well comes first."""
+        await store.add(
+            [
+                Document.from_text("invoice total due", id="both", embedding=[1.0, 0.0, 0.0]),
+                Document.from_text("invoice only by words", id="words", embedding=[0.0, 0.0, 1.0]),
+                Document.from_text("unrelated prose", id="vector", embedding=[0.9, 0.1, 0.0]),
+            ],
+            collection="kb",
+        )
+        results = await store.hybrid_search([1.0, 0.0, 0.0], "invoice", collection="kb")
+        assert [r.id for r in results][0] == "both"
+        assert {r.id for r in results} == {"both", "words", "vector"}
+        assert results[0].score > results[1].score
+        assert [r.id for r in await store.hybrid_search([1.0, 0.0, 0.0], "invoice", collection="kb", fused_k=1)] == ["both"]
+        assert await store.hybrid_search([1.0, 0.0, 0.0], "invoice", collection="kb", filter={"nope": 1}) == []
+
+    async def test_a_zero_vector_scores_zero_instead_of_breaking_the_search(self, store) -> None:
+        await store.add(
+            [Document.from_text("blank", id="z", embedding=[0.0, 0.0]), Document.from_text("x", id="x", embedding=[1.0, 0.0])],
+            collection="kb",
+        )
+        assert [r.id for r in await store.search([1.0, 0.0], collection="kb")] == ["x", "z"]
+        assert [r.score for r in await store.search([0.0, 0.0], collection="kb")] == [0.0, 0.0]
+
+
+__all__ = ["SearchableVectorStoreConformance", "VectorStoreConformance"]

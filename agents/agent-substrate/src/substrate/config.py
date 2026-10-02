@@ -54,18 +54,19 @@ class SubstrateConfig(BaseSettings):
     APP_DATABASE_URL: str = ""
     RLS_APP_ROLE_PASSWORD: str | None = None
 
-    # ── Durable runtime asyncpg pool ─────────────────────────────────────────
-    RUNTIME_PG_POOL_MIN_SIZE: int = 2
-    RUNTIME_PG_POOL_MAX_SIZE: int = 10
+    # ── The store's PostgreSQL pool and schema (STORE_BACKEND=postgres) ──────
+    STORE_PG_POOL_MIN_SIZE: int = 2
+    STORE_PG_POOL_MAX_SIZE: int = 10
+    STORE_PG_SCHEMA: str = "substrate"  # the engine's tables live here, apart from the application's
 
     # ── Redis ────────────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_SESSION_TTL: int = 3600
 
-    # ── Agent runtime backend ────────────────────────────────────────────────
-    # "postgres" (durable, network-distributed) | "local" (durable, no infra —
-    # one SQLite file under DATA_DIR) | "memory" (ephemeral/tests)
-    RUNTIME_BACKEND: str = "postgres"
+    # ── The store: everything the engine remembers ───────────────────────────
+    # "postgres" (workers on several machines; rows in DATABASE_URL) | "local" (no infra: one folder, STORE_PATH).
+    # File contents live under STORE_PATH either way unless FILE_STORE_BACKEND=s3.
+    STORE_BACKEND: str = "postgres"
     STORE_PATH: str = ""
 
     # ── Session / context ────────────────────────────────────────────────────

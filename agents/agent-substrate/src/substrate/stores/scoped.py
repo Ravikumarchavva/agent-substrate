@@ -30,8 +30,8 @@ def _tenant(scope: Scope) -> str:
 class _Prefixer:
     """Names under ``<tenant>/`` and back."""
 
-    def __init__(self, scope: Scope) -> None:
-        self.prefix = _tenant(scope) + "/"
+    def __init__(self, scope: Scope | None = None, *, prefix: str | None = None) -> None:
+        self.prefix = prefix if prefix is not None else _tenant(scope) + "/"  # type: ignore[arg-type]
 
     def add(self, name: str) -> str:
         return self.prefix + name
@@ -137,9 +137,9 @@ class _ScopedThreadStore:
 class _ScopedVectorStore:
     """A ``VectorStore`` whose collections all live inside its tenant."""
 
-    def __init__(self, inner: VectorStore, scope: Scope) -> None:
+    def __init__(self, inner: VectorStore, scope: Scope | None = None, *, prefix: str | None = None) -> None:
         self._inner = inner
-        self._p = _Prefixer(scope)
+        self._p = _Prefixer(scope, prefix=prefix)
 
     async def add(self, documents: list[Document], *, collection: str = "default") -> list[str]:
         return await self._inner.add(documents, collection=self._p.add(collection))
@@ -330,6 +330,12 @@ def bind_vector(store: VectorStore, scope: Scope) -> VectorStore:
     return _ScopedVectorStore(store, scope)
 
 
+def vector_namespace(store: VectorStore, name: str) -> VectorStore:
+    """``store``'s collections kept apart under ``name`` (e.g. image embeddings beside text ones in one store). The
+    prefix starts with a character a tenant's is never allowed (tenants are percent-encoded), so it cannot meet one."""
+    return _ScopedVectorStore(store, prefix=f"!{name}/")
+
+
 def bind_graph(store: GraphStore, scope: Scope) -> GraphStore:
     return _ScopedGraphStore(store, scope)
 
@@ -342,4 +348,4 @@ def bind_tasks(store: TaskStore, scope: Scope) -> TaskStore:
     return _ScopedTaskStore(store, scope)
 
 
-__all__ = ["bind_graph", "bind_tasks", "bind_threads", "bind_vector", "fence_objects"]
+__all__ = ["bind_graph", "bind_tasks", "bind_threads", "bind_vector", "fence_objects", "vector_namespace"]

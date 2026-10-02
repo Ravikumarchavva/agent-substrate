@@ -5,9 +5,9 @@ regression is traceable to *which* stage caused it, not just that the
 end-to-end number moved.
 
 Stages measured, in pipeline order:
-  1. Dense-only  (``PgVectorStore.search``)            → Recall@dense_k
-  2. Lexical-only (``PgVectorStore.lexical_search``)    → Recall@lexical_k
-  3. Hybrid (RRF-fused)  (``PgVectorStore.hybrid_search``) → Recall@fused_k
+  1. Dense-only  (``Vectors.search``)                   → Recall@dense_k
+  2. Lexical-only (``Vectors.lexical_search``)           → Recall@lexical_k
+  3. Hybrid (RRF-fused)  (``Vectors.hybrid_search``) → Recall@fused_k
   4. Pre-filter  (``reranker.prefilter_candidates``)    → Recall@rerank_top_n
   5. Reranker    (``CrossEncoderReranker``/``LLMReranker``) → NDCG@final_k
   6. Final       (whatever rerank produces)             → Recall@final_k
@@ -26,7 +26,7 @@ from tests.eval.dataset import EvalDataset
 from tests.eval.metrics import ndcg_at_k, recall_at_k
 
 if TYPE_CHECKING:
-    from substrate.integrations.vector.pgvector_store import PgVectorStore
+    from substrate.stores.vector_tables import Vectors
     from substrate.models import EmbeddingModel
 
 
@@ -53,7 +53,7 @@ def _average(values: list[float]) -> float:
 
 async def run_retrieval_eval(
     *,
-    store: "PgVectorStore",
+    store: "Vectors",
     embedding_client: "EmbeddingModel",
     dataset: EvalDataset,
     collection: str,

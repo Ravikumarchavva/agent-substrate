@@ -19,9 +19,8 @@ Directory layout::
     ├── pipeline/     ← declarative pipeline execution engine + DataRefStore/ArtifactStore
     ├── memory/       ← Postgres/Redis/Lance MemoryStore implementations
     ├── history/      ← Postgres ThreadStore implementation
-    ├── vector/       ← Postgres/LanceDB VectorStore implementations
-    ├── graph/        ← Apache AGE/LanceDB GraphStore implementations
-    ├── storage/      ← S3FileStore, PostgresWorkspaceStore
+    ├── database/     ← PostgresDatabase / postgres_store: the engine's state on PostgreSQL (pgvector for vectors)
+    ├── storage/      ← S3FileStore
     ├── safety/       ← TextSafetyClassifier, ImageSafetyClassifier
     ├── artifacts/    ← OKF artifact store
     ├── gdpr/         ← cross-store tenant erasure

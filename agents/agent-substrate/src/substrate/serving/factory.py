@@ -25,7 +25,7 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import Any, List, Optional, cast
 
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from substrate.config import SubstrateConfig
 from substrate.types import Actor
@@ -149,31 +149,33 @@ def init_llm_clients(cfg: SubstrateConfig) -> ChatModels:
 # ── Runtime ───────────────────────────────────────────────────────────────────
 
 
-async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None]:
-    """Build the agent runtime per ``cfg.RUNTIME_BACKEND``.
-
-    Returns ``(runtime, stack_or_None)`` — caller must close the stack on shutdown.
-    """
-    from substrate.runtime import Runtime
-
-    backend = cfg.RUNTIME_BACKEND.lower()
+def open_store(cfg: SubstrateConfig) -> Any:
+    """The one ``Store`` behind history, memory, tasks, vectors, files and the run journal, per ``cfg.STORE_BACKEND``."""
+    backend = cfg.STORE_BACKEND.lower()
     if backend == "postgres":
-        from substrate.integrations.runtime import PostgresRuntimeStore
+        from substrate.integrations.database import postgres_store
 
-        pg_url = (cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL).replace("+asyncpg", "")
-        store = PostgresRuntimeStore(
-            pg_url,
-            pool_min_size=cfg.RUNTIME_PG_POOL_MIN_SIZE,
-            pool_max_size=cfg.RUNTIME_PG_POOL_MAX_SIZE,
+        logger.info("Store: PostgreSQL (schema %s), files under %s", cfg.STORE_PG_SCHEMA, cfg.STORE_PATH)
+        return postgres_store(
+            (cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL).replace("+asyncpg", ""),
+            files=cfg.STORE_PATH,
+            schema=cfg.STORE_PG_SCHEMA,
+            file_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES,
+            pool_min_size=cfg.STORE_PG_POOL_MIN_SIZE,
+            pool_max_size=cfg.STORE_PG_POOL_MAX_SIZE,
         )
-        logger.info("Agent runtime: durable (Postgres)")
-    elif backend == "local":
+    if backend == "local":
         from substrate.stores import Store
 
-        store = Store.at(cfg.STORE_PATH)
-        logger.info("Agent runtime: durable, no infra (store at %s)", cfg.STORE_PATH)
-    else:
-        raise ValueError(f"RUNTIME_BACKEND must be 'postgres' or 'local', got {cfg.RUNTIME_BACKEND!r}")
+        logger.info("Store: folder %s", cfg.STORE_PATH)
+        return Store.at(cfg.STORE_PATH, file_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES)
+    raise ValueError(f"STORE_BACKEND must be 'postgres' or 'local', got {cfg.STORE_BACKEND!r}")
+
+
+async def init_runtime(store: Any) -> tuple[Any, AsyncExitStack | None]:
+    """The agent runtime, journaling into ``store``. Returns ``(runtime, stack)`` — the caller closes the stack on
+    shutdown, which stops the runtime (the store is closed separately, once)."""
+    from substrate.runtime import Runtime
 
     stack = AsyncExitStack()
     runtime = await stack.enter_async_context(Runtime(store))
@@ -215,13 +217,12 @@ async def init_infrastructure(
     cfg: SubstrateConfig,
     embedding_client: EmbeddingModel,
     *,
-    engine: AsyncEngine,
     session_factory: async_sessionmaker,
     model_client: Any = None,
 ) -> Infrastructure:
     """Create Redis, runtime, file store, vector store, RAG, and bridge registry.
 
-    ``engine`` and ``session_factory`` come from ``init_db()`` called in lifespan.
+    ``session_factory`` comes from ``init_db()`` called in lifespan.
     ``model_client`` is optional — only used by the "local" RAG backend for
     ``query_with_context`` and its optional reranker.
     """
@@ -230,12 +231,10 @@ async def init_infrastructure(
     from substrate.integrations.knowledge.backends import build_rag_backend
     from substrate.integrations.pipeline.data_ref import DataRefStore
     from substrate.integrations.tools.skills._manager import SkillManager
-    from substrate.integrations.vector.pgvector_store import PgVectorStore
     from substrate.serving.monolith.sse.bridge import BridgeRegistry
+    from substrate.stores import vector_namespace
 
-    from substrate.stores import Store
-
-    store = Store.at(cfg.STORE_PATH, file_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES)
+    store = open_store(cfg)
     history = store.threads
     from substrate.workspace import Workspaces
 
@@ -254,27 +253,15 @@ async def init_infrastructure(
 
     redis_client = aioredis.from_url(cfg.REDIS_URL, decode_responses=True)
 
-    runtime, runtime_stack = await init_runtime(cfg)
+    runtime, runtime_stack = await init_runtime(store)
 
     task_store: Any = store.tasks
 
-    vector_store = PgVectorStore(
-        session_factory=session_factory,
-        engine=engine,
-        dimensions=cfg.RAG_TEXT_EMBEDDING_DIM,
-    )
-    # Separate table for chart/table images — a different embedding model
-    # (the extraction service's SigLIP-family model) means a different
-    # vector dimensionality, and PgVectorStore's `vector({dimensions})`
-    # column is fixed per instance/table (see backends/local.py's module
-    # docstring). Built unconditionally; unused (never populated) when no
-    # extraction service is configured, so this costs nothing in that case.
-    image_store = PgVectorStore(
-        session_factory=session_factory,
-        engine=engine,
-        dimensions=cfg.RAG_IMAGE_EMBEDDING_DIM,
-        table_name="vector_records_images",
-    )
+    vector_store = store.vectors
+    # Chart/table images use a different embedding model (the extraction service's SigLIP-family one), so a different
+    # vector width: kept in their own namespace of the same store, since a collection holds one width. Never populated
+    # when no extraction service is configured.
+    image_store = vector_namespace(store.vectors, "images")
     # Built before the RAG backend, which takes it: extracted chart/table
     # images are written here rather than inlined into the image vector rows.
     file_store = await _init_file_store(cfg, store)
@@ -1083,9 +1070,9 @@ def build_session_graph_store(cfg: SubstrateConfig, tenant_id: str, user_id: str
     alongside ``build_session_index_vector_store``/``build_page_index_memory`` above.
 
     A store of its own in the user's index folder (``user_index_prefix``), so erasing a user's index is still removing
-    that one folder. Deliberately separate from the shared tenant-level ``AGEGraphStore``
-    (``integrations/graph/age_store.py``) used for any standing, cross-user knowledge graph — different scale,
-    different lifecycle. Reads span everything the user has ever had extracted.
+    that one folder. Deliberately separate from the shared store's ``graph`` (``Store.graph``), which would hold any
+    standing, cross-user knowledge graph — different scale, different lifecycle. Reads span everything the user has
+    ever had extracted.
     """
     from pathlib import Path
 

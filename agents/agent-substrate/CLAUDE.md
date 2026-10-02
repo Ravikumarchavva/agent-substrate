@@ -136,13 +136,10 @@ src/substrate/
 │   ├── tts/              text-to-speech provider adapters
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore (cache), CachedShortTermMemory, MemoryManager, exposure policy
-│   ├── vector/           PgVectorStore  (the PostgreSQL VectorStore; the folder store's is Store.vectors)
-│   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
-│   ├── storage/          S3Connector (raw client) + S3FileStore (FileStore Protocol
-│   │                     impl built on top), PostgresWorkspaceStore
-│   ├── database/         PostgresConnector (asyncpg pool — engine's own DB)
+│   ├── storage/          S3Connector (raw client) + S3FileStore (FileStore Protocol impl built on top)
+│   ├── database/         PostgresDatabase + postgres_store(dsn) (the engine's whole state on PostgreSQL/pgvector),
+│   │                     PostgresConnector (asyncpg pool for direct queries)
 │   ├── cache/            RedisConnector
-│   ├── runtime/          PostgresRuntimeStore (the RuntimeStore on asyncpg)
 │   ├── pipeline/         PipelineEngine, DataRef/DataRefArtifactStore, PipelineStore
 │   ├── triggers/         TriggerScheduler, WebhookRegistry, ConditionMonitor
 │   ├── safety/           TextSafetyClassifier, ImageSafetyClassifier (model-backed)
@@ -261,8 +258,7 @@ new orchestration in `agents/flows.py`, a new port in the concept that owns it *
 | A new LLM provider | `integrations/llm/<provider>/` — implement `ChatModel` (`models/protocols.py`); report a `FinishReason` and let `classify_llm_error` type its failures |
 | A new memory backend | `integrations/memory/<name>.py` — implement `MemoryStore` and run `MemoryStoreConformance` against it |
 | A new history backend | `integrations/history/<name>.py` — implement `ThreadStore` (`stores/threads.py`) |
-| A new vector store | `integrations/vector/<name>.py` — implement `VectorStore` (`stores/vector.py`) |
-| A new graph store | `integrations/graph/<name>.py` — implement `GraphStore` (`stores/graph.py`) |
+| A new vector or graph store | implement `VectorStore` (`stores/vector.py`) / `GraphStore` (`stores/graph.py`) and run its conformance suite — or, to put everything on another database, write a `Database` adapter (`stores/database.py`; see `integrations/database/postgres_database.py`) |
 | A new runtime store | implement `RuntimeStore` (`runtime/store.py`) — or a new `Database` adapter for `SqlRuntimeStore` — and run `RuntimeStoreConformance` against it |
 | A new document extractor | `integrations/document/<name>.py` — implement `DocumentExtractor` (`documents/protocols.py`) |
 | A new tool | `integrations/tools/<name>/tool.py` — implement `Tool`, **declaring `risk` and `idempotent`** (auto-scanned, no registration needed) |
@@ -426,12 +422,12 @@ Vector and graph store contracts live in the core (`stores/`). Concrete implemen
 from substrate.stores.vector import VectorStore, Document, SearchResult
 from substrate.stores.graph import GraphStore, Entity, Relationship, SubGraph
 
-# Implementations: the folder store's own (exact + full-text + hybrid search; graph by recursive query), or Postgres
+# Implementations: the store's own — on a folder, or on PostgreSQL (pgvector HNSW; graph by recursive query)
 from substrate.stores import Store
-from substrate.integrations.vector import PgVectorStore
-from substrate.integrations.graph import AGEGraphStore
+from substrate.integrations.database import postgres_store
 
 store = Store.at("./.substrate")          # store.vectors, store.graph — nothing else to install or start
+# store = postgres_store("postgresql://…")   # the same facets, for workers on several machines
 
 # High-level RAG pipeline
 from substrate.integrations.knowledge import RAGPipeline, GraphRAGPipeline
@@ -482,14 +478,16 @@ JWT_SECRET=<32+ char random string — required>
 # this host, no container) | "k8s" (one agent-sandbox pod per session) | "inprocess"
 SANDBOX_RUNTIME=nsjail
 
-# Agent runtime store: "postgres" (default, durable) or "local" (SQLite file, no infra).
-# There is no in-memory store anywhere: the floor is a folder (or a SQLite file). Runtime tests use
-# ephemeral_runtime() (substrate.testing) — the same code on a store in a throwaway folder.
-RUNTIME_BACKEND=postgres
+# The store — everything the engine remembers (runs, threads, memory, tasks, vectors, graph, files):
+# "postgres" (default; rows in DATABASE_URL, in their own schema) or "local" (one folder, STORE_PATH, no infra).
+# There is no in-memory store anywhere: the floor is a folder. Runtime tests use ephemeral_runtime()
+# (substrate.testing) — the same code on a store in a throwaway folder.
+STORE_BACKEND=postgres
+STORE_PG_SCHEMA=substrate
 
-# Durable runtime's own asyncpg pool (separate from the ORM engine's pool)
-RUNTIME_PG_POOL_MIN_SIZE=2
-RUNTIME_PG_POOL_MAX_SIZE=10
+# The store's own asyncpg pool (separate from the ORM engine's pool)
+STORE_PG_POOL_MIN_SIZE=2
+STORE_PG_POOL_MAX_SIZE=10
 ```
 
 **Rule:** Never add inline comments after integer values.

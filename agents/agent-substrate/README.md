@@ -201,10 +201,11 @@ tools = await MCPTool.from_mcp_client(client)   # list[MCPTool]
 ### Knowledge / RAG
 
 ```python
-from substrate.capabilities.vector import PgVectorStore
-from substrate.capabilities.knowledge import RAGPipeline
+from substrate.stores import Store
+from substrate.integrations.knowledge import RAGPipeline
 
-pipeline = RAGPipeline(embedding_client=embed_client, vector_store=PgVectorStore(...))
+store = Store.at("./.substrate")
+pipeline = RAGPipeline(embedding_client=embed_client, vector_store=store.vectors)
 await pipeline.ingest("Long document …", collection="kb")
 results = await pipeline.query("What is X?", collection="kb")
 ```

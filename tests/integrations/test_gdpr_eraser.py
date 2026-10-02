@@ -323,3 +323,56 @@ async def test_erasure_reaches_long_term_memory_and_the_run_journal(db: AsyncSes
             if row is not None:
                 await db.delete(row)
         await db.commit()
+
+
+@pytest.mark.requires_postgres
+async def test_erasure_reaches_the_conversation_history_tasks_vectors_and_graph(
+    db: AsyncSession, db_factory, cfg, tmp_path
+):
+    """The text of what was said lives in the thread DAG, and a session's notes in vectors and the graph: a
+    deletion request that left them behind did not satisfy it."""
+    from substrate.stores import Document, Entity, MessageNode, Store
+    from substrate.types import ChatMessage, Role
+
+    tenant, other_tenant = f"tenant-{uuid.uuid4()}", f"tenant-{uuid.uuid4()}"
+    thread = Thread(id=uuid.uuid4(), user_identifier="alice", tenant_id=tenant)
+    db.add(thread)
+    await db.commit()
+
+    folder = Store.at(tmp_path / "store")
+
+    async def fill(t: str, conversation: str) -> str:
+        view = folder.tenant(t)
+        node = MessageNode(session_id=conversation, payload=ChatMessage(role=Role.USER, content="alice-secret-sentence"))
+        await view.threads.append_node(node)
+        await view.tasks.create_task_list(conversation, ["a task"])
+        await view.vectors.add([Document.from_text("alice-secret-sentence", id="d", embedding=[1.0, 0.0])], collection="kb")
+        await view.graph.add_entities([Entity(id="e", label="P", name="alice")])
+        return node.id
+
+    mine = await fill(tenant, str(thread.id))
+    kept_node = await fill(other_tenant, "kept")
+
+    try:
+        user = await erase_user(
+            db, store=FakeStore(), redis=None, tenant_id=tenant, user_id="alice", cfg=cfg, folder=folder
+        )
+        assert user.thread_nodes_deleted == 1 and user.task_boards_deleted == 1
+        assert await folder.tenant(tenant).tasks.get_by_conversation(str(thread.id)) is None
+
+        whole = await erase_tenant(db, store=FakeStore(), redis=None, tenant_id=tenant, cfg=cfg, folder=folder)
+        assert whole.vectors_deleted == 1 and whole.graph_entities_deleted == 1
+        assert await folder.tenant(tenant).vectors.list_collections() == []
+        assert await folder.tenant(tenant).threads.get_node(mine) is None
+        assert (await folder.tenant(tenant).graph.get_neighbors("e")).entities == ()
+        # another tenant's conversation, tasks, vectors and graph are untouched
+        kept = folder.tenant(other_tenant)
+        assert await kept.tasks.get_by_conversation("kept") is not None
+        assert await kept.vectors.list_collections() == ["kb"]
+        assert await kept.threads.get_node(kept_node) is not None
+    finally:
+        row = await db.get(Thread, thread.id)
+        if row is not None:
+            await db.delete(row)
+            await db.commit()
+        await folder.aclose()

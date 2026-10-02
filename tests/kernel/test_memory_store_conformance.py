@@ -19,7 +19,11 @@ class TestMemory(MemoryStoreConformance):
 
     async def residue(self, store, needle):
         """Every file of the store — database, write-ahead log, files, indexes — scanned for the erased bytes."""
-        return [str(p) for p in self.root.rglob("*") if p.is_file() and needle.encode() in p.read_bytes()]
+        return [
+            str(p)
+            for p in self.root.rglob("*")
+            if p.is_file() and needle.encode() in p.read_bytes()
+        ]
 
 
 class TestSessionState(ShortTermMemoryConformance):

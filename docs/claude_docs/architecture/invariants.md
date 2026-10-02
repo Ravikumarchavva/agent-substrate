@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**107 enforced · 0 pending · 107 total**
+**109 enforced · 0 pending · 109 total**
 
 ## approvals
 
@@ -151,14 +151,18 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i03_graph_namespaces_cannot_be_escaped`
 - ✅ **i03 tasks of another tenant cannot be touched by board id**
   `test_i03_tasks_of_another_tenant_cannot_be_touched_by_board_id`
-- ✅ **i03 object keys cannot climb out of the tenant**
-  `test_i03_object_keys_cannot_climb_out_of_the_tenant`
-- ✅ **i03 object stores are per tenant with their own usage and erase**
-  `test_i03_object_stores_are_per_tenant_with_their_own_usage_and_erase`
 - ✅ **i03 a tenant whose name looks like another tenants prefix gets its own wall**
   `test_i03_a_tenant_whose_name_looks_like_another_tenants_prefix_gets_its_own_wall`
 - ✅ **i03 a fenced store keeps absolute keys but only inside its tenant**
   `test_i03_a_fenced_store_keeps_absolute_keys_but_only_inside_its_tenant`
+- ✅ **i04 erasing a tenant reaches every facet and no other tenant**
+  `test_i04_erasing_a_tenant_reaches_every_facet_and_no_other_tenant`
+- ✅ **i04 an erased tenants words are gone from the database file**
+  `test_i04_an_erased_tenants_words_are_gone_from_the_database_file`
+- ✅ **i04 erasing a tenant whose name is a prefix of another leaves the other alone**
+  `test_i04_erasing_a_tenant_whose_name_is_a_prefix_of_another_leaves_the_other_alone`
+- ✅ **i04 erasing one conversation leaves its neighbours**
+  `test_i04_erasing_one_conversation_leaves_its_neighbours`
 
 ## store
 

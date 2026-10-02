@@ -118,7 +118,9 @@ async def test_fork_is_o1_and_copies_zero_bytes(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_fork_then_write_on_fork_does_not_mutate_parent_branch(tmp_path: Path) -> None:
+async def test_fork_then_write_on_fork_does_not_mutate_parent_branch(
+    tmp_path: Path,
+) -> None:
     """The actual bug this package fixes: writing on a forked branch must
     never be visible on the branch it was forked from."""
     store = Store.at(tmp_path / "store", file_quota_bytes=1_000_000).files
@@ -154,7 +156,9 @@ async def test_fork_then_write_on_fork_does_not_mutate_parent_branch(tmp_path: P
     assert not (main_reread / "new_file.txt").exists()
 
     fork_reread = tmp_path / "fork_reread"
-    await checkout_branch(ws_store, cas, fork_reread, session_id="s1", branch_id="exp-1")
+    await checkout_branch(
+        ws_store, cas, fork_reread, session_id="s1", branch_id="exp-1"
+    )
     assert not (fork_reread / "data.csv").exists()
     assert (fork_reread / "new_file.txt").read_text() == "added on the fork"
 
@@ -176,8 +180,12 @@ async def test_concurrent_commit_to_same_branch_conflicts_not_silently_lost(
     parent = await ws_store.get_branch_snapshot_head("s1", "main")
     from substrate.workspace.materialize import commit as _commit_dir
 
-    snap_a = await _commit_dir(cas, root, session_id="s1", branch_id="main", parent=parent)
-    snap_b = await _commit_dir(cas, root, session_id="s1", branch_id="main", parent=parent)
+    snap_a = await _commit_dir(
+        cas, root, session_id="s1", branch_id="main", parent=parent
+    )
+    snap_b = await _commit_dir(
+        cas, root, session_id="s1", branch_id="main", parent=parent
+    )
 
     await ws_store.commit_snapshot(
         "s1", "main", snap_a, expected_parent_snapshot_id=parent.id

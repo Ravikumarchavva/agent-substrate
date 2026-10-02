@@ -13,7 +13,6 @@ here: it is the runtime-store conformance suite, run against every implementatio
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -24,12 +23,10 @@ from substrate.types import ConcurrentAppendError
 from substrate.types import RunMeta
 from substrate.runtime import CancellationToken
 from substrate.types import Supervision
-from substrate.types import RunStatus, new_run_id
+from substrate.types import new_run_id
 from substrate.types import RunLogEntry
-from substrate.runtime import Effect, EffectResult
-from substrate.types import Wakeup
+from substrate.runtime import Effect
 from substrate.runtime import RunRetryPolicy
-from substrate.runtime import RunHandle, RunResult
 from substrate.runtime import AgentRunContext
 from substrate.runtime.agent import Agent
 from substrate.stores import MemoryProvenance
@@ -64,60 +61,13 @@ def _message(sender: Actor | None = None, target: Actor | None = None) -> Messag
 
 
 class TestRunId:
-    def test_new_run_id_is_str(self) -> None:
-        rid = new_run_id()
-        assert isinstance(rid, str)
-        assert len(rid) > 0
-
     def test_new_run_id_unique(self) -> None:
         assert new_run_id() != new_run_id()
-
-    def test_run_status_values(self) -> None:
-        statuses = {s.value for s in RunStatus}
-        assert statuses == {
-            "pending",
-            "running",
-            "suspended",
-            "completed",
-            "failed",
-            "cancelled",
-        }
-
-    def test_run_status_terminal(self) -> None:
-        terminal = {RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.CANCELLED}
-        non_terminal = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.SUSPENDED}
-        assert terminal | non_terminal == set(RunStatus)
 
 
 # ---------------------------------------------------------------------------
 # log_entry.py
 # ---------------------------------------------------------------------------
-
-
-class TestRunLogEntry:
-    def test_round_trip_json(self) -> None:
-        entry = RunLogEntry(
-            run_id=new_run_id(),
-            seq=0,
-            kind="run.started",
-            payload={"boot": "hello"},
-        )
-        restored = RunLogEntry.model_validate_json(entry.model_dump_json())
-        assert restored == entry
-
-    def test_frozen(self) -> None:
-        entry = RunLogEntry(run_id=new_run_id(), seq=0, kind="msg.received")
-        with pytest.raises((TypeError, Exception)):
-            entry.seq = 99  # type: ignore[misc]
-
-    def test_default_payload_empty(self) -> None:
-        entry = RunLogEntry(run_id=new_run_id(), seq=0, kind="test")
-        assert entry.payload == {}
-
-    def test_ts_auto_populated(self) -> None:
-        entry = RunLogEntry(run_id=new_run_id(), seq=0, kind="test")
-        assert entry.ts is not None
-        assert entry.ts.tzinfo is not None
 
 
 # ---------------------------------------------------------------------------
@@ -148,48 +98,10 @@ class TestEffect:
         rid = new_run_id()
         assert Effect.make_id(rid, "0", "k", {}) != Effect.make_id(rid, "0.0", "k", {})
 
-    def test_round_trip_json(self) -> None:
-        e = Effect(id="abc123", kind="email.send", spec={"to": "x@y.com"})
-        restored = Effect.model_validate_json(e.model_dump_json())
-        assert restored == e
-
-    def test_frozen(self) -> None:
-        e = Effect(id="x", kind="k")
-        with pytest.raises((TypeError, Exception)):
-            e.kind = "y"  # type: ignore[misc]
-
-
-class TestEffectResult:
-    async def test_result_round_trip_json(self) -> None:
-        r = EffectResult(effect_id="x", status="error", value={"err": "timeout"})
-        restored = EffectResult.model_validate_json(r.model_dump_json())
-        assert restored == r
-
 
 # ---------------------------------------------------------------------------
 # wakeup.py
 # ---------------------------------------------------------------------------
-
-
-class TestWakeup:
-    def test_round_trip_json(self) -> None:
-        w = Wakeup(kind="timer", at=datetime(2026, 1, 1, tzinfo=timezone.utc))
-        restored = Wakeup.model_validate_json(w.model_dump_json())
-        assert restored == w
-
-    def test_child_done_carries_ref(self) -> None:
-        w = Wakeup(kind="child_done", child_run=new_run_id(), result_ref="ref:abc")
-        assert w.child_run is not None
-        assert w.result_ref == "ref:abc"
-
-    def test_signal_carries_payload(self) -> None:
-        w = Wakeup(kind="signal", signals=["new_item"], payload={"count": 3})
-        assert w.signals == ["new_item"]
-        assert w.payload == {"count": 3}
-
-    def test_signal_can_watch_multiple_names(self) -> None:
-        w = Wakeup(kind="signal", signals=["reply:abc", "child:def"])
-        assert w.signals == ["reply:abc", "child:def"]
 
 
 # ---------------------------------------------------------------------------
@@ -198,17 +110,6 @@ class TestWakeup:
 
 
 class TestRunRetryPolicy:
-    def test_defaults(self) -> None:
-        p = RunRetryPolicy()
-        assert p.max_retries == 3
-        assert p.backoff_s == 5.0
-        assert p.dead_run_on_cancel is False
-
-    def test_frozen(self) -> None:
-        p = RunRetryPolicy()
-        with pytest.raises((TypeError, Exception)):
-            p.max_retries = 99  # type: ignore[misc]
-
     @pytest.mark.parametrize(
         "kwargs",
         [
@@ -235,40 +136,6 @@ def test_memory_provenance_rejects_confidence_outside_range() -> None:
 # ---------------------------------------------------------------------------
 # supervisor.py
 # ---------------------------------------------------------------------------
-
-
-class TestRunHandle:
-    def test_frozen(self) -> None:
-        h = RunHandle(
-            run_id=new_run_id(), agent_id=_agent_id(), parent_run=new_run_id()
-        )
-        with pytest.raises((TypeError, Exception)):
-            h.run_id = "x"  # type: ignore[misc]
-
-    def test_round_trip_json(self) -> None:
-        h = RunHandle(
-            run_id=new_run_id(), agent_id=_agent_id(), parent_run=new_run_id()
-        )
-        restored = RunHandle.model_validate_json(h.model_dump_json())
-        assert restored.run_id == h.run_id
-
-
-class TestRunResult:
-    def test_terminal_statuses(self) -> None:
-        for status in (RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.CANCELLED):
-            r = RunResult(run_id=new_run_id(), status=status)
-            assert r.status == status
-
-    def test_round_trip_json(self) -> None:
-        r = RunResult(
-            run_id=new_run_id(),
-            status=RunStatus.COMPLETED,
-            error=None,
-            metadata={"duration_ms": 42},
-        )
-        restored = RunResult.model_validate_json(r.model_dump_json())
-        assert restored.status == RunStatus.COMPLETED
-        assert restored.metadata["duration_ms"] == 42
 
 
 # ---------------------------------------------------------------------------

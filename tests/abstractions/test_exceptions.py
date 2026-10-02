@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 
-from substrate.types import ContextLengthError, KernelError, PermanentError, SuspendInterrupt
+from substrate.types import (
+    ContextLengthError,
+    KernelError,
+    PermanentError,
+    SuspendInterrupt,
+)
 from substrate.types.errors import ToolDeclarationError, UnroutableMessageError
 
 
@@ -51,4 +56,3 @@ def test_kernel_exceptions_module() -> None:
     assert issubclass(ke.PolicyTermination, ke.KernelError)
     assert issubclass(ke.BudgetExhaustedError, ke.PolicyTermination)
     assert issubclass(ke.MiddlewareTermination, ke.PolicyTermination)
-

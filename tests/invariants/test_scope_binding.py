@@ -18,8 +18,9 @@ from substrate.types import ChatMessage, Role
 from substrate.stores import Entity, Relationship
 from substrate.stores import HistoryCheckpoint, MessageNode
 from substrate.stores import Document
-from substrate.stores import Store
-from substrate.stores import bind_graph, bind_threads, bind_files, bind_tasks, bind_vector
+from substrate.stores import MemoryNamespace, MemoryQuery, MemoryRecord, Store
+from substrate.types import TextBlock
+from substrate.stores import bind_graph, bind_tasks, bind_threads, bind_vector
 from substrate.testing.conformance.graph_store import GraphStoreConformance
 from substrate.testing.conformance.thread_store import ThreadStoreConformance
 from substrate.testing.conformance.task_store import TaskStoreConformance
@@ -42,25 +43,25 @@ def test_a_scope_needs_a_tenant() -> None:
 class TestBoundHistoryConforms(ThreadStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
-        return bind_threads(Store.at(tmp_path / "threads").threads, A)
+        return Store.at(tmp_path / "threads").tenant(A).threads
 
 
 class TestBoundVectorConforms(VectorStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
-        return bind_vector(Store.at(tmp_path).vectors, A)
+        return Store.at(tmp_path).tenant(A).vectors
 
 
 class TestBoundTasksConform(TaskStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
-        return bind_tasks(Store.at(tmp_path).tasks, A)
+        return Store.at(tmp_path).tenant(A).tasks
 
 
 class TestBoundGraphConforms(GraphStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
-        return bind_graph(Store.at(tmp_path).graph, A)
+        return Store.at(tmp_path).tenant(A).graph
 
 
 # ------------------------------------------------------------------ and they are walls
@@ -94,7 +95,7 @@ async def test_i03_history_of_one_tenant_is_invisible_to_another(tmp_path) -> No
 
 
 async def test_i03_ids_returned_to_the_caller_carry_no_tenant_prefix(tmp_path) -> None:
-    h = bind_threads(Store.at(tmp_path / "threads").threads, A)
+    h = Store.at(tmp_path / "threads").tenant(A).threads
     n = _node("s", "x")
     await h.append_node(n)
     assert (await h.get_node(n.id)).session_id == "s"
@@ -136,35 +137,6 @@ async def test_i03_tasks_of_another_tenant_cannot_be_touched_by_board_id(tmp_pat
     assert await theirs.increment_retry(board.id, tid) is None and await theirs.force_retry(board.id, tid) is None
     assert await theirs.update_task_title(board.id, tid, "hijacked") is None
     assert (await mine.get_task_list(board.id)).tasks[0].title == "t"
-
-
-async def test_i03_object_keys_cannot_climb_out_of_the_tenant(tmp_path) -> None:
-    raw = Store.at(tmp_path, file_quota_bytes=10**9).files
-    mine, theirs = bind_files(raw, A), bind_files(raw, B)
-    await theirs.upload("secret.txt", b"keep me")
-    for hostile in ("../evilcorp/secret.txt", "a/../../evilcorp/secret.txt", "/etc/passwd", "..", "a\\..\\b", ""):
-        with pytest.raises(ValueError):
-            await mine.upload(hostile, b"attack")
-        with pytest.raises(ValueError):
-            await mine.download(hostile)
-    with pytest.raises(ValueError):
-        await mine.list_prefix("../evilcorp/")
-    assert await theirs.download("secret.txt") == b"keep me"
-    assert await mine.exists("secret.txt") is False
-
-
-async def test_i03_object_stores_are_per_tenant_with_their_own_usage_and_erase(tmp_path) -> None:
-    raw = Store.at(tmp_path, file_quota_bytes=10**9).files
-    mine, theirs = bind_files(raw, A), bind_files(raw, B)
-    await mine.upload("docs/a.bin", b"x" * 100)
-    await theirs.upload("docs/a.bin", b"y" * 7)
-    assert await mine.download("docs/a.bin") == b"x" * 100
-    assert [k for k, _s, _m in await mine.list_prefix("docs/")] == ["docs/a.bin"]
-    assert await mine.usage_bytes(force=True) == 100 and await theirs.usage_bytes(force=True) == 7
-    with pytest.raises(ValueError):
-        await mine.usage_bytes("evilcorp")
-    assert await mine.erase() == 1
-    assert await theirs.download("docs/a.bin") == b"y" * 7
 
 
 async def test_i03_a_tenant_whose_name_looks_like_another_tenants_prefix_gets_its_own_wall(tmp_path) -> None:
@@ -214,3 +186,74 @@ async def test_i03_a_fenced_store_keeps_absolute_keys_but_only_inside_its_tenant
     with pytest.raises(ValueError):
         fence_objects(raw, Scope(tenant_id="a/b"))
     assert await raw.download("tenants/evilcorp/secret") == b"keep me"
+
+
+# ------------------------------------------------------------------ erasing a tenant
+
+
+async def _fill(store: Store, scope: Scope, word: str) -> None:
+    tenant = store.tenant(scope)
+    n = _node("s", word)
+    await tenant.threads.append_node(n)
+    await tenant.threads.ensure_branch("s", "main")
+    await tenant.threads.append_and_advance(n, "main")
+    await tenant.tasks.create_task_list("c", [word])
+    await tenant.vectors.add([Document.from_text(word, id="d", embedding=[1.0, 0.0])], collection="kb")
+    await tenant.graph.add_entities([Entity(id="e", label="P", name=word)])
+    await tenant.files.upload(f"tenants/{scope.tenant_id}/users/u/{word}.txt", word.encode())
+    await store.memory.save(
+        MemoryRecord(content=[TextBlock(text=word)], namespace=MemoryNamespace(tenant_id=scope.tenant_id))
+    )
+
+
+async def test_i04_erasing_a_tenant_reaches_every_facet_and_no_other_tenant(tmp_path) -> None:
+    store = Store.at(tmp_path)
+    await _fill(store, A, "alpha")
+    await _fill(store, B, "bravo")
+
+    erased = await store.tenant(A).erase()
+
+    assert erased.thread_nodes == erased.task_boards == erased.vectors == erased.graph_entities == 1
+    assert erased.files == erased.memories == 1
+    mine, theirs = store.tenant(A), store.tenant(B)
+    assert await mine.threads.list_branches("s") == [] and await mine.tasks.get_by_conversation("c") is None
+    assert await mine.vectors.list_collections() == [] and (await mine.graph.get_neighbors("e")).entities == ()
+    assert await mine.files.list_prefix("tenants/acme/") == []
+    assert await store.memory.query(MemoryQuery(namespace=MemoryNamespace(tenant_id="acme"))) == []
+    # the other tenant lost nothing
+    assert len(await theirs.threads.list_branches("s")) == 1 and await theirs.tasks.get_by_conversation("c") is not None
+    assert await theirs.vectors.list_collections() == ["kb"] and len((await theirs.graph.get_neighbors("e")).entities) == 1
+    assert len(await theirs.files.list_prefix("tenants/evilcorp/")) == 1
+    assert len(await store.memory.query(MemoryQuery(namespace=MemoryNamespace(tenant_id="evilcorp")))) == 1
+
+
+async def test_i04_an_erased_tenants_words_are_gone_from_the_database_file(tmp_path) -> None:
+    store = Store.at(tmp_path)
+    await _fill(store, A, "zanzibarquartz")
+    await store.tenant(A).erase()
+    await store.aclose()
+    for path in (tmp_path / "substrate.db", tmp_path / "substrate.db-wal"):
+        if path.exists():
+            assert b"zanzibarquartz" not in path.read_bytes()
+
+
+async def test_i04_erasing_a_tenant_whose_name_is_a_prefix_of_another_leaves_the_other_alone(tmp_path) -> None:
+    store = Store.at(tmp_path)
+    short, long = Scope(tenant_id="acme"), Scope(tenant_id="acme-corp")
+    for scope in (short, long):
+        await store.tenant(scope).tasks.create_task_list("c", ["t"])
+    await store.tenant(short).erase()
+    assert await store.tenant(long).tasks.get_by_conversation("c") is not None
+
+
+async def test_i04_erasing_one_conversation_leaves_its_neighbours(tmp_path) -> None:
+    store = Store.at(tmp_path)
+    tenant = store.tenant(A)
+    for conversation in ("c1", "c10"):
+        n = _node(conversation, "x")
+        await tenant.threads.append_node(n)
+        await tenant.tasks.create_task_list(conversation, ["t"])
+    erased = await tenant.erase_conversation("c1")
+    assert erased.thread_nodes == erased.task_boards == 1
+    assert await tenant.tasks.get_by_conversation("c1") is None
+    assert await tenant.tasks.get_by_conversation("c10") is not None

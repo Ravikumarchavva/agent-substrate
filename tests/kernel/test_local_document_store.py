@@ -22,8 +22,12 @@ async def test_round_trip_list_and_delete(tmp_path: Path):
         total_pages=2,
     )
     chunks = [
-        DocumentChunk.from_text("Chunk 1 text", document_id="doc-123", page_number=1, chunk_index=0),
-        DocumentChunk.from_text("Chunk 2 text", document_id="doc-123", page_number=2, chunk_index=1),
+        DocumentChunk.from_text(
+            "Chunk 1 text", document_id="doc-123", page_number=1, chunk_index=0
+        ),
+        DocumentChunk.from_text(
+            "Chunk 2 text", document_id="doc-123", page_number=2, chunk_index=1
+        ),
     ]
 
     await store.save_document(meta, chunks)
@@ -65,5 +69,8 @@ async def test_a_hostile_document_id_is_just_a_name(tmp_path: Path):
     await store.save_document(DocumentMetadata(id="../../evil", filename="x"), [])
 
     assert (await store.get_document("../../evil")) is not None
-    assert all(p.resolve().is_relative_to((tmp_path / "store").resolve()) for p in tmp_path.rglob("*"))
+    assert all(
+        p.resolve().is_relative_to((tmp_path / "store").resolve())
+        for p in tmp_path.rglob("*")
+    )
     assert not (tmp_path.parent / "evil").exists()

@@ -10,7 +10,14 @@ from substrate.models.tool_arguments import parse_tool_arguments
 from substrate.models.modalities import fit_to_capabilities
 from substrate.models import estimate_cost
 from substrate.models.registry import resolve_capabilities
-from substrate.types import ChatMessage, MediaBlock, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import (
+    ChatMessage,
+    MediaBlock,
+    Role,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 from substrate.types import Usage
 from substrate.models import Modality, ModelCapabilities
 
@@ -21,7 +28,10 @@ def _tool_turn(*results: ToolResultBlock) -> list[ChatMessage]:
     return [
         ChatMessage(
             role=Role.ASSISTANT,
-            content=[ToolUseBlock(call_id=r.call_id, tool_name=r.name, arguments={}) for r in results],
+            content=[
+                ToolUseBlock(call_id=r.call_id, tool_name=r.name, arguments={})
+                for r in results
+            ],
         ),
         ChatMessage(role=Role.TOOL, content=list(results)),
     ]
@@ -31,7 +41,10 @@ def _plot(call_id: str, name: str = "plot") -> ToolResultBlock:
     return ToolResultBlock(
         call_id=call_id,
         name=name,
-        content=[TextBlock(text="ok"), MediaBlock.image(data=PNG, media_type="image/png")],
+        content=[
+            TextBlock(text="ok"),
+            MediaBlock.image(data=PNG, media_type="image/png"),
+        ],
     )
 
 
@@ -78,7 +91,9 @@ def test_fit_replaces_unsupported_media_including_inside_tool_results():
 
 
 def test_fit_keeps_supported_media_untouched():
-    caps = ModelCapabilities(model_id="v", input_modalities=frozenset({Modality.TEXT, Modality.IMAGE}))
+    caps = ModelCapabilities(
+        model_id="v", input_modalities=frozenset({Modality.TEXT, Modality.IMAGE})
+    )
     msgs = _tool_turn(_plot("c1"))
     assert fit_to_capabilities(msgs, caps) is not msgs  # new list...
     assert fit_to_capabilities(msgs, caps)[1] is msgs[1]  # ...same unchanged message
@@ -120,7 +135,9 @@ def test_chat_completions_sends_tool_images_after_the_whole_tool_run():
 
 
 def test_chat_completions_text_only_model_never_gets_an_image_part():
-    client = OpenAICompatibleClient(model="llama3.2", api_key="x", base_url="http://x/v1")
+    client = OpenAICompatibleClient(
+        model="llama3.2", api_key="x", base_url="http://x/v1"
+    )
     out = client._serialize_messages(_tool_turn(_plot("c1")))
 
     assert [m["role"] for m in out] == ["assistant", "tool"]
@@ -128,13 +145,19 @@ def test_chat_completions_text_only_model_never_gets_an_image_part():
 
 
 def test_chat_completions_flags_tool_errors():
-    err = ToolResultBlock(call_id="c1", name="t", is_error=True, content=[TextBlock(text="boom")])
-    out = OpenAICompatibleClient(model="gpt-4o", api_key="x")._serialize_messages(_tool_turn(err))
+    err = ToolResultBlock(
+        call_id="c1", name="t", is_error=True, content=[TextBlock(text="boom")]
+    )
+    out = OpenAICompatibleClient(model="gpt-4o", api_key="x")._serialize_messages(
+        _tool_turn(err)
+    )
     assert out[1]["content"] == "Error: boom"
 
 
 def test_chat_completions_documents_use_file_parts():
-    doc = MediaBlock(type="document", data=b"%PDF", media_type="application/pdf", filename="a.pdf")
+    doc = MediaBlock(
+        type="document", data=b"%PDF", media_type="application/pdf", filename="a.pdf"
+    )
     msg = ChatMessage(role=Role.USER, content=[TextBlock(text="read"), doc])
     out = OpenAICompatibleClient(model="gpt-4o", api_key="x")._serialize_messages([msg])
     (file_part,) = [p for p in out[0]["content"] if p["type"] == "file"]

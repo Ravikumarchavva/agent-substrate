@@ -57,7 +57,12 @@ def _lease(
 
 def test_no_budget_means_no_deadline() -> None:
     assert _worker()._deadline(_lease(supervised=False)) is None
-    assert _worker()._deadline(_lease(deadline_s=None, started_at=datetime.now(timezone.utc))) is None
+    assert (
+        _worker()._deadline(
+            _lease(deadline_s=None, started_at=datetime.now(timezone.utc))
+        )
+        is None
+    )
 
 
 def test_budget_anchors_to_when_the_run_first_started() -> None:
@@ -71,8 +76,15 @@ def test_budget_anchors_to_when_the_run_first_started() -> None:
 def test_the_earlier_of_the_run_deadline_and_the_budget_wins() -> None:
     started_at = datetime.now(timezone.utc)
     hard = started_at + timedelta(seconds=10)
-    assert _worker()._deadline(_lease(deadline_s=60.0, started_at=started_at, deadline=hard)) == hard
-    assert _worker()._deadline(_lease(deadline_s=5.0, started_at=started_at, deadline=hard)) == started_at + timedelta(seconds=5)
+    assert (
+        _worker()._deadline(
+            _lease(deadline_s=60.0, started_at=started_at, deadline=hard)
+        )
+        == hard
+    )
+    assert _worker()._deadline(
+        _lease(deadline_s=5.0, started_at=started_at, deadline=hard)
+    ) == started_at + timedelta(seconds=5)
 
 
 async def test_run_meta_check_raises_past_deadline() -> None:

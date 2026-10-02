@@ -41,4 +41,7 @@ def test_entry_defaults_to_version_1_and_accepts_unknown_kinds() -> None:
     entry = RunLogEntry(run_id="r", seq=0, kind="some.app.kind")
     assert entry.v == 1
     assert entry.kind == "some.app.kind"
-    assert RunLogEntry(run_id="r", seq=0, kind=RunLogKind.RUN_STARTED).kind == "run.started"
+    assert (
+        RunLogEntry(run_id="r", seq=0, kind=RunLogKind.RUN_STARTED).kind
+        == "run.started"
+    )

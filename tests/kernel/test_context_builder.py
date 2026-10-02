@@ -53,7 +53,9 @@ async def test_context_builder_prepends_system_instruction():
     nodes = [
         MessageNode(id="n1", session_id="s1", payload=_msg("User question")),
     ]
-    window = await builder.build(nodes, system_instruction="You are a helpful assistant.")
+    window = await builder.build(
+        nodes, system_instruction="You are a helpful assistant."
+    )
     assert len(window.messages) == 2
     assert window.messages[0].role == Role.SYSTEM
     assert window.messages[0].text == "You are a helpful assistant."
@@ -65,8 +67,12 @@ async def test_context_builder_prepends_system_instruction():
 async def test_context_builder_avoids_duplicate_system_instruction():
     builder = DefaultContextBuilder()
     nodes = [
-        MessageNode(id="n0", session_id="s1", payload=_msg("Existing system", role=Role.SYSTEM)),
-        MessageNode(id="n1", parent_id="n0", session_id="s1", payload=_msg("User question")),
+        MessageNode(
+            id="n0", session_id="s1", payload=_msg("Existing system", role=Role.SYSTEM)
+        ),
+        MessageNode(
+            id="n1", parent_id="n0", session_id="s1", payload=_msg("User question")
+        ),
     ]
     window = await builder.build(nodes, system_instruction="New system")
     # Does not duplicate system prompt if one is already at index 0
@@ -78,9 +84,23 @@ async def test_context_builder_avoids_duplicate_system_instruction():
 async def test_context_builder_sliding_window_token_budget():
     builder = DefaultContextBuilder()
     nodes = [
-        MessageNode(id="n1", session_id="s1", payload=_msg("Message 1: Very long text with lots of details")),
-        MessageNode(id="n2", parent_id="n1", session_id="s1", payload=_msg("Message 2: Another detailed turn")),
-        MessageNode(id="n3", parent_id="n2", session_id="s1", payload=_msg("Message 3: Recent turn")),
+        MessageNode(
+            id="n1",
+            session_id="s1",
+            payload=_msg("Message 1: Very long text with lots of details"),
+        ),
+        MessageNode(
+            id="n2",
+            parent_id="n1",
+            session_id="s1",
+            payload=_msg("Message 2: Another detailed turn"),
+        ),
+        MessageNode(
+            id="n3",
+            parent_id="n2",
+            session_id="s1",
+            payload=_msg("Message 3: Recent turn"),
+        ),
     ]
 
     # Without budget: keeps all
@@ -108,12 +128,17 @@ async def test_end_to_end_ancestry_to_prompt_window():
     provider = fs_history()
 
     # Turn 0
-    n0 = MessageNode(id="n0", session_id="s1", parent_id=None, payload=_msg("What is AI?"))
+    n0 = MessageNode(
+        id="n0", session_id="s1", parent_id=None, payload=_msg("What is AI?")
+    )
     await provider.append_and_advance(n0, "main")
 
     # Turn 1
     n1 = MessageNode(
-        id="n1", session_id="s1", parent_id="n0", payload=_msg("AI is intelligence demonstrated by machines", role="assistant")
+        id="n1",
+        session_id="s1",
+        parent_id="n0",
+        payload=_msg("AI is intelligence demonstrated by machines", role="assistant"),
     )
     await provider.append_and_advance(n1, "main")
 
@@ -142,4 +167,3 @@ async def test_end_to_end_ancestry_to_prompt_window():
     assert window.messages[3].text == "Can it learn?"
     assert window.leaf_node_id == "n2"
     assert window.estimated_tokens > 0
-

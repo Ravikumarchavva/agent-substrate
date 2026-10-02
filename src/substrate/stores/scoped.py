@@ -46,7 +46,7 @@ class _Prefixer:
 # ===================================================================== history
 
 
-class ScopedThreadStore:
+class _ScopedThreadStore:
     """A ``ThreadStore`` that sees only its tenant's sessions."""
 
     def __init__(self, inner: ThreadStore, scope: Scope) -> None:
@@ -134,7 +134,7 @@ class ScopedThreadStore:
 # ===================================================================== vector
 
 
-class ScopedVectorStore:
+class _ScopedVectorStore:
     """A ``VectorStore`` whose collections all live inside its tenant."""
 
     def __init__(self, inner: VectorStore, scope: Scope) -> None:
@@ -176,7 +176,7 @@ class ScopedVectorStore:
 # ===================================================================== graph
 
 
-class ScopedGraphStore:
+class _ScopedGraphStore:
     """A ``GraphStore`` whose every call runs in its tenant's namespace. A caller's own ``namespace``
     subdivides the tenant; it can never leave it."""
 
@@ -206,71 +206,12 @@ class ScopedGraphStore:
 # ===================================================================== objects
 
 
-def _relative_key(key: str) -> str:
-    """A key relative to the tenant. Anything that could climb out of it is refused outright."""
-    parts = key.split("/")
-    if not key or key.startswith("/") or "\\" in key or "\x00" in key or any(p in ("..", ".") for p in parts):
-        raise ValueError(f"not a valid scoped key: {key!r}")
-    return key
-
-
-class ScopedFileStore:
-    """An ``FileStore`` confined to ``tenants/<tenant>/``. Keys are relative to the tenant."""
-
-    def __init__(self, inner: FileStore, scope: Scope) -> None:
-        self._inner = inner
-        self._scope = scope
-        self._root = f"tenants/{_tenant(scope)}/"
-
-    def _k(self, key: str) -> str:
-        return self._root + _relative_key(key)
-
-    def _prefix(self, prefix: str) -> str:
-        if prefix:
-            _relative_key(prefix.rstrip("/") or "x")
-        return self._root + prefix
-
-    async def upload(self, key: str, data: bytes, *, content_type: str = "application/octet-stream") -> None:
-        await self._inner.upload(self._k(key), data, content_type=content_type)
-
-    async def download(self, key: str) -> bytes:
-        return await self._inner.download(self._k(key))
-
-    async def exists(self, key: str) -> bool:
-        return await self._inner.exists(self._k(key))
-
-    async def delete(self, key: str) -> None:
-        await self._inner.delete(self._k(key))
-
-    async def list_prefix(self, prefix: str) -> list[tuple[str, int, float]]:
-        return [(k[len(self._root):], size, mtime) for k, size, mtime in await self._inner.list_prefix(self._prefix(prefix)) if k.startswith(self._root)]
-
-    async def delete_prefix(self, prefix: str) -> int:
-        return await self._inner.delete_prefix(self._prefix(prefix))
-
-    async def copy_prefix(self, source_prefix: str, dest_prefix: str) -> int:
-        return await self._inner.copy_prefix(self._prefix(source_prefix), self._prefix(dest_prefix))
-
-    async def presign_url(self, key: str, *, expires_in: int = 3600) -> str:
-        return await self._inner.presign_url(self._k(key), expires_in=expires_in)
-
-    async def usage_bytes(self, tenant_id: str | None = None, *, force: bool = False) -> int:
-        if tenant_id is not None and tenant_id != self._scope.tenant_id:
-            raise ValueError("a scoped store reports only its own tenant's usage")
-        return await self._inner.usage_bytes(self._scope.tenant_id, force=force)
-
-    async def erase(self) -> int:
-        """Remove everything this tenant has stored. Returns how many objects."""
-        return await self._inner.delete_prefix(self._root)
-
-
-class FencedFileStore:
+class _FencedFileStore:
     """An ``FileStore`` that keeps its callers' *absolute* keys but confines them to ``tenants/<tenant>/``.
 
-    ``ScopedFileStore`` is for code that thinks in tenant-relative keys. Serving builds absolute keys through
-    ``workspace/layout`` and stores them in database rows, so what it needs is a fence: every key and prefix must
-    be inside the tenant's subtree, with nothing that could climb out of it. Anything else raises ``ValueError``
-    before the store is touched.
+    Serving builds absolute keys through ``workspace/layout`` and stores them in database rows, so what it needs is a
+    fence: every key and prefix must be inside the tenant's subtree, with nothing that could climb out of it.
+    Anything else raises ``ValueError`` before the store is touched.
     """
 
     def __init__(self, inner: FileStore, scope: Scope) -> None:
@@ -321,11 +262,15 @@ class FencedFileStore:
             raise ValueError("a fenced store reports only its own tenant's usage")
         return await self._inner.usage_bytes(self._scope.tenant_id, force=force)
 
+    async def erase(self) -> int:
+        """Remove everything this tenant has stored. Returns how many objects."""
+        return await self._inner.delete_prefix(self._root)
+
 
 # ===================================================================== tasks
 
 
-class ScopedTaskStore:
+class _ScopedTaskStore:
     """A ``TaskStore`` whose conversations all live inside its tenant."""
 
     def __init__(self, inner: TaskStore, scope: Scope) -> None:
@@ -378,40 +323,23 @@ class ScopedTaskStore:
 
 
 def bind_threads(store: ThreadStore, scope: Scope) -> ThreadStore:
-    return ScopedThreadStore(store, scope)
+    return _ScopedThreadStore(store, scope)
 
 
-def bind_vector(store: VectorStore, scope: Scope) -> ScopedVectorStore:
-    return ScopedVectorStore(store, scope)
+def bind_vector(store: VectorStore, scope: Scope) -> VectorStore:
+    return _ScopedVectorStore(store, scope)
 
 
 def bind_graph(store: GraphStore, scope: Scope) -> GraphStore:
-    return ScopedGraphStore(store, scope)
+    return _ScopedGraphStore(store, scope)
 
 
-def bind_files(store: FileStore, scope: Scope) -> ScopedFileStore:
-    return ScopedFileStore(store, scope)
-
-
-def fence_objects(store: FileStore, scope: Scope) -> FencedFileStore:
-    return FencedFileStore(store, scope)
+def fence_objects(store: FileStore, scope: Scope) -> FileStore:
+    return _FencedFileStore(store, scope)
 
 
 def bind_tasks(store: TaskStore, scope: Scope) -> TaskStore:
-    return ScopedTaskStore(store, scope)
+    return _ScopedTaskStore(store, scope)
 
 
-__all__ = [
-    "FencedFileStore",
-    "ScopedGraphStore",
-    "ScopedThreadStore",
-    "ScopedFileStore",
-    "ScopedTaskStore",
-    "ScopedVectorStore",
-    "bind_graph",
-    "bind_threads",
-    "bind_files",
-    "bind_tasks",
-    "bind_vector",
-    "fence_objects",
-]
+__all__ = ["bind_graph", "bind_tasks", "bind_threads", "bind_vector", "fence_objects"]

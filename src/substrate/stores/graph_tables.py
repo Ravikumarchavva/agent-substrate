@@ -17,7 +17,7 @@ import json
 from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, TypeVar
 
-from substrate.stores.database import Row, Tx
+from substrate.stores.database import Row, Tx, under
 from substrate.stores.graph import Entity, Relationship, SubGraph
 
 if TYPE_CHECKING:
@@ -220,6 +220,19 @@ class Graph:
             return [_entity(row) for row in rows]
 
         return await self._run(op)
+
+    async def erase_under(self, name: str) -> int:
+        """Delete every entity and relationship in the namespace ``name`` or below it. Returns the entities removed."""
+        clause, params = under("namespace", name)
+
+        async def op(tx: Tx) -> int:
+            await tx.execute(f"DELETE FROM graph_relationships WHERE {clause}", *params)
+            return await tx.execute(f"DELETE FROM graph_entities WHERE {clause}", *params)
+
+        erased = await self._run(op)
+        if erased:
+            await self._store.database.reclaim()
+        return erased
 
 
 __all__ = ["SCHEMA", "Graph"]

@@ -67,7 +67,13 @@ async def test_workers_racing_for_the_last_retry_never_both_get_it(tmp_path) -> 
     board = await first.tasks.create_task_list("c", ["flaky"], max_retries=3)
     task_id = board.tasks[0].id
 
-    results = await asyncio.gather(*(s.tasks.increment_retry(board.id, task_id) for s in (first, second) for _ in range(20)))
+    results = await asyncio.gather(
+        *(
+            s.tasks.increment_retry(board.id, task_id)
+            for s in (first, second)
+            for _ in range(20)
+        )
+    )
 
     assert sum(r is not None for r in results) == 3
     assert (await first.tasks.get_task_list(board.id)).tasks[0].retry_count == 3

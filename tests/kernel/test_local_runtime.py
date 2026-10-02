@@ -41,7 +41,9 @@ def _chat(agent: Actor, text: str) -> Message:
     return Message(
         target=agent,
         sender=Actor(type="proxy", key="user"),
-        payload=ChatPayload(message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])),
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
+        ),
     )
 
 
@@ -62,11 +64,17 @@ async def test_react_agent_runs_end_to_end_on_local_runtime(tmp_path: Path) -> N
         await rt.register(agent)
         run_id = await rt.submit(agent.id, _chat(agent.id, "hi"))
         assert await _terminal(rt, run_id) == "run.completed"
-        text = [e.payload["text"] for e in await rt.read(run_id) if e.kind == RunLogKind.ASSISTANT_MESSAGE]
+        text = [
+            e.payload["text"]
+            for e in await rt.read(run_id)
+            if e.kind == RunLogKind.ASSISTANT_MESSAGE
+        ]
         assert text == ["hello from local runtime"]
 
 
-async def test_a_run_submitted_before_a_restart_is_picked_up_after_it(tmp_path: Path) -> None:
+async def test_a_run_submitted_before_a_restart_is_picked_up_after_it(
+    tmp_path: Path,
+) -> None:
     """The property an in-memory runtime cannot offer: work outlives the process that
     accepted it. The run is created while no worker exists, then a fresh runtime on the
     same file runs it."""
@@ -77,7 +85,10 @@ async def test_a_run_submitted_before_a_restart_is_picked_up_after_it(tmp_path: 
 
     store = runtime_store(path)
     await store.start()
-    run = await store.create_run(RunSpec(agent=agent.id), deliveries=[Delivery(agent=agent.id, msg=_chat(agent.id, "hi"))])
+    run = await store.create_run(
+        RunSpec(agent=agent.id),
+        deliveries=[Delivery(agent=agent.id, msg=_chat(agent.id, "hi"))],
+    )
     await store.aclose()
 
     async with Runtime.open(path) as rt:

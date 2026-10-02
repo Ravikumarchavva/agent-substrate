@@ -123,14 +123,17 @@ Row I30 fails the build if an implementation of a port that has a suite does not
   an id alone addresses nothing — ids are tenant-qualified, taking over another namespace's id raises
   `ScopeViolationError`, and cross-user reads need an explicit `TenantWide(reason=…)`. `erase(within)`
   removes everything under a tenant/user/agent/session, and the GDPR eraser reaches memory and the run journal.
-* **Every store port has a scope-bound handle.** `bind_threads/vector/graph/objects/tasks(store, scope)`
-  (`stores/scoped.py`, written once over the ports so it holds for every implementation) places each
+* **`store.tenant(t)` is the store as one tenant sees it** (`stores/tenant.py`): threads, tasks, vectors, graph and files
+  confined to `t`, and `erase()` removes everything the tenant stored — thread history, task boards, vectors, graph, files and memory
+  — leaving the words in neither the search indexes nor the database file (`erase_conversation(id)` for one conversation; the GDPR eraser
+  calls both). It is built from `bind_threads/vector/graph/tasks(store, scope)` (`stores/scoped.py`, written once over the ports so it
+  holds for every implementation, and public for ports that are not a folder store) places each
   session, collection, conversation, key and namespace under the tenant (percent-encoded, so no name can look like
-  another tenant's), refuses ids that resolve elsewhere, and rejects object keys that could climb out. `fence_objects` keeps serving's absolute `tenants/<t>/...` keys but refuses anything outside the tenant or containing `..`;
+  another tenant's), refuses ids that resolve elsewhere, and `fence_objects` keeps serving's absolute `tenants/<t>/...` keys but refuses anything outside the tenant or containing `..`;
   request code reaches objects only via `ctx.files_for(tenant)` / `ctx.pending_for(tenant)`. Serving binds conversation history (agent
   build, scheduled runs, branch/checkpoint routes) and task boards (`TaskManagerTool.store_for(tenant)`, task routes);
   a run gets its scope from `ctx.store_scope`; there is no unscoped handle to forget to scope. Rows I1–I3 in `test_scope_binding.py`
-  run the conformance suites *through* a bound handle and then attack the wall.
+  run the conformance suites *through* a tenant view and then attack the wall; rows I4 there erase a tenant and check no other tenant lost a row.
 * **Identity travels on `ctx.scope`** (`RunScope`), stamped from authenticated transport input;
   tools read it, never a model-supplied argument.
 * **Provider outcomes are typed:** every client reports a `FinishReason`; `classify_llm_error` yields

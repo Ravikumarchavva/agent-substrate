@@ -114,9 +114,13 @@ class TestDefaultCompactionCoordinator:
         assert len(res.prompt_messages) < 4
 
     @pytest.mark.asyncio
-    async def test_pre_llm_raises_budget_exhausted_when_system_exceeds_budget(self) -> None:
+    async def test_pre_llm_raises_budget_exhausted_when_system_exceeds_budget(
+        self,
+    ) -> None:
         coordinator = DefaultCompactionCoordinator()
-        sys_msg = _msg("a very very very long system prompt that exceeds budget", Role.SYSTEM)
+        sys_msg = _msg(
+            "a very very very long system prompt that exceeds budget", Role.SYSTEM
+        )
         ctx = CompactionContext(
             session_id="s1",
             messages=[sys_msg, _msg("hello")],
@@ -155,7 +159,9 @@ class TestDefaultCompactionCoordinator:
     @pytest.mark.asyncio
     async def test_post_turn_failure_discards_checkpoint(self) -> None:
         class FailingSummarizer:
-            async def create_checkpoint(self, ctx: CompactionContext) -> HistoryCheckpoint:
+            async def create_checkpoint(
+                self, ctx: CompactionContext
+            ) -> HistoryCheckpoint:
                 raise RuntimeError("LLM summarizer down")
 
         coordinator = DefaultCompactionCoordinator(summarizer=FailingSummarizer())
@@ -167,4 +173,3 @@ class TestDefaultCompactionCoordinator:
         res = await coordinator.compact(CompactionPhase.POST_TURN, ctx)
         assert res.phase == CompactionPhase.POST_TURN
         assert res.checkpoint_proposal is None
-

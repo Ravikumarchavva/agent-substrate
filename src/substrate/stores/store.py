@@ -36,6 +36,8 @@ from substrate.stores.vector_tables import SCHEMA as VECTOR_SCHEMA
 from substrate.stores.vector_tables import Vectors
 from substrate.stores.thread_tables import SCHEMA as THREAD_SCHEMA
 from substrate.stores.thread_tables import Threads
+from substrate.stores.tenant import Tenant
+from substrate.types.scope import Scope
 from substrate.version import __version__
 
 T = TypeVar("T")
@@ -118,6 +120,10 @@ class Store:
     def files(self) -> Files:
         """Keyed bytes (a ``FileStore``): rows here, contents under ``files/``, written to disk before the row commits."""
         return Files(self)
+
+    def tenant(self, tenant: str | Scope) -> Tenant:
+        """The store as one tenant sees it — every facet confined to ``tenant`` — with ``erase()`` for its data."""
+        return Tenant(self, tenant if isinstance(tenant, Scope) else Scope(tenant_id=tenant))
 
     @classmethod
     def at(cls, location: str | Path = "./.substrate", *, file_quota_bytes: int | None = None) -> Store:

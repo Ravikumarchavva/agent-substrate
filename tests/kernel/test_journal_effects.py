@@ -31,7 +31,14 @@ class Log:
             self.fail_next -= 1
             raise ConnectionError("store blip")
         for entry in new:
-            self.entries.append(RunLogEntry(run_id="run", seq=len(self.entries), kind=entry.kind, payload=entry.payload))
+            self.entries.append(
+                RunLogEntry(
+                    run_id="run",
+                    seq=len(self.entries),
+                    kind=entry.kind,
+                    payload=entry.payload,
+                )
+            )
 
     def journal(self, blob_store: Any | None = None) -> Journal:
         return Journal("run", list(self.entries), self.commit, blob_store=blob_store)  # type: ignore[arg-type]
@@ -90,7 +97,9 @@ async def test_a_replay_serves_a_completed_effect_without_running_it() -> None:
     assert replay.runs == 0, "a completed effect must never run twice"
 
 
-async def test_a_failed_effect_is_re_executed_on_replay_not_served_from_the_record() -> None:
+async def test_a_failed_effect_is_re_executed_on_replay_not_served_from_the_record() -> (
+    None
+):
     """A recorded failure must not be replayed forever — that is what made a retry
     re-raise the same cached error until retries ran out."""
     log = Log()
@@ -115,7 +124,9 @@ async def test_an_error_then_a_success_leaves_the_success_in_the_record() -> Non
 
     with pytest.raises(RuntimeError):
         await log.journal().effect("tool", {"n": 1}, boom, idempotent=False)
-    await log.journal().effect("tool", {"n": 1}, Counter({"result": "done"}), idempotent=False)
+    await log.journal().effect(
+        "tool", {"n": 1}, Counter({"result": "done"}), idempotent=False
+    )
 
     third = Counter()
     out = await log.journal().effect("tool", {"n": 1}, third, idempotent=False)
@@ -183,10 +194,14 @@ async def test_an_orphaned_idempotent_effect_re_runs_under_the_same_key() -> Non
     await log.journal().effect("tool", {"n": 1}, second, idempotent=True)
 
     assert second.runs == 1
-    assert second.keys == first.keys and first.keys[0] is not None, "the retry must carry the same idempotency key"
+    assert second.keys == first.keys and first.keys[0] is not None, (
+        "the retry must carry the same idempotency key"
+    )
 
 
-async def test_a_transient_blip_recording_the_outcome_does_not_lose_the_effect() -> None:
+async def test_a_transient_blip_recording_the_outcome_does_not_lose_the_effect() -> (
+    None
+):
     """The work is done; only its record failed. Retrying the record is what stops the
     step being reported as failed (and re-run)."""
     log = Log()
@@ -216,7 +231,10 @@ async def test_a_large_value_is_offloaded_and_resolves_on_a_fresh_journal() -> N
     await log.journal(blobs).effect("tool", {"n": 1}, Counter(big), idempotent=False)
 
     result = next(e for e in log.entries if e.kind == RunLogKind.EFFECT_RESULT)
-    assert "value" not in result.payload and result.payload["artifact_ref"] in blobs.objects
+    assert (
+        "value" not in result.payload
+        and result.payload["artifact_ref"] in blobs.objects
+    )
 
     replay = Counter()
     out = await log.journal(blobs).effect("tool", {"n": 1}, replay, idempotent=False)
@@ -226,7 +244,9 @@ async def test_a_large_value_is_offloaded_and_resolves_on_a_fresh_journal() -> N
 async def test_a_small_value_stays_inline() -> None:
     log = Log()
     blobs = InMemoryBlobStore()
-    await log.journal(blobs).effect("tool", {"n": 1}, Counter({"ok": True}), idempotent=False)
+    await log.journal(blobs).effect(
+        "tool", {"n": 1}, Counter({"ok": True}), idempotent=False
+    )
 
     result = next(e for e in log.entries if e.kind == RunLogKind.EFFECT_RESULT)
     assert result.payload["value"] == {"ok": True} and not blobs.objects

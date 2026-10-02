@@ -61,7 +61,9 @@ class MockChatModel:
 async def wait_run(rt: Runtime, run_id: str) -> None:
     async for entry in rt.tail(run_id):
         if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
-            assert entry.kind == "run.completed", f"Run ended with {entry.kind}: {entry.payload}"
+            assert entry.kind == "run.completed", (
+                f"Run ended with {entry.kind}: {entry.payload}"
+            )
             break
 
 
@@ -73,10 +75,12 @@ async def test_react_agent_post_turn_compaction_creates_checkpoint():
     )
     ctx_cfg = ContextConfig(history=history, coordinator=coordinator)
 
-    llm = MockChatModel([
-        [TextBlock(text="Response to turn 1")],
-        [TextBlock(text="Response to turn 2")],
-    ])
+    llm = MockChatModel(
+        [
+            [TextBlock(text="Response to turn 1")],
+            [TextBlock(text="Response to turn 2")],
+        ]
+    )
 
     user = Actor(type="user", key="bob")
     agent = ReActAgent("compact-agent", model=llm, context=ctx_cfg)
@@ -130,4 +134,3 @@ async def test_react_agent_post_turn_compaction_creates_checkpoint():
         branch_after = await history.get_branch(session_id, "main")
         assert branch_after is not None
         assert branch_after.head_message_id != cp.anchor_message_id
-

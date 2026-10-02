@@ -57,7 +57,7 @@ from substrate.serving.shared.doc_quota import (
 )
 from substrate.serving.shared.settings import settings
 from substrate.documents import ExtractionResult
-from substrate.runtimes.document_intelligence.extract import extract_document
+from substrate.integrations.services.document_extraction import extract_document
 
 logger = logging.getLogger(__name__)
 

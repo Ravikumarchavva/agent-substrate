@@ -12,12 +12,12 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from substrate.runtimes.document_intelligence.service.pipeline import (
+from document_intelligence.pipeline import (
     ExtractedImage,
     ExtractedPage,
     ExtractionResult,
 )
-from substrate.runtimes.document_intelligence.service.routes import router
+from document_intelligence.routes import router
 
 
 @dataclass

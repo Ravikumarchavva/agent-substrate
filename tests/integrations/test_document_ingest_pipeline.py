@@ -16,7 +16,7 @@ from substrate.integrations.knowledge.document_ingest_pipeline import (
     ExtractionFailedError,
 )
 from substrate.types import MediaBlock, TextBlock
-from substrate.runtimes.document_intelligence.client import (
+from substrate.integrations.services.document_extraction import (
     ExtractedImage,
     ExtractResponse,
 )
@@ -256,7 +256,7 @@ async def test_dropped_images_are_reported_not_just_silently_missing(tmp_path):
     size (1024 tokens)" on a large chart. Because _embed_images degrades by
     skipping, the run summary showed only the 47 survivors and a 22% loss
     was indistinguishable from a clean run. The drop must be stated."""
-    from substrate.runtimes.embedding_reranker.service.embedding import (
+    from substrate.integrations.services.llama_server import (
         EmbeddingServiceError,
     )
 

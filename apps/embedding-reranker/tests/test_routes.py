@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from substrate.runtimes.embedding_reranker.service.routes import router
+from embedding_reranker.routes import router
 
 
 @dataclass

@@ -33,9 +33,11 @@ RUN uv python install 3.13
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY packages/inference-pool ./packages/inference-pool
+COPY apps/document-intelligence ./apps/document-intelligence
 RUN uv venv --python 3.13 /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
-RUN uv pip install --python /opt/venv/bin/python -e ".[document-intelligence-gpu]"
+RUN uv pip install --python /opt/venv/bin/python -e "./apps/document-intelligence[paddle-gpu]"
 
 EXPOSE 8080
 
@@ -45,5 +47,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:8080/v1/health || exit 1
 
-ENTRYPOINT ["uvicorn", "substrate.runtimes.document_intelligence.service.app:app"]
+ENTRYPOINT ["uvicorn", "document_intelligence.app:app"]
 CMD ["--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]

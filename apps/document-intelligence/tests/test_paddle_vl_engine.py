@@ -8,15 +8,19 @@ from __future__ import annotations
 
 import asyncio
 
+import importlib.util
+
 import pytest
 
 from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.runtimes.document_intelligence.service.engines.paddle_vl import (
+from document_intelligence.engines.paddle_vl import (
     PaddleVLEngine,
     _apply_paddle_patches_once,
     _build_pipeline_config,
 )
-from substrate.runtimes.inference_pool.pool_types import PoolWorker
+from inference_pool.pool_types import PoolWorker
+
+needs_paddlex = pytest.mark.skipif(importlib.util.find_spec("paddlex") is None, reason="needs the `paddle` extra (PaddleX)")
 
 
 class _FakeBlock:
@@ -129,12 +133,13 @@ def _patch_create_pipeline(monkeypatch, fake_pipeline: _FakePaddlexPipeline):
     return captured_config
 
 
+@needs_paddlex
 async def test_aextract_acquires_and_releases_the_same_worker(monkeypatch) -> None:
     pool = _FakePool(worker_count=1)
     fake_pipeline = _FakePaddlexPipeline()
     _patch_create_pipeline(monkeypatch, fake_pipeline)
     monkeypatch.setattr(
-        "substrate.runtimes.document_intelligence.service.engines.paddle_vl._apply_paddle_patches_once",
+        "document_intelligence.engines.paddle_vl._apply_paddle_patches_once",
         lambda: None,
     )
 
@@ -147,6 +152,7 @@ async def test_aextract_acquires_and_releases_the_same_worker(monkeypatch) -> No
     assert result.pages[0].text == "hello from the VL model"
 
 
+@needs_paddlex
 async def test_pipeline_is_cached_per_worker_not_rebuilt_per_call(monkeypatch) -> None:
     pool = _FakePool(worker_count=1)
     fake_pipeline = _FakePaddlexPipeline()
@@ -160,7 +166,7 @@ async def test_pipeline_is_cached_per_worker_not_rebuilt_per_call(monkeypatch) -
 
     monkeypatch.setattr(paddlex_pipelines, "create_pipeline", _counting_create_pipeline)
     monkeypatch.setattr(
-        "substrate.runtimes.document_intelligence.service.engines.paddle_vl._apply_paddle_patches_once",
+        "document_intelligence.engines.paddle_vl._apply_paddle_patches_once",
         lambda: None,
     )
 
@@ -172,6 +178,7 @@ async def test_pipeline_is_cached_per_worker_not_rebuilt_per_call(monkeypatch) -
     assert len(fake_pipeline.predict_calls) == 2
 
 
+@needs_paddlex
 async def test_worker_released_even_when_predict_raises(monkeypatch) -> None:
     pool = _FakePool(worker_count=1)
 
@@ -188,7 +195,7 @@ async def test_worker_released_even_when_predict_raises(monkeypatch) -> None:
         paddlex_pipelines, "create_pipeline", lambda **kw: _RaisingPipeline()
     )
     monkeypatch.setattr(
-        "substrate.runtimes.document_intelligence.service.engines.paddle_vl._apply_paddle_patches_once",
+        "document_intelligence.engines.paddle_vl._apply_paddle_patches_once",
         lambda: None,
     )
 
@@ -208,6 +215,7 @@ async def test_raises_clearly_when_pool_has_zero_healthy_workers() -> None:
         await engine.aextract(b"%PDF-1.4\n%%EOF", "doc.pdf")
 
 
+@needs_paddlex
 def test_build_pipeline_config_sets_verified_batch_sizes_and_server_url() -> None:
     cfg = _build_pipeline_config(
         server_url="http://127.0.0.1:8090/v1",
@@ -229,6 +237,7 @@ def test_build_pipeline_config_sets_verified_batch_sizes_and_server_url() -> Non
     assert vl_config["max_concurrency"] == 1
 
 
+@needs_paddlex
 async def test_aextract_passes_worker_endpoint_and_device_into_pipeline_config(
     monkeypatch,
 ) -> None:
@@ -236,7 +245,7 @@ async def test_aextract_passes_worker_endpoint_and_device_into_pipeline_config(
     fake_pipeline = _FakePaddlexPipeline()
     captured = _patch_create_pipeline(monkeypatch, fake_pipeline)
     monkeypatch.setattr(
-        "substrate.runtimes.document_intelligence.service.engines.paddle_vl._apply_paddle_patches_once",
+        "document_intelligence.engines.paddle_vl._apply_paddle_patches_once",
         lambda: None,
     )
 
@@ -250,6 +259,7 @@ async def test_aextract_passes_worker_endpoint_and_device_into_pipeline_config(
     )
 
 
+@needs_paddlex
 async def test_aextract_batch_processes_all_items_with_bounded_concurrency(
     monkeypatch,
 ) -> None:
@@ -257,7 +267,7 @@ async def test_aextract_batch_processes_all_items_with_bounded_concurrency(
     fake_pipeline = _FakePaddlexPipeline()
     _patch_create_pipeline(monkeypatch, fake_pipeline)
     monkeypatch.setattr(
-        "substrate.runtimes.document_intelligence.service.engines.paddle_vl._apply_paddle_patches_once",
+        "document_intelligence.engines.paddle_vl._apply_paddle_patches_once",
         lambda: None,
     )
 
@@ -272,14 +282,14 @@ async def test_aextract_batch_processes_all_items_with_bounded_concurrency(
 def test_apply_paddle_patches_once_is_idempotent(monkeypatch) -> None:
     calls = {"disable": 0, "parallelize": 0}
     monkeypatch.setattr(
-        "substrate.runtimes.document_intelligence.service.engines.paddle_vl._disable_mkldnn",
+        "document_intelligence.engines.paddle_vl._disable_mkldnn",
         lambda: calls.__setitem__("disable", calls["disable"] + 1),
     )
     monkeypatch.setattr(
-        "substrate.runtimes.document_intelligence.service.engines.paddle_vl._parallelize_crop_image_regions",
+        "document_intelligence.engines.paddle_vl._parallelize_crop_image_regions",
         lambda: calls.__setitem__("parallelize", calls["parallelize"] + 1),
     )
-    import substrate.runtimes.document_intelligence.service.engines.paddle_vl as vl_mod
+    import document_intelligence.engines.paddle_vl as vl_mod
 
     monkeypatch.setattr(vl_mod, "_PATCHES_APPLIED", False)
     _apply_paddle_patches_once()

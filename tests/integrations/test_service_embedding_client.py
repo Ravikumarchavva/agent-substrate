@@ -11,7 +11,7 @@ import pytest
 
 from substrate.types import MediaBlock, TextBlock
 from substrate.types import UnsupportedContentError
-from substrate.runtimes.embedding_reranker.client import (
+from substrate.integrations.services.embedding_reranker import (
     EmbeddingRerankerClient,
     EmbeddingRerankerTextEmbeddingClient,
 )

@@ -17,14 +17,15 @@ error is ``routes.py``'s job, not this engine's.
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from pathlib import Path
 
 from substrate.documents import ExtractedPage, ExtractionResult
-from substrate.logger import setup_logging
-from substrate.runtimes.document_intelligence.service import convert
+from document_intelligence import convert
 
-logger = setup_logging("substrate.document_intelligence.raw_text")
+logger = logging.getLogger(__name__)
 
 # Real, standard IANA media types — kept in sync with convert.py's
 # CONTENT_TYPE -> extension map (the reverse direction: extension ->

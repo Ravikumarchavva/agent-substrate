@@ -21,12 +21,13 @@ so Q4 stays an explicit opt-in with a loud startup warning, never silent.
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from pathlib import Path
 
-from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.document_intelligence.models")
+logger = logging.getLogger(__name__)
 
 _MAIN_FP16_FILENAME = "PaddleOCR-VL-1.6-GGUF.gguf"
 _MMPROJ_FP16_FILENAME = "PaddleOCR-VL-1.6-GGUF-mmproj.gguf"

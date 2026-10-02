@@ -10,7 +10,7 @@ import builtins
 
 import pytest
 
-from substrate.runtimes.document_intelligence.service import hardware
+from inference_pool import hardware
 
 
 @pytest.fixture(autouse=True)

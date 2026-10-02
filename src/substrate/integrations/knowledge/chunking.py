@@ -149,7 +149,7 @@ _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 # Matches a raw HTML <table>...</table> block — document-intelligence's
 # extraction markdown embeds some detected tables this way (ones not
 # confident enough to be cropped as a separate image; see
-# runtimes/document_intelligence/service/pipeline.py's _IMAGE_LABELS/
+# apps/document-intelligence/pipeline.py's _IMAGE_LABELS/
 # confidence gate). An HTML table has ~no ". "/"! "/"? " boundaries, so
 # SentenceChunker's regex sees it as one giant unsplittable "sentence" —
 # _split_oversized_table below is what actually breaks it up.

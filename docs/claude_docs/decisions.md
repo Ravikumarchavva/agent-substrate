@@ -766,3 +766,28 @@ and `index/` (derived, rebuildable). The runtime journal is the first thing on i
 `Database`, replacing the per-technology `LocalFilesystem*` / `Durable*` / `Pg*` duplicates. Done so far: the runtime
 journal, threads, long-term memory (full-text search, erasure that reaches the index and the database's own files) and
 session state, task boards, the knowledge graph, vectors, files (names in the database, contents in `files/`, written to disk before the row commits), workspace snapshots and the document catalog. The last two live in `workspace/` and `documents/` as `Workspaces(store)` / `Documents(store)`: `stores` sits below the concepts whose types they use, so `Store` cannot expose them as properties, and `Store.ensure` creates their tables on first use. Because they share a database one transaction can span them (not exposed yet), and tenancy becomes a view of the store (`store.tenant(t)`) instead of `Scoped*` wrappers around each port.
+
+
+---
+
+## `runtimes/` removed: heavy services are projects of their own, reached by URL (2026-10-02)
+
+**Decision:** `src/substrate/runtimes/` no longer exists. What it held is split by what it *is*:
+
+* the **clients** (`ExtractionClient`, `EmbeddingRerankerClient`, the llama-server sidecar client, `extract_document`) are
+  library code and live in `integrations/services/` — a base URL and a token in, a typed result out, nothing heavy imported;
+* the **servers** are projects of their own: `apps/document-intelligence`, `apps/embedding-reranker`, and
+  `packages/inference-pool` (process supervision and hardware detection, shared by both), each with its own `pyproject.toml`,
+  environment, tests and Dockerfile. `make test-apps` runs them.
+
+**Why:** the package had become a place where three unrelated deployables lived inside the library — importing the library's
+configuration and logging, reached from the library by Python import of their internals (`integrations/knowledge` imported
+`runtimes.embedding_reranker.service.embedding` and the raw-text engine), and with their extras (PaddleOCR, NVML) in the
+library's own `pyproject.toml`. The placement rule it was created with ("heavy footprint, reached only through a thin client")
+was right and was not followed. Heavy things run on a server and the library connects by URL; the rule is now the structure.
+
+**What changed in behaviour:** without a document service, a PDF is read by the light `LocalDocumentExtractor` (pdfplumber/pypdf,
+Tesseract if the `ocr` extra is there) and reports `engine="local"`; Office formats need the service and come back empty rather
+than falling back to a local markitdown/LibreOffice conversion, which now exists only inside `apps/document-intelligence`'s
+`raw_text` mode. The document security scan (`doc-firewall`) is the service's, applied to what it receives, not the library's.
+The services' modules no longer configure logging on import; each service's `app.py` does, once.

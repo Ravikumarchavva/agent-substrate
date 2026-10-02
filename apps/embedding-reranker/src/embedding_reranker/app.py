@@ -5,13 +5,13 @@ httpx proxy to the llama-embed/llama-rerank sidecars, so resource needs are
 much lighter than document_intelligence (see docker-compose.yml's
 `embedding-reranker` profile). The main backend calls
 it via HTTP through EmbeddingRerankerClient
-(runtimes/embedding_reranker/client.py), only when
+(integrations/services/embedding_reranker.py), only when
 EMBEDDING_RERANKER_SERVICE_URL is configured; otherwise image ingestion and
 reranking are unavailable.
 
 Usage::
 
-    uvicorn substrate.runtimes.embedding_reranker.service.app:app \
+    uvicorn embedding_reranker.app:app \
         --host 0.0.0.0 --port 8080
 """
 
@@ -28,7 +28,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import ServiceConfig
-from .embedding import EmbeddingReranker
+from substrate.integrations.services.llama_server import EmbeddingReranker
 from .routes import router
 
 logging.basicConfig(
@@ -36,7 +36,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
-logger = setup_logging()
+setup_logging(service_name="embedding-reranker")  # the application, not the library, configures logging
+logger = logging.getLogger(__name__)
 
 # Estimated, not verified this session (unlike document_intelligence's
 # factory.py::_VL_WORKER_VRAM_BUDGET_MIB, which IS a real measured number)
@@ -106,9 +107,9 @@ async def lifespan(app: FastAPI):
     rerank_pool = None
 
     if svc_config.mode == "local":
-        from substrate.runtimes.document_intelligence.service.hardware import detect
-        from substrate.runtimes.inference_pool.llama_pool import LocalLlamaServerPool
-        from substrate.runtimes.inference_pool.vram_ledger import VramLedger
+        from inference_pool.hardware import detect
+        from inference_pool.llama_pool import LocalLlamaServerPool
+        from inference_pool.vram_ledger import VramLedger
 
         hw = detect()
         ledger = VramLedger({f"gpu:{g.index}": g.free_mib for g in hw.gpus})

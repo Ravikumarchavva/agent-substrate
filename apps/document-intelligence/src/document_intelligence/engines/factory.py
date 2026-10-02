@@ -11,24 +11,25 @@ its own to get wrong, just construction order.
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.logger import setup_logging
-from substrate.runtimes.document_intelligence.service.autoconfig import ResolvedRuntime
-from substrate.runtimes.document_intelligence.service.engines.base import ExtractionEngine
-from substrate.runtimes.document_intelligence.service.engines.paddle_classic import (
+from document_intelligence.autoconfig import ResolvedRuntime
+from document_intelligence.engines.base import ExtractionEngine
+from document_intelligence.engines.paddle_classic import (
     PaddleClassicEngine,
 )
-from substrate.runtimes.document_intelligence.service.engines.paddle_vl import PaddleVLEngine
-from substrate.runtimes.document_intelligence.service.engines.raw_text import RawTextEngine
-from substrate.runtimes.inference_pool.llama_pool import (
+from document_intelligence.engines.paddle_vl import PaddleVLEngine
+from document_intelligence.engines.raw_text import RawTextEngine
+from inference_pool.llama_pool import (
     LocalLlamaServerPool,
     RemoteInferencePool,
 )
-from substrate.runtimes.document_intelligence.service.models import ensure_models
+from document_intelligence.models import ensure_models
 
-logger = setup_logging("substrate.document_intelligence.factory")
+logger = logging.getLogger(__name__)
 
 # Verified this session's benchmark: ~1.3GB resident for the llama-server
 # child (Q8_0, ctx=6144) + ~2.2GB for the layout-detection stack (still
@@ -53,8 +54,8 @@ async def _admit_gpu_workers(layout_devices: list[str]) -> list[str]:
     if not gpu_devices:
         return layout_devices
 
-    from substrate.runtimes.document_intelligence.service.hardware import detect
-    from substrate.runtimes.inference_pool.vram_ledger import VramLedger
+    from inference_pool.hardware import detect
+    from inference_pool.vram_ledger import VramLedger
 
     hw = detect()
     free_by_device = {f"gpu:{g.index}": g.free_mib for g in hw.gpus}

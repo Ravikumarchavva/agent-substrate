@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from substrate.runtimes.inference_pool.vram_ledger import VramLedger
+from inference_pool.vram_ledger import VramLedger
 
 
 async def test_reserve_within_budget_succeeds_and_deducts():

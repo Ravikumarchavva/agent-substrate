@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from substrate.runtimes.document_intelligence.client import (
+from substrate.integrations.services.document_extraction import (
     ExtractedImage,
     ExtractedPageText,
     ExtractResponse,

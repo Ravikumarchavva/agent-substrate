@@ -75,12 +75,11 @@ _ENTRY_POINTS = {
 def test_i33_a_library_module_never_configures_logging() -> None:
     """A library emits (``logging.getLogger(__name__)``); the application decides where the records go. Configuring
     handlers at import — as 118 modules once did, writing a rotating file into whatever directory the process
-    started in — is a side effect nobody asked for. Only application entry points call ``setup_logging``.
-    ``runtimes/`` (separate services, being rewritten) is outside this row."""
+    started in — is a side effect nobody asked for. Only application entry points call ``setup_logging``."""
     offenders = []
     for path in SRC.rglob("*.py"):
         rel = path.relative_to(SRC).as_posix()
-        if rel.startswith("runtimes/") or rel in _ENTRY_POINTS:
+        if rel in _ENTRY_POINTS:
             continue
         if _mentions_setup_logging(path):
             offenders.append(rel)

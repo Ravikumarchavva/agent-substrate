@@ -15,11 +15,11 @@ from pathlib import Path
 import pytest
 
 from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.runtimes.inference_pool.llama_pool import (
+from inference_pool.llama_pool import (
     LocalLlamaServerPool,
     RemoteInferencePool,
 )
-from substrate.runtimes.inference_pool.pool_types import PoolWorker
+from inference_pool.pool_types import PoolWorker
 
 _STUB = str(Path(__file__).parent / "_stub_llama_server.py")
 

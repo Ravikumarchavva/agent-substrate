@@ -16,7 +16,7 @@ from .base import IngestResult
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from substrate.runtimes.embedding_reranker.client import EmbeddingRerankerClient
+    from substrate.integrations.services.embedding_reranker import EmbeddingRerankerClient
     from substrate.integrations.knowledge.pipeline import RAGPipeline
     from substrate.models import ChatModel
     from substrate.stores import VectorStore
@@ -73,7 +73,7 @@ class LocalRagBackend:
         if not self._embedding_reranker_url:
             return None
         if self._embedding_reranker_client is None:
-            from substrate.runtimes.embedding_reranker.client import (
+            from substrate.integrations.services.embedding_reranker import (
                 EmbeddingRerankerClient,
             )
 
@@ -428,7 +428,7 @@ class LocalRagBackend:
             return None
 
         from substrate.integrations.llm.endpoint import InferenceEndpoint
-        from substrate.runtimes.document_intelligence.extract import extract_document
+        from substrate.integrations.services.document_extraction import extract_document
 
         data = source if isinstance(source, bytes) else Path(source).read_bytes()
         content_type = metadata.get("content_type", "application/octet-stream")

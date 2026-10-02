@@ -1,5 +1,5 @@
 """``LocalLlamaServerPool`` / ``RemoteInferencePool`` — the two
-:class:`~substrate.runtimes.inference_pool.pool_types.InferencePool`
+:class:`~inference_pool.pool_types.InferencePool`
 implementations any consumer (``document_intelligence/service/engines/
 paddle_vl.py``, ``embedding_reranker``'s local mode) dispatches inference
 through.
@@ -19,6 +19,8 @@ partial-success readiness, ``PR_SET_PDEATHSIG`` for orphan prevention).
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import ctypes
 import os
@@ -28,10 +30,9 @@ from dataclasses import dataclass, field
 import httpx2 as httpx
 
 from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.logger import setup_logging
-from substrate.runtimes.inference_pool.pool_types import PoolWorker
+from inference_pool.pool_types import PoolWorker
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _HEALTH_POLL_INTERVAL_S = 1.0
 _RESTART_BACKOFF_INITIAL_S = 1.0

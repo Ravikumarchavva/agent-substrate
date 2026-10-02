@@ -11,7 +11,7 @@ import base64
 from unittest.mock import AsyncMock
 
 from substrate.integrations.knowledge.backends.local import LocalRagBackend
-from substrate.runtimes.document_intelligence.client import (
+from substrate.integrations.services.document_extraction import (
     ExtractedImage,
     ExtractedPageText,
     ExtractResponse,
@@ -393,7 +393,7 @@ async def test_load_via_extraction_service_splits_text_and_images(monkeypatch):
         )
     )
     monkeypatch.setattr(
-        "substrate.runtimes.document_intelligence.extract.ExtractionClient",
+        "substrate.integrations.services.document_extraction.ExtractionClient",
         lambda *a, **kw: client,
     )
     backend, _ = _backend(image_store=StubImageStore())
@@ -426,7 +426,7 @@ async def test_load_via_extraction_service_returns_none_on_failure(monkeypatch):
         return_value=ExtractResponse(success=False, error="boom")
     )
     monkeypatch.setattr(
-        "substrate.runtimes.document_intelligence.extract.ExtractionClient",
+        "substrate.integrations.services.document_extraction.ExtractionClient",
         lambda *a, **kw: client,
     )
     backend, _ = _backend(image_store=StubImageStore())
@@ -465,7 +465,7 @@ async def test_ingest_routes_pdf_text_through_pipeline_and_images_through_image_
     )
     client.embed_image = AsyncMock(return_value=[0.1, 0.2])
     monkeypatch.setattr(
-        "substrate.runtimes.document_intelligence.extract.ExtractionClient",
+        "substrate.integrations.services.document_extraction.ExtractionClient",
         lambda *a, **kw: client,
     )
     backend, pipeline = _backend(

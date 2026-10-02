@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from substrate.runtimes.document_intelligence.service.engines.paddle_classic import (
+from document_intelligence.engines.paddle_classic import (
     _nearest_score,
     _rewrite_markdown_images,
     _score_lookup,
@@ -157,7 +157,7 @@ def _pipeline_with_fake_result(blocks, *, boxes, markdown_texts=""):
     real, but whose underlying paddlex ``.predict()`` call is faked — avoids
     constructing a real (heavy, model-loading) PPStructureV3 pipeline just to
     test the confidence-gating branch."""
-    from substrate.runtimes.document_intelligence.service.pipeline import (
+    from document_intelligence.pipeline import (
         ExtractionPipeline,
     )
 
@@ -238,7 +238,7 @@ pytest.importorskip("paddleocr")
 def test_extraction_pipeline_detects_chart_in_real_pdf():
     """Real, non-mocked chart detection — verifies the mkldnn workaround and
     the layout-model chart label end to end, not just unit-level plumbing."""
-    from substrate.runtimes.document_intelligence.service.pipeline import (
+    from document_intelligence.pipeline import (
         ExtractionPipeline,
     )
 
@@ -266,7 +266,7 @@ def test_extraction_pipeline_extract_batch_demuxes_per_file():
     back correctly split by source file (input_path demuxing), each with
     its own page numbering reset and its own chart detected -- not a
     cross-contaminated merge of both files' pages."""
-    from substrate.runtimes.document_intelligence.service.pipeline import (
+    from document_intelligence.pipeline import (
         ExtractionPipeline,
     )
 

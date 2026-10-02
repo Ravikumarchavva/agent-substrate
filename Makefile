@@ -119,6 +119,17 @@ test-child:
 	uv pip install -q --python examples/child-project/.venv-acceptance/bin/python -e "examples/child-project[test]"
 	cd examples/child-project && .venv-acceptance/bin/python -m pytest -q
 
+# The services and the pool are projects of their own (apps/, packages/): each is installed into a fresh environment
+# with only its own dependencies and runs its own tests there. Nothing heavy — PaddleOCR is the `paddle` extra and its
+# tests skip without it.
+APPS = packages/inference-pool apps/embedding-reranker apps/document-intelligence
+test-apps:
+	@for p in $(APPS); do \
+		echo "== $$p"; rm -rf $$p/.venv-test; uv venv -q $$p/.venv-test && \
+		uv pip install -q --python $$p/.venv-test/bin/python -e "$$p[test]" && \
+		(cd $$p && .venv-test/bin/python -m pytest -q -p no:cacheprovider) || exit 1; \
+	done
+
 build:
 	docker build -f ./deployment/docker/backend.Dockerfile .
 
@@ -163,4 +174,5 @@ ci:
 	$(MAKE) typecheck
 	$(MAKE) test-ci
 	$(MAKE) test-child
+	$(MAKE) test-apps
 	$(MAKE) security

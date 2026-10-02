@@ -12,7 +12,7 @@ This is deliberately the *least* infra a real `DocumentExtractor` can need —
 a single well-known OCR binary, no model weights, no GPU, no external
 service. For production-grade layout/OCR quality (multi-column reading
 order, chart/table detection), see the PaddleOCR-backed adapter in
-``runtimes/document_intelligence`` (``ServiceBackedDocumentExtractor``),
+``integrations/services/document_extraction.py`` (``ServiceBackedDocumentExtractor``),
 which implements this exact same kernel ``DocumentExtractor`` Protocol and
 is a drop-in replacement wherever this one is used.
 """

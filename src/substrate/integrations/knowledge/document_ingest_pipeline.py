@@ -2,12 +2,12 @@
 
 Composes existing agent-substrate pieces without reimplementing any of them:
   - document-intelligence (PaddleOCR layout extraction) via ``ExtractionClient``
-    (HTTP) — see runtimes/document_intelligence/client.py
+    (HTTP) — see integrations/services/document_extraction.py
   - ``StructureAwareChunker`` — markdown-heading-aware text chunking, see
     integrations/knowledge/chunking.py
   - llama-embed/llama-rerank sidecars via ``EmbeddingReranker`` (HTTP) — text
     and image embedding into the same vector space, see
-    runtimes/embedding_reranker/service/embedding.py
+    integrations/services/llama_server.py
   - an optional ``blob_store`` (duck-typed ``upload``/``download``, e.g.
     ``S3FileStore`` — SeaweedFS/AWS S3, or any S3-compatible object store a deployment
     points it at, including a hosted one) for the source PDF and each
@@ -31,8 +31,8 @@ losing it, matching ``backends/local.py``'s existing behavior.
 
 Usage::
 
-    from substrate.runtimes.document_intelligence.client import ExtractionClient
-    from substrate.runtimes.embedding_reranker.service.embedding import EmbeddingReranker
+    from substrate.integrations.services.document_extraction import ExtractionClient
+    from substrate.integrations.services.llama_server import EmbeddingReranker
     from substrate.integrations.storage.s3 import S3FileStore
     from substrate.integrations.knowledge.document_ingest_pipeline import DocumentIngestPipeline
 
@@ -58,11 +58,11 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from substrate.stores import VectorStore
-    from substrate.runtimes.document_intelligence.client import (
+    from substrate.integrations.services.document_extraction import (
         ExtractionClient,
         ExtractResponse,
     )
-    from substrate.runtimes.embedding_reranker.service.embedding import (
+    from substrate.integrations.services.llama_server import (
         EmbeddingReranker,
     )
 
@@ -165,7 +165,7 @@ class DocumentIngestPipeline:
         batch with no partial results (also verified against the real
         sidecar), so the fast path can't tell us which chunk was bad.
         """
-        from substrate.runtimes.embedding_reranker.service.embedding import (
+        from substrate.integrations.services.llama_server import (
             EmbeddingServiceError,
         )
 
@@ -244,7 +244,7 @@ class DocumentIngestPipeline:
         """
         from substrate.types import MediaBlock, TextBlock
         from substrate.stores import Document
-        from substrate.runtimes.embedding_reranker.service.embedding import (
+        from substrate.integrations.services.llama_server import (
             EmbeddingServiceError,
         )
 
@@ -480,7 +480,7 @@ class DocumentIngestPipeline:
         One failing file is logged and counted, not raised — a 5000-file
         batch shouldn't die on file #3.
         """
-        from substrate.runtimes.embedding_reranker.service.embedding import (
+        from substrate.integrations.services.llama_server import (
             EmbeddingServiceError,
         )
 

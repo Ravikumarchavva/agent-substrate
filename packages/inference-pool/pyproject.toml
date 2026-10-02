@@ -1,0 +1,25 @@
+[project]
+name = "inference-pool"
+version = "0.1.0"
+description = "Spawn, supervise and load-balance llama-server children (or point at remote ones) — for the services that run a model."
+requires-python = ">=3.11"
+dependencies = ["agent-substrate[services]", "httpx2>=2.7.0"]
+
+[project.optional-dependencies]
+# GPU detection reads NVML; without it the pool falls back to nvidia-smi, then to CPU
+gpu = ["nvidia-ml-py>=12.0"]
+test = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0"]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "inference_pool"
+
+[tool.uv.sources]
+agent-substrate = { path = "../..", editable = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -15,10 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.serving.factory import build_chat_tools
 from substrate.integrations.llm.endpoint import InferenceEndpoint
-from substrate.runtimes.document_intelligence.extract import extract_document
-from substrate.runtimes.document_intelligence.service.convert import (
-    CONVERTIBLE_CONTENT_TYPES,
-)
+from substrate.integrations.services.document_extraction import OFFICE_CONTENT_TYPES, extract_document
 from substrate.serving.monolith.dependencies import ServerDependencies
 from substrate.serving.monolith.schemas import ChatRequest
 from substrate.serving.monolith.routes.chat_wire import _ImagePayload
@@ -52,7 +49,7 @@ _SANDBOX_WORKSPACE_MOUNT_PATH = "/app/workspace"
 
 # Types eligible for upload-time size caps and eager RAG staging
 EXTRACTABLE_CONTENT_TYPES = (
-    {"application/pdf", "text/markdown"} | CONVERTIBLE_CONTENT_TYPES
+    {"application/pdf", "text/markdown"} | OFFICE_CONTENT_TYPES
 )
 
 

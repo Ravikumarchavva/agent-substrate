@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from substrate.runtimes.embedding_reranker.service import app as app_module
+from embedding_reranker import app as app_module
 
 
 # ── fakes ────────────────────────────────────────────────────────────────
@@ -108,12 +108,12 @@ async def test_remote_mode_never_calls_hardware_detect_or_constructs_pool(
     def _fail_pool_ctor(**kwargs):
         raise AssertionError("LocalLlamaServerPool must not be constructed in remote mode")
 
-    import substrate.runtimes.document_intelligence.service.hardware as hardware_mod
+    import inference_pool.hardware as hardware_mod
 
     monkeypatch.setattr(hardware_mod, "detect", _fail_detect)
     monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
 
-    import substrate.runtimes.inference_pool.llama_pool as llama_pool_mod
+    import inference_pool.llama_pool as llama_pool_mod
 
     monkeypatch.setattr(llama_pool_mod, "LocalLlamaServerPool", _fail_pool_ctor)
 
@@ -136,13 +136,13 @@ async def test_remote_mode_never_calls_hardware_detect_or_constructs_pool(
 async def test_local_mode_with_sufficient_vram_constructs_two_pools_and_wires_urls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import substrate.runtimes.document_intelligence.service.hardware as hardware_mod
+    import inference_pool.hardware as hardware_mod
 
     profile = _FakeHardwareProfile(gpus=[_FakeGpu(index=0, free_mib=8192)])
     monkeypatch.setattr(hardware_mod, "detect", lambda: profile)
     monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
 
-    import substrate.runtimes.inference_pool.llama_pool as llama_pool_mod
+    import inference_pool.llama_pool as llama_pool_mod
 
     monkeypatch.setattr(llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool)
 
@@ -174,14 +174,14 @@ async def test_local_mode_with_sufficient_vram_constructs_two_pools_and_wires_ur
 async def test_local_mode_with_insufficient_vram_degrades_to_cpu(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import substrate.runtimes.document_intelligence.service.hardware as hardware_mod
+    import inference_pool.hardware as hardware_mod
 
     # 100 MiB free is below both the embed and rerank 2500 MiB budgets.
     profile = _FakeHardwareProfile(gpus=[_FakeGpu(index=0, free_mib=100)])
     monkeypatch.setattr(hardware_mod, "detect", lambda: profile)
     monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
 
-    import substrate.runtimes.inference_pool.llama_pool as llama_pool_mod
+    import inference_pool.llama_pool as llama_pool_mod
 
     monkeypatch.setattr(llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool)
 
@@ -205,13 +205,13 @@ async def test_local_mode_passes_real_embed_and_rerank_flags_via_extra_args(
     --hf-file/--embedding/--pooling last/--reranking) actually reach the
     pool constructor, and that --parallel is NOT duplicated in extra_args
     since `slots` already covers it."""
-    import substrate.runtimes.document_intelligence.service.hardware as hardware_mod
+    import inference_pool.hardware as hardware_mod
 
     profile = _FakeHardwareProfile(gpus=[_FakeGpu(index=0, free_mib=8192)])
     monkeypatch.setattr(hardware_mod, "detect", lambda: profile)
     monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
 
-    import substrate.runtimes.inference_pool.llama_pool as llama_pool_mod
+    import inference_pool.llama_pool as llama_pool_mod
 
     monkeypatch.setattr(llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool)
 
@@ -251,13 +251,13 @@ async def test_local_mode_passes_real_embed_and_rerank_flags_via_extra_args(
 async def test_local_mode_with_no_gpu_detected_uses_cpu_without_reserving(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import substrate.runtimes.document_intelligence.service.hardware as hardware_mod
+    import inference_pool.hardware as hardware_mod
 
     profile = _FakeHardwareProfile(gpus=[])
     monkeypatch.setattr(hardware_mod, "detect", lambda: profile)
     monkeypatch.setattr(app_module, "EmbeddingReranker", _FakeEmbeddingReranker)
 
-    import substrate.runtimes.inference_pool.llama_pool as llama_pool_mod
+    import inference_pool.llama_pool as llama_pool_mod
 
     monkeypatch.setattr(llama_pool_mod, "LocalLlamaServerPool", _FakeLocalLlamaServerPool)
 

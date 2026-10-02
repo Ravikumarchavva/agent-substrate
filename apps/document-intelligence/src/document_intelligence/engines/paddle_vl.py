@@ -8,7 +8,7 @@ remote sglang/vLLM deployment) to serve the vision-language model.
 
 Layout detection inside this pipeline is STILL classic Paddle models — only
 the text/OCR recognition step is handed off to the VL model over HTTP (via
-whatever :class:`~substrate.runtimes.inference_pool.pool_types.PoolWorker` the
+whatever :class:`~inference_pool.pool_types.PoolWorker` the
 pool hands this engine).
 That's why this module still needs ``_disable_mkldnn()``/
 ``_parallelize_crop_image_regions()`` from ``paddle_classic.py``, and why
@@ -29,22 +29,23 @@ top-level / ``8`` per-submodule caused real, repeated VRAM exhaustion;
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 
-from substrate.logger import setup_logging
-from substrate.runtimes.document_intelligence.service.engines.paddle_classic import (
+from document_intelligence.engines.paddle_classic import (
     _disable_mkldnn,
     _finalize_markdown_for_pipeline,
     _parallelize_crop_image_regions,
     _pages_from_results_for_pipeline,
 )
-from substrate.runtimes.inference_pool.pool_types import (
+from inference_pool.pool_types import (
     InferencePool,
     PoolWorker,
 )
 from substrate.documents import ExtractionResult
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 _PATCHES_APPLIED = False
 

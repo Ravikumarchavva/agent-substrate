@@ -11,8 +11,8 @@ import pytest
 from substrate.integrations.document.local_extractor import LocalDocumentExtractor
 from substrate.integrations.llm.endpoint import InferenceEndpoint
 from substrate.testing.conformance.document_extractor import DocumentExtractorConformance, pdf
-from substrate.runtimes.document_intelligence import extract as extract_module
-from substrate.runtimes.document_intelligence.client import ExtractionClient
+from substrate.integrations.services import document_extraction as extract_module
+from substrate.integrations.services.document_extraction import ExtractionClient
 
 
 class LocalPdf:

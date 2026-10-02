@@ -142,7 +142,7 @@ class LLMReranker:
 
 class CrossEncoderReranker:
     """Rerank search results using the embedding-reranker service's local
-    cross-encoder (Qwen3-VL-Reranker-2B — see runtimes/embedding_reranker/).
+    cross-encoder (Qwen3-VL-Reranker-2B — see apps/embedding-reranker/).
 
     Duck-types the same shape as ``LLMReranker`` (no formal Protocol exists;
     ``LocalRagBackend``'s ``reranker`` param accepts either). Unlike

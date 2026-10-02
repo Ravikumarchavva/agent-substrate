@@ -1,4 +1,4 @@
-"""substrate.runtimes.inference_pool — spawn/health-check/dispatch/shutdown
+"""inference_pool — spawn/health-check/dispatch/shutdown
 of N local ``llama-server``-shaped subprocess children (or a pre-configured
 remote deployment), shared across every consumer that talks to a local-or-
 remote OpenAI-compatible inference backend.
@@ -15,11 +15,11 @@ agents/capabilities" contract).
 
 from __future__ import annotations
 
-from substrate.runtimes.inference_pool.llama_pool import (
+from inference_pool.llama_pool import (
     LocalLlamaServerPool,
     RemoteInferencePool,
 )
-from substrate.runtimes.inference_pool.pool_types import InferencePool, PoolWorker
+from inference_pool.pool_types import InferencePool, PoolWorker
 
 __all__ = [
     "LocalLlamaServerPool",

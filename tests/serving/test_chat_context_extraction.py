@@ -4,7 +4,7 @@ endpoint construction from settings, and how the returned
 ``_build_file_context`` expects.
 
 The service-vs-local fallback decision tree itself now lives in
-``runtimes/document_intelligence/extract.py`` and is covered there (see
+``integrations/services/document_extraction.py`` and is covered there (see
 ``tests/document_intelligence/test_extract.py``) — these tests only pin
 that chat_context builds the right ``InferenceEndpoint`` and consumes the
 result correctly, via ``AsyncMock``-patching ``extract_document`` at its

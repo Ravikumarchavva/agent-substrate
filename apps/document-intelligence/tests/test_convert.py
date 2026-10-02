@@ -13,7 +13,7 @@ import asyncio
 import pytest
 
 from substrate.documents import ExtractedPage, ExtractionResult
-from substrate.runtimes.document_intelligence.service import convert
+from document_intelligence import convert
 
 
 def test_convertible_content_types_cover_real_office_formats() -> None:
@@ -119,7 +119,7 @@ async def test_convert_office_document_escalates_to_tier2_when_tier1_thin(
     )
     # _extract_pdf is imported lazily inside convert_office_document from
     # engines.raw_text — patch it at its real definition site.
-    import substrate.runtimes.document_intelligence.service.engines.raw_text as raw_text_mod
+    import document_intelligence.engines.raw_text as raw_text_mod
 
     monkeypatch.setattr(raw_text_mod, "_extract_pdf", lambda pdf_bytes: final_result)
 

@@ -11,10 +11,10 @@ from dataclasses import dataclass
 
 import pytest
 
-from substrate.runtimes.document_intelligence.service.autoconfig import ResolvedRuntime
-from substrate.runtimes.document_intelligence.service.engines import factory
-from substrate.runtimes.document_intelligence.service.engines.paddle_vl import PaddleVLEngine
-from substrate.runtimes.document_intelligence.service.engines.raw_text import RawTextEngine
+from document_intelligence.autoconfig import ResolvedRuntime
+from document_intelligence.engines import factory
+from document_intelligence.engines.paddle_vl import PaddleVLEngine
+from document_intelligence.engines.raw_text import RawTextEngine
 
 
 @dataclass
@@ -165,7 +165,7 @@ class _FakeHardwareProfile:
 
 
 def _mock_hardware_detect(monkeypatch: pytest.MonkeyPatch, *, free_mib: int) -> None:
-    import substrate.runtimes.document_intelligence.service.hardware as hardware_mod
+    import inference_pool.hardware as hardware_mod
 
     profile = _FakeHardwareProfile(gpus=[_FakeGpu(free_mib=free_mib)])
     monkeypatch.setattr(hardware_mod, "detect", lambda: profile)
@@ -247,7 +247,7 @@ async def test_vl_cpu_mode_never_calls_hardware_detect(
     """No GPU device in layout_device_for_worker -> _admit_gpu_workers'
     early-return path -- hardware.detect() (real subprocess/pynvml calls on
     a real deployment) must not run at all for a pure-CPU worker."""
-    import substrate.runtimes.document_intelligence.service.hardware as hardware_mod
+    import inference_pool.hardware as hardware_mod
 
     def _fail_if_called():
         raise AssertionError("hardware.detect() must not be called for a CPU worker")
@@ -273,7 +273,7 @@ async def test_remote_endpoint_skips_vram_admission_entirely(
 ) -> None:
     """A remote pool's VRAM is someone else's process to arbitrate --
     admission must not run (or matter) for the remote-endpoint path."""
-    import substrate.runtimes.document_intelligence.service.hardware as hardware_mod
+    import inference_pool.hardware as hardware_mod
 
     def _fail_if_called():
         raise AssertionError("hardware.detect() must not be called for a remote endpoint")

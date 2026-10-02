@@ -1,6 +1,6 @@
 """The document-security-scan gate in document-intelligence service routes.py::extract()
 — real doc-firewall scan on real PDF bytes, exercised through the actual
-FastAPI route (not just runtimes/document_intelligence/security_scan.py directly,
+FastAPI route (not just apps/document-intelligence/security_scan.py directly,
 which test_security_scan.py already covers at the unit level).
 
 Verifies the gate actually short-circuits BEFORE the (fake) pipeline runs —
@@ -20,11 +20,11 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from substrate.runtimes.document_intelligence.service.pipeline import (
+from document_intelligence.pipeline import (
     ExtractedPage,
     ExtractionResult,
 )
-from substrate.runtimes.document_intelligence.service.routes import router
+from document_intelligence.routes import router
 
 pytestmark = pytest.mark.heavy
 

@@ -16,6 +16,8 @@ GPU detection chain, each step a soft-fail fallback to the next:
 
 from __future__ import annotations
 
+import logging
+
 import csv
 import io
 import os
@@ -23,9 +25,8 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 
-from substrate.logger import setup_logging
 
-logger = setup_logging("substrate.document_intelligence.hardware")
+logger = logging.getLogger(__name__)
 
 # Conservative assumed per-card VRAM (MiB) when only a GPU *count* is
 # available (the paddle fallback gives no memory info at all).

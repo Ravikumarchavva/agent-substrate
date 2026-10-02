@@ -13,7 +13,7 @@ import json
 import httpx2 as httpx
 import pytest
 
-from substrate.runtimes.embedding_reranker.service.embedding import (
+from substrate.integrations.services.llama_server import (
     EmbeddingReranker,
     EmbeddingServiceError,
 )
@@ -140,7 +140,7 @@ def _png(width: int, height: int) -> bytes:
 
 
 def test_downscale_leaves_an_image_that_already_fits_untouched() -> None:
-    from substrate.runtimes.embedding_reranker.service.embedding import (
+    from substrate.integrations.services.llama_server import (
         _downscale_to_pixel_budget,
     )
 
@@ -156,7 +156,7 @@ def test_downscale_shrinks_to_budget_and_keeps_aspect_ratio() -> None:
 
     from PIL import Image
 
-    from substrate.runtimes.embedding_reranker.service.embedding import (
+    from substrate.integrations.services.llama_server import (
         _PIXELS_PER_IMAGE_TOKEN,
         _downscale_to_pixel_budget,
     )
@@ -175,7 +175,7 @@ def test_downscale_returns_input_unchanged_when_it_cannot_be_decoded() -> None:
     """Not this function's job to police unreadable bytes -- the existing
     embed error path already handles them, and swallowing them here would
     turn a clear failure into a confusing one."""
-    from substrate.runtimes.embedding_reranker.service.embedding import (
+    from substrate.integrations.services.llama_server import (
         _downscale_to_pixel_budget,
     )
 
@@ -292,7 +292,7 @@ async def test_rerank_with_image_falls_back_to_text_only_and_warns(caplog):
     import logging
 
     target_logger = logging.getLogger(
-        "substrate.runtimes.embedding_reranker.service.embedding"
+        "substrate.integrations.services.llama_server"
     )
     target_logger.addHandler(caplog.handler)
     target_logger.setLevel(logging.WARNING)

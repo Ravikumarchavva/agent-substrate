@@ -5,7 +5,8 @@ Authentication is via ``Bearer <token>`` header (optional, configurable).
 """
 
 from __future__ import annotations
-from substrate.logger import setup_logging
+
+import logging
 
 import asyncio
 import base64
@@ -24,7 +25,7 @@ from .schemas import (
     HealthResponse,
 )
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1", tags=["document-intelligence"])
 
@@ -92,11 +93,11 @@ async def extract(body: ExtractRequest, request: Request, _: Authed):
     # Structural/security scan on the RAW bytes, before the parser touches
     # them — a hostile file must not get a chance to exploit the extraction
     # engine's own parsing first. See
-    # runtimes/document_intelligence/security_scan.py for what's actually
+    # apps/document-intelligence/security_scan.py for what's actually
     # verified working here (not just wired up).
     if getattr(cfg, "enable_document_security_scan", True):
         from substrate.safety import Severity
-        from substrate.runtimes.document_intelligence.security_scan import scan_document
+        from document_intelligence.security_scan import scan_document
 
         scan_verdict = await asyncio.to_thread(
             scan_document, data, filename=body.filename
@@ -195,7 +196,7 @@ async def _validate_batch_item(
 
     if getattr(cfg, "enable_document_security_scan", True):
         from substrate.safety import Severity
-        from substrate.runtimes.document_intelligence.security_scan import scan_document
+        from document_intelligence.security_scan import scan_document
 
         scan_verdict = await asyncio.to_thread(
             scan_document, data, filename=item.filename

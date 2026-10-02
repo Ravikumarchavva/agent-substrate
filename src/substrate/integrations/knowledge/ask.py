@@ -45,7 +45,7 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from substrate.models import ChatModel
     from substrate.stores import SearchResult, VectorStore
-    from substrate.runtimes.embedding_reranker.service.embedding import (
+    from substrate.integrations.services.llama_server import (
         EmbeddingReranker,
     )
 
@@ -263,7 +263,7 @@ async def ask(
     """
     from substrate.types import ChatMessage, TextBlock, content_blocks_to_str
     from substrate.models import GenerationOptions
-    from substrate.runtimes.embedding_reranker.service.embedding import (
+    from substrate.integrations.services.llama_server import (
         EmbeddingServiceError,
     )
 

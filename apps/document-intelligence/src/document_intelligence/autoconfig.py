@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from substrate.runtimes.document_intelligence.service.hardware import HardwareProfile
+from inference_pool.hardware import HardwareProfile
 
 # GPU eligibility threshold (MiB). NOT 3500 -- Paddle's own allocator showed
 # real run-to-run variance of a few hundred MB in this session's testing;

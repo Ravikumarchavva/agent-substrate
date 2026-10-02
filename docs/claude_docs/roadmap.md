@@ -543,7 +543,7 @@ so the decision is visible, not silently dropped.
     accept an injected `cfg`/`load_persisted_steps` instead of importing
     `serving.shared.settings`/`serving.monolith.services` itself.
   - `_cosine_similarity` was reimplemented identically in three files
-    (`capabilities/tools/ai/knowledge_search.py`, `agents/llm/cache.py`,
+    (`capabilities/tools/ai/knowledge_search.py` — since replaced by `documents/tool.py`, `agents/llm/cache.py`,
     `agents/storage/vector.py`). Consolidated into one
     `agents/storage/vector.py::cosine_similarity()`, re-exported from
     `agents.storage`.

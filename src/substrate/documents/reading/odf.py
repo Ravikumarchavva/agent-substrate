@@ -134,7 +134,7 @@ class _Content:
                 elif child.tag == _q("text", "list"):
                     self.list(child, depth + 1)
 
-    def table(self, node: ET.Element, *, as_markdown: bool = True) -> list[list[str]]:
+    def table(self, node: ET.Element) -> list[list[str]]:
         rows: list[list[str]] = []
         for row in node.iter(_q("table", "table-row")):
             repeat = min(int(row.get(_q("table", "number-rows-repeated"), 1)), 100)

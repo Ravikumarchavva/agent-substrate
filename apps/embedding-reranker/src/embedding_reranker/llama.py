@@ -171,49 +171,6 @@ class LlamaEngine:
         }
         return await self._embed(payload)
 
-    async def embed_images(self, images: list[bytes]) -> list[list[float]]:
-        """Embed many images in one round trip — same batching win as
-        ``embed_texts`` (real, verified: 2 images in 0.08s in one request).
-        If ANY image in the batch fails (e.g. exceeds the sidecar's image
-        token minimum), the WHOLE request fails with no partial results
-        (same behavior as the text batch endpoint) — callers doing
-        heterogeneous batches should catch ``EngineError`` and
-        fall back to per-item ``embed_image`` calls to isolate the bad one.
-        """
-        if not images:
-            return []
-        marker = await self._media_marker()
-        payload = {
-            "input": [
-                {
-                    "prompt_string": marker,
-                    "multimodal_data": [
-                        base64.b64encode(
-                            _downscale_to_pixel_budget(data, self._max_image_pixels)
-                        ).decode("ascii")
-                    ],
-                }
-                for data in images
-            ]
-        }
-        try:
-            resp = await self._client.post(
-                f"{self._embed_url}/embeddings", json=payload
-            )
-            resp.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise EngineError(
-                f"llama-embed sidecar batch request failed ({self._embed_url}): {exc}"
-            ) from exc
-        data = resp.json()
-        try:
-            rows = sorted(data, key=lambda row: row["index"])
-            return [list(row["embedding"][0]) for row in rows]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise EngineError(
-                f"Unexpected /embeddings batch response shape: {data!r}"
-            ) from exc
-
     async def _media_marker(self) -> str:
         marker = self._cached_media_marker
         if marker is None:

@@ -134,8 +134,8 @@ class EmbeddingRerankerClient:
             else:
                 text_parts.append(str(block))
 
-        text = "\n".join(text_parts).strip()
-        if not text and not images:
+        text = "".join(text_parts)
+        if not text.strip() and not images:
             return []
 
         try:

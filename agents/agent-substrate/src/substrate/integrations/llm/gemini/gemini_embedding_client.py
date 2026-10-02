@@ -24,6 +24,10 @@ from substrate.integrations.llm.base import BaseEmbeddingClient, EmbeddingResult
 logger = setup_logging()
 
 
+# ``batchEmbedContents`` accepts at most this many inputs in one request.
+_MAX_INPUTS_PER_REQUEST = 100
+
+
 class GeminiEmbeddingClient(BaseEmbeddingClient):
     """Google Gemini Embeddings API client.
 
@@ -56,26 +60,28 @@ class GeminiEmbeddingClient(BaseEmbeddingClient):
         """
         effective_model = model or self.model
         effective_dims = dimensions or self.dimensions
+        if not texts:
+            return EmbeddingResult(embeddings=[], model=effective_model)
 
         config_kwargs: dict[str, Any] = {}
         if effective_dims is not None:
             config_kwargs["output_dimensionality"] = effective_dims
-
-        config = (
-            genai.types.EmbedContentConfig(**config_kwargs) if config_kwargs else None
-        )
-
-        response = self.client.models.embed_content(
-            model=effective_model,
-            contents=texts,  # type: ignore[arg-type]
-            config=config,
-        )
+        config = genai.types.EmbedContentConfig(**config_kwargs) if config_kwargs else None
 
         embeddings: list[list[float]] = []
-        if response.embeddings:
-            for emb in response.embeddings:
-                if emb.values is not None:
-                    embeddings.append(list(emb.values))
+        for start in range(0, len(texts), _MAX_INPUTS_PER_REQUEST):
+            # The async API: the sync one would block the event loop for the whole round trip.
+            response = await self.client.aio.models.embed_content(
+                model=effective_model,
+                contents=texts[start : start + _MAX_INPUTS_PER_REQUEST],  # type: ignore[arg-type]
+                config=config,
+            )
+            vectors = [list(e.values) for e in (response.embeddings or []) if e.values is not None]
+            if len(vectors) != len(texts[start : start + _MAX_INPUTS_PER_REQUEST]):
+                raise ValueError(
+                    f"Gemini returned {len(vectors)} embeddings for {len(texts[start : start + _MAX_INPUTS_PER_REQUEST])} texts"
+                )
+            embeddings.extend(vectors)
 
         return EmbeddingResult(
             embeddings=embeddings,

@@ -26,6 +26,10 @@ from substrate.integrations.llm.base import BaseEmbeddingClient, EmbeddingResult
 logger = setup_logging()
 
 
+# The Embeddings API accepts at most this many inputs in one request.
+_MAX_INPUTS_PER_REQUEST = 2048
+
+
 class OpenAIEmbeddingClient(BaseEmbeddingClient):
     """OpenAI Embeddings API client.
 
@@ -74,6 +78,8 @@ class OpenAIEmbeddingClient(BaseEmbeddingClient):
         """
         effective_model = model or self.model
         effective_dims = dimensions or self.dimensions
+        if not texts:
+            return EmbeddingResult(embeddings=[], model=effective_model)  # the API rejects an empty input
 
         create_kwargs: dict[str, Any] = {
             "model": effective_model,
@@ -83,16 +89,14 @@ class OpenAIEmbeddingClient(BaseEmbeddingClient):
         if effective_dims is not None:
             create_kwargs["dimensions"] = effective_dims
 
-        response = await self.client.embeddings.create(**create_kwargs)
+        embeddings: list[list[float]] = []
+        usage_tokens = 0
+        served_model = effective_model
+        for start in range(0, len(texts), _MAX_INPUTS_PER_REQUEST):
+            response = await self.client.embeddings.create(**{**create_kwargs, "input": texts[start : start + _MAX_INPUTS_PER_REQUEST]})
+            # Sort by index to guarantee order matches input
+            embeddings.extend(item.embedding for item in sorted(response.data, key=lambda d: d.index))
+            usage_tokens += response.usage.total_tokens if response.usage else 0
+            served_model = response.model
 
-        # Sort by index to guarantee order matches input
-        sorted_data = sorted(response.data, key=lambda d: d.index)
-        embeddings = [item.embedding for item in sorted_data]
-
-        usage_tokens = response.usage.total_tokens if response.usage else 0
-
-        return EmbeddingResult(
-            embeddings=embeddings,
-            model=response.model,
-            usage_tokens=usage_tokens,
-        )
+        return EmbeddingResult(embeddings=embeddings, model=served_model, usage_tokens=usage_tokens)

@@ -17,7 +17,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 KERNEL = REPO_ROOT / "src" / "substrate" / "kernel"
@@ -207,6 +206,8 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
     assert "ObjectStore" in suites, "the ObjectStore conformance suite has gone missing"
     assert "TaskStore" in suites, "the TaskStore conformance suite has gone missing"
     assert "GraphStore" in suites, "the GraphStore conformance suite has gone missing"
+    for port in ("LLMClient", "EmbeddingClient", "DocumentExtractor"):
+        assert port in suites, f"the {port} conformance suite has gone missing"
     assert "VectorStore" in suites, "the vector-store conformance suite has gone missing"
     shipped = {
         "RuntimeStore": ("SqliteRuntimeStore", "PostgresRuntimeStore"),
@@ -215,6 +216,9 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
         "ObjectStore": ("WorkspaceFileStore", "S3FileStore"),
         "TaskStore": ("LocalFilesystemTaskStore", "PgTaskStore"),
         "GraphStore": ("LocalFilesystemGraphStore", "LanceGraphStore"),
+        "LLMClient": ("OpenAICompatibleClient", "OpenAIClient", "AnthropicClient", "GeminiClient"),
+        "EmbeddingClient": ("OpenAIEmbeddingClient", "GeminiEmbeddingClient", "SentenceTransformersEmbeddingClient", "EmbeddingRerankerTextEmbeddingClient"),
+        "DocumentExtractor": ("LocalDocumentExtractor", "ServiceBackedDocumentExtractor"),
         "VectorStore": ("LocalFilesystemVectorStore", "LanceDBVectorStore", "PgVectorStore"),
     }
     for port, implementations in shipped.items():
@@ -225,11 +229,6 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
             )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="I30: every store port has a conformance suite; the LLM-client, embedding-client "
-    "and document-extractor ports do not yet.",
-)
 def test_i30_every_port_has_a_conformance_suite() -> None:
     missing = [port for port in _PORTS if port not in _suite_classes()]
     assert not missing, f"ports with no conformance suite: {missing}"

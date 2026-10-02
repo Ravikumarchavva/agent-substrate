@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**94 enforced · 1 pending · 95 total**
+**95 enforced · 0 pending · 95 total**
 
 ## approvals
 
@@ -172,9 +172,8 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i28_the_public_api_matches_its_snapshot`
 - ✅ **The row that keeps the other rows honest. A file once promised "the same suite is run against those implementations" and never was, while three backends drifted apart.**
   `test_i30_every_implementation_of_a_port_with_a_suite_runs_it`
-- ⏳ **i30 every port has a conformance suite**
+- ✅ **i30 every port has a conformance suite**
   `test_i30_every_port_has_a_conformance_suite`
-  _Pending — I30: every store port has a conformance suite; the LLM-client, embedding-client and document-extractor ports do not yet._
 - ✅ **The engine instruments itself through ``opentelemetry-api``, which does nothing until a host configures an SDK. The SDK, the exporter and the web-framework instrumentation are the host's choice — the reference server installs them through its extra — so a plain install of the engine does not pull them in.**
   `test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports`
 - ✅ **The AST check above sees what each file names; this one sees what actually loads. A module that reached a vendor SDK, a logging stack or a database driver through a helper would pass the first and fail this.**

@@ -12,6 +12,10 @@ from substrate.stores.store import (
     Store,
     connect,
 )
+from substrate.stores.tenant import (
+    Erased,
+    Tenant,
+)
 from substrate.stores.blob import (
     BlobStore,
 )
@@ -45,7 +49,6 @@ from substrate.stores.memory import (
 from substrate.stores.scoped import (
     bind_graph,
     bind_threads,
-    bind_files,
     bind_tasks,
     bind_vector,
     fence_objects,
@@ -71,6 +74,8 @@ from substrate.stores.vector import (
 __all__ = [
     "Database",
     "Store",
+    "Tenant",
+    "Erased",
     "StoreVersionError",
     "Tx",
     "connect",
@@ -110,7 +115,6 @@ __all__ = [
     "WorkspaceQuotaExceededError",
     "bind_graph",
     "bind_threads",
-    "bind_files",
     "bind_tasks",
     "bind_vector",
     "fence_objects",

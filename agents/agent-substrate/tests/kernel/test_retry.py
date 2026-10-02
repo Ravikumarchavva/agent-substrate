@@ -27,7 +27,9 @@ def _agent_id(name: str) -> Actor:
 
 
 def _msg(target: Actor) -> Message:
-    return Message(target=target, sender=Actor.system("test"), payload=DataPayload(data={}))
+    return Message(
+        target=target, sender=Actor.system("test"), payload=DataPayload(data={})
+    )
 
 
 async def _run_to_terminal(rt: Runtime, run_id: str) -> str:
@@ -69,7 +71,11 @@ async def test_retryable_failure_re_executes_on_retry() -> None:
     agent = _FlakyAgent(_agent_id("flaky"))
     async with ephemeral_runtime() as rt:
         await rt.register(agent)
-        run_id = await rt.submit(agent.id, _msg(agent.id), retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.01))
+        run_id = await rt.submit(
+            agent.id,
+            _msg(agent.id),
+            retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.01),
+        )
         outcome = await _run_to_terminal(rt, run_id)
 
     assert outcome == "run.completed"
@@ -81,7 +87,11 @@ async def test_permanent_error_fails_without_retrying() -> None:
     agent = _AlwaysCrashingAgent(_agent_id("permanent"))
     async with ephemeral_runtime() as rt:
         await rt.register(agent)
-        run_id = await rt.submit(agent.id, _msg(agent.id), retry_policy=RunRetryPolicy(max_retries=5, backoff_s=10.0))
+        run_id = await rt.submit(
+            agent.id,
+            _msg(agent.id),
+            retry_policy=RunRetryPolicy(max_retries=5, backoff_s=10.0),
+        )
         outcome = await _run_to_terminal(rt, run_id)
 
     assert outcome == "run.failed"
@@ -95,9 +105,15 @@ async def test_retry_backoff_delays_the_next_attempt() -> None:
     async with ephemeral_runtime() as rt:
         await rt.register(agent)
         start = time.monotonic()
-        run_id = await rt.submit(agent.id, _msg(agent.id), retry_policy=RunRetryPolicy(max_retries=1, backoff_s=backoff_s))
+        run_id = await rt.submit(
+            agent.id,
+            _msg(agent.id),
+            retry_policy=RunRetryPolicy(max_retries=1, backoff_s=backoff_s),
+        )
         outcome = await _run_to_terminal(rt, run_id)
         elapsed = time.monotonic() - start
 
     assert outcome == "run.completed"
-    assert elapsed >= backoff_s * 0.5, "retry must not fire before the backoff delay elapses"
+    assert elapsed >= backoff_s * 0.5, (
+        "retry must not fire before the backoff delay elapses"
+    )

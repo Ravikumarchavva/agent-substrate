@@ -291,4 +291,3 @@ class TestContextBuilderCheckpointIntegration:
         # Message 2 & 3: Delta messages n3 and n4
         assert window.messages[2].text == "msg 3"
         assert window.messages[3].text == "msg 4"
-

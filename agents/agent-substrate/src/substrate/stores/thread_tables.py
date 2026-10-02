@@ -23,7 +23,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from substrate.stores.database import Row, Tx
+from substrate.stores.database import Row, Tx, under
 from substrate.stores.threads import Branch, HistoryCheckpoint, MessageNode
 from substrate.types.content import ChatMessage
 from substrate.types.errors import (
@@ -487,6 +487,20 @@ class Threads:
             await tx.execute("DELETE FROM thread_nodes WHERE session_id = ?", session_id)
 
         await self._run(op)
+
+    async def erase_under(self, name: str) -> int:
+        """Delete every session named ``name`` or below it, with its branches and checkpoints. Returns the nodes removed."""
+        clause, params = under("session_id", name)
+
+        async def op(tx: Tx) -> int:
+            await tx.execute(f"DELETE FROM thread_checkpoints WHERE {clause}", *params)
+            await tx.execute(f"DELETE FROM thread_branches WHERE {clause}", *params)
+            return await tx.execute(f"DELETE FROM thread_nodes WHERE {clause}", *params)
+
+        erased = await self._run(op)
+        if erased:
+            await self._store.database.reclaim()
+        return erased
 
 
 __all__ = ["SCHEMA", "Threads"]

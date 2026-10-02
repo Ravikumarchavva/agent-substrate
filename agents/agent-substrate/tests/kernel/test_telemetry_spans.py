@@ -31,7 +31,9 @@ def exporter(monkeypatch: pytest.MonkeyPatch) -> InMemorySpanExporter:
     provider.add_span_processor(SimpleSpanProcessor(exp))
     # set_tracer_provider is once-per-process; patch the accessor instead so
     # each test gets a clean exporter.
-    monkeypatch.setattr(trace, "get_tracer", lambda name, *a, **k: provider.get_tracer(name))
+    monkeypatch.setattr(
+        trace, "get_tracer", lambda name, *a, **k: provider.get_tracer(name)
+    )
     return exp
 
 
@@ -53,13 +55,17 @@ def test_spans_nest_into_one_trace(exporter: InMemorySpanExporter) -> None:
     assert spans["tool.inner"].parent.span_id == spans["tool"].context.span_id
 
 
-def test_outcome_set_inside_the_block_is_recorded(exporter: InMemorySpanExporter) -> None:
+def test_outcome_set_inside_the_block_is_recorded(
+    exporter: InMemorySpanExporter,
+) -> None:
     with span("tool") as handle:
         handle.set_attribute(semconv.TOOL_OUTCOME, "ok")
     assert dict(_by_name(exporter)["tool"].attributes)[semconv.TOOL_OUTCOME] == "ok"
 
 
-def test_a_failure_marks_the_span_and_carries_the_error_code(exporter: InMemorySpanExporter) -> None:
+def test_a_failure_marks_the_span_and_carries_the_error_code(
+    exporter: InMemorySpanExporter,
+) -> None:
     with pytest.raises(RateLimitedError):
         with span("llm"):
             raise RateLimitedError(retry_after=2.0)
@@ -81,13 +87,17 @@ def test_suspension_is_not_a_failure(exporter: InMemorySpanExporter) -> None:
     assert dict(s.attributes)[semconv.SUSPENDED] is True
 
 
-def test_a_trace_continues_across_a_process_boundary(exporter: InMemorySpanExporter) -> None:
+def test_a_trace_continues_across_a_process_boundary(
+    exporter: InMemorySpanExporter,
+) -> None:
     """The persisted context is all a different worker has. The span it opens must
     land in the same trace, parented to where the first worker left off."""
     with span("lease.one") as first:
         persisted = first.context()
     assert persisted is not None
-    revived = TraceContext.from_traceparent(persisted.to_traceparent())  # as read back from storage
+    revived = TraceContext.from_traceparent(
+        persisted.to_traceparent()
+    )  # as read back from storage
 
     with span("lease.two", parent=revived, links=[persisted]):
         pass
@@ -97,7 +107,9 @@ def test_a_trace_continues_across_a_process_boundary(exporter: InMemorySpanExpor
     assert len(spans["lease.two"].links) == 1
 
 
-def test_non_scalar_attributes_are_stringified_not_dropped_or_raised(exporter: InMemorySpanExporter) -> None:
+def test_non_scalar_attributes_are_stringified_not_dropped_or_raised(
+    exporter: InMemorySpanExporter,
+) -> None:
     with span("x", attributes={"d": {"a": 1}, "n": None, "ok": 3}):
         pass
     attrs = dict(_by_name(exporter)["x"].attributes)
@@ -108,20 +120,32 @@ def test_content_attributes_are_dropped_unless_capture_is_enabled(
     exporter: InMemorySpanExporter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("SUBSTRATE_CAPTURE_CONTENT", raising=False)
-    with span("llm", attributes={semconv.GEN_AI_INPUT_MESSAGES: "secret prompt", "ok": 1}):
+    with span(
+        "llm", attributes={semconv.GEN_AI_INPUT_MESSAGES: "secret prompt", "ok": 1}
+    ):
         pass
-    assert semconv.GEN_AI_INPUT_MESSAGES not in dict(_by_name(exporter)["llm"].attributes)
+    assert semconv.GEN_AI_INPUT_MESSAGES not in dict(
+        _by_name(exporter)["llm"].attributes
+    )
 
     exporter.clear()
     monkeypatch.setenv("SUBSTRATE_CAPTURE_CONTENT", "true")
     with span("llm", attributes={semconv.GEN_AI_INPUT_MESSAGES: "secret prompt"}):
         pass
-    assert dict(_by_name(exporter)["llm"].attributes)[semconv.GEN_AI_INPUT_MESSAGES] == "secret prompt"
+    assert (
+        dict(_by_name(exporter)["llm"].attributes)[semconv.GEN_AI_INPUT_MESSAGES]
+        == "secret prompt"
+    )
 
 
 def test_traceparent_round_trips_and_rejects_garbage() -> None:
     ctx = TraceContext.new()
     assert TraceContext.from_traceparent(ctx.to_traceparent()) == ctx
-    for bad in ("", "00-xyz", "01-" + "a" * 32 + "-" + "b" * 16 + "-01", "00-" + "0" * 32 + "-" + "b" * 16 + "-01"):
+    for bad in (
+        "",
+        "00-xyz",
+        "01-" + "a" * 32 + "-" + "b" * 16 + "-01",
+        "00-" + "0" * 32 + "-" + "b" * 16 + "-01",
+    ):
         with pytest.raises(ValueError):
             TraceContext.from_traceparent(bad)

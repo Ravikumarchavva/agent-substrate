@@ -59,7 +59,9 @@ class MockChatModel:
 async def wait_run(rt: Runtime, run_id: str) -> None:
     async for entry in rt.tail(run_id):
         if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
-            assert entry.kind == "run.completed", f"Run ended with {entry.kind}: {entry.payload}"
+            assert entry.kind == "run.completed", (
+                f"Run ended with {entry.kind}: {entry.payload}"
+            )
             break
 
 
@@ -68,11 +70,13 @@ async def test_react_agent_branching_and_dag_history():
     history = fs_history()
     ctx_cfg = ContextConfig(history=history)
 
-    llm = MockChatModel([
-        [TextBlock(text="Hello Alice! Pleased to meet you.")],
-        [TextBlock(text="Your name is Alice, and this is an experiment branch.")],
-        [TextBlock(text="Your name is Alice on the main branch.")],
-    ])
+    llm = MockChatModel(
+        [
+            [TextBlock(text="Hello Alice! Pleased to meet you.")],
+            [TextBlock(text="Your name is Alice, and this is an experiment branch.")],
+            [TextBlock(text="Your name is Alice on the main branch.")],
+        ]
+    )
 
     user = Actor(type="user", key="alice")
     agent = ReActAgent("assistant", model=llm, context=ctx_cfg)

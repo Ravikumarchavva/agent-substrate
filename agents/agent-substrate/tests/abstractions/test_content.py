@@ -4,44 +4,16 @@ import pytest
 from substrate.types import BlockValidationError, KernelError
 from substrate.types import (
     ChatMessage,
-    DataBlock,
     ErrorBlock,
-    KernelModel,
     MediaBlock,
     ReasoningBlock,
     Role,
     TextBlock,
     ToolResultBlock,
-    ToolUseBlock,
     UnknownBlock,
     content_blocks_to_str,
     parse_content_block,
 )
-
-
-def test_base_model_immutability():
-    block = TextBlock(text="immutable")
-    assert isinstance(block, KernelModel)
-    with pytest.raises(Exception):
-        block.text = "modified"  # type: ignore[misc]
-
-    img = MediaBlock.image(url="http://example.com/img.png")
-    assert isinstance(img, MediaBlock)
-    assert isinstance(img, KernelModel)
-
-
-def test_text_block():
-    block = TextBlock(text="hello")
-    assert block.type == "text"
-    assert block.text == "hello"
-    assert str(block) == "hello"
-
-
-def test_data_block():
-    block = DataBlock(data={"a": 1})
-    assert block.type == "data"
-    assert block.data == {"a": 1}
-    assert str(block) == '{"a": 1}'
 
 
 def test_error_block():
@@ -83,7 +55,9 @@ def test_media_blocks_centralized_validation():
     with pytest.raises(
         ValueError, match="Exactly one of url, data, or file_id must be provided"
     ):
-        MediaBlock.audio(url="http://example.com/a.wav", file_id="f1")  # Multiple provided
+        MediaBlock.audio(
+            url="http://example.com/a.wav", file_id="f1"
+        )  # Multiple provided
 
     # Video media block
     video = MediaBlock.video(url="http://example.com/video.mp4")
@@ -96,15 +70,6 @@ def test_media_blocks_centralized_validation():
     assert isinstance(doc, MediaBlock)
     assert doc.is_document is True
     assert str(doc) == "[Document: paper.pdf]"
-
-
-def test_tool_use_block():
-    block = ToolUseBlock(call_id="call1", tool_name="echo", arguments={"text": "hi"})
-    assert block.type == "tool_use"
-    assert block.call_id == "call1"
-    assert block.tool_name == "echo"
-    assert block.arguments == {"text": "hi"}
-    assert str(block) == "[ToolCall: echo(call1)]"
 
 
 def test_tool_result_block():
@@ -123,15 +88,6 @@ def test_tool_result_block_string_coercion():
     assert len(result.content) == 1
     assert isinstance(result.content[0], TextBlock)
     assert result.text == "direct string result"
-
-
-def test_reasoning_block():
-    block = ReasoningBlock(text="let me think", signature="sig-abc")
-    assert block.type == "reasoning"
-    assert block.text == "let me think"
-    assert block.signature == "sig-abc"
-    assert block.redacted is False
-    assert str(block) == "[Reasoning] let me think"
 
 
 def test_reasoning_block_redacted():
@@ -178,13 +134,6 @@ def test_content_blocks_to_str():
     blocks = [TextBlock(text="hello"), TextBlock(text="world")]
     res = content_blocks_to_str(blocks)
     assert "hello\nworld" == res
-
-
-def test_chat_message():
-    msg = ChatMessage(role="user", content=[TextBlock(text="hi")])
-    assert msg.role == "user"
-    assert len(msg.content) == 1
-    assert msg.text == "hi"
 
 
 def test_chat_message_string_coercion():

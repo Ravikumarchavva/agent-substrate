@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.stores import MemoryNamespace
+from substrate.stores import Erased, MemoryNamespace, Store
 from substrate.workspace.layout import tenant_prefix, user_prefix
 from substrate.integrations.storage.session_index_erasure import (
     erase_session_index,
@@ -34,6 +34,10 @@ class ErasureSummary:
     session_index_tables_deleted: int
     memories_deleted: int = 0
     runs_deleted: int = 0
+    thread_nodes_deleted: int = 0
+    task_boards_deleted: int = 0
+    vectors_deleted: int = 0
+    graph_entities_deleted: int = 0
 
     def as_dict(self) -> dict[str, int | str | None]:
         return asdict(self)
@@ -70,6 +74,7 @@ async def erase_user(
     pending_store: Any = None,
     memory_store: Any = None,
     runtime_store: Any = None,
+    folder: Store | None = None,
 ) -> ErasureSummary:
     threads = list(
         (
@@ -125,6 +130,14 @@ async def erase_user(
     if runtime_store is not None:
         for thread_id in thread_ids:
             runs += await runtime_store.erase(tenant=tenant_id, thread_id=thread_id)
+    # The conversation DAG and task boards of each of the user's threads: the raw text of what was said.
+    erased = Erased()
+    if folder is not None:
+        for thread_id in thread_ids:
+            gone = await folder.tenant(tenant_id).erase_conversation(thread_id)
+            erased = Erased(
+                thread_nodes=erased.thread_nodes + gone.thread_nodes, task_boards=erased.task_boards + gone.task_boards
+            )
     return ErasureSummary(
         tenant_id,
         user_id,
@@ -135,6 +148,8 @@ async def erase_user(
         session_index_tables,
         memories,
         runs,
+        erased.thread_nodes,
+        erased.task_boards,
     )
 
 
@@ -148,6 +163,7 @@ async def erase_tenant(
     pending_store: Any = None,
     memory_store: Any = None,
     runtime_store: Any = None,
+    folder: Store | None = None,
 ) -> ErasureSummary:
     threads = list(
         (
@@ -161,12 +177,14 @@ async def erase_tenant(
     )
     await db.execute(delete(Thread).where(Thread.tenant_id == tenant_id))
     await db.commit()
-    objects = await _delete_prefix(store, tenant_prefix(tenant_id))
+    # Everything the folder store holds for the tenant — conversation DAG, tasks, vectors, graph, files, memory.
+    erased = await folder.tenant(tenant_id).erase() if folder is not None else Erased()
+    objects = erased.files + await _delete_prefix(store, tenant_prefix(tenant_id))
     if pending_store is not None and hasattr(pending_store, "delete_prefix"):
         objects += await pending_store.delete_prefix(tenant_prefix(tenant_id))
     redis_deleted = await _redis_sweep(redis, thread_ids | users)
     session_index_tables = await erase_session_index_for_tenant(cfg, tenant_id, users)
-    memories = await memory_store.erase(MemoryNamespace(tenant_id=tenant_id)) if memory_store else 0
+    memories = erased.memories + (await memory_store.erase(MemoryNamespace(tenant_id=tenant_id)) if memory_store else 0)
     runs = await runtime_store.erase(tenant=tenant_id) if runtime_store is not None else 0
     return ErasureSummary(
         tenant_id,
@@ -178,4 +196,8 @@ async def erase_tenant(
         session_index_tables,
         memories,
         runs,
+        erased.thread_nodes,
+        erased.task_boards,
+        erased.vectors,
+        erased.graph_entities,
     )

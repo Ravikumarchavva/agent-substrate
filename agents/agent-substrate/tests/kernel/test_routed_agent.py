@@ -21,11 +21,19 @@ ME = Actor("agent", "routed")
 
 
 def _chat(text: str) -> Message:
-    return Message(target=ME, sender=Actor.system("t"), payload=ChatPayload(message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])))
+    return Message(
+        target=ME,
+        sender=Actor.system("t"),
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
+        ),
+    )
 
 
 def _data(**data: object) -> Message:
-    return Message(target=ME, sender=Actor.system("t"), payload=DataPayload(data=dict(data)))
+    return Message(
+        target=ME, sender=Actor.system("t"), payload=DataPayload(data=dict(data))
+    )
 
 
 class Recorder(RoutedAgent):
@@ -54,7 +62,11 @@ class OnlyChat(RoutedAgent):
 async def _terminal(rt: Runtime, run_id: str) -> tuple[str, dict]:
     async def watch() -> tuple[str, dict]:
         async for entry in rt.tail(run_id):
-            if entry.kind in (RunLogKind.RUN_COMPLETED, RunLogKind.RUN_FAILED, RunLogKind.RUN_CANCELLED):
+            if entry.kind in (
+                RunLogKind.RUN_COMPLETED,
+                RunLogKind.RUN_FAILED,
+                RunLogKind.RUN_CANCELLED,
+            ):
                 return str(entry.kind), dict(entry.payload or {})
         raise AssertionError("no terminal entry")
 
@@ -86,11 +98,17 @@ async def test_a_subclass_inherits_handlers_and_can_override_one() -> None:
     async with ephemeral_runtime() as rt:
         await rt.register(agent)
         await _terminal(rt, await rt.submit(ME, _chat("x")))
-    assert agent.seen == ["LOUD"], "the subclass's handler for ChatPayload replaces the parent's"
-    assert Loud._routes[DataPayload] == "on_data", "handlers the subclass did not override are inherited"
+    assert agent.seen == ["LOUD"], (
+        "the subclass's handler for ChatPayload replaces the parent's"
+    )
+    assert Loud._routes[DataPayload] == "on_data", (
+        "handlers the subclass did not override are inherited"
+    )
 
 
-async def test_an_unroutable_payload_fails_the_run_with_a_typed_reason_and_is_not_retried() -> None:
+async def test_an_unroutable_payload_fails_the_run_with_a_typed_reason_and_is_not_retried() -> (
+    None
+):
     agent = OnlyChat()
     async with ephemeral_runtime() as rt:
         await rt.register(agent)
@@ -99,15 +117,22 @@ async def test_an_unroutable_payload_fails_the_run_with_a_typed_reason_and_is_no
         events = await rt.read(run_id)
 
     assert kind == RunLogKind.RUN_FAILED
-    assert "DataPayload" in str(payload.get("error")) and "ChatPayload" in str(payload.get("error")), payload
-    assert not [e for e in events if e.kind == RunLogKind.RUN_RETRYING], "a poison message must not be retried"
+    assert "DataPayload" in str(payload.get("error")) and "ChatPayload" in str(
+        payload.get("error")
+    ), payload
+    assert not [e for e in events if e.kind == RunLogKind.RUN_RETRYING], (
+        "a poison message must not be retried"
+    )
 
 
 def test_the_error_names_what_the_agent_accepts() -> None:
     agent = OnlyChat()
     with pytest.raises(UnroutableMessageError) as raised:
         agent._handler_for(_data(n=1))
-    assert raised.value.accepts == ("ChatPayload",) and raised.value.payload_type == "DataPayload"
+    assert (
+        raised.value.accepts == ("ChatPayload",)
+        and raised.value.payload_type == "DataPayload"
+    )
 
 
 def test_handle_needs_a_payload_type() -> None:

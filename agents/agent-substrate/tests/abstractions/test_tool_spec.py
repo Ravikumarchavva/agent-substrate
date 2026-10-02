@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 
-from substrate.tools import AnyTool, ToolExecutionResult, is_hosted_tool, is_provider_defined_tool
+from substrate.tools import (
+    AnyTool,
+    ToolExecutionResult,
+    is_hosted_tool,
+    is_provider_defined_tool,
+)
 from substrate.tools import PayloadBase
 from substrate.types import TextBlock
 

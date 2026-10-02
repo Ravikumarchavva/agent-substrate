@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, TypeVar
 from uuid import uuid4
 
-from substrate.stores.database import Row, Tx
+from substrate.stores.database import Row, Tx, under
 from substrate.stores.tasks import Task, TaskList, TaskStatus
 
 if TYPE_CHECKING:
@@ -290,6 +290,19 @@ class Tasks:
             return await _read_task(tx, task_list_id, task_id) if changed else None
 
         return await self._run(op)
+
+    async def erase_under(self, name: str) -> int:
+        """Delete the boards of every conversation named ``name`` or below it. Returns the boards removed."""
+        clause, params = under("conversation_id", name)
+
+        async def op(tx: Tx) -> int:
+            await tx.execute(f"DELETE FROM task_items WHERE board_id IN (SELECT id FROM task_boards WHERE {clause})", *params)
+            return await tx.execute(f"DELETE FROM task_boards WHERE {clause}", *params)
+
+        erased = await self._run(op)
+        if erased:
+            await self._store.database.reclaim()
+        return erased
 
 
 __all__ = ["SCHEMA", "Tasks"]

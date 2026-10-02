@@ -30,10 +30,16 @@ class SendEmailTool:
     description = "Sends an email."
     risk = ToolRisk.HIGH
     idempotent = False
-    input_schema: dict[str, Any] = {"type": "object", "properties": {"to": {"type": "string"}}}
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {"to": {"type": "string"}},
+    }
 
     async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:
-        return ToolExecutionResult(name=self.name, content=[TextBlock(text=f"email sent to {kwargs.get('to')}")])
+        return ToolExecutionResult(
+            name=self.name,
+            content=[TextBlock(text=f"email sent to {kwargs.get('to')}")],
+        )
 
 
 class SignalApprovalHandler:
@@ -61,7 +67,9 @@ class Mailer:
 
 
 def _boot(agent: Mailer) -> Message:
-    return Message(target=agent.id, sender=Actor.system("test"), payload=DataPayload(data={}))
+    return Message(
+        target=agent.id, sender=Actor.system("test"), payload=DataPayload(data={})
+    )
 
 
 async def _wait_for(rt: Runtime, run_id: str, kind: str) -> dict[str, Any]:
@@ -88,14 +96,18 @@ async def _approve_across_restart(path: Path, action: str) -> Mailer:
 
     # The human responds while nothing is running.
     async with Runtime.open(path) as rt:
-        await rt.store.signal(run_id, f"hitl:{request['request_id']}", {"action": action})
+        await rt.store.signal(
+            run_id, f"hitl:{request['request_id']}", {"action": action}
+        )
         second = Mailer()
         await rt.register(second)
         await _wait_for(rt, run_id, RunLogKind.RUN_COMPLETED)
     return second
 
 
-async def test_tool_approval_survives_restart_and_resumes_when_approved(tmp_path: Path) -> None:
+async def test_tool_approval_survives_restart_and_resumes_when_approved(
+    tmp_path: Path,
+) -> None:
     second = await _approve_across_restart(tmp_path / "rt.sqlite3", "approve")
 
     (result,) = second.results
@@ -103,7 +115,9 @@ async def test_tool_approval_survives_restart_and_resumes_when_approved(tmp_path
     assert "user@example.com" in (result.text or "")
 
 
-async def test_tool_approval_survives_restart_and_denies_when_rejected(tmp_path: Path) -> None:
+async def test_tool_approval_survives_restart_and_denies_when_rejected(
+    tmp_path: Path,
+) -> None:
     second = await _approve_across_restart(tmp_path / "rt.sqlite3", "deny")
 
     (result,) = second.results
@@ -130,7 +144,11 @@ async def test_tool_approval_request_id_is_replay_stable(tmp_path: Path) -> None
         # A new message wakes the suspended run; it replays to the same approval and suspends again.
         await rt.store.deliver(Delivery(agent=again.id, msg=_boot(again)))
         await asyncio.sleep(0.3)
-        assert [e.kind for e in await rt.read(run_id)].count(RunLogKind.RUN_RESUMED) >= 1, "the run was not replayed"
-        requests = [e for e in await rt.read(run_id) if e.kind == RunLogKind.APPROVAL_REQUESTED]
+        assert [e.kind for e in await rt.read(run_id)].count(
+            RunLogKind.RUN_RESUMED
+        ) >= 1, "the run was not replayed"
+        requests = [
+            e for e in await rt.read(run_id) if e.kind == RunLogKind.APPROVAL_REQUESTED
+        ]
 
     assert [r.payload["request_id"] for r in requests] == [first["request_id"]]

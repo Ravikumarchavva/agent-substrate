@@ -32,7 +32,9 @@ def _agent_id(name: str) -> Actor:
 
 
 def _msg(target: Actor | Topic, data: dict | None = None) -> Message:
-    return Message(target=target, sender=Actor.system("test"), payload=DataPayload(data=data or {}))
+    return Message(
+        target=target, sender=Actor.system("test"), payload=DataPayload(data=data or {})
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +254,9 @@ class SpawnsAssistantByType:
             handle = await ctx.spawn_child("assistant", boot=boot)
             outcome = await ctx.ask(handle, boot, timeout=3.0)
             output = outcome.result.output  # type: ignore[union-attr]
-            self.child_address = output.data["seen_at"] if isinstance(output, DataPayload) else None
+            self.child_address = (
+                output.data["seen_at"] if isinstance(output, DataPayload) else None
+            )
             self.done.set()
 
 
@@ -362,15 +366,23 @@ async def test_journal_dedup_via_context() -> None:
 
     async with ephemeral_runtime() as rt:
         await rt.register(agent)
-        run_id = await rt.submit(agent_id, _msg(agent_id, {}), retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.0))
+        run_id = await rt.submit(
+            agent_id,
+            _msg(agent_id, {}),
+            retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.0),
+        )
         async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed"):
                 assert entry.kind == "run.completed"
                 break
 
     first, replay = agent.attempts
-    assert first[0] != first[1], "two journaled calls in one run must not share an effect id"
-    assert replay == first, "the replay must be served from the journal, not re-executed"
+    assert first[0] != first[1], (
+        "two journaled calls in one run must not share an effect id"
+    )
+    assert replay == first, (
+        "the replay must be served from the journal, not re-executed"
+    )
 
 
 async def test_nested_effect_inside_journal_hit_tool_stays_replay_safe() -> None:
@@ -428,7 +440,11 @@ async def test_nested_effect_inside_journal_hit_tool_stays_replay_safe() -> None
 
     async with ephemeral_runtime() as rt:
         await rt.register(agent)
-        run_id = await rt.submit(agent_id, _msg(agent_id, {}), retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.0))
+        run_id = await rt.submit(
+            agent_id,
+            _msg(agent_id, {}),
+            retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.0),
+        )
         async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed"):
                 assert entry.kind == "run.completed"
@@ -615,7 +631,9 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
         await rt.store.signal(run_id, f"hitl:{request_id}", {"answer": "yes"})
         await asyncio.wait_for(agent.done.wait(), timeout=3.0)
 
-        final_count = len([e for e in await rt.read(run_id) if e.kind == "input.requested"])
+        final_count = len(
+            [e for e in await rt.read(run_id) if e.kind == "input.requested"]
+        )
         assert final_count == 1, (
             f"input.requested duplicated across suspend/resume: {final_count} entries"
         )

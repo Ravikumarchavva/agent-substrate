@@ -13,7 +13,9 @@ from substrate.workspace.layout import (
 
 def test_canonical_keys_are_tenant_first() -> None:
     assert user_prefix("tenant-a", "user-a") == "tenants/tenant-a/users/user-a"
-    assert conversation_shared_key("tenant-a", "user-a", "thread-a", "uploads/report.pdf") == (
+    assert conversation_shared_key(
+        "tenant-a", "user-a", "thread-a", "uploads/report.pdf"
+    ) == (
         "tenants/tenant-a/users/user-a/conversations/thread-a/branches/main/workspace"
         "/shared/uploads/report.pdf"
     )
@@ -33,8 +35,14 @@ def test_branch_dimension_is_uniform_not_special_cased() -> None:
     parameter at all."""
     main = conversation_workspace_prefix("tenant-a", "user-a", "thread-a", "main")
     other = conversation_workspace_prefix("tenant-a", "user-a", "thread-a", "exp-1")
-    assert main == "tenants/tenant-a/users/user-a/conversations/thread-a/branches/main/workspace"
-    assert other == "tenants/tenant-a/users/user-a/conversations/thread-a/branches/exp-1/workspace"
+    assert (
+        main
+        == "tenants/tenant-a/users/user-a/conversations/thread-a/branches/main/workspace"
+    )
+    assert (
+        other
+        == "tenants/tenant-a/users/user-a/conversations/thread-a/branches/exp-1/workspace"
+    )
     # Same shape, only the branch segment differs.
     assert main.replace("/main/", "/exp-1/") == other
 

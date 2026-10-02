@@ -65,13 +65,21 @@ async def _finish(rt: Runtime, agent, msg: Message) -> None:
 
 def test_scope_round_trips_through_message_metadata():
     scope = RunScope.from_metadata(
-        {"tenant_id": "t", "user_id": "u", "branch_id": "exp", "parent_agent_id": "boss"},
+        {
+            "tenant_id": "t",
+            "user_id": "u",
+            "branch_id": "exp",
+            "parent_agent_id": "boss",
+        },
         thread_id="th",
         agent_id="a",
         agent_label="A",
     )
     assert (scope.tenant_id, scope.user_id, scope.branch_id, scope.parent_agent_id) == (
-        "t", "u", "exp", "boss",
+        "t",
+        "u",
+        "exp",
+        "boss",
     )
     assert scope.thread_id == "th"
 
@@ -93,7 +101,12 @@ def test_missing_metadata_means_no_identity_and_the_main_branch():
 
 async def test_a_tool_sees_the_scope_of_the_message_being_handled():
     probe = ProbeTool()
-    llm = ScriptedLLM([[ToolUseBlock(call_id="c1", tool_name="probe", arguments={})], [TextBlock(text="ok")]])
+    llm = ScriptedLLM(
+        [
+            [ToolUseBlock(call_id="c1", tool_name="probe", arguments={})],
+            [TextBlock(text="ok")],
+        ]
+    )
     agent = ReActAgent("bot", model=llm, tools=[probe], context=_isolated())
 
     async with ephemeral_runtime() as rt:
@@ -109,7 +122,10 @@ async def test_a_tool_sees_the_scope_of_the_message_being_handled():
 
     (seen,) = probe.seen
     assert (seen.tenant_id, seen.user_id, seen.thread_id, seen.branch_id) == (
-        "acme", "ana", "thread-9", "exp-1",
+        "acme",
+        "ana",
+        "thread-9",
+        "exp-1",
     )
     assert seen.agent_label == "bot"
 
@@ -122,7 +138,10 @@ async def test_a_sub_agent_inherits_tenant_user_and_branch():
     worker = ReActAgent(
         "worker",
         model=ScriptedLLM(
-            [[ToolUseBlock(call_id="w1", tool_name="probe", arguments={})], [TextBlock(text="done")]]
+            [
+                [ToolUseBlock(call_id="w1", tool_name="probe", arguments={})],
+                [TextBlock(text="done")],
+            ]
         ),
         tools=[probe],
         context=_isolated(),
@@ -131,7 +150,13 @@ async def test_a_sub_agent_inherits_tenant_user_and_branch():
         "boss",
         model=ScriptedLLM(
             [
-                [ToolUseBlock(call_id="b1", tool_name="handoff_worker", arguments={"task": "look"})],
+                [
+                    ToolUseBlock(
+                        call_id="b1",
+                        tool_name="handoff_worker",
+                        arguments={"task": "look"},
+                    )
+                ],
                 [TextBlock(text="all done")],
             ]
         ),

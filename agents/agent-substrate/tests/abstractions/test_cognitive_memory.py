@@ -53,7 +53,9 @@ def test_memory_record_content_normalization():
 
 def test_candidate_vs_active_construction():
     # Manual from_text defaults to ACTIVE
-    active = MemoryRecord.from_text("Always use dark mode", category=MemoryCategory.DIRECTIVE)
+    active = MemoryRecord.from_text(
+        "Always use dark mode", category=MemoryCategory.DIRECTIVE
+    )
     assert active.status == MemoryStatus.ACTIVE
     assert active.category == MemoryCategory.DIRECTIVE
 
@@ -142,4 +144,3 @@ def test_context_memory_injection_contract():
     assert len(inj.directives) == 1
     assert len(inj.relevant_memories) == 1
     assert inj.estimated_tokens == 45
-

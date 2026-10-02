@@ -11,7 +11,14 @@ from substrate.middleware import PIIDetectionMiddleware
 from substrate.middleware import RetryMiddleware
 from substrate.types import MiddlewareTermination
 from substrate.middleware import MiddlewareStage
-from substrate.types import ChatMessage, MediaBlock, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import (
+    ChatMessage,
+    MediaBlock,
+    Role,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 from substrate.types import BudgetExhaustedError, PermanentError, TransientError
 
 
@@ -44,10 +51,14 @@ async def test_max_token_counts_tool_results_not_just_top_level_text():
 
 
 async def test_max_token_counts_images_tool_arguments_and_the_system_prompt():
-    image = ChatMessage(role=Role.USER, content=[MediaBlock.image(data=b"x", media_type="image/png")])
+    image = ChatMessage(
+        role=Role.USER, content=[MediaBlock.image(data=b"x", media_type="image/png")]
+    )
     call = ChatMessage(
         role=Role.ASSISTANT,
-        content=[ToolUseBlock(call_id="c", tool_name="run", arguments={"code": "y" * 20_000})],
+        content=[
+            ToolUseBlock(call_id="c", tool_name="run", arguments={"code": "y" * 20_000})
+        ],
     )
     mw = MaxTokenMiddleware(max_tokens=500)
 
@@ -69,7 +80,11 @@ async def test_max_token_lets_a_small_context_through():
 
 def _tool_ctx(arguments: dict) -> MiddlewareContext:
     return MiddlewareContext(
-        stage=MiddlewareStage.TOOL, agent_name="a", run_id="r", function_name="send", arguments=arguments
+        stage=MiddlewareStage.TOOL,
+        agent_name="a",
+        run_id="r",
+        function_name="send",
+        arguments=arguments,
     )
 
 
@@ -88,7 +103,9 @@ async def test_pii_is_found_however_deeply_it_is_nested(arguments: dict):
 
 
 async def test_pii_ignores_clean_nested_arguments():
-    await PIIDetectionMiddleware().process(_tool_ctx({"body": {"n": 3, "tags": ["a", "b"]}}), _pass)
+    await PIIDetectionMiddleware().process(
+        _tool_ctx({"body": {"n": 3, "tags": ["a", "b"]}}), _pass
+    )
 
 
 # ── Retry ────────────────────────────────────────────────────────────────────
@@ -123,7 +140,13 @@ async def test_retry_recovers_from_a_transient_error():
 
 @pytest.mark.parametrize(
     "error",
-    [_Status(401), _Status(400), PermanentError("nope"), BudgetExhaustedError("spent"), MiddlewareTermination("blocked")],
+    [
+        _Status(401),
+        _Status(400),
+        PermanentError("nope"),
+        BudgetExhaustedError("spent"),
+        MiddlewareTermination("blocked"),
+    ],
 )
 async def test_retry_does_not_repeat_what_can_never_succeed(error: Exception):
     flaky = _Flaky(error)

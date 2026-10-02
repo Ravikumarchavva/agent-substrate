@@ -24,6 +24,14 @@ from typing import Any, Protocol
 Row = Mapping[str, Any]
 
 
+def under(column: str, name: str) -> tuple[str, list[Any]]:
+    """SQL for the rows whose ``column`` is ``name`` or lies below it (starts with ``name/``) — a name is a directory,
+    as in ``FileStore.delete_prefix``. A prefix test by ``substr`` rather than ``LIKE``, so ``%`` and ``_`` in a
+    tenant's id are just characters."""
+    stem = name.rstrip("/") or name
+    return f"({column} = ? OR substr({column}, 1, ?) = ?)", [stem, len(stem) + 1, stem + "/"]
+
+
 class Tx(Protocol):
     """One open transaction."""
 

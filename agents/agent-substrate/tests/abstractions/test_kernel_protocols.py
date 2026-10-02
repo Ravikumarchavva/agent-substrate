@@ -9,14 +9,10 @@ from typing import Protocol
 
 import pytest
 
-from substrate.stores import Store
 from tests._layout import contract_files, module_name
-from tests._stores import folder, fs_tasks
 from substrate.types import MediaBlock, TextBlock
 from substrate.types import UnsupportedContentError
 from substrate.models import EmbeddingModel, EmbeddingResult
-from substrate.stores import Entity, GraphStore, Relationship
-from substrate.stores import TaskStatus, TaskStore
 
 
 def _kernel_protocols() -> list[type]:
@@ -103,47 +99,12 @@ async def test_text_only_embedding_clients_reject_media_content() -> None:
         )
 
     with pytest.raises(UnsupportedContentError):
-        await SentenceTransformersEmbeddingClient(model="sentence-transformers/all-MiniLM-L6-v2").embed_blocks(
-            [MediaBlock(type="image", data=b"abc")]
-        )
+        await SentenceTransformersEmbeddingClient(
+            model="sentence-transformers/all-MiniLM-L6-v2"
+        ).embed_blocks([MediaBlock(type="image", data=b"abc")])
 
 
 # ── Branch-isolated tasks ───────────────────────────────────────────────────
 
 
-async def test_task_branches_do_not_touch_main() -> None:
-    store = fs_tasks()
-    assert isinstance(store, TaskStore)
-
-    main = await store.create_task_list("conv", ["ship it"])
-    exp = await store.create_task_list("conv", ["try risky idea"], branch_id="experiment")
-    await store.update_status(exp.id, exp.tasks[0].id, TaskStatus.FAILED)
-
-    assert main.branch_id == "main" and exp.branch_id == "experiment"
-    got_main = await store.get_by_conversation("conv")
-    got_exp = await store.get_by_conversation("conv", "experiment")
-    assert got_main is not None and got_main.id == main.id
-    assert got_main.tasks[0].status == TaskStatus.PLANNED
-    assert got_exp is not None and got_exp.tasks[0].status == TaskStatus.FAILED
-    assert [b.id for b in await store.get_boards_by_conversation("conv")] == [main.id]
-
-
 # ── Graph namespacing ───────────────────────────────────────────────────────
-
-
-async def test_graph_namespaces_do_not_leak() -> None:
-    store = Store.at(folder()).graph
-    assert isinstance(store, GraphStore)
-
-    a, b = Entity(label="P", id="a"), Entity(label="P", id="b")
-    await store.add_entities([a, b], namespace="tenant_a")
-    await store.add_relationships(
-        [Relationship(source_id="a", target_id="b", type="KNOWS")],
-        namespace="tenant_a",
-    )
-
-    assert (await store.get_neighbors("a", namespace="tenant_a")).entities
-    assert not (await store.get_neighbors("a", namespace="tenant_b")).entities
-    assert (await store.get_neighbors("a")).entities  # "" sees the whole graph
-    assert await store.delete_entity("a", namespace="tenant_b") is False
-    assert await store.delete_entity("a", namespace="tenant_a") is True

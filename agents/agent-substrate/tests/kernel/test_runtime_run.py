@@ -59,10 +59,14 @@ async def test_runs_on_one_thread_share_its_history_and_other_threads_do_not() -
     class _CountingLLM(_StubLLM):
         async def generate_stream(self, messages, *, options, ctx=None):
             shown.append(len(messages))
-            async for event in super().generate_stream(messages, options=options, ctx=ctx):
+            async for event in super().generate_stream(
+                messages, options=options, ctx=ctx
+            ):
                 yield event
 
-    agent = ReActAgent("assistant", model=_CountingLLM("ok"), context=ContextConfig(fs_history()))
+    agent = ReActAgent(
+        "assistant", model=_CountingLLM("ok"), context=ContextConfig(fs_history())
+    )
     async with ephemeral_runtime() as rt:
         await rt.run(agent, "first", thread="t1")
         await rt.run(agent, "second", thread="t1")

@@ -14,7 +14,14 @@ from substrate.context import ContextConfig
 from substrate.agents import ReActAgent
 from substrate.types import ExecutionBudget
 from substrate.runtime import Runtime
-from substrate.types import ChatMessage, ContentBlock, Role, TextBlock, ToolResultBlock, ToolUseBlock
+from substrate.types import (
+    ChatMessage,
+    ContentBlock,
+    Role,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 from substrate.types import Actor
 from substrate.types import Usage
 from substrate.models import GenerationOptions, ModelCapabilities
@@ -54,7 +61,9 @@ class ScriptedLLM:
     ) -> AsyncIterator[CompletionEvent]:
         return self._stream(messages)
 
-    async def _stream(self, messages: list[ChatMessage]) -> AsyncIterator[CompletionEvent]:
+    async def _stream(
+        self, messages: list[ChatMessage]
+    ) -> AsyncIterator[CompletionEvent]:
         self.calls += 1
         self.seen.append(list(messages))
         turn = self._turns.pop(0)
@@ -93,7 +102,9 @@ class PairTool:
         self._started[who].set()
         other = "b" if who == "a" else "a"
         await asyncio.wait_for(self._started[other].wait(), timeout=self._wait_s)
-        return ToolExecutionResult(name=self.name, content=[TextBlock(text=f"{who} ok")])
+        return ToolExecutionResult(
+            name=self.name, content=[TextBlock(text=f"{who} ok")]
+        )
 
 
 class CountingTool:
@@ -101,7 +112,10 @@ class CountingTool:
     idempotent = True
     name = "count"
     description = "counts executions"
-    input_schema: dict[str, object] = {"type": "object", "properties": {"x": {"type": "integer"}}}
+    input_schema: dict[str, object] = {
+        "type": "object",
+        "properties": {"x": {"type": "integer"}},
+    }
 
     def __init__(self) -> None:
         self.executions = 0
@@ -157,16 +171,17 @@ def _use(name: str, call_id: str, **args: object) -> ToolUseBlock:
 
 async def _tool_results(rt: Runtime, run_id: str) -> list[dict]:
     return [
-        e.payload
-        for e in await rt.read(run_id, from_seq=0)
-        if e.kind == "tool.result"
+        e.payload for e in await rt.read(run_id, from_seq=0) if e.kind == "tool.result"
     ]
 
 
 async def test_concurrency_safe_calls_run_together_and_keep_call_order():
     tool = PairTool()
     llm = ScriptedLLM(
-        [[_use("pair", "c1", who="a"), _use("pair", "c2", who="b")], [TextBlock(text="done")]]
+        [
+            [_use("pair", "c1", who="a"), _use("pair", "c2", who="b")],
+            [TextBlock(text="done")],
+        ]
     )
     agent = make_agent(llm, tools=[tool])
 
@@ -183,7 +198,10 @@ async def test_calls_without_the_marker_run_one_at_a_time():
     tool = PairTool(wait_s=0.2)
     tool.concurrency_safe = False
     llm = ScriptedLLM(
-        [[_use("pair", "c1", who="a"), _use("pair", "c2", who="b")], [TextBlock(text="done")]]
+        [
+            [_use("pair", "c1", who="a"), _use("pair", "c2", who="b")],
+            [TextBlock(text="done")],
+        ]
     )
     agent = make_agent(llm, tools=[tool])
 
@@ -353,7 +371,12 @@ async def test_the_reply_is_the_answer_text_not_the_reasoning_trace():
             outputs.append(context.turn_result.output)
 
     llm = ScriptedLLM(
-        [[ReasoningBlock(text="private chain of thought"), TextBlock(text="The answer is 4.")]]
+        [
+            [
+                ReasoningBlock(text="private chain of thought"),
+                TextBlock(text="The answer is 4."),
+            ]
+        ]
     )
     agent = make_agent(llm, middleware=MiddlewarePipeline([CaptureOutput()]))
     async with ephemeral_runtime() as rt:
@@ -393,7 +416,9 @@ async def test_an_agent_can_make_more_than_fifty_tool_calls_in_one_run():
     """Regression: the sandbox-chain policy (50 calls, 60 s) governed every
     direct tool call, so call 51 came back as "Chain budget exhausted"."""
     tool = CountingTool()
-    turns: list = [[_use("count", f"c{i}")] for i in range(60)] + [[TextBlock(text="done")]]
+    turns: list = [[_use("count", f"c{i}")] for i in range(60)] + [
+        [TextBlock(text="done")]
+    ]
     agent = make_agent(ScriptedLLM(turns), tools=[tool], max_iterations=70)
 
     async with ephemeral_runtime() as rt:
@@ -426,7 +451,9 @@ async def test_an_agent_can_set_its_own_tool_policy():
             return ToolExecutionResult(name=self.name, content=[TextBlock(text="late")])
 
     llm = ScriptedLLM([[_use("slow", "c1")], [TextBlock(text="done")]])
-    agent = make_agent(llm, tools=[SlowTool()], tool_policy=ChainPolicy(call_timeout_s=0.05))
+    agent = make_agent(
+        llm, tools=[SlowTool()], tool_policy=ChainPolicy(call_timeout_s=0.05)
+    )
 
     async with ephemeral_runtime() as rt:
         _, _, run_id = await run_to_end(rt, agent)

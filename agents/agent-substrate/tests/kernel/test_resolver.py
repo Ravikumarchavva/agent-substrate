@@ -156,7 +156,9 @@ async def test_unpinned_instance_is_evictable() -> None:
     r.register_instance(StubAgent(addr), pinned=False)
 
     for i in range(20):  # push it out under load, same as a factory actor
-        r.register_instance(StubAgent(Actor(type="assistant", key=f"filler{i}")), pinned=False)
+        r.register_instance(
+            StubAgent(Actor(type="assistant", key=f"filler{i}")), pinned=False
+        )
         await r.resolve(Actor(type="assistant", key=f"filler{i}"))
 
     assert addr not in r, "unpinned instance must be evictable like a factory actor"

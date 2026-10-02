@@ -45,8 +45,12 @@ class _NameArgTool:
     risk = ToolRisk.SAFE
     idempotent = True
 
-    async def execute(self, *, action: str, name: str = "", **_: Any) -> ToolExecutionResult:
-        return ToolExecutionResult(name=self.name, content=[TextBlock(text=f"{action}:{name}")])
+    async def execute(
+        self, *, action: str, name: str = "", **_: Any
+    ) -> ToolExecutionResult:
+        return ToolExecutionResult(
+            name=self.name, content=[TextBlock(text=f"{action}:{name}")]
+        )
 
 
 class _Caller:
@@ -68,7 +72,14 @@ async def _dispatch(*calls: dict[str, Any]) -> list[Any]:
     agent = _Caller(list(calls))
     async with ephemeral_runtime() as runtime:
         await runtime.register(agent)
-        run_id = await runtime.submit(agent.id, Message(target=agent.id, sender=Actor.system("test"), payload=DataPayload(data={})))
+        run_id = await runtime.submit(
+            agent.id,
+            Message(
+                target=agent.id,
+                sender=Actor.system("test"),
+                payload=DataPayload(data={}),
+            ),
+        )
         async for entry in runtime.tail(run_id):
             assert entry.kind != RunLogKind.RUN_FAILED, entry.payload
             if entry.kind == RunLogKind.RUN_COMPLETED:
@@ -79,7 +90,9 @@ async def _dispatch(*calls: dict[str, Any]) -> list[Any]:
 async def test_tool_call_with_a_name_shaped_argument_does_not_collide() -> None:
     """The exact ReActAgent dispatch shape: ctx.tool(tc.tool_name, tc.arguments)
     where tc.arguments itself contains a key called "name"."""
-    (result,) = await asyncio.wait_for(_dispatch({"action": "activate", "name": "excel-report"}), 10)
+    (result,) = await asyncio.wait_for(
+        _dispatch({"action": "activate", "name": "excel-report"}), 10
+    )
 
     assert result.status == "ok"
     assert result.text == "activate:excel-report"

@@ -27,7 +27,7 @@ from collections.abc import Awaitable, Callable
 from operator import mul
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from substrate.stores.database import Row, Tx
+from substrate.stores.database import Row, Tx, under
 from substrate.stores.vector import Document, SearchResult
 
 if TYPE_CHECKING:
@@ -313,6 +313,22 @@ class Vectors:
             return await tx.execute("UPDATE vector_docs SET collection = ? WHERE collection = ?", new, old)
 
         return await self._run(op)
+
+    async def erase_under(self, name: str) -> int:
+        """Delete every collection named ``name`` or below it. Returns the documents removed."""
+        clause, params = under("collection", name)
+
+        async def op(tx: Tx) -> int:
+            erased = await tx.execute(f"DELETE FROM vector_docs WHERE {clause}", *params)
+            if erased:
+                # The delete trigger only marks index entries deleted; rewriting the index drops the words themselves.
+                await tx.execute("INSERT INTO vector_fts (vector_fts) VALUES ('optimize')")
+            return erased
+
+        erased = await self._run(op)
+        if erased:
+            await self._store.database.reclaim()
+        return erased
 
 
 __all__ = ["SCHEMA", "Vectors"]

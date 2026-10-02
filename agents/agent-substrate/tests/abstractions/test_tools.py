@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from substrate.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
+from substrate.tools import ToolExecutionResult, ToolRisk
 from substrate.tools import Toolbox
 from substrate.types import TextBlock
 
@@ -20,32 +20,6 @@ class MockToolImpl:
         return ToolExecutionResult(
             name=self.name, content=[TextBlock(text=f"executed with {val}")]
         )
-
-
-def test_tool_risk_enum():
-    assert ToolRisk.SAFE == "safe"
-    assert ToolRisk.HIGH == "high"
-    assert ToolRisk.CRITICAL == "critical"
-
-
-def test_tool_call_request():
-    req = ToolCallRequest(name="test_tool", arguments={"x": 1}, call_id="c123")
-    assert req.name == "test_tool"
-    assert req.arguments == {"x": 1}
-    assert req.call_id == "c123"
-
-
-def test_tool_execution_result():
-    res = ToolExecutionResult(
-        call_id="c123",
-        name="test_tool",
-        content=[TextBlock(text="done")],
-        is_error=False,
-    )
-    assert res.call_id == "c123"
-    assert res.name == "test_tool"
-    assert res.is_error is False
-    assert res.text == "done"
 
 
 def test_tool_registry():

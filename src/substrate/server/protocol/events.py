@@ -22,7 +22,7 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
-from substrate.serving.protocol.version import PROTOCOL_VERSION
+from substrate.server.protocol.version import PROTOCOL_VERSION
 
 
 # ---------------------------------------------------------------------------

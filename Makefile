@@ -83,7 +83,7 @@ lint-apply:
 	uv run ruff check . --fix
 
 protocol-schema:
-	uv run python -m substrate.serving.protocol.export
+	uv run python -m substrate.server.protocol.export
 
 lint:
 	uv run ruff check .
@@ -109,6 +109,15 @@ test:
 
 test-ci:
 	$(RUN_TEST_CI)
+
+# The acceptance project: a separate project that installs the library into a fresh environment (engine + its
+# `testing` extra only — no vendor SDK, no driver, no web framework) and runs an agent with a tool, a ThreadStore and a
+# ChatModel of its own. Passing means a downstream project needs nothing that is not in the package.
+test-child:
+	rm -rf examples/child-project/.venv-acceptance
+	uv venv -q examples/child-project/.venv-acceptance
+	uv pip install -q --python examples/child-project/.venv-acceptance/bin/python -e "examples/child-project[test]"
+	cd examples/child-project && .venv-acceptance/bin/python -m pytest -q
 
 build:
 	docker build -f ./deployment/docker/backend.Dockerfile .
@@ -153,4 +162,5 @@ ci:
 	$(MAKE) lint-imports
 	$(MAKE) typecheck
 	$(MAKE) test-ci
+	$(MAKE) test-child
 	$(MAKE) security

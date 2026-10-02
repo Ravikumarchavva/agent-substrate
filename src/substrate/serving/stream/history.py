@@ -19,8 +19,8 @@ from typing import Any
 
 from substrate.types import RunLogKind
 from substrate.runtime import NewEntry, RuntimeStore
-from substrate.serving.protocol.events import WireEvent
-from substrate.serving.protocol.from_log import wire_from_log
+from substrate.server.protocol.events import WireEvent
+from substrate.server.protocol.from_log import wire_from_log
 
 
 async def project_thread(store: RuntimeStore, thread_id: str) -> list[WireEvent]:

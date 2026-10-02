@@ -89,8 +89,8 @@ code-interpreter tools are `"critical"`/`"sensitive"` and are flagged
 ### 4. Does it need to stream live UI updates (not just a final result)?
 
 Use `ctx._log(kind, payload)` with a `kind` string that matches a wire event
-type (`serving/protocol/events.py`), and make sure that kind is in
-`STREAMING_KINDS` (`serving/protocol/from_log.py`) if you want it to flow
+type (`server/protocol/events.py`), and make sure that kind is in
+`STREAMING_KINDS` (`server/protocol/from_log.py`) if you want it to flow
 through the normal SSE tail automatically. This is how `ask_human`'s
 `input.requested` event reaches the frontend without a separate out-of-band
 channel.

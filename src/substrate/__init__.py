@@ -2,9 +2,19 @@
 
 Quick-start for client apps::
 
-    from substrate import ReActAgent, Runtime, create_model_client
-    from substrate import ContentFilterMiddleware, MiddlewareTermination
-    from substrate import TextDelta, CompletionEvent, StreamDone
+    from substrate import ReActAgent, Runtime, ToolRisk, tool
+
+    @tool(risk=ToolRisk.SAFE, idempotent=True)
+    def shout(text: str) -> str:
+        "Upper-case the text."
+        return text.upper()
+
+    agent = ReActAgent("bot", model=my_model, tools=[shout])
+    async with Runtime.open("./.substrate") as runtime:      # durable: a folder is the floor
+        print((await runtime.run(agent, "Say hi loudly")).output)
+
+Everything is imported from where it lives (``substrate.stores``, ``substrate.tools``…); the names here are the ones
+nearly every program wants. Importing ``substrate`` imports nothing heavy.
 """
 
 from __future__ import annotations
@@ -49,6 +59,9 @@ if TYPE_CHECKING:
     from substrate.types import MiddlewareTermination
     from substrate.types import ChatMessage, TextBlock
     from substrate.tools import ToolExecutionResult
+    from substrate.tools import ApprovalDecision, AutoApprove, DurableApproval, Tool, ToolRisk, tool
+    from substrate.models import ChatModel
+    from substrate.server import create_app
     from substrate.types import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
 
 __all__ = [
@@ -104,6 +117,17 @@ __all__ = [
     "ChatMessage",
     "TextBlock",
     "ToolExecutionResult",
+    # tools and human approval
+    "tool",
+    "Tool",
+    "ToolRisk",
+    "ApprovalDecision",
+    "DurableApproval",
+    "AutoApprove",
+    # the contract a model provider implements
+    "ChatModel",
+    # serve an agent over HTTP (needs the ``serve`` extra)
+    "create_app",
 ]
 
 _LAZY: dict[str, tuple[str, str]] = {
@@ -181,6 +205,15 @@ _LAZY: dict[str, tuple[str, str]] = {
     "ChatMessage": ("substrate.types.content", "ChatMessage"),
     "TextBlock": ("substrate.types.content", "TextBlock"),
     "ToolExecutionResult": ("substrate.tools", "ToolExecutionResult"),
+    # tools and human approval
+    "tool": ("substrate.tools", "tool"),
+    "Tool": ("substrate.tools", "Tool"),
+    "ToolRisk": ("substrate.tools", "ToolRisk"),
+    "ApprovalDecision": ("substrate.tools", "ApprovalDecision"),
+    "DurableApproval": ("substrate.tools", "DurableApproval"),
+    "AutoApprove": ("substrate.tools", "AutoApprove"),
+    "ChatModel": ("substrate.models", "ChatModel"),
+    "create_app": ("substrate.server", "create_app"),
 }
 
 

@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**115 enforced · 0 pending · 115 total**
+**116 enforced · 0 pending · 116 total**
 
 ## approvals
 
@@ -82,6 +82,8 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i33_an_entry_point_configures_logging_when_started_not_when_imported`
 - ✅ **The library owns no handler on the ``substrate`` logger until an application adds one (a ``NullHandler`` keeps Python from printing records the application did not ask to see).**
   `test_i34_importing_substrate_installs_no_log_handler`
+- ✅ **``from substrate import X`` is the first thing a user writes. A name in ``__all__`` that does not resolve fails there, not in a test of the thing itself. Only a name that lives in ``integrations`` or ``server`` may be missing — and only because its extra (a vendor SDK, FastAPI) is not installed.**
+  `test_i35_every_name_the_package_exports_resolves`
 
 ## liveness
 

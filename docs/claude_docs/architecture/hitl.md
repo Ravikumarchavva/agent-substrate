@@ -19,7 +19,7 @@ see [`roadmap.md`](../roadmap.md).
    asyncio coroutine** (see [`kernel.md`](kernel.md) for what
    "suspend" actually means and its durability gap).
 2. The frontend renders a card the moment `input.requested` streams through
-   the normal event-log tail (`STREAMING_KINDS` in `serving/protocol/from_log.py`).
+   the normal event-log tail (`STREAMING_KINDS` in `server/protocol/from_log.py`).
 3. User clicks an option (or Skip, or types free text) → frontend POSTs to
    `/chat/respond/{request_id}` → `WebHITLBridge.resolve()` fires
    `SignalBus.signal(run_id, f"hitl:{request_id}", payload)`.

@@ -181,10 +181,10 @@ def _agent():
 
     sys.path.insert(0, str(EXAMPLES))
     try:
-        from _model import ToolCall, pick_model
+        from _model import ScriptedModel, ToolCall
     finally:
         sys.path.remove(str(EXAMPLES))
-    return ReActAgent("t", model=pick_model(ToolCall("wire", {"amount": 5}), "done"), tools=[wire], approval_handler=DurableApproval())
+    return ReActAgent("t", model=ScriptedModel(ToolCall("wire", {"amount": 5}), "done"), tools=[wire], approval_handler=DurableApproval())
 
 
 async def test_pending_approvals_and_decide_close_the_loop_without_hand_rolled_signals(tmp_path: Path) -> None:

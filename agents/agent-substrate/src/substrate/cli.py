@@ -405,6 +405,18 @@ def _load_mcp_tools(server_urls: list[str]) -> list:
     return tools
 
 
+def cmd_serve(args: argparse.Namespace) -> None:
+    """``substrate serve my_module:agent`` — serve an agent (or a function that builds one) over HTTP."""
+    import uvicorn
+
+    from substrate.server import create_app, load
+
+    target = load(args.target)
+    app = target if hasattr(target, "add_api_route") else create_app(target, store=args.store, agui_path=None if args.no_agui else "/agui")
+    print(f"serving {args.target} on http://{args.host}:{args.port}  (POST /chat, POST /agui, GET /health)")
+    uvicorn.run(app, host=args.host, port=args.port)
+
+
 # ── CLI entry point ───────────────────────────────────────────────────────────
 
 
@@ -494,6 +506,17 @@ def main() -> None:
         "--mcp", nargs="+", metavar="URL", help="MCP SSE server URLs to connect"
     )
     p_chat.set_defaults(func=cmd_chat)
+
+    # ── serve ──────────────────────────────────────────────────────────────
+    p_serve = sub.add_parser(
+        "serve", help="Serve your agent over HTTP: substrate serve my_module:agent (needs the `serve` and `server` extras)"
+    )
+    p_serve.add_argument("target", help="module:attribute — an agent, or a function that returns one (or a FastAPI app)")
+    p_serve.add_argument("--store", default="./.substrate", help="Folder of the store (default: ./.substrate)")
+    p_serve.add_argument("--host", default="127.0.0.1", help="Bind host")
+    p_serve.add_argument("--port", type=int, default=8000, help="Bind port")
+    p_serve.add_argument("--no-agui", action="store_true", help="Do not mount the AG-UI endpoint")
+    p_serve.set_defaults(func=cmd_serve)
 
     # ── restart ────────────────────────────────────────────────────────────
     p_restart = sub.add_parser("restart", help="Stop then start the server")

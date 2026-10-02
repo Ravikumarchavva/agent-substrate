@@ -8,7 +8,7 @@ two stay aligned (a drift in field names would surface here).
 from __future__ import annotations
 
 from substrate.serving.monolith.sse.bridge import bridge_event_to_wire
-from substrate.serving.protocol import (
+from substrate.server.protocol import (
     ApprovalRequestedEvent,
     InputRequestedEvent,
     ReasoningDeltaEvent,
@@ -17,7 +17,7 @@ from substrate.serving.protocol import (
     ToolResultEvent,
     wire_from_log,
 )
-from substrate.serving.protocol.events import MessageFlaggedEvent
+from substrate.server.protocol.events import MessageFlaggedEvent
 
 
 # ---------------------------------------------------------------------------

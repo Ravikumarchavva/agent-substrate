@@ -48,7 +48,7 @@ from substrate.serving.monolith.security.deps import AuthClaims, get_current_use
 from substrate.serving.monolith.sse.bridge import WebHITLBridge
 from substrate.serving.shared.rate_limit import rate_limit
 from substrate.serving.shared.doc_quota import check_and_increment, seconds_until_reset
-from substrate.serving.protocol import PROTOCOL_VERSION, HelloEvent
+from substrate.server.protocol import PROTOCOL_VERSION, HelloEvent
 from substrate.serving.stream import AgentStreamSession, sse_lines, tail_wire_events
 
 from substrate.serving.monolith.routes.chat_intents import (

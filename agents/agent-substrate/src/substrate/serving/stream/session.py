@@ -51,7 +51,7 @@ from substrate.serving.monolith.sse.bridge import (
     WebHITLBridge,
     bridge_event_to_wire,
 )
-from substrate.serving.protocol import (
+from substrate.server.protocol import (
     ApprovalRequestedEvent,
     HelloEvent,
     InputRequestedEvent,

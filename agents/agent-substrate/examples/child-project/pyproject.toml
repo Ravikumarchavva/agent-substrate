@@ -1,0 +1,23 @@
+[project]
+name = "ticket-desk"
+version = "0.1.0"
+description = "A support-ticket agent built on agent-substrate — the acceptance project: it installs the library and copies nothing from its repository."
+requires-python = ">=3.11"
+# The engine only. No OpenAI SDK, no database driver, no web framework: this agent brings its own model, tool and
+# thread store, which is what the library's extension points are for.
+dependencies = ["agent-substrate"]
+
+[project.optional-dependencies]
+test = ["agent-substrate[testing,serve]"]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+# In a real project this line does not exist and `agent-substrate` comes from PyPI.
+agent-substrate = { path = "../..", editable = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -263,10 +263,28 @@ forbidden_modules = [
     "substrate.integrations",
     "substrate.runtimes",
     "substrate.serving",
+    "substrate.server",
     "substrate.console",
     "substrate.cli",
     "substrate.config",
     "substrate.logger",
+]
+
+[[tool.importlinter.contracts]]
+name = "the server is the engine over HTTP, and imports only the engine"
+type = "forbidden"
+# substrate.server is what `create_app(agent)` gives a downstream project: it sits on Runtime and the contracts, with
+# FastAPI as its one framework. It must not reach an adapter, the reference deployment, or how an agent is built.
+source_modules = ["substrate.server"]
+forbidden_modules = [
+    "substrate.agents",
+    "substrate.integrations",
+    "substrate.runtimes",
+    "substrate.serving",
+    "substrate.console",
+    "substrate.cli",
+    "substrate.config",
+    "substrate.evals",
 ]
 
 [[tool.importlinter.contracts]]
@@ -338,7 +356,6 @@ source_modules = [
     "substrate.serving.monolith",
     "substrate.serving.services",
     "substrate.serving.shared",
-    "substrate.serving.protocol",
     "substrate.serving.stream",
 ]
 forbidden_modules = [

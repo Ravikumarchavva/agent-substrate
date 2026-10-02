@@ -24,7 +24,7 @@ EXPECTED = {
     "05_multi_agent.py": "All 3 records are valid.",
     "06_guardrails.py": "tool calls seen by our middleware: 1",
     "07_mcp_tools.py": "19 + 23 = 42.",
-    "08_serve_http.py": '"type": "run.completed"',
+    "08_serve_http.py": '"type":"RUN_FINISHED"',
     "09_evals.py": "Passed:    2 (66.7%)",
 }
 

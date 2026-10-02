@@ -14,7 +14,7 @@ from substrate.types import ChatMessage, Role, TextBlock
 from substrate.types import Actor
 from substrate.runtime import ChatPayload, Message
 from substrate.serving.monolith.sse.bridge import BRIDGE_DONE
-from substrate.serving.protocol import (
+from substrate.server.protocol import (
     HelloEvent,
     RunCompletedEvent,
     RunFailedEvent,

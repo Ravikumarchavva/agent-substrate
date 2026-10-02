@@ -110,3 +110,20 @@ def test_i34_importing_substrate_installs_no_log_handler() -> None:
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=REPO_ROOT).stdout
     assert out.strip() == "['NullHandler'] True", out
+
+
+def test_i35_every_name_the_package_exports_resolves() -> None:
+    """``from substrate import X`` is the first thing a user writes. A name in ``__all__`` that does not resolve fails
+    there, not in a test of the thing itself. Only a name that lives in ``integrations`` or ``server`` may be missing — and
+    only because its extra (a vendor SDK, FastAPI) is not installed."""
+    code = (
+        "import substrate\n"
+        "missing = []\n"
+        "for name in substrate.__all__:\n"
+        "    try: getattr(substrate, name)\n"
+        "    except ImportError: missing.append(name)\n"
+        "print(' '.join(missing), '|', ' '.join(n for n, (mod, _) in substrate._LAZY.items() if mod.startswith(('substrate.integrations', 'substrate.server'))))"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=REPO_ROOT).stdout
+    missing, adapters = (part.split() for part in out.split("|"))
+    assert set(missing) <= set(adapters), f"names the engine itself should provide do not resolve: {sorted(set(missing) - set(adapters))}"

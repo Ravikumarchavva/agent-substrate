@@ -14,7 +14,7 @@ from substrate.types import TextBlock
 from substrate.types import Actor
 from substrate.types import Usage
 from substrate.types import CompletionEvent, TextDelta
-from substrate.serving.protocol.events import (
+from substrate.server.protocol.events import (
     RunCompletedEvent,
     TextDeltaEvent,
     UserMessageEvent,

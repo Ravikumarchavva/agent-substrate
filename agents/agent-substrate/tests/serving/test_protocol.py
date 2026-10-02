@@ -6,7 +6,7 @@ import json
 
 from pydantic import TypeAdapter
 
-from substrate.serving.protocol import (
+from substrate.server.protocol import (
     PROTOCOL_VERSION,
     WireEvent,
     HelloEvent,
@@ -20,7 +20,7 @@ from substrate.serving.protocol import (
     RunFailedEvent,
     ErrorEvent,
 )
-from substrate.serving.protocol.export import build_schema
+from substrate.server.protocol.export import build_schema
 
 _ADAPTER = TypeAdapter(WireEvent)
 

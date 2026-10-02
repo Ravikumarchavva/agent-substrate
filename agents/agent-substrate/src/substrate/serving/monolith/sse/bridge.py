@@ -48,7 +48,7 @@ import asyncio
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
-    from substrate.serving.protocol import WireEvent
+    from substrate.server.protocol import WireEvent
     from substrate.runtime import RuntimeStore
 
 from substrate.integrations.tools.human_input import (
@@ -75,7 +75,7 @@ def bridge_event_to_wire(data: dict) -> "WireEvent | None":
     adaptation point absorbs the field aliasing.  Rich tool UIs (kanban, …) flow
     inline as ``ui.resource`` via the tool result, not through here.
     """
-    from substrate.serving.protocol import (
+    from substrate.server.protocol import (
         ApprovalRequestedEvent,
         InputRequestedEvent,
         ToolResultEvent,

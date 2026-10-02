@@ -2,7 +2,7 @@
 
 Run::
 
-    uv run python -m substrate.serving.protocol.export
+    uv run python -m substrate.server.protocol.export
 
 Writes ``protocol.schema.json`` next to this file. The UI's ``pnpm gen:protocol``
 reads that file and generates ``src/protocol/protocol.gen.ts``. Re-run both
@@ -20,14 +20,14 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
-from substrate.serving.protocol.events import WireEvent
-from substrate.serving.protocol.requests import (
+from substrate.server.protocol.events import WireEvent
+from substrate.server.protocol.requests import (
     ApprovalResponse,
     CancelRequest,
     ChatRequest,
     InputResponse,
 )
-from substrate.serving.protocol.version import PROTOCOL_VERSION
+from substrate.server.protocol.version import PROTOCOL_VERSION
 
 _SCHEMA_PATH = Path(__file__).parent / "protocol.schema.json"
 

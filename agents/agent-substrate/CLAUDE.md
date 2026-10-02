@@ -261,7 +261,7 @@ new orchestration in `agents/flows.py`, a new port in the concept that owns it *
 | A new vector or graph store | implement `VectorStore` (`stores/vector.py`) / `GraphStore` (`stores/graph.py`) and run its conformance suite — or, to put everything on another database, write a `Database` adapter (`stores/database.py`; see `integrations/database/postgres_database.py`) |
 | A new runtime store | implement `RuntimeStore` (`runtime/store.py`) — or a new `Database` adapter for `SqlRuntimeStore` — and run `RuntimeStoreConformance` against it |
 | A new document extractor | `integrations/document/<name>.py` — implement `DocumentExtractor` (`documents/protocols.py`) |
-| A new tool | `integrations/tools/<name>/tool.py` — implement `Tool`, **declaring `risk` and `idempotent`** (auto-scanned, no registration needed) |
+| A new tool | a typed function with `@tool(risk=…, idempotent=…)` (`substrate.tools`) — or, for a shipped one, `integrations/tools/<name>/tool.py` implementing `Tool`, **declaring `risk` and `idempotent`** (auto-scanned, no registration needed) |
 | A new skill | `integrations/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
 | A new agent flow | `agents/flows.py` — SequentialFlow / ParallelFlow / ConditionalFlow are `RoutedAgent`s |
 

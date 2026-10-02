@@ -12,73 +12,10 @@ provider is a class with those, passed in as ``model=`` — no registration anyw
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
-from typing import Any
 
-from substrate.models import ChatModel, FinishReason, GenerationOptions, LLMResponse, ModelCapabilities
-from substrate.types import (
-    ChatMessage,
-    CompletionEvent,
-    ContentBlock,
-    Role,
-    TextBlock,
-    TextDelta,
-    ToolUseBlock,
-    Usage,
-)
-
-
-@dataclass(frozen=True)
-class ToolCall:
-    """A scripted reply that asks for a tool instead of answering."""
-
-    tool: str
-    arguments: dict[str, Any]
-
-
-Reply = str | ToolCall | Callable[[list[ChatMessage]], str]
-
-
-class ScriptedModel:
-    """A ``ChatModel`` that replays ``replies`` in order, repeating the last one when they run out.
-
-    A reply is text, a ``ToolCall``, or a function of the messages the model was shown — which is how an example
-    can prove what the engine put in front of the model (``lambda messages: f"I can see {len(messages)} messages"``).
-    """
-
-    capabilities = ModelCapabilities(model_id="scripted")
-
-    def __init__(self, *replies: Reply) -> None:
-        self.model = "scripted"
-        self._replies = list(replies) or ["OK."]
-        self._calls = 0
-        self.seen: list[list[ChatMessage]] = []
-
-    def _next(self, messages: list[ChatMessage]) -> list[ContentBlock]:
-        self.seen.append(list(messages))
-        reply = self._replies[min(self._calls, len(self._replies) - 1)]
-        self._calls += 1
-        if isinstance(reply, ToolCall):
-            return [ToolUseBlock(call_id=f"call-{self._calls}", tool_name=reply.tool, arguments=reply.arguments)]
-        return [TextBlock(text=reply(messages) if callable(reply) else reply)]
-
-    async def generate(
-        self, messages: list[ChatMessage], *, options: GenerationOptions = GenerationOptions(), ctx: Any = None
-    ) -> LLMResponse:
-        return LLMResponse(content=self._next(messages), usage=Usage(), finish_reason=FinishReason.STOP)
-
-    async def generate_stream(
-        self, messages: list[ChatMessage], *, options: GenerationOptions = GenerationOptions(), ctx: Any = None
-    ) -> AsyncIterator[TextDelta | CompletionEvent]:
-        content = self._next(messages)
-        for block in content:
-            if isinstance(block, TextBlock):
-                yield TextDelta(text=block.text)
-        yield CompletionEvent(content=content, usage=Usage(), finish_reason=FinishReason.STOP)
-
-    async def count_tokens(self, messages: list[ChatMessage]) -> int:
-        return sum(len(m.text) for m in messages) // 4
+from substrate.models import ChatModel
+from substrate.testing.scripted import Reply, ScriptedModel, ToolCall  # noqa: F401  (re-exported for the examples)
+from substrate.types import ChatMessage, Role
 
 
 def last_user_text(messages: list[ChatMessage]) -> str:

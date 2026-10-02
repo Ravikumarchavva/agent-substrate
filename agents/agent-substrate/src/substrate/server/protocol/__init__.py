@@ -7,8 +7,8 @@ start. `export` dumps the JSON Schema the UI's TypeScript types are generated fr
 
 from __future__ import annotations
 
-from substrate.serving.protocol.version import PROTOCOL_VERSION
-from substrate.serving.protocol.events import (
+from substrate.server.protocol.version import PROTOCOL_VERSION
+from substrate.server.protocol.events import (
     WireEvent,
     HelloEvent,
     TextDeltaEvent,
@@ -28,13 +28,13 @@ from substrate.serving.protocol.events import (
     ErrorEvent,
     PingEvent,
 )
-from substrate.serving.protocol.requests import (
+from substrate.server.protocol.requests import (
     ChatRequest,
     ApprovalResponse,
     InputResponse,
     CancelRequest,
 )
-from substrate.serving.protocol.from_log import wire_from_log, STREAMING_KINDS
+from substrate.server.protocol.from_log import wire_from_log, STREAMING_KINDS
 
 __all__ = [
     "PROTOCOL_VERSION",

@@ -25,7 +25,7 @@ so asking for one vendor's client needs that vendor's SDK and nothing else.
 | `tts` | text-to-speech |
 | `tools` | skills and curated artifacts (`pyyaml`) |
 | `console` | the interactive console (`rich`, `prompt-toolkit`, `pydantic-settings`) |
-| `serve` | `substrate.serve.add_routes` (`fastapi`) |
+| `serve` | `substrate.server.create_app` (`fastapi`) |
 | `testing` | the conformance suites in `substrate.testing` (`pytest`, `pytest-asyncio`, `httpx`) |
 | *(no `server` extra)* | the multi-tenant platform is `apps/substrate-cloud`, a project of its own that depends on the extras above plus SQLAlchemy, uvicorn, JWT and the OpenTelemetry SDK |
 

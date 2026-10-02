@@ -29,7 +29,7 @@ help:
 	@echo "  make observability-up   - start Tempo and Grafana via Docker Compose"
 	@echo "  make observability-down - stop Tempo and Grafana"
 	@echo "  make lint         - run Ruff lint and format checks"
-	@echo "  make lint-imports - run import-linter (kernel independence + layer contracts)"
+	@echo "  make lint-imports - run import-linter (core independence + layer contracts)"
 	@echo "  make audit-dead-symbols - scan for module-level functions/classes with no real usage (manual, not in ci)"
 	@echo "  make typecheck    - run Pyright (hard fail)"
 	@echo "  make test         - run pytest"

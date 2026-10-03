@@ -155,10 +155,13 @@ build:
 #   PYSEC-2026-597 (nltk, path traversal in url2pathname) — no fix version
 #     exists upstream yet. Pulled in transitively via crawl4ai only; we
 #     never import nltk directly or call its data-download helpers.
+#   PYSEC-2026-3740 (nltk) — same package, same reasoning as PYSEC-2026-597: no fix version exists upstream, transitive
+#     via crawl4ai only, never imported here. Re-audit when nltk > 3.10.3 exists.
 SECURITY_IGNORES = \
 	--ignore-vuln PYSEC-2026-282 \
 	--ignore-vuln PYSEC-2026-87 \
-	--ignore-vuln PYSEC-2026-597
+	--ignore-vuln PYSEC-2026-597 \
+	--ignore-vuln PYSEC-2026-3740
 
 security:
 	uv run --with pip-audit pip-audit --skip-editable $(SECURITY_IGNORES)

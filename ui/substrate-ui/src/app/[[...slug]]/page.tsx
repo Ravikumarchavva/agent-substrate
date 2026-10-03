@@ -19,6 +19,7 @@ import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { ScheduledPanel } from "@/components/ScheduledPanel";
 import { ModelPicker } from "@/components/ModelPicker";
+import { WaitingIndicator } from "@/components/WaitingIndicator";
 import type { SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
@@ -2026,12 +2027,8 @@ function ChatPageContent() {
 
                     {loading && !hitlPending && !messages.some((m) => m.role === "assistant" && m.id === messages[messages.length - 1]?.id) && (
                       <div className="px-4 py-2 sm:px-6">
-                        <div className="mx-auto flex max-w-chat items-center gap-2 py-2">
-                          <div className="flex items-center gap-1.5">
-                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted" style={{ animationDelay: "0ms" }} />
-                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted" style={{ animationDelay: "150ms" }} />
-                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted" style={{ animationDelay: "300ms" }} />
-                          </div>
+                        <div className="mx-auto max-w-chat">
+                          <WaitingIndicator />
                         </div>
                       </div>
                     )}

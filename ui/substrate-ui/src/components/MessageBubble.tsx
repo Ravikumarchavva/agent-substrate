@@ -15,7 +15,6 @@ import {
   ChevronUp,
   Loader2,
   PanelRightOpen,
-  WrenchIcon,
   ArrowUpRight,
   X,
   Download,
@@ -878,11 +877,6 @@ export function MessageBubble({
                     className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-card-hover"
                     style={{ background: "var(--badge-bg)" }}
                   >
-                    {isToolExecuting ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-muted" />
-                    ) : (
-                      <WrenchIcon className="w-3.5 h-3.5 shrink-0 text-muted" />
-                    )}
                     <span className="text-xs font-medium text-badge-foreground">
                       {isToolExecuting
                         ? `Running tools… ${visibleToolCalls.filter((t) => t.result !== undefined).length}/${visibleToolCalls.length}`
@@ -987,7 +981,6 @@ export function MessageBubble({
                   className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-card-hover"
                   style={{ background: "var(--badge-bg)" }}
                 >
-                  <span className="text-xs">💭</span>
                   <span className="text-xs font-medium text-badge-foreground">Thinking</span>
                   <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/think:rotate-90 text-muted" />
                 </summary>
@@ -1170,7 +1163,6 @@ export function MessageBubble({
                   className="inline-flex cursor-pointer select-none list-none items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium text-badge-foreground transition-colors hover:bg-card-hover"
                   style={{ background: "var(--badge-bg)" }}
                 >
-                  <WrenchIcon className="h-3.5 w-3.5 shrink-0 text-muted" />
                   {`${toolImageAttachments.length} chart${toolImageAttachments.length > 1 ? "s" : ""} generated`}
                   <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open/plots:rotate-90 text-muted" />
                 </summary>

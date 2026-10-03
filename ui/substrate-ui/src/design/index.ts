@@ -10,6 +10,7 @@ export { Meter } from "./ui/Meter";
 export { Popover, PopoverContent, PopoverTrigger } from "./ui/Popover";
 export { Select, type SelectGroup, type SelectOption } from "./ui/Select";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/Tabs";
+export { Toaster, toast } from "./ui/Toast";
 export { Toolbar, ToolbarGroup, ToolbarItem } from "./ui/Toolbar";
 export { Tooltip, TooltipProvider } from "./ui/Tooltip";
 export { Container } from "./layout/Container";

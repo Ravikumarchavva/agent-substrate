@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { Thread, UploadedFile } from "@/types";
 import { type AttachmentKind, getFileExtension, getAttachmentKind } from "@/lib/file-utils";
 import { api } from "@/lib/api";
-import { useToast } from "@/contexts/ToastContext";
+import { toast } from "@/design";
 
 // PDFs and pasted-text documents go through eager staged extraction+
 // embedding today (see EXTRACTABLE_CONTENT_TYPES in agent-substrate's
@@ -90,7 +90,6 @@ export function useFileAttachments(
   promoteThreadUrl: (threadId: string) => void,
   setThreads: React.Dispatch<React.SetStateAction<Thread[]>>,
 ) {
-  const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFilePreview[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -185,7 +184,7 @@ export function useFileAttachments(
         promoteThreadUrl(newThread.id);
         threadId = newThread.id;
       } catch {
-        showToast("Could not start a new chat for this upload.", "error");
+        toast.error("Couldn't start a new chat for this upload");
         return;
       }
     }
@@ -209,11 +208,11 @@ export function useFileAttachments(
       // exceeding the 20-page limit.") to the user, not just a console log
       // — a silent failure here looks like nothing happened.
       const message = err instanceof Error ? err.message : "File upload failed.";
-      showToast(message, "error");
+      toast.error(message);
     } finally {
       setUploadingFile(false);
     }
-  }, [currentThreadId, promoteThreadUrl, setThreads, pollFileIds, showToast]);
+  }, [currentThreadId, promoteThreadUrl, setThreads, pollFileIds]);
 
   const handleFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);

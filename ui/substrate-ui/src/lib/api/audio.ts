@@ -47,7 +47,7 @@ export const audioApi = {
         response_format: getPreferredTTSFormat(preferredModel),
       }),
     });
-    if (!res.ok) throw new Error(`TTS failed: ${res.statusText}`);
+    if (!res.ok) throw new Error(await ttsFailure(res));
     return res.blob();
   },
 
@@ -62,3 +62,15 @@ export const audioApi = {
     return res.json();
   },
 };
+
+/** The server's reason for a failed speech request (the proxy wraps FastAPI's `{detail}` in `{error}`), else the status text. */
+async function ttsFailure(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    const inner = typeof body.error === "string" ? (JSON.parse(body.error) as { detail?: unknown }) : null;
+    if (typeof inner?.detail === "string") return inner.detail;
+  } catch {
+    // not JSON; fall through
+  }
+  return `TTS failed: ${res.statusText}`;
+}

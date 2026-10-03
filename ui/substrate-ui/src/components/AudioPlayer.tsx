@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Loader2, Pause, Play, Volume2 } from "lucide-react";
+import { Button } from "@/design";
 import { api } from "@/lib/api";
+import { toSpeechText } from "@/lib/speech-text";
 import {
   DEFAULT_TTS_PLAYBACK_RATE,
   MODEL_PREFERENCES_UPDATED_EVENT,
@@ -41,7 +43,8 @@ function formatClock(seconds: number): string {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
 
-export function AudioPlayer({ text }: AudioPlayerProps) {
+export function AudioPlayer({ text: markdown }: AudioPlayerProps) {
+  const text = useMemo(() => toSpeechText(markdown), [markdown]);
   const [playerState, setPlayerState] = useState<PlayerState>("idle");
   const [hasAudio, setHasAudio] = useState(false);
   const [durationSeconds, setDurationSeconds] = useState(0);
@@ -269,8 +272,9 @@ export function AudioPlayer({ text }: AudioPlayerProps) {
         <span className="min-w-[3rem] text-[10px] tabular-nums" style={{ color: "var(--muted)" }}>
           {formatClock(currentTimeSeconds)}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={() => {
             const rates = TTS_PLAYBACK_RATE_OPTIONS.map((o) => o.id);
             const next = rates[(rates.indexOf(playbackRate) + 1) % rates.length];
@@ -278,11 +282,10 @@ export function AudioPlayer({ text }: AudioPlayerProps) {
           }}
           aria-label={`Playback speed ${formatPlaybackRateLabel(playbackRate)}, change`}
           title="Change playback speed"
-          className="rounded px-1 text-[10px] tabular-nums transition-colors hover:bg-card-hover"
-          style={{ color: "var(--muted)" }}
+          className="w-auto px-1 text-2xs tabular-nums"
         >
           {formatPlaybackRateLabel(playbackRate)}
-        </button>
+        </Button>
       </div>
     );
   }

@@ -37,6 +37,7 @@ import { Button, Input, Menu, MenuContent, MenuItem, MenuTrigger, Toolbar, Toolb
 import { api } from "@/lib/api";
 import { buildObjectUrl, buildWorkspaceFileUrl } from "@/lib/api/_client";
 import { formatFileSize, getFileExtension } from "@/lib/file-utils";
+import { DocumentSummary } from "@/components/settings/DocumentSummary";
 import { FileArtifactViewer } from "@/components/FileArtifactViewer";
 import { FileTypeIcon, type FileTypeIconSize } from "@/components/FileTypeIcon";
 import type { Thread, WorkspaceFile, WorkspaceUsage } from "@/types";
@@ -1129,6 +1130,10 @@ export function StorageTab() {
                 </button>
               </div>
             </div>
+
+            {inspectedFile.owner === "user" && inspectedFile.session_id && (
+              <DocumentSummary threadId={inspectedFile.session_id} fileName={inspectedFile.name} />
+            )}
 
             {/* Real preview, not a "binary file, download it" dead end —
                 reuses the same viewer the chat/code-interpreter artifact

@@ -105,10 +105,16 @@ export const TTS_MODEL_OPTIONS: ModelOption[] = [
     description: "Small local model; runs on this server without a speech API.",
   },
   {
+    id: "google/gemini-3.8-flash-tts",
+    label: "Gemini 3.8 Flash TTS",
+    provider: "google",
+    description: "Fast Google speech model; the free tier allows only about 20 requests a day.",
+  },
+  {
     id: "google/gemini-2.5-flash-preview-tts",
     label: "Gemini 2.5 Flash TTS",
     provider: "google",
-    description: "Fast, cost-efficient Google speech model.",
+    description: "Earlier Google speech model; the free tier is similarly small.",
   },
   {
     id: "google/gemini-3.1-flash-tts-preview",
@@ -339,5 +345,5 @@ export function getPreferredRealtimeVoice(): OpenAITTSVoice {
 }
 
 export function getPreferredTTSFormat(model: string): "mp3" | "wav" {
-  return getProviderForModel(model) === "google" ? "wav" : "mp3";
+  return getProviderForModel(model) === "google" || model.trim().toLowerCase().startsWith("local/") ? "wav" : "mp3";
 }

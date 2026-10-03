@@ -15,13 +15,13 @@ export function AuthModal({ isOpen, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-(--card) border border-(--border) rounded-xl shadow-2xl w-full max-w-md mx-4">
+      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-(--border)">
+        <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="text-xl font-semibold">Authentication</h2>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-(--card-hover) rounded-lg transition-colors cursor-pointer"
+            className="p-1 hover:bg-card-hover rounded-lg transition-colors cursor-pointer"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -96,7 +96,7 @@ export function AuthModal({ isOpen, onClose }: Props) {
           {/* Logout */}
           {(googleAuth || spotifyAuth) && (
             <>
-              <div className="border-t border-(--border) my-4" />
+              <div className="border-t border-border my-4" />
               <button
                 onClick={async () => {
                   const confirmed = window.confirm(
@@ -120,7 +120,7 @@ export function AuthModal({ isOpen, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-zinc-800/50 rounded-b-xl border-t border-(--border)">
+        <div className="p-4 bg-zinc-800/50 rounded-b-xl border-t border-border">
           <p className="text-xs text-center text-zinc-500">
             Your credentials are securely stored in httpOnly cookies
           </p>

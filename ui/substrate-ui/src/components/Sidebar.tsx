@@ -91,7 +91,7 @@ function QuickActionButton({ icon: Icon, label, onClick, isActive = false, badge
     <button
       type="button"
       onClick={onClick}
-      className={`substrate-press flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-3 text-left text-sm transition-colors ${isActive ? "bg-foreground text-background" : "text-foreground hover:bg-(--card-hover)"}`}
+      className={`substrate-press flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-3 text-left text-sm transition-colors ${isActive ? "bg-foreground text-background" : "text-foreground hover:bg-card-hover"}`}
     >
       <div className="flex items-center gap-3 min-w-0">
         <Icon className="h-4 w-4 shrink-0" />
@@ -231,7 +231,7 @@ export function Sidebar({
   return (
     <>
       <aside
-        className="flex h-full min-h-0 w-full flex-col overflow-hidden border-r border-(--border) bg-(--card) shadow-2xl lg:shadow-none"
+        className="flex h-full min-h-0 w-full flex-col overflow-hidden border-r border-border bg-card shadow-2xl lg:shadow-none"
         suppressHydrationWarning
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -246,7 +246,7 @@ export function Sidebar({
               type="button"
               onClick={onCollapse}
               title="Collapse sidebar"
-              className="btn-icon flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-transparent text-(--muted) transition-colors hover:border-(--border) hover:bg-background hover:text-foreground"
+              className="btn-icon flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-transparent text-muted transition-colors hover:border-border hover:bg-background hover:text-foreground"
             >
               <SidebarToggleIcon direction="close" className="h-5 w-5" />
             </button>
@@ -277,7 +277,7 @@ export function Sidebar({
             <div className="space-y-5">
               {settingsGroups.map((group) => (
                 <div key={group.title}>
-                  <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-(--muted)">
+                  <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-muted">
                     {group.title}
                   </p>
                   <div className="space-y-1">
@@ -291,12 +291,12 @@ export function Sidebar({
                           onClick={() => onSelectSettingsTab?.(item.id)}
                           className={`flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition-colors cursor-pointer ${active ? "bg-background text-foreground" : "text-foreground hover:bg-background"}`}
                         >
-                          <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${active ? "bg-foreground text-background" : "bg-(--badge-bg) text-(--muted)"}`}>
+                          <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${active ? "bg-foreground text-background" : "bg-badge text-muted"}`}>
                             <Icon className="h-4 w-4" />
                           </div>
                           <div className="min-w-0">
                             <div className="text-sm font-medium">{item.label}</div>
-                            <div className="mt-1 text-xs leading-5 text-(--muted)">{item.description}</div>
+                            <div className="mt-1 text-xs leading-5 text-muted">{item.description}</div>
                           </div>
                         </button>
                       );
@@ -309,20 +309,20 @@ export function Sidebar({
         ) : (
           <>
             <div className="px-3 pb-2 pt-3">
-              <div className="flex items-center gap-2 rounded-xl border border-(--border) bg-background px-3 py-2.5 text-sm text-(--muted)">
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-muted">
                 <Search className="h-4 w-4 shrink-0" />
                 <input
                   ref={searchInputRef}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search threads"
-                  className="flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-(--muted)"
+                  className="flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted"
                 />
                 {search && (
                   <button
                     type="button"
                     onClick={() => setSearch("")}
-                    className="btn-icon cursor-pointer rounded-lg p-1 hover:bg-(--card-hover)"
+                    className="btn-icon cursor-pointer rounded-lg p-1 hover:bg-card-hover"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -331,13 +331,13 @@ export function Sidebar({
             </div>
 
             <div className="flex-1 overflow-y-auto px-2 pb-3 pt-4">
-              <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-(--muted)">
+              <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
                 Recents
               </p>
               {threads.length === 0 ? (
-                <p className="px-3 py-8 text-center text-xs text-(--muted)">No conversations yet</p>
+                <p className="px-3 py-8 text-center text-xs text-muted">No conversations yet</p>
               ) : filteredThreads.length === 0 ? (
-                <p className="px-3 py-8 text-center text-xs text-(--muted)">
+                <p className="px-3 py-8 text-center text-xs text-muted">
                   No results for &ldquo;{search}&rdquo;
                 </p>
               ) : (
@@ -346,7 +346,7 @@ export function Sidebar({
 
                   return (
                     <div key={label} className="mb-4">
-                      <p className="px-1 pb-2 pt-2 text-[11px] font-semibold uppercase tracking-wider text-(--muted)">
+                      <p className="px-1 pb-2 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
                         {label}
                       </p>
                       <div className="space-y-0.5">
@@ -379,11 +379,11 @@ export function Sidebar({
 
         <div className="mt-auto px-2 pb-3 pt-2" ref={menuRef}>
           {menuOpen && (
-            <div className="substrate-pop-in mb-1.5 overflow-hidden rounded-2xl bg-(--card)" style={{ boxShadow: "var(--shadow-lg)", transformOrigin: "bottom center" }}>
+            <div className="substrate-pop-in mb-1.5 overflow-hidden rounded-2xl bg-card" style={{ boxShadow: "var(--shadow-lg)", transformOrigin: "bottom center" }}>
               {isAuthenticated && user && (
-                <div className="border-b border-(--border) px-2.5 py-3">
+                <div className="border-b border-border px-2.5 py-3">
                   <div className="truncate text-sm font-medium">{user.name ?? "User"}</div>
-                  <div className="mt-0.5 truncate text-xs text-(--muted)">{user.email ?? ""}</div>
+                  <div className="mt-0.5 truncate text-xs text-muted">{user.email ?? ""}</div>
                   {isAdmin && (
                     <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-emerald-500">
                       <ShieldCheck className="h-3 w-3" /> Admin
@@ -392,12 +392,12 @@ export function Sidebar({
                 </div>
               )}
 
-              <div className="flex items-center justify-between border-b border-(--border) px-4 py-2.5">
+              <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
                 <span className="text-sm">{theme === "dark" ? "Dark mode" : "Light mode"}</span>
                 <button
                   type="button"
                   onClick={toggleTheme}
-                  className="flex items-center justify-center cursor-pointer rounded-xl p-1.5 transition-colors hover:bg-(--card-hover)"
+                  className="flex items-center justify-center cursor-pointer rounded-xl p-1.5 transition-colors hover:bg-card-hover"
                   aria-label="Toggle theme"
                 >
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -411,14 +411,14 @@ export function Sidebar({
                     setMenuOpen(false);
                     onOpenSettings("general");
                   }}
-                  className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-(--card-hover)"
+                  className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-card-hover"
                 >
-                  <Settings2 className="h-4 w-4 text-(--muted)" />
+                  <Settings2 className="h-4 w-4 text-muted" />
                   Settings
                 </button>
               </div>
 
-              <div className="border-t border-(--border) py-1">
+              <div className="border-t border-border py-1">
                 {isAuthenticated ? (
                   <button
                     type="button"
@@ -430,7 +430,7 @@ export function Sidebar({
                       if (!confirmed) return;
                       await logout();
                     }}
-                    className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-red-400 transition-colors hover:bg-(--card-hover)"
+                    className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-red-400 transition-colors hover:bg-card-hover"
                   >
                     <LogOut className="h-4 w-4" />
                     Sign out
@@ -442,7 +442,7 @@ export function Sidebar({
                       setMenuOpen(false);
                       loginWithGoogle();
                     }}
-                    className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-(--card-hover)"
+                    className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-card-hover"
                   >
                     <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -460,7 +460,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => setMenuOpen((open) => !open)}
-            className="flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-(--card-hover)"
+            className="flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-card-hover"
             aria-expanded={menuOpen}
             aria-haspopup="true"
           >
@@ -471,7 +471,7 @@ export function Sidebar({
                 className="h-8 w-8 shrink-0 rounded-full object-cover"
               />
             ) : (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-(--badge-bg) text-xs font-bold text-foreground">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-badge text-xs font-bold text-foreground">
                 {isAuthenticated && user ? (user.name ?? user.email ?? "?")[0].toUpperCase() : <User className="h-3.5 w-3.5" />}
               </div>
             )}
@@ -479,11 +479,11 @@ export function Sidebar({
               <p className="truncate text-sm font-medium">
                 {isAuthenticated && user ? user.name ?? user.email ?? "My Account" : "My Account"}
               </p>
-              <p className="truncate text-xs text-(--muted)">
+              <p className="truncate text-xs text-muted">
                 {isAuthenticated && user?.email ? user.email : "Open account menu"}
               </p>
             </div>
-            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted" />
           </button>
         </div>
       </aside>
@@ -497,7 +497,7 @@ export function Sidebar({
             aria-label="Close delete confirmation"
           />
           <div
-            className="substrate-scale-in relative w-full max-w-md rounded-2xl bg-(--card) p-6"
+            className="substrate-scale-in relative w-full max-w-md rounded-2xl bg-card p-6"
             role="dialog"
             aria-modal="true"
             aria-label="Delete chat thread"
@@ -509,7 +509,7 @@ export function Sidebar({
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-lg font-semibold text-foreground">Delete chat thread?</h2>
-                <p className="mt-2 text-sm leading-6 text-(--muted)">
+                <p className="mt-2 text-sm leading-6 text-muted">
                   This removes
                   <span className="font-medium text-foreground"> {threadPendingDelete.name}</span>
                   and its message history permanently.
@@ -522,7 +522,7 @@ export function Sidebar({
                 type="button"
                 onClick={() => setThreadPendingDelete(null)}
                 disabled={isDeletingThread}
-                className="cursor-pointer rounded-xl border border-(--border) px-4 py-2 text-sm text-foreground transition-colors hover:bg-(--card-hover) disabled:cursor-not-allowed disabled:opacity-60"
+                className="cursor-pointer rounded-xl border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -583,7 +583,7 @@ function ThreadItem({
 
   if (isEditing) {
     return (
-      <div className="flex items-center gap-1 rounded-xl bg-(--card) px-3 py-2" style={{ boxShadow: "var(--shadow-sm)" }}>
+      <div className="flex items-center gap-1 rounded-xl bg-card px-3 py-2" style={{ boxShadow: "var(--shadow-sm)" }}>
         <input
           value={editName}
           onChange={(event) => onEditNameChange(event.target.value)}
@@ -597,14 +597,14 @@ function ThreadItem({
         <button
           type="button"
           onClick={onSaveEdit}
-          className="cursor-pointer rounded-lg p-1 text-emerald-500 hover:bg-(--card-hover)"
+          className="cursor-pointer rounded-lg p-1 text-emerald-500 hover:bg-card-hover"
         >
           <Check className="h-3 w-3" />
         </button>
         <button
           type="button"
           onClick={onCancelEdit}
-          className="cursor-pointer rounded-lg p-1 opacity-50 hover:bg-(--card-hover)"
+          className="cursor-pointer rounded-lg p-1 opacity-50 hover:bg-card-hover"
         >
           <X className="h-3 w-3" />
         </button>
@@ -614,7 +614,7 @@ function ThreadItem({
 
   return (
     <div
-      className={`group relative w-full cursor-pointer rounded-xl transition-colors ${isActive ? "bg-(--card-hover) text-foreground" : "text-foreground hover:bg-(--card-hover)"}`}
+      className={`group relative w-full cursor-pointer rounded-xl transition-colors ${isActive ? "bg-card-hover text-foreground" : "text-foreground hover:bg-card-hover"}`}
       onClick={onSelect}
       style={isActive ? { boxShadow: "var(--shadow-sm)" } : undefined}
       role="button"
@@ -639,7 +639,7 @@ function ThreadItem({
       >
         {/* Gradient fade behind the button */}
         <div
-          className={`pointer-events-none absolute right-0 top-0 h-full w-14 rounded-r-xl bg-linear-to-l to-transparent opacity-0 group-hover:opacity-100 transition-opacity from-(--card-hover)`}
+          className={`pointer-events-none absolute right-0 top-0 h-full w-14 rounded-r-xl bg-linear-to-l to-transparent opacity-0 group-hover:opacity-100 transition-opacity from-card-hover`}
         />
         <button
           type="button"
@@ -653,7 +653,7 @@ function ThreadItem({
         </button>
 
         {showMenu && (
-          <div className="substrate-scale-in absolute right-0 top-full z-[100] mt-1 w-32 overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-2xl" style={{ transformOrigin: "top right" }}>
+          <div className="substrate-scale-in absolute right-0 top-full z-[100] mt-1 w-32 overflow-hidden rounded-xl border border-border bg-card shadow-2xl" style={{ transformOrigin: "top right" }}>
             <button
               type="button"
               onClick={(e) => {
@@ -661,7 +661,7 @@ function ThreadItem({
                 setShowMenu(false);
                 onStartEdit();
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-(--card-hover)"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-card-hover"
             >
               <Pencil className="h-3 w-3" />
               Rename

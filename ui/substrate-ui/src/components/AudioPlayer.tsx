@@ -226,7 +226,7 @@ export function AudioPlayer({ text }: AudioPlayerProps) {
   if (hasAudio) {
     return (
       <div
-        className="flex min-w-0 items-center gap-2 rounded-full border border-(--border) bg-(--card) px-2 py-1"
+        className="flex min-w-0 items-center gap-2 rounded-full border border-border bg-card px-2 py-1"
         title={`Saved speech clip at ${formatPlaybackRateLabel(playbackRate)} playback`}
       >
         <button
@@ -260,7 +260,7 @@ export function AudioPlayer({ text }: AudioPlayerProps) {
           value={Math.min(currentTimeSeconds, durationSeconds || 0)}
           onChange={handleSeek}
           aria-label="Seek saved speech"
-          className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-(--border) sm:w-28"
+          className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-border sm:w-28"
           style={{ accentColor: "var(--accent)" }}
         />
 
@@ -293,7 +293,7 @@ export function AudioPlayer({ text }: AudioPlayerProps) {
           ? "Pause"
           : "Listen"
       }
-      className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+      className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-card-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
       style={{
         color: playerState === "error" ? "#ef4444" : "var(--muted)",
       }}

@@ -45,7 +45,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             className={`substrate-pop-in pointer-events-auto flex max-w-md items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm shadow-lg ${
               toast.variant === "error"
                 ? "border-red-500/30 bg-red-500/10 text-red-400"
-                : "border-(--border) bg-(--card) text-foreground"
+                : "border-border bg-card text-foreground"
             }`}
           >
             <span className="min-w-0 flex-1">{toast.message}</span>

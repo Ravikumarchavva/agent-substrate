@@ -88,8 +88,8 @@ export function OoxmlViewer({ kind, fileUrl }: { kind: Kind; fileUrl: string }) 
   return (
     <div className="relative h-full w-full">
       {state === "loading" && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-(--card)">
-          <Loader2 className="h-5 w-5 animate-spin text-(--muted)" />
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-card">
+          <Loader2 className="h-5 w-5 animate-spin text-muted" />
         </div>
       )}
       <div ref={containerRef} className="h-full w-full overflow-auto bg-white" />
@@ -99,7 +99,7 @@ export function OoxmlViewer({ kind, fileUrl }: { kind: Kind; fileUrl: string }) 
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-(--muted)">
+    <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-muted">
       {children}
     </div>
   );

@@ -40,7 +40,7 @@ export function FileArtifactViewer({
 
   if (kind === "image") {
     return (
-      <div className="flex h-full w-full items-center justify-center overflow-auto bg-(--card) p-4">
+      <div className="flex h-full w-full items-center justify-center overflow-auto bg-card p-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={fileUrl} alt={fileName} className="max-h-full max-w-full object-contain" />
       </div>
@@ -127,7 +127,7 @@ function parseFileUrl(fileUrl: string): { threadId: string; path: string } | nul
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-(--muted)">
+    <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-muted">
       {children}
     </div>
   );
@@ -229,7 +229,7 @@ function TextView({ fileUrl, csv }: { fileUrl: string; csv: boolean }) {
     return <GridTable rows={rows} />;
   }
   return (
-    <pre className="h-full w-full overflow-auto bg-(--code-bg) p-4 font-mono text-xs text-(--code-fg)">
+    <pre className="h-full w-full overflow-auto bg-code p-4 font-mono text-xs text-code-foreground">
       {text}
     </pre>
   );
@@ -240,13 +240,13 @@ function GridTable({ rows }: { rows: string[][] }) {
   const [header, ...body] = rows;
   return (
     <table className="w-full border-collapse text-xs">
-      <thead className="sticky top-0 bg-(--card)">
+      <thead className="sticky top-0 bg-card">
         <tr>
-          <th className="border border-(--border) px-2 py-1 text-(--muted)"></th>
+          <th className="border border-border px-2 py-1 text-muted"></th>
           {header.map((cell, i) => (
             <th
               key={i}
-              className="border border-(--border) px-2 py-1 text-left font-semibold text-foreground"
+              className="border border-border px-2 py-1 text-left font-semibold text-foreground"
             >
               {String(cell)}
             </th>
@@ -255,10 +255,10 @@ function GridTable({ rows }: { rows: string[][] }) {
       </thead>
       <tbody>
         {body.map((row, r) => (
-          <tr key={r} className="even:bg-(--card)/40">
-            <td className="border border-(--border) px-2 py-1 text-center text-(--muted)">{r + 2}</td>
+          <tr key={r} className="even:bg-card/40">
+            <td className="border border-border px-2 py-1 text-center text-muted">{r + 2}</td>
             {header.map((_, c) => (
-              <td key={c} className="border border-(--border) px-2 py-1 text-foreground">
+              <td key={c} className="border border-border px-2 py-1 text-foreground">
                 {String(row[c] ?? "")}
               </td>
             ))}
@@ -273,7 +273,7 @@ function UnsupportedView({ fileUrl, fileName }: { fileUrl: string; fileName: str
   return (
     <Centered>
       <div className="flex flex-col items-center gap-3">
-        <FileWarning className="h-8 w-8 text-(--muted)" />
+        <FileWarning className="h-8 w-8 text-muted" />
         <p>No inline preview for this file type yet.</p>
         <a
           href={fileUrl}

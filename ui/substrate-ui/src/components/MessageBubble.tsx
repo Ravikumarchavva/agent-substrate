@@ -114,7 +114,7 @@ function MarkdownImage({
   if (!resolved) return null;
   if (failed) {
     return (
-      <span className="my-1 inline-block text-xs italic text-(--muted)">
+      <span className="my-1 inline-block text-xs italic text-muted">
         {alt ? `${alt} (image unavailable)` : "Image unavailable"}
       </span>
     );
@@ -130,7 +130,7 @@ function MarkdownImage({
         src={resolved}
         alt={alt ?? ""}
         onError={() => setFailed(true)}
-        className="my-2 max-h-[520px] w-auto max-w-full rounded-2xl border border-(--border) bg-(--card) shadow-md transition-shadow duration-200 group-hover/inline-image:shadow-lg"
+        className="my-2 max-h-[520px] w-auto max-w-full rounded-2xl border border-border bg-card shadow-md transition-shadow duration-200 group-hover/inline-image:shadow-lg"
       />
     </button>
   );
@@ -211,7 +211,7 @@ function CopyableMarkdownTable({ children, className, ...props }: ComponentProps
       <button
         type="button"
         onClick={handleCopyTable}
-        className="btn-icon absolute right-1.5 top-2.5 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground"
+        className="btn-icon absolute right-1.5 top-2.5 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-card-hover hover:text-foreground"
         aria-label={copied ? "Copied" : "Copy table"}
         title={copied ? "Copied" : "Copy table"}
       >
@@ -246,7 +246,7 @@ function CopyablePre({ children, className, ...props }: ComponentPropsWithoutRef
       <button
         type="button"
         onClick={handleCopyCode}
-        className="btn-icon absolute right-2 top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-(--muted) bg-(--card)/85 backdrop-blur-sm border border-(--border) opacity-0 group-hover/code:opacity-100 transition-all hover:bg-(--card-hover) hover:text-foreground shadow-sm"
+        className="btn-icon absolute right-2 top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted bg-card/85 backdrop-blur-sm border border-border opacity-0 group-hover/code:opacity-100 transition-all hover:bg-card-hover hover:text-foreground shadow-sm"
         aria-label={copied ? "Copied" : "Copy code"}
         title={copied ? "Copied" : "Copy code"}
         style={{ minWidth: 'unset', minHeight: 'unset' }}
@@ -283,7 +283,7 @@ function AttachmentDocumentCard({ attachment, onOpenArtifact }: AttachmentDocume
       <FileTypeIcon name={attachment.name} mime={attachment.mime} size="lg" />
       <div className="min-w-0 flex-1 pr-1">
         <div className="truncate text-sm font-semibold text-foreground">{attachment.name}</div>
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-(--muted)">
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-muted">
           <span>{extension}</span>
           {attachment.size > 0 && (
             <>
@@ -294,7 +294,7 @@ function AttachmentDocumentCard({ attachment, onOpenArtifact }: AttachmentDocume
         </div>
       </div>
       {!opensInPanel && attachment.url && (
-        <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
+        <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted" />
       )}
     </div>
   );
@@ -667,7 +667,7 @@ export function MessageBubble({
           <button
             type="button"
             onClick={() => openLightbox("main", 0)}
-            className="group/image relative block w-full overflow-hidden rounded-2xl cursor-pointer border border-(--border) bg-(--card) shadow-md transition-all duration-300 hover:shadow-lg focus:outline-none"
+            className="group/image relative block w-full overflow-hidden rounded-2xl cursor-pointer border border-border bg-card shadow-md transition-all duration-300 hover:shadow-lg focus:outline-none"
           >
             <img
               src={attachment.url ?? ""}
@@ -683,7 +683,7 @@ export function MessageBubble({
 
     return (
       <div className="w-full max-w-[720px] pt-1">
-        <div className="group/carousel relative w-full overflow-hidden rounded-2xl border border-(--border) bg-(--card) shadow-md transition-all duration-300 hover:shadow-lg select-none">
+        <div className="group/carousel relative w-full overflow-hidden rounded-2xl border border-border bg-card shadow-md transition-all duration-300 hover:shadow-lg select-none">
           <button
             type="button"
             onClick={() => openLightbox("main", inlineImageIndex)}
@@ -748,7 +748,7 @@ export function MessageBubble({
     return (
       <>
         <div className="substrate-fade-up group px-4 sm:px-6">
-          <div className="mx-auto max-w-(--chat-width) flex justify-end">
+          <div className="mx-auto max-w-chat flex justify-end">
             <div className="flex max-w-[85%] flex-col items-end gap-2 sm:max-w-[75%]">
               {imageAttachments.length > 0 && (
                 <div className="flex justify-end w-full">
@@ -801,7 +801,7 @@ export function MessageBubble({
                       <button
                         type="button"
                         onClick={() => setIsCollapsed(!isCollapsed)}
-                        className="text-[11px] font-semibold text-(--muted) hover:text-foreground transition-colors cursor-pointer flex items-center gap-1 select-none btn-icon"
+                        className="text-[11px] font-semibold text-muted hover:text-foreground transition-colors cursor-pointer flex items-center gap-1 select-none btn-icon"
                         style={{ minHeight: "unset", minWidth: "unset" }}
                       >
                         {isCollapsed ? (
@@ -827,7 +827,7 @@ export function MessageBubble({
                       <button
                         type="button"
                         onClick={copyToClipboard}
-                        className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                        className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-card-hover transition-colors cursor-pointer text-muted"
                         title="Copy message"
                         style={{ minWidth: "unset", minHeight: "unset" }}
                       >
@@ -837,7 +837,7 @@ export function MessageBubble({
                         <button
                           type="button"
                           onClick={() => onForkBranch(messageId)}
-                          className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                          className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-card-hover transition-colors cursor-pointer text-muted"
                           title="Fork branch from here"
                           aria-label="Fork branch from here"
                           style={{ minWidth: "unset", minHeight: "unset" }}
@@ -848,7 +848,7 @@ export function MessageBubble({
                     </div>
                   )}
                   {timestamp && (
-                    <span className="text-[11px] text-(--muted) select-none">
+                    <span className="text-[11px] text-muted select-none">
                       {formatTime(timestamp)}
                     </span>
                   )}
@@ -866,7 +866,7 @@ export function MessageBubble({
   return (
     <>
       <div className="substrate-fade-up group relative px-4 sm:px-6">
-        <div className="mx-auto max-w-(--chat-width)">
+        <div className="mx-auto max-w-chat">
           {/* Content column */}
           <div className="space-y-3">
             {/* Tool Calls — pill-style inline display */}
@@ -875,20 +875,20 @@ export function MessageBubble({
                 {/* Summary pill */}
                 <details className="group/tools" open={false}>
                   <summary
-                    className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-(--card-hover)"
+                    className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-card-hover"
                     style={{ background: "var(--badge-bg)" }}
                   >
                     {isToolExecuting ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-(--muted)" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-muted" />
                     ) : (
-                      <WrenchIcon className="w-3.5 h-3.5 shrink-0 text-(--muted)" />
+                      <WrenchIcon className="w-3.5 h-3.5 shrink-0 text-muted" />
                     )}
-                    <span className="text-xs font-medium text-(--badge-fg)">
+                    <span className="text-xs font-medium text-badge-foreground">
                       {isToolExecuting
                         ? `Running tools… ${visibleToolCalls.filter((t) => t.result !== undefined).length}/${visibleToolCalls.length}`
                         : `Used ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}`}
                     </span>
-                    <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/tools:rotate-90 text-(--muted)" />
+                    <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/tools:rotate-90 text-muted" />
                   </summary>
 
                   <div
@@ -907,12 +907,12 @@ export function MessageBubble({
                       const riskColor = riskColors[tool.color ?? tool.risk ?? "safe"] ?? "#34d399";
                       return (
                         <div key={tool.id}>
-                          {idx > 0 && <div className="border-t border-(--border)" />}
+                          {idx > 0 && <div className="border-t border-border" />}
                           <details className="group">
-                            <summary className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-(--card-hover) transition-colors list-none">
+                            <summary className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-card-hover transition-colors list-none">
                               <span className="shrink-0">
                                 {!isDone ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-(--muted)" />
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-muted" />
                                 ) : isErr ? (
                                   <span className="text-red-400 text-xs leading-none">✕</span>
                                 ) : (
@@ -928,16 +928,16 @@ export function MessageBubble({
                                 {tool.name.replace(/_/g, " ")}
                               </span>
                               {hasApp && (
-                                <span className="text-[10px] px-2 py-0.5 rounded-lg bg-(--badge-bg) text-(--badge-fg) font-medium">
+                                <span className="text-[10px] px-2 py-0.5 rounded-lg bg-badge text-badge-foreground font-medium">
                                   App
                                 </span>
                               )}
-                              <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open:rotate-90 text-(--muted)" />
+                              <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open:rotate-90 text-muted" />
                             </summary>
 
-                            <div className="px-4 pb-3 space-y-2 border-t border-(--border)">
+                            <div className="px-4 pb-3 space-y-2 border-t border-border">
                               <div className="pt-2.5">
-                                <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-(--muted)">Input</div>
+                                <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-muted">Input</div>
                                 <pre className="text-[11px] p-3 rounded-xl overflow-x-auto" style={{ background: "var(--code-bg)", color: "var(--code-fg)" }}>
                                   {JSON.stringify(
                                     typeof tool.arguments === "string"
@@ -964,7 +964,7 @@ export function MessageBubble({
                               {hasApp && (
                                 <button
                                   onClick={() => onOpenInPanel?.(tool)}
-                                  className="flex items-center gap-1.5 text-xs py-1 transition-colors cursor-pointer text-(--muted) hover:text-foreground"
+                                  className="flex items-center gap-1.5 text-xs py-1 transition-colors cursor-pointer text-muted hover:text-foreground"
                                 >
                                   <PanelRightOpen className="w-3.5 h-3.5" />
                                   Open {tool.name.replace(/_/g, " ")}
@@ -984,18 +984,18 @@ export function MessageBubble({
             {safeReasoning && (
               <details className="group/think" open={isToolExecuting}>
                 <summary
-                  className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-(--card-hover)"
+                  className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-card-hover"
                   style={{ background: "var(--badge-bg)" }}
                 >
                   <span className="text-xs">💭</span>
-                  <span className="text-xs font-medium text-(--badge-fg)">Thinking</span>
-                  <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/think:rotate-90 text-(--muted)" />
+                  <span className="text-xs font-medium text-badge-foreground">Thinking</span>
+                  <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/think:rotate-90 text-muted" />
                 </summary>
                 <div
                   className="mt-2 rounded-2xl px-4 py-3"
                   style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
                 >
-                  <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-(--muted)">
+                  <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-muted">
                     {safeReasoning}
                   </div>
                 </div>
@@ -1098,14 +1098,14 @@ export function MessageBubble({
                                 onOpenArtifact(path, name);
                               }
                             }}
-                            className={`my-1 flex w-full max-w-md items-center gap-3 rounded-2xl border border-(--border) bg-(--card) p-3 shadow-xs hover:shadow-sm hover:bg-(--card-hover) hover:border-(--border-hover) transition-all duration-200 ${onOpenArtifact ? "cursor-pointer" : ""}`}
+                            className={`my-1 flex w-full max-w-md items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-xs hover:shadow-sm hover:bg-card-hover hover:border-border-hover transition-all duration-200 ${onOpenArtifact ? "cursor-pointer" : ""}`}
                           >
                             <FileTypeIcon name={name} size="lg" as="span" />
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm font-semibold text-foreground">
                                 {name}
                               </span>
-                              <span className="block text-xs text-(--muted)">
+                              <span className="block text-xs text-muted">
                                 {label} · {ext}
                               </span>
                             </span>
@@ -1167,12 +1167,12 @@ export function MessageBubble({
             {toolImageAttachments.length > 0 && (
               <details className="group/plots w-full">
                 <summary
-                  className="inline-flex cursor-pointer select-none list-none items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium text-(--badge-fg) transition-colors hover:bg-(--card-hover)"
+                  className="inline-flex cursor-pointer select-none list-none items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium text-badge-foreground transition-colors hover:bg-card-hover"
                   style={{ background: "var(--badge-bg)" }}
                 >
-                  <WrenchIcon className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
+                  <WrenchIcon className="h-3.5 w-3.5 shrink-0 text-muted" />
                   {`${toolImageAttachments.length} chart${toolImageAttachments.length > 1 ? "s" : ""} generated`}
-                  <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open/plots:rotate-90 text-(--muted)" />
+                  <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open/plots:rotate-90 text-muted" />
                 </summary>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {toolImageAttachments.map((attachment, idx) => (
@@ -1180,7 +1180,7 @@ export function MessageBubble({
                       key={attachment.id}
                       type="button"
                       onClick={() => openLightbox("tool", idx)}
-                      className="block cursor-pointer overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-sm transition-shadow hover:shadow-md"
+                      className="block cursor-pointer overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -1199,7 +1199,7 @@ export function MessageBubble({
               <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                 <button
                   onClick={copyToClipboard}
-                  className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                  className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-card-hover transition-colors cursor-pointer text-muted"
                   title="Copy"
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1208,7 +1208,7 @@ export function MessageBubble({
                 {onRegenerate && (
                   <button
                     onClick={onRegenerate}
-                    className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                    className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-card-hover transition-colors cursor-pointer text-muted"
                     title="Regenerate"
                   >
                     <RotateCw className="w-3.5 h-3.5" />
@@ -1217,7 +1217,7 @@ export function MessageBubble({
                 {onForkBranch && messageId && (
                   <button
                     onClick={() => onForkBranch(messageId)}
-                    className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                    className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-card-hover transition-colors cursor-pointer text-muted"
                     title="Fork branch from here"
                     aria-label="Fork branch from here"
                   >
@@ -1225,7 +1225,7 @@ export function MessageBubble({
                   </button>
                 )}
                 {timestamp && (
-                  <span className="text-[11px] ml-1.5 text-(--muted)">
+                  <span className="text-[11px] ml-1.5 text-muted">
                     {formatTime(timestamp)}
                   </span>
                 )}

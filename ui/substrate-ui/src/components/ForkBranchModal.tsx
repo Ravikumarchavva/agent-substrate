@@ -69,16 +69,16 @@ export function ForkBranchModal({
         if (e.target === e.currentTarget && !loading) onClose();
       }}
     >
-      <div className="relative w-full max-w-md rounded-2xl border border-(--border) bg-(--card) p-6 shadow-2xl animate-in zoom-in-95 duration-150">
+      <div className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl animate-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--card-hover) border border-(--border) text-foreground">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-card-hover border border-border text-foreground">
               <GitFork className="h-5 w-5" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-foreground">Fork Branch</h2>
-              <p className="text-xs text-(--muted)">
+              <p className="text-xs text-muted">
                 Create an alternate history path from{" "}
                 <span className="font-mono font-medium text-foreground">{sourceBranchId}</span>
               </p>
@@ -88,7 +88,7 @@ export function ForkBranchModal({
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="flex items-center justify-center h-7 w-7 rounded-lg text-(--muted) hover:bg-(--card-hover) hover:text-foreground transition-colors disabled:opacity-50 cursor-pointer"
+            className="flex items-center justify-center h-7 w-7 rounded-lg text-muted hover:bg-card-hover hover:text-foreground transition-colors disabled:opacity-50 cursor-pointer"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -97,8 +97,8 @@ export function ForkBranchModal({
 
         {/* Message preview if forking from a specific turn */}
         {sourceMessageText && (
-          <div className="mt-4 rounded-xl border border-(--border)/60 bg-background/60 p-3">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-(--muted) mb-1">
+          <div className="mt-4 rounded-xl border border-border/60 bg-background/60 p-3">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-muted mb-1">
               Forking from turn
             </div>
             <p className="text-xs text-foreground/80 line-clamp-2 italic">
@@ -124,7 +124,7 @@ export function ForkBranchModal({
               }}
               disabled={loading}
               placeholder="e.g. alternative-approach"
-              className="w-full rounded-xl border border-(--border) bg-background px-3.5 py-2 text-sm text-foreground placeholder:text-(--muted) focus:outline-none focus:ring-2 focus:ring-(--accent)/40 focus:border-(--accent) transition-all font-mono"
+              className="w-full rounded-xl border border-border bg-background px-3.5 py-2 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-all font-mono"
             />
           </div>
 
@@ -140,7 +140,7 @@ export function ForkBranchModal({
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="rounded-xl px-4 py-2 text-xs font-medium text-(--muted) hover:bg-(--card-hover) hover:text-foreground transition-colors disabled:opacity-50 cursor-pointer"
+              className="rounded-xl px-4 py-2 text-xs font-medium text-muted hover:bg-card-hover hover:text-foreground transition-colors disabled:opacity-50 cursor-pointer"
             >
               Cancel
             </button>

@@ -42,12 +42,12 @@ function SelectCard({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-[24px] border p-5 text-left transition-all cursor-pointer ${active ? "border-(--accent)" : "border-(--border) hover:bg-(--card-hover)"}`}
+      className={`rounded-[24px] border p-5 text-left transition-all cursor-pointer ${active ? "border-accent" : "border-border hover:bg-card-hover"}`}
       style={{ background: active ? "color-mix(in srgb, var(--accent) 6%, var(--card))" : "var(--card)", boxShadow: "var(--shadow-sm)" }}
     >
       <div className="text-base font-semibold text-foreground">{title}</div>
-      <p className="mt-3 text-sm leading-6 text-(--muted)">{caption}</p>
-      <div className="mt-4 text-xs font-medium text-(--muted)">{active ? "Selected model" : "Select model"}</div>
+      <p className="mt-3 text-sm leading-6 text-muted">{caption}</p>
+      <div className="mt-4 text-xs font-medium text-muted">{active ? "Selected model" : "Select model"}</div>
     </button>
   );
 }
@@ -68,7 +68,7 @@ export function SearchTab({
     <div className="space-y-8">
       <div className="space-y-2">
         <h2 className="text-3xl font-semibold tracking-tight text-foreground">Search Settings</h2>
-        <p className="max-w-3xl text-sm leading-6 text-(--muted)">
+        <p className="max-w-3xl text-sm leading-6 text-muted">
           Retrieval controls inspired by the reference admin screens. These preferences are stored locally for now, so the UI is ready before the backend indexing stack lands in this app.
         </p>
       </div>
@@ -77,12 +77,12 @@ export function SearchTab({
         <div className="space-y-5">
           <div className="rounded-[28px] p-6" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-(--badge-bg) text-foreground">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-badge text-foreground">
                 <Search className="h-5 w-5" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-foreground">Embedding model</h3>
-                <p className="text-sm text-(--muted)">Choose the retrieval backbone used to represent documents and queries.</p>
+                <p className="text-sm text-muted">Choose the retrieval backbone used to represent documents and queries.</p>
               </div>
             </div>
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -94,12 +94,12 @@ export function SearchTab({
 
           <div className="rounded-[28px] p-6" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-(--badge-bg) text-foreground">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-badge text-foreground">
                 <Sparkles className="h-5 w-5" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-foreground">Reranking</h3>
-                <p className="text-sm text-(--muted)">Improve result quality after the first retrieval pass.</p>
+                <p className="text-sm text-muted">Improve result quality after the first retrieval pass.</p>
               </div>
             </div>
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -112,18 +112,18 @@ export function SearchTab({
 
         <div className="rounded-[28px] p-6" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-(--badge-bg) text-foreground">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-badge text-foreground">
               <SlidersHorizontal className="h-5 w-5" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-foreground">Post-processing</h3>
-              <p className="text-sm text-(--muted)">A compact settings card modeled after the reference search workspace.</p>
+              <p className="text-sm text-muted">A compact settings card modeled after the reference search workspace.</p>
             </div>
           </div>
 
           <div className="mt-6 space-y-5">
             <div>
-              <div className="text-xs font-medium text-(--muted)">Results to rerank</div>
+              <div className="text-xs font-medium text-muted">Results to rerank</div>
               <input
                 type="range"
                 min={5}
@@ -136,18 +136,18 @@ export function SearchTab({
               <div className="mt-2 text-sm font-semibold text-foreground">{rerankLimit}</div>
             </div>
 
-            <label className="flex items-start justify-between gap-4 rounded-2xl border border-(--border) px-4 py-4">
+            <label className="flex items-start justify-between gap-4 rounded-2xl border border-border px-4 py-4">
               <div>
                 <div className="text-sm font-semibold text-foreground">Contextual RAG</div>
-                <div className="mt-1 text-sm leading-6 text-(--muted)">Improve prompts with more surrounding context when available.</div>
+                <div className="mt-1 text-sm leading-6 text-muted">Improve prompts with more surrounding context when available.</div>
               </div>
               <input type="checkbox" checked={contextualRag} onChange={(event) => setContextualRag(event.target.checked)} className="mt-1 h-4 w-4" />
             </label>
 
-            <label className="flex items-start justify-between gap-4 rounded-2xl border border-(--border) px-4 py-4">
+            <label className="flex items-start justify-between gap-4 rounded-2xl border border-border px-4 py-4">
               <div>
                 <div className="text-sm font-semibold text-foreground">Multipass indexing</div>
-                <div className="mt-1 text-sm leading-6 text-(--muted)">Keep a more exhaustive indexing pass ready for future document-heavy flows.</div>
+                <div className="mt-1 text-sm leading-6 text-muted">Keep a more exhaustive indexing pass ready for future document-heavy flows.</div>
               </div>
               <input type="checkbox" checked={multipassIndexing} onChange={(event) => setMultipassIndexing(event.target.checked)} className="mt-1 h-4 w-4" />
             </label>

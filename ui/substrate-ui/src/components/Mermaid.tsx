@@ -231,18 +231,18 @@ export function Mermaid({ chart }: MermaidProps) {
     setIsDragging(false);
   };
 
-  const btnCls = "btn-icon flex items-center justify-center w-6 h-6 rounded-lg text-(--muted) hover:text-foreground hover:bg-(--card-hover) transition-colors cursor-pointer";
-  const headerBtnCls = "btn-icon flex items-center justify-center w-7 h-7 rounded-md text-(--muted) hover:text-foreground hover:bg-(--badge-bg) transition-colors cursor-pointer";
+  const btnCls = "btn-icon flex items-center justify-center w-6 h-6 rounded-lg text-muted hover:text-foreground hover:bg-card-hover transition-colors cursor-pointer";
+  const headerBtnCls = "btn-icon flex items-center justify-center w-7 h-7 rounded-md text-muted hover:text-foreground hover:bg-badge transition-colors cursor-pointer";
 
   // Fullscreen Modal Portal
   const fullscreenPortal = isFullscreen && typeof document !== "undefined" && createPortal(
     <div className="fixed inset-0 z-50 flex flex-col bg-background/98 backdrop-blur-md text-foreground">
       {/* Header bar */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-(--border) bg-(--card)">
+      <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-card">
         <div className="flex items-center gap-4">
           <button
             onClick={() => setIsFullscreen(false)}
-            className="btn-icon flex items-center justify-center w-8 h-8 rounded-xl hover:bg-(--card-hover) text-(--muted) hover:text-foreground cursor-pointer transition-colors"
+            className="btn-icon flex items-center justify-center w-8 h-8 rounded-xl hover:bg-card-hover text-muted hover:text-foreground cursor-pointer transition-colors"
             title="Close"
           >
             <X className="w-5 h-5" />
@@ -261,7 +261,7 @@ export function Mermaid({ chart }: MermaidProps) {
           {/* Copy code */}
           <button
             onClick={handleCopy}
-            className="btn-icon flex items-center justify-center w-8 h-8 rounded-xl hover:bg-(--card-hover) text-(--muted) hover:text-foreground cursor-pointer transition-colors"
+            className="btn-icon flex items-center justify-center w-8 h-8 rounded-xl hover:bg-card-hover text-muted hover:text-foreground cursor-pointer transition-colors"
             title="Copy diagram source"
           >
             {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
@@ -270,7 +270,7 @@ export function Mermaid({ chart }: MermaidProps) {
           {/* Download PNG */}
           <button
             onClick={downloadPng}
-            className="btn-icon flex items-center justify-center w-8 h-8 rounded-xl hover:bg-(--card-hover) text-(--muted) hover:text-foreground cursor-pointer transition-colors"
+            className="btn-icon flex items-center justify-center w-8 h-8 rounded-xl hover:bg-card-hover text-muted hover:text-foreground cursor-pointer transition-colors"
             title="Download PNG"
           >
             <Download className="w-4 h-4" />
@@ -282,8 +282,8 @@ export function Mermaid({ chart }: MermaidProps) {
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Left Pane: Code Editor */}
         {showCodeInFullscreen && (
-          <div className="w-80 sm:w-96 border-r border-(--border) flex flex-col bg-(--card)">
-            <div className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-(--muted) border-b border-(--border)">
+          <div className="w-80 sm:w-96 border-r border-border flex flex-col bg-card">
+            <div className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted border-b border-border">
               Code Editor
             </div>
             <textarea
@@ -292,8 +292,8 @@ export function Mermaid({ chart }: MermaidProps) {
               className="flex-1 p-4 font-mono text-[11px] bg-transparent text-foreground resize-none outline-none border-none leading-relaxed"
               placeholder="Write diagram syntax..."
             />
-            <div className="p-3 border-t border-(--border) flex flex-col gap-2 bg-(--card)">
-              <span className="text-[10px] text-(--muted) font-mono text-center">Note: Edits are local only and not visible to the agent</span>
+            <div className="p-3 border-t border-border flex flex-col gap-2 bg-card">
+              <span className="text-[10px] text-muted font-mono text-center">Note: Edits are local only and not visible to the agent</span>
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setCompiledCode(chartCode)}
@@ -335,29 +335,29 @@ export function Mermaid({ chart }: MermaidProps) {
               )}
             </div>
           ) : (
-            <div className="animate-pulse text-xs text-(--muted)">Generating diagram...</div>
+            <div className="animate-pulse text-xs text-muted">Generating diagram...</div>
           )}
 
           {/* Fullscreen Zoom overlay */}
           {svg && (
-            <div className="absolute bottom-4 right-4 flex flex-col gap-1 bg-(--card)/90 backdrop-blur-md p-1.5 rounded-xl border border-(--border) shadow-lg z-10" onMouseDown={e => e.stopPropagation()}>
+            <div className="absolute bottom-4 right-4 flex flex-col gap-1 bg-card/90 backdrop-blur-md p-1.5 rounded-xl border border-border shadow-lg z-10" onMouseDown={e => e.stopPropagation()}>
               <button
                 onClick={() => setFsScale(s => Math.min(s + ZOOM_STEP, MAX_ZOOM))}
-                className="btn-icon flex items-center justify-center w-7 h-7 rounded-lg hover:bg-(--card-hover) text-(--muted) hover:text-foreground cursor-pointer transition-colors"
+                className="btn-icon flex items-center justify-center w-7 h-7 rounded-lg hover:bg-card-hover text-muted hover:text-foreground cursor-pointer transition-colors"
                 title="Zoom in"
               >
                 <ZoomIn className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setFsScale(s => Math.max(s - ZOOM_STEP, MIN_ZOOM))}
-                className="btn-icon flex items-center justify-center w-7 h-7 rounded-lg hover:bg-(--card-hover) text-(--muted) hover:text-foreground cursor-pointer transition-colors"
+                className="btn-icon flex items-center justify-center w-7 h-7 rounded-lg hover:bg-card-hover text-muted hover:text-foreground cursor-pointer transition-colors"
                 title="Zoom out"
               >
                 <ZoomOut className="w-4 h-4" />
               </button>
               <button
                 onClick={() => { setFsScale(1); setFsTranslate({ x: 0, y: 0 }); }}
-                className="btn-icon flex items-center justify-center w-7 h-7 rounded-lg hover:bg-(--card-hover) text-(--muted) hover:text-foreground cursor-pointer transition-colors"
+                className="btn-icon flex items-center justify-center w-7 h-7 rounded-lg hover:bg-card-hover text-muted hover:text-foreground cursor-pointer transition-colors"
                 title="Reset zoom"
               >
                 <RotateCcw className="w-4 h-4" />
@@ -371,11 +371,11 @@ export function Mermaid({ chart }: MermaidProps) {
   );
 
   return (
-    <div className="mermaid-wrap group/mermaid relative my-4 w-full border border-(--border) bg-(--card) rounded-2xl overflow-hidden flex flex-col">
+    <div className="mermaid-wrap group/mermaid relative my-4 w-full border border-border bg-card rounded-2xl overflow-hidden flex flex-col">
       {/* Card Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-(--border) bg-black/[0.01] dark:bg-white/[0.01]">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-black/[0.01] dark:bg-white/[0.01]">
         <div className="flex items-center gap-2">
-          <Code className="w-3.5 h-3.5 text-(--muted)" />
+          <Code className="w-3.5 h-3.5 text-muted" />
           <span className="text-xs font-semibold text-foreground/80">Mermaid</span>
         </div>
 
@@ -394,7 +394,7 @@ export function Mermaid({ chart }: MermaidProps) {
           {/* Edit toggle */}
           <button
             onClick={() => setIsEditing(!isEditing)}
-            className={`${headerBtnCls} ${isEditing ? "text-foreground bg-(--badge-bg)" : ""}`}
+            className={`${headerBtnCls} ${isEditing ? "text-foreground bg-badge" : ""}`}
             title="Edit code inline"
           >
             <Pencil className="w-3.5 h-3.5" />
@@ -439,11 +439,11 @@ export function Mermaid({ chart }: MermaidProps) {
             <textarea
               value={chartCode}
               onChange={(e) => setChartCode(e.target.value)}
-              className="w-full flex-1 p-4 font-mono text-[11px] bg-transparent text-foreground border border-(--border) rounded-xl outline-none resize-y leading-relaxed min-h-[160px]"
+              className="w-full flex-1 p-4 font-mono text-[11px] bg-transparent text-foreground border border-border rounded-xl outline-none resize-y leading-relaxed min-h-[160px]"
               placeholder="Write your diagram code..."
             />
             <div className="flex justify-between items-center">
-              <span className="text-[10px] text-(--muted) font-mono">Note: Edits are local only and not visible to the agent</span>
+              <span className="text-[10px] text-muted font-mono">Note: Edits are local only and not visible to the agent</span>
               <button
                 onClick={() => setCompiledCode(chartCode)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-background font-semibold text-xs rounded-xl hover:opacity-90 transition-opacity cursor-pointer"
@@ -469,7 +469,7 @@ export function Mermaid({ chart }: MermaidProps) {
             </div>
 
             {/* Compact zoom/pan overlay pad (fades in on hover) */}
-            <div className="absolute bottom-3 right-3 z-10 grid grid-cols-3 gap-0.5 bg-(--card)/85 backdrop-blur-md p-1 rounded-xl border border-(--border) shadow-md opacity-100 sm:opacity-0 sm:group-hover/mermaid:opacity-100 transition-opacity duration-200">
+            <div className="absolute bottom-3 right-3 z-10 grid grid-cols-3 gap-0.5 bg-card/85 backdrop-blur-md p-1 rounded-xl border border-border shadow-md opacity-100 sm:opacity-0 sm:group-hover/mermaid:opacity-100 transition-opacity duration-200">
               <div className="w-6 h-6" />
               <button onClick={panUp} className={btnCls} title="Pan up"><ChevronUp className="w-3 h-3" /></button>
               <button onClick={zoomIn} className={btnCls} title="Zoom in"><ZoomIn className="w-3 h-3" /></button>
@@ -501,7 +501,7 @@ export function Mermaid({ chart }: MermaidProps) {
             )}
           </div>
         ) : (
-          <div className="animate-pulse text-xs text-(--muted) py-8 text-center">Generating diagram…</div>
+          <div className="animate-pulse text-xs text-muted py-8 text-center">Generating diagram…</div>
         )}
       </div>
 

@@ -25,7 +25,7 @@ const TRUST_META: Record<ArtifactTrust, { label: string; Icon: typeof Bot; class
   "Machine-confirmed": {
     label: "Assistant",
     Icon: Bot,
-    className: "text-(--muted)",
+    className: "text-muted",
   },
   Unverified: {
     label: "Unverified",
@@ -123,7 +123,7 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
           <h2 className="text-3xl font-semibold tracking-tight text-foreground">Artifacts</h2>
-          <p className="max-w-3xl text-sm leading-6 text-(--muted)">
+          <p className="max-w-3xl text-sm leading-6 text-muted">
             Things worth keeping — what the assistant has learned about you, plus
             notes and files it has set aside. <strong>Global</strong> artifacts apply to
             every conversation; <strong>session</strong> artifacts stay in the one they came
@@ -133,7 +133,7 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
         <button
           onClick={() => void load()}
           disabled={loading}
-          className="inline-flex cursor-pointer items-center gap-2 self-start rounded-xl bg-(--card) px-4 py-2 text-sm text-(--muted) transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex cursor-pointer items-center gap-2 self-start rounded-xl bg-card px-4 py-2 text-sm text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           style={{ boxShadow: "var(--shadow-sm)" }}
           aria-label="Refresh artifacts"
         >
@@ -144,7 +144,7 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
 
       {/* Scope switch */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-xl bg-(--card) p-1" style={{ boxShadow: "var(--shadow-sm)" }}>
+        <div className="inline-flex rounded-xl bg-card p-1" style={{ boxShadow: "var(--shadow-sm)" }}>
           {(["global", "session"] as ArtifactScope[]).map((s) => (
             <button
               key={s}
@@ -152,19 +152,19 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
               className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm capitalize transition-colors ${
                 scope === s
                   ? "bg-background text-foreground"
-                  : "text-(--muted) hover:text-foreground"
+                  : "text-muted hover:text-foreground"
               }`}
             >
               {s}
             </button>
           ))}
         </div>
-        <label className="ml-auto inline-flex cursor-pointer items-center gap-2 text-xs text-(--muted)">
+        <label className="ml-auto inline-flex cursor-pointer items-center gap-2 text-xs text-muted">
           <input
             type="checkbox"
             checked={showDeprecated}
             onChange={(e) => setShowDeprecated(e.target.checked)}
-            className="cursor-pointer accent-(--accent)"
+            className="cursor-pointer accent-accent"
           />
           Show retired
         </label>
@@ -172,15 +172,15 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
 
       {allTags.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <Tag className="h-3.5 w-3.5 text-(--muted)" />
+          <Tag className="h-3.5 w-3.5 text-muted" />
           {allTags.map((tag) => (
             <button
               key={tag}
               onClick={() => setActiveTag(activeTag === tag ? null : tag)}
               className={`cursor-pointer rounded-full px-2.5 py-1 text-[11px] transition-colors ${
                 activeTag === tag
-                  ? "bg-(--accent)/15 text-foreground ring-1 ring-(--accent)/40"
-                  : "bg-(--badge-bg) text-(--muted) hover:text-foreground"
+                  ? "bg-accent/15 text-foreground ring-1 ring-accent/40"
+                  : "bg-badge text-muted hover:text-foreground"
               }`}
             >
               {tag}
@@ -190,24 +190,24 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
       )}
 
       {error && (
-        <p className="rounded-[18px] bg-(--badge-bg) px-4 py-3 text-sm text-(--muted)">{error}</p>
+        <p className="rounded-[18px] bg-badge px-4 py-3 text-sm text-muted">{error}</p>
       )}
 
       {sessionUnavailable ? (
-        <div className="rounded-xl border border-(--border) bg-(--card) px-6 py-10 text-center text-sm text-(--muted)">
+        <div className="rounded-xl border border-border bg-card px-6 py-10 text-center text-sm text-muted">
           Open a conversation to see its session artifacts.
         </div>
       ) : loading ? (
         <div className="flex items-center justify-center py-10">
-          <Loader2 className="h-5 w-5 animate-spin text-(--muted)" />
+          <Loader2 className="h-5 w-5 animate-spin text-muted" />
         </div>
       ) : visible.length === 0 ? (
-        <div className="flex flex-col items-center rounded-xl border border-(--border) bg-(--card) px-6 py-10 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-(--card-hover) text-(--muted)">
+        <div className="flex flex-col items-center rounded-xl border border-border bg-card px-6 py-10 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-card-hover text-muted">
             <Archive className="h-6 w-6" />
           </div>
           <h4 className="mt-4 text-lg font-semibold text-foreground">Nothing here yet</h4>
-          <p className="mt-1 max-w-sm text-sm text-(--muted)">
+          <p className="mt-1 max-w-sm text-sm text-muted">
             {activeTag
               ? "No artifacts with that tag."
               : scope === "global"
@@ -230,7 +230,7 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
                   retired ? "opacity-55" : ""
                 }`}
               >
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-(--badge-bg) text-(--muted)">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-badge text-muted">
                   <Archive className="h-4 w-4" />
                 </div>
 
@@ -239,11 +239,11 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
                     <span className="text-sm font-medium text-foreground">
                       {artifact.title || artifact.slug}
                     </span>
-                    <span className="rounded bg-(--badge-bg) px-1.5 py-0.5 text-[10px] text-(--muted)">
+                    <span className="rounded bg-badge px-1.5 py-0.5 text-[10px] text-muted">
                       {artifact.type}
                     </span>
                     {retired && (
-                      <span className="rounded bg-(--badge-bg) px-1.5 py-0.5 text-[10px] text-amber-400">
+                      <span className="rounded bg-badge px-1.5 py-0.5 text-[10px] text-amber-400">
                         retired
                       </span>
                     )}
@@ -257,7 +257,7 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
                   </div>
 
                   {artifact.body && (
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-(--muted)">
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-muted">
                       {artifact.body}
                     </p>
                   )}
@@ -267,7 +267,7 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
                       {artifact.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="rounded-full bg-(--badge-bg) px-2 py-0.5 text-[10px] text-(--muted)"
+                          className="rounded-full bg-badge px-2 py-0.5 text-[10px] text-muted"
                         >
                           {tag}
                         </span>
@@ -281,7 +281,7 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
                     <button
                       onClick={() => void handlePromote(artifact)}
                       disabled={busySlug === artifact.slug}
-                      className="cursor-pointer rounded-lg p-2 text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground disabled:opacity-40"
+                      className="cursor-pointer rounded-lg p-2 text-muted transition-colors hover:bg-card-hover hover:text-foreground disabled:opacity-40"
                       title="Keep across all conversations"
                       aria-label="Promote artifact to global"
                     >
@@ -296,7 +296,7 @@ export function ArtifactsTab({ threadId }: { threadId?: string | null }) {
                     <button
                       onClick={() => void handleDelete(artifact)}
                       disabled={busySlug === artifact.slug}
-                      className="cursor-pointer rounded-lg p-2 text-(--muted) transition-colors hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-40"
+                      className="cursor-pointer rounded-lg p-2 text-muted transition-colors hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-40"
                       aria-label="Remove artifact"
                     >
                       {busySlug === artifact.slug ? (

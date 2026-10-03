@@ -66,10 +66,10 @@ export function CitationChip({
       {/* The only element that participates in layout — its size never
           changes, so hovering it can never trigger a reflow. */}
       <span
-        className="btn-icon flex h-[1.5em] w-[1.5em] items-center justify-center rounded-full leading-none transition-colors duration-150 group-hover/cite:bg-(--card-hover)"
+        className="btn-icon flex h-[1.5em] w-[1.5em] items-center justify-center rounded-full leading-none transition-colors duration-150 group-hover/cite:bg-card-hover"
         style={{ background: "var(--badge-bg)" }}
       >
-        <FileText className="h-[0.85em] w-[0.85em] text-(--muted)" />
+        <FileText className="h-[0.85em] w-[0.85em] text-muted" />
       </span>
       {/* Hover reveal. `pointer-events-none` while collapsed so it can't
           create a dead click zone over a neighbouring chip or cell content;
@@ -78,10 +78,10 @@ export function CitationChip({
         className="pointer-events-none absolute left-0 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium opacity-0 shadow-md transition-opacity duration-150 group-hover/cite:pointer-events-auto group-hover/cite:opacity-100"
         style={{ background: "var(--badge-bg)", color: "var(--badge-fg)" }}
       >
-        <FileText className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
+        <FileText className="h-3.5 w-3.5 shrink-0 text-muted" />
         <span className="max-w-[160px] truncate">{source.fileName}</span>
         {source.page && (
-          <span className="shrink-0 font-normal text-(--muted)">p.{source.page}</span>
+          <span className="shrink-0 font-normal text-muted">p.{source.page}</span>
         )}
       </span>
     </span>
@@ -104,7 +104,7 @@ export function SourceChip({
       type="button"
       onClick={onOpen ? () => onOpen(source) : undefined}
       title={source.snippet}
-      className="btn-icon inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-medium transition-colors hover:bg-(--card-hover) cursor-pointer"
+      className="btn-icon inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-medium transition-colors hover:bg-card-hover cursor-pointer"
       style={{
         background: "var(--badge-bg)",
         color: "var(--badge-fg)",
@@ -112,12 +112,12 @@ export function SourceChip({
         minWidth: "unset",
       }}
     >
-      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-(--accent) text-[9px] font-semibold text-(--accent-foreground)">
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-accent text-[9px] font-semibold text-accent-foreground">
         {source.index}
       </span>
-      <FileText className="h-3 w-3 shrink-0 text-(--muted)" />
+      <FileText className="h-3 w-3 shrink-0 text-muted" />
       <span className="truncate max-w-40 font-medium">{source.fileName}</span>
-      {pageLabel(source) && <span className="shrink-0 text-(--muted)">{pageLabel(source)}</span>}
+      {pageLabel(source) && <span className="shrink-0 text-muted">{pageLabel(source)}</span>}
     </button>
   );
 }

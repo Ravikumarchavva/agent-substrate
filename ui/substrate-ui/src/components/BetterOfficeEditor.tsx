@@ -152,18 +152,18 @@ export function BetterOfficeEditor({
 
   if (state === "loading") {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-(--card)">
-        <Loader2 className="h-5 w-5 animate-spin text-(--muted)" />
+      <div className="flex h-full w-full items-center justify-center bg-card">
+        <Loader2 className="h-5 w-5 animate-spin text-muted" />
       </div>
     );
   }
 
   if (state === "error" || !bytes) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-(--muted)">
+      <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted">
         <span>Couldn&apos;t open the editor.</span>
         {errMsg && (
-          <code className="max-w-full overflow-auto rounded bg-(--code-bg) px-2 py-1 text-xs text-(--code-fg)">
+          <code className="max-w-full overflow-auto rounded bg-code px-2 py-1 text-xs text-code-foreground">
             {errMsg}
           </code>
         )}
@@ -203,8 +203,8 @@ export function BetterOfficeEditor({
   // pptx
   if (!pptxFont) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-(--card)">
-        <Loader2 className="h-5 w-5 animate-spin text-(--muted)" />
+      <div className="flex h-full w-full items-center justify-center bg-card">
+        <Loader2 className="h-5 w-5 animate-spin text-muted" />
       </div>
     );
   }

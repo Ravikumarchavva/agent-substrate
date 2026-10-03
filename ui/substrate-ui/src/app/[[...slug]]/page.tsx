@@ -13,6 +13,7 @@ import { HumanInputCard } from "@/components/HumanInputCard";
 import { MaxIterationsCard } from "@/components/MaxIterationsCard";
 import { CircularProgress } from "@/components/CircularProgress";
 import { AppPanel } from "@/components/AppPanel";
+import { CollapsedRail } from "@/components/CollapsedRail";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { SettingsPanel } from "@/components/SettingsPanel";
@@ -489,7 +490,7 @@ function ChatPageContent() {
         <button
           type="button"
           onClick={() => handleRemoveFile(file.id)}
-          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-background/85 text-(--muted) opacity-100 shadow-sm transition-all sm:opacity-0 sm:group-hover/attach:opacity-100 cursor-pointer"
+          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-background/85 text-muted opacity-100 shadow-sm transition-all sm:opacity-0 sm:group-hover/attach:opacity-100 cursor-pointer"
           aria-label={`Remove ${file.name}`}
         >
           <X className="h-3.5 w-3.5" />
@@ -522,7 +523,7 @@ function ChatPageContent() {
 
         <div className="min-w-0 flex-1 pr-7">
           <div className="truncate text-sm font-semibold text-foreground">{file.name}</div>
-          <div className="mt-1 text-[11px] text-(--muted)">
+          <div className="mt-1 text-[11px] text-muted">
             {processingState === "error"
               ? <span className="text-red-400">{file.stagingError}</span>
               : processingState === "pending"
@@ -1708,7 +1709,7 @@ function ChatPageContent() {
   if (authLoading) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background">
-        <Loader2 className="w-6 h-6 animate-spin text-(--muted)" />
+        <Loader2 className="w-6 h-6 animate-spin text-muted" />
       </div>
     );
   }
@@ -1722,7 +1723,7 @@ function ChatPageContent() {
           </div>
           <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
             <h1 className="text-2xl font-semibold">Welcome</h1>
-            <p className="text-sm mt-2 text-(--muted)">
+            <p className="text-sm mt-2 text-muted">
               Sign in to start chatting with your AI assistant
             </p>
           </div>
@@ -1745,7 +1746,7 @@ function ChatPageContent() {
             </svg>
             Continue with Google
           </button>
-          <p className="substrate-fade-up text-xs text-(--muted)" style={{ '--stagger': 4 } as React.CSSProperties}>
+          <p className="substrate-fade-up text-xs text-muted" style={{ '--stagger': 4 } as React.CSSProperties}>
             Your conversations are private and secure
           </p>
         </div>
@@ -1779,60 +1780,50 @@ function ChatPageContent() {
         />
       </div>
 
+      {!desktopSidebarOpen && (
+        <CollapsedRail
+          onExpand={() => setDesktopSidebarOpen(true)}
+          onNewChat={handleNewChat}
+          onOpenSettings={openSettingsPanel}
+        />
+      )}
+
       {/* Main Content */}
       <div className="flex min-w-0 flex-1">
         <div className="relative flex min-w-0 flex-1 flex-col">
           {!settingsPanelOpen && (
-          <Header
-            onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
-            desktopSidebarOpen={desktopSidebarOpen}
-            threadName={threads.find((t) => t.id === currentThreadId)?.name}
-            branches={branches}
-            activeBranchId={activeBranchId}
-            onSelectBranch={handleSelectBranch}
-            onRenameBranch={handleRenameBranch}
-          />
+            <Header
+              onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+              desktopSidebarOpen={desktopSidebarOpen}
+              threadName={threads.find((t) => t.id === currentThreadId)?.name}
+              branches={branches}
+              activeBranchId={activeBranchId}
+              onSelectBranch={handleSelectBranch}
+              onRenameBranch={handleRenameBranch}
+            />
           )}
           <div className="pointer-events-none absolute left-3 top-1.5 z-20 flex gap-2">
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
-              className="btn-icon pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-(--border) bg-(--card)/95 text-(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:hidden"
+              className="btn-icon pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-card/95 text-muted shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:hidden"
               aria-label="Open sidebar"
             >
               <SidebarToggleIcon direction="open" className="h-4 w-4" />
             </button>
-            {/* Collapsed desktop rail — keeps expand + new chat reachable
-                without opening the sidebar (Claude-style). */}
-            {!desktopSidebarOpen && (
-              <div className="pointer-events-auto hidden flex-col gap-2 rounded-xl border border-(--border) bg-(--card)/95 p-1 shadow-sm backdrop-blur-sm lg:flex">
-                <button
-                  type="button"
-                  onClick={() => setDesktopSidebarOpen(true)}
-                  className="btn-icon flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-(--muted) transition-colors hover:bg-background hover:text-foreground"
-                  aria-label="Open sidebar"
-                  title="Open sidebar"
-                >
-                  <SidebarToggleIcon direction="open" className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleNewChat}
-                  className="btn-icon flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-(--muted) transition-colors hover:bg-background hover:text-foreground"
-                  aria-label="New chat"
-                  title="New chat"
-                >
-                  <SquarePen className="h-4 w-4" />
-                </button>
-              </div>
-            )}
           </div>
 
           {settingsPanelOpen ? (
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div
+              className={`flex-1 min-h-0 flex flex-col ${
+                settingsPanelTab === "storage"
+                  ? "h-full overflow-hidden"
+                  : "overflow-y-auto"
+              }`}
+            >
               <SettingsPanel
                 isOpen={settingsPanelOpen}
-                initialTab={settingsPanelTab}
+                initialTab={settingsPanelTab === "artifacts" ? "storage" : settingsPanelTab}
                 onTabChange={selectSettingsTab}
                 threadId={currentThreadId}
               />
@@ -1859,7 +1850,7 @@ function ChatPageContent() {
                         <SubstrateMark className="substrate-fade-up mx-auto h-10 w-10 text-foreground sm:h-12 sm:w-12" />
                         <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
                           <h2 className="text-xl font-semibold sm:text-2xl">How can I help you today?</h2>
-                          <p className="mt-2 text-sm text-(--muted)">
+                          <p className="mt-2 text-sm text-muted">
                             Ask me anything and I&apos;ll keep the working area clean and focused.
                           </p>
                         </div>
@@ -1875,7 +1866,7 @@ function ChatPageContent() {
                             <button
                               key={idx}
                               onClick={() => doSendMessage(text)}
-                              className="substrate-pop-in substrate-press flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-(--muted) transition-colors hover:bg-(--card-hover) sm:p-3.5"
+                              className="substrate-pop-in substrate-press flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-muted transition-colors hover:bg-card-hover sm:p-3.5"
                               style={{ '--stagger': idx + 2, background: "var(--card)", boxShadow: "var(--shadow-sm)" } as React.CSSProperties}
                             >
                               <Icon className="h-4 w-4 shrink-0 text-foreground" />
@@ -1887,7 +1878,7 @@ function ChatPageContent() {
                         {/* MCP App launchers — direct open, no agent needed */}
                         {mcpManifest.length > 0 && (
                           <div className="mt-3">
-                            <p className="mb-2 text-xs text-(--muted) font-medium uppercase tracking-wider">Apps</p>
+                            <p className="mb-2 text-xs text-muted font-medium uppercase tracking-wider">Apps</p>
                             <div className="flex flex-wrap gap-2">
                               {mcpManifest.map((entry) => {
                                 const label = entry.tool_name.replace(/_/g, " ");
@@ -1905,10 +1896,10 @@ function ChatPageContent() {
                                       });
                                       setPanelCollapsed(false);
                                     }}
-                                    className="substrate-press flex items-center gap-1.5 rounded-xl border border-(--border) bg-(--card) px-3 py-1.5 text-xs text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"
+                                    className="substrate-press flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-muted transition-colors hover:bg-card-hover hover:text-foreground cursor-pointer"
                                     style={{ boxShadow: "var(--shadow-sm)" }}
                                   >
-                                    <span className="h-1.5 w-1.5 rounded-full bg-(--accent) opacity-60" />
+                                    <span className="h-1.5 w-1.5 rounded-full bg-accent opacity-60" />
                                     {label}
                                   </button>
                                 );
@@ -1925,7 +1916,7 @@ function ChatPageContent() {
                       if (m.role === "tool_approval" && m.metadata) {
                         return (
                           <div key={m.id} className="px-4 sm:px-6">
-                            <div className="mx-auto max-w-(--chat-width)">
+                            <div className="mx-auto max-w-chat">
                               <ToolApprovalCard
                                 requestId={m.metadata.requestId as string}
                                 toolName={m.metadata.toolName as string}
@@ -1943,7 +1934,7 @@ function ChatPageContent() {
                       if (m.role === "human_input" && m.metadata) {
                         return (
                           <div key={m.id} className="px-4 sm:px-6">
-                            <div className="mx-auto max-w-(--chat-width)">
+                            <div className="mx-auto max-w-chat">
                               <HumanInputCard
                                 requestId={m.metadata.requestId as string}
                                 question={m.metadata.question as string}
@@ -1970,7 +1961,7 @@ function ChatPageContent() {
                       if (m.role === "max_iterations") {
                         return (
                           <div key={m.id} className="px-4 sm:px-6">
-                            <div className="mx-auto max-w-(--chat-width)">
+                            <div className="mx-auto max-w-chat">
                               <MaxIterationsCard
                                 onContinue={() =>
                                   doSendMessage(
@@ -2024,7 +2015,7 @@ function ChatPageContent() {
                             />
                             {anchoredBoards && anchoredBoards.length > 0 && (
                               <div className="px-4 sm:px-6">
-                                <div className="mx-auto max-w-(--chat-width)">
+                                <div className="mx-auto max-w-chat">
                                   <PlanCardStack
                                     boards={anchoredBoards}
                                     runActive={loading && !hitlPending}
@@ -2042,11 +2033,11 @@ function ChatPageContent() {
 
                     {loading && !hitlPending && !messages.some((m) => m.role === "assistant" && m.id === messages[messages.length - 1]?.id) && (
                       <div className="px-4 py-2 sm:px-6">
-                        <div className="mx-auto flex max-w-(--chat-width) items-center gap-2 py-2">
+                        <div className="mx-auto flex max-w-chat items-center gap-2 py-2">
                           <div className="flex items-center gap-1.5">
-                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-(--muted)" style={{ animationDelay: "0ms" }} />
-                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-(--muted)" style={{ animationDelay: "150ms" }} />
-                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-(--muted)" style={{ animationDelay: "300ms" }} />
+                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted" style={{ animationDelay: "0ms" }} />
+                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted" style={{ animationDelay: "150ms" }} />
+                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted" style={{ animationDelay: "300ms" }} />
                           </div>
                         </div>
                       </div>
@@ -2056,7 +2047,7 @@ function ChatPageContent() {
               </div>
 
               <div className="bg-background pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:pb-5">
-                <div className="mx-auto w-full max-w-(--chat-width) px-3 sm:px-6">
+                <div className="mx-auto w-full max-w-chat px-3 sm:px-6">
                   {lockedReason && (
                     <div className="mb-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs text-amber-500">
                       {lockedReason}
@@ -2106,7 +2097,7 @@ function ChatPageContent() {
                         }
                       }}
                       rows={1}
-                      className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-[15px] outline-none placeholder:text-(--muted)"
+                      className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-[15px] outline-none placeholder:text-muted"
                       placeholder={lockedReason ? "This conversation is locked" : "Ask anything"}
                       disabled={loading || !!lockedReason}
                     />
@@ -2118,7 +2109,7 @@ function ChatPageContent() {
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploadingFile}
-                        className="btn-icon flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-(--muted) transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                        className="btn-icon flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                         style={{ background: "var(--card-hover)" }}
                         aria-label="Attach file"
                       >
@@ -2184,7 +2175,7 @@ function ChatPageContent() {
                   </form>
 
                   <RealtimeVoicePanel isOpen={realtimeOpen} onClose={() => setRealtimeOpen(false)} />
-                  <p className="mt-2 text-center text-xs text-(--muted)">
+                  <p className="mt-2 text-center text-xs text-muted">
                     AI can make mistakes. Verify important information.
                   </p>
                 </div>
@@ -2279,7 +2270,7 @@ export default function ChatPage() {
     <Suspense
       fallback={
         <div className="flex min-h-dvh items-center justify-center bg-background">
-          <Loader2 className="w-6 h-6 animate-spin text-(--muted)" />
+          <Loader2 className="w-6 h-6 animate-spin text-muted" />
         </div>
       }
     >

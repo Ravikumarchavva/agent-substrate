@@ -228,3 +228,13 @@ GitHub Actions workflow in `.github/workflows/ci.yml`:
 - **Build**: Next.js production build (with `NEXT_PUBLIC_API_URL=""`)
 - **Docker**: Image to GHCR with BuildKit cache
 - **Security**: `pnpm audit`
+
+## Design system
+
+Look and feel is decided in one place: `src/design/` (tokens + primitives). Read `src/design/DESIGN.md` before touching UI.
+
+- Use `Button`, `Input`, `Menu`, `Dialog`, `Toolbar`… from `@/design`; never a raw `<button>`/`<input>`.
+- Colours are token utilities (`bg-card`, `text-muted`), never hex. Sizes come from the scales; no `[13px]`.
+- Controls are 28 / 32 / 40px high (`sm` / `md` / `lg`) so rows align by construction.
+- This repo owns it: after changing `src/design/`, run `scripts/sync-design.sh` to copy it into `agent-substrate-platform`.
+- `pnpm check:design` fails if raw buttons, hex colours or arbitrary sizes increase (baseline in `design-baseline.json`).

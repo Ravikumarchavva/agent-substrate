@@ -101,23 +101,23 @@ export function VersionHistoryDropdown({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"
+        className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-card-hover hover:text-foreground cursor-pointer"
         title="Version history"
       >
         <History className="h-4 w-4" />
       </button>
       {open && (
-        <div className="absolute right-0 top-8 z-50 w-72 overflow-hidden rounded-lg border border-(--border) bg-background shadow-lg">
-          <div className="border-b border-(--border) px-3 py-2 text-xs font-semibold text-foreground">
+        <div className="absolute right-0 top-8 z-50 w-72 overflow-hidden rounded-lg border border-border bg-background shadow-lg">
+          <div className="border-b border-border px-3 py-2 text-xs font-semibold text-foreground">
             Version history
           </div>
           <div className="max-h-80 overflow-auto">
             {versions === null ? (
               <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-4 w-4 animate-spin text-(--muted)" />
+                <Loader2 className="h-4 w-4 animate-spin text-muted" />
               </div>
             ) : versions.length === 0 ? (
-              <div className="px-3 py-6 text-center text-xs text-(--muted)">
+              <div className="px-3 py-6 text-center text-xs text-muted">
                 No versions recorded yet.
               </div>
             ) : (
@@ -127,21 +127,21 @@ export function VersionHistoryDropdown({
                 return (
                   <div
                     key={v.seq}
-                    className="flex items-center gap-2 border-b border-(--border)/50 px-3 py-2 last:border-0"
+                    className="flex items-center gap-2 border-b border-border/50 px-3 py-2 last:border-0"
                   >
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-(--card) text-(--muted)">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-card text-muted">
                       <meta.Icon className="h-3.5 w-3.5" />
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                         {meta.label}
                         {isLatest && (
-                          <span className="rounded bg-(--badge-bg) px-1 py-0.5 text-[10px] text-(--muted)">
+                          <span className="rounded bg-badge px-1 py-0.5 text-[10px] text-muted">
                             current
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-(--muted)">
+                      <div className="text-[11px] text-muted">
                         v{v.seq} · {relTime(v.created_at)}
                         {v.restored_from_seq != null && ` · from v${v.restored_from_seq}`}
                       </div>
@@ -150,7 +150,7 @@ export function VersionHistoryDropdown({
                       <button
                         onClick={() => restore(v.seq)}
                         disabled={busy !== null}
-                        className="flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground disabled:opacity-40"
+                        className="flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted transition-colors hover:bg-card-hover hover:text-foreground disabled:opacity-40"
                         title={`Restore v${v.seq}`}
                       >
                         {busy === v.seq ? (

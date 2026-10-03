@@ -75,14 +75,14 @@ function CapabilityCard({
     <div className="rounded-[24px] p-5" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-(--badge-bg) text-foreground">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-badge text-foreground">
             {icon}
           </div>
           <h3 className="mt-4 text-base font-semibold text-foreground">{title}</h3>
-          <p className="mt-2 text-sm leading-6 text-(--muted)">{description}</p>
+          <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
         </div>
         {activeModel && (
-          <span className="rounded-full bg-(--badge-bg) px-3 py-1 text-[11px] font-medium text-(--badge-fg)">
+          <span className="rounded-full bg-badge px-3 py-1 text-[11px] font-medium text-badge-foreground">
             {activeModel.provider}
           </span>
         )}
@@ -94,7 +94,7 @@ function CapabilityCard({
 
 function Notice({ tone, message }: SettingsNotice) {
   return (
-    <div className={`rounded-[18px] px-4 py-3 text-sm ${tone === "success" ? "bg-emerald-500/10 text-emerald-500" : "bg-(--badge-bg) text-(--muted)"}`}>
+    <div className={`rounded-[18px] px-4 py-3 text-sm ${tone === "success" ? "bg-emerald-500/10 text-emerald-500" : "bg-badge text-muted"}`}>
       {message}
     </div>
   );
@@ -127,7 +127,7 @@ function GroupedSelect({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between rounded-xl border border-(--border) bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
+        className="flex w-full items-center justify-between rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-accent"
       >
         <span className="truncate">{selectedLabel}</span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
@@ -135,12 +135,12 @@ function GroupedSelect({
 
       {isOpen && (
         <div
-          className="substrate-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-(--border) p-1 shadow-xl"
+          className="substrate-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-border p-1 shadow-xl"
           style={{ background: "var(--card)" }}
         >
           {groups.map((group) => (
             <div key={group.label} className="mb-2 last:mb-0">
-              <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-(--muted)">
+              <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-muted">
                 {group.label}
               </div>
               <div className="flex flex-col gap-0.5">
@@ -155,7 +155,7 @@ function GroupedSelect({
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                       value === option.id
                         ? "bg-foreground/10 font-medium text-foreground"
-                        : "text-foreground hover:bg-(--card-hover)"
+                        : "text-foreground hover:bg-card-hover"
                     }`}
                   >
                     <span className="truncate">{option.label}</span>
@@ -198,7 +198,7 @@ function CustomSelect({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between rounded-xl border border-(--border) bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
+        className="flex w-full items-center justify-between rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-accent"
       >
         <span className="truncate">{selectedLabel}</span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
@@ -206,7 +206,7 @@ function CustomSelect({
 
       {isOpen && (
         <div
-          className="substrate-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-(--border) p-1 shadow-xl"
+          className="substrate-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-border p-1 shadow-xl"
           style={{ background: "var(--card)" }}
         >
           <div className="flex flex-col gap-0.5">
@@ -221,7 +221,7 @@ function CustomSelect({
                 className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                   value === option.id
                     ? "bg-foreground/10 font-medium text-foreground"
-                    : "text-foreground hover:bg-(--card-hover)"
+                    : "text-foreground hover:bg-card-hover"
                 }`}
               >
                 <span className="truncate">{option.label}</span>
@@ -305,31 +305,31 @@ export function ModelsTab({
     <div className="space-y-8">
       <div className="space-y-2">
         <h2 className="text-3xl font-semibold tracking-tight text-foreground">LLM Setup</h2>
-        <p className="max-w-3xl text-sm leading-6 text-(--muted)">
+        <p className="max-w-3xl text-sm leading-6 text-muted">
           Dedicated model and voice controls inspired by the admin screenshots, but wired to the same local preferences the chat composer already uses.
         </p>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="rounded-[26px] p-6 xl:col-span-2" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-(--muted)">Enabled provider defaults</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Enabled provider defaults</div>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div>
-              <p className="text-xs font-medium text-(--muted)">Chat default</p>
+              <p className="text-xs font-medium text-muted">Chat default</p>
               <p className="mt-1 text-lg font-semibold text-foreground">{selectedChatModel?.label ?? "Unset"}</p>
-              <p className="mt-1 text-sm text-(--muted)">{selectedChatModel?.description}</p>
+              <p className="mt-1 text-sm text-muted">{selectedChatModel?.description}</p>
             </div>
             <div>
-              <p className="text-xs font-medium text-(--muted)">Voice default</p>
+              <p className="text-xs font-medium text-muted">Voice default</p>
               <p className="mt-1 text-lg font-semibold text-foreground">{selectedTtsModel?.label ?? "Unset"}</p>
-              <p className="mt-1 text-sm text-(--muted)">{selectedTtsModel?.description}</p>
+              <p className="mt-1 text-sm text-muted">{selectedTtsModel?.description}</p>
             </div>
           </div>
         </div>
 
         <div className="rounded-[26px] p-6" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-(--muted)">Workspace status</div>
-          <p className="mt-4 text-sm leading-6 text-(--muted)">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Workspace status</div>
+          <p className="mt-4 text-sm leading-6 text-muted">
             {hasUnsavedModelPreferences
               ? "You have pending changes that are only local until saved."
               : "Model defaults are synced to local preferences and used immediately in chat."}
@@ -339,7 +339,7 @@ export function ModelsTab({
               type="button"
               onClick={handleSaveModelPreferences}
               disabled={!hasUnsavedModelPreferences}
-              className="rounded-xl bg-(--accent) px-4 py-2 text-sm font-medium text-(--accent-foreground) transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+              className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
             >
               Save defaults
             </button>
@@ -347,7 +347,7 @@ export function ModelsTab({
               type="button"
               onClick={handleResetModelPreferences}
               disabled={isDefaultModelPreferences}
-              className="rounded-xl border border-(--border) px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-(--card-hover) disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+              className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
             >
               Reset
             </button>
@@ -422,19 +422,19 @@ export function ModelsTab({
 
       <div className="space-y-4">
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">Providers</h3>
-          <p className="mt-2 text-sm leading-6 text-(--muted)">A dedicated provider grid inspired by the reference workspace. Supported providers are live; the rest are visual placeholders until backend support lands.</p>
+          <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-muted">Providers</h3>
+          <p className="mt-2 text-sm leading-6 text-muted">A dedicated provider grid inspired by the reference workspace. Supported providers are live; the rest are visual placeholders until backend support lands.</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {providerCards.map((provider) => (
             <div key={provider.label} className="rounded-[22px] p-5" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
               <div className="flex items-center justify-between gap-3">
                 <h4 className="text-base font-semibold text-foreground">{provider.label}</h4>
-                <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${provider.status === "Soon" ? "bg-(--badge-bg) text-(--badge-fg)" : "bg-emerald-500/10 text-emerald-500"}`}>
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${provider.status === "Soon" ? "bg-badge text-badge-foreground" : "bg-emerald-500/10 text-emerald-500"}`}>
                   {provider.status}
                 </span>
               </div>
-              <p className="mt-3 text-sm leading-6 text-(--muted)">{provider.detail}</p>
+              <p className="mt-3 text-sm leading-6 text-muted">{provider.detail}</p>
             </div>
           ))}
         </div>

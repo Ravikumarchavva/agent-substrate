@@ -95,11 +95,11 @@ export function ModelEffortPicker({
         ref={triggerRef}
         type="button"
         onClick={() => (open ? close() : setOpen(true))}
-        className="btn-icon flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] font-medium transition-colors hover:bg-(--card-hover)"
+        className="btn-icon flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] font-medium transition-colors hover:bg-card-hover"
       >
         <span className="truncate text-foreground/90">{active?.label ?? selectedModel.split("/").pop()}</span>
-        <span className="text-(--muted)">{levelLabel}</span>
-        <ChevronDown className="h-3.5 w-3.5 text-(--muted)" />
+        <span className="text-muted">{levelLabel}</span>
+        <ChevronDown className="h-3.5 w-3.5 text-muted" />
       </button>
 
       {open && pos &&
@@ -124,7 +124,7 @@ export function ModelEffortPicker({
                 />
               ))}
 
-              <div className="my-1 h-px bg-(--border)" />
+              <div className="my-1 h-px bg-border" />
 
               <FlyoutRow
                 label="Effort"
@@ -156,7 +156,7 @@ export function ModelEffortPicker({
                       className="substrate-scale-in flex w-64 flex-col rounded-2xl p-1.5 shadow-2xl"
                       style={{ background: "var(--card)", border: "1px solid var(--border)", transformOrigin: layout === "right" ? "bottom left" : "bottom right" }}
                     >
-                      <p className="px-3 pb-1.5 pt-2 text-[12px] leading-snug text-(--muted)">
+                      <p className="px-3 pb-1.5 pt-2 text-[12px] leading-snug text-muted">
                         Higher effort means more thorough responses, but takes longer and uses your limits faster.
                       </p>
                       {effortLevels.map((level) => {
@@ -167,26 +167,26 @@ export function ModelEffortPicker({
                             key={level}
                             type="button"
                             onClick={() => pickEffort(level)}
-                            className="btn-icon flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-(--card-hover)"
+                            className="btn-icon flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-card-hover"
                           >
                             <span className="flex items-center gap-2">
                               <span className={`text-[13.5px] font-medium ${isActive ? "text-foreground" : "text-foreground/85"}`}>
                                 {meta?.label ?? level}
                               </span>
-                              {meta?.desc && <span className="text-[11px] text-(--muted)">{meta.desc}</span>}
-                              {meta?.info && <Info className="h-3.5 w-3.5 text-(--muted)" />}
+                              {meta?.desc && <span className="text-[11px] text-muted">{meta.desc}</span>}
+                              {meta?.info && <Info className="h-3.5 w-3.5 text-muted" />}
                             </span>
                             {isActive && <Check className="h-4 w-4 text-blue-500" strokeWidth={2.5} />}
                           </button>
                         );
                       })}
 
-                      <div className="my-1 h-px bg-(--border)" />
+                      <div className="my-1 h-px bg-border" />
 
                       <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5">
                         <div>
                           <div className="text-[13.5px] font-medium text-foreground/90">Thinking</div>
-                          <div className="text-[11px] text-(--muted)">Can think for more complex tasks</div>
+                          <div className="text-[11px] text-muted">Can think for more complex tasks</div>
                         </div>
                         <Toggle
                           on={thinkingOn}
@@ -238,11 +238,11 @@ function FlyoutRow({
       onClick={onOpen}
       onMouseEnter={onOpen}
       className={`btn-icon flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors ${
-        open ? "bg-(--card-hover)" : "hover:bg-(--card-hover)"
+        open ? "bg-card-hover" : "hover:bg-card-hover"
       }`}
     >
       <span className="text-[13.5px] font-medium text-foreground/90">{label}</span>
-      <span className="flex items-center gap-1 text-[12.5px] text-(--muted)">
+      <span className="flex items-center gap-1 text-[12.5px] text-muted">
         {value}
         <ChevronRight className="h-4 w-4" />
       </span>
@@ -273,13 +273,13 @@ function ModelRow({
       disabled={disabled}
       className={`btn-icon flex w-full items-center justify-between rounded-xl px-3 text-left transition-colors ${
         compact ? "py-2" : "py-2.5"
-      } ${active ? "bg-(--card-hover)" : "hover:bg-(--card-hover)"} ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
+      } ${active ? "bg-card-hover" : "hover:bg-card-hover"} ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
     >
       <div>
         <div className={`text-[13.5px] font-medium ${active ? "text-foreground" : "text-foreground/85"}`}>
           {model.label}
         </div>
-        {!compact && <div className="text-[11.5px] text-(--muted)">{model.description}</div>}
+        {!compact && <div className="text-[11.5px] text-muted">{model.description}</div>}
       </div>
       {active && <Check className="ml-2 h-4 w-4 shrink-0 text-blue-500" strokeWidth={2.5} />}
     </button>

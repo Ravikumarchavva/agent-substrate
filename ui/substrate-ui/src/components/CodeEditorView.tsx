@@ -116,21 +116,21 @@ export function CodeEditorView({
 
   if (loadError)
     return (
-      <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-(--muted)">
+      <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-muted">
         Couldn&apos;t load this file.
       </div>
     );
   if (text === null)
     return (
       <div className="flex h-full w-full items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-(--muted)" />
+        <Loader2 className="h-5 w-5 animate-spin text-muted" />
       </div>
     );
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-(--border) bg-(--card) px-3 py-1.5">
-        <span className="truncate text-xs text-(--muted)">{langFor(fileName)}</span>
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-3 py-1.5">
+        <span className="truncate text-xs text-muted">{langFor(fileName)}</span>
         <div className="flex items-center gap-2">
           {save === "conflict" && (
             <span className="flex items-center gap-1 text-xs text-amber-500">
@@ -162,7 +162,7 @@ export function CodeEditorView({
           <button
             onClick={doSave}
             disabled={!dirty || save === "saving"}
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-(--card-hover) disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-card-hover disabled:opacity-40"
             style={{ background: "var(--badge-bg)" }}
             title="Save (⌘/Ctrl-S)"
           >

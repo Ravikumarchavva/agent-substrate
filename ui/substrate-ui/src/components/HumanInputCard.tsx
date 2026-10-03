@@ -315,7 +315,7 @@ export function HumanInputCard({
               {selectedKey === "__freeform__" && freeformText.trim() && (
                 <button
                   onClick={(e) => { e.stopPropagation(); handleFreeformSubmit(); }}
-                  className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded cursor-pointer text-(--accent-foreground)"
+                  className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded cursor-pointer text-accent-foreground"
                   style={{ background: "var(--accent)" }}
                 >
                   Send

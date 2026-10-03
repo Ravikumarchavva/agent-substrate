@@ -338,7 +338,7 @@ export function RealtimeVoicePanel({ isOpen, onClose }: RealtimeVoicePanelProps)
           </div>
           <button
             onClick={() => { teardown(); onClose(); }}
-            className="p-1.5 rounded-full hover:bg-(--card-hover) transition-colors cursor-pointer"
+            className="p-1.5 rounded-full hover:bg-card-hover transition-colors cursor-pointer"
             style={{ color: "var(--muted)" }}
             aria-label="Close voice panel"
           >

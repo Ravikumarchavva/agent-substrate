@@ -1,0 +1,165 @@
+/* Design tokens: the one place the look of the product is decided.
+ *
+ * Three layers, each only reading the one above it:
+ *   1. Scales    raw sizes: type, radius, control heights, motion. Same in every theme and every brand.
+ *   2. Semantic  what a colour means (surface, text, border, status). Light and dark swap here and nowhere else.
+ *   3. Brand     the few variables an instance overrides to re-brand (accent, accent-2).
+ *
+ * Components use the Tailwind names this file exposes (bg-card, text-muted, h-control-md), never a hex or a [Npx] value.
+ * See DESIGN.md. This folder is copied verbatim into agent-substrate-platform (scripts/sync-design.sh): edit it here only. */
+
+/* ── 1. Scales ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Control heights: every button, input, select and toolbar item takes one of these, so a row of controls always lines up. */
+  --control-sm: 1.75rem; /* 28px: dense toolbars, chips */
+  --control-md: 2rem; /* 32px: the default */
+  --control-lg: 2.5rem; /* 40px: primary actions, forms */
+
+  --chat-width: 54rem;
+
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --duration-entrance: 500ms;
+}
+
+/* ── 2. Semantic colours: light ────────────────────────────────────────────────────────────────────────────────────── */
+:root {
+  --background: #f4f5f8;
+  --foreground: #090a0f;
+  --muted: #5e6472;
+  --muted-foreground: #8a91a0;
+  --border: #e2e4ea;
+  --border-hover: #cbcfd9;
+  --surface: #ffffff;
+  --surface-alt: #ebedf2;
+  --card: #ffffff;
+  --card-hover: #f1f2f7;
+  --input-bg: #ffffff;
+  --badge-bg: #eaecf1;
+  --badge-fg: #1f222e;
+  --code-bg: #14151a;
+  --code-fg: #f4f5f8;
+
+  /* Chat surfaces */
+  --sidebar-bg: #ebedf2;
+  --user-bubble: #eceef4;
+  --step-bg: #f0f1f6;
+  --panel: var(--card);
+  --panel-muted: var(--surface-alt);
+  --panel-border: var(--border);
+
+  --success: #15803d;
+  --warning: #b45309;
+  --danger: #dc2626;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* ── 2. Semantic colours: dark ─────────────────────────────────────────────────────────────────────────────────────── */
+[data-theme="dark"],
+.dark {
+  --background: #171717;
+  --foreground: #f5f5f5;
+  --muted: #9ca3af;
+  --muted-foreground: #6b7280;
+  --border: #2a2a2a;
+  --border-hover: #3a3a3a;
+  --surface: #1f1f1f;
+  --surface-alt: #1a1a1a;
+  --card: #1f1f1f;
+  --card-hover: #262626;
+  --input-bg: #1f1f1f;
+  --badge-bg: #262626;
+  --badge-fg: #d4d4d4;
+  --code-bg: #111111;
+  --code-fg: #e5e5e5;
+
+  --sidebar-bg: #1a1a1a;
+  --user-bubble: #262626;
+  --step-bg: #1a1a1a;
+
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #f87171;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.16), 0 1px 4px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.24), 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* ── 3. Brand: override these (and only these) to re-brand an instance ─────────────────────────────────────────────── */
+:root {
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --accent-foreground: #ffffff;
+  --accent-2: #f95716;
+  --accent-2-foreground: #ffffff;
+}
+
+[data-theme="dark"],
+.dark {
+  --accent: #a177f5;
+  --accent-hover: #b492f7;
+  --accent-foreground: #171717;
+  --accent-2: #ff8a47;
+  --accent-2-foreground: #171717;
+}
+
+/* ── Tailwind names ────────────────────────────────────────────────────────────────────────────────────────────────── */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-card: var(--card);
+  --color-card-hover: var(--card-hover);
+  --color-input: var(--input-bg);
+  --color-badge: var(--badge-bg);
+  --color-badge-foreground: var(--badge-fg);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-2: var(--accent-2);
+  --color-accent-2-foreground: var(--accent-2-foreground);
+  --color-step: var(--step-bg);
+  --color-sidebar: var(--sidebar-bg);
+  --color-bubble: var(--user-bubble);
+  --color-code: var(--code-bg);
+  --color-code-foreground: var(--code-fg);
+  --container-chat: var(--chat-width);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* The type scale. 2xs is the one size below Tailwind's xs, for dense metadata (it replaces text-[11px]). */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  /* Radii: controls use md, panels lg, floating surfaces xl, pills and avatars full. */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+/* Control heights as utilities: h-control-md, min-h-control-sm, size-control-md */
+@utility h-control-sm { height: var(--control-sm); }
+@utility h-control-md { height: var(--control-md); }
+@utility h-control-lg { height: var(--control-lg); }
+@utility size-control-sm { width: var(--control-sm); height: var(--control-sm); }
+@utility size-control-md { width: var(--control-md); height: var(--control-md); }
+@utility size-control-lg { width: var(--control-lg); height: var(--control-lg); }

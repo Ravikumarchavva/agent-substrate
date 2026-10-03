@@ -23,7 +23,7 @@ function ModeButton({ active, label, onClick }: { active: boolean; label: string
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${active ? "bg-foreground text-background" : "bg-(--card) text-(--muted) hover:text-foreground"}`}
+      className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${active ? "bg-foreground text-background" : "bg-card text-muted hover:text-foreground"}`}
       style={active ? { boxShadow: "var(--shadow-sm)" } : undefined}
     >
       {label}
@@ -32,14 +32,14 @@ function ModeButton({ active, label, onClick }: { active: boolean; label: string
 }
 
 function StatusPill({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "success" | "soon" }) {
-  const className = tone === "success" ? "bg-emerald-500/10 text-emerald-500" : "bg-(--badge-bg) text-(--badge-fg)";
+  const className = tone === "success" ? "bg-emerald-500/10 text-emerald-500" : "bg-badge text-badge-foreground";
   return <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${className}`}>{label}</span>;
 }
 
 function ConnectorGlyph({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="flex h-11 w-11 items-center justify-center rounded-2xl bg-(--badge-bg) text-foreground"
+      className="flex h-11 w-11 items-center justify-center rounded-2xl bg-badge text-foreground"
       style={{ boxShadow: "var(--shadow-sm)" }}
     >
       {children}
@@ -183,19 +183,19 @@ export function ConnectorsTab({
     <div className="space-y-8">
       <div className="space-y-2">
         <h2 className="text-3xl font-semibold tracking-tight text-foreground">Connectors</h2>
-        <p className="max-w-3xl text-sm leading-6 text-(--muted)">
+        <p className="max-w-3xl text-sm leading-6 text-muted">
           A workspace inspired by the reference connector admin screens, adapted to the integrations this app actually has today.
         </p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 rounded-2xl bg-(--panel-muted) p-1">
+        <div className="flex items-center gap-2 rounded-2xl bg-surface-alt p-1">
           <ModeButton active={mode === "existing"} label="Existing connectors" onClick={() => setMode("existing")} />
           <ModeButton active={mode === "catalog"} label="Add connector" onClick={() => setMode("catalog")} />
         </div>
-        <label className="flex min-w-65 items-center gap-2 rounded-2xl bg-(--card) px-4 py-3" style={{ boxShadow: "var(--shadow-sm)" }}>
-          <Search className="h-4 w-4 text-(--muted)" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search connectors..." className="w-full bg-transparent text-sm outline-none placeholder:text-(--muted)" />
+        <label className="flex min-w-65 items-center gap-2 rounded-2xl bg-card px-4 py-3" style={{ boxShadow: "var(--shadow-sm)" }}>
+          <Search className="h-4 w-4 text-muted" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search connectors..." className="w-full bg-transparent text-sm outline-none placeholder:text-muted" />
         </label>
       </div>
 
@@ -209,17 +209,17 @@ export function ConnectorsTab({
                     <ConnectorGlyph>{row.icon}</ConnectorGlyph>
                     <div>
                       <h3 className="text-xl font-semibold text-foreground">{row.title}</h3>
-                      <p className="mt-1 text-sm leading-6 text-(--muted)">{row.subtitle}</p>
+                      <p className="mt-1 text-sm leading-6 text-muted">{row.subtitle}</p>
                     </div>
                     <StatusPill label={row.connected ? "Connected" : "Disconnected"} tone={row.connected ? "success" : "neutral"} />
                   </div>
                 </div>
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-(--muted)">Status</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Status</div>
                   <div className="mt-2 text-lg font-semibold text-foreground">{row.metric}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-(--muted)">Services</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Services</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {row.services.map((service) => (
                       <StatusPill key={service} label={service} />
@@ -245,7 +245,7 @@ export function ConnectorsTab({
         </div>
       ) : (
         <div className="space-y-6">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-(--muted)">Popular</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Popular</div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filteredCatalog.map((connector) => (
               <div key={connector.id} className="rounded-3xl p-5" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
@@ -254,12 +254,12 @@ export function ConnectorsTab({
                   <StatusPill label={connector.connected ? "Connected" : connector.active ? "Available" : connector.actionLabel} tone={connector.connected ? "success" : connector.active ? "neutral" : "soon"} />
                 </div>
                 <h3 className="mt-5 text-lg font-semibold text-foreground">{connector.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-(--muted)">{connector.summary}</p>
+                <p className="mt-2 text-sm leading-6 text-muted">{connector.summary}</p>
                 <button
                   type="button"
                   onClick={connector.onAction}
                   disabled={!connector.active || connector.actionLabel === "Bundled"}
-                  className={`mt-5 rounded-xl px-4 py-2 text-sm font-medium transition-colors ${connector.active && connector.actionLabel !== "Bundled" ? "bg-foreground text-background hover:opacity-90 cursor-pointer" : "bg-(--badge-bg) text-(--badge-fg) cursor-default"}`}
+                  className={`mt-5 rounded-xl px-4 py-2 text-sm font-medium transition-colors ${connector.active && connector.actionLabel !== "Bundled" ? "bg-foreground text-background hover:opacity-90 cursor-pointer" : "bg-badge text-badge-foreground cursor-default"}`}
                 >
                   {connector.actionLabel}
                 </button>

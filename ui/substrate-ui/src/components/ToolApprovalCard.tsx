@@ -122,7 +122,7 @@ export function ToolApprovalCard({
               {toolName.replace(/_/g, " ")}
             </span>
             {summary && (
-              <span className="text-[13px] text-(--muted)">— {summary}</span>
+              <span className="text-[13px] text-muted">— {summary}</span>
             )}
           </div>
 

@@ -15,7 +15,7 @@ function Notice({
       ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-200"
       : tone === "error"
         ? "border-rose-500/25 bg-rose-500/10 text-rose-200"
-        : "border-(--border) bg-(--card) text-(--muted)";
+        : "border-border bg-card text-muted";
 
   return (
     <div className={`rounded-xl border px-4 py-3 text-sm ${toneClass}`}>
@@ -38,7 +38,7 @@ function Section({
       <div>
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {description && (
-          <p className="mt-1 text-xs text-(--muted)">{description}</p>
+          <p className="mt-1 text-xs text-muted">{description}</p>
         )}
       </div>
       {children}
@@ -58,8 +58,8 @@ function Field({
   return (
     <label className="block space-y-1.5">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-medium text-(--muted)">{label}</span>
-        {hint && <span className="text-[11px] text-(--muted)">{hint}</span>}
+        <span className="text-xs font-medium text-muted">{label}</span>
+        {hint && <span className="text-[11px] text-muted">{hint}</span>}
       </div>
       {children}
     </label>
@@ -80,11 +80,11 @@ function FeatureCard({
       className="rounded-[22px] p-5"
       style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
     >
-      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-(--badge-bg) text-foreground">
+      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-badge text-foreground">
         {icon}
       </div>
       <h4 className="text-sm font-semibold text-foreground">{title}</h4>
-      <p className="mt-2 text-sm leading-6 text-(--muted)">{description}</p>
+      <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
     </div>
   );
 }
@@ -116,7 +116,7 @@ export function GeneralTab({
     <div className="space-y-8">
       <div className="space-y-2">
         <h2 className="text-3xl font-semibold tracking-tight text-foreground">General</h2>
-        <p className="max-w-2xl text-sm leading-6 text-(--muted)">
+        <p className="max-w-2xl text-sm leading-6 text-muted">
           Personal defaults that shape every conversation before tools, models, or connectors take over.
         </p>
       </div>
@@ -136,10 +136,10 @@ export function GeneralTab({
           className="rounded-[22px] p-5"
           style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
         >
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-(--muted)">Summary</div>
-          <p className="mt-4 text-sm text-(--muted)">Current timezone</p>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Summary</div>
+          <p className="mt-4 text-sm text-muted">Current timezone</p>
           <p className="mt-1 text-lg font-semibold text-foreground">{timezone || "Not set yet"}</p>
-          <p className="mt-4 text-sm text-(--muted)">
+          <p className="mt-4 text-sm text-muted">
             {customInstructions.trim() ? "Custom instructions are active." : "No custom instructions saved yet."}
           </p>
         </div>
@@ -153,7 +153,7 @@ export function GeneralTab({
             onChange={(e) => onTimezoneChange(e.target.value)}
             placeholder="e.g. Asia/Kolkata"
             list="common-timezones"
-            className="w-full rounded-xl border border-(--border) bg-background px-3 py-2.5 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
+            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-accent"
           />
           <datalist id="common-timezones">
             <option value="Asia/Kolkata" />
@@ -168,19 +168,19 @@ export function GeneralTab({
             <option value="UTC" />
           </datalist>
           {timezone && (
-            <p className="mt-1.5 text-xs text-(--muted)">Saved — will be used for calendar events and time-aware tasks.</p>
+            <p className="mt-1.5 text-xs text-muted">Saved — will be used for calendar events and time-aware tasks.</p>
           )}
         </Field>
       </Section>
 
-      <div className="h-px bg-(--border)" />
+      <div className="h-px bg-border" />
 
       <Section title="Custom instructions" description="Appended to the system prompt to shape tone and context.">
         <textarea
           value={customInstructions}
           onChange={(e) => { setCustomInstructions(e.target.value); setSaveError(null); }}
           rows={6}
-          className="w-full resize-none rounded-xl border border-(--border) bg-background p-4 text-sm leading-7 outline-none transition focus:ring-2 focus:ring-(--accent)"
+          className="w-full resize-none rounded-xl border border-border bg-background p-4 text-sm leading-7 outline-none transition focus:ring-2 focus:ring-accent"
           placeholder="e.g. Always respond in British English. Keep answers concise."
         />
         {saveError && <Notice tone="error">{saveError}</Notice>}
@@ -189,7 +189,7 @@ export function GeneralTab({
           <button
             onClick={handleSaveInstructions}
             disabled={isSaving}
-            className="inline-flex items-center gap-2 rounded-xl bg-(--accent) px-4 py-2 text-sm font-medium text-(--accent-foreground) transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
             {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
             {isSaving ? "Checking…" : "Save"}
@@ -197,7 +197,7 @@ export function GeneralTab({
           {customInstructions && (
             <button
               onClick={() => { setCustomInstructions(""); localStorage.removeItem("system_instructions_override"); setSaveError(null); }}
-              className="rounded-xl border border-(--border) px-4 py-2 text-sm font-medium transition-colors hover:bg-(--card-hover) cursor-pointer"
+              className="rounded-xl border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-card-hover cursor-pointer"
             >
               Clear
             </button>

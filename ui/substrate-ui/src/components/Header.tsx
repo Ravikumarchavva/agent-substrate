@@ -74,10 +74,13 @@ export function Header({
     setEditingBranchId(null);
   };
 
+  // Nothing to show on a new chat: no bar at all, rather than an empty one.
+  if (!threadName && branches.length === 0) return null;
+
   return (
     <header
-      className={`flex h-12 items-center justify-between bg-background/80 backdrop-blur-md px-3 sm:px-4 border-b border-(--border)/40 z-20 shrink-0 ${
-        !desktopSidebarOpen ? "pl-14 lg:pl-16" : ""
+      className={`flex h-12 items-center justify-between px-3 sm:px-4 z-20 shrink-0 ${
+        !desktopSidebarOpen ? "pl-14 lg:pl-4" : ""
       }`}
       suppressHydrationWarning
     >
@@ -86,7 +89,7 @@ export function Header({
         {onOpenMobileSidebar && (
           <button
             onClick={onOpenMobileSidebar}
-            className="shrink-0 rounded-lg p-1.5 hover:bg-(--card-hover) text-(--muted) hover:text-foreground cursor-pointer lg:hidden transition-colors"
+            className="shrink-0 rounded-lg p-1.5 hover:bg-card-hover text-muted hover:text-foreground cursor-pointer lg:hidden transition-colors"
             aria-label="Open sidebar"
           >
             <SidebarToggleIcon direction="open" className="h-4 w-4" />
@@ -101,18 +104,18 @@ export function Header({
               onClick={() => setIsOpen((prev) => !prev)}
               className={`group flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-medium cursor-pointer transition-all select-none ${
                 isOpen
-                  ? "bg-(--card-hover) text-foreground border border-(--border)/80 shadow-xs"
-                  : "text-foreground/80 hover:text-foreground hover:bg-(--card-hover) border border-(--border)/40 hover:border-(--border)/70"
+                  ? "bg-card-hover text-foreground border border-border/80 shadow-xs"
+                  : "text-foreground/80 hover:text-foreground hover:bg-card-hover border border-border/40 hover:border-border/70"
               }`}
               title="Switch branch"
               aria-expanded={isOpen}
             >
-              <GitBranch className="h-3.5 w-3.5 text-(--muted) group-hover:text-foreground transition-colors shrink-0" />
+              <GitBranch className="h-3.5 w-3.5 text-muted group-hover:text-foreground transition-colors shrink-0" />
               <span className="tracking-tight max-w-[180px] truncate text-[12px] font-medium text-foreground">
                 {activeDisplayName}
               </span>
               <ChevronDown
-                className={`h-3 w-3 text-(--muted) opacity-70 transition-transform duration-200 shrink-0 ${
+                className={`h-3 w-3 text-muted opacity-70 transition-transform duration-200 shrink-0 ${
                   isOpen ? "rotate-180 text-foreground opacity-100" : ""
                 }`}
               />
@@ -120,14 +123,14 @@ export function Header({
 
             {/* Dropdown Menu */}
             {isOpen && (
-              <div className="absolute left-0 top-full mt-2 w-72 rounded-2xl border border-(--border)/80 bg-(--card)/95 p-1.5 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in-0 zoom-in-95 duration-150 ring-1 ring-black/5 dark:ring-white/5">
+              <div className="absolute left-0 top-full mt-2 w-72 rounded-2xl border border-border/80 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in-0 zoom-in-95 duration-150 ring-1 ring-black/5 dark:ring-white/5">
                 {/* Header with Title */}
-                <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-(--border)/40 mb-1">
+                <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/40 mb-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-semibold tracking-wider uppercase text-(--muted)">
+                    <span className="text-[11px] font-semibold tracking-wider uppercase text-muted">
                       Branches
                     </span>
-                    <span className="px-1.5 py-0.2 rounded-md text-[10px] font-mono font-medium bg-(--border)/30 text-(--muted)">
+                    <span className="px-1.5 py-0.2 rounded-md text-[10px] font-mono font-medium bg-border/30 text-muted">
                       {branches.length || 1}
                     </span>
                   </div>
@@ -144,7 +147,7 @@ export function Header({
                       return (
                         <div
                           key={b.id}
-                          className="p-2 rounded-xl bg-(--card-hover) border border-(--border)/80 shadow-xs space-y-2"
+                          className="p-2 rounded-xl bg-card-hover border border-border/80 shadow-xs space-y-2"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <input
@@ -161,18 +164,18 @@ export function Header({
                                 handleCancelRename();
                               }
                             }}
-                            className="w-full rounded-lg bg-background border border-(--border) focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10 px-2.5 py-1.5 text-xs text-foreground placeholder:text-(--muted) outline-none font-medium transition-all"
+                            className="w-full rounded-lg bg-background border border-border focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted outline-none font-medium transition-all"
                             placeholder="Branch display name..."
                           />
                           <div className="flex items-center justify-between pt-0.5">
-                            <span className="text-[10px] text-(--muted) font-mono">
+                            <span className="text-[10px] text-muted font-mono">
                               ↵ save · esc cancel
                             </span>
                             <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={handleCancelRename}
-                                className="inline-flex h-6 items-center justify-center px-2 rounded-md text-[11px] text-(--muted) hover:text-foreground hover:bg-background transition-colors cursor-pointer"
+                                className="inline-flex h-6 items-center justify-center px-2 rounded-md text-[11px] text-muted hover:text-foreground hover:bg-background transition-colors cursor-pointer"
                               >
                                 Cancel
                               </button>
@@ -194,8 +197,8 @@ export function Header({
                         key={b.id}
                         className={`group relative flex items-center justify-between rounded-xl px-2.5 py-2 text-xs cursor-pointer transition-all ${
                           isSelected
-                            ? "bg-(--card-hover) text-foreground font-medium"
-                            : "text-foreground/80 hover:bg-(--card-hover)/60 hover:text-foreground"
+                            ? "bg-card-hover text-foreground font-medium"
+                            : "text-foreground/80 hover:bg-card-hover/60 hover:text-foreground"
                         }`}
                         onClick={() => {
                           onSelectBranch?.(b.id);
@@ -207,7 +210,7 @@ export function Header({
                             className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                               isSelected
                                 ? "bg-foreground/10 text-foreground"
-                                : "bg-(--border)/20 text-(--muted) group-hover:text-foreground"
+                                : "bg-border/20 text-muted group-hover:text-foreground"
                             }`}
                           >
                             <GitBranch className="h-3.5 w-3.5" />
@@ -218,12 +221,12 @@ export function Header({
                             </span>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               {b.id === "main" && (
-                                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-(--border)/30 text-(--muted)">
+                                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-border/30 text-muted">
                                   default
                                 </span>
                               )}
                               {b.name && b.name !== b.id && (
-                                <span className="font-mono text-[9px] text-(--muted) truncate">
+                                <span className="font-mono text-[9px] text-muted truncate">
                                   {b.id}
                                 </span>
                               )}
@@ -235,7 +238,7 @@ export function Header({
                           <button
                             type="button"
                             onClick={(e) => handleStartRename(e, b)}
-                            className="flex h-6 w-6 items-center justify-center rounded-md hover:bg-background text-(--muted) hover:text-foreground transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
+                            className="flex h-6 w-6 items-center justify-center rounded-md hover:bg-background text-muted hover:text-foreground transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
                             title="Rename branch"
                           >
                             <Pencil className="h-3.5 w-3.5 shrink-0" />

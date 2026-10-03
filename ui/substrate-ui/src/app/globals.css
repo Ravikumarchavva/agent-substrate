@@ -1,95 +1,7 @@
 @import "tailwindcss";
 
 /* ─── Shared design tokens ───────────────────────────────────────────────── */
-:root {
-  --background: #ffffff;
-  --foreground: #0d0d0d;
-  --muted: #676767;
-  --muted-foreground: #b4b4b4;
-  --border: #e3e3e3;
-  --border-hover: #cdcdcd;
-  --card: #ffffff;
-  --card-hover: #f4f4f4;
-  --accent: #000000;
-  --accent-hover: #1f1f1f;
-  --accent-foreground: #ffffff;
-  --input-bg: #f4f4f4;
-  --input-border: transparent;
-  --code-bg: #1a1a1a;
-  --code-fg: #e5e5e5;
-  --badge-bg: #f4f4f4;
-  --badge-fg: #0d0d0d;
-  --nav-bg: rgba(255, 255, 255, 0.88);
-  --section-alt: #f9f9f9;
-  --gradient-from: #ffffff;
-  --gradient-to: #f9f9f9;
-  --shadow: rgba(0, 0, 0, 0.03);
-  --ring: rgba(0, 0, 0, 0.05);
-  --sidebar-bg: #f9f9f9;
-  --sidebar-item: #ffffff;
-  --user-bubble: #f4f4f4;
-  --step-bg: #f4f4f4;
-  --panel: #ffffff;
-  --panel-elevated: #ffffff;
-  --panel-muted: #f9f9f9;
-  --panel-border: #e3e3e3;
-  --panel-shadow: rgba(0, 0, 0, 0.05);
-  --panel-glow: rgba(0, 0, 0, 0.02);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.06);
-  --radius: 12px;
-  --chat-width: 54rem;
-}
-
-[data-theme="dark"],
-.dark {
-  --background: #171717;
-  --foreground: #f5f5f5;
-  --muted: #9ca3af;
-  --muted-foreground: #6b7280;
-  --border: #2a2a2a;
-  --border-hover: #3a3a3a;
-  --card: #1f1f1f;
-  --card-hover: #262626;
-  --accent: #ffffff;
-  --accent-hover: #e5e5e5;
-  --accent-foreground: #0a0a0a;
-  --input-bg: #1f1f1f;
-  --input-border: #2a2a2a;
-  --code-bg: #111111;
-  --code-fg: #e5e5e5;
-  --badge-bg: #262626;
-  --badge-fg: #d4d4d4;
-  --nav-bg: rgba(23, 23, 23, 0.88);
-  --section-alt: #1a1a1a;
-  --gradient-from: #171717;
-  --gradient-to: #1a1a1a;
-  --shadow: rgba(0, 0, 0, 0.2);
-  --ring: rgba(255, 255, 255, 0.08);
-  --sidebar-bg: #1a1a1a;
-  --sidebar-item: #1f1f1f;
-  --user-bubble: #262626;
-  --step-bg: #1a1a1a;
-  --panel: #1f1f1f;
-  --panel-elevated: #262626;
-  --panel-muted: #1a1a1a;
-  --panel-border: #2a2a2a;
-  --panel-shadow: rgba(0, 0, 0, 0.3);
-  --panel-glow: rgba(255, 255, 255, 0.04);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.16), 0 1px 4px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.24), 0 2px 8px rgba(0, 0, 0, 0.12);
-  --radius: 16px;
-  --chat-width: 54rem;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@import "../design/tokens.css";
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -114,10 +26,15 @@ button, a, [role="button"], summary, label[for] {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Ensure minimum 44×44px touch target for accessibility (WCAG 2.5.5) */
-button, a, [role="button"] {
-  min-height: 44px;
-  min-width: 44px;
+/* Minimum 44×44px touch target for accessibility (WCAG 2.5.5), on touch screens only and in the base layer, so a utility such as h-8
+   still sizes a button on desktop instead of losing to this rule. */
+@layer base {
+  @media (pointer: coarse) {
+    button, a, [role="button"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
 }
 
 /* Inline/icon buttons override — they shouldn't force 44px box-model */
@@ -262,21 +179,6 @@ select {
 /* ─── Substrate UI Motion System ────────────────────────────────────────── */
 /* Shared animation tokens, keyframes, and utility classes used across       */
 /* Substrate UI for a consistent, premium feel.                              */
-/* ═══════════════════════════════════════════════════════════════════════════ */
-
-:root {
-  /* Easing curves */
-  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-
-  /* Durations */
-  --duration-fast: 150ms;
-  --duration-normal: 250ms;
-  --duration-slow: 400ms;
-  --duration-entrance: 500ms;
-}
 
 /* ─── Keyframes ──────────────────────────────────────────────────────────── */
 @keyframes substrate-fade-in {

@@ -55,20 +55,20 @@ export function RateLimitBar() {
         : "bg-emerald-500";
 
   return (
-    <div className="mx-2 mb-2 rounded-2xl border border-(--border) bg-(--card) px-3 py-2.5">
+    <div className="mx-2 mb-2 rounded-2xl border border-border bg-card px-3 py-2.5">
       {/* Header row */}
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-(--muted)">
+        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted">
           Daily limit
         </span>
-        <span className="text-[11px] text-(--muted)">
+        <span className="text-[11px] text-muted">
           Reset in:&nbsp;
           <span className="font-medium text-foreground">{formatResetIn(reset_in)}</span>
         </span>
       </div>
 
       {/* Progress bar */}
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-(--border)">
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-border">
         <div
           className={`h-full rounded-full transition-all duration-500 ${barColour}`}
           style={{ width: `${pct}%` }}
@@ -77,12 +77,12 @@ export function RateLimitBar() {
 
       {/* Footer row */}
       <div className="mt-1.5 flex items-center justify-between">
-        <span className={`text-[11px] ${exhausted ? "text-red-400" : "text-(--muted)"}`}>
+        <span className={`text-[11px] ${exhausted ? "text-red-400" : "text-muted"}`}>
           {exhausted
             ? "Limit reached"
             : `${remaining} of ${limit} messages left`}
         </span>
-        <span className="text-[11px] text-(--muted)">{formatWindowLabel(window_seconds)}</span>
+        <span className="text-[11px] text-muted">{formatWindowLabel(window_seconds)}</span>
       </div>
     </div>
   );

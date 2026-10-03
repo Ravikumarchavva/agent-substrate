@@ -30,7 +30,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
       {/* Avatar trigger */}
       <button
         onClick={() => setIsOpen((o) => !o)}
-        className="flex items-center justify-center w-7 h-7 rounded-full overflow-hidden hover:ring-2 hover:ring-(--accent)/60 transition-all cursor-pointer"
+        className="flex items-center justify-center w-7 h-7 rounded-full overflow-hidden hover:ring-2 hover:ring-accent/60 transition-all cursor-pointer"
         aria-label="Account menu"
         aria-expanded={isOpen}
         aria-haspopup="true"
@@ -43,7 +43,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
           />
         ) : (
           <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-(--accent-foreground)"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-accent-foreground"
             style={{ background: "var(--accent)" }}
           >
             {isAuthenticated && user
@@ -56,17 +56,17 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
       {/* Dropdown */}
       {isOpen && (
         <div
-          className="absolute right-0 top-full mt-2 w-56 bg-(--card) border border-(--border) rounded-xl shadow-xl overflow-hidden z-50"
+          className="absolute right-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50"
           role="menu"
         >
           {isAuthenticated && user ? (
             <>
               {/* User info header */}
-              <div className="px-3 py-2.5 border-b border-(--border)">
+              <div className="px-3 py-2.5 border-b border-border">
                 <div className="text-sm font-medium truncate">
                   {user.name ?? "User"}
                 </div>
-                <div className="text-xs text-(--muted) truncate">{user.email ?? ""}</div>
+                <div className="text-xs text-muted truncate">{user.email ?? ""}</div>
                 {isAdmin && (
                   <span className="inline-flex items-center gap-1 mt-1.5 text-xs text-purple-300">
                     <ShieldCheck className="w-3 h-3" />
@@ -79,16 +79,16 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
               <div className="py-1" role="none">
                 <button
                   onClick={() => { setIsOpen(false); onOpenSettings("general"); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-card-hover transition-colors cursor-pointer"
                   role="menuitem"
                 >
-                  <Settings className="w-3.5 h-3.5 text-(--muted)" />
+                  <Settings className="w-3.5 h-3.5 text-muted" />
                   Settings
                 </button>
                 {isAdmin && (
                   <button
                     onClick={() => { setIsOpen(false); onOpenSettings("admin"); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-card-hover transition-colors cursor-pointer"
                     role="menuitem"
                   >
                     <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
@@ -98,7 +98,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
               </div>
 
               {/* Sign out */}
-              <div className="border-t border-(--border) py-1" role="none">
+              <div className="border-t border-border py-1" role="none">
                 <button
                   onClick={async () => {
                     setIsOpen(false);
@@ -110,7 +110,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
                     }
                     await logout();
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 hover:bg-(--card-hover) transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 hover:bg-card-hover transition-colors cursor-pointer"
                   role="menuitem"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -121,12 +121,12 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
           ) : (
             /* Not signed in */
             <div className="py-1.5">
-              <div className="px-3 py-1.5 text-xs text-(--muted) border-b border-(--border) mb-1">
+              <div className="px-3 py-1.5 text-xs text-muted border-b border-border mb-1">
                 Not signed in
               </div>
               <button
                 onClick={() => { setIsOpen(false); loginWithGoogle(); }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-card-hover transition-colors cursor-pointer"
                 role="menuitem"
               >
                 {/* Google G */}

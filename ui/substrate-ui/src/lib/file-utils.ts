@@ -107,7 +107,7 @@ export function getDocumentBadge(name: string): DocumentBadge {
   if (extension === "txt") {
     return { Icon: FileText, label: "Text", badgeClass: "bg-slate-500/15 text-slate-500" };
   }
-  return { Icon: FileIcon, label: "File", badgeClass: "bg-(--muted)/15 text-(--muted)" };
+  return { Icon: FileIcon, label: "File", badgeClass: "bg-muted/15 text-muted" };
 }
 
 export interface FileGlyph {

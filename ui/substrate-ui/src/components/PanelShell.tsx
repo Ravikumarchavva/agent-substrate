@@ -50,12 +50,12 @@ export function PanelShell({
 
   return (
     <div
-      className={`rounded-xl border border-(--border) bg-(--step-bg) overflow-hidden ${className}`}
+      className={`rounded-xl border border-border bg-step overflow-hidden ${className}`}
       style={{ background: "var(--step-bg)" }}
     >
       {/* ── Header ── */}
       <div
-        className="flex items-center gap-2 px-3 py-2.5 border-b border-(--border)"
+        className="flex items-center gap-2 px-3 py-2.5 border-b border-border"
         style={{ background: "var(--card)" }}
       >
         {icon && (
@@ -78,7 +78,7 @@ export function PanelShell({
         {collapsible && (
           <button
             onClick={() => setCollapsed((c) => !c)}
-            className="p-1 rounded hover:bg-(--card-hover) transition-colors cursor-pointer"
+            className="p-1 rounded hover:bg-card-hover transition-colors cursor-pointer"
             style={{ color: "var(--muted)" }}
             aria-label={collapsed ? "Expand" : "Collapse"}
           >
@@ -89,7 +89,7 @@ export function PanelShell({
         {onDismiss && (
           <button
             onClick={onDismiss}
-            className="p-1 rounded hover:bg-(--card-hover) transition-colors cursor-pointer"
+            className="p-1 rounded hover:bg-card-hover transition-colors cursor-pointer"
             style={{ color: "var(--muted)" }}
             aria-label="Dismiss"
           >

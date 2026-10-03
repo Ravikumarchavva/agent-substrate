@@ -8,6 +8,8 @@ const WS_BACKEND_URL = PUBLIC_BACKEND_URL.replace(/^http/, "ws");
 
 const nextConfig: NextConfig = {
   output: 'standalone', // For Docker builds
+  // The dev-only Next.js badge defaults to the bottom-left, over the account avatar.
+  devIndicators: { position: 'bottom-right' },
   // Mounted at /chat behind agent-substrate-platform's rewrite proxy, so the
   // whole product lives under one origin (fixes the shared-Google-OAuth-client
   // port collision between the two apps). basePath makes Next.js rewrite all

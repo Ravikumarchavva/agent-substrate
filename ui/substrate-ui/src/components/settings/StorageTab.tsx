@@ -33,6 +33,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { Button, Input, Menu, MenuContent, MenuItem, MenuTrigger, Toolbar, ToolbarGroup, ToolbarItem } from "@/design";
 import { api } from "@/lib/api";
 import { buildObjectUrl, buildWorkspaceFileUrl } from "@/lib/api/_client";
 import { formatFileSize, getFileExtension } from "@/lib/file-utils";
@@ -204,7 +205,7 @@ function SidebarItem({
       className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition-colors cursor-pointer ${
         active
           ? "bg-background font-semibold text-foreground shadow-xs"
-          : "font-medium text-(--muted) hover:bg-background/50 hover:text-foreground"
+          : "font-medium text-muted hover:bg-background/50 hover:text-foreground"
       }`}
     >
       {glyphName ? (
@@ -212,7 +213,7 @@ function SidebarItem({
       ) : (
         <Icon
           className={`h-[15px] w-[15px] shrink-0 ${
-            active ? "text-(--accent)" : iconColor ?? "text-(--muted)"
+            active ? "text-accent" : iconColor ?? "text-muted"
           }`}
         />
       )}
@@ -220,7 +221,7 @@ function SidebarItem({
       {badge !== undefined && (
         <span
           className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums leading-none shrink-0 ${
-            active ? "bg-(--badge-bg) text-foreground" : "bg-background/60 text-(--muted)"
+            active ? "bg-badge text-foreground" : "bg-background/60 text-muted"
           }`}
         >
           {badge}
@@ -255,81 +256,42 @@ const GRID_SIZE_SHORT_LABEL: Record<GridSize, string> = { sm: "S", md: "M", lg: 
 
 function GridSizeControl({ size, onChange }: { size: GridSize; onChange: (s: GridSize) => void }) {
   return (
-    <div className="flex h-8 items-center rounded-lg border border-(--border) bg-background/50 shrink-0" role="group" aria-label="Tile size">
-      {GRID_SIZE_ORDER.map((key, i) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onChange(key)}
-          title={GRID_SIZE_PRESETS[key].label}
-          className={`flex h-8 min-w-8 items-center justify-center px-1.5 text-[10px] font-semibold transition cursor-pointer ${
-            i === 0 ? "rounded-l-lg" : "border-l border-(--border)/60"
-          } ${i === GRID_SIZE_ORDER.length - 1 ? "rounded-r-lg" : ""} ${
-            size === key ? "bg-(--card) text-foreground" : "text-(--muted) hover:text-foreground"
-          }`}
-        >
+    <ToolbarGroup aria-label="Tile size">
+      {GRID_SIZE_ORDER.map((key) => (
+        <ToolbarItem key={key} size="icon" active={size === key} onClick={() => onChange(key)} title={GRID_SIZE_PRESETS[key].label}>
           {GRID_SIZE_SHORT_LABEL[key]}
-        </button>
+        </ToolbarItem>
       ))}
-    </div>
+    </ToolbarGroup>
   );
 }
 
 function SortDropdown({ sort, onChange }: { sort: SortKey; onChange: (s: SortKey) => void }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) setIsOpen(false);
-    }
-    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
-
   const TriggerIcon = SORT_ICONS[sort];
   const selectedLabel = SORT_OPTIONS.find((o) => o.key === sort)?.label ?? "Sort";
 
   return (
-    <div className="relative shrink-0" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setIsOpen((o) => !o)}
-        className="flex h-8 items-center gap-1.5 rounded-lg border border-(--border) bg-background/60 px-2.5 text-xs font-medium text-foreground transition hover:bg-(--card) cursor-pointer"
-        aria-label="Sort options"
-      >
-        <TriggerIcon className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
-        <span className="hidden sm:inline">{selectedLabel}</span>
-        <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
-      </button>
-
-      {isOpen && (
-        <div
-          className="absolute right-0 z-50 mt-1.5 w-40 overflow-hidden rounded-xl border border-(--border) p-1 shadow-xl"
-          style={{ background: "var(--card)" }}
-        >
-          {SORT_OPTIONS.map((opt) => {
-            const OptIcon = SORT_ICONS[opt.key];
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => { onChange(opt.key); setIsOpen(false); }}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition cursor-pointer ${
-                  sort === opt.key
-                    ? "bg-foreground/8 font-semibold text-foreground"
-                    : "text-(--muted) hover:bg-background hover:text-foreground"
-                }`}
-              >
-                <OptIcon className="h-3.5 w-3.5 shrink-0 text-(--muted)" />
-                <span className="flex-1">{opt.label}</span>
-                {sort === opt.key && <Check className="h-3.5 w-3.5 shrink-0 text-foreground" />}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+    <Menu>
+      <MenuTrigger asChild>
+        <Button aria-label="Sort options">
+          <TriggerIcon className="text-muted" />
+          <span className="hidden sm:inline">{selectedLabel}</span>
+          <ChevronDown className="size-3 opacity-50" />
+        </Button>
+      </MenuTrigger>
+      <MenuContent align="end" className="w-44">
+        {SORT_OPTIONS.map((opt) => {
+          const OptIcon = SORT_ICONS[opt.key];
+          return (
+            <MenuItem key={opt.key} onSelect={() => onChange(opt.key)} className={sort === opt.key ? "font-semibold" : ""}>
+              <OptIcon />
+              <span className="flex-1">{opt.label}</span>
+              {sort === opt.key && <Check className="text-foreground" />}
+            </MenuItem>
+          );
+        })}
+      </MenuContent>
+    </Menu>
   );
 }
 
@@ -350,10 +312,10 @@ function FileMenuContent({
 }) {
   return (
     <>
-      <div className="px-3 py-2 border-b border-(--border)/40">
-        <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-(--muted)/60 mb-1">Details</p>
-        <p className="text-[11px] text-(--muted)">{formatFileSize(file.size_bytes)} · {formatDate(file.modified_at)}</p>
-        <p className="text-[11px] text-(--muted) mt-0.5">
+      <div className="px-3 py-2 border-b border-border/40">
+        <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted/60 mb-1">Details</p>
+        <p className="text-[11px] text-muted">{formatFileSize(file.size_bytes)} · {formatDate(file.modified_at)}</p>
+        <p className="text-[11px] text-muted mt-0.5">
           {file.owner === "user" ? "Uploaded by you" : "Generated by assistant"}
         </p>
       </div>
@@ -361,7 +323,7 @@ function FileMenuContent({
         <button
           type="button"
           onClick={() => { onInspect(); onClose(); }}
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-(--muted) hover:bg-background hover:text-foreground transition cursor-pointer"
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-muted hover:bg-background hover:text-foreground transition cursor-pointer"
         >
           <Eye className="h-3.5 w-3.5 shrink-0" />
           Inspect
@@ -370,7 +332,7 @@ function FileMenuContent({
           href={downloadUrl}
           download={file.name}
           onClick={onClose}
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-(--muted) hover:bg-background hover:text-foreground transition cursor-pointer"
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-muted hover:bg-background hover:text-foreground transition cursor-pointer"
         >
           <Download className="h-3.5 w-3.5 shrink-0" />
           Download
@@ -444,7 +406,7 @@ function FileContextMenu({
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-50 w-48 overflow-hidden rounded-xl border border-(--border) p-1 shadow-xl"
+      className="fixed z-50 w-48 overflow-hidden rounded-xl border border-border p-1 shadow-xl"
       style={{ background: "var(--card)", top, left }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -789,30 +751,30 @@ export function StorageTab() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex flex-col flex-1 h-full min-h-0 w-full">
       {error && (
-        <div className="border-b border-red-500/20 bg-red-500/8 px-4 py-2.5 text-sm text-red-400">
+        <div className="mb-2 rounded-xl border border-red-500/20 bg-red-500/8 px-4 py-2.5 text-sm text-red-400 shrink-0">
           {error}
         </div>
       )}
 
       {/* Main Explorer Window */}
       <div
-        className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[240px_1fr]"
+        className="grid flex-1 min-h-0 h-full w-full overflow-hidden lg:grid-cols-[240px_1fr]"
         style={{ background: "var(--card)" }}
       >
         {/* Sidebar */}
-        <aside className="flex flex-col border-b border-(--border) lg:border-b-0 lg:border-r">
+        <aside className="flex flex-col border-b border-border lg:border-b-0 lg:border-r">
           <div className="flex-1 space-y-5 p-3">
             <div className="space-y-0.5">
-              <p className="mb-1.5 px-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-(--muted)/60">Places</p>
+              <p className="mb-1.5 px-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted/60">Places</p>
               <SidebarItem icon={HardDrive} label="Home Drive" badge={sessionFolders.length} active={location.type === "drive"} onClick={() => navigateTo({ type: "drive" })} />
               <SidebarItem icon={Clock} label="Recent" badge={files.length > 0 ? files.length : undefined} active={location.type === "recent"} onClick={() => navigateTo({ type: "recent" })} />
               <SidebarItem icon={Upload} label="User Uploads" badge={files.filter((f) => f.owner === "user").length || undefined} active={location.type === "uploads"} onClick={() => navigateTo({ type: "uploads" })} />
               <SidebarItem icon={Bot} label="Assistant Outputs" badge={files.filter((f) => f.owner === "agent").length || undefined} active={location.type === "assistant"} onClick={() => navigateTo({ type: "assistant" })} />
             </div>
             <div className="space-y-0.5">
-              <p className="mb-1.5 px-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-(--muted)/60">File Types</p>
+              <p className="mb-1.5 px-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted/60">File Types</p>
               {/* Same flat colored-square badge a file's own tile uses
                   (FileTypeIcon → getFileGlyph, file-utils.ts) — a representative
                   extension per category — not a plain line icon, so this list
@@ -827,19 +789,19 @@ export function StorageTab() {
           </div>
 
           {usage && (
-            <div className="border-t border-(--border) p-3">
+            <div className="border-t border-border p-3">
               <div className="rounded-xl bg-background/40 p-3">
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="flex items-center gap-1.5 font-medium text-foreground">
-                    <HardDrive className="h-3 w-3 shrink-0 text-(--muted)" />
+                    <HardDrive className="h-3 w-3 shrink-0 text-muted" />
                     Storage
                   </span>
                   <span className="font-semibold tabular-nums text-foreground">{pct.toFixed(0)}%</span>
                 </div>
-                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-(--border)/60">
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-border/60">
                   <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${pct}%` }} />
                 </div>
-                <p className="mt-1.5 text-[10px] text-(--muted)">{formatFileSize(usage.used_bytes)} of {formatFileSize(usage.quota_bytes)}</p>
+                <p className="mt-1.5 text-[10px] text-muted">{formatFileSize(usage.used_bytes)} of {formatFileSize(usage.quota_bytes)}</p>
               </div>
             </div>
           )}
@@ -848,85 +810,69 @@ export function StorageTab() {
         {/* Main Pane */}
         <div className="flex min-h-0 flex-col">
           {/* Toolbar */}
-          <div className="flex flex-wrap items-center gap-2.5 border-b border-(--border) px-4 py-2.5">
-            {/* Nav */}
-            <div className="flex h-8 items-center rounded-lg border border-(--border) bg-background/50 shrink-0">
-              <button type="button" onClick={goBack} disabled={historyIndex <= 0} className="flex h-8 w-8 items-center justify-center rounded-l-lg text-(--muted) transition hover:bg-(--card) hover:text-foreground disabled:opacity-30 disabled:pointer-events-none cursor-pointer" title="Back">
-                <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
-              </button>
-              <button type="button" onClick={goForward} disabled={historyIndex >= history.length - 1} className="flex h-8 w-8 items-center justify-center border-l border-(--border)/60 text-(--muted) transition hover:bg-(--card) hover:text-foreground disabled:opacity-30 disabled:pointer-events-none cursor-pointer" title="Forward">
-                <ArrowRight className="h-3.5 w-3.5 shrink-0" />
-              </button>
+          <Toolbar className="border-b border-border px-4 py-2.5">
+            <ToolbarGroup aria-label="History">
+              <ToolbarItem size="icon" onClick={goBack} disabled={historyIndex <= 0} title="Back" aria-label="Back">
+                <ArrowLeft />
+              </ToolbarItem>
+              <ToolbarItem size="icon" onClick={goForward} disabled={historyIndex >= history.length - 1} title="Forward" aria-label="Forward">
+                <ArrowRight />
+              </ToolbarItem>
               {location.type !== "drive" && (
-                <button type="button" onClick={goUp} className="flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-(--border)/60 text-(--muted) transition hover:bg-(--card) hover:text-foreground cursor-pointer" title="Up">
-                  <ArrowUp className="h-3.5 w-3.5 shrink-0" />
-                </button>
+                <ToolbarItem size="icon" onClick={goUp} title="Up" aria-label="Up">
+                  <ArrowUp />
+                </ToolbarItem>
               )}
-            </div>
+            </ToolbarGroup>
 
-            {/* Breadcrumb */}
-            <div className="flex h-8 items-center rounded-lg border border-(--border) bg-background/50 px-3 text-xs shrink-0 min-w-0">
-              <button type="button" onClick={() => navigateTo({ type: "drive" })} className={`flex items-center gap-1.5 shrink-0 transition cursor-pointer ${location.type === "drive" ? "font-semibold text-foreground" : "text-(--muted) hover:text-foreground"}`}>
-                <HardDrive className="h-3.5 w-3.5 shrink-0" />
-                <span>Home</span>
-              </button>
+            <nav aria-label="Location" className="flex h-control-md min-w-0 shrink-0 items-center rounded-md border border-border bg-background/50 pr-3 text-xs">
+              <Button variant="ghost" onClick={() => navigateTo({ type: "drive" })} className={location.type === "drive" ? "font-semibold text-foreground" : ""}>
+                <HardDrive /> Home
+              </Button>
               {location.type === "folder" && (
                 <>
-                  <ChevronRight className="mx-2 h-3 w-3 shrink-0 text-(--muted)/40" />
-                  <span className="truncate max-w-[200px] font-semibold text-foreground">{location.name}</span>
+                  <ChevronRight className="mx-1 size-3 shrink-0 text-muted/40" />
+                  <span className="max-w-48 truncate font-semibold text-foreground">{location.name}</span>
                 </>
               )}
               {location.type !== "drive" && location.type !== "folder" && (
                 <>
-                  <ChevronRight className="mx-2 h-3 w-3 shrink-0 text-(--muted)/40" />
-                  <span className="truncate max-w-[200px] font-semibold text-foreground">{currentViewData.title}</span>
+                  <ChevronRight className="mx-1 size-3 shrink-0 text-muted/40" />
+                  <span className="max-w-48 truncate font-semibold text-foreground">{currentViewData.title}</span>
                 </>
               )}
-            </div>
+            </nav>
+
+            <Button onClick={() => void load()} disabled={loading} title="Refresh files">
+              <RefreshCw className={loading ? "animate-spin text-accent" : ""} />
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
 
             <div className="flex-1" />
 
-            <button
-              type="button"
-              onClick={() => void load()}
-              disabled={loading}
-              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border border-(--border) bg-background/50 px-3 text-xs font-medium text-(--muted) transition hover:text-foreground disabled:opacity-50 cursor-pointer"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${loading ? "animate-spin text-(--accent)" : ""}`} />
-              Refresh
-            </button>
-
-            {/* Search */}
-            <div className="relative h-8 w-40 sm:w-48 shrink-0">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--muted)" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search files…"
-                className="h-8 w-full rounded-lg border border-(--border) bg-background/50 pl-8 pr-7 text-xs text-foreground placeholder:text-(--muted) focus:border-(--accent) focus:outline-none focus:ring-1 focus:ring-(--accent) transition"
-              />
+            <div className="relative w-40 shrink-0 sm:w-48">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
+              <Input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search files…" className="pl-8 pr-7" />
               {search && (
-                <button type="button" onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-(--muted) hover:text-foreground cursor-pointer">
-                  <X className="h-3 w-3 shrink-0" />
+                <button type="button" onClick={() => setSearch("")} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground">
+                  <X className="size-3" />
                 </button>
               )}
             </div>
 
-            {/* View toggle */}
-            <div className="flex h-8 items-center rounded-lg border border-(--border) bg-background/50 shrink-0">
-              <button type="button" onClick={() => setViewMode("grid")} className={`flex h-8 w-8 items-center justify-center rounded-l-lg transition cursor-pointer ${viewMode === "grid" ? "bg-(--card) text-foreground" : "text-(--muted) hover:text-foreground"}`} title="Grid View">
-                <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
-              </button>
-              <button type="button" onClick={() => setViewMode("list")} className={`flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-(--border)/60 transition cursor-pointer ${viewMode === "list" ? "bg-(--card) text-foreground" : "text-(--muted) hover:text-foreground"}`} title="List View">
-                <List className="h-3.5 w-3.5 shrink-0" />
-              </button>
-            </div>
+            <ToolbarGroup aria-label="View">
+              <ToolbarItem size="icon" active={viewMode === "grid"} onClick={() => setViewMode("grid")} title="Grid view" aria-label="Grid view">
+                <LayoutGrid />
+              </ToolbarItem>
+              <ToolbarItem size="icon" active={viewMode === "list"} onClick={() => setViewMode("list")} title="List view" aria-label="List view">
+                <List />
+              </ToolbarItem>
+            </ToolbarGroup>
 
             {viewMode === "grid" && <GridSizeControl size={gridSize} onChange={setGridSize} />}
 
             <SortDropdown sort={sort} onChange={setSort} />
-          </div>
+          </Toolbar>
 
           {/* Canvas */}
           <div
@@ -936,17 +882,17 @@ export function StorageTab() {
           >
             {loading ? (
               <div className="flex h-72 flex-col items-center justify-center gap-2.5">
-                <Loader2 className="h-7 w-7 animate-spin text-(--accent) shrink-0" />
-                <p className="text-xs text-(--muted)">Loading storage drive…</p>
+                <Loader2 className="h-7 w-7 animate-spin text-accent shrink-0" />
+                <p className="text-xs text-muted">Loading storage drive…</p>
               </div>
             ) : currentViewData.folders.length === 0 && currentViewData.files.length === 0 ? (
               <div className="flex h-72 flex-col items-center justify-center gap-3">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-background border border-(--border) shrink-0">
-                  <Folder className="h-7 w-7 text-(--muted) opacity-40 shrink-0" />
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-background border border-border shrink-0">
+                  <Folder className="h-7 w-7 text-muted opacity-40 shrink-0" />
                 </div>
                 <div className="text-center max-w-xs">
                   <p className="text-sm font-medium text-foreground">{search ? `No matches for "${search}"` : "This folder is empty"}</p>
-                  <p className="mt-1 text-xs text-(--muted)">Files uploaded or generated will appear here.</p>
+                  <p className="mt-1 text-xs text-muted">Files uploaded or generated will appear here.</p>
                 </div>
               </div>
             ) : (
@@ -954,7 +900,7 @@ export function StorageTab() {
                 {/* Folders */}
                 {currentViewData.folders.length > 0 && (
                   <section>
-                    <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-(--muted)">
+                    <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
                       Folders ({currentViewData.folders.length})
                     </p>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -963,16 +909,16 @@ export function StorageTab() {
                           key={folder.id}
                           type="button"
                           onClick={() => navigateTo({ type: "folder", id: folder.id, name: folder.name })}
-                          className="group flex items-center gap-3 rounded-xl border border-(--border) bg-background/40 p-3 text-left transition hover:border-amber-500/30 hover:bg-background hover:shadow-sm cursor-pointer"
+                          className="group flex items-center gap-3 rounded-xl border border-border bg-background/40 p-3 text-left transition hover:border-amber-500/30 hover:bg-background hover:shadow-sm cursor-pointer"
                         >
                           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 shrink-0">
                             <Folder className="h-5 w-5 shrink-0 fill-amber-500/20 text-amber-500" />
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-[13px] font-semibold text-foreground group-hover:text-amber-400 transition-colors">{folder.name}</p>
-                            <p className="mt-0.5 text-[11px] text-(--muted)">{folder.files.length} {folder.files.length === 1 ? "file" : "files"} · {formatFileSize(folder.totalBytes)}</p>
+                            <p className="mt-0.5 text-[11px] text-muted">{folder.files.length} {folder.files.length === 1 ? "file" : "files"} · {formatFileSize(folder.totalBytes)}</p>
                           </div>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-(--muted)/30 group-hover:text-foreground transition" />
+                          <ChevronRight className="h-4 w-4 shrink-0 text-muted/30 group-hover:text-foreground transition" />
                         </button>
                       ))}
                     </div>
@@ -983,8 +929,8 @@ export function StorageTab() {
                 {currentViewData.files.length > 0 && (
                   <section>
                     <div className="mb-3 flex items-center justify-between">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-(--muted)">Files ({currentViewData.files.length})</p>
-                      <p className="text-[11px] text-(--muted)">{formatFileSize(currentViewData.files.reduce((a, f) => a + f.size_bytes, 0))}</p>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">Files ({currentViewData.files.length})</p>
+                      <p className="text-[11px] text-muted">{formatFileSize(currentViewData.files.reduce((a, f) => a + f.size_bytes, 0))}</p>
                     </div>
 
                     {viewMode === "grid" ? (
@@ -1008,7 +954,7 @@ export function StorageTab() {
                               onContextMenu={(e) => handleFileContextMenu(file, e)}
                               className={`group relative flex flex-col items-center rounded-lg px-2 py-2.5 transition cursor-pointer ${
                                 isSelected
-                                  ? "bg-(--accent)/12 ring-1 ring-(--accent)/40"
+                                  ? "bg-accent/12 ring-1 ring-accent/40"
                                   : "hover:bg-background"
                               }`}
                             >
@@ -1034,13 +980,13 @@ export function StorageTab() {
                               {/* Name + size */}
                               <p
                                 className={`mt-1 w-full text-center text-[10.5px] font-medium leading-tight line-clamp-2 break-words transition-colors ${
-                                  isSelected ? "text-(--accent)" : "text-foreground group-hover:text-(--accent)"
+                                  isSelected ? "text-accent" : "text-foreground group-hover:text-accent"
                                 }`}
                                 title={file.name}
                               >
                                 {renderBreakableName(file.name)}
                               </p>
-                              <p className="text-[9px] text-(--muted)/70 tabular-nums">
+                              <p className="text-[9px] text-muted/70 tabular-nums">
                                 {formatFileSize(file.size_bytes)}
                               </p>
                             </div>
@@ -1049,10 +995,10 @@ export function StorageTab() {
                       </div>
                     ) : (
                       /* List view */
-                      <div className="overflow-hidden rounded-xl border border-(--border)">
+                      <div className="overflow-hidden rounded-xl border border-border">
                         <table className="w-full text-left text-xs">
-                          <thead className="border-b border-(--border) bg-background/50">
-                            <tr className="text-(--muted)">
+                          <thead className="border-b border-border bg-background/50">
+                            <tr className="text-muted">
                               <th className="px-3 py-2.5 font-semibold">Name</th>
                               <th className="px-3 py-2.5 font-semibold">Source</th>
                               <th className="px-3 py-2.5 font-semibold">Size</th>
@@ -1060,7 +1006,7 @@ export function StorageTab() {
                               <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-(--border)/40">
+                          <tbody className="divide-y divide-border/40">
                             {currentViewData.files.map((file, index) => {
                               const isSelected = selected.has(file.path);
                               return (
@@ -1070,27 +1016,27 @@ export function StorageTab() {
                                   onDoubleClick={() => void openInspector(file)}
                                   onContextMenu={(e) => handleFileContextMenu(file, e)}
                                   className={`cursor-pointer transition ${
-                                    isSelected ? "bg-(--accent)/12" : "hover:bg-(--card)/40"
+                                    isSelected ? "bg-accent/12" : "hover:bg-card/40"
                                   }`}
                                 >
                                   <td className="px-3 py-2.5">
                                     <div className="flex items-center gap-2.5">
                                       <FileIconDisplay file={file} size="sm" />
-                                      <span className={`truncate font-medium max-w-xs sm:max-w-md ${isSelected ? "text-(--accent)" : "text-foreground"}`}>{file.name}</span>
+                                      <span className={`truncate font-medium max-w-xs sm:max-w-md ${isSelected ? "text-accent" : "text-foreground"}`}>{file.name}</span>
                                     </div>
                                   </td>
                                   <td className="px-3 py-2.5"><SourcePill owner={file.owner} /></td>
-                                  <td className="px-3 py-2.5 text-(--muted) tabular-nums">{formatFileSize(file.size_bytes)}</td>
-                                  <td className="px-3 py-2.5 text-(--muted)">{formatDate(file.modified_at)}</td>
+                                  <td className="px-3 py-2.5 text-muted tabular-nums">{formatFileSize(file.size_bytes)}</td>
+                                  <td className="px-3 py-2.5 text-muted">{formatDate(file.modified_at)}</td>
                                   <td className="px-3 py-2.5">
                                     <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
-                                      <button type="button" onClick={() => void openInspector(file)} className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) hover:bg-background hover:text-foreground cursor-pointer" title="Inspect">
+                                      <button type="button" onClick={() => void openInspector(file)} className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-background hover:text-foreground cursor-pointer" title="Inspect">
                                         <Eye className="h-3.5 w-3.5 shrink-0" />
                                       </button>
-                                      <a href={getDownloadUrl(file)} download={file.name} className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) hover:bg-background hover:text-foreground cursor-pointer" title="Download">
+                                      <a href={getDownloadUrl(file)} download={file.name} className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-background hover:text-foreground cursor-pointer" title="Download">
                                         <Download className="h-3.5 w-3.5 shrink-0" />
                                       </a>
-                                      <button type="button" onClick={() => confirmDelete(file)} className="flex h-7 w-7 items-center justify-center rounded-md text-(--muted) hover:bg-rose-500/10 hover:text-rose-400 cursor-pointer" title="Delete">
+                                      <button type="button" onClick={() => confirmDelete(file)} className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-rose-500/10 hover:text-rose-400 cursor-pointer" title="Delete">
                                         <Trash2 className="h-3.5 w-3.5 shrink-0" />
                                       </button>
                                     </div>
@@ -1111,7 +1057,7 @@ export function StorageTab() {
           {/* Status bar — Nautilus/Dolphin style: item count normally,
               selection count + size + a quick delete action once
               something's selected. */}
-          <div className="flex h-8 shrink-0 items-center justify-between border-t border-(--border) px-4 text-[11px] text-(--muted)">
+          <div className="flex h-8 shrink-0 items-center justify-between border-t border-border px-4 text-[11px] text-muted">
             {selected.size > 0 ? (
               <>
                 <span className="font-medium text-foreground">
@@ -1159,13 +1105,13 @@ export function StorageTab() {
       {/* Inspector Modal */}
       {inspectedFile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-(--border) shadow-2xl" style={{ background: "var(--card)" }}>
-            <div className="flex items-center justify-between border-b border-(--border) px-5 py-3.5">
+          <div className="flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border shadow-2xl" style={{ background: "var(--card)" }}>
+            <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
               <div className="flex items-center gap-3 min-w-0">
                 <FileIconDisplay file={inspectedFile} size="lg" />
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-semibold text-foreground">{inspectedFile.name}</h3>
-                  <div className="flex items-center gap-2 text-[11px] text-(--muted)">
+                  <div className="flex items-center gap-2 text-[11px] text-muted">
                     <span>{formatFileSize(inspectedFile.size_bytes)}</span>
                     <span>•</span>
                     <span>{formatFullDate(inspectedFile.modified_at)}</span>
@@ -1175,10 +1121,10 @@ export function StorageTab() {
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <a href={getDownloadUrl(inspectedFile)} download={inspectedFile.name} aria-label="Download" title="Download" className="flex h-8 w-8 items-center justify-center rounded-lg text-(--muted) hover:bg-background hover:text-foreground transition cursor-pointer">
+                <a href={getDownloadUrl(inspectedFile)} download={inspectedFile.name} aria-label="Download" title="Download" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-background hover:text-foreground transition cursor-pointer">
                   <Download className="h-4 w-4 shrink-0" />
                 </a>
-                <button type="button" onClick={() => setInspectedFile(null)} className="flex h-8 w-8 items-center justify-center rounded-lg text-(--muted) hover:bg-background hover:text-foreground transition cursor-pointer">
+                <button type="button" onClick={() => setInspectedFile(null)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-background hover:text-foreground transition cursor-pointer">
                   <X className="h-4 w-4 shrink-0" />
                 </button>
               </div>
@@ -1191,7 +1137,7 @@ export function StorageTab() {
                 here) for docx/xlsx/pptx. Always editMode={false}: this is
                 a browse-and-inspect surface, editing happens from the
                 actual conversation. */}
-            <div className="mx-5 mb-5 mt-5 min-h-0 flex-1 overflow-hidden rounded-xl border border-(--border) bg-background/40">
+            <div className="mx-5 mb-5 mt-5 min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-background/40">
               <FileArtifactViewer
                 fileUrl={getDownloadUrl(inspectedFile)}
                 fileName={inspectedFile.name}
@@ -1205,19 +1151,19 @@ export function StorageTab() {
       {/* Delete Confirmation Modal */}
       {deletingFile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-(--border) p-5 shadow-2xl" style={{ background: "var(--card)" }}>
+          <div className="w-full max-w-md rounded-2xl border border-border p-5 shadow-2xl" style={{ background: "var(--card)" }}>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
                 <Trash2 className="h-5 w-5 shrink-0" />
               </div>
               <h3 className="text-sm font-semibold text-foreground">Delete File?</h3>
             </div>
-            <p className="mt-3 text-sm text-(--muted) leading-relaxed">
+            <p className="mt-3 text-sm text-muted leading-relaxed">
               Are you sure you want to permanently delete{" "}
               <strong className="text-foreground">{deletingFile.name}</strong>? This cannot be undone.
             </p>
             <div className="mt-5 flex items-center justify-end gap-2">
-              <button type="button" disabled={isDeleting} onClick={() => setDeletingFile(null)} className="h-8 rounded-lg border border-(--border) bg-background px-4 text-xs font-medium text-foreground transition hover:bg-(--card) disabled:opacity-50 cursor-pointer">
+              <button type="button" disabled={isDeleting} onClick={() => setDeletingFile(null)} className="h-8 rounded-lg border border-border bg-background px-4 text-xs font-medium text-foreground transition hover:bg-card disabled:opacity-50 cursor-pointer">
                 Cancel
               </button>
               <button type="button" disabled={isDeleting} onClick={() => void executeDelete()} className="flex h-8 items-center gap-1.5 rounded-lg bg-rose-600 px-4 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:opacity-50 cursor-pointer">
@@ -1232,24 +1178,24 @@ export function StorageTab() {
       {/* Bulk Delete Confirmation Modal */}
       {bulkDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-(--border) p-5 shadow-2xl" style={{ background: "var(--card)" }}>
+          <div className="w-full max-w-md rounded-2xl border border-border p-5 shadow-2xl" style={{ background: "var(--card)" }}>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
                 <Trash2 className="h-5 w-5 shrink-0" />
               </div>
               <h3 className="text-sm font-semibold text-foreground">Delete {selectedFiles.length} Files?</h3>
             </div>
-            <p className="mt-3 text-sm text-(--muted) leading-relaxed">
+            <p className="mt-3 text-sm text-muted leading-relaxed">
               Are you sure you want to permanently delete these {selectedFiles.length} files
               ({formatFileSize(selectedFiles.reduce((a, f) => a + f.size_bytes, 0))})? This cannot be undone.
             </p>
             <div className="mt-3 max-h-32 overflow-y-auto rounded-lg bg-background/60 p-2">
               {selectedFiles.map((f) => (
-                <p key={f.path} className="truncate px-1 py-0.5 text-xs text-(--muted)">{f.name}</p>
+                <p key={f.path} className="truncate px-1 py-0.5 text-xs text-muted">{f.name}</p>
               ))}
             </div>
             <div className="mt-5 flex items-center justify-end gap-2">
-              <button type="button" disabled={isBulkDeleting} onClick={() => setBulkDeleteConfirm(false)} className="h-8 rounded-lg border border-(--border) bg-background px-4 text-xs font-medium text-foreground transition hover:bg-(--card) disabled:opacity-50 cursor-pointer">
+              <button type="button" disabled={isBulkDeleting} onClick={() => setBulkDeleteConfirm(false)} className="h-8 rounded-lg border border-border bg-background px-4 text-xs font-medium text-foreground transition hover:bg-card disabled:opacity-50 cursor-pointer">
                 Cancel
               </button>
               <button type="button" disabled={isBulkDeleting} onClick={() => void executeBulkDelete()} className="flex h-8 items-center gap-1.5 rounded-lg bg-rose-600 px-4 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:opacity-50 cursor-pointer">

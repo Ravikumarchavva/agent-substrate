@@ -108,14 +108,14 @@ export function PlanCard({ taskList, runActive, onChange }: PlanCardProps) {
 
   return (
     <div
-      className="overflow-hidden rounded-xl border border-(--border)"
+      className="overflow-hidden rounded-xl border border-border"
       style={{ background: "var(--card)" }}
     >
       {/* Header (always visible) — acts as the collapsed chip too */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-(--card-hover)"
+        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-card-hover"
       >
         {open ? (
           <ChevronDown className="w-4 h-4 shrink-0" style={{ color: "var(--muted)" }} />
@@ -154,14 +154,14 @@ export function PlanCard({ taskList, runActive, onChange }: PlanCardProps) {
 
       {/* Steps */}
       {open && (
-        <div className="border-t border-(--border) px-2 pb-2 pt-1">
+        <div className="border-t border-border px-2 pb-2 pt-1">
           {tasks.map((t) => {
             const next = NEXT[t.status];
             const canRetry = t.status === "failed" || t.status === "abandoned";
             return (
               <div
                 key={t.id}
-                className="group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-(--background)"
+                className="group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-background"
                 style={{
                   cursor: next ? "pointer" : "default",
                 }}
@@ -183,7 +183,7 @@ export function PlanCard({ taskList, runActive, onChange }: PlanCardProps) {
                 {canRetry && (
                   <button
                     type="button"
-                    className="shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-(--background) group-hover:opacity-100 cursor-pointer"
+                    className="shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-background group-hover:opacity-100 cursor-pointer"
                     style={{ color: "#ef4444" }}
                     title="Retry"
                     onClick={(e) => {
@@ -224,7 +224,7 @@ export function PlanCardStack({
           {children
             .filter((c) => c.parent_agent_id === tl.agent_id)
             .map((child) => (
-              <div key={child.id} className="ml-3 border-l-2 border-(--border) pl-3">
+              <div key={child.id} className="ml-3 border-l-2 border-border pl-3">
                 <PlanCard taskList={child} runActive={runActive} onChange={onChange} />
               </div>
             ))}

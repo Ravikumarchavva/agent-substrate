@@ -321,31 +321,31 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
   };
 
   return (
-    <div className="flex h-full w-full flex-col bg-(--background) text-(--foreground) relative overflow-hidden">
+    <div className="flex h-full w-full flex-col bg-background text-foreground relative overflow-hidden">
       {/* ─── Main Header ─── */}
-      <div className="flex items-center justify-between border-b border-(--border) px-6 py-4 bg-(--card)/50 backdrop-blur-md sticky top-0 z-10">
+      <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-card/50 backdrop-blur-md sticky top-0 z-10">
         <div className="flex items-center gap-3">
           {selectedTask ? (
             <button
               onClick={() => setSelectedTask(null)}
-              className="p-2 -ml-2 rounded-xl hover:bg-(--card-hover) transition-all duration-200 cursor-pointer text-(--muted) hover:text-(--foreground) btn-icon"
+              className="p-2 -ml-2 rounded-xl hover:bg-card-hover transition-all duration-200 cursor-pointer text-muted hover:text-foreground btn-icon"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           ) : (
             <button
               onClick={onBack}
-              className="p-2 -ml-2 rounded-xl hover:bg-(--card-hover) transition-all duration-200 cursor-pointer text-(--muted) hover:text-(--foreground) btn-icon"
+              className="p-2 -ml-2 rounded-xl hover:bg-card-hover transition-all duration-200 cursor-pointer text-muted hover:text-foreground btn-icon"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
           <div>
             <h1 className="text-base font-bold flex items-center gap-2">
-              <CalendarClock className="w-5 h-5 text-(--muted)" />
+              <CalendarClock className="w-5 h-5 text-muted" />
               {selectedTask ? selectedTask.name : "Scheduled Tasks"}
             </h1>
-            <p className="text-xs text-(--muted)">
+            <p className="text-xs text-muted">
               {selectedTask
                 ? `${selectedTask.task_type.toUpperCase()} • ${formatScheduleText(selectedTask)}`
                 : "Automate agent loops and background processes"}
@@ -356,7 +356,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
         {!selectedTask && (
           <button
             onClick={fetchTasks}
-            className="p-2 rounded-xl hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted) hover:text-(--foreground) btn-icon border border-(--border)"
+            className="p-2 rounded-xl hover:bg-card-hover transition-colors cursor-pointer text-muted hover:text-foreground btn-icon border border-border"
             title="Refresh list"
           >
             <RefreshCw className="w-4 h-4" />
@@ -376,18 +376,18 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
           {/* Scheduling Input Bar */}
           <form onSubmit={handleNLPSubmit} className="relative substrate-fade-up max-w-3xl mx-auto">
-            <div className="relative flex items-center overflow-hidden rounded-2xl border border-(--border) bg-(--card) shadow-md focus-within:border-violet-500/50 focus-within:ring-1 focus-within:ring-violet-500/20 transition-all duration-300">
+            <div className="relative flex items-center overflow-hidden rounded-2xl border border-border bg-card shadow-md focus-within:border-violet-500/50 focus-within:ring-1 focus-within:ring-violet-500/20 transition-all duration-300">
               <Sparkles className="absolute left-4 w-4 h-4 text-violet-500 animate-pulse" />
               <input
                 type="text"
                 value={naturalText}
                 onChange={(e) => setNaturalText(e.target.value)}
                 placeholder="Ask to schedule a task... (e.g. 'every day at 8am tell me AI news')"
-                className="w-full pl-11 pr-24 py-3.5 bg-transparent border-0 rounded-none text-sm outline-none placeholder:text-(--muted)"
+                className="w-full pl-11 pr-24 py-3.5 bg-transparent border-0 rounded-none text-sm outline-none placeholder:text-muted"
               />
               <div className="absolute right-2 flex gap-1">
                 {isParsing ? (
-                  <div className="px-3 py-1.5 text-xs text-(--muted) flex items-center gap-1.5 bg-(--card-hover) rounded-xl">
+                  <div className="px-3 py-1.5 text-xs text-muted flex items-center gap-1.5 bg-card-hover rounded-xl">
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-500" />
                     <span>Parsing...</span>
                   </div>
@@ -405,17 +405,17 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
           </form>
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 text-(--muted) gap-2">
+            <div className="flex flex-col items-center justify-center py-20 text-muted gap-2">
               <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
               <span className="text-xs font-semibold uppercase tracking-wider">Loading schedules...</span>
             </div>
           ) : tasks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 px-6 border border-(--border) rounded-2xl bg-(--card) shadow-sm max-w-xl mx-auto text-center substrate-fade-up">
+            <div className="flex flex-col items-center justify-center py-16 px-6 border border-border rounded-2xl bg-card shadow-sm max-w-xl mx-auto text-center substrate-fade-up">
               <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center mb-6 text-violet-500">
                 <CalendarClock className="w-8 h-8" />
               </div>
-              <h3 className="font-bold text-sm text-(--foreground)">No scheduled tasks yet</h3>
-              <p className="text-xs text-(--muted) mt-2 max-w-md leading-relaxed">
+              <h3 className="font-bold text-sm text-foreground">No scheduled tasks yet</h3>
+              <p className="text-xs text-muted mt-2 max-w-md leading-relaxed">
                 Automate your AI assistant to run background updates, monitor metrics, or deliver daily reports. Use the scheduling composer above to start.
               </p>
             </div>
@@ -426,7 +426,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                   key={task.id}
                   onClick={() => setSelectedTask(task)}
                   style={{ "--stagger": idx } as React.CSSProperties}
-                  className="p-5 rounded-2xl border border-(--border) bg-(--card) hover:border-(--border-hover) hover:shadow-md transition-all duration-300 flex flex-col justify-between group cursor-pointer substrate-hover-lift"
+                  className="p-5 rounded-2xl border border-border bg-card hover:border-border-hover hover:shadow-md transition-all duration-300 flex flex-col justify-between group cursor-pointer substrate-hover-lift"
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -439,15 +439,15 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                       <h3 className="font-bold text-sm group-hover:text-violet-500 transition-colors">
                         {task.name}
                       </h3>
-                      <p className="text-xs text-(--muted) line-clamp-2 leading-relaxed">
+                      <p className="text-xs text-muted line-clamp-2 leading-relaxed">
                         {task.prompt}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-5 pt-4 border-t border-(--border) flex items-center justify-between text-xs text-(--muted)">
+                  <div className="mt-5 pt-4 border-t border-border flex items-center justify-between text-xs text-muted">
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-semibold text-(--foreground)">{formatScheduleText(task)}</span>
+                      <span className="font-semibold text-foreground">{formatScheduleText(task)}</span>
                       {task.next_run_at && (
                         <span>Next: {new Date(task.next_run_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                       )}
@@ -456,14 +456,14 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                     <div className="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={(e) => handleRunNow(task.id, e)}
-                        className="p-2 rounded-lg bg-(--step-bg) hover:bg-emerald-500/10 hover:text-emerald-500 border border-transparent hover:border-emerald-500/20 transition-all cursor-pointer btn-icon"
+                        className="p-2 rounded-lg bg-step hover:bg-emerald-500/10 hover:text-emerald-500 border border-transparent hover:border-emerald-500/20 transition-all cursor-pointer btn-icon"
                         title="Run now"
                       >
                         <Play className="w-3.5 h-3.5 fill-current" />
                       </button>
                       <button
                         onClick={(e) => handleToggleStatus(task, e)}
-                        className={`p-2 rounded-lg bg-(--step-bg) border border-transparent transition-all cursor-pointer btn-icon ${
+                        className={`p-2 rounded-lg bg-step border border-transparent transition-all cursor-pointer btn-icon ${
                           task.status === "active"
                             ? "hover:bg-amber-500/10 hover:text-amber-500 hover:border-amber-500/20"
                             : "hover:bg-emerald-500/10 hover:text-emerald-500 hover:border-emerald-500/20"
@@ -478,7 +478,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                       </button>
                       <button
                         onClick={(e) => handleDeleteTask(task.id, e)}
-                        className="p-2 rounded-lg bg-(--step-bg) hover:bg-rose-500/10 hover:text-rose-500 border border-transparent hover:border-rose-500/20 transition-all cursor-pointer btn-icon"
+                        className="p-2 rounded-lg bg-step hover:bg-rose-500/10 hover:text-rose-500 border border-transparent hover:border-rose-500/20 transition-all cursor-pointer btn-icon"
                         title="Delete task"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -494,10 +494,10 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
         /* ─── View 2: History & Execution Feed ─── */
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Config Detail Dashboard Banner */}
-          <div className="px-6 py-5 border-b border-(--border) bg-(--card)/30 space-y-5">
+          <div className="px-6 py-5 border-b border-border bg-card/30 space-y-5">
             <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
               <div className="flex-1 space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-(--muted) flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
                   <span className={`p-1.5 rounded-lg shrink-0 flex items-center justify-center ${getTypeBadgeStyles(selectedTask.task_type)}`}>
                     {getTypeIcon(selectedTask.task_type)}
                   </span>
@@ -509,12 +509,12 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                       value={editPromptValue}
                       onChange={(e) => setEditPromptValue(e.target.value)}
                       rows={4}
-                      className="w-full p-3.5 text-sm bg-(--input-bg) border border-(--border) rounded-xl focus:outline-none focus:border-violet-500/50"
+                      className="w-full p-3.5 text-sm bg-input border border-border rounded-xl focus:outline-none focus:border-violet-500/50"
                     />
                     <div className="flex gap-2 justify-end">
                       <button
                         onClick={() => setIsEditingPrompt(false)}
-                        className="px-4 py-1.5 text-xs font-semibold rounded-xl border border-(--border) hover:bg-(--card-hover) cursor-pointer min-h-unset min-w-unset"
+                        className="px-4 py-1.5 text-xs font-semibold rounded-xl border border-border hover:bg-card-hover cursor-pointer min-h-unset min-w-unset"
                       >
                         Cancel
                       </button>
@@ -528,12 +528,12 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                   </div>
                 ) : (
                   <div className="flex items-start gap-2.5 group">
-                    <p className="text-sm font-semibold text-(--foreground)/90 leading-relaxed pr-6 select-text">
+                    <p className="text-sm font-semibold text-foreground/90 leading-relaxed pr-6 select-text">
                       {selectedTask.prompt}
                     </p>
                     <button
                       onClick={() => setIsEditingPrompt(true)}
-                      className="p-1.5 rounded-lg hover:bg-(--card-hover) border border-transparent hover:border-(--border) opacity-0 group-hover:opacity-100 transition-all btn-icon text-(--muted)"
+                      className="p-1.5 rounded-lg hover:bg-card-hover border border-transparent hover:border-border opacity-0 group-hover:opacity-100 transition-all btn-icon text-muted"
                       title="Edit instructions"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
@@ -554,7 +554,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                   </button>
                   <button
                     onClick={() => handleToggleStatus(selectedTask)}
-                    className={`px-4 py-2 rounded-xl font-bold border border-(--border) bg-(--card) transition-all cursor-pointer min-h-unset min-w-unset hover:bg-(--card-hover) ${
+                    className={`px-4 py-2 rounded-xl font-bold border border-border bg-card transition-all cursor-pointer min-h-unset min-w-unset hover:bg-card-hover ${
                       selectedTask.status === "active" ? "hover:text-amber-500" : "hover:text-emerald-500"
                     }`}
                   >
@@ -565,22 +565,22 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
             </div>
 
             {/* Horizontal Dashboard Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-(--border)">
-              <div className="p-3 bg-(--card) border border-(--border) rounded-xl space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-(--muted)">Status</div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-border">
+              <div className="p-3 bg-card border border-border rounded-xl space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Status</div>
                 <div className="flex items-center mt-1">{getStatusPill(selectedTask.status)}</div>
               </div>
-              <div className="p-3 bg-(--card) border border-(--border) rounded-xl space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-(--muted)">Schedule</div>
-                <div className="text-xs font-bold text-(--foreground) truncate mt-0.5">{formatScheduleText(selectedTask)}</div>
+              <div className="p-3 bg-card border border-border rounded-xl space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Schedule</div>
+                <div className="text-xs font-bold text-foreground truncate mt-0.5">{formatScheduleText(selectedTask)}</div>
               </div>
-              <div className="p-3 bg-(--card) border border-(--border) rounded-xl space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-(--muted)">Lookback Context</div>
-                <div className="text-xs font-bold text-(--foreground) mt-0.5">{selectedTask.lookback_runs} Runs</div>
+              <div className="p-3 bg-card border border-border rounded-xl space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Lookback Context</div>
+                <div className="text-xs font-bold text-foreground mt-0.5">{selectedTask.lookback_runs} Runs</div>
               </div>
-              <div className="p-3 bg-(--card) border border-(--border) rounded-xl space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-(--muted)">Next Execution</div>
-                <div className="text-xs font-bold text-(--foreground) truncate mt-0.5">
+              <div className="p-3 bg-card border border-border rounded-xl space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Next Execution</div>
+                <div className="text-xs font-bold text-foreground truncate mt-0.5">
                   {selectedTask.next_run_at
                     ? new Date(selectedTask.next_run_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                     : "—"}
@@ -592,21 +592,21 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
           {/* Timeline Execution Logs Feed */}
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
             <div className="max-w-4xl mx-auto space-y-6">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-(--muted) mb-2">Run Logs & Timeline</h2>
+              <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted mb-2">Run Logs & Timeline</h2>
               
               {loadingRuns ? (
-                <div className="flex items-center justify-center py-20 text-(--muted) gap-2.5">
+                <div className="flex items-center justify-center py-20 text-muted gap-2.5">
                   <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
                   <span className="text-xs font-semibold uppercase tracking-wider">Loading timeline logs...</span>
                 </div>
               ) : runs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-(--border) rounded-2xl bg-(--card)/10 text-(--muted) text-center max-w-md mx-auto">
-                  <Clock className="w-8 h-8 text-(--muted-foreground) mb-3 animate-pulse" />
-                  <p className="text-sm font-bold text-(--foreground)">No run history yet</p>
-                  <p className="text-xs text-(--muted) mt-1">Click &quot;Run Now&quot; to trigger the initial background process manually.</p>
+                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-border rounded-2xl bg-card/10 text-muted text-center max-w-md mx-auto">
+                  <Clock className="w-8 h-8 text-muted-foreground mb-3 animate-pulse" />
+                  <p className="text-sm font-bold text-foreground">No run history yet</p>
+                  <p className="text-xs text-muted mt-1">Click &quot;Run Now&quot; to trigger the initial background process manually.</p>
                 </div>
               ) : (
-                <div className="space-y-6 relative pl-4 border-l border-(--border)">
+                <div className="space-y-6 relative pl-4 border-l border-border">
                   {runs.map((run, idx) => {
                     const dateStr = new Date(run.executed_at).toLocaleString([], {
                       month: 'short',
@@ -620,11 +620,11 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                         <div
                           key={run.id}
                           style={{ "--stagger": idx } as React.CSSProperties}
-                          className="relative pl-6 py-1 text-xs text-(--muted) flex items-center gap-2.5 substrate-fade-up"
+                          className="relative pl-6 py-1 text-xs text-muted flex items-center gap-2.5 substrate-fade-up"
                         >
-                          <div className="absolute -left-[23px] top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-(--border) border-4 border-(--background)" />
-                          <span className="font-bold text-(--foreground)/80">{dateStr}</span>
-                          <span className="text-(--muted-foreground)">•</span>
+                          <div className="absolute -left-[23px] top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-border border-4 border-background" />
+                          <span className="font-bold text-foreground/80">{dateStr}</span>
+                          <span className="text-muted-foreground">•</span>
                           <span className="italic">Silent check completed. Metrics within normal bounds.</span>
                         </div>
                       );
@@ -639,17 +639,17 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                       >
                         {/* Timeline dot */}
                         <div
-                          className={`absolute -left-[24px] top-4.5 w-3.5 h-3.5 rounded-full border-4 border-(--background) ${
+                          className={`absolute -left-[24px] top-4.5 w-3.5 h-3.5 rounded-full border-4 border-background ${
                             isFailed ? "bg-rose-500 shadow-lg shadow-rose-500/20" : "bg-emerald-500 shadow-lg shadow-emerald-500/20"
                           }`}
                         />
 
                         {/* Log Card */}
-                        <div className="rounded-2xl border border-(--border) bg-(--card) shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+                        <div className="rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden">
                           {/* Log Header */}
-                          <div className="flex justify-between items-center px-4 py-3 bg-(--card-hover)/40 border-b border-(--border) text-xs">
-                            <span className="font-bold text-(--foreground)">{dateStr}</span>
-                            <div className="flex items-center gap-2.5 text-(--muted)">
+                          <div className="flex justify-between items-center px-4 py-3 bg-card-hover/40 border-b border-border text-xs">
+                            <span className="font-bold text-foreground">{dateStr}</span>
+                            <div className="flex items-center gap-2.5 text-muted">
                               {run.duration_ms > 0 && <span>Duration: {run.duration_ms}ms</span>}
                               <span
                                 className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase border ${
@@ -687,7 +687,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
           </div>
 
           {/* Feedback reply container */}
-          <div className="px-6 py-4 border-t border-(--border) bg-(--card)/40 backdrop-blur-md sticky bottom-0 z-10">
+          <div className="px-6 py-4 border-t border-border bg-card/40 backdrop-blur-md sticky bottom-0 z-10">
             <div className="max-w-3xl mx-auto">
               <form onSubmit={handleSendFeedback} className="flex gap-2">
                 <input
@@ -695,7 +695,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                   value={feedbackText}
                   onChange={(e) => setFeedbackText(e.target.value)}
                   placeholder="Adjust instructions for next run... (e.g. 'prioritize stock price comparison')"
-                  className="flex-1 px-4 py-2.5 bg-(--input-bg) border border-(--border) rounded-xl text-sm focus:outline-none focus:border-violet-500/50"
+                  className="flex-1 px-4 py-2.5 bg-input border border-border rounded-xl text-sm focus:outline-none focus:border-violet-500/50"
                 />
                 <button
                   type="submit"
@@ -709,7 +709,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                   )}
                 </button>
               </form>
-              <p className="text-[10px] text-(--muted) mt-2 pl-1 select-none leading-relaxed">
+              <p className="text-[10px] text-muted mt-2 pl-1 select-none leading-relaxed">
                 Feedback instructions are saved to thread memory. The agent reviews past instructions and output histories on each schedule cycle.
               </p>
             </div>
@@ -720,15 +720,15 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
       {/* ─── Config Edit / Parsing Confirmation Modal ─── */}
       {showConfigModal && (
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-(--panel) border border-(--panel-border) rounded-2xl max-w-lg w-full p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 duration-200 select-none">
-            <div className="flex justify-between items-center border-b border-(--border) pb-3.5">
+          <div className="bg-card border border-border rounded-2xl max-w-lg w-full p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 duration-200 select-none">
+            <div className="flex justify-between items-center border-b border-border pb-3.5">
               <h2 className="text-sm font-bold flex items-center gap-2">
                 <Sparkles className="w-4.5 h-4.5 text-violet-500" />
                 Confirm Task Schedule
               </h2>
               <button
                 onClick={() => setShowConfigModal(false)}
-                className="p-1 rounded-lg hover:bg-(--card-hover) cursor-pointer btn-icon"
+                className="p-1 rounded-lg hover:bg-card-hover cursor-pointer btn-icon"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -736,34 +736,34 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
 
             <div className="space-y-4 text-xs overflow-y-auto max-h-[55vh] pr-1">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-(--muted) uppercase tracking-wider">Task Name</label>
+                <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Task Name</label>
                 <input
                   type="text"
                   value={newConfig.name}
                   onChange={(e) => setNewConfig((c) => ({ ...c, name: e.target.value }))}
-                  className="w-full p-2.5 bg-(--input-bg) border border-(--border) rounded-xl text-xs focus:outline-none"
+                  className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-(--muted) uppercase tracking-wider">Instructions (Agent Prompt)</label>
+                <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Instructions (Agent Prompt)</label>
                 <textarea
                   value={newConfig.prompt}
                   onChange={(e) => setNewConfig((c) => ({ ...c, prompt: e.target.value }))}
                   rows={4}
-                  className="w-full p-2.5 bg-(--input-bg) border border-(--border) rounded-xl text-xs focus:outline-none"
+                  className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-(--muted) uppercase tracking-wider">Schedule Type</label>
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Schedule Type</label>
                   <select
                     value={newConfig.kind}
                     onChange={(e) =>
                       setNewConfig((c) => ({ ...c, kind: e.target.value as "cron" | "interval" }))
                     }
-                    className="w-full p-2.5 bg-(--input-bg) border border-(--border) rounded-xl text-xs focus:outline-none"
+                    className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
                   >
                     <option value="cron">Cron Expression</option>
                     <option value="interval">Interval (Seconds)</option>
@@ -771,19 +771,19 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-(--muted) uppercase tracking-wider">Expression / Value</label>
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Expression / Value</label>
                   <input
                     type="text"
                     value={newConfig.cron_expression}
                     onChange={(e) => setNewConfig((c) => ({ ...c, cron_expression: e.target.value }))}
-                    className="w-full p-2.5 bg-(--input-bg) border border-(--border) rounded-xl text-xs focus:outline-none"
+                    className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-(--muted) uppercase tracking-wider">Task Type</label>
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Task Type</label>
                   <select
                     value={newConfig.task_type}
                     onChange={(e) =>
@@ -792,7 +792,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                         task_type: e.target.value as "report" | "monitor" | "reminder" | "learning",
                       }))
                     }
-                    className="w-full p-2.5 bg-(--input-bg) border border-(--border) rounded-xl text-xs focus:outline-none"
+                    className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
                   >
                     <option value="report">Report / News Digest</option>
                     <option value="monitor">Alert Monitor</option>
@@ -802,7 +802,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-(--muted) uppercase tracking-wider">Context Lookback (Runs)</label>
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Context Lookback (Runs)</label>
                   <input
                     type="number"
                     min={0}
@@ -811,7 +811,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                     onChange={(e) =>
                       setNewConfig((c) => ({ ...c, lookback_runs: Number.parseInt(e.target.value, 10) || 0 }))
                     }
-                    className="w-full p-2.5 bg-(--input-bg) border border-(--border) rounded-xl text-xs focus:outline-none"
+                    className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
                   />
                 </div>
               </div>
@@ -822,18 +822,18 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                   id="auto_disable"
                   checked={newConfig.auto_disable}
                   onChange={(e) => setNewConfig((c) => ({ ...c, auto_disable: e.target.checked }))}
-                  className="rounded border-(--border) text-violet-500 focus:ring-violet-500"
+                  className="rounded border-border text-violet-500 focus:ring-violet-500"
                 />
-                <label htmlFor="auto_disable" className="text-xs text-(--muted) font-medium cursor-pointer">
+                <label htmlFor="auto_disable" className="text-xs text-muted font-medium cursor-pointer">
                   Auto-disable after first success (one-shot alert)
                 </label>
               </div>
             </div>
 
-            <div className="flex gap-2 justify-end border-t border-(--border) pt-4 mt-2">
+            <div className="flex gap-2 justify-end border-t border-border pt-4 mt-2">
               <button
                 onClick={() => setShowConfigModal(false)}
-                className="px-4 py-2 rounded-xl border border-(--border) hover:bg-(--card-hover) text-xs font-semibold cursor-pointer min-h-unset min-w-unset"
+                className="px-4 py-2 rounded-xl border border-border hover:bg-card-hover text-xs font-semibold cursor-pointer min-h-unset min-w-unset"
               >
                 Discard
               </button>

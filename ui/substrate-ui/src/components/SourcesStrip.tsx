@@ -20,8 +20,8 @@ export function SourcesStrip({
   if (!sources || sources.length === 0) return null;
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-(--border) pt-2">
-      <span className="text-xs font-medium text-(--muted)">Sources</span>
+    <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border pt-2">
+      <span className="text-xs font-medium text-muted">Sources</span>
       {sources.map((source) => (
         <SourceChip key={source.index} source={source} onOpen={onOpenSource} />
       ))}

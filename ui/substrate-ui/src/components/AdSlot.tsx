@@ -45,7 +45,7 @@ export function AdSlot() {
   return (
     <div
       ref={containerRef}
-      className="ethical-ad mt-3 max-w-sm rounded-xl border border-(--border) p-3 text-xs"
+      className="ethical-ad mt-3 max-w-sm rounded-xl border border-border p-3 text-xs"
       data-ea-publisher={publisherId}
       data-ea-type="text"
       aria-label="Advertisement"

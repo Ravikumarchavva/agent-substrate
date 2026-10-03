@@ -44,7 +44,7 @@ function IntegrationCard({
   helperText,
 }: IntegrationCardProps) {
   return (
-    <div className="rounded-xl border border-(--border) bg-(--card) p-5">
+    <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-center gap-3">
         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>
           {icon}
@@ -57,7 +57,7 @@ function IntegrationCard({
         )}
       </div>
 
-      <p className="mt-3 text-sm leading-relaxed text-(--muted)">{description}</p>
+      <p className="mt-3 text-sm leading-relaxed text-muted">{description}</p>
 
       <div className="mt-4">
         {connected ? (
@@ -73,7 +73,7 @@ function IntegrationCard({
           <button
             onClick={onConnect}
             disabled={disabled}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-(--accent) px-3.5 py-1.5 text-sm font-medium text-(--accent-foreground) transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
             {connectLabel ?? `Connect ${title}`}
@@ -82,7 +82,7 @@ function IntegrationCard({
       </div>
 
       {helperText && (
-        <p className="mt-2 text-xs leading-relaxed text-(--muted)">{helperText}</p>
+        <p className="mt-2 text-xs leading-relaxed text-muted">{helperText}</p>
       )}
     </div>
   );
@@ -101,20 +101,20 @@ export function AppsTab({
 }: AppsTabProps) {
   if (!googleAuth) {
     return (
-      <div className="rounded-xl border border-(--border) bg-(--card) p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-start gap-4">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-gray-900">
             <GoogleIcon />
           </div>
           <div className="min-w-0 flex-1">
             <h4 className="text-sm font-semibold text-foreground">Sign in first</h4>
-            <p className="mt-2 text-sm leading-relaxed text-(--muted)">
+            <p className="mt-2 text-sm leading-relaxed text-muted">
               Google is your sign-in identity. Connected apps like Spotify attach to that account,
               but they do not replace who you are in the app.
             </p>
             <button
               onClick={loginWithGoogle}
-              className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-(--accent) px-3.5 py-1.5 text-sm font-medium text-(--accent-foreground) transition-opacity hover:opacity-90"
+              className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
               Sign in with Google

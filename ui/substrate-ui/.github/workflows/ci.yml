@@ -33,6 +33,8 @@ jobs:
       - run: pnpm prisma:generate
       - name: ESLint
         run: pnpm lint
+      - name: Design system ratchet
+        run: pnpm check:design
 
   # ── Type Check ──────────────────────────────────────────────────────
   typecheck:

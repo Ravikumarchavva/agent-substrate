@@ -6,12 +6,14 @@ import { api } from "@/lib/api";
 import {
   DEFAULT_TTS_PLAYBACK_RATE,
   MODEL_PREFERENCES_UPDATED_EVENT,
+  TTS_PLAYBACK_RATE_OPTIONS,
   TTS_PLAYBACK_RATE_STORAGE_KEY,
   formatPlaybackRateLabel,
   getPreferredTTSFormat,
   getPreferredTTSModel,
   getPreferredTTSPlaybackRate,
   getPreferredTTSVoice,
+  writeStoredValue,
 } from "@/lib/model-preferences";
 import { deleteCachedTtsAudio, getCachedTtsAudio, setCachedTtsAudio } from "@/lib/audio-cache";
 import type { TTSPlaybackRate, TTSVoice } from "@/types";
@@ -267,9 +269,20 @@ export function AudioPlayer({ text }: AudioPlayerProps) {
         <span className="min-w-[3rem] text-[10px] tabular-nums" style={{ color: "var(--muted)" }}>
           {formatClock(currentTimeSeconds)}
         </span>
-        <span className="text-[10px]" style={{ color: "var(--muted)" }}>
+        <button
+          type="button"
+          onClick={() => {
+            const rates = TTS_PLAYBACK_RATE_OPTIONS.map((o) => o.id);
+            const next = rates[(rates.indexOf(playbackRate) + 1) % rates.length];
+            writeStoredValue(TTS_PLAYBACK_RATE_STORAGE_KEY, String(next));
+          }}
+          aria-label={`Playback speed ${formatPlaybackRateLabel(playbackRate)}, change`}
+          title="Change playback speed"
+          className="rounded px-1 text-[10px] tabular-nums transition-colors hover:bg-card-hover"
+          style={{ color: "var(--muted)" }}
+        >
           {formatPlaybackRateLabel(playbackRate)}
-        </span>
+        </button>
       </div>
     );
   }

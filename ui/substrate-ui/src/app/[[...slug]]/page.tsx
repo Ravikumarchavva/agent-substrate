@@ -656,23 +656,24 @@ function ChatPageContent() {
         .getBranchMessages(threadId, branchId)
         .catch(() => [] as ResolvedBranchMessage[]);
 
-      let correlated: Message[];
-
-      if (branchNodes.length > 0) {
-        // Build directly from resolved DAG history nodes. Each node's text
-        // holds the authentic turn content for this branch ancestry.
-        correlated = branchNodes.map((node) => ({
-          id: node.id,
-          role: node.role as Message["role"],
-          content: node.text || "",
-          timestamp: new Date(node.created_at),
-          metadata: {
-            historyNodeId: node.id,
-          },
-        }));
-      } else {
-        // Fallback: use wire-event fold when no history nodes or branch 404
-        correlated = await api.getMessages(threadId).catch(() => [] as Message[]);
+      // The wire-event fold is what the user saw (their typed text, attachments, reasoning, tool steps). A branch node's
+      // text is what the model was given, which includes extracted file content, so nodes only supply the ids used for
+      // forking: paired turn by turn (a turn starts at each user message; its assistant id is the last assistant node).
+      const correlated = await api.getMessages(threadId).catch(() => [] as Message[]);
+      const nodeTurns: { user?: string; assistant?: string }[] = [];
+      for (const node of branchNodes) {
+        if (node.role === "user") nodeTurns.push({ user: node.id });
+        else if (nodeTurns.length) nodeTurns[nodeTurns.length - 1].assistant = node.id;
+      }
+      const userCount = correlated.filter((m) => m.role === "user").length;
+      if (userCount === nodeTurns.length) {
+        let turn = -1;
+        for (let i = 0; i < correlated.length; i++) {
+          const m = correlated[i];
+          if (m.role === "user") turn++;
+          const id = turn < 0 ? undefined : m.role === "user" ? nodeTurns[turn].user : nodeTurns[turn].assistant;
+          if (id) correlated[i] = { ...m, metadata: { ...m.metadata, historyNodeId: id } };
+        }
       }
 
       setMessages((current) => {

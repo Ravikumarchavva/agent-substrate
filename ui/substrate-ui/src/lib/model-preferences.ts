@@ -20,7 +20,7 @@ export const DEFAULT_CHAT_MODEL = "google/gemini-3.1-flash-lite";
 export const DEFAULT_STT_MODEL = "openai/gpt-4o-mini-transcribe";
 export const DEFAULT_TTS_MODEL = "local/kokoro-82m";
 export const DEFAULT_TTS_VOICE: TTSVoice = "af_heart";
-export const DEFAULT_TTS_PLAYBACK_RATE: TTSPlaybackRate = 2;
+export const DEFAULT_TTS_PLAYBACK_RATE: TTSPlaybackRate = 1;
 export const DEFAULT_REALTIME_MODEL = "openai/gpt-4o-realtime-preview-2024-12-17";
 export const DEFAULT_REALTIME_VOICE: OpenAITTSVoice = "coral";
 
@@ -108,7 +108,7 @@ export const TTS_MODEL_OPTIONS: ModelOption[] = [
     id: "google/gemini-2.5-flash-preview-tts",
     label: "Gemini 2.5 Flash TTS",
     provider: "google",
-    description: "Fast, cost-efficient Google TTS option and the default speech model.",
+    description: "Fast, cost-efficient Google speech model.",
   },
   {
     id: "google/gemini-3.1-flash-tts-preview",
@@ -292,9 +292,14 @@ export function getPreferredRealtimeModel(): string {
   return readStoredValue(REALTIME_MODEL_STORAGE_KEY, DEFAULT_REALTIME_MODEL);
 }
 
+/** Which voice catalogue a speech model draws from: the local Kokoro voices, Gemini's, or OpenAI's. */
+function voiceProviderFor(model: string): VoiceOption["provider"] {
+  if (model.trim().toLowerCase().startsWith("local/")) return "local";
+  return getProviderForModel(model) === "google" ? "google" : "openai";
+}
+
 export function getVoiceOptionsForModel(model: string): VoiceOption[] {
-  const provider = getProviderForModel(model);
-  const voiceProvider = provider === "google" ? "google" : "openai";
+  const voiceProvider = voiceProviderFor(model);
   return TTS_VOICE_OPTIONS.filter((option) => option.provider === voiceProvider);
 }
 
@@ -303,7 +308,7 @@ export function isVoiceCompatible(model: string, voice: string): voice is TTSVoi
 }
 
 export function getDefaultVoiceForModel(model: string): TTSVoice {
-  return getProviderForModel(model) === "google" ? DEFAULT_TTS_VOICE : DEFAULT_REALTIME_VOICE;
+  return voiceProviderFor(model) === "openai" ? DEFAULT_REALTIME_VOICE : getVoiceOptionsForModel(model)[0]?.id ?? DEFAULT_TTS_VOICE;
 }
 
 export function getPreferredTTSVoice(model = getPreferredTTSModel()): TTSVoice {

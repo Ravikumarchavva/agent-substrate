@@ -976,7 +976,7 @@ export function MessageBubble({
 
             {/* Reasoning — expandable thinking card */}
             {safeReasoning && (
-              <details className="group/think" open={isToolExecuting}>
+              <details className="group/think">
                 <summary
                   className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-card-hover"
                   style={{ background: "var(--badge-bg)" }}
@@ -988,8 +988,8 @@ export function MessageBubble({
                   className="mt-2 rounded-2xl px-4 py-3"
                   style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
                 >
-                  <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-muted">
-                    {safeReasoning}
+                  <div className="prose-chat text-[13px] leading-relaxed text-muted">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{safeReasoning}</ReactMarkdown>
                   </div>
                 </div>
               </details>

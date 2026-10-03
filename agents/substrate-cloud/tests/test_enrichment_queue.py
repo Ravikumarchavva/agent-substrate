@@ -129,3 +129,35 @@ def test_no_key_for_the_model_means_no_descriptions_not_a_failed_start():
     cfg.DOCUMENT_SUMMARY_ENABLED = True
     enricher = build_enricher(cfg, {"openai": "sk-test"})
     assert enricher is not None and enricher.name.startswith("summariser-")
+
+
+async def test_a_topic_tree_that_grew_too_wide_is_redrawn_after_describing(tmp_path):
+    """After a knowledge-base document is described, the queue checks the tree and has the whole of it redrawn if one topic outgrew browsing."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    library = MagicMock()
+    library.enrich = AsyncMock(
+        return_value=MagicMock(
+            state="done", usage=MagicMock(input_tokens=0, output_tokens=0)
+        )
+    )
+    library.needs_reorganising = AsyncMock(return_value=True)
+    library.reorganise = AsyncMock(
+        return_value=MagicMock(
+            state="done",
+            moved=5,
+            usage=MagicMock(input_tokens=900, output_tokens=100, cost_usd=0.001),
+        )
+    )
+    queue = EnrichmentQueue(concurrency=1, daily_tokens=0, redis=None)
+    queue.submit(library, "tenants/acme/knowledge/hr/library", "doc1")
+    await queue.drain()
+    library.reorganise.assert_awaited_once_with(
+        collection="tenants/acme/knowledge/hr/library"
+    )
+
+    library.needs_reorganising.return_value = False
+    library.reorganise.reset_mock()
+    queue.submit(library, "tenants/acme/knowledge/hr/library", "doc2")
+    await queue.drain()
+    library.reorganise.assert_not_awaited()

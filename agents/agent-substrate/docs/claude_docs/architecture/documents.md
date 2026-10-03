@@ -73,6 +73,14 @@ answer) and, when the library has `file_topics=True` (knowledge bases), **where 
 * The assistant sees descriptions in `list`, `outline` and `find` (search also matches them, and for knowledge bases each chunk is embedded with
   its section's description in front of it), and walks the topic tree with `browse`.
 
+* **Redrawing the tree.** Filing one document at a time drifts (near-duplicate names, one branch that keeps growing). When a topic has more than
+  12 subtopics (or 24 documents filed straight into it) `Library.needs_reorganising(collection)` says so, and `Library.reorganise(collection)`
+  has an `Organiser` (`LLMOrganiser`: one call that sees every card and where each is filed now) redraw the whole tree at once. Documents and
+  their text never move; only each document's topics (catalog and its `index.md`) and the topic pages change, the previous topics are appended
+  to `{collection}/_topics/log.md`, and a failed or nonsensical answer (unknown documents, unusable paths) leaves the tree as it was. The
+  platform's `EnrichmentQueue` checks after each description and runs it inside the same token budget. On the 8-document eval corpus it
+  merged near-duplicates and cost $0.0007.
+
 Cost: about $0.01 per average (30k-token) document with `gpt-5.4-mini`; the live run on a 3-page financial statement cost $0.0015 and took 5 s.
 
 ## Searching by meaning (knowledge bases)
@@ -102,6 +110,10 @@ the OpenAI embeddings wire and the Jina/Cohere rerank wire; `apps/embedding-rera
   not yet described. The model is `DOCUMENT_SUMMARY_MODEL` or `CHAT_MODEL`; with no key for it, nothing is written and nothing breaks.
   Knowledge-base documents are described and filed the same way. It never delays `staged_at` or the first message.
 * GDPR erasure calls `Library.erase_under(prefix)` for the user or tenant.
+* `GET /files/documents?thread_id=` lists a conversation's documents with their card, topics and state; `GET /files/{id}/document` returns one
+  with its section descriptions; `POST /files/{id}/document/describe` queues a forced re-description. The chat UI's Storage inspector shows
+  the card ("Auto-written") with a "Write again" button.
+
 
 ## Where to change things
 

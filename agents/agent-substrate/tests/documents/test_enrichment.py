@@ -68,7 +68,7 @@ def test_ground_can_lose_every_sentence():
         ("Finance / Earnings/Apple ", "Finance/Earnings/Apple"),
         ("a/b/c/d/e", "a/b/c"),
         ("../../etc/passwd", "etc/passwd"),
-        ("<script>/x", "script/x"),
+        ("<script>/x", "x"),  # a tag is dropped, not read as a word
         ("   ", ""),
     ],
 )

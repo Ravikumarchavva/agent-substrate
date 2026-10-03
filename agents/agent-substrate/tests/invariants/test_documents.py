@@ -350,3 +350,116 @@ async def test_everything_a_model_wrote_is_labelled_generated_and_never_verified
             assert concept.verified == [] and concept.trust_tier == "Unverified"
     finally:
         await store.aclose()
+
+
+# ── redrawing the topic tree (rows I40–I41) ──────────────────────────────────
+
+
+async def _filed_library(tmp_path, organiser):
+    from substrate.documents import Described, EnrichmentUsage, Library, Reader
+    from substrate.documents.types import ExtractedPage, ExtractionResult
+    from substrate.stores import Store
+
+    class _Filer:
+        name = "filer"
+        version = "1"
+
+        async def enrich(self, brief, *, topics):
+            return Described(
+                sections={s.position: "About it." for s in brief.sections},
+                card=f"Card of {brief.filename}.",
+                topics=(f"Misc/{brief.filename}",),
+                usage=EnrichmentUsage(),
+            )
+
+    store = Store.at(tmp_path / "store")
+    await store.start()
+    library = Library(
+        store,
+        reader=Reader(isolate=False),
+        enricher=_Filer(),
+        organiser=organiser,
+        file_topics=True,
+    )
+    collection = "tenants/a/knowledge/kb"
+    ids = []
+    for n in range(3):
+        body = f"## Part {n}\n\n<!-- page 1 -->\n\n" + f"Fact {n}. " * 300
+        added = await library.add(
+            ExtractionResult(
+                pages=[ExtractedPage(page_number=1, text="x")],
+                markdown=body,
+                engine="t",
+            ),
+            f"{n}.md",
+            collection=collection,
+        )
+        await library.enrich(collection=collection, document=added.document)
+        ids.append(added.document)
+    return store, library, collection, ids
+
+
+async def test_redrawing_the_topic_tree_moves_filing_only_never_a_document_or_its_text(
+    tmp_path,
+) -> None:
+    """A reorganisation changes which topics a document is filed under and nothing else: every document is still there, its section text is
+    byte for byte what it was, and the change is written to ``_topics/log.md`` so it can be read back."""
+
+    class _Everything:
+        name = "all-in-one"
+        version = "1"
+
+        async def organise(self, documents):
+            from substrate.documents import Organised
+
+            return Organised({d.document: ("Handbook",) for d in documents})
+
+    store, library, collection, ids = await _filed_library(tmp_path, _Everything())
+    try:
+        before = [
+            (await library.read(collection=collection, document=d, section=1)).text
+            for d in ids
+        ]
+        done = await library.reorganise(collection=collection)
+        assert done.state == "done" and done.moved == 3
+        after = [
+            (await library.read(collection=collection, document=d, section=1)).text
+            for d in ids
+        ]
+        assert after == before
+        assert {
+            d.document for d in (await library.list(collection=collection)).documents
+        } == set(ids)
+        log = (await library._files.download(f"{collection}/_topics/log.md")).decode()
+        assert all(d in log for d in ids)
+    finally:
+        await store.aclose()
+
+
+async def test_a_model_that_redraws_the_tree_badly_or_not_at_all_leaves_the_tree_as_it_was(
+    tmp_path,
+) -> None:
+    """If the model fails, or answers only with documents it made up, no document is re-filed."""
+
+    class _Broken:
+        name = "broken"
+        version = "1"
+        fail = True
+
+        async def organise(self, documents):
+            from substrate.documents import Organised
+
+            if self.fail:
+                raise RuntimeError("the provider is down")
+            return Organised({"made-up": ("Elsewhere",)})
+
+    organiser = _Broken()
+    store, library, collection, ids = await _filed_library(tmp_path, organiser)
+    try:
+        filed = [(await library.info(collection, d)).topics for d in ids]
+        assert (await library.reorganise(collection=collection)).state == "failed"
+        organiser.fail = False
+        assert (await library.reorganise(collection=collection)).moved == 0
+        assert [(await library.info(collection, d)).topics for d in ids] == filed
+    finally:
+        await store.aclose()

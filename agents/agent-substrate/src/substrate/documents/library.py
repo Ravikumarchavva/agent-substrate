@@ -39,6 +39,7 @@ from substrate.documents import okf
 from substrate.documents.chunking import chunk_section, chunk_size_for
 from substrate.documents.enrichment import (
     CARD_CHARS,
+    MAX_TOPIC_CHILDREN,
     MIN_ENRICH_TOKENS,
     SECTION_DESCRIPTION_CHARS,
     Described,
@@ -46,7 +47,10 @@ from substrate.documents.enrichment import (
     Enriched,
     Enricher,
     EnrichmentUsage,
+    FiledDocument,
     FirstSentenceEnricher,
+    Organiser,
+    Reorganised,
     SectionBrief,
     clean,
     extract,
@@ -350,6 +354,7 @@ class Library:
         reranker: Reranker | str | None = None,
         chunk_tokens: int | None = None,
         enricher: Enricher | None = None,
+        organiser: Organiser | None = None,
         file_topics: bool = False,
         enrich_timeout: float = 180.0,
     ) -> None:
@@ -363,7 +368,8 @@ class Library:
 
         An ``enricher`` (see ``substrate.documents.enrichment``) lets ``enrich`` write a card per document and a description per section, which
         ``list``, ``outline`` and ``find`` then return; ``file_topics`` also files each document in a topic tree (``browse``). ``add`` itself never
-        calls it: run ``enrich`` after, in the background, so an upload never waits for a model."""
+        calls it: run ``enrich`` after, in the background, so an upload never waits for a model. An ``organiser`` lets ``reorganise`` redraw the whole
+        topic tree at once, which ``needs_reorganising`` says is due."""
         self._store = store
         self._files: FileStore = files if files is not None else store.files
         self._reader = reader or Reader()
@@ -375,9 +381,11 @@ class Library:
         )
         self._chunk_tokens = chunk_tokens
         self._enricher = enricher
+        self._organiser = organiser
         self._file_topics = file_topics
         self._enrich_timeout = enrich_timeout
         self._enrich_locks: dict[tuple[str, str], asyncio.Lock] = {}
+        self._organise_locks: dict[str, asyncio.Lock] = {}
 
     async def _run(self, fn):
         await self._store.ensure(_COMPONENT, SCHEMA)
@@ -1441,6 +1449,165 @@ class Library:
             return [(r["collection"], r["document"]) for r in rows]
 
         return await self._run(op)
+
+    async def needs_reorganising(self, collection: str) -> bool:
+        """Whether the topic tree has outgrown browsing: some topic has more than ``MAX_TOPIC_CHILDREN`` subtopics, or twice that many
+        documents filed straight into it. Filing one document at a time causes this; ``reorganise`` repairs it."""
+        collection = collection.strip("/")
+        if not self._file_topics:
+            return False
+
+        async def op(tx: Tx) -> list[Any]:
+            return list(
+                await tx.fetchall(
+                    "SELECT topic, document FROM library_topics WHERE collection = ?",
+                    collection,
+                )
+            )
+
+        rows = await self._run(op)
+        children: dict[str, set[str]] = defaultdict(set)
+        here: dict[str, int] = defaultdict(int)
+        for r in rows:
+            parts = r["topic"].split("/")
+            here[r["topic"]] += 1
+            for i in range(len(parts)):
+                children["/".join(parts[:i])].add("/".join(parts[: i + 1]))
+        return any(len(c) > MAX_TOPIC_CHILDREN for c in children.values()) or any(
+            n > 2 * MAX_TOPIC_CHILDREN for n in here.values()
+        )
+
+    async def reorganise(
+        self, *, collection: str, organiser: Organiser | None = None
+    ) -> Reorganised:
+        """Redraw the topic tree of ``collection`` in one pass: an ``Organiser`` sees every described document's card and the topics it has,
+        and says where each should be filed. Filing documents one at a time drifts; seeing them all at once is more coherent.
+
+        Documents never move and nothing is deleted: only each document's topics (in the catalog and its ``index.md``) and the topic pages
+        change, and the previous topics are written to ``_topics/log.md``. Never raises for a model that is down or wrong; the tree stays
+        as it was and the outcome says ``failed``."""
+        collection = collection.strip("/")
+        chosen = organiser or self._organiser
+        if not self._file_topics or chosen is None:
+            return Reorganised("skipped", error="topic filing is not on")
+        lock = self._organise_locks.setdefault(collection, asyncio.Lock())
+        async with lock:
+            return await self._reorganise(collection, chosen)
+
+    async def _reorganise(self, collection: str, chosen: Organiser) -> Reorganised:
+        listing = await self._described(collection)
+        if len(listing) < 2:
+            return Reorganised("skipped", error="too few described documents")
+        before = {d.document: d.topics for d in listing}
+        try:
+            organised = await asyncio.wait_for(
+                chosen.organise(
+                    [
+                        FiledDocument(
+                            d.document, d.title, d.description or "", d.topics
+                        )
+                        for d in listing
+                    ]
+                ),
+                timeout=self._enrich_timeout,
+            )
+        except Exception as exc:  # noqa: BLE001 — a model's failure must leave the tree as it was
+            logger.warning(
+                "reorganising %s by %s failed: %s", collection, chosen.name, exc
+            )
+            return Reorganised("failed", error="the topics could not be redrawn")
+        plan: dict[str, tuple[str, ...]] = {}
+        for document, proposed in organised.topics.items():
+            if document not in before:
+                continue  # a document the model made up
+            cleaned = tuple(
+                dict.fromkeys(t for t in (topic_path(x) for x in proposed) if t)
+            )[:2]
+            if cleaned and cleaned != before[document]:
+                plan[document] = cleaned
+        if not plan:
+            return Reorganised(
+                "done",
+                moved=0,
+                topics=len({t for ts in before.values() for t in ts}),
+                usage=organised.usage,
+            )
+        try:
+            for document, topics in plan.items():
+                await self._set_topics(collection, document, topics)
+            await self._write_topic_pages(
+                collection,
+                [t for d in plan for t in (*before[d], *plan[d])],
+            )
+            await self._write_collection_index(collection)
+            await self._log_reorganisation(collection, chosen, before, plan)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("could not store the new topics of %s: %s", collection, exc)
+            return Reorganised("failed", error="the new topics could not be saved")
+        after = {**before, **plan}
+        return Reorganised(
+            "done",
+            moved=len(plan),
+            topics=len({t for ts in after.values() for t in ts}),
+            usage=organised.usage,
+        )
+
+    async def _described(self, collection: str) -> list[DocumentInfo]:
+        """The documents of ``collection`` that have a model-written card (all of them, oldest first)."""
+        out: list[DocumentInfo] = []
+        after: str | None = None
+        while True:
+            page = await self.list(collection=collection, limit=MAX_LIST, after=after)
+            out += [d for d in page.documents if d.description]
+            if page.next is None:
+                return out
+            after = page.next
+
+    async def _set_topics(
+        self, collection: str, document: str, topics: Sequence[str]
+    ) -> None:
+        async def op(tx: Tx) -> None:
+            await tx.execute(
+                "DELETE FROM library_topics WHERE collection = ? AND document = ?",
+                collection, document,
+            )  # fmt: skip
+            for topic in topics:
+                await tx.execute(
+                    "INSERT INTO library_topics (collection, document, topic) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+                    collection, document, topic,
+                )  # fmt: skip
+
+        await self._run(op)
+        key = f"{collection}/{document}/index.md"
+        index = okf.parse((await self._files.download(key)).decode("utf-8", "replace"))
+        index.extra["topics"] = list(topics)
+        await self._files.upload(
+            key, okf.serialize(index).encode("utf-8"), content_type="text/markdown"
+        )
+
+    async def _log_reorganisation(
+        self,
+        collection: str,
+        organiser: Organiser,
+        before: dict[str, tuple[str, ...]],
+        plan: dict[str, tuple[str, ...]],
+    ) -> None:
+        """Append what changed to ``_topics/log.md``, so a reorganisation can be read back and undone by hand."""
+        key = f"{collection}/{TOPICS_DIR}/log.md"
+        try:
+            text = (await self._files.download(key)).decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001 — no log yet
+            text = "# Topic log\n"
+        lines = [f"\n## {okf.utc_now_iso()} — {organiser.name} {organiser.version}\n"]
+        lines += [
+            f"- {document}: {', '.join(before[document]) or '(none)'} → {', '.join(topics)}"
+            for document, topics in plan.items()
+        ]
+        await self._files.upload(
+            key,
+            (text.rstrip("\n") + "\n" + "\n".join(lines) + "\n").encode("utf-8"),
+            content_type="text/markdown",
+        )
 
     async def browse(self, *, collection: str, topic: str = "") -> Topic | None:
         """One level of the topic tree: the topics directly under ``topic`` (``""`` is the top) with how many documents each holds, and the

@@ -863,6 +863,98 @@ async def get_file_status(
     }
 
 
+def _document_of(ctx: Any, meta: FileMetadata, claims: AuthClaims) -> tuple[str, str]:
+    """The conversation collection and library document id of an uploaded file, or 404 when it was never filed."""
+    from substrate_cloud.documents_library import documents_collection
+
+    if ctx.library is None or meta.thread_id is None or not meta.checksum_sha256:
+        raise HTTPException(status_code=404, detail="This file is not in the library")
+    collection = documents_collection(claims.tenant_id, claims.sub, str(meta.thread_id))
+    if collection is None:
+        raise HTTPException(status_code=404, detail="This file is not in the library")
+    return collection, ctx.library.document_id(meta.original_name, meta.checksum_sha256)
+
+
+@router.get("/documents")
+async def list_thread_documents(
+    thread_id: uuid.UUID,
+    ctx: ServerDependencies = Depends(get_ctx),
+    claims: AuthClaims = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+) -> list[dict]:
+    """The documents filed under one conversation, each with its model-written card and topics (``state`` is ``none`` until described)."""
+    from substrate_cloud.documents_library import documents_collection
+
+    if await get_owned_thread(db, thread_id, claims) is None:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    collection = documents_collection(claims.tenant_id, claims.sub, str(thread_id))
+    if ctx.library is None or collection is None:
+        return []
+    listing = await ctx.library.list(collection=collection)
+    return [
+        {
+            "file_id": d.meta.get("file_id"),
+            "name": d.filename,
+            "state": d.enrichment,
+            "description": d.description,
+            "topics": list(d.topics),
+            "pages": d.pages,
+        }
+        for d in listing.documents
+    ]
+
+
+@router.get("/{file_id}/document")
+async def get_file_document(
+    file_id: uuid.UUID,
+    ctx: ServerDependencies = Depends(get_ctx),
+    claims: AuthClaims = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+) -> dict:
+    """What the library knows about an uploaded file: the model-written card, where it is filed, and what each section says.
+    ``state`` is ``none`` until it has been described, then ``running``, ``done`` or ``failed``. Everything model-written is
+    machine-generated and unverified (``generated: true``)."""
+    meta = await _get_meta(file_id, db, claims)
+    collection, document = _document_of(ctx, meta, claims)
+    outline = await ctx.library.outline(collection=collection, document=document)
+    if outline is None:
+        raise HTTPException(status_code=404, detail="This file is not in the library")
+    info = outline.document
+    return {
+        "state": info.enrichment,
+        "generated": info.description is not None,
+        "description": info.description,
+        "topics": list(info.topics),
+        "pages": info.pages,
+        "sections": [
+            {
+                "position": s.position,
+                "title": s.title,
+                "first_page": s.first_page,
+                "last_page": s.last_page,
+                "description": s.description,
+            }
+            for s in outline.sections
+        ],
+    }
+
+
+@router.post("/{file_id}/document/describe", status_code=202)
+async def describe_file_document(
+    file_id: uuid.UUID,
+    ctx: ServerDependencies = Depends(get_ctx),
+    claims: AuthClaims = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+) -> dict:
+    """Have the document described again (a new card and section descriptions). Runs in the background; poll ``GET .../document``."""
+    meta = await _get_meta(file_id, db, claims)
+    collection, document = _document_of(ctx, meta, claims)
+    if ctx.enrichment is None:
+        raise HTTPException(status_code=503, detail="Summaries are turned off")
+    ctx.enrichment.submit(ctx.library, collection, document, force=True)
+    return {"state": "running"}
+
+
 @router.get("/{file_id}/download")
 async def download_file(
     file_id: uuid.UUID,

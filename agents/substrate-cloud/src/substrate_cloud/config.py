@@ -83,7 +83,7 @@ class SubstrateConfig(BaseSettings):
     EMBEDDING_MODEL: str = ""
     STT_MODEL: str = "whisper-1"
     TTS_MODEL: str = "local/kokoro-82m"
-    TTS_VOICE: str = "af_heart"
+    TTS_VOICE: str = "Kore"  # a Gemini voice; Kokoro always uses af_heart
     REALTIME_MODEL: str = "gpt-4o-realtime-preview-2024-12-17"
     REALTIME_VOICE: str = "coral"
     MODEL_CONTEXT_WINDOW: int = 40

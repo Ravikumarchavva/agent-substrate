@@ -16,7 +16,13 @@ import logging
 import time
 from typing import Any
 
-from substrate.documents import Enricher, LLMEnricher, Library
+from substrate.documents import (
+    Enricher,
+    LLMEnricher,
+    LLMOrganiser,
+    Library,
+    Organiser,
+)
 from substrate.types.run import RunScope
 from substrate.workspace.layout import (
     conversation_documents_prefix,
@@ -95,6 +101,11 @@ def build_enricher(
         return None
 
 
+def build_organiser(enricher: Enricher | None) -> Organiser | None:
+    """Whatever redraws a knowledge base's topic tree: the same model that describes its documents, or ``None`` when there is no such model."""
+    return LLMOrganiser(enricher.model) if isinstance(enricher, LLMEnricher) else None
+
+
 def build_library(
     store: Any, file_store: Any, cfg: Any, enricher: Enricher | None = None
 ) -> Library | None:
@@ -150,7 +161,11 @@ def build_reranker(cfg: Any) -> Any:
 
 
 def build_knowledge_library(
-    store: Any, file_store: Any, cfg: Any, enricher: Enricher | None = None
+    store: Any,
+    file_store: Any,
+    cfg: Any,
+    enricher: Enricher | None = None,
+    organiser: Organiser | None = None,
 ) -> Library | None:
     """The knowledge bases' library: the same store and object store, with the configured embedder and reranker, and its documents filed
     under topics (a conversation's handful of documents are not)."""
@@ -163,6 +178,7 @@ def build_knowledge_library(
         embedder=build_embedder(cfg),
         reranker=build_reranker(cfg),
         enricher=enricher,
+        organiser=organiser,
         file_topics=True,
         enrich_timeout=float(cfg.DOCUMENT_SUMMARY_TIMEOUT_S),
     )
@@ -190,7 +206,9 @@ class EnrichmentQueue:
         self._inflight: set[tuple[str, str]] = set()
         self._tasks: set[asyncio.Task[None]] = set()
 
-    def submit(self, library: Library, collection: str, document: str) -> None:
+    def submit(
+        self, library: Library, collection: str, document: str, *, force: bool = False
+    ) -> None:
         key = (
             collection,
             document,
@@ -198,7 +216,9 @@ class EnrichmentQueue:
         if key in self._inflight:
             return
         self._inflight.add(key)
-        task = asyncio.create_task(self._run(library, collection, document, key))
+        task = asyncio.create_task(
+            self._run(library, collection, document, key, force=force)
+        )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
@@ -247,12 +267,32 @@ class EnrichmentQueue:
                 pass
         self._local[key] = self._local.get(key, 0) + tokens
 
+    async def _redraw_if_due(
+        self, library: Library, collection: str, tenant: str
+    ) -> None:
+        """Once filing one document at a time has left a topic too wide, have the whole tree redrawn in one pass (see ``Library.reorganise``)."""
+        if not await library.needs_reorganising(collection):
+            return
+        if self._daily and await self._spent(tenant) >= self._daily:
+            return
+        redrawn = await library.reorganise(collection=collection)
+        if redrawn.usage.input_tokens or redrawn.usage.output_tokens:
+            await self._record(
+                tenant, redrawn.usage.input_tokens + redrawn.usage.output_tokens
+            )
+        logger.info(
+            "redrew the topics of %s: %s, %d documents moved, $%.4f",
+            collection, redrawn.state, redrawn.moved, redrawn.usage.cost_usd,
+        )  # fmt: skip
+
     async def _run(
         self,
         library: Library,
         collection: str,
         document: str,
         key: tuple[str, str],
+        *,
+        force: bool = False,
     ) -> None:
         try:
             async with self._slots:
@@ -263,7 +303,10 @@ class EnrichmentQueue:
                         tenant,
                     )
                     return
-                done = await library.enrich(collection=collection, document=document)
+                done = await library.enrich(
+                    collection=collection, document=document, force=force
+                )
+                await self._redraw_if_due(library, collection, tenant)
                 if done.usage.input_tokens or done.usage.output_tokens:
                     await self._record(
                         tenant, done.usage.input_tokens + done.usage.output_tokens
@@ -284,6 +327,7 @@ __all__ = [
     "build_embedder",
     "build_enricher",
     "build_knowledge_library",
+    "build_organiser",
     "build_library",
     "build_reranker",
     "collection_for_scope",

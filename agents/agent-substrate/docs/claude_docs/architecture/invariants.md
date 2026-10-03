@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**128 enforced · 0 pending · 128 total**
+**130 enforced · 0 pending · 130 total**
 
 ## approvals
 
@@ -55,6 +55,10 @@ and the marker has to come off. That is what keeps this document honest.
   `test_text_a_model_wrote_from_an_untrusted_document_is_cleaned_and_its_figures_checked_before_it_is_stored`
 - ✅ **Each file a description is written into carries ``generated`` (by which enricher and version, when) and no ``verified``, so a reader can always tell a machine's summary from the document's own words and sees it as Unverified.**
   `test_everything_a_model_wrote_is_labelled_generated_and_never_verified`
+- ✅ **A reorganisation changes which topics a document is filed under and nothing else: every document is still there, its section text is byte for byte what it was, and the change is written to ``_topics/log.md`` so it can be read back.**
+  `test_redrawing_the_topic_tree_moves_filing_only_never_a_document_or_its_text`
+- ✅ **If the model fails, or answers only with documents it made up, no document is re-filed.**
+  `test_a_model_that_redraws_the_tree_badly_or_not_at_all_leaves_the_tree_as_it_was`
 
 ## durable execution
 

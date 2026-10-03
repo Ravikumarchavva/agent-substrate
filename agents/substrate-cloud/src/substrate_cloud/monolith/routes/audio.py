@@ -211,34 +211,56 @@ async def text_to_speech(request: Request, body: TTSRequest):
         body.voice.strip()
         if body.voice and body.voice.strip()
         else (
-            settings.TTS_VOICE
-            if isinstance(model_client, (GeminiClient, KokoroTTSClient))
+            "af_heart"
+            if isinstance(model_client, KokoroTTSClient)
+            else settings.TTS_VOICE
+            if isinstance(model_client, GeminiClient)
             else "coral"
         )
     )
 
+    audio_iter = model_client.stream_tts(
+        text=body.text,
+        voice=voice,
+        model=effective_model,
+        response_format=fmt,
+        instructions=body.instructions,
+    )
+    # Pull the first chunk before answering, so a provider failure (quota, bad model, no audio) is an HTTP error the client can show
+    # rather than a 200 whose body stops short, which a browser reports only as "no supported source".
     try:
-        audio_iter = model_client.stream_tts(
-            text=body.text,
-            voice=voice,
-            model=effective_model,
-            response_format=fmt,
-            instructions=body.instructions,
-        )
+        first = await anext(audio_iter)
+    except StopAsyncIteration:
+        raise HTTPException(status_code=502, detail="No audio was produced")
     except NotImplementedError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("TTS setup failed")
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        logger.exception("TTS failed")
+        raise HTTPException(status_code=502, detail=_tts_error(exc)) from exc
+
+    async def audio():
+        yield first
+        async for chunk in audio_iter:
+            yield chunk
 
     return StreamingResponse(
-        audio_iter,
+        audio(),
         media_type=content_type,
         headers={
             "Cache-Control": "no-store",
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+def _tts_error(exc: Exception) -> str:
+    """A provider failure in words a user can act on."""
+    text = str(exc)
+    if "429" in text or "RESOURCE_EXHAUSTED" in text:
+        return "The speech model's quota is used up. Try again later or choose another speech model."
+    if "404" in text or "NOT_FOUND" in text:
+        return "That speech model is not available. Choose another in Settings."
+    return "The speech model could not produce audio."
 
 
 # ── GET /audio/realtime-token ─────────────────────────────────────────────────

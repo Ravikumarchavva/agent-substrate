@@ -1,6 +1,7 @@
 "use client";
 
 import * as MenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { ChevronRight } from "lucide-react";
 import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
 import { cn } from "../cn";
 
@@ -14,6 +15,7 @@ export const MenuContent = forwardRef<ElementRef<typeof MenuPrimitive.Content>, 
         ref={ref}
         sideOffset={sideOffset}
         align={align}
+        collisionPadding={12}
         className={cn("z-50 min-w-44 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-lg", className)}
         {...props}
       />
@@ -48,3 +50,41 @@ export const MenuSeparator = forwardRef<ElementRef<typeof MenuPrimitive.Separato
   ({ className, ...props }, ref) => <MenuPrimitive.Separator ref={ref} className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />,
 );
 MenuSeparator.displayName = "MenuSeparator";
+
+export const MenuSub = MenuPrimitive.Sub;
+
+/** A row that opens a second list beside it: the label on the left, the current value and a chevron on the right. */
+export const MenuSubTrigger = forwardRef<
+  ElementRef<typeof MenuPrimitive.SubTrigger>,
+  ComponentPropsWithoutRef<typeof MenuPrimitive.SubTrigger> & { value?: string }
+>(({ className, children, value, ...props }, ref) => (
+  <MenuPrimitive.SubTrigger
+    ref={ref}
+    className={cn(
+      "flex min-h-control-md cursor-pointer select-none items-center gap-2 rounded-md px-2.5 py-1 text-sm text-foreground outline-none transition-colors " +
+        "data-[highlighted]:bg-card-hover data-[state=open]:bg-card-hover [&_svg]:size-4 [&_svg]:shrink-0",
+      className,
+    )}
+    {...props}
+  >
+    <span className="flex-1">{children}</span>
+    {value && <span className="text-xs text-muted">{value}</span>}
+    <ChevronRight className="text-muted" />
+  </MenuPrimitive.SubTrigger>
+));
+MenuSubTrigger.displayName = "MenuSubTrigger";
+
+export const MenuSubContent = forwardRef<ElementRef<typeof MenuPrimitive.SubContent>, ComponentPropsWithoutRef<typeof MenuPrimitive.SubContent>>(
+  ({ className, sideOffset = 8, ...props }, ref) => (
+    <MenuPrimitive.Portal>
+      <MenuPrimitive.SubContent
+        ref={ref}
+        sideOffset={sideOffset}
+        collisionPadding={12}
+        className={cn("z-50 min-w-48 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-lg", className)}
+        {...props}
+      />
+    </MenuPrimitive.Portal>
+  ),
+);
+MenuSubContent.displayName = "MenuSubContent";

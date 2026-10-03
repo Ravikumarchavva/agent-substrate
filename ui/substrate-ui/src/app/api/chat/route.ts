@@ -33,6 +33,7 @@ export async function POST(req: Request) {
       ...(body.file_ids?.length ? { file_ids: body.file_ids } : {}),
       ...(body.model ? { model: body.model } : {}),
       ...(body.branch_id ? { branch_id: body.branch_id } : {}),
+      ...(body.reasoning ? { reasoning: body.reasoning } : {}),
     }),
     // @ts-expect-error — dispatcher is a Node/undici fetch extension, not in the standard fetch() types
     dispatcher: streamingDispatcher,
@@ -62,8 +63,11 @@ export async function POST(req: Request) {
   return new Response(res.body, {
     headers: {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
+      // no-transform: Next's gzip middleware (here and in the platform proxy in front of this app) buffers a compressed stream until it
+      // ends, so the reply would appear all at once. This header makes both leave the stream alone.
+      "Cache-Control": "no-cache, no-transform",
       "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

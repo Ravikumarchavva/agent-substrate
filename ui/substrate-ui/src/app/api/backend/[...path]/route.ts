@@ -68,10 +68,16 @@ async function proxyRequest(req: NextRequest, path: string[]): Promise<Response>
   } as RequestInit & { duplex: "half"; dispatcher: unknown });
 
   // Stream response back as-is (handles SSE, JSON, binary)
+  const responseHeaders = Object.fromEntries(upstream.headers.entries());
+  if (responseHeaders["content-type"]?.includes("text/event-stream")) {
+    // Keep gzip from buffering a live stream (see app/api/chat/route.ts).
+    responseHeaders["cache-control"] = "no-cache, no-transform";
+    responseHeaders["x-accel-buffering"] = "no";
+  }
   return new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
-    headers: Object.fromEntries(upstream.headers.entries()),
+    headers: responseHeaders,
   });
 }
 

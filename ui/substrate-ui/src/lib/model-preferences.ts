@@ -40,43 +40,39 @@ export const CHAT_MODEL_OPTIONS: ModelOption[] = [
     id: "google/gemini-3.1-flash-lite",
     label: "Gemini 3.1 Flash Lite",
     provider: "google",
-    description: "Default — fast and cost-efficient Gemini model.",
-    thinkingLevels: ["off"],
+    description: "Fast and low cost",
   },
   {
     id: "openai/gpt-5.4-mini",
     label: "GPT-5.4 Mini",
     provider: "openai",
-    description: "High-quality OpenAI default.",
-    thinkingLevels: ["off", "low", "medium", "high", "xhigh"],
+    description: "Balanced quality and speed",
+    thinkingLevels: ["off", "low", "medium", "high"],
   },
   {
     id: "openai/gpt-5.4",
     label: "GPT-5.4",
     provider: "openai",
-    description: "Full-size OpenAI model — higher quality than Mini, more expensive.",
-    thinkingLevels: ["off", "low", "medium", "high", "xhigh"],
+    description: "Highest quality",
+    thinkingLevels: ["off", "low", "medium", "high"],
   },
   {
     id: "nvidia/moonshotai/kimi-k2.6",
     label: "Kimi K2.6",
     provider: "nvidia",
-    description: "Multimodal Kimi K2.6 by Moonshot AI via NVIDIA NIM.",
-    thinkingLevels: ["off"],
+    description: "Reads images",
   },
   {
     id: "openrouter/qwen/qwen3-coder:free",
     label: "Qwen3 Coder",
     provider: "openrouter",
-    description: "Best free coding-oriented model.",
-    thinkingLevels: ["off", "low", "medium"],
+    description: "Free, built for code",
   },
   {
     id: "groq/llama-3.3-70b-versatile",
     label: "Llama 3.3 70B",
     provider: "groq",
-    description: "Powerful Groq-hosted Llama model.",
-    thinkingLevels: ["off", "low", "medium"],
+    description: "Fast open model",
   },
 ];
 
@@ -249,6 +245,35 @@ export function groupModelOptions(options: ModelOption[]): Array<{
     label,
     options: groupedOptions,
   }));
+}
+
+export type ReasoningLevel = "off" | "low" | "medium" | "high";
+export const REASONING_LEVELS: { id: ReasoningLevel; label: string }[] = [
+  { id: "off", label: "Off" },
+  { id: "low", label: "Low" },
+  { id: "medium", label: "Medium" },
+  { id: "high", label: "High" },
+];
+export const DEFAULT_REASONING: ReasoningLevel = "medium";
+export const REASONING_STORAGE_KEY = "chat_reasoning_effort";
+
+/** The effort levels a model accepts, or an empty list when it does not reason (the Effort control is then hidden). */
+export function reasoningLevelsFor(modelId: string): ReasoningLevel[] {
+  const levels = CHAT_MODEL_OPTIONS.find((m) => m.id === modelId)?.thinkingLevels ?? [];
+  return REASONING_LEVELS.filter((l) => levels.includes(l.id)).map((l) => l.id);
+}
+
+/** The saved effort if this model accepts it, else the recommended one, else nothing (a model that does not reason). */
+export function effectiveReasoning(modelId: string, saved: string): ReasoningLevel | null {
+  const levels = reasoningLevelsFor(modelId);
+  if (levels.length === 0) return null;
+  if (levels.includes(saved as ReasoningLevel)) return saved as ReasoningLevel;
+  return levels.includes(DEFAULT_REASONING) ? DEFAULT_REASONING : levels[0];
+}
+
+/** The saved effort preference as stored; use `effectiveReasoning` for what a given model will get. */
+export function getPreferredReasoning(): string {
+  return readStoredValue(REASONING_STORAGE_KEY, DEFAULT_REASONING);
 }
 
 export function getPreferredChatModel(): string {

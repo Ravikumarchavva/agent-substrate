@@ -32,6 +32,9 @@ import {
   getPreferredChatModel,
   CHAT_MODEL_OPTIONS,
   CHAT_MODEL_STORAGE_KEY,
+  REASONING_STORAGE_KEY,
+  getPreferredReasoning,
+  effectiveReasoning,
   MODEL_PREFERENCES_UPDATED_EVENT,
   writeStoredValue,
   groupModelOptions,
@@ -164,7 +167,6 @@ function ChatPageContent() {
   // Tracks whether the user is currently near the bottom of the scroll
   // container. Read (not state) so it doesn't trigger re-renders on scroll.
   const isNearBottomRef = useRef(true);
-  const autoScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // Tracks the active AbortController for the current SSE fetch so we can
   // cancel the stream when the user clicks Stop.
@@ -186,6 +188,7 @@ function ChatPageContent() {
 
   // ── Model selector ─────────────────────────────────────────────────
   const [selectedModel, setSelectedModel] = useState(() => getPreferredChatModel());
+  const [reasoning, setReasoning] = useState<string>(() => getPreferredReasoning());
 
   // Keep selectedModel in sync with localStorage changes from settings
   useEffect(() => {
@@ -626,25 +629,15 @@ function ChatPageContent() {
   }, [canLoadData, clearAttachedFiles, currentThreadId, setPanelItems, setActivePanelId]);
 
   useEffect(() => {
-    // Auto-scroll to bottom whenever messages change — but only if the user
-    // was already near the bottom. A burst of tool-call/result events (e.g.
-    // 8+ tools running) fires this effect repeatedly; without the "near
-    // bottom" check and without clearing the previous timeout, each firing
-    // re-scheduled another forced scrollTo that fought the user's manual
-    // scroll, making it impossible to scroll down to read a tool_approval /
-    // human_input card that appeared below a long-running tool list.
-    if (autoScrollTimeoutRef.current) {
-      clearTimeout(autoScrollTimeoutRef.current);
-    }
+    // Follow the newest text, but only while the reader is already at the bottom (isNearBottomRef follows their own scrolling: scroll
+    // up to read and it stops, scroll back down and it resumes). The jump is instant and once per frame: a delayed, smooth scroll
+    // lags behind streaming text, and its in-between positions read as "the user scrolled away", which switched following off.
     const el = containerRef.current;
     if (!el || !isNearBottomRef.current) return;
-    // Use setTimeout to ensure DOM is updated
-    autoScrollTimeoutRef.current = setTimeout(() => {
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    }, 100);
-    return () => {
-      if (autoScrollTimeoutRef.current) clearTimeout(autoScrollTimeoutRef.current);
-    };
+    const frame = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [messages, loading]);
 
   // Auto-resize textarea
@@ -1078,6 +1071,7 @@ function ChatPageContent() {
             return combined ? { system_instructions: combined } : {};
           })(),
           model: requestedModel,
+          ...(effectiveReasoning(requestedModel, reasoning) ? { reasoning: effectiveReasoning(requestedModel, reasoning)! } : {}),
           branch_id: activeBranchId || "main",
         },
         signal,
@@ -2123,6 +2117,8 @@ function ChatPageContent() {
                           models={CHAT_MODEL_OPTIONS}
                           selectedModel={selectedModel}
                           onSelectModel={(id) => { setSelectedModel(id); writeStoredValue(CHAT_MODEL_STORAGE_KEY, id); }}
+                          reasoning={effectiveReasoning(selectedModel, reasoning)}
+                          onSelectReasoning={(level) => { setReasoning(level); writeStoredValue(REASONING_STORAGE_KEY, level); }}
                         />
 
                         {input.trim() || (loading && !hitlPending) ? (

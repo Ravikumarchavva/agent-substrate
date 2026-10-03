@@ -5,7 +5,7 @@ export { Card } from "./ui/Card";
 export { Combobox } from "./ui/Combobox";
 export { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "./ui/Dialog";
 export { Input, type InputProps } from "./ui/Input";
-export { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "./ui/Menu";
+export { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from "./ui/Menu";
 export { Meter } from "./ui/Meter";
 export { Popover, PopoverContent, PopoverTrigger } from "./ui/Popover";
 export { Select, type SelectGroup, type SelectOption } from "./ui/Select";

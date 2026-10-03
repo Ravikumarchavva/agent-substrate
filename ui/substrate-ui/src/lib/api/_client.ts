@@ -113,6 +113,8 @@ export type ChatStreamRequest = {
   system_instructions?: string;
   model?: string;
   branch_id?: string;
+  /** How hard a reasoning model thinks; ignored by models that do not reason. */
+  reasoning?: "off" | "low" | "medium" | "high";
 };
 
 function getStructuredErrorMessage(payload: unknown): string | null {

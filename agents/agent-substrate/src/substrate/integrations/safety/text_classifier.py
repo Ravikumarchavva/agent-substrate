@@ -78,6 +78,9 @@ class PromptGuardClassifier:
 
         self._tokenizer = Tokenizer.from_file(tokenizer_path)
         self._tokenizer.enable_truncation(max_length=_MAX_TOKENS)
+        # The tokenizer ships configured to pad every input to 512 tokens, which made a one-line message cost as much as a full page
+        # (~1.2 s on one CPU thread). The attention mask makes padding irrelevant to the verdict, so run at the real length (~25 ms).
+        self._tokenizer.no_padding()
 
         so = ort.SessionOptions()
         so.intra_op_num_threads = 1

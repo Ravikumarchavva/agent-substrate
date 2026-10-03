@@ -1783,15 +1783,15 @@ function ChatPageContent() {
       <div className="flex min-w-0 flex-1">
         <div className="relative flex min-w-0 flex-1 flex-col">
           {!settingsPanelOpen && (
-            <Header
-              onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
-              desktopSidebarOpen={desktopSidebarOpen}
-              threadName={threads.find((t) => t.id === currentThreadId)?.name}
-              branches={branches}
-              activeBranchId={activeBranchId}
-              onSelectBranch={handleSelectBranch}
-              onRenameBranch={handleRenameBranch}
-            />
+          <Header
+            onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+            desktopSidebarOpen={desktopSidebarOpen}
+            threadName={threads.find((t) => t.id === currentThreadId)?.name}
+            branches={branches}
+            activeBranchId={activeBranchId}
+            onSelectBranch={handleSelectBranch}
+            onRenameBranch={handleRenameBranch}
+          />
           )}
           <div className="pointer-events-none absolute left-3 top-1.5 z-20 flex gap-2">
             <button
@@ -1829,16 +1829,10 @@ function ChatPageContent() {
           </div>
 
           {settingsPanelOpen ? (
-            <div
-              className={`flex-1 min-h-0 flex flex-col ${
-                settingsPanelTab === "storage"
-                  ? `h-full overflow-hidden ${!desktopSidebarOpen ? "pl-14" : ""}`
-                  : "overflow-y-auto"
-              }`}
-            >
+            <div className="min-h-0 flex-1 overflow-y-auto">
               <SettingsPanel
                 isOpen={settingsPanelOpen}
-                initialTab={settingsPanelTab === "artifacts" ? "storage" : settingsPanelTab}
+                initialTab={settingsPanelTab}
                 onTabChange={selectSettingsTab}
                 threadId={currentThreadId}
               />

@@ -41,10 +41,9 @@ export function parseChatPath(pathname: string): {
   // /settings or /settings/<tab>
   if (segments[0] === "settings") {
     const tab = segments[1] ?? null;
-    const resolvedTab = tab === "artifacts" ? "storage" : isSettingsTab(tab) ? tab : "general";
     return {
       threadId: null,
-      settingsTab: resolvedTab,
+      settingsTab: isSettingsTab(tab) ? tab : "general",
     };
   }
 

@@ -40,7 +40,7 @@ async def test_retrieval_eval_starter_dataset(capsys, tmp_path) -> None:
     # so ServerSettings can't silently pick up the real one from .env — this
     # test is the one deliberate exception, opted into by exporting a real
     # key before running pytest, which conftest's setdefault leaves alone.
-    if os.environ.get("OPENAI_API_KEY", "").startswith("sk-test-not-a-real-key"):
+    if not os.environ.get("OPENAI_API_KEY") or os.environ["OPENAI_API_KEY"].startswith("sk-test"):
         pytest.skip("OPENAI_API_KEY not set (export a real key to run this test)")
     from tests._postgres import DSN, schema_store
 

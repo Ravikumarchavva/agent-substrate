@@ -51,6 +51,9 @@ export const toast = {
   dismiss,
 };
 
+/** The toasts on screen now (what `<Toaster />` renders; also for tests). */
+export const visibleToasts = (): readonly ToastItem[] => items;
+
 const subscribe = (l: () => void) => {
   listeners.add(l);
   return () => void listeners.delete(l);

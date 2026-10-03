@@ -4,7 +4,7 @@ import "./globals.css";
 import "katex/dist/katex.min.css";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { Toaster } from "@/design";
+import { ConfirmHost, Toaster } from "@/design";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -56,6 +56,7 @@ export default function RootLayout({
           <AuthProvider>
             {children}
             <Toaster />
+            <ConfirmHost />
           </AuthProvider>
         </ThemeProvider>
       </body>

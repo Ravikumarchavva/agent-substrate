@@ -27,6 +27,7 @@ import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getVisibleSettingsTabGroups, type SettingsTab } from "./settings/SettingsPanel";
+import { confirmAction } from "@/design";
 
 type SidebarMode = "chat" | "settings";
 
@@ -248,7 +249,7 @@ export function Sidebar({
               onClick={onCollapse}
               title="Collapse sidebar"
               className="btn-icon flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-transparent text-muted transition-colors hover:border-border hover:bg-background hover:text-foreground"
-            >
+             aria-label="Collapse sidebar">
               <SidebarToggleIcon direction="close" className="h-5 w-5" />
             </button>
           )}
@@ -314,6 +315,8 @@ export function Sidebar({
                 <Search className="size-4 shrink-0" />
                 <input
                   ref={searchInputRef}
+                  data-thread-search
+                  aria-label="Search threads"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search threads"
@@ -323,6 +326,7 @@ export function Sidebar({
                   <button
                     type="button"
                     onClick={() => setSearch("")}
+                    aria-label="Clear search"
                     className="btn-icon cursor-pointer rounded-lg p-1 hover:bg-card-hover"
                   >
                     <X className="h-3 w-3" />
@@ -425,9 +429,11 @@ export function Sidebar({
                     type="button"
                     onClick={async () => {
                       setMenuOpen(false);
-                      const confirmed = window.confirm(
-                        "Sign out of Google? Spotify will stay connected until you disconnect it from Apps.",
-                      );
+                      const confirmed = await confirmAction({
+        title: "Sign out?",
+        description: "Spotify stays connected until you disconnect it in Apps.",
+        confirmLabel: "Sign out",
+      });
                       if (!confirmed) return;
                       await logout();
                     }}
@@ -598,6 +604,7 @@ function ThreadItem({
         <button
           type="button"
           onClick={onSaveEdit}
+          aria-label="Save name"
           className="cursor-pointer rounded-lg p-1 text-emerald-500 hover:bg-card-hover"
         >
           <Check className="h-3 w-3" />
@@ -605,6 +612,7 @@ function ThreadItem({
         <button
           type="button"
           onClick={onCancelEdit}
+          aria-label="Cancel rename"
           className="cursor-pointer rounded-lg p-1 opacity-50 hover:bg-card-hover"
         >
           <X className="h-3 w-3" />

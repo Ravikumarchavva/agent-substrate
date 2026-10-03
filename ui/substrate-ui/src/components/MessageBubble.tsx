@@ -829,7 +829,7 @@ export function MessageBubble({
                         className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-card-hover transition-colors cursor-pointer text-muted"
                         title="Copy message"
                         style={{ minWidth: "unset", minHeight: "unset" }}
-                      >
+                       aria-label="Copy message">
                         {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
                       {onForkBranch && messageId && (
@@ -1193,7 +1193,7 @@ export function MessageBubble({
                   onClick={copyToClipboard}
                   className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-card-hover transition-colors cursor-pointer text-muted"
                   title="Copy"
-                >
+                 aria-label="Copy">
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
                 <AudioPlayer text={safeContent} />
@@ -1202,7 +1202,7 @@ export function MessageBubble({
                     onClick={onRegenerate}
                     className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-card-hover transition-colors cursor-pointer text-muted"
                     title="Regenerate"
-                  >
+                   aria-label="Regenerate">
                     <RotateCw className="w-3.5 h-3.5" />
                   </button>
                 )}

@@ -165,7 +165,7 @@ export function CodeEditorView({
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-card-hover disabled:opacity-40"
             style={{ background: "var(--badge-bg)" }}
             title="Save (⌘/Ctrl-S)"
-          >
+           aria-label="Save (⌘/Ctrl-S)">
             {save === "saving" ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : save === "saved" ? (

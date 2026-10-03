@@ -9,6 +9,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { fetchDocQuotaStatus } from "@/lib/api/doc_quota";
 import { fetchRateLimitStatus } from "@/lib/api/rate_limit";
 import type { SettingsTab } from "./settings/SettingsPanel";
+import { confirmAction } from "@/design";
 
 interface Quota {
   used: number;
@@ -102,7 +103,7 @@ export function CollapsedRail({
                 <MenuItem
                   tone="danger"
                   onSelect={async () => {
-                    if (!window.confirm("Sign out of Google? Spotify will stay connected until you disconnect it from Apps.")) return;
+                    if (!(await confirmAction({ title: "Sign out?", description: "Spotify stays connected until you disconnect it in Apps.", confirmLabel: "Sign out" }))) return;
                     await logout();
                   }}
                 >

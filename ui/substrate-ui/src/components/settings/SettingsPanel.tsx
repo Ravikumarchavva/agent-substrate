@@ -59,6 +59,8 @@ import { ConnectorsTab } from "./ConnectorsTab";
 import { ModelsTab } from "./ModelsTab";
 import { AdminTab } from "./AdminTab";
 import { StorageTab } from "./StorageTab";
+import { confirmAction } from "@/design";
+import { reportError } from "@/lib/report-error";
 
 export type SettingsTab =
   | "general"
@@ -371,14 +373,14 @@ export function SettingsPanel({
         const steps = await api.getAdminThreadSteps(threadId);
         setThreadSteps((prev) => ({ ...prev, [threadId]: steps }));
       } catch (err) {
-        console.error("Failed to load thread steps:", err);
+        reportError("Couldn't load this conversation's steps", err);
       }
     }
   };
 
   const handleDeleteThread = async (threadId: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    if (!confirm("Delete this thread permanently? This cannot be undone.")) return;
+    if (!(await confirmAction({ title: "Delete this conversation?", description: "It is removed permanently. This can't be undone.", confirmLabel: "Delete", danger: true }))) return;
 
     setDeletingThreadId(threadId);
     try {
@@ -389,7 +391,7 @@ export function SettingsPanel({
         setAdminStats((prev) => (prev ? { ...prev, total_threads: prev.total_threads - 1 } : prev));
       }
     } catch (err) {
-      console.error("Failed to delete thread:", err);
+      reportError("Couldn't delete the conversation", err);
     } finally {
       setDeletingThreadId(null);
     }
@@ -437,7 +439,7 @@ export function SettingsPanel({
       await api.disconnectSpotify();
       await checkAuth();
     } catch (err) {
-      console.error("Failed to disconnect Spotify:", err);
+      reportError("Couldn't disconnect Spotify", err);
     } finally {
       setDisconnectingApp(null);
     }
@@ -449,7 +451,7 @@ export function SettingsPanel({
       await api.disconnectWorkspace();
       await checkAuth();
     } catch (err) {
-      console.error("Failed to disconnect Google Workspace:", err);
+      reportError("Couldn't disconnect Google Workspace", err);
     } finally {
       setDisconnectingApp(null);
     }

@@ -263,7 +263,7 @@ export function Mermaid({ chart }: MermaidProps) {
             onClick={handleCopy}
             className="btn-icon flex items-center justify-center w-8 h-8 rounded-xl hover:bg-card-hover text-muted hover:text-foreground cursor-pointer transition-colors"
             title="Copy diagram source"
-          >
+           aria-label="Copy diagram source">
             {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
           </button>
           
@@ -272,7 +272,7 @@ export function Mermaid({ chart }: MermaidProps) {
             onClick={downloadPng}
             className="btn-icon flex items-center justify-center w-8 h-8 rounded-xl hover:bg-card-hover text-muted hover:text-foreground cursor-pointer transition-colors"
             title="Download PNG"
-          >
+           aria-label="Download PNG">
             <Download className="w-4 h-4" />
           </button>
         </div>
@@ -405,7 +405,7 @@ export function Mermaid({ chart }: MermaidProps) {
             onClick={handleCopy}
             className={headerBtnCls}
             title="Copy diagram source"
-          >
+           aria-label="Copy diagram source">
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
 
@@ -415,7 +415,7 @@ export function Mermaid({ chart }: MermaidProps) {
               onClick={downloadPng}
               className={headerBtnCls}
               title="Download PNG"
-            >
+             aria-label="Download PNG">
               <Download className="w-3.5 h-3.5" />
             </button>
           )}
@@ -471,16 +471,16 @@ export function Mermaid({ chart }: MermaidProps) {
             {/* Compact zoom/pan overlay pad (fades in on hover) */}
             <div className="absolute bottom-3 right-3 z-10 grid grid-cols-3 gap-0.5 bg-card/85 backdrop-blur-md p-1 rounded-xl border border-border shadow-md opacity-100 sm:opacity-0 sm:group-hover/mermaid:opacity-100 transition-opacity duration-200">
               <div className="w-6 h-6" />
-              <button onClick={panUp} className={btnCls} title="Pan up"><ChevronUp className="w-3 h-3" /></button>
-              <button onClick={zoomIn} className={btnCls} title="Zoom in"><ZoomIn className="w-3 h-3" /></button>
+              <button onClick={panUp} className={btnCls} title="Pan up" aria-label="Pan up"><ChevronUp className="w-3 h-3" /></button>
+              <button onClick={zoomIn} className={btnCls} title="Zoom in" aria-label="Zoom in"><ZoomIn className="w-3 h-3" /></button>
 
-              <button onClick={panLeft} className={btnCls} title="Pan left"><ChevronLeft className="w-3 h-3" /></button>
-              <button onClick={reset} className={btnCls} title="Reset"><RotateCcw className="w-3 h-3" /></button>
-              <button onClick={panRight} className={btnCls} title="Pan right"><ChevronRight className="w-3 h-3" /></button>
+              <button onClick={panLeft} className={btnCls} title="Pan left" aria-label="Pan left"><ChevronLeft className="w-3 h-3" /></button>
+              <button onClick={reset} className={btnCls} title="Reset" aria-label="Reset"><RotateCcw className="w-3 h-3" /></button>
+              <button onClick={panRight} className={btnCls} title="Pan right" aria-label="Pan right"><ChevronRight className="w-3 h-3" /></button>
 
               <div className="w-6 h-6" />
-              <button onClick={panDown} className={btnCls} title="Pan down"><ChevronDown className="w-3 h-3" /></button>
-              <button onClick={zoomOut} className={btnCls} title="Zoom out"><ZoomOut className="w-3 h-3" /></button>
+              <button onClick={panDown} className={btnCls} title="Pan down" aria-label="Pan down"><ChevronDown className="w-3 h-3" /></button>
+              <button onClick={zoomOut} className={btnCls} title="Zoom out" aria-label="Zoom out"><ZoomOut className="w-3 h-3" /></button>
             </div>
           </>
         ) : error ? (

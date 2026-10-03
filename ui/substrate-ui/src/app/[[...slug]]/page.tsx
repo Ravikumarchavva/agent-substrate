@@ -55,6 +55,8 @@ import {
 import { useAppPanel } from "@/hooks/useAppPanel";
 import { useTaskBoards } from "@/hooks/useTaskBoards";
 import { PlanCardStack } from "@/components/PlanCard";
+import { reportError } from "@/lib/report-error";
+import { useFileDrop } from "@/hooks/useFileDrop";
 import { Send, Plus, FileText, Mail, ListTodo, CalendarClock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, type LucideIcon } from "lucide-react";
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "substrate:last-active-thread";
@@ -329,6 +331,7 @@ function ChatPageContent() {
   // brand-new-thread case, where there's no sidebar entry yet to read it
   // from).
   const [lockedReason, setLockedReason] = useState<string | null>(null);
+  const dropping = useFileDrop((files) => void handleFilesPasted(files), !lockedReason);
   useEffect(() => {
     const thread = threads.find((t) => t.id === currentThreadId);
     setLockedReason(thread?.locked_reason ?? null);
@@ -546,6 +549,27 @@ function ChatPageContent() {
     }
     await _handleNewChat({ onCreated: () => { setMessages([]); setMobileSidebarOpen(false); } });
   }, [_handleNewChat]);
+
+  // Keyboard shortcuts: Ctrl/Cmd+Shift+O new chat, Ctrl/Cmd+K search conversations, "/" jump to the composer (when not already typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement | null)?.tagName ?? "") || (e.target as HTMLElement | null)?.isContentEditable;
+      if (mod && e.shiftKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        void handleNewChat();
+      } else if (mod && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setDesktopSidebarOpen(true);
+        setTimeout(() => document.querySelector<HTMLInputElement>("[data-thread-search]")?.focus(), 0);
+      } else if (e.key === "/" && !mod && !typing) {
+        e.preventDefault();
+        textareaRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleNewChat]);
 
   const handleSelectThread = useCallback((threadId: string) => {
     setScheduledPanelOpen(false);
@@ -771,7 +795,7 @@ function ChatPageContent() {
           prev.map((b) => (b.id === branchId ? { ...b, name: updated.name } : b)),
         );
       } catch (err) {
-        console.error("Failed to rename branch:", err);
+        reportError("Couldn't rename the branch", err);
       }
     },
     [currentThreadId],
@@ -790,7 +814,7 @@ function ChatPageContent() {
         setBranches(updated);
         await handleSelectBranch(newBranch.id);
       } catch (err) {
-        console.error("Failed to fork branch:", err);
+        reportError("Couldn't branch the conversation", err);
       }
     },
     [currentThreadId, handleSelectBranch],
@@ -841,7 +865,7 @@ function ChatPageContent() {
     // bugs) for a case that already works.
     if (wsRef.current) {
       api.respondToHitl(requestId, data).catch((err: unknown) => {
-        console.error("HITL respond failed:", err);
+        reportError("Couldn't send your answer", err);
       });
       return;
     }
@@ -875,7 +899,7 @@ function ChatPageContent() {
     await runEventStream(threadId, msgState, async (signal) => {
       const res = await api.streamThread(threadId, signal);
       api.respondToHitl(requestId, data).catch((err: unknown) => {
-        console.error("HITL respond failed:", err);
+        reportError("Couldn't send your answer", err);
       });
       return res;
     });
@@ -896,7 +920,7 @@ function ChatPageContent() {
     try {
       await api.updateMcpContext(currentThreadId, toolName, result);
     } catch (err) {
-      console.error("Failed to update MCP context:", err);
+      reportError("Couldn't update the app", err);
     }
   }
 
@@ -914,7 +938,7 @@ function ChatPageContent() {
     const cancelId = currentThreadIdRef.current || activeStreamThreadIdRef.current;
     if (cancelId) {
       api.cancelChat(cancelId).catch((error: unknown) => {
-        console.error("Failed to cancel active run:", error);
+        reportError("Couldn't stop the run", error);
       });
     }
   }
@@ -1037,13 +1061,13 @@ function ChatPageContent() {
         promoteThreadUrl(threadId);
         msgState.isNewThread = false;
       } catch (error) {
-        console.error("Failed to create thread:", error);
+        reportError("Couldn't start the conversation", error);
         setMessages((prev) => [
           ...prev,
           {
             id: nanoid(),
             role: "assistant" as const,
-            content: "⚠️ Could not reach the backend. Is it running on port 8000?",
+            content: "⚠️ Couldn't start this conversation. Please try again.",
             timestamp: new Date(),
           },
         ]);
@@ -1749,6 +1773,17 @@ function ChatPageContent() {
 
   return (
     <div className="flex h-dvh min-h-dvh overflow-hidden bg-background text-foreground" suppressHydrationWarning>
+      {dropping && (
+        <div
+          className="pointer-events-none fixed inset-0 z-[9998] flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          role="status"
+        >
+          <div className="rounded-2xl border-2 border-dashed border-accent px-10 py-8 text-center">
+            <p className="text-base font-semibold text-foreground">Drop files to attach</p>
+            <p className="mt-1 text-xs text-muted">Documents, images and text files</p>
+          </div>
+        </div>
+      )}
       {/* Desktop Sidebar */}
       <div
         className={`hidden shrink-0 overflow-hidden transition-all duration-300 ease-in-out lg:block ${desktopSidebarOpen ? "lg:w-[20rem]" : "lg:w-0"

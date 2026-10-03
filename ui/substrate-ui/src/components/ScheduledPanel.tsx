@@ -25,7 +25,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "@/lib/api";
 import type { ScheduledTask, ScheduledTaskRun } from "@/types";
-import { Select } from "@/design";
+import { Select, confirmAction, toast } from "@/design";
+import { reportError } from "@/lib/report-error";
 
 interface ScheduledPanelProps {
   onBack: () => void;
@@ -105,7 +106,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
       const runData = await api.getScheduledTaskRuns(taskId, { limit: 50, include_silent: true });
       setRuns(runData);
     } catch (err) {
-      console.error("Failed to fetch task runs:", err);
+      reportError("Couldn't load this task's runs", err);
     } finally {
       setLoadingRuns(false);
     }
@@ -171,7 +172,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
         fetchTasks();
       }, 1000);
     } catch (err) {
-      console.error("Failed to trigger task run:", err);
+      reportError("Couldn't start the run", err);
     }
   };
 
@@ -186,14 +187,14 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
         setSelectedTask(updated);
       }
     } catch (err) {
-      console.error("Failed to update status:", err);
+      reportError(`Couldn't ${newStatus === "paused" ? "pause" : "resume"} the task`, err);
     }
   };
 
   // Delete task
   const handleDeleteTask = async (taskId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!confirm("Permanently delete this scheduled task and all its run logs?")) return;
+    if (!(await confirmAction({ title: "Delete this task?", description: "Its run history is deleted too. This can't be undone.", confirmLabel: "Delete", danger: true }))) return;
 
     try {
       await api.deleteScheduledTask(taskId);
@@ -202,7 +203,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
         setSelectedTask(null);
       }
     } catch (err) {
-      console.error("Failed to delete task:", err);
+      reportError("Couldn't delete the task", err);
     }
   };
 
@@ -215,7 +216,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
       setIsEditingPrompt(false);
       fetchTasks();
     } catch (err) {
-      alert((err instanceof Error && err.message) || "Failed to save prompt override.");
+      reportError("Couldn't save the instructions", err);
     }
   };
 
@@ -228,20 +229,9 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
     try {
       await api.addScheduledTaskFeedback(selectedTask.id, feedbackText.trim());
       setFeedbackText("");
-      // Append a virtual run output or visual confirm
-      const virtualRun: ScheduledTaskRun = {
-        id: nanoid(),
-        task_id: selectedTask.id,
-        status: "success",
-        output_summary: `Feedback accepted: "${feedbackText.trim()}". The agent will adapt to this instruction on the next execution cycle.`,
-        executed_at: new Date().toISOString(),
-        duration_ms: 0,
-        was_silent: false,
-        error_message: null,
-      };
-      setRuns((prev) => [virtualRun, ...prev]);
+      toast.success("Feedback saved", "The assistant will use it the next time this task runs.");
     } catch (err) {
-      alert((err instanceof Error && err.message) || "Failed to persist feedback.");
+      reportError("Couldn't save your feedback", err);
     } finally {
       setIsSendingFeedback(false);
     }
@@ -336,6 +326,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
           ) : (
             <button
               onClick={onBack}
+              aria-label="Back"
               className="p-2 -ml-2 rounded-xl hover:bg-card-hover transition-all duration-200 cursor-pointer text-muted hover:text-foreground btn-icon"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -359,7 +350,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
             onClick={fetchTasks}
             className="p-2 rounded-xl hover:bg-card-hover transition-colors cursor-pointer text-muted hover:text-foreground btn-icon border border-border"
             title="Refresh list"
-          >
+           aria-label="Refresh list">
             <RefreshCw className="w-4 h-4" />
           </button>
         )}

@@ -19,6 +19,7 @@ import {
 } from "@/lib/model-preferences";
 import { deleteCachedTtsAudio, getCachedTtsAudio, setCachedTtsAudio } from "@/lib/audio-cache";
 import type { TTSPlaybackRate, TTSVoice } from "@/types";
+import { reportError } from "@/lib/report-error";
 
 interface AudioPlayerProps {
   /** The assistant message text to synthesize. */
@@ -149,7 +150,7 @@ export function AudioPlayer({ text: markdown }: AudioPlayerProps) {
       await setCachedTtsAudio(request, freshBlob);
       return createAudioFromBlob(freshBlob, request);
     } catch (err) {
-      console.error("TTS error:", err);
+      reportError("Couldn't read that aloud", err);
       setPlayerState("error");
       setHasAudio(false);
       return null;

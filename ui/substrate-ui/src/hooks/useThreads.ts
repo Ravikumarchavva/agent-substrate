@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import type { Thread } from "@/types";
 import { api } from "@/lib/api";
+import { reportError } from "@/lib/report-error";
 
 interface UseThreadsOptions {
   autoSelectFirstThread?: boolean;
@@ -38,7 +39,7 @@ export function useThreads(
       }
       hasAutoSelected.current = true;
     } catch (error) {
-      console.error("Failed to load threads:", error);
+      reportError("Couldn't load your conversations", error);
     }
   }, [autoSelectFirstThread, currentThreadId, selectThread]);
 
@@ -61,7 +62,7 @@ export function useThreads(
       }
       setThreads((current) => current.filter((thread) => thread.id !== threadId));
     } catch (error) {
-      console.error("Failed to delete thread:", error);
+      reportError("Couldn't delete the conversation", error);
     }
   }, [currentThreadId, selectThread, threads]);
 
@@ -76,7 +77,7 @@ export function useThreads(
         )
       );
     } catch (error) {
-      console.error("Failed to rename thread:", error);
+      reportError("Couldn't rename the conversation", error);
     }
   }, []);
 

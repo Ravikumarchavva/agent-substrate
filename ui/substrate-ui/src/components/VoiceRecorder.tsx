@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Mic, MicOff } from "lucide-react";
 import { api } from "@/lib/api";
+import { reportError } from "@/lib/report-error";
 
 interface VoiceRecorderProps {
   /** Called with the final transcript text. Parent decides whether to auto-send. */
@@ -95,7 +96,7 @@ export function VoiceRecorder({ onTranscript, disabled, className }: VoiceRecord
           onTranscript(result.text);
         }
       } catch (err) {
-        console.error("Transcription error:", err);
+        reportError("Couldn't transcribe that recording", err);
         setError("Transcription failed. Please try again.");
       } finally {
         setState("idle");

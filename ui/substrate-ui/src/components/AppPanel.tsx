@@ -599,7 +599,7 @@ export function AppPanel({
                 onClick={onToggleCollapse}
                 className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-card-hover hover:text-foreground cursor-pointer"
                 title="Collapse panel"
-              >
+               aria-label="Collapse panel">
                 <PanelRightClose className="h-4 w-4" />
               </button>
             )}

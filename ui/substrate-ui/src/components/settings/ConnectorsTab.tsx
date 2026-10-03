@@ -23,7 +23,7 @@ function ModeButton({ active, label, onClick }: { active: boolean; label: string
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${active ? "bg-foreground text-background" : "bg-card text-muted hover:text-foreground"}`}
+      className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${active ? "bg-accent text-accent-foreground" : "bg-card text-muted hover:text-foreground"}`}
       style={active ? { boxShadow: "var(--shadow-sm)" } : undefined}
     >
       {label}
@@ -231,7 +231,7 @@ export function ConnectorsTab({
                     <button
                       type="button"
                       onClick={row.action}
-                      className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${row.connected ? "border border-rose-500/20 text-rose-400 hover:bg-rose-500/10" : "bg-foreground text-background hover:opacity-90"}`}
+                      className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${row.connected ? "border border-rose-500/20 text-rose-400 hover:bg-rose-500/10" : "bg-accent-2 text-accent-2-foreground hover:bg-accent-2-hover"}`}
                       disabled={row.disconnecting}
                     >
                       {row.disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : row.connected ? <Link2 className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -259,7 +259,7 @@ export function ConnectorsTab({
                   type="button"
                   onClick={connector.onAction}
                   disabled={!connector.active || connector.actionLabel === "Bundled"}
-                  className={`mt-5 rounded-xl px-4 py-2 text-sm font-medium transition-colors ${connector.active && connector.actionLabel !== "Bundled" ? "bg-foreground text-background hover:opacity-90 cursor-pointer" : "bg-badge text-badge-foreground cursor-default"}`}
+                  className={`mt-5 rounded-xl px-4 py-2 text-sm font-medium transition-colors ${connector.active && connector.actionLabel !== "Bundled" ? "bg-accent-2 text-accent-2-foreground hover:bg-accent-2-hover cursor-pointer" : "bg-badge text-badge-foreground cursor-default"}`}
                 >
                   {connector.actionLabel}
                 </button>

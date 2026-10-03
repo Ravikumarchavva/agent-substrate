@@ -33,7 +33,7 @@ function parseFileRef(fileUrl?: string): { threadId: string; path: string } | nu
   }
 }
 
-const API_BASE = "/api/backend";
+import { API_BASE } from "@/lib/api/_client";
 
 export type AppPanelItem = {
   /** Unique ID for this panel instance */

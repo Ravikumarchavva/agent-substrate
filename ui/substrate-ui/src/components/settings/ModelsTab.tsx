@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Cpu, Mic, Radio, Volume2, ChevronDown, Check } from "lucide-react";
+import { Cpu, Mic, Radio, Volume2 } from "lucide-react";
 import type {
   ModelOption,
   OpenAITTSVoice,
@@ -14,6 +13,7 @@ import {
   getDefaultVoiceForModel,
   isVoiceCompatible,
 } from "@/lib/model-preferences";
+import { Select } from "@/design";
 
 interface SettingsNotice {
   tone: "success" | "info";
@@ -109,65 +109,13 @@ function GroupedSelect({
   groups: ModelOptionGroup[];
   onChange: (value: string) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) setIsOpen(false);
-    }
-    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
-
-  const selectedLabel = groups.flatMap((g) => g.options).find((o) => o.id === value)?.label || value;
-
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-accent"
-      >
-        <span className="truncate">{selectedLabel}</span>
-        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-      </button>
-
-      {isOpen && (
-        <div
-          className="substrate-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-border p-1 shadow-xl"
-          style={{ background: "var(--card)" }}
-        >
-          {groups.map((group) => (
-            <div key={group.label} className="mb-2 last:mb-0">
-              <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-muted">
-                {group.label}
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {group.options.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => {
-                      onChange(option.id);
-                      setIsOpen(false);
-                    }}
-                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                      value === option.id
-                        ? "bg-foreground/10 font-medium text-foreground"
-                        : "text-foreground hover:bg-card-hover"
-                    }`}
-                  >
-                    <span className="truncate">{option.label}</span>
-                    {value === option.id && <Check className="h-4 w-4 shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <Select
+      size="lg"
+      value={value}
+      onValueChange={onChange}
+      groups={groups.map((g) => ({ label: g.label, options: g.options.map((o) => ({ value: o.id, label: o.label })) }))}
+    />
   );
 }
 
@@ -180,59 +128,7 @@ function CustomSelect({
   options: { id: string; label: string }[];
   onChange: (value: string) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) setIsOpen(false);
-    }
-    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
-
-  const selectedLabel = options.find((o) => o.id === value)?.label || value;
-
-  return (
-    <div className="relative w-full" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-accent"
-      >
-        <span className="truncate">{selectedLabel}</span>
-        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-      </button>
-
-      {isOpen && (
-        <div
-          className="substrate-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-border p-1 shadow-xl"
-          style={{ background: "var(--card)" }}
-        >
-          <div className="flex flex-col gap-0.5">
-            {options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => {
-                  onChange(option.id);
-                  setIsOpen(false);
-                }}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                  value === option.id
-                    ? "bg-foreground/10 font-medium text-foreground"
-                    : "text-foreground hover:bg-card-hover"
-                }`}
-              >
-                <span className="truncate">{option.label}</span>
-                {value === option.id && <Check className="h-4 w-4 shrink-0" />}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <Select size="lg" value={value} onValueChange={onChange} options={options.map((o) => ({ value: o.id, label: o.label }))} />;
 }
 
 export function ModelsTab({
@@ -339,7 +235,7 @@ export function ModelsTab({
               type="button"
               onClick={handleSaveModelPreferences}
               disabled={!hasUnsavedModelPreferences}
-              className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+              className="rounded-xl bg-accent-2 px-4 py-2 text-sm font-medium text-accent-2-foreground transition-opacity hover:bg-accent-2-hover disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
             >
               Save defaults
             </button>

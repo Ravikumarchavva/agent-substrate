@@ -33,6 +33,17 @@ if they differ. Edit here, then sync. Never edit the copy.
 3. **Brand**: `accent`, `accent-hover`, `accent-foreground`, `accent-2`. An instance re-brands by overriding these in its own CSS
    after importing `tokens.css`. Components never name a brand colour.
 
+## Colour roles (one meaning each)
+
+| Role | Colour | Used for |
+|---|---|---|
+| **Action** | orange (`accent-2`) | the main thing to do on a screen: Save, Connect, Send, Schedule. `Button` default `primary`. At most one or two per view. |
+| **Selected / active** | violet (`accent`) | the current tab, active nav item, selected row, focus ring, checkmarks, progress, links. Never a button that does something. |
+| **Neutral** | `secondary` / `ghost` | every other button. |
+| **Danger** | red (`danger`) | delete and sign out. |
+
+If a control changes the screen you are on, it is violet. If it makes something happen, it is orange.
+
 ## Adding things
 
 - A new control: a `cva` component in `ui/`, heights from the control scale, behaviour from Radix, **and** a row in `/design-system`.

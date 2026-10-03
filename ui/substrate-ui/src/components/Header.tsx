@@ -182,7 +182,7 @@ export function Header({
                               <button
                                 type="button"
                                 onClick={() => handleSaveRename(b.id)}
-                                className="inline-flex h-6 items-center justify-center px-2.5 rounded-md text-[11px] font-semibold bg-foreground text-background hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+                                className="inline-flex h-6 items-center justify-center px-2.5 rounded-md text-[11px] font-semibold bg-accent text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
                               >
                                 Save
                               </button>
@@ -209,7 +209,7 @@ export function Header({
                           <div
                             className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                               isSelected
-                                ? "bg-foreground/10 text-foreground"
+                                ? "bg-accent/10 text-foreground"
                                 : "bg-border/20 text-muted group-hover:text-foreground"
                             }`}
                           >

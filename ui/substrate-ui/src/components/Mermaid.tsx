@@ -250,7 +250,7 @@ export function Mermaid({ chart }: MermaidProps) {
           
           <button
             onClick={() => setShowCodeInFullscreen(!showCodeInFullscreen)}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-foreground/5 hover:bg-foreground/10 text-foreground cursor-pointer transition-colors"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-foreground/5 hover:bg-accent/10 text-foreground cursor-pointer transition-colors"
           >
             <Columns className="w-3.5 h-3.5" />
             {showCodeInFullscreen ? "Hide code" : "Show code"}
@@ -297,7 +297,7 @@ export function Mermaid({ chart }: MermaidProps) {
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setCompiledCode(chartCode)}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-foreground text-background font-semibold text-xs rounded-xl hover:opacity-90 transition-opacity cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-accent-2 text-accent-2-foreground font-semibold text-xs rounded-xl hover:bg-accent-2-hover transition-opacity cursor-pointer"
                 >
                   <Play className="w-3 h-3 fill-current" />
                   Render
@@ -446,7 +446,7 @@ export function Mermaid({ chart }: MermaidProps) {
               <span className="text-[10px] text-muted font-mono">Note: Edits are local only and not visible to the agent</span>
               <button
                 onClick={() => setCompiledCode(chartCode)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-background font-semibold text-xs rounded-xl hover:opacity-90 transition-opacity cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-2 text-accent-2-foreground font-semibold text-xs rounded-xl hover:bg-accent-2-hover transition-opacity cursor-pointer"
               >
                 <Play className="w-3 h-3 fill-current" />
                 Run

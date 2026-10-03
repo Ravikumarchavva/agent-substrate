@@ -1,5 +1,5 @@
 import { getPreferredChatModel } from "@/lib/model-preferences";
-import { API_BASE, getErrorMessage, requestJson } from "./_client";
+import { API_BASE, getErrorMessage, requestJson, ApiError } from "./_client";
 import type { ChatStreamRequest } from "./_client";
 
 export interface PendingHitlRequest {
@@ -98,7 +98,7 @@ export const chatApi = {
       );
     }
     if (!res.ok || !res.body) {
-      throw new Error(await getErrorMessage(res, `HTTP ${res.status}`));
+      throw new ApiError(await getErrorMessage(res, `HTTP ${res.status}`), res.status);
     }
     return res;
   },
@@ -117,7 +117,7 @@ export const chatApi = {
       signal,
     });
     if (!res.ok || !res.body) {
-      throw new Error(await getErrorMessage(res, `HTTP ${res.status}`));
+      throw new ApiError(await getErrorMessage(res, `HTTP ${res.status}`), res.status);
     }
     return res;
   },

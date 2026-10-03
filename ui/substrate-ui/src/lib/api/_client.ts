@@ -10,7 +10,14 @@ import { ToolCall, UploadedFile } from "@/types";
 // fetch("/api/backend/...") is just a literal browser request and is NOT
 // basePath-aware — it has to be spelled out here or every call site would
 // silently 404 in production.
-export const API_BASE = "/chat/api/backend";
+// The one place the mount path is spelled. Every browser URL to this app's own route handlers or to the backend proxy builds on it.
+export const APP_BASE = "/chat";
+export const API_BASE = `${APP_BASE}/api/backend`;
+
+/** URL of one of this app's own route handlers (`app/api/<path>`), e.g. `appApiUrl("/admin/users")`. */
+export function appApiUrl(path: string): string {
+  return `${APP_BASE}/api${path}`;
+}
 
 // Backend route is GET /files/{file_id}/download (agent-substrate
 // routes/files.py) — file id alone is enough, no thread scoping needed.
@@ -123,25 +130,46 @@ function getStructuredErrorMessage(payload: unknown): string | null {
   return null;
 }
 
+/** What to tell a person about a failed request, by status. Never the response body: it may be a stack trace or an HTML error page. */
+export function describeHttpStatus(status: number, fallback: string): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You don't have permission to do that.";
+  if (status === 404) return "That wasn't found. It may have been moved or deleted.";
+  if (status === 408 || status === 504) return "The request timed out. Please try again.";
+  if (status === 413) return "That file is too large.";
+  if (status === 429) return "You've reached a usage limit. It resets automatically; the usage meter shows when.";
+  if (status >= 500) return "Something went wrong on our side. Please try again in a moment.";
+  return fallback;
+}
+
+/** An HTTP failure with its status, so callers can react to 401/429 without parsing the message. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function getErrorMessage(res: Response, fallback: string): Promise<string> {
   const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
-
-  if (contentType.includes("application/json")) {
-    const payload = await res.json().catch(() => null);
-    return getStructuredErrorMessage(payload) ?? fallback;
-  }
-
   const text = await res.text().catch(() => "");
-  if (!text) {
-    return fallback;
+
+  if (contentType.includes("application/json") || /^\s*[{[]/.test(text)) {
+    try {
+      const payload = JSON.parse(text) as unknown;
+      return getStructuredErrorMessage(payload) ?? describeHttpStatus(res.status, fallback);
+    } catch {
+      return describeHttpStatus(res.status, fallback);
+    }
   }
 
-  try {
-    const payload = JSON.parse(text) as unknown;
-    return getStructuredErrorMessage(payload) ?? text;
-  } catch {
-    return text;
-  }
+  // Plain text from our own backend is a short sentence; anything else (an HTML page, a long dump) is not for people.
+  const looksLikeHtml = /^\s*<(!doctype|html|head|body)/i.test(text);
+  if (text && !looksLikeHtml && text.length <= 300) return text;
+  return describeHttpStatus(res.status, fallback);
 }
 
 export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -151,7 +179,7 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
     : { "Content-Type": "application/json", ...init?.headers };
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!res.ok) {
-    throw new Error(await getErrorMessage(res, `Request failed for ${path}`));
+    throw new ApiError(await getErrorMessage(res, `Request failed for ${path}`), res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -163,7 +191,7 @@ export async function requestVoid(path: string, init?: RequestInit): Promise<voi
     : { "Content-Type": "application/json", ...init?.headers };
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!res.ok) {
-    throw new Error(await getErrorMessage(res, `Request failed for ${path}`));
+    throw new ApiError(await getErrorMessage(res, `Request failed for ${path}`), res.status);
   }
 }
 
@@ -174,7 +202,7 @@ export async function requestJsonFromUrl<T>(url: string, init?: RequestInit): Pr
     : { "Content-Type": "application/json", ...init?.headers };
   const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
-    throw new Error(await getErrorMessage(res, `Request failed for ${url}`));
+    throw new ApiError(await getErrorMessage(res, `Request failed for ${url}`), res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -186,6 +214,6 @@ export async function requestVoidFromUrl(url: string, init?: RequestInit): Promi
     : { "Content-Type": "application/json", ...init?.headers };
   const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
-    throw new Error(await getErrorMessage(res, `Request failed for ${url}`));
+    throw new ApiError(await getErrorMessage(res, `Request failed for ${url}`), res.status);
   }
 }

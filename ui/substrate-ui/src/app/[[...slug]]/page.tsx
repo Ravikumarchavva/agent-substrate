@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { ScheduledPanel } from "@/components/ScheduledPanel";
-import { ModelEffortPicker } from "@/components/ModelEffortPicker";
+import { ModelPicker } from "@/components/ModelPicker";
 import type { SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
@@ -26,7 +26,7 @@ import { Message, UploadedFile, TaskList, CitationSource, Branch } from "@/types
 import { api } from "@/lib/api";
 import type { ResolvedBranchMessage } from "@/lib/api/branches";
 import { ChatConflictError, ChatLockedError } from "@/lib/api/chat";
-import { getMessageAttachments, buildWorkspaceFileUrl } from "@/lib/api/_client";
+import { ApiError, getMessageAttachments, buildWorkspaceFileUrl, buildFileContentUrl } from "@/lib/api/_client";
 import { mergeSources, parseCitations } from "@/lib/citations";
 import {
   getPreferredChatModel,
@@ -51,7 +51,7 @@ import {
 import { useAppPanel } from "@/hooks/useAppPanel";
 import { useTaskBoards } from "@/hooks/useTaskBoards";
 import { PlanCardStack } from "@/components/PlanCard";
-import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, type LucideIcon } from "lucide-react";
+import { Send, Plus, FileText, Mail, ListTodo, CalendarClock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, type LucideIcon } from "lucide-react";
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "substrate:last-active-thread";
 
@@ -98,7 +98,7 @@ function firstArtifactRef(content: string): string | null {
 }
 
 function ChatPageContent() {
-  const { isAuthenticated, isLoading: authLoading, isAdmin, loginWithGoogle } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, isAdmin, loginWithGoogle, workspaceAuth } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const routeState = parseChatPath(pathname);
@@ -184,17 +184,8 @@ function ChatPageContent() {
   // ── Realtime speech-to-speech panel ────────────────────────────────
   const [realtimeOpen, setRealtimeOpen] = useState(false);
 
-  // ── Model selector + thinking level ────────────────────────────────
+  // ── Model selector ─────────────────────────────────────────────────
   const [selectedModel, setSelectedModel] = useState(() => getPreferredChatModel());
-  const [thinkingLevel, setThinkingLevel] = useState<string>("medium");
-
-  // Reset thinking level if not compatible with the selected model
-  useEffect(() => {
-    const model = CHAT_MODEL_OPTIONS.find((m) => m.id === selectedModel);
-    if (model?.thinkingLevels && !model.thinkingLevels.includes(thinkingLevel)) {
-      setThinkingLevel(model.thinkingLevels[0] || "off");
-    }
-  }, [selectedModel, thinkingLevel]);
 
   // Keep selectedModel in sync with localStorage changes from settings
   useEffect(() => {
@@ -480,7 +471,7 @@ function ChatPageContent() {
 
   const renderComposerAttachment = useCallback((file: AttachedFilePreview) => {
     const previewSource = file.previewUrl || file.url || (currentThreadId
-      ? `/api/backend/threads/${currentThreadId}/files/${file.id}/content`
+      ? buildFileContentUrl(file.id)
       : "");
     const processingState = getAttachmentProcessingState(file);
     const showRing = processingState === "pending" || processingState === "error";
@@ -1461,7 +1452,7 @@ function ChatPageContent() {
             name: fileObj.name,
             mime: fileObj.mime || "application/octet-stream",
             size: fileObj.size || 0,
-            url: fileObj.url || `/api/backend/threads/${fileObj.thread_id}/files/${fileObj.id}/content`,
+            url: fileObj.url || buildFileContentUrl(fileObj.id),
           };
         });
 
@@ -1676,7 +1667,7 @@ function ChatPageContent() {
         setMessages((m) =>
           m.map((msg) =>
             msg.id === msgState.activeAssistantId
-              ? { ...msg, content: msg.content + "\n\n⚠️ Connection error.", isToolExecuting: false }
+              ? { ...msg, content: msg.content + `\n\n⚠️ ${describeSendFailure(err)}`, isToolExecuting: false }
               : msg
           )
         );
@@ -1700,6 +1691,12 @@ function ChatPageContent() {
     }
   }
 
+  /** What to tell the person when a send fails: the reason when we know it (limit reached, signed out), else a network hint. */
+  function describeSendFailure(err: unknown): string {
+    if (err instanceof ApiError) return err.message;
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
+
   function sendMessage(e: React.FormEvent) {
     e.preventDefault();
     doSendMessage(input);
@@ -1718,7 +1715,7 @@ function ChatPageContent() {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background px-4">
         <div className="text-center space-y-6 max-w-sm w-full">
-          <div className="substrate-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center bg-foreground text-background">
+          <div className="substrate-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center bg-accent text-accent-foreground">
             <SubstrateMark className="h-8 w-8" />
           </div>
           <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
@@ -1823,7 +1820,7 @@ function ChatPageContent() {
             >
               <SettingsPanel
                 isOpen={settingsPanelOpen}
-                initialTab={settingsPanelTab === "artifacts" ? "storage" : settingsPanelTab}
+                initialTab={settingsPanelTab}
                 onTabChange={selectSettingsTab}
                 threadId={currentThreadId}
               />
@@ -1857,15 +1854,17 @@ function ChatPageContent() {
 
                         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
                           {([
-                            { icon: Music2, text: "Play Despacito on Spotify" },
-                            { icon: Mail, text: "Summarize my recent 5 emails" },
+                            { icon: FileText, text: "Summarize a document", onClick: () => fileInputRef.current?.click() },
+                            { icon: Mail, text: "Summarize my recent 5 emails", show: workspaceAuth },
+                            { icon: CalendarClock, text: "Schedule a daily briefing", onClick: handleOpenScheduled },
                             { icon: ListTodo, text: "Plan tasks to organise a birthday party" },
-                            { icon: Clock, text: "What's the current time?" },
                             { icon: BarChart2, text: "Show a data visualisation" },
-                          ] as { icon: LucideIcon; text: string }[]).map(({ icon: Icon, text }, idx) => (
+                          ] as { icon: LucideIcon; text: string; show?: boolean; onClick?: () => void }[])
+                            .filter((chip) => chip.show !== false)
+                            .map(({ icon: Icon, text, onClick }, idx) => (
                             <button
                               key={idx}
-                              onClick={() => doSendMessage(text)}
+                              onClick={onClick ?? (() => doSendMessage(text))}
                               className="substrate-pop-in substrate-press flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-muted transition-colors hover:bg-card-hover sm:p-3.5"
                               style={{ '--stagger': idx + 2, background: "var(--card)", boxShadow: "var(--shadow-sm)" } as React.CSSProperties}
                             >
@@ -2091,15 +2090,17 @@ function ChatPageContent() {
                         void handleFilesPasted([buildPastedDocumentFile(text)]);
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
+                        // Enter sends; Shift+Enter is a new line. Not while an IME is composing (CJK, accents), and not mid-reply:
+                        // the draft stays in the box until the current answer finishes.
+                        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                           e.preventDefault();
-                          sendMessage(e);
+                          if (!loading) sendMessage(e);
                         }
                       }}
                       rows={1}
                       className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-[15px] outline-none placeholder:text-muted"
                       placeholder={lockedReason ? "This conversation is locked" : "Ask anything"}
-                      disabled={loading || !!lockedReason}
+                      disabled={!!lockedReason}
                     />
 
                     {/* ── Bottom bar: [+] left · [model][mic][audio/send] right ── */}
@@ -2118,12 +2119,10 @@ function ChatPageContent() {
 
                       {/* Right group */}
                       <div className="ml-auto flex items-center gap-1.5">
-                        <ModelEffortPicker
+                        <ModelPicker
                           models={CHAT_MODEL_OPTIONS}
                           selectedModel={selectedModel}
                           onSelectModel={(id) => { setSelectedModel(id); writeStoredValue(CHAT_MODEL_STORAGE_KEY, id); }}
-                          thinkingLevel={thinkingLevel}
-                          onSelectThinking={setThinkingLevel}
                         />
 
                         {input.trim() || (loading && !hitlPending) ? (
@@ -2131,7 +2130,7 @@ function ChatPageContent() {
                             <button
                               type="button"
                               onClick={handleStop}
-                              className="btn-icon substrate-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-colors"
+                              className="btn-icon substrate-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-accent-2 text-accent-2-foreground transition-colors"
                               aria-label="Stop"
                             >
                               <StopCircle className="h-4 w-4" />
@@ -2140,7 +2139,7 @@ function ChatPageContent() {
                             <button
                               type="submit"
                               disabled={!input.trim() || sendQueued}
-                              className={`btn-icon substrate-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-all disabled:cursor-not-allowed ${sendQueued ? "disabled:opacity-60" : "disabled:opacity-10"}`}
+                              className={`btn-icon substrate-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-accent-2 text-accent-2-foreground transition-all disabled:cursor-not-allowed ${sendQueued ? "disabled:opacity-60" : "disabled:opacity-10"}`}
                               aria-label={sendQueued ? "Waiting for attachments to finish processing" : "Send"}
                             >
                               {sendQueued ? (
@@ -2162,7 +2161,7 @@ function ChatPageContent() {
                             <button
                               type="button"
                               onClick={() => setRealtimeOpen(true)}
-                              className="btn-icon flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-transform active:scale-95"
+                              className="btn-icon flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-accent-2 text-accent-2-foreground transition-transform active:scale-95"
                               aria-label="Start speech-to-speech conversation"
                               title="Live voice conversation"
                             >

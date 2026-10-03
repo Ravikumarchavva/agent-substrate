@@ -100,6 +100,7 @@
   --accent-hover: #6d28d9;
   --accent-foreground: #ffffff;
   --accent-2: #f95716;
+  --accent-2-hover: #e04609;
   --accent-2-foreground: #ffffff;
 }
 
@@ -109,6 +110,7 @@
   --accent-hover: #b492f7;
   --accent-foreground: #171717;
   --accent-2: #ff8a47;
+  --accent-2-hover: #ff9d64;
   --accent-2-foreground: #171717;
 }
 
@@ -131,6 +133,7 @@
   --color-accent-hover: var(--accent-hover);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent-2: var(--accent-2);
+  --color-accent-2-hover: var(--accent-2-hover);
   --color-accent-2-foreground: var(--accent-2-foreground);
   --color-step: var(--step-bg);
   --color-sidebar: var(--sidebar-bg);

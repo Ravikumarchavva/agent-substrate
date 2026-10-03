@@ -25,6 +25,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "@/lib/api";
 import type { ScheduledTask, ScheduledTaskRun } from "@/types";
+import { Select } from "@/design";
 
 interface ScheduledPanelProps {
   onBack: () => void;
@@ -395,7 +396,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                   <button
                     type="submit"
                     disabled={!naturalText.trim()}
-                    className="px-4 py-1.5 rounded-xl bg-foreground text-background font-semibold text-xs hover:opacity-90 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer flex items-center gap-1 min-h-unset min-w-unset btn-icon shadow-sm"
+                    className="px-4 py-1.5 rounded-xl bg-accent-2 text-accent-2-foreground font-semibold text-xs hover:bg-accent-2-hover disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer flex items-center gap-1 min-h-unset min-w-unset btn-icon shadow-sm"
                   >
                     <span>Schedule</span>
                   </button>
@@ -520,7 +521,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                       </button>
                       <button
                         onClick={handleSavePrompt}
-                        className="px-4 py-1.5 text-xs font-bold rounded-xl bg-foreground text-background cursor-pointer min-h-unset min-w-unset"
+                        className="px-4 py-1.5 text-xs font-bold rounded-xl bg-accent-2 text-accent-2-foreground cursor-pointer min-h-unset min-w-unset"
                       >
                         Save Prompt
                       </button>
@@ -700,7 +701,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                 <button
                   type="submit"
                   disabled={!feedbackText.trim() || isSendingFeedback}
-                  className="px-5 py-2.5 bg-foreground text-background rounded-xl text-sm font-bold hover:opacity-90 transition-all flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none cursor-pointer shadow-sm min-h-unset min-w-unset btn-icon"
+                  className="px-5 py-2.5 bg-accent-2 text-accent-2-foreground rounded-xl text-sm font-bold hover:bg-accent-2-hover transition-all flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none cursor-pointer shadow-sm min-h-unset min-w-unset btn-icon"
                 >
                   {isSendingFeedback ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -758,16 +759,14 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Schedule Type</label>
-                  <select
+                  <Select
                     value={newConfig.kind}
-                    onChange={(e) =>
-                      setNewConfig((c) => ({ ...c, kind: e.target.value as "cron" | "interval" }))
-                    }
-                    className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
-                  >
-                    <option value="cron">Cron Expression</option>
-                    <option value="interval">Interval (Seconds)</option>
-                  </select>
+                    onValueChange={(v) => setNewConfig((c) => ({ ...c, kind: v as "cron" | "interval" }))}
+                    options={[
+                      { value: "cron", label: "Cron Expression" },
+                      { value: "interval", label: "Interval (Seconds)" },
+                    ]}
+                  />
                 </div>
 
                 <div className="space-y-1">
@@ -784,21 +783,18 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Task Type</label>
-                  <select
+                  <Select
                     value={newConfig.task_type}
-                    onChange={(e) =>
-                      setNewConfig((c) => ({
-                        ...c,
-                        task_type: e.target.value as "report" | "monitor" | "reminder" | "learning",
-                      }))
+                    onValueChange={(v) =>
+                      setNewConfig((c) => ({ ...c, task_type: v as "report" | "monitor" | "reminder" | "learning" }))
                     }
-                    className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
-                  >
-                    <option value="report">Report / News Digest</option>
-                    <option value="monitor">Alert Monitor</option>
-                    <option value="reminder">Reminder Pings</option>
-                    <option value="learning">Continuous learning</option>
-                  </select>
+                    options={[
+                      { value: "report", label: "Report / News Digest" },
+                      { value: "monitor", label: "Alert Monitor" },
+                      { value: "reminder", label: "Reminder Pings" },
+                      { value: "learning", label: "Continuous learning" },
+                    ]}
+                  />
                 </div>
 
                 <div className="space-y-1">
@@ -839,7 +835,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
               </button>
               <button
                 onClick={handleCreateTask}
-                className="px-4 py-2 rounded-xl bg-foreground text-background text-xs font-bold cursor-pointer min-h-unset min-w-unset"
+                className="px-4 py-2 rounded-xl bg-accent-2 text-accent-2-foreground text-xs font-bold cursor-pointer min-h-unset min-w-unset"
               >
                 Confirm & Create
               </button>

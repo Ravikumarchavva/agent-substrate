@@ -98,7 +98,7 @@ function QuotaEditor({
           onSave(userId, Number.isFinite(mb) && mb >= 0 ? mb * 1024 * 1024 : null);
           setEditing(false);
         }}
-        className="cursor-pointer rounded-lg bg-foreground px-2 py-1 text-xs font-medium text-background disabled:opacity-50"
+        className="cursor-pointer rounded-lg bg-accent-2 px-2 py-1 text-xs font-medium text-accent-2-foreground disabled:opacity-50"
       >
         {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
       </button>
@@ -190,7 +190,7 @@ export function AdminTab({
               onClick={() => setAdminTab(tab)}
               className={`cursor-pointer rounded-xl px-4 py-2 text-sm font-medium capitalize transition-colors ${
                 adminTab === tab
-                  ? "bg-foreground text-background"
+                  ? "bg-accent text-accent-foreground"
                   : "border border-transparent text-muted hover:text-foreground"
               }`}
               style={adminTab === tab ? { boxShadow: "var(--shadow-sm)" } : undefined}
@@ -379,7 +379,7 @@ export function AdminTab({
                     <div className="w-40 shrink-0">
                       <div className="h-1.5 overflow-hidden rounded-full bg-surface-alt">
                         <div
-                          className={`h-full rounded-full ${pct > 0.9 ? "bg-rose-400" : "bg-foreground"}`}
+                          className={`h-full rounded-full ${pct > 0.9 ? "bg-rose-400" : "bg-accent"}`}
                           style={{ width: `${Math.min(100, pct * 100)}%` }}
                         />
                       </div>

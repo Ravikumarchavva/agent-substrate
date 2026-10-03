@@ -2,6 +2,26 @@
 
 import type { ReactNode } from "react";
 import { Globe2, Loader2, Sparkles } from "lucide-react";
+import { Combobox } from "@/design";
+
+// Common zones first (some engines list India as Asia/Calcutta, so "Kolkata" would not be found), then every IANA zone the browser knows.
+const COMMON_TIMEZONES = [
+  "Asia/Kolkata",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Sao_Paulo",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Asia/Dubai",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+  "UTC",
+];
+const TIMEZONES = [...new Set([...COMMON_TIMEZONES, ...Intl.supportedValuesOf("timeZone")])];
 
 function Notice({
   tone,
@@ -147,26 +167,12 @@ export function GeneralTab({
 
       <Section title="User preferences" description="Applied automatically to every conversation.">
         <Field label="Timezone" hint="IANA format recommended">
-          <input
-            type="text"
+          <Combobox
             value={timezone}
-            onChange={(e) => onTimezoneChange(e.target.value)}
+            onValueChange={onTimezoneChange}
             placeholder="e.g. Asia/Kolkata"
-            list="common-timezones"
-            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-accent"
+            options={TIMEZONES}
           />
-          <datalist id="common-timezones">
-            <option value="Asia/Kolkata" />
-            <option value="America/New_York" />
-            <option value="America/Chicago" />
-            <option value="America/Los_Angeles" />
-            <option value="Europe/London" />
-            <option value="Europe/Paris" />
-            <option value="Asia/Tokyo" />
-            <option value="Asia/Singapore" />
-            <option value="Australia/Sydney" />
-            <option value="UTC" />
-          </datalist>
           {timezone && (
             <p className="mt-1.5 text-xs text-muted">Saved — will be used for calendar events and time-aware tasks.</p>
           )}
@@ -189,7 +195,7 @@ export function GeneralTab({
           <button
             onClick={handleSaveInstructions}
             disabled={isSaving}
-            className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-xl bg-accent-2 px-4 py-2 text-sm font-medium text-accent-2-foreground transition-opacity hover:bg-accent-2-hover disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
             {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
             {isSaving ? "Checking…" : "Save"}

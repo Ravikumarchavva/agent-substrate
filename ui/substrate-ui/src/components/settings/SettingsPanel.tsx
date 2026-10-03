@@ -5,7 +5,6 @@ import {
   BrainCircuit,
   HardDrive,
   Puzzle,
-  Search,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -58,18 +57,14 @@ import {
 import { GeneralTab } from "./GeneralTab";
 import { ConnectorsTab } from "./ConnectorsTab";
 import { ModelsTab } from "./ModelsTab";
-import { SearchTab } from "./SearchTab";
 import { AdminTab } from "./AdminTab";
 import { StorageTab } from "./StorageTab";
-import { ArtifactsTab } from "./ArtifactsTab";
 
 export type SettingsTab =
   | "general"
   | "apps"
   | "llm"
-  | "search"
   | "storage"
-  | "artifacts"
   | "admin";
 
 interface SettingsNotice {
@@ -103,7 +98,6 @@ export const SETTINGS_TAB_GROUPS: SettingsNavGroup[] = [
     items: [
       { id: "apps", label: "Connectors", description: "Connected apps and catalog", icon: Puzzle },
       { id: "llm", label: "LLM Setup", description: "Model and voice defaults", icon: SlidersHorizontal },
-      { id: "search", label: "Search", description: "Retrieval and reranking preview", icon: Search },
     ],
   },
   {
@@ -125,11 +119,6 @@ export function getVisibleSettingsTabGroups(isAdmin: boolean): SettingsNavGroup[
 
 const CUSTOM_INSTRUCTIONS_STORAGE_KEY = "system_instructions_override";
 const TIMEZONE_STORAGE_KEY = "user_timezone";
-const SEARCH_EMBEDDING_MODEL_STORAGE_KEY = "search_embedding_model";
-const SEARCH_RERANKER_MODEL_STORAGE_KEY = "search_reranker_model";
-const SEARCH_RERANK_LIMIT_STORAGE_KEY = "search_rerank_limit";
-const SEARCH_CONTEXTUAL_RAG_STORAGE_KEY = "search_contextual_rag";
-const SEARCH_MULTIPASS_STORAGE_KEY = "search_multipass_indexing";
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -162,7 +151,7 @@ export function SettingsPanel({
     checkAuth,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab === "artifacts" ? "storage" : initialTab);
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [customInstructions, setCustomInstructions] = useState("");
   const [timezone, setTimezone] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -179,16 +168,12 @@ export function SettingsPanel({
   const [realtimeModel, setRealtimeModel] = useState(DEFAULT_REALTIME_MODEL);
   const [realtimeVoice, setRealtimeVoice] = useState<OpenAITTSVoice>(DEFAULT_REALTIME_VOICE);
 
-  const [embeddingModel, setEmbeddingModel] = useState("embed-english-light-v3.0");
-  const [rerankerModel, setRerankerModel] = useState("mixedbread-base");
-  const [rerankLimit, setRerankLimit] = useState(20);
-  const [contextualRag, setContextualRag] = useState(false);
-  const [multipassIndexing, setMultipassIndexing] = useState(false);
 
   const [adminThreads, setAdminThreads] = useState<AdminThread[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [adminLoading, setAdminLoading] = useState(false);
+  const [adminLoaded, setAdminLoaded] = useState(false);
   const [adminLoadNotice, setAdminLoadNotice] = useState<string | null>(null);
   const [adminUsersError, setAdminUsersError] = useState<string | null>(null);
   const [adminTab, setAdminTab] = useState<"users" | "threads" | "storage">("users");
@@ -198,6 +183,7 @@ export function SettingsPanel({
 
   const [adminStorageUsers, setAdminStorageUsers] = useState<AdminStorageUser[]>([]);
   const [adminStorageLoading, setAdminStorageLoading] = useState(false);
+  const [adminStorageLoaded, setAdminStorageLoaded] = useState(false);
   const [adminStorageSessions, setAdminStorageSessions] = useState<
     Record<string, AdminStorageSession[]>
   >({});
@@ -215,13 +201,6 @@ export function SettingsPanel({
     setTtsVoice(getPreferredTTSVoice(preferredTtsModel));
     setTtsPlaybackRate(getPreferredTTSPlaybackRate());
     setRealtimeModel(getPreferredRealtimeModel());
-    setRealtimeVoice(getPreferredRealtimeVoice());
-
-    setEmbeddingModel(localStorage.getItem(SEARCH_EMBEDDING_MODEL_STORAGE_KEY) ?? "embed-english-light-v3.0");
-    setRerankerModel(localStorage.getItem(SEARCH_RERANKER_MODEL_STORAGE_KEY) ?? "mixedbread-base");
-    setRerankLimit(Number.parseInt(localStorage.getItem(SEARCH_RERANK_LIMIT_STORAGE_KEY) ?? "20", 10));
-    setContextualRag(localStorage.getItem(SEARCH_CONTEXTUAL_RAG_STORAGE_KEY) === "true");
-    setMultipassIndexing(localStorage.getItem(SEARCH_MULTIPASS_STORAGE_KEY) === "true");
 
     setSaveError(null);
     setSaveSuccess(false);
@@ -284,14 +263,15 @@ export function SettingsPanel({
       }
     } finally {
       setAdminLoading(false);
+      setAdminLoaded(true);
     }
   }, []);
 
   useEffect(() => {
-    if (activeTab === "admin" && isAdmin && !adminLoading && adminThreads.length === 0) {
+    if (activeTab === "admin" && isAdmin && !adminLoading && !adminLoaded) {
       void loadAdminData();
     }
-  }, [activeTab, adminLoading, adminThreads.length, isAdmin, loadAdminData]);
+  }, [activeTab, adminLoading, adminLoaded, isAdmin, loadAdminData]);
 
   const loadAdminStorage = useCallback(async () => {
     setAdminStorageLoading(true);
@@ -301,6 +281,7 @@ export function SettingsPanel({
       console.warn("Failed to load admin storage.", error);
     } finally {
       setAdminStorageLoading(false);
+      setAdminStorageLoaded(true);
     }
   }, []);
 
@@ -314,11 +295,11 @@ export function SettingsPanel({
       adminTab === "storage" &&
       isAdmin &&
       !adminStorageLoading &&
-      adminStorageUsers.length === 0
+      !adminStorageLoaded
     ) {
       void loadAdminStorage();
     }
-  }, [activeTab, adminTab, adminStorageLoading, adminStorageUsers.length, isAdmin, loadAdminStorage]);
+  }, [activeTab, adminTab, adminStorageLoading, adminStorageLoaded, isAdmin, loadAdminStorage]);
 
   const handleExpandStorageUser = useCallback(
     (userId: string) => {
@@ -474,25 +455,10 @@ export function SettingsPanel({
     }
   }, [checkAuth]);
 
-  useEffect(() => {
-    localStorage.setItem(SEARCH_EMBEDDING_MODEL_STORAGE_KEY, embeddingModel);
-  }, [embeddingModel]);
 
-  useEffect(() => {
-    localStorage.setItem(SEARCH_RERANKER_MODEL_STORAGE_KEY, rerankerModel);
-  }, [rerankerModel]);
 
-  useEffect(() => {
-    localStorage.setItem(SEARCH_RERANK_LIMIT_STORAGE_KEY, String(rerankLimit));
-  }, [rerankLimit]);
 
-  useEffect(() => {
-    localStorage.setItem(SEARCH_CONTEXTUAL_RAG_STORAGE_KEY, String(contextualRag));
-  }, [contextualRag]);
 
-  useEffect(() => {
-    localStorage.setItem(SEARCH_MULTIPASS_STORAGE_KEY, String(multipassIndexing));
-  }, [multipassIndexing]);
 
   if (!isOpen) return null;
 
@@ -549,7 +515,7 @@ export function SettingsPanel({
               key={id}
               type="button"
               onClick={() => handleInlineTabChange(id)}
-              className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${activeTab === id ? "bg-foreground text-background" : "bg-card text-muted hover:text-foreground"}`}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${activeTab === id ? "bg-accent text-accent-foreground" : "bg-card text-muted hover:text-foreground"}`}
             >
               {label}
             </button>
@@ -627,24 +593,9 @@ export function SettingsPanel({
           />
         )}
 
-        {activeTab === "search" && (
-          <SearchTab
-            embeddingModel={embeddingModel}
-            setEmbeddingModel={setEmbeddingModel}
-            rerankerModel={rerankerModel}
-            setRerankerModel={setRerankerModel}
-            rerankLimit={rerankLimit}
-            setRerankLimit={setRerankLimit}
-            contextualRag={contextualRag}
-            setContextualRag={setContextualRag}
-            multipassIndexing={multipassIndexing}
-            setMultipassIndexing={setMultipassIndexing}
-          />
-        )}
 
         {activeTab === "storage" && <StorageTab />}
 
-        {activeTab === "artifacts" && <ArtifactsTab threadId={threadId} />}
 
         {activeTab === "admin" && isAdmin && (
           <AdminTab

@@ -91,14 +91,15 @@ function QuickActionButton({ icon: Icon, label, onClick, isActive = false, badge
     <button
       type="button"
       onClick={onClick}
-      className={`substrate-press flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-3 text-left text-sm transition-colors ${isActive ? "bg-foreground text-background" : "text-foreground hover:bg-card-hover"}`}
+      aria-current={isActive ? "page" : undefined}
+      className={`substrate-press flex h-control-lg w-full cursor-pointer items-center justify-between rounded-lg px-3 text-left text-sm transition-colors ${isActive ? "bg-accent/12 text-foreground" : "text-foreground hover:bg-card-hover"}`}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <Icon className="h-4 w-4 shrink-0" />
+        <Icon className={`size-4 shrink-0 ${isActive ? "text-accent" : "text-muted"}`} />
         <span className="truncate font-medium">{label}</span>
       </div>
       {badge !== undefined && badge > 0 && (
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${isActive ? "bg-background text-foreground" : "bg-violet-500 text-white"}`}>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold bg-accent text-accent-foreground`}>
           {badge}
         </span>
       )}
@@ -291,7 +292,7 @@ export function Sidebar({
                           onClick={() => onSelectSettingsTab?.(item.id)}
                           className={`flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition-colors cursor-pointer ${active ? "bg-background text-foreground" : "text-foreground hover:bg-background"}`}
                         >
-                          <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${active ? "bg-foreground text-background" : "bg-badge text-muted"}`}>
+                          <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${active ? "bg-accent text-accent-foreground" : "bg-badge text-muted"}`}>
                             <Icon className="h-4 w-4" />
                           </div>
                           <div className="min-w-0">
@@ -308,15 +309,15 @@ export function Sidebar({
           </div>
         ) : (
           <>
-            <div className="px-3 pb-2 pt-3">
-              <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-muted">
-                <Search className="h-4 w-4 shrink-0" />
+            <div className="px-2 pb-2 pt-2">
+              <div className="flex h-control-lg items-center gap-3 rounded-lg border border-border bg-background px-3 text-sm text-muted">
+                <Search className="size-4 shrink-0" />
                 <input
                   ref={searchInputRef}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search threads"
-                  className="flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted"
+                  className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
                 />
                 {search && (
                   <button
@@ -647,7 +648,7 @@ function ThreadItem({
             e.stopPropagation();
             setShowMenu(!showMenu);
           }}
-          className={`btn-icon relative z-10 flex cursor-pointer items-center justify-center rounded-lg p-1.5 sm:p-1 transition-all hover:bg-foreground/10 ${showMenu ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+          className={`btn-icon relative z-10 flex cursor-pointer items-center justify-center rounded-lg p-1.5 sm:p-1 transition-all hover:bg-accent/10 ${showMenu ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
         >
           <MoreHorizontal className="h-4 w-4" />
         </button>

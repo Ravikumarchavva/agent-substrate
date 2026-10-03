@@ -146,6 +146,15 @@ class SubstrateConfig(BaseSettings):
     # What an upload may be: read once (substrate.documents.Reader), filed in the conversation's documents.
     RAG_MAX_DOC_PAGES: int = 300
     RAG_MAX_DOC_MB: int = 5
+    # After an upload a model reads the document and writes what each section says, a card for the document and (in a knowledge base) where it is
+    # filed, so the assistant can choose what to open. It runs in the background; an upload never waits for it and works without it. The model
+    # is DOCUMENT_SUMMARY_MODEL, or CHAT_MODEL when that is empty; with no key for it, descriptions are simply not written.
+    DOCUMENT_SUMMARY_ENABLED: bool = True
+    DOCUMENT_SUMMARY_MODEL: str = ""
+    DOCUMENT_SUMMARY_CONCURRENCY: int = 4
+    DOCUMENT_SUMMARY_TIMEOUT_S: int = 180
+    # Tokens (input + output) one tenant may spend on descriptions per day; 0 is no cap.
+    DOCUMENT_SUMMARY_DAILY_TOKENS: int = 5_000_000
     # The knowledge base the chat's `knowledge` tool searches (one per tenant for now; /rag and /internal/knowledge address any by id).
     KNOWLEDGE_CHAT_BASE: str = "default"
 

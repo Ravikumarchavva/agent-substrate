@@ -201,12 +201,20 @@ async def text_to_speech(request: Request, body: TTSRequest):
             detail="OpenRouter chat models are not supported for speech synthesis",
         )
 
-    fmt = "wav" if provider == "gemini" else (body.response_format or "mp3")
+    fmt = (
+        "wav"
+        if isinstance(model_client, (GeminiClient, KokoroTTSClient))
+        else (body.response_format or "mp3")
+    )
     content_type = _TTS_CONTENT_TYPE.get(fmt, "audio/mpeg")
     voice = (
         body.voice.strip()
         if body.voice and body.voice.strip()
-        else (settings.TTS_VOICE if provider == "gemini" else "coral")
+        else (
+            settings.TTS_VOICE
+            if isinstance(model_client, (GeminiClient, KokoroTTSClient))
+            else "coral"
+        )
     )
 
     try:

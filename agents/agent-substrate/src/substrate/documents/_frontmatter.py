@@ -340,8 +340,10 @@ def dump_mapping(data: dict[str, Any]) -> str:
     lines = []
     for key, value in data.items():
         name = str(key)
+        # A bare key that YAML 1.1 reads as a word (``NO`` is False, ``~`` is null) must be quoted like any other string.
+        bare = _PLAIN_KEY.match(name) and name.lower() not in _YAML_WORDS
         lines.append(
-            f"{name if _PLAIN_KEY.match(name) else json.dumps(name, ensure_ascii=False)}: {_render(value)}"
+            f"{name if bare else json.dumps(name, ensure_ascii=False)}: {_render(value)}"
         )
     return "\n".join(lines)
 

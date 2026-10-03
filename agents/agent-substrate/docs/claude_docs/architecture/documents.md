@@ -47,6 +47,34 @@
   the run's scope, never an argument. Text comes back inside `<document>` tags — untrusted data. Results carry `[n]` citations (stable per
   tool instance) in the wire shape the chat UI renders.
 
+## Descriptions and filing (written by a model, after the upload)
+
+`Library.add` never calls a model: the index it writes says only what can be counted ("3 pages · 4 sections"), which cannot guide a model
+through thousands of documents. `Library.enrich(collection, document)` adds what can: a **description per section** (what it says, with its
+key names and figures), a **card** for the document (the `description` of its `index.md`: what kind of document, when, about whom, what it can
+answer) and, when the library has `file_topics=True` (knowledge bases), **where it is filed** (`Finance/Earnings`).
+
+* An `Enricher` (`documents/enrichment.py`) does the writing; `LLMEnricher` uses any `ChatModel` with reasoning off and no tools (small sections
+  are batched into one call, the card and topic are one more call). `FirstSentenceEnricher` is the free, offline fallback, and is used on its
+  own for documents under ~1,000 tokens.
+* **Additive and labelled.** Section text is never touched (byte for byte); everything written carries `generated: {by, at}` and no `verified`,
+  so it reads as Unverified. A document is never moved: topics are virtual folders (`{collection}/_topics/Finance/Earnings/index.md`, plus
+  `topics:` in the document's frontmatter), so ids and citations never change.
+* **Distrusted twice.** The text a model wrote from an untrusted file is cleaned (no links, markup, control characters; length-capped) and every
+  figure in it must appear in the text it describes, allowing rounding (`$119.6B` for `119,575`); a sentence with an unknown figure is dropped
+  and, if nothing is left, a plain extract stands in. The tool returns descriptions inside `<document>` tags with a note that they are
+  machine-written hints.
+* **Fails soft, runs later.** `enrich` never raises for a model that is down, slow or wrong; it records `failed` (retried up to three times by
+  `pending()`/`pending_all()`), and the document keeps its counted index. One document is described by one caller at a time; writes are
+  idempotent, so two server processes can race safely. Re-running with the same enricher name+version does nothing; a new model or prompt
+  version describes again.
+* **Recoverable.** The descriptions live in the OKF files; `reindex` rebuilds the `library_enrichment*` tables from them. `delete` and
+  `erase_under` remove them and rewrite the topic pages.
+* The assistant sees descriptions in `list`, `outline` and `find` (search also matches them, and for knowledge bases each chunk is embedded with
+  its section's description in front of it), and walks the topic tree with `browse`.
+
+Cost: about $0.01 per average (30k-token) document with `gpt-5.4-mini`; the live run on a 3-page financial statement cost $0.0015 and took 5 s.
+
 ## Searching by meaning (knowledge bases)
 
 `Library(store, embedder=…, reranker=…)` — an `EmbeddingModel`/`Reranker`, or a URL (`RemoteEmbedder`/`RemoteReranker`, `models/remote.py`:
@@ -69,6 +97,10 @@ the OpenAI embeddings wire and the Jina/Cohere rerank wire; `apps/embedding-rera
 * A knowledge base is `knowledge_collection(tenant, kb)`. `/rag/*` and `/internal/knowledge/*` derive it from the authenticated claims, never
   from the request — a tenant cannot reach another's. The chat has two tools over the two libraries: `documents` and `knowledge`
   (`KNOWLEDGE_CHAT_BASE`). Embedder/reranker: `EMBEDDING_RERANKER_SERVICE_URL`, or `EMBEDDING_MODEL`; with neither, words only.
+* After an upload is filed, an `EnrichmentQueue` (`documents_library.py`) describes it in the background (`DOCUMENT_SUMMARY_*` settings): a few
+  at a time, once per document, within a per-tenant daily token budget (`DOCUMENT_SUMMARY_DAILY_TOKENS`), with a startup sweep for anything
+  not yet described. The model is `DOCUMENT_SUMMARY_MODEL` or `CHAT_MODEL`; with no key for it, nothing is written and nothing breaks.
+  Knowledge-base documents are described and filed the same way. It never delays `staged_at` or the first message.
 * GDPR erasure calls `Library.erase_under(prefix)` for the user or tenant.
 
 ## Where to change things
@@ -79,7 +111,9 @@ the OpenAI embeddings wire and the Jina/Cohere rerank wire; `apps/embedding-rera
 | Use another OCR / reader / document server | implement `Ocr` / `DocumentExtractor` and pass it; run `OcrConformance` / `DocumentExtractorConformance` |
 | Use another embedder / reranker | implement `EmbeddingModel` / `Reranker` and pass it (a URL needs no code); run `EmbeddingModelConformance` / `RerankerConformance` |
 | Change how sections are cut | `documents/split.py` (and `tests/documents/test_split.py`) |
+| Change how documents are described or filed | an `Enricher` (`documents/enrichment.py`), or the prompts in `documents/llm_enricher.py` (bump `PROMPT_VERSION` so existing documents are described again) |
 | Change what the model can do with documents | `documents/tool.py`; keep it free of any argument that names a collection or a path |
 
-Tests: `tests/documents/` (formats, PDF, OCR, reader, library on SQLite **and** PostgreSQL, embeddings), invariants I32–I34 and the tenant
+Tests: `tests/documents/` (formats, PDF, OCR, reader, library on SQLite **and** PostgreSQL, embeddings, `test_library_enrichment.py`,
+`test_llm_enricher.py`), `apps/substrate-cloud/tests/test_enrichment_queue.py`, invariants I32–I39 and the tenant
 row in `tests/invariants/test_documents.py`, `apps/substrate-cloud/tests/test_rag_routes.py` for tenant isolation.

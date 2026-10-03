@@ -429,6 +429,9 @@ tool = DocumentsTool(library, collection=lambda scope: …)   # list / outline /
   index) is derived and rebuilt by `reindex`. With an `embedder`, sections are also chunked and embedded into `store.vectors` (one embedder per
   collection — `VectorSpaceError` otherwise); `find` fuses similarity and words, reranks if there is a reranker, and degrades to words when the
   service is down (chunks stored without a vector are embedded later by `reindex(missing_only=True)`).
+* `Library.enrich` has a model write a description per section, a card per document and (knowledge bases) a topic path, after the upload and
+  never inside `add`: additive (section text untouched), labelled `generated`, figure-checked, fail-soft; the platform runs it from an
+  `EnrichmentQueue` (`DOCUMENT_SUMMARY_*`). The assistant sees it in `list`/`outline`/`find` and walks topics with `browse`. See `documents.md`.
 * A tool takes its collection from `scope_of(ctx)`; there is no action that adds a document or opens a path. Document text is returned inside
   `<document>` tags — untrusted data.
 * Platform: a conversation's uploads are read once and filed under `conversation_documents_prefix`; a knowledge base is

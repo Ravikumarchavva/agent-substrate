@@ -161,7 +161,7 @@ SECURITY_IGNORES = \
 	--ignore-vuln PYSEC-2026-597
 
 security:
-	uv run --with pip-audit pip-audit $(SECURITY_IGNORES)
+	uv run --with pip-audit pip-audit --skip-editable $(SECURITY_IGNORES)
 
 security-soft:
 	@$(MAKE) security || echo "Non-blocking: security findings ignored by ci target"

@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from substrate.tools.protocols import Tool
-from substrate.models.protocols import ChatModel
+from substrate.models.protocols import ChatModel, ReasoningEffort
 from substrate.tools.approval import ApprovalHandler
 from substrate.tools.protocols import ToolRisk
 from substrate.context.compaction.pipeline import CompactionPipeline
@@ -94,6 +94,7 @@ def create_assistant_agent(
     initial_tool_choice: str | None = None,
     approval_handler: ApprovalHandler | None = None,
     approval_required_risk: ToolRisk | None = None,
+    reasoning: ReasoningEffort | None = None,
 ) -> ReActAgent:
     """Create a configured ``ReActAgent``.
 
@@ -126,6 +127,7 @@ def create_assistant_agent(
             ``RetryMiddleware``/``LLMJudgeMiddleware`` (CHAT),
             ``PIIDetectionMiddleware``/``ToolCallValidationMiddleware``/
             ``CacheMiddleware``/``ContentTruncatorMiddleware`` (TOOL).
+        reasoning: How hard a reasoning-capable model thinks before answering (``None`` = the provider default).
         initial_tool_choice: Forces this exact tool name on the agent's
             first LLM call only; dropped after (see ``ReActAgent``).
         approval_handler: Satisfies ``kernel.tools.approval.ApprovalHandler``
@@ -167,4 +169,5 @@ def create_assistant_agent(
         approval_handler=approval_handler,
         approval_required_risk=approval_required_risk,
         middleware=MiddlewarePipeline(list(middleware or [])),
+        reasoning=reasoning,
     )

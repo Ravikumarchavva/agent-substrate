@@ -38,6 +38,7 @@ from substrate_cloud.factory import build_agent_for_thread
 # ContextVar that scopes TaskManagerTool to the active thread
 from substrate.types import ChatMessage as _ChatMessage, Role
 from substrate.types import Actor as _Actor
+from substrate.models.protocols import ReasoningEffort
 from substrate.runtime import ChatPayload as _ChatPayload, Message as _Message
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
@@ -323,6 +324,7 @@ async def chat(
             initial_tool_choice=initial_tool_choice or None,
             bridge=deps["bridge"],
             safety_middleware=ctx.safety_middleware,
+            reasoning=ReasoningEffort(body.reasoning) if body.reasoning else None,
             # Virtual actor: a fresh, fully-current agent is rebuilt on every
             # turn anyway, so pinning this in the registry forever just leaks
             # one entry per thread ever chatted with. Evictable is safe here.

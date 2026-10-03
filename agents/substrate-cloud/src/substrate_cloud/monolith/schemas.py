@@ -72,6 +72,9 @@ class ChatRequest(BaseModel):
     file_ids: Optional[List[uuid.UUID]] = None  # IDs of files to inject for this turn
     model: Optional[str] = None  # per-request LLM override (e.g. "gpt-4o")
     branch_id: Optional[str] = "main"  # conversation branch to drive
+    reasoning: Optional[Literal["off", "low", "medium", "high"]] = (
+        None  # how hard a reasoning model thinks; None = provider default
+    )
 
 
 # ── Branch / Checkpoint schemas ──────────────────────────────────────────────

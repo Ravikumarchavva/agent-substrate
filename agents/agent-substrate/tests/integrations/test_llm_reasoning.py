@@ -227,3 +227,11 @@ async def test_gemini_thought_parts_become_reasoning_not_answer_text():
     assert [type(b).__name__ for b in result.content] == ["ReasoningBlock", "TextBlock"]
     assert result.text == "The answer is 4."
     assert result.usage.output_tokens == 25 and result.usage.reasoning_tokens == 20
+
+
+def test_openai_off_uses_none_for_gpt_5_1_and_later_which_reject_minimal():
+    off = GenerationOptions(reasoning=ReasoningEffort.OFF)
+    gpt54 = OpenAIClient(model="gpt-5.4-mini", api_key="x")._build_params(
+        MSGS, off, stream=False
+    )
+    assert gpt54["reasoning"] == {"effort": "none"}

@@ -95,7 +95,6 @@ export const SETTINGS_TAB_GROUPS: SettingsNavGroup[] = [
     title: "Personal",
     items: [
       { id: "general", label: "General", description: "Timezone and prompt defaults", icon: Settings },
-      { id: "artifacts", label: "Artifacts", description: "What the assistant remembers and keeps", icon: BrainCircuit },
       { id: "storage", label: "Storage", description: "Uploaded and generated files", icon: HardDrive },
     ],
   },
@@ -163,7 +162,7 @@ export function SettingsPanel({
     checkAuth,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab === "artifacts" ? "storage" : initialTab);
   const [customInstructions, setCustomInstructions] = useState("");
   const [timezone, setTimezone] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -542,7 +541,7 @@ export function SettingsPanel({
   };
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className={`flex flex-col ${activeTab === "storage" ? "h-full flex-1 min-h-0" : "min-h-full"}`}>
       <div className="border-b border-(--border) px-4 py-3 lg:hidden">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {tabGroups.flatMap((group) => group.items).map(({ id, label }) => (
@@ -558,7 +557,13 @@ export function SettingsPanel({
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
+      <div
+        className={
+          activeTab === "storage"
+            ? "flex-1 min-h-0 h-full w-full p-2 sm:p-3 lg:p-4 flex flex-col"
+            : "mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10"
+        }
+      >
         {activeTab === "general" && (
           <GeneralTab
             customInstructions={customInstructions}

@@ -789,32 +789,16 @@ export function StorageTab() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Storage Drive</h2>
-          <p className="mt-0.5 text-sm text-(--muted)">Browse, inspect, and organize files across your conversations.</p>
-        </div>
-        <button
-          onClick={() => void load()}
-          disabled={loading}
-          className="inline-flex h-8 items-center gap-2 rounded-lg border border-(--border) bg-(--card) px-3 text-xs font-medium text-(--muted) transition hover:text-foreground disabled:opacity-50 cursor-pointer"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${loading ? "animate-spin text-(--accent)" : ""}`} />
-          Refresh
-        </button>
-      </div>
-
+    <div className="flex flex-col flex-1 h-full min-h-0 w-full">
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/8 px-4 py-2.5 text-sm text-red-400">
+        <div className="mb-2 rounded-xl border border-red-500/20 bg-red-500/8 px-4 py-2.5 text-sm text-red-400 shrink-0">
           {error}
         </div>
       )}
 
       {/* Main Explorer Window */}
       <div
-        className="grid min-h-[600px] overflow-hidden rounded-2xl border border-(--border) lg:grid-cols-[220px_1fr]"
+        className="grid flex-1 min-h-0 h-full w-full overflow-hidden rounded-2xl border border-(--border) lg:grid-cols-[220px_1fr]"
         style={{ background: "var(--card)" }}
       >
         {/* Sidebar */}
@@ -899,6 +883,18 @@ export function StorageTab() {
                 </>
               )}
             </div>
+
+            {/* Refresh */}
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading}
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-(--border) bg-background/50 px-2.5 text-xs font-medium text-(--muted) transition hover:bg-(--card) hover:text-foreground disabled:opacity-50 cursor-pointer shrink-0"
+              title="Refresh files"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${loading ? "animate-spin text-(--accent)" : ""}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
 
             <div className="flex-1" />
 

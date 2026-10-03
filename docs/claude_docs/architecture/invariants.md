@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**123 enforced · 0 pending · 123 total**
+**128 enforced · 0 pending · 128 total**
 
 ## approvals
 
@@ -45,6 +45,16 @@ and the marker has to come off. That is what keeps this document honest.
   `test_the_catalog_is_derived_from_the_bundle_and_can_be_rebuilt`
 - ✅ **The collection of a knowledge base is derived from the authenticated tenant and a validated name, so it is inside that tenant's prefix (where its erasure reaches it) and no name — a path, another tenant's collection — can make it point somewhere else.**
   `test_a_knowledge_base_collection_is_always_under_its_tenants_prefix`
+- ✅ **``Library.add`` writes the bundle with plain code; descriptions come later from ``enrich``. A library holding an enricher still adds a document without calling it, so a slow or broken model cannot slow or break an upload.**
+  `test_adding_a_document_never_calls_a_model_so_an_upload_never_waits_for_one`
+- ✅ **A description is written next to the text, never into it: every section file's body is byte for byte what ``add`` wrote, whatever the model returned — the original words are the evidence, the description only a pointer to them.**
+  `test_enriching_a_document_never_changes_what_its_sections_say`
+- ✅ **When the model is down, slow or wrong, ``enrich`` records ``failed`` and changes nothing else: the counted index, the section files and the search results are untouched, so a document is never made worse by trying to describe it.**
+  `test_a_model_that_fails_leaves_the_document_exactly_as_it_was`
+- ✅ **A description is derived from a file anyone could have written, then read by the next model: links, markup and any figure the document does not contain are removed before it is stored, and what is stored is cleaned of control characters and capped in length.**
+  `test_text_a_model_wrote_from_an_untrusted_document_is_cleaned_and_its_figures_checked_before_it_is_stored`
+- ✅ **Each file a description is written into carries ``generated`` (by which enricher and version, when) and no ``verified``, so a reader can always tell a machine's summary from the document's own words and sees it as Unverified.**
+  `test_everything_a_model_wrote_is_labelled_generated_and_never_verified`
 
 ## durable execution
 

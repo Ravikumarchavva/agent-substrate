@@ -817,6 +817,28 @@ keys from the environment (`provider_keys_from_env`). Root tests no longer inclu
 
 ---
 
+## A model describes and files documents, after the upload, as an additive layer (2026-10-03)
+
+**Context.** The bundle's index said only counts ("3 pages · 1 sections"; "Page 1 — ~43 tokens"). Fine for ten files; useless for choosing among
+thousands. Prior art points the same way: a tree whose nodes carry model-written summaries and page references (PageIndex, 98.7% on FinanceBench
+without vectors), short model-written context in front of each chunk (Anthropic's contextual retrieval, −49% failed retrievals, −67% with
+reranking), hierarchies of index files that an agent walks (RAPTOR, "LLMs already understand filesystems").
+
+**Decision.** `Library.enrich` has a model write a description per section, a card for the document, and (knowledge bases) a topic path.
+It is **additive** (section text byte-identical, documents never moved, topics are virtual folders), **labelled** (`generated`, never
+`verified`), **checked** (cleaned, every figure verified against the text), **fail-soft** (a failing model leaves the counted index), and
+**asynchronous** (`add` never calls a model; a background queue does, within a per-tenant daily token budget). Unlike memory, the model never
+decides whether to write, never edits or supersedes a document, and has no tool to do either.
+
+**Why not in `add`.** An upload would wait for, and fail with, a model. `add` stays a pure function of the bytes: same file, same bundle.
+
+**Why a side table, not columns.** The catalog stays derived from the bundle's text; descriptions are their own tables (and live in the OKF
+files, so `reindex` restores them), and SQLite cannot add a column idempotently, which the migration framework requires.
+
+**Found by running it.** Two concurrent runs of one document collided on Postgres (a startup sweep queued it once per library over one store):
+fixed with upserts, a per-document lock and a queue keyed by document. Padding in the safety classifier (a separate finding the same day) cost
+1.2 s per message: see `PromptGuardClassifier`.
+
 ## Documents first: one `Reader`, a navigable `Library`, knowledge bases by URL (2026-10-02)
 
 **Decision:** reading a user's document is a base-install capability with one entry point, and what the model does with it is

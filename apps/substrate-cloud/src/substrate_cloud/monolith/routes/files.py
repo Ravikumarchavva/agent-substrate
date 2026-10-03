@@ -348,7 +348,7 @@ async def _stage_uploaded_doc(
         result = await document_reader().read(
             data, original_name, content_type=content_type
         )
-        await ctx.library.add(
+        added = await ctx.library.add(
             result,
             original_name,
             collection=collection,
@@ -379,6 +379,10 @@ async def _stage_uploaded_doc(
                 )
                 await session.commit()
         return
+    # The document is filed and readable. Describing it (what each section says, a card) is separate, later and optional: it never
+    # delays ``staged_at`` or the first message, and a model that is down just leaves the counted index.
+    if ctx.enrichment is not None:
+        ctx.enrichment.submit(ctx.library, collection, added.document)
     await _write_extracted_sidecar(
         ctx.pending_for(tenant_id),
         file_id,

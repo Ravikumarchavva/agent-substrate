@@ -126,12 +126,31 @@ async def lifespan(app: FastAPI):
 
     app.state.jwt_secret = settings.JWT_SECRET
 
-    from substrate_cloud.documents_library import build_knowledge_library, build_library
+    from substrate_cloud.documents_library import (
+        EnrichmentQueue,
+        build_enricher,
+        build_knowledge_library,
+        build_library,
+    )
 
-    library = build_library(infra.store, infra.file_store, settings)
-    knowledge = build_knowledge_library(infra.store, infra.file_store, settings)
+    enricher = build_enricher(
+        settings, app.state.api_keys, **app.state.model_client_kwargs
+    )
+    library = build_library(infra.store, infra.file_store, settings, enricher)
+    knowledge = build_knowledge_library(
+        infra.store, infra.file_store, settings, enricher
+    )
     app.state.library = library
     app.state.knowledge = knowledge
+    app.state.enrichment = (
+        EnrichmentQueue(
+            concurrency=settings.DOCUMENT_SUMMARY_CONCURRENCY,
+            daily_tokens=settings.DOCUMENT_SUMMARY_DAILY_TOKENS,
+            redis=infra.redis_client,
+        )
+        if enricher is not None
+        else None
+    )
 
     # Tool registry
     tools: ToolboxResult = await init_tool_registry(
@@ -251,6 +270,7 @@ async def lifespan(app: FastAPI):
         library=app.state.library,
         knowledge=app.state.knowledge,
     )
+    app.state.ctx.enrichment = app.state.enrichment
 
     from substrate_cloud.monolith.routes.files import sweep_stuck_staging_uploads
 
@@ -262,6 +282,21 @@ async def lifespan(app: FastAPI):
             "Staging reconciliation: re-dispatched %d stuck upload(s) on startup",
             dispatched,
         )
+
+    if app.state.enrichment is not None:
+        # each library describes only its own kind of collection: knowledge bases (filed by topic) and conversations (not)
+        for describer, matching, excluding in (
+            (app.state.library, "%", "%/knowledge/%"),
+            (app.state.knowledge, "%/knowledge/%", None),
+        ):
+            if describer is not None:
+                queued = await app.state.enrichment.sweep(
+                    describer, matching=matching, excluding=excluding
+                )
+                if queued:
+                    logger.info(
+                        "Queued %d document(s) for descriptions on startup", queued
+                    )
 
     for name in ("httpx", "urllib3", "openai"):
         logging.getLogger(name).setLevel(logging.WARNING)
@@ -306,6 +341,10 @@ async def lifespan(app: FastAPI):
         await (
             app.state.short_term_memory.disconnect()
         )  # the Redis cache in front of the store, when there is one
+    if getattr(app.state, "enrichment", None) is not None:
+        await (
+            app.state.enrichment.drain()
+        )  # let descriptions being written finish before the store closes
     if getattr(app.state, "store", None) is not None:
         await app.state.store.aclose()  # threads, memory and session state share it
     if getattr(app.state, "redis_client", None):

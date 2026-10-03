@@ -41,9 +41,14 @@ class Chunk:
     last_page: int
     heading: str
 
-    def embedding_text(self, title: str, heading_path: Sequence[str]) -> str:
+    def embedding_text(
+        self, title: str, heading_path: Sequence[str], context: str = ""
+    ) -> str:
+        """The chunk with where it is from in front: the title and heading trail, and ``context`` (what the section is about, as a model wrote
+        it) when there is one. Embedding this finds the chunk by its subject, not only by its own words."""
         trail = " › ".join(part for part in (title, *heading_path) if part)
-        return f"{trail}\n\n{self.text}" if trail else self.text
+        head = f"{trail}\n{context}" if trail and context else (trail or context)
+        return f"{head}\n\n{self.text}" if head else self.text
 
 
 @dataclass

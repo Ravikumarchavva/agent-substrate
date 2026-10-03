@@ -62,6 +62,8 @@ async def upload_document(
                     "knowledge_base_id": knowledge_base_id,
                 },
             )
+            if ctx.enrichment is not None:
+                ctx.enrichment.submit(ctx.knowledge, collection, added.document)
             indexed = {
                 "indexed": True,
                 "library_document": added.document,

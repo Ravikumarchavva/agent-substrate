@@ -167,3 +167,12 @@ def test_strings_that_yaml_would_reinterpret_are_quoted() -> None:
     assert load_mapping(out) == data
     yaml = pytest.importorskip("yaml")
     assert yaml.safe_load(out) == data
+
+
+def test_a_key_that_yaml_reads_as_a_word_is_quoted():
+    """Found by the property test above: ``NO: null`` is ``{False: None}`` to a real YAML parser. A key is quoted whenever a value would be."""
+    yaml = pytest.importorskip("yaml")
+    for word in ("NO", "no", "Yes", "ON", "off", "null", "True", "y", "N"):
+        text = dump_mapping({word: None})
+        assert yaml.safe_load(text) == {word: None}, text
+        assert load_mapping(text) == {word: None}

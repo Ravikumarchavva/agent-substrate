@@ -97,3 +97,9 @@ def test_threshold_is_configurable():
     loose = PromptGuardClassifier(threshold=0.01)
     v2 = loose.classify("hello, how are you today?")
     assert not v2.flagged  # 0.0007 malicious score stays well under even 0.01
+
+
+def test_short_text_is_not_padded_to_the_model_maximum(classifier):
+    # Regression: the tokenizer's own config pads every input to 512 tokens, so a one-line message cost ~1.2s of CPU instead of ~25ms
+    # on every chat turn. Structural (token count), not a timing assertion, because timings are noisy on shared machines.
+    assert len(classifier._tokenizer.encode("hello, how are you today?").ids) < 64

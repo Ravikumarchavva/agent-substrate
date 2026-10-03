@@ -32,6 +32,7 @@ source = { editable = "../../" }
 dependencies = [
     { name = "opentelemetry-api" },
     { name = "pydantic" },
+    { name = "pypdfium2" },
 ]
 
 [package.optional-dependencies]
@@ -61,9 +62,6 @@ openai = [
 ]
 postgres = [
     { name = "asyncpg" },
-]
-rag = [
-    { name = "pypdf" },
 ]
 redis = [
     { name = "redis", extra = ["hiredis"] },
@@ -98,9 +96,6 @@ scheduler = [
 serve = [
     { name = "fastapi" },
 ]
-services = [
-    { name = "httpx2" },
-]
 tools = [
     { name = "pyyaml" },
 ]
@@ -129,10 +124,10 @@ requires-dist = [
     { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.14.4" },
     { name = "exa-py", marker = "extra == 'web'", specifier = ">=2.14.0" },
     { name = "fastapi", marker = "extra == 'serve'", specifier = ">=0.128.0" },
+    { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.128.0" },
     { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=1.73.0" },
     { name = "httpx", marker = "extra == 'openai'", specifier = ">=0.27.0" },
     { name = "httpx", marker = "extra == 'testing'", specifier = ">=0.27.0" },
-    { name = "httpx2", marker = "extra == 'services'", specifier = ">=2.7.0" },
     { name = "httpx2", marker = "extra == 'web'", specifier = ">=2.7.0" },
     { name = "huggingface-hub", marker = "extra == 'safety'", specifier = ">=0.25.0" },
     { name = "k8s-agent-sandbox", marker = "extra == 'code'", specifier = ">=0.4.6" },
@@ -140,6 +135,7 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'sandbox'", specifier = ">=3.9.0" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
     { name = "msgspec", marker = "extra == 'logging'", specifier = ">=0.21.1" },
+    { name = "onnxruntime", marker = "extra == 'ocr'", specifier = ">=1.20.0" },
     { name = "onnxruntime", marker = "extra == 'safety'", specifier = ">=1.20.0" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=2.15.0" },
     { name = "openpyxl", marker = "extra == 'sandbox'", specifier = ">=3.1.0" },
@@ -156,15 +152,14 @@ requires-dist = [
     { name = "prompt-toolkit", marker = "extra == 'console'", specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", marker = "extra == 'console'", specifier = ">=2.12.0" },
-    { name = "pypdf", marker = "extra == 'rag'", specifier = ">=6.13.0" },
-    { name = "pypdfium2", marker = "extra == 'ocr'", specifier = ">=4.30.0" },
-    { name = "pytesseract", marker = "extra == 'ocr'", specifier = ">=0.3.10" },
+    { name = "pypdfium2", specifier = ">=5.0.0" },
     { name = "pytest", marker = "extra == 'testing'", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", marker = "extra == 'testing'", specifier = ">=1.4.0" },
     { name = "python-docx", marker = "extra == 'sandbox'", specifier = ">=1.1.0" },
     { name = "python-json-logger", marker = "extra == 'logging'", specifier = ">=2.0.7" },
     { name = "python-pptx", marker = "extra == 'sandbox'", specifier = ">=1.0.0" },
     { name = "pyyaml", marker = "extra == 'tools'", specifier = ">=6.0" },
+    { name = "rapidocr", marker = "extra == 'ocr'", specifier = ">=3.0.0" },
     { name = "redis", extras = ["hiredis"], marker = "extra == 'redis'", specifier = ">=5.0.0" },
     { name = "reportlab", marker = "extra == 'sandbox'", specifier = ">=4.2.0" },
     { name = "rich", marker = "extra == 'console'", specifier = ">=14.3.2" },
@@ -175,9 +170,8 @@ requires-dist = [
     { name = "tavily-python", marker = "extra == 'web'", specifier = ">=0.7.26" },
     { name = "tiktoken", marker = "extra == 'openai'", specifier = ">=0.12.0" },
     { name = "tokenizers", marker = "extra == 'safety'", specifier = ">=0.20.0" },
-    { name = "wtpsplit", extras = ["onnx-cpu"], marker = "extra == 'chunking'", specifier = ">=2.1.0" },
 ]
-provides-extras = ["openai", "services", "logging", "postgres", "redis", "scheduler", "mcp", "tts", "tools", "console", "serve", "testing", "web", "code", "sandbox", "rag", "chunking", "ocr", "anthropic", "gemini", "s3", "safety", "sentence-transformers"]
+provides-extras = ["openai", "logging", "postgres", "redis", "scheduler", "mcp", "tts", "tools", "console", "serve", "server", "testing", "web", "code", "sandbox", "ocr", "anthropic", "gemini", "s3", "safety", "sentence-transformers"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -185,14 +179,11 @@ dev = [
     { name = "import-linter", specifier = ">=2.11" },
     { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
+    { name = "pypdf", specifier = ">=6.13.0" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", specifier = ">=0.15.15" },
-]
-docs = [
-    { name = "mkdocs-material", specifier = ">=9.5.0" },
-    { name = "mkdocs-minify-plugin", specifier = ">=0.8.0" },
-    { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.0" },
 ]
 
 [[package]]
@@ -2395,8 +2386,8 @@ name = "httpcore2"
 version = "2.13.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "python_full_version != '3.12.*' or sys_platform != 'emscripten'" },
-    { name = "truststore", marker = "python_full_version != '3.12.*' or sys_platform != 'emscripten'" },
+    { name = "h11", marker = "sys_platform != 'emscripten'" },
+    { name = "truststore", marker = "sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cb/f3/1db7aa2bc2524062192bb0e0323969492d1883152a232fe36eea65f4e35c/httpcore2-2.13.1.tar.gz", hash = "sha256:e0aa977abe17e69a3b820a24542a6fa88702676d83880b8d194dcd18408e5103", size = 68071, upload-time = "2026-09-23T07:47:22.372Z" }
 wheels = [
@@ -6411,7 +6402,7 @@ name = "substrate-cloud"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "agent-substrate", extra = ["anthropic", "code", "gemini", "logging", "mcp", "openai", "postgres", "rag", "redis", "s3", "safety", "sandbox", "scheduler", "serve", "services", "tools", "tts", "web"] },
+    { name = "agent-substrate", extra = ["anthropic", "code", "gemini", "logging", "mcp", "openai", "postgres", "redis", "s3", "safety", "sandbox", "scheduler", "serve", "tools", "tts", "web"] },
     { name = "cryptography" },
     { name = "greenlet" },
     { name = "opentelemetry-exporter-otlp" },
@@ -6420,6 +6411,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
+    { name = "pypdf" },
     { name = "python-multipart" },
     { name = "sqlalchemy" },
     { name = "uvicorn", extra = ["standard"] },
@@ -6436,7 +6428,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-substrate", extras = ["serve", "openai", "anthropic", "gemini", "postgres", "redis", "scheduler", "mcp", "tts", "tools", "services", "logging", "web", "code", "rag", "s3", "safety", "sandbox"], editable = "../../" },
+    { name = "agent-substrate", extras = ["serve", "openai", "anthropic", "gemini", "postgres", "redis", "scheduler", "mcp", "tts", "tools", "logging", "web", "code", "s3", "safety", "sandbox"], editable = "../../" },
     { name = "cryptography", specifier = ">=46.0.6" },
     { name = "greenlet", specifier = ">=3.0.0" },
     { name = "httpx", marker = "extra == 'test'", specifier = ">=0.27.0" },
@@ -6448,6 +6440,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0" },
     { name = "pydantic-settings", specifier = ">=2.12.0" },
     { name = "pyjwt", specifier = ">=2.12.0" },
+    { name = "pypdf", specifier = ">=6.13.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=1.4.0" },
     { name = "python-multipart", specifier = ">=0.0.9" },

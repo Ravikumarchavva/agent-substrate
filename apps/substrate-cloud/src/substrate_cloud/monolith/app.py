@@ -130,6 +130,7 @@ async def lifespan(app: FastAPI):
         EnrichmentQueue,
         build_enricher,
         build_knowledge_library,
+        build_organiser,
         build_library,
     )
 
@@ -138,7 +139,7 @@ async def lifespan(app: FastAPI):
     )
     library = build_library(infra.store, infra.file_store, settings, enricher)
     knowledge = build_knowledge_library(
-        infra.store, infra.file_store, settings, enricher
+        infra.store, infra.file_store, settings, enricher, build_organiser(enricher)
     )
     app.state.library = library
     app.state.knowledge = knowledge

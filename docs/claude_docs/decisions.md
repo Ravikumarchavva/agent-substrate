@@ -839,6 +839,12 @@ files, so `reindex` restores them), and SQLite cannot add a column idempotently,
 fixed with upserts, a per-document lock and a queue keyed by document. Padding in the safety classifier (a separate finding the same day) cost
 1.2 s per message: see `PromptGuardClassifier`.
 
+**Follow-up (2026-10-04): the tree is redrawn as a whole.** Filing one document at a time drifts, and taxonomy research says restructuring all at
+once is more coherent. `Library.reorganise` has an `Organiser` (`LLMOrganiser`: every card in one call) redraw the topics when
+`needs_reorganising` says a topic has outgrown browsing (>12 subtopics or >24 documents). Same rules as `enrich`: documents never move,
+the old topics go to `_topics/log.md`, an invalid answer changes nothing, and the platform queue runs it inside the tenant's token budget.
+`topic_path` now flattens links and tags *before* splitting on `/`, so a model-written `[x](http://y)` cannot leave a URL's words in a topic.
+
 ## Documents first: one `Reader`, a navigable `Library`, knowledge bases by URL (2026-10-02)
 
 **Decision:** reading a user's document is a base-install capability with one entry point, and what the model does with it is

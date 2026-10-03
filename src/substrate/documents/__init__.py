@@ -8,7 +8,11 @@ from substrate.documents.enrichment import (
     Enriched,
     Enricher,
     EnrichmentUsage,
+    FiledDocument,
     FirstSentenceEnricher,
+    Organised,
+    Organiser,
+    Reorganised,
     SectionBrief,
 )
 from substrate.documents.library import (
@@ -25,6 +29,7 @@ from substrate.documents.library import (
     Topic,
 )
 from substrate.documents.llm_enricher import LLMEnricher
+from substrate.documents.llm_organiser import LLMOrganiser
 from substrate.documents.protocols import DocumentExtractor, Ocr
 from substrate.documents.reader import Reader
 from substrate.documents.tool import DocumentsTool
@@ -54,9 +59,11 @@ __all__ = [
     "ExtractedImageLabel",
     "ExtractedPage",
     "ExtractionResult",
+    "FiledDocument",
     "FirstSentenceEnricher",
     "Hit",
     "LLMEnricher",
+    "LLMOrganiser",
     "Library",
     "Listing",
     "Ocr",
@@ -70,5 +77,8 @@ __all__ = [
     "SectionBrief",
     "SectionInfo",
     "Strategy",
+    "Organised",
+    "Organiser",
+    "Reorganised",
     "Topic",
 ]

@@ -29,6 +29,9 @@ SECTION_DESCRIPTION_CHARS = 280
 CARD_CHARS = 600
 TOPIC_DEPTH = 3
 TOPIC_SEGMENT_CHARS = 40
+MAX_TOPIC_CHILDREN = 12
+"""Past this many subtopics under one topic (or twice as many documents filed straight into one) the tree is hard to browse; a whole-tree
+reorganisation is due."""
 
 
 @dataclass(frozen=True)
@@ -104,6 +107,49 @@ class Enriched:
     topics: tuple[str, ...] = ()
     usage: EnrichmentUsage = field(default_factory=EnrichmentUsage)
     warnings: tuple[str, ...] = ()
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class FiledDocument:
+    """A document as an ``Organiser`` sees it: its card, and the topics it is filed under now. Untrusted, like all model-read text."""
+
+    document: str
+    title: str
+    card: str
+    topics: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Organised:
+    """What an ``Organiser`` returns: the topics each document should be filed under (documents it leaves out keep theirs)."""
+
+    topics: Mapping[str, tuple[str, ...]]
+    usage: EnrichmentUsage = field(default_factory=EnrichmentUsage)
+
+
+@runtime_checkable
+class Organiser(Protocol):
+    """Contract for whatever redraws the filing tree. Filing one document at a time drifts (near-duplicate names, one branch that keeps
+    growing); seeing every card at once yields a more coherent tree. May raise; the library records the failure and keeps the tree it has."""
+
+    name: str
+    version: str
+
+    async def organise(self, documents: Sequence[FiledDocument]) -> Organised: ...
+
+
+@dataclass(frozen=True)
+class Reorganised:
+    """The outcome of ``Library.reorganise``."""
+
+    state: str
+    """``done``, ``skipped`` (too few described documents, or topic filing is off) or ``failed``."""
+    moved: int = 0
+    """Documents whose topics changed."""
+    topics: int = 0
+    """Topics in the tree afterwards."""
+    usage: EnrichmentUsage = field(default_factory=EnrichmentUsage)
     error: str | None = None
 
 
@@ -202,6 +248,9 @@ def ground(
 def topic_path(value: str) -> str:
     """A topic as a clean ``A/B/C`` path: at most ``TOPIC_DEPTH`` levels, each a short plain name. ``""`` if nothing usable is left."""
     parts: list[str] = []
+    value = _TAG.sub(
+        "", _URL.sub("", _LINK.sub(r"\1", value))
+    )  # a link or tag is flattened before its slashes are read as levels
     for raw in value.replace("\\", "/").split("/"):
         name = _SPACE.sub(
             " ", re.sub(r"[^\w &,.'-]", " ", raw, flags=re.UNICODE)
@@ -249,6 +298,7 @@ def extract(markdown: str, *, limit: int) -> str:
 
 __all__ = [
     "CARD_CHARS",
+    "MAX_TOPIC_CHILDREN",
     "MIN_ENRICH_TOKENS",
     "SECTION_DESCRIPTION_CHARS",
     "TOPIC_DEPTH",
@@ -257,7 +307,11 @@ __all__ = [
     "Enriched",
     "Enricher",
     "EnrichmentUsage",
+    "FiledDocument",
     "FirstSentenceEnricher",
+    "Organised",
+    "Organiser",
+    "Reorganised",
     "SectionBrief",
     "clean",
     "extract",

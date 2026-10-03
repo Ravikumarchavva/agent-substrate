@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import logging
+import re
+import wave
 
 from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional, cast
 
@@ -500,12 +503,13 @@ class GeminiClient(ChatModel):
         if effective_format != "wav":
             raise ValueError("Gemini TTS currently supports WAV output only")
 
-        prompt_parts = []
-        if instructions and instructions.strip():
-            prompt_parts.append(instructions.strip())
-        prompt_parts.append("Speak the following text verbatim.")
-        prompt_parts.append(text)
-        prompt_text = "\n\n".join(prompt_parts)
+        # Bare text is spoken as written. A preamble like "speak this verbatim" makes the 2.5 models answer with text instead of
+        # audio (no content comes back), so a style instruction is the only thing ever put in front of it, in the "Say <style>:" form.
+        prompt_text = (
+            f"{instructions.strip()}: {text}"
+            if instructions and instructions.strip()
+            else text
+        )
 
         response = await self.client.aio.models.generate_content(
             model=effective_model,
@@ -534,7 +538,23 @@ class GeminiClient(ChatModel):
             for part in content.parts:
                 inline_data = getattr(part, "inline_data", None)
                 if inline_data and getattr(inline_data, "data", None):
-                    yield inline_data.data
+                    yield _as_wav(inline_data.data, inline_data.mime_type or "")
                     return
 
         raise ValueError("Gemini TTS returned no audio data")
+
+
+def _as_wav(data: bytes, mime_type: str) -> bytes:
+    """Gemini TTS answers with WAV from some models and with headerless 16-bit PCM (``audio/L16;rate=24000``) from others; a browser can
+    only play the former, so raw PCM gets a WAV header."""
+    if data[:4] == b"RIFF":
+        return data
+    rate = re.search(r"rate=(\d+)", mime_type)
+    channels = re.search(r"channels=(\d+)", mime_type)
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(int(channels.group(1)) if channels else 1)
+        wav.setsampwidth(2)
+        wav.setframerate(int(rate.group(1)) if rate else 24000)
+        wav.writeframes(data)
+    return buffer.getvalue()

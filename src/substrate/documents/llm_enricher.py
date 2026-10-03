@@ -122,6 +122,7 @@ class LLMEnricher:
         reasoning: ReasoningEffort | None = ReasoningEffort.OFF,
     ) -> None:
         self._model = model
+        self.model = model
         self.name = f"summariser-{model.model.rsplit('/', 1)[-1]}"
         self._limit = asyncio.Semaphore(concurrency)
         self._batch_tokens = batch_tokens
@@ -207,41 +208,62 @@ class LLMEnricher:
     async def _ask(
         self, system: str, user: str, schema: type[BaseModel], *, max_tokens: int
     ) -> tuple[Any, Usage]:
-        """One model call returning a validated ``schema`` and its usage. A reply that is not valid JSON of that shape is asked for once more."""
-        last: Exception | None = None
-        spent = Usage()
-        for attempt in range(2):
-            async with self._limit:
-                with span(
-                    "substrate.documents.enrich",
-                    attributes={"gen_ai.request.model": self._model.model},
-                ):
-                    response = await self._model.generate(
-                        [ChatMessage(role=Role.USER, content=[TextBlock(text=user)])],
-                        options=GenerationOptions(
-                            system_instructions=system,
-                            response_format=schema,
-                            max_tokens=max_tokens,
-                            reasoning=self._reasoning,
-                        ),
-                    )
-            spent = spent + response.usage
-            try:
-                data = next(
-                    (b.data for b in response.content if isinstance(b, DataBlock)), None
-                )
-                parsed = (
-                    schema.model_validate(data)
-                    if data is not None
-                    else schema.model_validate_json(_json(response.text))
-                )
-                return parsed, spent
-            except (ValidationError, ValueError, json.JSONDecodeError) as exc:
-                last = exc
-                logger.info(
-                    "enrichment reply was not valid (attempt %d): %s", attempt + 1, exc
-                )
-        raise ValueError(f"the model did not return the requested JSON: {last}")
+        return await ask_json(
+            self._model,
+            self._limit,
+            self._reasoning,
+            system,
+            user,
+            schema,
+            max_tokens=max_tokens,
+        )
 
 
-__all__ = ["PROMPT_VERSION", "LLMEnricher"]
+async def ask_json(
+    model: ChatModel,
+    limit: asyncio.Semaphore,
+    reasoning: ReasoningEffort | None,
+    system: str,
+    user: str,
+    schema: type[BaseModel],
+    *,
+    max_tokens: int,
+) -> tuple[Any, Usage]:
+    """One model call returning a validated ``schema`` and its usage. A reply that is not valid JSON of that shape is asked for once more."""
+    last: Exception | None = None
+    spent = Usage()
+    for attempt in range(2):
+        async with limit:
+            with span(
+                "substrate.documents.enrich",
+                attributes={"gen_ai.request.model": model.model},
+            ):
+                response = await model.generate(
+                    [ChatMessage(role=Role.USER, content=[TextBlock(text=user)])],
+                    options=GenerationOptions(
+                        system_instructions=system,
+                        response_format=schema,
+                        max_tokens=max_tokens,
+                        reasoning=reasoning,
+                    ),
+                )
+        spent = spent + response.usage
+        try:
+            data = next(
+                (b.data for b in response.content if isinstance(b, DataBlock)), None
+            )
+            parsed = (
+                schema.model_validate(data)
+                if data is not None
+                else schema.model_validate_json(_json(response.text))
+            )
+            return parsed, spent
+        except (ValidationError, ValueError, json.JSONDecodeError) as exc:
+            last = exc
+            logger.info(
+                "enrichment reply was not valid (attempt %d): %s", attempt + 1, exc
+            )
+    raise ValueError(f"the model did not return the requested JSON: {last}")
+
+
+__all__ = ["PROMPT_VERSION", "LLMEnricher", "ask_json"]

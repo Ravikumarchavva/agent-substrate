@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from collections.abc import Sequence
 from typing import Any
 
@@ -59,4 +61,14 @@ def _text_of(item: str | Sequence[ContentBlock]) -> str:
     return "".join(block.text for block in item if isinstance(block, TextBlock))
 
 
-__all__ = ["EmbeddingResult", "BaseEmbeddingClient"]
+def off_effort(model: str) -> str:
+    """The lowest reasoning effort ``model`` accepts, for "do not think".
+
+    GPT-5 / mini / nano take ``minimal``; GPT-5.1 and later take ``none`` and reject ``minimal``; o-series models cannot switch
+    reasoning off, so they get ``low``."""
+    if re.match(r"gpt-5\.\d", model):
+        return "none"
+    return "minimal" if model.startswith("gpt-5") else "low"
+
+
+__all__ = ["BaseEmbeddingClient", "EmbeddingResult", "off_effort"]

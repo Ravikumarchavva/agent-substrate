@@ -34,6 +34,7 @@ from substrate.types import ChatMessage, ContentBlock
 from substrate.tools import Tool, is_hosted_tool, is_provider_defined_tool
 from substrate.types import TextBlock, ToolUseBlock, DataBlock, ReasoningBlock
 from substrate.types import TextDelta, ReasoningDelta, CompletionEvent
+from substrate.integrations.llm.base import off_effort
 from substrate.integrations.llm.encoders.openai import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,
@@ -310,7 +311,7 @@ class OpenAIClient(ChatModel):
         if effort is None or not self.capabilities.supports_reasoning:
             return None
         if effort == ReasoningEffort.OFF:
-            return {"effort": "minimal" if self.model.startswith("gpt-5") else "low"}
+            return {"effort": off_effort(self.model)}
         return {"effort": effort.value, "summary": "auto"}
 
     def _build_params(

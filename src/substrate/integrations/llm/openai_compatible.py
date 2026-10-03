@@ -27,6 +27,7 @@ import re
 from typing import Any, AsyncIterator, Optional
 
 from openai import AsyncOpenAI
+from substrate.integrations.llm.base import off_effort
 
 from substrate.models.modalities import fit_to_capabilities
 from substrate.models.tool_arguments import parse_tool_arguments
@@ -544,7 +545,7 @@ class OpenAICompatibleClient:
             and self.capabilities.supports_reasoning
         ):
             params["reasoning_effort"] = (
-                "minimal"
+                off_effort(self.model)
                 if options.reasoning == ReasoningEffort.OFF
                 else options.reasoning.value
             )

@@ -20,19 +20,22 @@ import {
   Bell,
   GraduationCap,
   RefreshCw,
+  MessageSquare,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "@/lib/api";
 import type { ScheduledTask, ScheduledTaskRun } from "@/types";
-import { Select, confirmAction, toast } from "@/design";
+import { Button, Checkbox, Select, confirmAction, toast } from "@/design";
 import { reportError } from "@/lib/report-error";
 
 interface ScheduledPanelProps {
   onBack: () => void;
+  /** Open the conversation a task (or one of its runs) belongs to. */
+  onOpenThread?: (threadId: string) => void;
 }
 
-export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
+export function ScheduledPanel({ onBack, onOpenThread }: ScheduledPanelProps) {
   // Navigation states
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null);
@@ -55,6 +58,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
     task_type: "report" | "monitor" | "reminder" | "learning";
     lookback_runs: number;
     auto_disable: boolean;
+    email_results: boolean;
   }>({
     name: "",
     prompt: "",
@@ -63,6 +67,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
     task_type: "report",
     lookback_runs: 5,
     auto_disable: false,
+    email_results: false,
   });
 
   // Edit states for selected task
@@ -129,6 +134,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
         task_type: parsed.task_type,
         lookback_runs: 5,
         auto_disable: parsed.task_type === "monitor", // default monitor tasks to auto_disable if they are alert-oriented
+        email_results: false,
       });
       setShowConfigModal(true);
     } catch (err) {
@@ -150,6 +156,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
         task_type: newConfig.task_type,
         lookback_runs: newConfig.lookback_runs,
         auto_disable: newConfig.auto_disable,
+        email_results: newConfig.email_results,
       });
       setShowConfigModal(false);
       setNaturalText("");
@@ -552,6 +559,11 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                   >
                     {selectedTask.status === "active" ? "Pause" : "Activate"}
                   </button>
+                  {onOpenThread && (
+                    <Button variant="secondary" size="lg" onClick={() => onOpenThread(selectedTask.thread_id)}>
+                      <MessageSquare /> Open conversation
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -642,7 +654,18 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                           <div className="flex justify-between items-center px-4 py-3 bg-card-hover/40 border-b border-border text-xs">
                             <span className="font-bold text-foreground">{dateStr}</span>
                             <div className="flex items-center gap-2.5 text-muted">
-                              {run.duration_ms > 0 && <span>Duration: {run.duration_ms}ms</span>}
+                              {run.duration_ms > 0 && <span>{(run.duration_ms / 1000).toFixed(run.duration_ms < 10000 ? 1 : 0)}s</span>}
+                              {(run.cost_usd ?? 0) > 0 && <span title={`${run.tokens ?? 0} tokens`}>${(run.cost_usd ?? 0).toFixed((run.cost_usd ?? 0) < 0.01 ? 4 : 2)}</span>}
+                              {isFailed && (
+                                <Button size="sm" variant="secondary" onClick={() => void handleRunNow(selectedTask.id)}>
+                                  <RefreshCw /> Retry
+                                </Button>
+                              )}
+                              {run.status === "waiting" && onOpenThread && (
+                                <Button size="sm" variant="primary" onClick={() => onOpenThread(selectedTask.thread_id)}>
+                                  Review
+                                </Button>
+                              )}
                               <span
                                 className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase border ${
                                   isFailed 
@@ -803,18 +826,17 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="auto_disable"
-                  checked={newConfig.auto_disable}
-                  onChange={(e) => setNewConfig((c) => ({ ...c, auto_disable: e.target.checked }))}
-                  className="rounded border-border text-violet-500 focus:ring-violet-500"
-                />
-                <label htmlFor="auto_disable" className="text-xs text-muted font-medium cursor-pointer">
-                  Auto-disable after first success (one-shot alert)
-                </label>
-              </div>
+              <Checkbox
+                className="pt-2"
+                checked={newConfig.auto_disable}
+                onChange={(e) => setNewConfig((c) => ({ ...c, auto_disable: e.target.checked }))}
+                label="Auto-disable after first success (one-shot alert)"
+              />
+              <Checkbox
+                checked={newConfig.email_results}
+                onChange={(e) => setNewConfig((c) => ({ ...c, email_results: e.target.checked }))}
+                label="Email me the result of each run"
+              />
             </div>
 
             <div className="flex gap-2 justify-end border-t border-border pt-4 mt-2">

@@ -1,5 +1,9 @@
 import { threadApi } from "./threads";
+import { approvalsApi } from "./approvals";
 import { messageApi } from "./messages";
+import { usageApi } from "./usage";
+import { notificationsApi } from "./notifications";
+import { preferencesApi } from "./preferences";
 import { taskApi } from "./tasks";
 import { fileApi } from "./files";
 import { chatApi } from "./chat";
@@ -22,6 +26,10 @@ export const api = {
   ...scheduledApi,
   ...workspaceApi,
   ...memoryApi,
+  ...usageApi,
+  ...notificationsApi,
+  ...approvalsApi,
+  ...preferencesApi,
   ...artifactsApi,
   ...branchApi,
 };

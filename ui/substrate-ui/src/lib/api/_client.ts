@@ -155,7 +155,21 @@ export class ApiError extends Error {
   }
 }
 
+/** 31200 -> "8h 40m": how long until a limit resets, in the units a person uses. */
+export function formatWait(seconds: number): string {
+  if (seconds < 60) return "less than a minute";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.ceil((seconds % 3600) / 60);
+  if (h === 0) return `${m} minute${m === 1 ? "" : "s"}`;
+  return m === 0 || m === 60 ? `${h}h` : `${h}h ${m}m`;
+}
+
 export async function getErrorMessage(res: Response, fallback: string): Promise<string> {
+  // A usage limit says when it ends (Retry-After): tell the person that, not a count of seconds.
+  const retryAfter = Number(res.headers.get("retry-after"));
+  if (res.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) {
+    return `You've reached your usage limit. It resets in ${formatWait(retryAfter)}.`;
+  }
   const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
   const text = await res.text().catch(() => "");
 

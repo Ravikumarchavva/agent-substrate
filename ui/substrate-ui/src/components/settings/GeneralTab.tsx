@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Globe2, Loader2, Sparkles } from "lucide-react";
 import { Combobox } from "@/design";
+import { schedulePreferencesPush } from "@/lib/preferences-sync";
 
 // Common zones first (some engines list India as Asia/Calcutta, so "Kolkata" would not be found), then every IANA zone the browser knows.
 const COMMON_TIMEZONES = [
@@ -202,7 +203,7 @@ export function GeneralTab({
           </button>
           {customInstructions && (
             <button
-              onClick={() => { setCustomInstructions(""); localStorage.removeItem("system_instructions_override"); setSaveError(null); }}
+              onClick={() => { setCustomInstructions(""); localStorage.removeItem("system_instructions_override"); schedulePreferencesPush(); setSaveError(null); }}
               className="rounded-xl border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-card-hover cursor-pointer"
             >
               Clear

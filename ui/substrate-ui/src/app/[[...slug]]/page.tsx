@@ -40,7 +40,7 @@ import {
   writeStoredValue,
   groupModelOptions,
 } from "@/lib/model-preferences";
-import { parseChatPath, buildChatPath, buildChatRoute, buildSettingsPath } from "@/lib/chat-routes";
+import { parseChatPath, buildChatPath, buildChatRoute, buildSettingsPath, buildViewPath, type ChatView } from "@/lib/chat-routes";
 import { formatFileSize } from "@/lib/file-utils";
 import { FileTypeIcon } from "@/components/FileTypeIcon";
 import { useAuth } from "@/contexts/AuthContext";
@@ -55,8 +55,11 @@ import {
 import { useAppPanel } from "@/hooks/useAppPanel";
 import { useTaskBoards } from "@/hooks/useTaskBoards";
 import { PlanCardStack } from "@/components/PlanCard";
+import { ApprovalsPanel } from "@/components/ApprovalsPanel";
+import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { reportError } from "@/lib/report-error";
 import { useFileDrop } from "@/hooks/useFileDrop";
+import { pullPreferences, watchPreferenceChanges } from "@/lib/preferences-sync";
 import { Send, Plus, FileText, Mail, ListTodo, CalendarClock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, type LucideIcon } from "lucide-react";
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "substrate:last-active-thread";
@@ -131,8 +134,12 @@ function ChatPageContent() {
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const wasAuthenticatedRef = useRef(false);
 
-  const [scheduledPanelOpen, setScheduledPanelOpen] = useState(false);
+  const scheduledPanelOpen = routeState.view === "scheduled";
+  const approvalsPanelOpen = routeState.view === "approvals";
+  const notificationsPanelOpen = routeState.view === "notifications";
+  const [unreadCount, setUnreadCount] = useState(0);
   const [scheduledCount, setScheduledCount] = useState(0);
+  const [approvalsCount, setApprovalsCount] = useState(0);
 
   const updateLastActiveThreadId = useCallback((threadId: string | null) => {
     setLastActiveThreadId(threadId);
@@ -163,6 +170,24 @@ function ChatPageContent() {
 
     updateCount();
     const interval = setInterval(updateCount, 30000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, authLoading]);
+
+  // Poll for unread notifications, for the sidebar badge
+  const refreshUnread = useCallback(async () => setUnreadCount((await api.getNotifications()).unread), []);
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) return;
+    void refreshUnread();
+    const interval = setInterval(() => void refreshUnread(), 30000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, authLoading, refreshUnread]);
+
+  // Poll for approvals waiting on the user, for the sidebar badge
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) return;
+    const update = async () => setApprovalsCount((await api.getApprovals()).length);
+    void update();
+    const interval = setInterval(() => void update(), 30000);
     return () => clearInterval(interval);
   }, [isAuthenticated, authLoading]);
 
@@ -212,14 +237,12 @@ function ChatPageContent() {
   useEffect(() => {
     if (routeState.threadId !== null) {
       updateLastActiveThreadId(routeState.threadId);
-      setScheduledPanelOpen(false);
     }
   }, [routeState.threadId, updateLastActiveThreadId]);
 
   const selectThread = useCallback(
     (threadId: string | null, mode: "replace" | "push" = "replace") => {
       updateLastActiveThreadId(threadId);
-      setScheduledPanelOpen(false);
       const nextUrl = buildChatPath(threadId);
       // A real Next.js navigation here (router.push/replace) changes the
       // optional-catch-all slug and REMOUNTS this whole page component,
@@ -292,17 +315,21 @@ function ChatPageContent() {
     router.push(buildChatRoute(lastActiveThreadId), { scroll: false });
   }, [lastActiveThreadId, router]);
 
-  const handleOpenScheduled = useCallback(() => {
-    setScheduledPanelOpen(true);
+  // Scheduled and Approvals are pages with their own URL. The raw History API (not router.push) so the page does not remount
+  // and lose an in-flight reply (see selectThread).
+  const openView = useCallback((view: ChatView) => {
     setMobileSidebarOpen(false);
-    if (settingsPanelOpen) {
-      closeSettingsPanel();
-    }
-  }, [settingsPanelOpen, closeSettingsPanel]);
-
-  const handleCloseScheduled = useCallback(() => {
-    setScheduledPanelOpen(false);
+    window.history.pushState(null, "", buildViewPath(view));
   }, []);
+  const handleOpenScheduled = useCallback(() => openView("scheduled"), [openView]);
+  const handleOpenApprovals = useCallback(() => openView("approvals"), [openView]);
+  const handleOpenNotifications = useCallback(() => openView("notifications"), [openView]);
+
+  /** Leave Scheduled/Approvals for the conversation they came from (or a given one). */
+  const handleCloseView = useCallback(
+    (threadId?: string | null) => selectThread(threadId === undefined ? lastActiveThreadId : threadId, "push"),
+    [lastActiveThreadId, selectThread],
+  );
 
   useEffect(() => {
     if (settingsPanelOpen) {
@@ -317,7 +344,7 @@ function ChatPageContent() {
   }, [isAdmin, routeState.settingsTab, router]);
 
   // ── Custom Hooks ────────────────────────────────────────
-  const { threads, setThreads, loadThreads, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
+  const { threads, setThreads, loadThreads, hasMore, loadMore, showArchived, setShowArchived, handlePinThread, handleArchiveThread, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
     autoSelectFirstThread: !settingsPanelOpen,
   });
   const { attachedFiles, setAttachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
@@ -331,6 +358,13 @@ function ChatPageContent() {
   // brand-new-thread case, where there's no sidebar entry yet to read it
   // from).
   const [lockedReason, setLockedReason] = useState<string | null>(null);
+  // Preferences live on the account: pull them into this browser on sign-in, and send later changes back.
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) return;
+    void pullPreferences();
+    return watchPreferenceChanges();
+  }, [isAuthenticated, authLoading]);
+
   const dropping = useFileDrop((files) => void handleFilesPasted(files), !lockedReason);
   useEffect(() => {
     const thread = threads.find((t) => t.id === currentThreadId);
@@ -535,7 +569,6 @@ function ChatPageContent() {
 
   // Wrap hook handlers to also manage local page state
   const handleNewChat = useCallback(async () => {
-    setScheduledPanelOpen(false);
     // Starting a new chat while the previous thread is still streaming used
     // to blow away `messages` unconditionally (see loadMessages/the
     // thread-change effect above, which both guard `wsRef.current` before
@@ -572,7 +605,6 @@ function ChatPageContent() {
   }, [handleNewChat]);
 
   const handleSelectThread = useCallback((threadId: string) => {
-    setScheduledPanelOpen(false);
     // Same race as handleNewChat above, but for switching to a *different
     // existing* thread mid-stream: loadMessages' `if (wsRef.current) return
     // current` guard would keep showing the streaming thread's live
@@ -1089,13 +1121,6 @@ function ChatPageContent() {
           thread_id: threadId!,
           messages: [{ role: "user", content: currentInput }],
           ...(currentFileIds.length ? { file_ids: currentFileIds } : {}),
-          ...(() => {
-            const base = localStorage.getItem("system_instructions_override")?.trim() ?? "";
-            const tz = localStorage.getItem("user_timezone")?.trim();
-            const tzNote = tz ? `User timezone: ${tz}. Always use this timezone when creating or interpreting calendar events and times.` : "";
-            const combined = [tzNote, base].filter(Boolean).join("\n");
-            return combined ? { system_instructions: combined } : {};
-          })(),
           model: requestedModel,
           ...(effectiveReasoning(requestedModel, reasoning) ? { reasoning: effectiveReasoning(requestedModel, reasoning)! } : {}),
           branch_id: activeBranchId || "main",
@@ -1796,11 +1821,23 @@ function ChatPageContent() {
           onSelectThread={handleSelectThread}
           onDeleteThread={handleDeleteThread}
           onRenameThread={handleRenameThread}
+          onPinThread={handlePinThread}
+          onArchiveThread={handleArchiveThread}
+          onLoadMore={loadMore}
+          onToggleArchived={setShowArchived}
+          hasMore={hasMore}
+          showArchived={showArchived}
           onCollapse={() => setDesktopSidebarOpen(false)}
           onOpenSettings={openSettingsPanel}
           onOpenScheduled={handleOpenScheduled}
           isScheduledOpen={scheduledPanelOpen}
           scheduledCount={scheduledCount}
+          onOpenApprovals={handleOpenApprovals}
+          isApprovalsOpen={approvalsPanelOpen}
+          approvalsCount={approvalsCount}
+          onOpenNotifications={handleOpenNotifications}
+          isNotificationsOpen={notificationsPanelOpen}
+          unreadCount={unreadCount}
           mode={settingsPanelOpen ? "settings" : "chat"}
           settingsTab={settingsPanelTab}
           onSelectSettingsTab={selectSettingsTab}
@@ -1857,7 +1894,11 @@ function ChatPageContent() {
               />
             </div>
           ) : scheduledPanelOpen ? (
-            <ScheduledPanel onBack={handleCloseScheduled} />
+            <ScheduledPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} />
+          ) : notificationsPanelOpen ? (
+            <NotificationsPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} />
+          ) : approvalsPanelOpen ? (
+            <ApprovalsPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} />
           ) : (
             <>
               <div
@@ -2273,11 +2314,23 @@ function ChatPageContent() {
               onSelectThread={handleSelectThread}
               onDeleteThread={handleDeleteThread}
               onRenameThread={handleRenameThread}
+          onPinThread={handlePinThread}
+          onArchiveThread={handleArchiveThread}
+          onLoadMore={loadMore}
+          onToggleArchived={setShowArchived}
+          hasMore={hasMore}
+          showArchived={showArchived}
               onCollapse={() => setMobileSidebarOpen(false)}
               onOpenSettings={openSettingsPanel}
               onOpenScheduled={handleOpenScheduled}
               isScheduledOpen={scheduledPanelOpen}
               scheduledCount={scheduledCount}
+              onOpenApprovals={handleOpenApprovals}
+              isApprovalsOpen={approvalsPanelOpen}
+              approvalsCount={approvalsCount}
+              onOpenNotifications={handleOpenNotifications}
+              isNotificationsOpen={notificationsPanelOpen}
+              unreadCount={unreadCount}
               mode={settingsPanelOpen ? "settings" : "chat"}
               settingsTab={settingsPanelTab}
               onSelectSettingsTab={selectSettingsTab}

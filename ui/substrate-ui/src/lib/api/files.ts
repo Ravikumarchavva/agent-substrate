@@ -19,7 +19,34 @@ export interface DocumentCard {
   pages: number;
 }
 
+/** One section of a filed document: where it is, and (once described) what it says. */
+export interface DocumentSection {
+  position: number;
+  title: string;
+  first_page: number;
+  last_page: number;
+  description: string | null;
+}
+
+export interface DocumentDetail {
+  state: DocumentCard["state"];
+  description: string | null;
+  topics: string[];
+  pages: number;
+  sections: DocumentSection[];
+}
+
 export const fileApi = {
+  /** The document's sections with their descriptions. Null when it is not in the library. */
+  async getFileDocument(fileId: string): Promise<DocumentDetail | null> {
+    try {
+      const res = await fetch(`${API_BASE}/files/${fileId}/document`, { credentials: "include" });
+      return res.ok ? ((await res.json()) as DocumentDetail) : null;
+    } catch {
+      return null;
+    }
+  },
+
   /** The documents filed under a conversation, with their cards. Empty on any failure: the card is a nicety, never a blocker. */
   async getThreadDocuments(threadId: string): Promise<DocumentCard[]> {
     try {

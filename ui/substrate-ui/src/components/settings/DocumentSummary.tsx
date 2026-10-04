@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Sparkles } from "lucide-react";
 import { Badge, Button } from "@/design";
 import { api } from "@/lib/api";
-import type { DocumentCard } from "@/lib/api/files";
+import type { DocumentCard, DocumentDetail } from "@/lib/api/files";
 
 const POLL_MS = 3000;
 
@@ -15,6 +15,7 @@ const POLL_MS = 3000;
 export function DocumentSummary({ threadId, fileName }: { threadId: string; fileName: string }) {
   const [card, setCard] = useState<DocumentCard | null>(null);
   const [asked, setAsked] = useState(false);
+  const [detail, setDetail] = useState<DocumentDetail | null>(null);
 
   const load = useCallback(async () => {
     const cards = await api.getThreadDocuments(threadId);
@@ -25,6 +26,18 @@ export function DocumentSummary({ threadId, fileName }: { threadId: string; file
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the server when the file changes
     void load();
   }, [load]);
+
+  const fileId = card?.file_id ?? null;
+  const cardState = card?.state;
+  useEffect(() => {
+    if (!fileId) return;
+    let cancelled = false;
+    // refetched when the description finishes, so the section list gains its descriptions
+    api.getFileDocument(fileId).then((d) => !cancelled && setDetail(d));
+    return () => {
+      cancelled = true;
+    };
+  }, [fileId, cardState]);
 
   const running = card?.state === "running" || asked;
   useEffect(() => {
@@ -77,6 +90,22 @@ export function DocumentSummary({ threadId, fileName }: { threadId: string; file
               ? "Writing a summary…"
               : "No summary yet. The assistant can still read the file.")}
       </p>
+      {detail && detail.sections.length > 1 && (
+        <details className="group mt-1">
+          <summary className="cursor-pointer text-xs font-medium text-muted hover:text-foreground">
+            {detail.sections.length} sections · {detail.pages} page{detail.pages === 1 ? "" : "s"}
+          </summary>
+          <ol className="mt-2 space-y-2">
+            {detail.sections.map((s) => (
+              <li key={s.position} className="text-xs">
+                <span className="font-medium text-foreground">{s.title}</span>
+                <span className="text-muted"> · {s.first_page === s.last_page ? `p. ${s.first_page}` : `pp. ${s.first_page}–${s.last_page}`}</span>
+                {s.description && <p className="mt-0.5 text-muted">{s.description}</p>}
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
     </div>
   );
 }

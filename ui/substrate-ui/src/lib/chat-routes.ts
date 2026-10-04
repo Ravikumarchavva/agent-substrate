@@ -8,7 +8,8 @@ export function isSettingsTab(value: string | null): value is SettingsTab {
     value === "general" ||
     value === "apps" ||
     value === "llm" ||
-    value === "search" ||
+    value === "memory" ||
+    value === "usage" ||
     value === "storage" ||
     value === "admin"
   );
@@ -31,11 +32,22 @@ export function isSettingsTab(value: string | null): value is SettingsTab {
  *   /settings             → { threadId: null, settingsTab: "general" }
  *   /settings/<tab>       → { threadId: null, settingsTab: <tab> }
  */
+export type ChatView = "scheduled" | "approvals" | "notifications";
+
+const VIEWS: readonly string[] = ["scheduled", "approvals", "notifications"];
+
 export function parseChatPath(pathname: string): {
   threadId: string | null;
   settingsTab: SettingsTab | null;
+  /** A page of its own in place of the conversation (`/scheduled`, `/approvals`). */
+  view: ChatView | null;
 } {
   const segments = pathname.split("/").filter(Boolean);
+
+  // /scheduled or /approvals
+  if (segments[0] && VIEWS.includes(segments[0])) {
+    return { threadId: null, settingsTab: null, view: segments[0] as ChatView };
+  }
 
   // /settings or /settings/<tab>
   if (segments[0] === "settings") {
@@ -44,11 +56,12 @@ export function parseChatPath(pathname: string): {
     return {
       threadId: null,
       settingsTab: resolvedTab,
+      view: null,
     };
   }
 
   // / or /<threadId>
-  return { threadId: segments[0] ?? null, settingsTab: null };
+  return { threadId: segments[0] ?? null, settingsTab: null, view: null };
 }
 
 /**
@@ -79,6 +92,11 @@ export function buildChatPath(threadId: string | null): string {
 export function buildChatRoute(threadId: string | null): string {
   if (threadId) return `/${threadId}`;
   return "/";
+}
+
+/** The browser path of a page like Scheduled (basePath included, for the raw History API). */
+export function buildViewPath(view: ChatView): string {
+  return `/chat/${view}`;
 }
 
 /**

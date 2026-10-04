@@ -48,6 +48,18 @@ export type Thread = {
   // thread loads, not only after a send already 423s.
   locked_at?: string | null;
   locked_reason?: string | null;
+  /** When it was pinned (it sorts first), or null. */
+  pinned_at?: string | null;
+  /** When it was archived (hidden from the main list), or null. */
+  archived_at?: string | null;
+};
+
+/** A message that matched a search of the user's conversations. */
+export type ThreadSearchHit = {
+  thread_id: string;
+  thread_name: string | null;
+  role: "user" | "assistant";
+  snippet: string;
 };
 
 export type Branch = {

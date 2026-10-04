@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import type { Thread } from "@/types";
 import {
   ArrowLeft,
+  Bell,
   CalendarClock,
   Check,
   ChevronsUpDown,
@@ -13,6 +14,7 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  ShieldQuestion,
   SquarePen,
   Sun,
   Trash2,
@@ -28,6 +30,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getVisibleSettingsTabGroups, type SettingsTab } from "./settings/SettingsPanel";
 import { confirmAction } from "@/design";
+import { ThreadList } from "@/components/ThreadList";
 
 type SidebarMode = "chat" | "settings";
 
@@ -38,11 +41,23 @@ type Props = {
   onSelectThread: (threadId: string) => void;
   onDeleteThread: (threadId: string) => Promise<void> | void;
   onRenameThread: (threadId: string, newName: string) => void;
+  onPinThread: (threadId: string, pinned: boolean) => void;
+  onArchiveThread: (threadId: string, archived: boolean) => void;
+  onLoadMore: () => void;
+  onToggleArchived: (archived: boolean) => void;
+  hasMore: boolean;
+  showArchived: boolean;
   onCollapse?: () => void;
   onOpenSettings: (tab?: SettingsTab) => void;
   onOpenScheduled?: () => void;
   isScheduledOpen?: boolean;
   scheduledCount?: number;
+  onOpenApprovals?: () => void;
+  isApprovalsOpen?: boolean;
+  approvalsCount?: number;
+  onOpenNotifications?: () => void;
+  isNotificationsOpen?: boolean;
+  unreadCount?: number;
   mode?: SidebarMode;
   settingsTab?: SettingsTab;
   onSelectSettingsTab?: (tab: SettingsTab) => void;
@@ -115,22 +130,30 @@ export function Sidebar({
   onSelectThread,
   onDeleteThread,
   onRenameThread,
+  onPinThread,
+  onArchiveThread,
+  onLoadMore,
+  onToggleArchived,
+  hasMore,
+  showArchived,
   onCollapse,
   onOpenSettings,
   onOpenScheduled,
   isScheduledOpen,
   scheduledCount,
+  onOpenApprovals,
+  isApprovalsOpen,
+  approvalsCount,
+  onOpenNotifications,
+  isNotificationsOpen,
+  unreadCount,
   mode = "chat",
   settingsTab,
   onSelectSettingsTab,
   onBackToChat,
 }: Props) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [threadPendingDelete, setThreadPendingDelete] = useState<Thread | null>(null);
-  const [isDeletingThread, setIsDeletingThread] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const { theme, toggleTheme } = useTheme();
@@ -151,54 +174,7 @@ export function Sidebar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [menuOpen]);
 
-  useEffect(() => {
-    if (!threadPendingDelete || isDeletingThread) return;
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setThreadPendingDelete(null);
-    }
-
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [isDeletingThread, threadPendingDelete]);
-
-  const filteredThreads = useMemo(
-    () =>
-      search.trim() === ""
-        ? threads
-        : threads.filter((thread) => thread.name.toLowerCase().includes(search.toLowerCase())),
-    [search, threads],
-  );
-
-  const threadGroups = useMemo(() => groupByDate(filteredThreads), [filteredThreads]);
   const settingsGroups = useMemo(() => getVisibleSettingsTabGroups(isAdmin), [isAdmin]);
-
-  const startEdit = (thread: Thread) => {
-    setEditingId(thread.id);
-    setEditName(thread.name);
-  };
-
-  const saveEdit = (threadId: string) => {
-    if (editName.trim()) onRenameThread(threadId, editName.trim());
-    setEditingId(null);
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditName("");
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!threadPendingDelete) return;
-
-    setIsDeletingThread(true);
-    try {
-      await onDeleteThread(threadPendingDelete.id);
-      setThreadPendingDelete(null);
-    } finally {
-      setIsDeletingThread(false);
-    }
-  };
 
   const chatQuickActions = [
     { label: "New chat", icon: SquarePen, onClick: onNewChat },
@@ -208,6 +184,20 @@ export function Sidebar({
       onClick: onOpenScheduled || (() => {}),
       isActive: isScheduledOpen,
       badge: scheduledCount,
+    },
+    {
+      label: "Approvals",
+      icon: ShieldQuestion,
+      onClick: onOpenApprovals || (() => {}),
+      isActive: isApprovalsOpen,
+      badge: approvalsCount,
+    },
+    {
+      label: "Notifications",
+      icon: Bell,
+      onClick: onOpenNotifications || (() => {}),
+      isActive: isNotificationsOpen,
+      badge: unreadCount,
     },
   ];
 
@@ -335,47 +325,20 @@ export function Sidebar({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-2 pb-3 pt-4">
-              <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
-                Recents
-              </p>
-              {threads.length === 0 ? (
-                <p className="px-3 py-8 text-center text-xs text-muted">No conversations yet</p>
-              ) : filteredThreads.length === 0 ? (
-                <p className="px-3 py-8 text-center text-xs text-muted">
-                  No results for &ldquo;{search}&rdquo;
-                </p>
-              ) : (
-                Object.entries(threadGroups).map(([label, items]) => {
-                  if (items.length === 0) return null;
-
-                  return (
-                    <div key={label} className="mb-4">
-                      <p className="px-1 pb-2 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
-                        {label}
-                      </p>
-                      <div className="space-y-0.5">
-                        {items.map((thread) => (
-                          <ThreadItem
-                            key={thread.id}
-                            thread={thread}
-                            isActive={thread.id === currentThreadId}
-                            isEditing={editingId === thread.id}
-                            editName={editName}
-                            onSelect={() => onSelectThread(thread.id)}
-                            onStartEdit={() => startEdit(thread)}
-                            onSaveEdit={() => saveEdit(thread.id)}
-                            onCancelEdit={cancelEdit}
-                            onDelete={() => setThreadPendingDelete(thread)}
-                            onEditNameChange={setEditName}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+            <ThreadList
+              threads={threads}
+              currentThreadId={currentThreadId}
+              search={search}
+              showArchived={showArchived}
+              hasMore={hasMore}
+              onSelect={onSelectThread}
+              onRename={onRenameThread}
+              onDelete={onDeleteThread}
+              onPin={onPinThread}
+              onArchive={onArchiveThread}
+              onLoadMore={onLoadMore}
+              onToggleArchived={onToggleArchived}
+            />
           </>
         )}
 
@@ -495,201 +458,6 @@ export function Sidebar({
         </div>
       </aside>
 
-      {threadPendingDelete && (
-        <div className="substrate-fade-in fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            className="absolute inset-0 cursor-pointer bg-black/50 backdrop-blur-sm"
-            onClick={() => !isDeletingThread && setThreadPendingDelete(null)}
-            aria-label="Close delete confirmation"
-          />
-          <div
-            className="substrate-scale-in relative w-full max-w-md rounded-2xl bg-card p-6"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Delete chat thread"
-            style={{ boxShadow: "var(--shadow-lg)" }}
-          >
-            <div className="flex items-start gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/12 text-red-400">
-                <Trash2 className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-lg font-semibold text-foreground">Delete chat thread?</h2>
-                <p className="mt-2 text-sm leading-6 text-muted">
-                  This removes
-                  <span className="font-medium text-foreground"> {threadPendingDelete.name}</span>
-                  and its message history permanently.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setThreadPendingDelete(null)}
-                disabled={isDeletingThread}
-                className="cursor-pointer rounded-xl border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleConfirmDelete()}
-                disabled={isDeletingThread}
-                className="cursor-pointer rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isDeletingThread ? "Deleting..." : "Delete thread"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
-  );
-}
-
-interface ThreadItemProps {
-  thread: Thread;
-  isActive: boolean;
-  isEditing: boolean;
-  editName: string;
-  onSelect: () => void;
-  onStartEdit: () => void;
-  onSaveEdit: () => void;
-  onCancelEdit: () => void;
-  onDelete: () => void;
-  onEditNameChange: (value: string) => void;
-}
-
-function ThreadItem({
-  thread,
-  isActive,
-  isEditing,
-  editName,
-  onSelect,
-  onStartEdit,
-  onSaveEdit,
-  onCancelEdit,
-  onDelete,
-  onEditNameChange,
-}: ThreadItemProps) {
-  const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!showMenu) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showMenu]);
-
-  if (isEditing) {
-    return (
-      <div className="flex items-center gap-1 rounded-xl bg-card px-3 py-2" style={{ boxShadow: "var(--shadow-sm)" }}>
-        <input
-          value={editName}
-          onChange={(event) => onEditNameChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") onSaveEdit();
-            if (event.key === "Escape") onCancelEdit();
-          }}
-          className="flex-1 bg-transparent text-xs outline-none"
-          autoFocus
-        />
-        <button
-          type="button"
-          onClick={onSaveEdit}
-          aria-label="Save name"
-          className="cursor-pointer rounded-lg p-1 text-emerald-500 hover:bg-card-hover"
-        >
-          <Check className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          onClick={onCancelEdit}
-          aria-label="Cancel rename"
-          className="cursor-pointer rounded-lg p-1 opacity-50 hover:bg-card-hover"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`group relative w-full cursor-pointer rounded-xl transition-colors ${isActive ? "bg-card-hover text-foreground" : "text-foreground hover:bg-card-hover"}`}
-      onClick={onSelect}
-      style={isActive ? { boxShadow: "var(--shadow-sm)" } : undefined}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
-    >
-      {/* Text — full width */}
-      <div className="w-full py-3 px-3">
-        <p
-          className={`truncate text-[14px] leading-6 ${isActive ? "font-medium" : ""}`}
-          title={thread.name}
-        >
-          {thread.name}
-        </p>
-      </div>
-
-      {/* Three-dot button — absolutely overlaid on the right, visible only on hover */}
-      <div
-        className="absolute right-0 top-0 flex h-full items-center pr-1"
-        ref={menuRef}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Gradient fade behind the button */}
-        <div
-          className={`pointer-events-none absolute right-0 top-0 h-full w-14 rounded-r-xl bg-linear-to-l to-transparent opacity-0 group-hover:opacity-100 transition-opacity from-card-hover`}
-        />
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowMenu(!showMenu);
-          }}
-          className={`btn-icon relative z-10 flex cursor-pointer items-center justify-center rounded-lg p-1.5 sm:p-1 transition-all hover:bg-accent/10 ${showMenu ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
-
-        {showMenu && (
-          <div className="substrate-scale-in absolute right-0 top-full z-[100] mt-1 w-32 overflow-hidden rounded-xl border border-border bg-card shadow-2xl" style={{ transformOrigin: "top right" }}>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(false);
-                onStartEdit();
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-card-hover"
-            >
-              <Pencil className="h-3 w-3" />
-              Rename
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(false);
-                onDelete();
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-400 transition-colors hover:bg-red-500/10"
-            >
-              <Trash2 className="h-3 w-3" />
-              Delete
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
   );
 }

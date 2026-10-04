@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
+  BarChart3,
   BrainCircuit,
   HardDrive,
   Puzzle,
@@ -59,11 +60,16 @@ import { ConnectorsTab } from "./ConnectorsTab";
 import { ModelsTab } from "./ModelsTab";
 import { AdminTab } from "./AdminTab";
 import { StorageTab } from "./StorageTab";
+import { MemoryTab } from "./MemoryTab";
+import { UsageTab } from "./UsageTab";
 import { confirmAction } from "@/design";
+import { schedulePreferencesPush } from "@/lib/preferences-sync";
 import { reportError } from "@/lib/report-error";
 
 export type SettingsTab =
   | "general"
+  | "memory"
+  | "usage"
   | "apps"
   | "llm"
   | "storage"
@@ -92,6 +98,8 @@ export const SETTINGS_TAB_GROUPS: SettingsNavGroup[] = [
     title: "Personal",
     items: [
       { id: "general", label: "General", description: "Timezone and prompt defaults", icon: Settings },
+      { id: "memory", label: "Memory", description: "What the assistant remembers about you", icon: BrainCircuit },
+      { id: "usage", label: "Usage", description: "Messages, tokens and cost", icon: BarChart3 },
       { id: "storage", label: "Storage", description: "Uploaded and generated files", icon: HardDrive },
     ],
   },
@@ -339,6 +347,7 @@ export function SettingsPanel({
 
     if (!customInstructions.trim()) {
       localStorage.removeItem(CUSTOM_INSTRUCTIONS_STORAGE_KEY);
+      schedulePreferencesPush();
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
       return;
@@ -352,6 +361,7 @@ export function SettingsPanel({
         return;
       }
       localStorage.setItem(CUSTOM_INSTRUCTIONS_STORAGE_KEY, customInstructions.trim());
+      schedulePreferencesPush();
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
     } catch {
@@ -401,6 +411,7 @@ export function SettingsPanel({
     setTimezone(value);
     if (value.trim()) localStorage.setItem(TIMEZONE_STORAGE_KEY, value.trim());
     else localStorage.removeItem(TIMEZONE_STORAGE_KEY);
+    schedulePreferencesPush();
   };
 
   const handleSaveModelPreferences = () => {
@@ -595,6 +606,10 @@ export function SettingsPanel({
           />
         )}
 
+
+        {activeTab === "memory" && <MemoryTab />}
+
+        {activeTab === "usage" && <UsageTab />}
 
         {activeTab === "storage" && <StorageTab />}
 

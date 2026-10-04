@@ -2,6 +2,7 @@ export { cn } from "./cn";
 export { Badge } from "./ui/Badge";
 export { Button, buttonVariants, type ButtonProps } from "./ui/Button";
 export { Card } from "./ui/Card";
+export { Checkbox, type CheckboxProps } from "./ui/Checkbox";
 export { Combobox } from "./ui/Combobox";
 export { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "./ui/Dialog";
 export { Input, type InputProps } from "./ui/Input";

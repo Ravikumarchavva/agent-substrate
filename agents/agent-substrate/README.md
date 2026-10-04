@@ -6,6 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docs](https://img.shields.io/badge/docs-docs.agent--substrate.com-teal)](https://docs.agent-substrate.com)
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="The chat app built on Agent Substrate: streaming answers, scheduled tasks, approvals, notifications and settings" width="860" />
+  <br /><sub>The chat app that ships with it (<code>substrate-ui</code>) running on this engine.</sub>
+</p>
+
 ---
 
 ## 🚀 Features
@@ -32,6 +37,7 @@
 ## 📋 Table of Contents
 
 *   [Quick Start](#-quick-start)
+*   [Tech Stack: required vs opt-in](#-tech-stack-required-vs-opt-in)
 *   [Core Architecture](#-core-architecture)
 *   [Key Patterns](#-key-patterns)
 *   [Multi-Agent Workflows](#-multi-agent-workflows)
@@ -55,7 +61,7 @@ uv add agent-substrate
 pip install agent-substrate
 ```
 
-The base install contains the complete engine (`pydantic`, `typing_extensions`, `opentelemetry-api`, `pypdfium2`, and `confusable_homoglyphs`). Optional integrations (vendor LLMs, Postgres, Redis, S3, OCR) can be installed as extras:
+The base install contains the complete engine (`pydantic`, `typing_extensions`, `opentelemetry-api`, `pypdfium2`, and `confusable_homoglyphs`) and stores everything in an embedded SQLite folder, so it runs with no other service. Optional integrations (vendor LLMs, Postgres, Redis, S3, OCR) are extras; see [Tech Stack](#-tech-stack-required-vs-opt-in):
 
 ```bash
 uv add "agent-substrate[openai,postgres]"
@@ -119,6 +125,61 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+---
+
+## 🧱 Tech Stack: required vs opt-in
+
+Two things are called "Agent Substrate": the **library** (`pip install agent-substrate`, an engine you embed) and the **platform** (`apps/substrate-cloud`, a multi-tenant HTTP server built on it, which the chat app talks to). They need different things.
+
+### The library needs nothing but Python
+
+| | |
+|---|---|
+| **Required** | Python 3.13+, `pydantic`, `typing_extensions`, `opentelemetry-api`, `pypdfium2`, `confusable_homoglyphs`. |
+| **State** | One **embedded SQLite** database plus a files folder (`Runtime.open("./.substrate")`): runs and their journal, threads, memory, tasks, graph, vectors, files. **No Postgres, no Redis, no vector database** to install. |
+| **Documents** | PDF through PDFium, and DOCX/PPTX/XLSX/ODF/HTML/Markdown/CSV with the standard library, all in the base install. Scanned pages: the `tesseract` program if it is on your `PATH`, otherwise they are reported in `needs_ocr`, never returned silently empty. |
+| **Search** | Words (SQLite full-text) out of the box. Meaning (embeddings) only when you give a `Library` an embedder. |
+
+Everything below is an **extra you choose** (`uv add "agent-substrate[openai,postgres]"`); nothing imports until you use it.
+
+| Opt in when you want… | Extra / service | Adds |
+|---|---|---|
+| A model provider | `openai` (also vLLM, llama.cpp, Ollama, LM Studio), `anthropic`, `gemini` | that vendor's SDK |
+| **PostgreSQL** instead of SQLite (several workers or hosts) | `postgres` | `asyncpg`; vectors use the **pgvector** extension |
+| Redis (session cache, event bus) | `redis` | `redis` client |
+| Object storage instead of local disk | `s3` | `aiobotocore` (works with SeaweedFS, MinIO, S3) |
+| Scheduled / cron tasks | `scheduler` | `apscheduler` |
+| OCR for scanned pages without a system program | `ocr` | **RapidOCR**: PaddleOCR's own small models on ONNX Runtime, inside the wheel (~120-150 MB) |
+| Layout, tables and chart reading | the **document-intelligence service** (`make infra-up-document-intelligence`) | **PaddleOCR-VL** in a CPU container (~1 GB image), called over HTTP |
+| Search by meaning | an embedding model, or the **embedding-reranker service** (`make infra-up-embedding-reranker`) | Qwen3-VL embedding and reranking |
+| Prompt-injection / NSFW guardrails | `safety` | ONNX classifiers (`onnxruntime`, `tokenizers`) |
+| Web search and browsing | `web` | Playwright, crawl4ai, Tavily/Exa clients (hundreds of MB) |
+| Code execution | `sandbox` (data-science packages) and an `nsjail` or Kubernetes (`code`) runtime | |
+| MCP tools, TTS, the CLI console | `mcp`, `tts` (Kokoro), `console` | |
+| An HTTP/SSE server around an agent | `serve` | `fastapi` |
+
+Full reasoning per extra (sizes, pins, exclusivity) is in [`optional-dependencies.md`](docs/claude_docs/architecture/optional-dependencies.md).
+
+> **No LanceDB.** Vectors live in the same database as everything else (SQLite, or PostgreSQL with pgvector). The "Lance database" comment in `stores/store.py` is only an analogy for how the folder is laid out.
+
+### The platform (`apps/substrate-cloud`) is a deployment, so it needs services
+
+| Needed | Why |
+|---|---|
+| **PostgreSQL 18** (with `pgvector`) | The application tables (users, threads, files, scheduled tasks, notifications, preferences) use JSONB and row-level security, and the engine store runs on it (`STORE_BACKEND=postgres`). `STORE_BACKEND=local` keeps the engine state in a folder, but the application tables still need Postgres. |
+| **Redis 7** | Rate limits and daily quotas, the session cache, the event bus. |
+| An LLM key | Any one provider above. |
+| **Docker** | Only to run the two services above with `make infra-up`. |
+
+Optional on the platform, each off until configured: SeaweedFS or S3 for files (`FILE_STORE_BACKEND`), the document-intelligence and embedding-reranker services, ONLYOFFICE for editing Office files server-side, Resend for emailing scheduled-task results (`RESEND_API_KEY`), and Grafana, Loki and Tempo for observability.
+
+### The apps around it
+
+| App | Stack |
+|---|---|
+| `substrate-ui` (chat) | Next.js 16, React, TypeScript, Tailwind v4, Radix UI, pnpm. |
+| `agent-substrate-platform` (control plane) | Next.js 16, Prisma on PostgreSQL, Auth.js, Tailwind v4, pnpm. |
 
 ---
 

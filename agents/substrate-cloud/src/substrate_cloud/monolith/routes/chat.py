@@ -16,7 +16,7 @@ import logging
 import json
 import substrate
 import uuid
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -79,6 +79,29 @@ router = APIRouter(
     tags=["chat"],
     dependencies=[Depends(rate_limit), Depends(get_current_user)],
 )
+
+
+def _knowledge_tool_for(
+    tools: list, knowledge: Any, tenant_id: str, knowledge_base: str
+) -> list:
+    """``tools`` with the ``knowledge`` tool pointed at ``knowledge_base``, one of the caller's own tenant's bases (the collection is built
+    from the token's tenant, so no id can reach another tenant's). A base id that is not a valid id leaves the tools as they were."""
+    from substrate.documents import DocumentsTool
+    from substrate_cloud.documents_library import knowledge_collection_for
+
+    collection = knowledge_collection_for(tenant_id, knowledge_base)
+    if collection is None:
+        return tools
+    chosen = DocumentsTool(
+        knowledge,
+        collection=lambda scope: collection,
+        name="knowledge",
+        description=(
+            "Search and read this assistant's knowledge base. find(query) is the way in — it searches by meaning and by words; "
+            "outline and read open what it finds; view shows a figure. Cite what you read as [n] with its page."
+        ),
+    )
+    return [t for t in tools if _tool_name(t) != "knowledge"] + [chosen]
 
 
 def plan_quota_key(user: AuthClaims) -> str:
@@ -259,6 +282,14 @@ async def chat(
             ),
         ):
             deps["system_instructions"] += block
+
+        if body.knowledge_base and ctx.knowledge is not None:
+            deps["tools"] = _knowledge_tool_for(
+                deps["tools"], ctx.knowledge, user.tenant_id, body.knowledge_base
+            )
+        if body.allowed_tools is not None:
+            allowed = set(body.allowed_tools)
+            deps["tools"] = [t for t in deps["tools"] if _tool_name(t) in allowed]
 
         if not allow_task_planning:
             deps["tools"] = [

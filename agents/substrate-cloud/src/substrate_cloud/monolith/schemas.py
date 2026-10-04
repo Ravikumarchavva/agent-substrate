@@ -79,6 +79,11 @@ class ChatRequest(BaseModel):
     reasoning: Optional[Literal["off", "low", "medium", "high"]] = (
         None  # how hard a reasoning model thinks; None = provider default
     )
+    # Narrowing controls for an embedded assistant. Both can only take capability away, or point at the caller's own tenant's data:
+    # the tool list becomes exactly these names (an empty list is "no tools"), and `knowledge_base` is the id of one of the
+    # tenant's knowledge bases that the `knowledge` tool should search instead of the default.
+    allowed_tools: Optional[List[str]] = None
+    knowledge_base: Optional[str] = Field(default=None, max_length=64)
 
 
 # ── Branch / Checkpoint schemas ──────────────────────────────────────────────

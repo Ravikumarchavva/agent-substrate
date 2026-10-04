@@ -108,6 +108,7 @@ async def create_scheduled_task_endpoint(
         task_type=body.task_type,
         auto_disable=body.auto_disable,
         email_results=bool(body.email_results) and bool(user.email),
+        ask_before_acting=body.ask_before_acting,
         notify_email=user.email or None,
     )
     db.add(task)
@@ -140,6 +141,7 @@ async def create_scheduled_task_endpoint(
         task_type=task.task_type,
         auto_disable=task.auto_disable,
         email_results=task.email_results,
+        ask_before_acting=task.ask_before_acting,
         created_at=task.created_at,
         updated_at=task.updated_at,
         next_run_at=next_run_at,
@@ -194,6 +196,7 @@ async def list_scheduled_tasks(
                 task_type=task.task_type,
                 auto_disable=task.auto_disable,
                 email_results=task.email_results,
+                ask_before_acting=task.ask_before_acting,
                 created_at=task.created_at,
                 updated_at=task.updated_at,
                 next_run_at=next_run_at,
@@ -244,6 +247,7 @@ async def get_scheduled_task(
         task_type=task.task_type,
         auto_disable=task.auto_disable,
         email_results=task.email_results,
+        ask_before_acting=task.ask_before_acting,
         created_at=task.created_at,
         updated_at=task.updated_at,
         next_run_at=next_run_at,
@@ -313,6 +317,8 @@ async def update_scheduled_task_endpoint(
         task.lookback_runs = body.lookback_runs
     if body.auto_disable is not None:
         task.auto_disable = body.auto_disable
+    if body.ask_before_acting is not None:
+        task.ask_before_acting = body.ask_before_acting
     if body.email_results is not None:
         # Needs an address to send to: the one on the account making this change (the task keeps it).
         task.notify_email = task.notify_email or user.email or None
@@ -359,6 +365,7 @@ async def update_scheduled_task_endpoint(
         task_type=task.task_type,
         auto_disable=task.auto_disable,
         email_results=task.email_results,
+        ask_before_acting=task.ask_before_acting,
         created_at=task.created_at,
         updated_at=task.updated_at,
         next_run_at=next_run_at,

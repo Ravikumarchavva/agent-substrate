@@ -160,6 +160,8 @@ class SubstrateConfig(BaseSettings):
     # Email for scheduled-task results (Resend). With no key nothing is sent, and the in-app notification is still made.
     RESEND_API_KEY: str = ""
     NOTIFY_FROM_EMAIL: str = "Assistant <notifications@localhost>"
+    # On start, run once each scheduled task whose firing came due while the server was down.
+    SCHEDULER_CATCH_UP: bool = True
 
     # ── Local database paths (PostgreSQL & Redis replacements under DATA_DIR) ──
     HISTORY_STORAGE_PATH: str = ""

@@ -297,6 +297,7 @@ class ScheduledTaskCreate(BaseModel):
     lookback_runs: Optional[int] = 5
     auto_disable: Optional[bool] = False
     email_results: Optional[bool] = False
+    ask_before_acting: bool = True
 
 
 class ScheduledTaskUpdate(BaseModel):
@@ -310,6 +311,7 @@ class ScheduledTaskUpdate(BaseModel):
     lookback_runs: Optional[int] = None
     auto_disable: Optional[bool] = None
     email_results: Optional[bool] = None
+    ask_before_acting: Optional[bool] = None
 
 
 class ScheduledTaskRunOut(BaseModel):
@@ -344,6 +346,7 @@ class ScheduledTaskOut(BaseModel):
     task_type: str
     auto_disable: bool
     email_results: bool = False
+    ask_before_acting: bool = True
     created_at: datetime
     updated_at: datetime
     last_run_at: Optional[datetime] = None

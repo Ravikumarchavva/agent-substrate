@@ -35,6 +35,9 @@ os.environ.setdefault(
     "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
 )
 
+# A test that starts the app must not run the dev database's overdue scheduled tasks against a model.
+os.environ.setdefault("SCHEDULER_CATCH_UP", "false")
+
 import pytest
 
 # The safety guardrail's classifiers (PromptGuardClassifier,

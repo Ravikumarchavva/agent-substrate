@@ -5,6 +5,8 @@ or human-input request from the frontend.
 
 GET /hitl/status/{thread_id} – check for pending HITL requests
 (used by the frontend on reconnect to restore approval/input cards).
+
+GET /approvals – everything waiting on the caller, across all their conversations (the approvals inbox).
 """
 
 from __future__ import annotations
@@ -15,14 +17,20 @@ from substrate.types import RunLogKind
 import uuid
 from datetime import datetime, timezone
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.schemas import HITLResponse
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.monolith.models import Thread
 from substrate_cloud.monolith.services import get_owned_thread
+from substrate_cloud.monolith.services.thread_service import owned_thread_ids
 
 logger = logging.getLogger(__name__)
 
@@ -142,3 +150,88 @@ async def _durable_pending_hitl(ctx: ServerDependencies, thread_id: str) -> list
     bridge = await ctx.bridge_registry.acquire(thread_id)
     bridge.register_signal_request(request_id, run_id, card=signal_card)
     return [card]
+
+
+class PendingApproval(BaseModel):
+    thread_id: uuid.UUID
+    thread_name: Optional[str] = None
+    kind: str
+    """``approval`` (the assistant wants to use a tool) or ``input`` (it is asking the user something)."""
+    summary: str
+    requested_at: Optional[datetime] = None
+
+
+def _summary(kind: str, payload: dict) -> str:
+    if kind == RunLogKind.APPROVAL_REQUESTED:
+        args = ", ".join(
+            f"{k}={str(v)[:40]}" for k, v in (payload.get("args") or {}).items()
+        )
+        return f"Wants to use {payload.get('tool_name', 'a tool')}" + (
+            f" ({args[:140]})" if args else ""
+        )
+    return str(payload.get("question") or "Waiting for your answer")[:200]
+
+
+@router.get("/approvals", response_model=list[PendingApproval])
+async def list_approvals(
+    ctx: ServerDependencies = Depends(get_ctx),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+) -> list[PendingApproval]:
+    """Every approval or question the assistant is waiting on across the caller's conversations, oldest first.
+
+    A run that needs a person is suspended in the runtime's store (it survives restarts), so this reads the store, not the browser: it
+    finds requests from a scheduled task or another tab, not only the open conversation. Answering happens in the conversation itself."""
+    from substrate.types import RunStatus
+
+    runtime = getattr(ctx, "runtime", None)
+    if runtime is None:
+        return []
+    owned = {
+        str(i) for i in await owned_thread_ids(db, user_identifier=user.sub, limit=500)
+    }
+    if not owned:
+        return []
+    waiting = [
+        r
+        for r in await runtime.store.find_runs(tenant=user.tenant_id)
+        if r.status == RunStatus.SUSPENDED and r.thread_id in owned
+    ]
+    found: list[tuple[str, str, str, datetime | None]] = []
+    for run in waiting:
+        last = None
+        for entry in await runtime.read(run.run_id):
+            if entry.kind in (
+                RunLogKind.INPUT_REQUESTED,
+                RunLogKind.APPROVAL_REQUESTED,
+            ):
+                last = entry
+        if last is not None:
+            kind = "approval" if last.kind == RunLogKind.APPROVAL_REQUESTED else "input"
+            found.append(
+                (
+                    run.thread_id,
+                    kind,
+                    _summary(last.kind, last.payload or {}),
+                    getattr(last, "ts", None),
+                )
+            )
+    if not found:
+        return []
+    rows = await db.execute(
+        select(Thread.id, Thread.name).where(
+            Thread.id.in_({uuid.UUID(t) for t, *_ in found})
+        )
+    )
+    names = {str(r.id): r.name for r in rows}
+    found.sort(key=lambda f: (f[3] is None, f[3]))
+    return [
+        PendingApproval(
+            thread_id=uuid.UUID(t),
+            thread_name=names.get(t),
+            kind=k,
+            summary=s,
+            requested_at=at,
+        )
+        for t, k, s, at in found
+    ]

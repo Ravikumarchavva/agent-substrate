@@ -845,6 +845,31 @@ once is more coherent. `Library.reorganise` has an `Organiser` (`LLMOrganiser`: 
 the old topics go to `_topics/log.md`, an invalid answer changes nothing, and the platform queue runs it inside the tenant's token budget.
 `topic_path` now flattens links and tags *before* splitting on `/`, so a model-written `[x](http://y)` cannot leave a URL's words in a topic.
 
+## The product surface: conversations you can organise, share and leave running (2026-10-04)
+
+**Context.** The approved product plan (Releases 0-3) found a working core wrapped in dead ends. This records the backend decisions behind the
+Release 0/1 work; the UI side is in `substrate-ui`.
+
+* **Conversation content is read from the run journal, not a table.** Message counts, search, usage, export and public share links all read
+  `rt_runs`/`rt_events` in the engine's store (`stream/search.py`, `stream/usage.py`, `stream/export.py`) for thread ids the caller already
+  owns. The old `message_count` read two legacy empty tables and was always 0.
+* **Share links are a row, not a flag.** `thread_shares(token)` is read by token alone (32 random bytes) with no tenant context, so it has no
+  row policy; it stores the title at share time and returns only what was said (no tool output, reasoning or file contents). Deleting the
+  thread deletes its links.
+* **Background work needs `system_session`.** Row-level security hides every tenant's rows from a connection that has not set a tenant, so
+  the scheduled-task executor and the startup load found *nothing*: scheduled tasks had never run since RLS was enforced. Server-initiated
+  jobs now use `database.system_session` (bypass, one pinned connection, reset on exit). Found by running a real scheduled task, not by a test.
+* **Replicas claim a tick.** Every replica hears every APScheduler tick (in-memory store). `claim_firing` is one atomic `UPDATE ... WHERE
+  last_claimed_at < now - gap`; the winner runs. Missed-run catch-up and a durable job store are not built.
+* **A run that needs a person is parked, not awaited.** The executor used to wait on `tail()` for completion and so hung on an approval.
+  It now records `waiting`, notifies the user and returns; the run resumes when they answer in the conversation.
+* **Preferences follow the account.** `user_preferences` (instructions, timezone, model choices). The chat route builds the standing
+  instructions from it, so a browser no longer has to send them; the UI mirrors it in localStorage so the composer can read it synchronously.
+* **`/triggers/*` is namespaced by tenant** (`{tenant}::{name}`) because the scheduler, webhook registry and condition monitor are single shared
+  in-memory objects. Their state is still in memory (lost on restart); moving it to the database is open.
+* **Also fixed:** `ensure_app_role` compared asyncpg's `"char"` (bytes) to `'r'`, so a newly created table was `ALTER SEQUENCE`d and startup
+  failed; `topic_path` now flattens links and tags before reading `/` as a level.
+
 ## Documents first: one `Reader`, a navigable `Library`, knowledge bases by URL (2026-10-02)
 
 **Decision:** reading a user's document is a base-install capability with one entry point, and what the model does with it is

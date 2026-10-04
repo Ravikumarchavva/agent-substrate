@@ -63,6 +63,10 @@ from substrate_cloud.monolith.routes.chat_intents import (
     attachments_block,
     custom_instructions_block,
 )
+from substrate_cloud.monolith.routes.preferences import (
+    instructions_for,
+    load_preferences,
+)
 from substrate_cloud.monolith.routes.chat_wire import build_user_blocks
 from substrate_cloud.monolith.routes.chat_context import (
     _get_agent_deps,
@@ -303,10 +307,14 @@ async def chat(
                     **getattr(request.app.state, "model_client_kwargs", {}),
                 )
 
-        # Append per-request custom instructions if provided by the frontend
-        deps["system_instructions"] += custom_instructions_block(
+        # The user's standing instructions and timezone come from their saved preferences, so they apply to every message from any
+        # browser or device. An explicit ``system_instructions`` on the request (an API client) wins for that request.
+        standing = (
             body.system_instructions
+            if body.system_instructions is not None
+            else instructions_for(await load_preferences(db, user))
         )
+        deps["system_instructions"] += custom_instructions_block(standing)
 
         agent = await build_agent_for_thread(
             body.thread_id,

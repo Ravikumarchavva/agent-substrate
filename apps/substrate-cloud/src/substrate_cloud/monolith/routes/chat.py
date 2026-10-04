@@ -45,6 +45,16 @@ from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.hooks import ChatContext, hooks
 from substrate_cloud.monolith.schemas import ChatRequest
 from substrate_cloud.monolith.services import get_owned_thread
+from substrate_cloud.monolith.services.agent_service import (
+    agent_instructions_block,
+    get_owned_agent,
+    narrow_tools,
+)
+from substrate_cloud.monolith.services.delegation import (
+    TOOL_NAME,
+    AskAgentTool,
+    other_agents,
+)
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.monolith.sse.bridge import WebHITLBridge
 from substrate_cloud.shared.rate_limit import rate_limit
@@ -145,6 +155,11 @@ async def chat(
     thread = await get_owned_thread(db, body.thread_id, user)
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
+
+    # 1a. An agent profile, if the conversation is with one: its role and instructions, its tool permissions and its own workspace.
+    thread_agent = (
+        await get_owned_agent(db, thread.agent_id, user) if thread.agent_id else None
+    )
 
     # 1b. A file deleted from this thread's storage (routes/workspace.py::
     # delete_file, routes/files.py::delete_file) locks it read-only — the
@@ -290,6 +305,23 @@ async def chat(
         if body.allowed_tools is not None:
             allowed = set(body.allowed_tools)
             deps["tools"] = [t for t in deps["tools"] if _tool_name(t) in allowed]
+        if thread_agent is not None:
+            # The agent's permissions are a ceiling a request can narrow further but never widen.
+            deps["tools"] = narrow_tools(deps["tools"], thread_agent, _tool_name)
+            deps["system_instructions"] += agent_instructions_block(thread_agent)
+        # Other agents of the user's it may ask for help (unless its permissions leave that out or the request narrowed it away). A conversation
+        # that is itself a delegate never gets this: asking is one level deep.
+        delegated = bool((thread.metadata_ or {}).get("delegated_from"))
+        if (
+            not delegated
+            and (thread_agent is None or thread_agent.allowed_tools is None or TOOL_NAME in thread_agent.allowed_tools)
+            and (body.allowed_tools is None or TOOL_NAME in body.allowed_tools)
+        ):
+            others = await other_agents(
+                ctx, user.tenant_id or "default", user.sub, thread_agent.id if thread_agent else None
+            )
+            if others:
+                deps["tools"] = [*deps["tools"], AskAgentTool(ctx, others, _tool_name)]
 
         if not allow_task_planning:
             deps["tools"] = [
@@ -406,6 +438,11 @@ async def chat(
             "user_id": user.sub,
             "tenant_id": user.tenant_id,
             "branch_id": getattr(body, "branch_id", None) or "main",
+            **(
+                {"workspace_id": thread_agent.workspace_id}
+                if thread_agent is not None
+                else {}
+            ),
         },
     )
 

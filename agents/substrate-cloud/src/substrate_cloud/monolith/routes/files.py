@@ -44,6 +44,7 @@ from substrate_cloud.monolith.routes.chat_context import (
 )
 from substrate_cloud.monolith.security.deps import get_current_user
 from substrate_cloud.monolith.services import get_owned_thread
+from substrate_cloud.monolith.services.agent_service import get_owned_agent
 from substrate_cloud.shared.auth.claims import AuthClaims
 from substrate_cloud.shared.contracts.file_store import (
     FileUploadResponse,
@@ -577,7 +578,10 @@ async def upload_file(
     if ctx.files_for(claims.tenant_id) is None:
         raise HTTPException(status_code=503, detail="File store not configured")
 
-    if thread_id is not None and await get_owned_thread(db, thread_id, claims) is None:
+    upload_thread = (
+        await get_owned_thread(db, thread_id, claims) if thread_id is not None else None
+    )
+    if thread_id is not None and upload_thread is None:
         # Without this, any authenticated caller could tag an upload with
         # someone else's thread_id: the bytes land in the caller's own
         # prefix (harmless there), but the FileMetadata row still carries
@@ -651,8 +655,17 @@ async def upload_file(
                 )
 
     if thread_id is not None:
+        # A conversation with an agent keeps its files in the agent's own workspace, where the agent's sandbox looks for them.
+        upload_agent = (
+            await get_owned_agent(db, upload_thread.agent_id, claims)
+            if upload_thread is not None and upload_thread.agent_id
+            else None
+        )
         base_key = conversation_shared_key(
-            claims.tenant_id, claims.sub, str(thread_id), f"uploads/{original_name}"
+            claims.tenant_id,
+            claims.sub,
+            upload_agent.workspace_id if upload_agent else str(thread_id),
+            f"uploads/{original_name}",
         )
     else:
         base_key = user_upload_key(claims.tenant_id, claims.sub, original_name)

@@ -25,6 +25,7 @@ async def create_thread(
     tenant_id: Optional[str] = None,
     tags: Optional[List[str]] = None,
     metadata: Optional[Dict[str, Any]] = None,
+    agent_id: Optional[uuid.UUID] = None,
 ) -> Thread:
     """Create a new thread (chat session)."""
     thread = Thread(
@@ -34,6 +35,7 @@ async def create_thread(
         tenant_id=tenant_id,
         tags=tags or [],
         metadata_=metadata or {},
+        agent_id=agent_id,
     )
     db.add(thread)
     await db.flush()
@@ -162,6 +164,7 @@ def thread_row(thread: Thread, message_count: int = 0) -> Dict[str, Any]:
         "locked_reason": thread.locked_reason,
         "pinned_at": thread.pinned_at,
         "archived_at": thread.archived_at,
+        "agent_id": thread.agent_id,
     }
 
 

@@ -48,6 +48,7 @@ from substrate_cloud.monolith.services.thread_service import (
     thread_row,
 )
 from substrate_cloud.stream import project_thread
+from substrate_cloud.monolith.services.agent_service import get_owned_agent
 from substrate_cloud.stream.runs import RunDetail, inspect_thread
 from substrate_cloud.stream.export import filename, messages_of, to_markdown
 from substrate_cloud.stream.search import message_counts, search_messages
@@ -67,11 +68,14 @@ async def create_thread_endpoint(
     user: AuthClaims = Depends(get_current_user),
 ):
     """Create a new chat thread owned by the caller."""
+    if body.agent_id is not None and await get_owned_agent(db, body.agent_id, user) is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
     thread = await create_thread(
         db,
         name=body.name or "New Chat",
         user_identifier=user.sub,
         tenant_id=user.tenant_id,
+        agent_id=body.agent_id,
     )
     return ThreadOut(**thread_row(thread))
 

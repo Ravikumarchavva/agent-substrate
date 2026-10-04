@@ -22,6 +22,8 @@ class ThreadCreate(BaseModel):
     """POST /threads – create a new thread."""
 
     name: Optional[str] = "New Chat"
+    # Start the conversation with one of the caller's agent profiles.
+    agent_id: Optional[uuid.UUID] = None
 
 
 class ThreadUpdate(BaseModel):
@@ -53,6 +55,7 @@ class ThreadOut(BaseModel):
     locked_reason: Optional[str] = None
     pinned_at: Optional[datetime] = None
     archived_at: Optional[datetime] = None
+    agent_id: Optional[uuid.UUID] = None
 
     model_config = {"from_attributes": True}
 

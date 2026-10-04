@@ -48,6 +48,7 @@ async def test_preferences_start_empty_and_are_saved_and_replaced():
         assert (await c.get("/me/preferences")).json() == {
             "custom_instructions": "",
             "timezone": "",
+            "display_name": "",
             "models": {},
         }
         saved = {
@@ -64,6 +65,16 @@ async def test_preferences_start_empty_and_are_saved_and_replaced():
         await c.put("/me/preferences", json={"timezone": "Asia/Tokyo"})
         got = (await c.get("/me/preferences")).json()
         assert got["timezone"] == "Asia/Tokyo" and got["custom_instructions"] == ""
+
+
+@pytest.mark.requires_postgres
+async def test_the_name_to_call_you_is_kept_on_one_line_and_can_be_cleared():
+    async with session() as c:
+        await c.put("/me/preferences", json={"display_name": "  Ravi \n Kumar  "})
+        assert (await c.get("/me/preferences")).json()["display_name"] == "Ravi Kumar"
+        assert (await c.put("/me/preferences", json={"display_name": "x" * 61})).status_code == 422
+        await c.put("/me/preferences", json={"display_name": ""})
+        assert (await c.get("/me/preferences")).json()["display_name"] == ""
 
 
 @pytest.mark.requires_postgres
@@ -87,11 +98,21 @@ async def test_one_user_never_sees_another_users_preferences():
 
 def test_the_assistant_gets_the_timezone_note_then_the_users_own_words():
     prefs = SimpleNamespace(
-        timezone="Europe/London", custom_instructions="  Be brief. "
+        timezone="Europe/London", custom_instructions="  Be brief. ", display_name=None
     )
     out = instructions_for(prefs)
     assert out.startswith("User timezone: Europe/London.") and out.endswith("Be brief.")
     assert instructions_for(None) == ""
     assert (
-        instructions_for(SimpleNamespace(timezone=None, custom_instructions=None)) == ""
+        instructions_for(
+            SimpleNamespace(timezone=None, custom_instructions=None, display_name=None)
+        )
+        == ""
     )
+
+
+def test_the_assistant_is_told_what_to_call_the_user():
+    prefs = SimpleNamespace(
+        timezone=None, custom_instructions=None, display_name="Ravi"
+    )
+    assert "called Ravi" in instructions_for(prefs)

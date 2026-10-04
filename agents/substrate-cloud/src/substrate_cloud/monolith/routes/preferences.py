@@ -26,11 +26,14 @@ router = APIRouter(prefix="/me/preferences", tags=["preferences"])
 
 MAX_INSTRUCTIONS_CHARS = 2000
 MAX_MODELS_BYTES = 4000
+MAX_NAME_CHARS = 60
 
 
 class PreferencesIO(BaseModel):
     custom_instructions: str = Field(default="", max_length=MAX_INSTRUCTIONS_CHARS)
     timezone: str = Field(default="", max_length=64)
+    # What to call the user; empty means the name on their account.
+    display_name: str = Field(default="", max_length=MAX_NAME_CHARS)
     models: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("timezone")
@@ -45,6 +48,11 @@ class PreferencesIO(BaseModel):
                     "That is not a timezone name (for example Europe/London)."
                 )
         return value
+
+    @field_validator("display_name")
+    @classmethod
+    def _one_line(cls, value: str) -> str:
+        return " ".join(value.split())
 
     @field_validator("models")
     @classmethod
@@ -67,15 +75,22 @@ async def load_preferences(
 
 
 def instructions_for(prefs: Optional[UserPreferences]) -> str:
-    """The standing instructions the assistant gets with every message: the timezone note, then the user's own words."""
+    """The standing instructions the assistant gets with every message: what to call the user, the timezone note, then the user's own words."""
     if prefs is None:
         return ""
+    name = (
+        f"The user likes to be called {prefs.display_name}. Use it when addressing them, naturally and not in every message."
+        if prefs.display_name
+        else ""
+    )
     note = (
         f"User timezone: {prefs.timezone}. Always use this timezone when creating or interpreting calendar events and times."
         if prefs.timezone
         else ""
     )
-    return "\n".join(filter(None, [note, (prefs.custom_instructions or "").strip()]))
+    return "\n".join(
+        filter(None, [name, note, (prefs.custom_instructions or "").strip()])
+    )
 
 
 def _out(prefs: Optional[UserPreferences]) -> PreferencesIO:
@@ -84,6 +99,7 @@ def _out(prefs: Optional[UserPreferences]) -> PreferencesIO:
     return PreferencesIO(
         custom_instructions=prefs.custom_instructions or "",
         timezone=prefs.timezone or "",
+        display_name=prefs.display_name or "",
         models=prefs.models or {},
     )
 
@@ -112,6 +128,7 @@ async def put_preferences(
         db.add(prefs)
     prefs.custom_instructions = body.custom_instructions.strip() or None
     prefs.timezone = body.timezone or None
+    prefs.display_name = body.display_name or None
     prefs.models = body.models
     await db.flush()
     return _out(prefs)

@@ -98,6 +98,14 @@ def _session_relative_path(object_key: str) -> str | None:
     return None
 
 
+def _workspace_of(object_key: str) -> str | None:
+    """The workspace id (a conversation's, or an agent's) in a conversation-scoped object key: ``tenants/{t}/users/{u}/conversations/{id}/...``."""
+    parts = object_key.split("/")
+    if len(parts) > 5 and parts[0] == "tenants" and parts[4] == "conversations":
+        return parts[5]
+    return None
+
+
 def _truncate(text: str) -> str:
     max_chars = settings.ATTACHMENT_PDF_MAX_CHARS
     if len(text) > max_chars:
@@ -115,7 +123,8 @@ def _library_metadata(meta: Any, thread_id: str) -> dict[str, str]:
     return {
         "file_id": str(meta.id),
         "session_path": _session_relative_path(meta.object_key) or meta.original_name,
-        "thread_id": thread_id,
+        # The workspace the file lives in (a conversation's, or its agent's), which is what ``/workspace/file`` is asked for.
+        "thread_id": _workspace_of(meta.object_key) or thread_id,
     }
 
 

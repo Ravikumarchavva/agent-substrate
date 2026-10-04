@@ -230,6 +230,8 @@ class UserPreferences(Base):
     user_identifier: Mapped[str] = mapped_column(String, primary_key=True)
     custom_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     timezone: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # What the user wants to be called, when it is not the name on their account.
+    display_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # Free-form model choices the UI keeps (chat model, effort, voice...): small, and only ever read back by the same UI.
     models: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     updated_at: Mapped[datetime] = mapped_column(

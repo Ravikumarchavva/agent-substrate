@@ -45,6 +45,7 @@ from substrate_cloud.monolith.file_versioning import (
 from substrate_cloud.monolith.models import FileMetadata, FileVersion, Thread
 from substrate_cloud.monolith.security.deps import get_current_user
 from substrate_cloud.monolith.services import get_owned_thread
+from substrate_cloud.monolith.services.agent_service import get_owned_agent, list_agents
 from substrate_cloud.shared.auth.claims import AuthClaims
 
 router = APIRouter(
@@ -239,6 +240,10 @@ async def list_files(
         .scalars()
         .all()
     }
+    # The caller's agents' workspaces are listed too, under the agent's name.
+    my_agents = await list_agents(db, claims)
+    owned_thread_ids |= {a.workspace_id for a in my_agents}
+
     # One scan of the caller's whole prefix — not one call per thread plus
     # this, which used to list every conversation's shared files twice
     # (conversations now nest under users/{uid}/, so the per-thread loop's
@@ -279,6 +284,7 @@ async def list_files(
             )
         ).all()
         thread_names = {str(row.id): row.name for row in rows}
+    thread_names.update({a.workspace_id: a.name for a in my_agents})
 
     # A file is user-owned iff it has a (non-deleted) FileMetadata row: uploads
     # go through routes/files.py which records one, while code-interpreter /
@@ -325,6 +331,15 @@ async def _thread_owner(db: AsyncSession, claims: AuthClaims, thread_id: str) ->
     tenant match used to be enough here, letting any caller in the tenant
     read or overwrite any other caller's conversation files by thread id.
     """
+    if thread_id.startswith("dot-"):
+        # An agent's own workspace: only its owner may open it.
+        try:
+            agent = await get_owned_agent(db, uuid.UUID(thread_id[4:]), claims)
+        except ValueError:
+            agent = None
+        if agent is None:
+            raise HTTPException(status_code=404, detail="Thread not found")
+        return agent.user_identifier
     try:
         thread_uuid = uuid.UUID(thread_id)
     except ValueError:

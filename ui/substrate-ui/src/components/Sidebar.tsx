@@ -15,6 +15,7 @@ import {
   Settings2,
   ShieldCheck,
   ShieldQuestion,
+  Bot,
   SquarePen,
   Sun,
   Trash2,
@@ -23,11 +24,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { SubstrateMark } from "@/components/SubstrateMark";
-import { RateLimitBar } from "@/components/RateLimitBar";
-import { DocQuotaBar } from "@/components/DocQuotaBar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDisplayName } from "@/lib/display-name";
 import { getVisibleSettingsTabGroups, type SettingsTab } from "./settings/SettingsPanel";
 import { NavItem, confirmAction } from "@/design";
 import { ThreadList } from "@/components/ThreadList";
@@ -53,6 +53,8 @@ type Props = {
   isScheduledOpen?: boolean;
   scheduledCount?: number;
   onOpenApprovals?: () => void;
+  onOpenAgents?: () => void;
+  isAgentsOpen?: boolean;
   isApprovalsOpen?: boolean;
   approvalsCount?: number;
   onOpenNotifications?: () => void;
@@ -113,6 +115,8 @@ export function Sidebar({
   isScheduledOpen,
   scheduledCount,
   onOpenApprovals,
+  onOpenAgents,
+  isAgentsOpen,
   isApprovalsOpen,
   approvalsCount,
   onOpenNotifications,
@@ -129,6 +133,7 @@ export function Sidebar({
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const { theme, toggleTheme } = useTheme();
   const { user, isAuthenticated, isAdmin, loginWithGoogle, logout } = useAuth();
+  const shownName = useDisplayName(user?.name);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -149,6 +154,12 @@ export function Sidebar({
 
   const chatQuickActions = [
     { label: "New chat", icon: SquarePen, onClick: onNewChat },
+    {
+      label: "Agents",
+      icon: Bot,
+      onClick: onOpenAgents || (() => {}),
+      isActive: isAgentsOpen,
+    },
     {
       label: "Scheduled",
       icon: CalendarClock,
@@ -295,15 +306,12 @@ export function Sidebar({
           </>
         )}
 
-        <RateLimitBar />
-        <DocQuotaBar />
-
         <div className="mt-auto px-2 pb-3 pt-2" ref={menuRef}>
           {menuOpen && (
             <div className="substrate-pop-in mb-1.5 overflow-hidden rounded-2xl bg-card" style={{ boxShadow: "var(--shadow-lg)", transformOrigin: "bottom center" }}>
               {isAuthenticated && user && (
                 <div className="border-b border-border px-2.5 py-3">
-                  <div className="truncate text-sm font-medium">{user.name ?? "User"}</div>
+                  <div className="truncate text-sm font-medium">{shownName || "User"}</div>
                   <div className="mt-0.5 truncate text-xs text-muted">{user.email ?? ""}</div>
                   {isAdmin && (
                     <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-emerald-500">
@@ -395,12 +403,12 @@ export function Sidebar({
               />
             ) : (
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-badge text-xs font-bold text-foreground">
-                {isAuthenticated && user ? (user.name ?? user.email ?? "?")[0].toUpperCase() : <User className="h-3.5 w-3.5" />}
+                {isAuthenticated && user ? (shownName || user.email || "?")[0].toUpperCase() : <User className="h-3.5 w-3.5" />}
               </div>
             )}
             <div className="min-w-0 flex-1 text-left">
               <p className="truncate text-sm font-medium">
-                {isAuthenticated && user ? user.name ?? user.email ?? "My Account" : "My Account"}
+                {isAuthenticated && user ? shownName || user.email || "My Account" : "My Account"}
               </p>
               <p className="truncate text-xs text-muted">
                 {isAuthenticated && user?.email ? user.email : "Open account menu"}

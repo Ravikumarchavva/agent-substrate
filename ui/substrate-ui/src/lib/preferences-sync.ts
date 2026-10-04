@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { DISPLAY_NAME_EVENT, DISPLAY_NAME_KEY } from "@/lib/display-name";
 import { CHAT_WIDTH_KEY, MOTION_KEY, applyAppearance } from "@/lib/appearance";
 import {
   CHAT_MODEL_STORAGE_KEY,
@@ -47,6 +48,7 @@ function readLocal() {
   return {
     custom_instructions: localStorage.getItem(CUSTOM_INSTRUCTIONS_KEY)?.trim() ?? "",
     timezone: localStorage.getItem(TIMEZONE_KEY)?.trim() ?? "",
+    display_name: localStorage.getItem(DISPLAY_NAME_KEY)?.trim() ?? "",
     models,
   };
 }
@@ -79,16 +81,18 @@ export async function pullPreferences(): Promise<void> {
   } catch {
     return; // offline or signed out: keep what this browser has
   }
-  const empty = !remote.custom_instructions && !remote.timezone && Object.keys(remote.models).length === 0;
+  const empty = !remote.custom_instructions && !remote.timezone && !remote.display_name && Object.keys(remote.models).length === 0;
   if (empty) {
     const local = readLocal();
-    if (local.custom_instructions || local.timezone || Object.keys(local.models).length) await push();
+    if (local.custom_instructions || local.timezone || local.display_name || Object.keys(local.models).length) await push();
     return;
   }
   applying = true;
   try {
     set(CUSTOM_INSTRUCTIONS_KEY, remote.custom_instructions);
     set(TIMEZONE_KEY, remote.timezone);
+    set(DISPLAY_NAME_KEY, remote.display_name);
+    window.dispatchEvent(new Event(DISPLAY_NAME_EVENT));
     for (const key of MODEL_KEYS) set(key, remote.models[key] ?? "");
     applyAppearance();
     window.dispatchEvent(new CustomEvent(MODEL_PREFERENCES_UPDATED_EVENT, { detail: { key: null, value: null } }));

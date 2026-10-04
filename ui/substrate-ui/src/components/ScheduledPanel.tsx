@@ -1,33 +1,58 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { nanoid } from "nanoid";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarClock,
-  Play,
-  Pause,
-  Trash2,
-  ArrowLeft,
-  Send,
-  Sparkles,
-  AlertCircle,
-  Clock,
-  Loader2,
-  Edit3,
-  X,
-  FileText,
   Activity,
   Bell,
+  CalendarClock,
+  ChevronDown,
+  Clock,
+  FileText,
   GraduationCap,
-  RefreshCw,
+  Loader2,
   MessageSquare,
+  MoreHorizontal,
+  Pause,
+  Pencil,
+  Play,
+  RefreshCw,
+  Search,
+  Send,
+  Sparkles,
+  Trash2,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "@/lib/api";
 import type { ScheduledTask, ScheduledTaskRun } from "@/types";
-import { Button, Checkbox, PageHeading, Select, confirmAction, toast } from "@/design";
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  Input,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+  Page,
+  PageEmpty,
+  PageHeading,
+  Pane,
+  SettingGroup,
+  SettingRow,
+  Section,
+  Select,
+  Textarea,
+  cn,
+  confirmAction,
+  toast,
+} from "@/design";
 import { reportError } from "@/lib/report-error";
+import { DEFAULT_CHOICE, FREQUENCIES, WEEKDAYS, describe, toChoice, toSchedule, type Choice, type Frequency } from "@/lib/schedule";
 
 interface ScheduledPanelProps {
   onBack: () => void;
@@ -35,802 +60,579 @@ interface ScheduledPanelProps {
   onOpenThread?: (threadId: string) => void;
 }
 
-export function ScheduledPanel({ onBack, onOpenThread }: ScheduledPanelProps) {
-  // Navigation states
+type TaskType = ScheduledTask["task_type"];
+
+interface Draft {
+  name: string;
+  prompt: string;
+  choice: Choice;
+  task_type: TaskType;
+  ask_before_acting: boolean;
+  email_results: boolean;
+  auto_disable: boolean;
+  lookback_runs: number;
+}
+
+const BLANK: Draft = { name: "", prompt: "", choice: DEFAULT_CHOICE, task_type: "report", ask_before_acting: true, email_results: false, auto_disable: false, lookback_runs: 5 };
+
+/** Starting points shown on an empty page; picking one opens the form filled in. */
+const TEMPLATES: { icon: typeof FileText; name: string; prompt: string; task_type: TaskType; choice: Partial<Choice> }[] = [
+  { icon: FileText, name: "Daily briefing", prompt: "Summarise what needs my attention today: the news in my field, anything I asked you to keep an eye on, and what I should do first.", task_type: "report", choice: { frequency: "weekdays", time: "08:00" } },
+  { icon: Activity, name: "Monitor a topic", prompt: "Watch for news or mentions of [topic] and tell me only when something new and important appears.", task_type: "monitor", choice: { frequency: "daily", time: "09:00" } },
+  { icon: GraduationCap, name: "Weekly review", prompt: "Write a Friday summary of what we worked on this week and what is still open.", task_type: "learning", choice: { frequency: "weekly", weekday: 5, time: "16:00" } },
+  { icon: Bell, name: "Reminder", prompt: "Remind me to [thing to do].", task_type: "reminder", choice: { frequency: "daily", time: "09:00" } },
+  { icon: Sparkles, name: "Content ideas", prompt: "Draft a few post ideas based on the latest news in my industry.", task_type: "report", choice: { frequency: "weekly", weekday: 1, time: "09:00" } },
+];
+
+const ICONS: Record<TaskType, typeof FileText> = { report: FileText, monitor: Activity, reminder: Bell, learning: GraduationCap };
+
+const SORTS = [
+  { value: "next", label: "Sort by next run" },
+  { value: "name", label: "Sort by name" },
+  { value: "recent", label: "Sort by last run" },
+];
+
+const PERMISSIONS = [
+  { value: "ask", label: "Ask me before it changes anything" },
+  { value: "auto", label: "Act on its own (destructive actions still ask)" },
+];
+
+const scheduleOf = (t: ScheduledTask) => ({ kind: t.kind, expression: t.cron_expression });
+const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—");
+
+function StatusBadge({ status }: { status: ScheduledTask["status"] }) {
+  const tone = status === "active" ? "success" : status === "paused" ? "warning" : status === "error" ? "danger" : "neutral";
+  return <Badge tone={tone}>{status === "active" ? "Active" : status === "paused" ? "Paused" : status === "error" ? "Error" : "Done"}</Badge>;
+}
+
+export function ScheduledPanel({ onOpenThread }: ScheduledPanelProps) {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
-  const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null);
-  const [runs, setRuns] = useState<ScheduledTaskRun[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingRuns, setLoadingRuns] = useState(false);
+  const [selected, setSelected] = useState<ScheduledTask | null>(null);
+  const [sort, setSort] = useState("next");
+  const [query, setQuery] = useState("");
+  const [draft, setDraft] = useState<Draft | null>(null); // the create dialog, when open
+  const [describeOpen, setDescribeOpen] = useState(false);
 
-  // Parsing & creation states
-  const [naturalText, setNaturalText] = useState("");
-  const [isParsing, setIsParsing] = useState(false);
-  const [showConfigModal, setShowConfigModal] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // New task config form (parsed from NLP or filled manually)
-  const [newConfig, setNewConfig] = useState<{
-    name: string;
-    prompt: string;
-    cron_expression: string;
-    kind: "cron" | "interval";
-    task_type: "report" | "monitor" | "reminder" | "learning";
-    lookback_runs: number;
-    auto_disable: boolean;
-    email_results: boolean;
-  }>({
-    name: "",
-    prompt: "",
-    cron_expression: "0 8 * * *",
-    kind: "cron",
-    task_type: "report",
-    lookback_runs: 5,
-    auto_disable: false,
-    email_results: false,
-  });
-
-  // Edit states for selected task
-  const [isEditingPrompt, setIsEditingPrompt] = useState(false);
-  const [editPromptValue, setEditPromptValue] = useState("");
-
-  // Feedback input state
-  const [feedbackText, setFeedbackText] = useState("");
-  const [isSendingFeedback, setIsSendingFeedback] = useState(false);
-
-  // Load task list on mount
-  const fetchTasks = async () => {
-    setLoading(true);
-    setErrorMsg(null);
+  const load = useCallback(async () => {
     try {
-      const data = await api.getScheduledTasks();
-      setTasks(data);
+      setTasks(await api.getScheduledTasks());
     } catch (err) {
-      setErrorMsg((err instanceof Error && err.message) || "Failed to fetch scheduled tasks.");
+      reportError("Couldn't load your scheduled tasks", err);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchTasks();
   }, []);
 
-  // Fetch runs when selected task changes
   useEffect(() => {
-    if (selectedTask) {
-      fetchRuns(selectedTask.id);
-      setEditPromptValue(selectedTask.prompt);
-      setIsEditingPrompt(false);
-    }
-  }, [selectedTask]);
+    void load();
+  }, [load]);
 
-  const fetchRuns = async (taskId: string) => {
-    setLoadingRuns(true);
-    try {
-      const runData = await api.getScheduledTaskRuns(taskId, { limit: 50, include_silent: true });
-      setRuns(runData);
-    } catch (err) {
-      reportError("Couldn't load this task's runs", err);
-    } finally {
-      setLoadingRuns(false);
-    }
+  const replace = (updated: ScheduledTask) => {
+    setTasks((all) => all.map((t) => (t.id === updated.id ? updated : t)));
+    setSelected((s) => (s?.id === updated.id ? updated : s));
   };
 
-  // Natural language query submit
-  const handleNLPSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!naturalText.trim()) return;
-
-    setIsParsing(true);
-    setErrorMsg(null);
+  const runNow = async (task: ScheduledTask) => {
     try {
-      const parsed = await api.parseScheduledTaskText(naturalText);
-      setNewConfig({
-        name: parsed.name,
-        prompt: parsed.prompt,
-        cron_expression: parsed.cron_expression,
-        kind: parsed.kind,
-        task_type: parsed.task_type,
-        lookback_runs: 5,
-        auto_disable: parsed.task_type === "monitor", // default monitor tasks to auto_disable if they are alert-oriented
-        email_results: false,
-      });
-      setShowConfigModal(true);
-    } catch (err) {
-      setErrorMsg((err instanceof Error && err.message) || "Failed to interpret text. Please adjust and retry.");
-    } finally {
-      setIsParsing(false);
-    }
-  };
-
-  // Create Task
-  const handleCreateTask = async () => {
-    setErrorMsg(null);
-    try {
-      await api.createScheduledTask({
-        name: newConfig.name.trim(),
-        prompt: newConfig.prompt.trim(),
-        cron_expression: newConfig.cron_expression.trim(),
-        kind: newConfig.kind,
-        task_type: newConfig.task_type,
-        lookback_runs: newConfig.lookback_runs,
-        auto_disable: newConfig.auto_disable,
-        email_results: newConfig.email_results,
-      });
-      setShowConfigModal(false);
-      setNaturalText("");
-      fetchTasks();
-    } catch (err) {
-      setErrorMsg((err instanceof Error && err.message) || "Failed to create task.");
-    }
-  };
-
-  // Run now manual trigger
-  const handleRunNow = async (taskId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    try {
-      await api.runScheduledTaskNow(taskId);
-      // Give a tiny delay then refresh if viewing this task's runs
-      setTimeout(() => {
-        if (selectedTask?.id === taskId) {
-          fetchRuns(taskId);
-        }
-        fetchTasks();
-      }, 1000);
+      await api.runScheduledTaskNow(task.id);
+      toast.success("Started", "The result will appear under its runs.");
+      setTimeout(() => void load(), 1500);
     } catch (err) {
       reportError("Couldn't start the run", err);
     }
   };
 
-  // Pause / Resume toggle
-  const handleToggleStatus = async (task: ScheduledTask, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const newStatus = task.status === "active" ? "paused" : "active";
+  const toggle = async (task: ScheduledTask) => {
+    const status = task.status === "active" ? "paused" : "active";
     try {
-      const updated = await api.updateScheduledTask(task.id, { status: newStatus });
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)));
-      if (selectedTask?.id === task.id) {
-        setSelectedTask(updated);
-      }
+      replace(await api.updateScheduledTask(task.id, { status }));
     } catch (err) {
-      reportError(`Couldn't ${newStatus === "paused" ? "pause" : "resume"} the task`, err);
+      reportError(`Couldn't ${status === "paused" ? "pause" : "resume"} the task`, err);
     }
   };
 
-  // Delete task
-  const handleDeleteTask = async (taskId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (!(await confirmAction({ title: "Delete this task?", description: "Its run history is deleted too. This can't be undone.", confirmLabel: "Delete", danger: true }))) return;
-
+  const remove = async (task: ScheduledTask) => {
+    if (!(await confirmAction({ title: "Delete this task?", description: "Its run history goes with it. This can't be undone.", confirmLabel: "Delete", danger: true }))) return;
     try {
-      await api.deleteScheduledTask(taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
-      if (selectedTask?.id === taskId) {
-        setSelectedTask(null);
-      }
+      await api.deleteScheduledTask(task.id);
+      setTasks((all) => all.filter((t) => t.id !== task.id));
+      setSelected(null);
     } catch (err) {
       reportError("Couldn't delete the task", err);
     }
   };
 
-  // Update prompt instructions
-  const handleSavePrompt = async () => {
-    if (!selectedTask) return;
-    try {
-      const updated = await api.updateScheduledTask(selectedTask.id, { prompt: editPromptValue });
-      setSelectedTask(updated);
-      setIsEditingPrompt(false);
-      fetchTasks();
-    } catch (err) {
-      reportError("Couldn't save the instructions", err);
-    }
-  };
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = tasks.filter((t) => !q || t.name.toLowerCase().includes(q) || t.prompt.toLowerCase().includes(q));
+    const at = (iso: string | null, missing: number) => (iso ? new Date(iso).getTime() : missing);
+    return [...list].sort((a, b) =>
+      sort === "name" ? a.name.localeCompare(b.name) : sort === "recent" ? at(b.last_run_at, 0) - at(a.last_run_at, 0) : at(a.next_run_at, Number.MAX_SAFE_INTEGER) - at(b.next_run_at, Number.MAX_SAFE_INTEGER),
+    );
+  }, [tasks, query, sort]);
 
-  // Add feedback / reply to thread
-  const handleSendFeedback = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedTask || !feedbackText.trim()) return;
+  const newTaskMenu = (
+    <Menu>
+      <MenuTrigger asChild>
+        <Button variant="primary">
+          New task <ChevronDown />
+        </Button>
+      </MenuTrigger>
+      <MenuContent align="end">
+        <MenuItem onSelect={() => setDescribeOpen(true)}>
+          <Sparkles /> Describe it
+        </MenuItem>
+        <MenuItem onSelect={() => setDraft(BLANK)}>
+          <Pencil /> Set up manually
+        </MenuItem>
+      </MenuContent>
+    </Menu>
+  );
 
-    setIsSendingFeedback(true);
-    try {
-      await api.addScheduledTaskFeedback(selectedTask.id, feedbackText.trim());
-      setFeedbackText("");
-      toast.success("Feedback saved", "The assistant will use it the next time this task runs.");
-    } catch (err) {
-      reportError("Couldn't save your feedback", err);
-    } finally {
-      setIsSendingFeedback(false);
-    }
-  };
+  const dialogs = (
+    <>
+      <CreateDialog
+        draft={draft}
+        onClose={() => setDraft(null)}
+        onCreated={(task) => {
+          setDraft(null);
+          setTasks((all) => [task, ...all]);
+          setSelected(task);
+        }}
+      />
+      <DescribeDialog open={describeOpen} onClose={() => setDescribeOpen(false)} onParsed={(d) => { setDescribeOpen(false); setDraft(d); }} />
+    </>
+  );
 
-  // Helper styles based on task types
-  const getTypeBadgeStyles = (type: string) => {
-    switch (type) {
-      case "report":
-        return "bg-emerald-500/10 text-emerald-500 border border-emerald-500/10";
-      case "monitor":
-        return "bg-cyan-500/10 text-cyan-500 border border-cyan-500/10";
-      case "reminder":
-        return "bg-amber-500/10 text-amber-500 border border-amber-500/10";
-      case "learning":
-        return "bg-violet-500/10 text-violet-500 border border-violet-500/10";
-      default:
-        return "bg-neutral-500/10 text-neutral-500 border border-neutral-500/10";
-    }
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case "report":
-        return <FileText className="w-4 h-4" />;
-      case "monitor":
-        return <Activity className="w-4 h-4" />;
-      case "reminder":
-        return <Bell className="w-4 h-4" />;
-      case "learning":
-        return <GraduationCap className="w-4 h-4" />;
-      default:
-        return <CalendarClock className="w-4 h-4" />;
-    }
-  };
-
-  const getStatusPill = (status: string) => {
-    switch (status) {
-      case "active":
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/10 select-none uppercase tracking-wider">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Active
-          </span>
-        );
-      case "paused":
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/10 select-none uppercase tracking-wider">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            Paused
-          </span>
-        );
-      case "error":
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/10 select-none uppercase tracking-wider">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-            Error
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-neutral-500/10 text-neutral-500 border border-neutral-500/10 select-none uppercase tracking-wider">
-            {status}
-          </span>
-        );
-    }
-  };
-
-  const formatScheduleText = (task: ScheduledTask) => {
-    if (task.kind === "interval") {
-      const secs = Number.parseInt(task.cron_expression);
-      if (secs >= 86400) return `Every ${Math.round(secs / 86400)} day(s)`;
-      if (secs >= 3600) return `Every ${Math.round(secs / 3600)} hour(s)`;
-      if (secs >= 60) return `Every ${Math.round(secs / 60)} minute(s)`;
-      return `Every ${secs} second(s)`;
-    }
-    return `Cron: ${task.cron_expression}`;
-  };
-
-  return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
-      {/* ─── Header: the same slim header every page has (see design Page) ─── */}
-      <div className="shrink-0 px-4 pt-8 sm:px-8">
-        <PageHeading
-          title={selectedTask ? selectedTask.name : "Scheduled"}
-          subtitle={selectedTask ? `${selectedTask.task_type.toUpperCase()} • ${formatScheduleText(selectedTask)}` : "Automate agent loops and background processes."}
-          onBack={selectedTask ? () => setSelectedTask(null) : undefined}
-          actions={
-            !selectedTask ? (
-              <Button variant="secondary" onClick={fetchTasks} title="Refresh list">
-                <RefreshCw /> <span className="hidden sm:inline">Refresh</span>
-              </Button>
-            ) : undefined
-          }
-        />
-      </div>
-
-      {errorMsg && (
-        <div className="mx-6 mt-4 p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-400 text-xs flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
-      )}
-
-      {/* ─── View 1: Task List ─── */}
-      {!selectedTask ? (
-        <div className="scroll-area flex flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
-          {/* Scheduling Input Bar */}
-          <form onSubmit={handleNLPSubmit} className="relative substrate-fade-up">
-            <div className="relative flex items-center overflow-hidden rounded-2xl border border-border bg-card shadow-md focus-within:border-violet-500/50 focus-within:ring-1 focus-within:ring-violet-500/20 transition-all duration-300">
-              <Sparkles className="absolute left-4 w-4 h-4 text-violet-500 animate-pulse" />
-              <input
-                type="text"
-                value={naturalText}
-                onChange={(e) => setNaturalText(e.target.value)}
-                placeholder="Ask to schedule a task... (e.g. 'every day at 8am tell me AI news')"
-                className="w-full pl-11 pr-24 py-3.5 bg-transparent border-0 rounded-none text-sm outline-none placeholder:text-muted"
-              />
-              <div className="absolute right-2 flex gap-1">
-                {isParsing ? (
-                  <div className="px-3 py-1.5 text-xs text-muted flex items-center gap-1.5 bg-card-hover rounded-xl">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-500" />
-                    <span>Parsing...</span>
-                  </div>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={!naturalText.trim()}
-                    className="px-4 py-1.5 rounded-xl bg-accent-2 text-accent-2-foreground font-semibold text-xs hover:bg-accent-2-hover disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer flex items-center gap-1 min-h-unset min-w-unset btn-icon shadow-sm"
-                  >
-                    <span>Schedule</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </form>
-
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 text-muted gap-2">
-              <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
-              <span className="text-xs font-semibold uppercase tracking-wider">Loading schedules...</span>
-            </div>
-          ) : tasks.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center py-16 px-6 border border-dashed border-border rounded-2xl text-center substrate-fade-up">
-              <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center mb-6 text-violet-500">
-                <CalendarClock className="w-8 h-8" />
-              </div>
-              <h3 className="font-bold text-sm text-foreground">No scheduled tasks yet</h3>
-              <p className="text-xs text-muted mt-2 max-w-md leading-relaxed">
-                Automate your AI assistant to run background updates, monitor metrics, or deliver daily reports. Use the scheduling composer above to start.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {tasks.map((task, idx) => (
-                <div
-                  key={task.id}
-                  onClick={() => setSelectedTask(task)}
-                  style={{ "--stagger": idx } as React.CSSProperties}
-                  className="p-5 rounded-2xl border border-border bg-card hover:border-border-hover hover:shadow-md transition-all duration-300 flex flex-col justify-between group cursor-pointer substrate-hover-lift"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className={`p-2.5 rounded-xl shrink-0 flex items-center justify-center ${getTypeBadgeStyles(task.task_type)}`}>
-                        {getTypeIcon(task.task_type)}
-                      </div>
-                      {getStatusPill(task.status)}
-                    </div>
-                    <div className="space-y-1">
-                      <h3 className="font-bold text-sm group-hover:text-violet-500 transition-colors">
-                        {task.name}
-                      </h3>
-                      <p className="text-xs text-muted line-clamp-2 leading-relaxed">
-                        {task.prompt}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 pt-4 border-t border-border flex items-center justify-between text-xs text-muted">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-semibold text-foreground">{formatScheduleText(task)}</span>
-                      {task.next_run_at && (
-                        <span>Next: {new Date(task.next_run_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => handleRunNow(task.id, e)}
-                        className="p-2 rounded-lg bg-step hover:bg-emerald-500/10 hover:text-emerald-500 border border-transparent hover:border-emerald-500/20 transition-all cursor-pointer btn-icon"
-                        title="Run now"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                      </button>
-                      <button
-                        onClick={(e) => handleToggleStatus(task, e)}
-                        className={`p-2 rounded-lg bg-step border border-transparent transition-all cursor-pointer btn-icon ${
-                          task.status === "active"
-                            ? "hover:bg-amber-500/10 hover:text-amber-500 hover:border-amber-500/20"
-                            : "hover:bg-emerald-500/10 hover:text-emerald-500 hover:border-emerald-500/20"
-                        }`}
-                        title={task.status === "active" ? "Pause schedule" : "Activate schedule"}
-                      >
-                        {task.status === "active" ? (
-                          <Pause className="w-3.5 h-3.5 fill-current" />
-                        ) : (
-                          <Play className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                      <button
-                        onClick={(e) => handleDeleteTask(task.id, e)}
-                        className="p-2 rounded-lg bg-step hover:bg-rose-500/10 hover:text-rose-500 border border-transparent hover:border-rose-500/20 transition-all cursor-pointer btn-icon"
-                        title="Delete task"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
+  // With tasks, the page is split: the list stays on the left and the task you open fills the right, so there is no going back and forth. On a narrow
+  // screen it is one or the other, with a back arrow.
+  if (!loading && tasks.length > 0) {
+    return (
+      <div className="@container h-full w-full bg-background text-foreground">
+        <div className="grid h-full min-h-0 @4xl:grid-cols-[minmax(22rem,26rem)_minmax(0,1fr)]">
+          <div className={cn("min-h-0 @4xl:border-r @4xl:border-border", selected && "hidden @4xl:block")}>
+            <Pane>
+              <PageHeading title="Scheduled tasks" subtitle="Run tasks on a schedule or whenever you need them." actions={newTaskMenu} />
+              <div className="flex items-center gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted" aria-hidden />
+                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" aria-label="Search tasks" className="pl-8" />
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        /* ─── View 2: History & Execution Feed ─── */
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Config Detail Dashboard Banner */}
-          <div className="px-6 py-5 border-b border-border bg-card/30 space-y-5">
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
-              <div className="flex-1 space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
-                  <span className={`p-1.5 rounded-lg shrink-0 flex items-center justify-center ${getTypeBadgeStyles(selectedTask.task_type)}`}>
-                    {getTypeIcon(selectedTask.task_type)}
-                  </span>
-                  {selectedTask.task_type} Instructions
-                </span>
-                {isEditingPrompt ? (
-                  <div className="space-y-2">
-                    <textarea
-                      value={editPromptValue}
-                      onChange={(e) => setEditPromptValue(e.target.value)}
-                      rows={4}
-                      className="w-full p-3.5 text-sm bg-input border border-border rounded-xl focus:outline-none focus:border-violet-500/50"
-                    />
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => setIsEditingPrompt(false)}
-                        className="px-4 py-1.5 text-xs font-semibold rounded-xl border border-border hover:bg-card-hover cursor-pointer min-h-unset min-w-unset"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleSavePrompt}
-                        className="px-4 py-1.5 text-xs font-bold rounded-xl bg-accent-2 text-accent-2-foreground cursor-pointer min-h-unset min-w-unset"
-                      >
-                        Save Prompt
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-2.5 group">
-                    <p className="text-sm font-semibold text-foreground/90 leading-relaxed pr-6 select-text">
-                      {selectedTask.prompt}
-                    </p>
-                    <button
-                      onClick={() => setIsEditingPrompt(true)}
-                      className="p-1.5 rounded-lg hover:bg-card-hover border border-transparent hover:border-border opacity-0 group-hover:opacity-100 transition-all btn-icon text-muted"
-                      title="Edit instructions"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+                <Select value={sort} onValueChange={setSort} options={SORTS} className="w-44 shrink-0" aria-label="Sort tasks" />
               </div>
-
-              {/* Task Detail Summary Widgets */}
-              <div className="shrink-0 flex flex-wrap md:flex-col items-start md:items-end gap-3 text-xs">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleRunNow(selectedTask.id)}
-                    className="px-4 py-2 rounded-xl bg-emerald-500 text-white font-bold hover:bg-emerald-600 shadow-sm shadow-emerald-500/10 transition-colors flex items-center gap-1.5 cursor-pointer min-h-unset min-w-unset"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Run Now</span>
-                  </button>
-                  <button
-                    onClick={() => handleToggleStatus(selectedTask)}
-                    className={`px-4 py-2 rounded-xl font-bold border border-border bg-card transition-all cursor-pointer min-h-unset min-w-unset hover:bg-card-hover ${
-                      selectedTask.status === "active" ? "hover:text-amber-500" : "hover:text-emerald-500"
-                    }`}
-                  >
-                    {selectedTask.status === "active" ? "Pause" : "Activate"}
-                  </button>
-                  {onOpenThread && (
-                    <Button variant="secondary" size="lg" onClick={() => onOpenThread(selectedTask.thread_id)}>
-                      <MessageSquare /> Open conversation
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Horizontal Dashboard Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-border">
-              <div className="p-3 bg-card border border-border rounded-xl space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Status</div>
-                <div className="flex items-center mt-1">{getStatusPill(selectedTask.status)}</div>
-              </div>
-              <div className="p-3 bg-card border border-border rounded-xl space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Schedule</div>
-                <div className="text-xs font-bold text-foreground truncate mt-0.5">{formatScheduleText(selectedTask)}</div>
-              </div>
-              <div className="p-3 bg-card border border-border rounded-xl space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Lookback Context</div>
-                <div className="text-xs font-bold text-foreground mt-0.5">{selectedTask.lookback_runs} Runs</div>
-              </div>
-              <div className="p-3 bg-card border border-border rounded-xl space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Next Execution</div>
-                <div className="text-xs font-bold text-foreground truncate mt-0.5">
-                  {selectedTask.next_run_at
-                    ? new Date(selectedTask.next_run_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : "—"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Timeline Execution Logs Feed */}
-          <div className="scroll-area flex flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
-            <div className="space-y-6">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted mb-2">Run Logs & Timeline</h2>
-              
-              {loadingRuns ? (
-                <div className="flex items-center justify-center py-20 text-muted gap-2.5">
-                  <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
-                  <span className="text-xs font-semibold uppercase tracking-wider">Loading timeline logs...</span>
-                </div>
-              ) : runs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-border rounded-2xl bg-card/10 text-muted text-center">
-                  <Clock className="w-8 h-8 text-muted-foreground mb-3 animate-pulse" />
-                  <p className="text-sm font-bold text-foreground">No run history yet</p>
-                  <p className="text-xs text-muted mt-1">Click &quot;Run Now&quot; to trigger the initial background process manually.</p>
-                </div>
+              {visible.length === 0 ? (
+                <p className="py-10 text-center text-sm text-muted">No task matches “{query}”.</p>
               ) : (
-                <div className="space-y-6 relative pl-4 border-l border-border">
-                  {runs.map((run, idx) => {
-                    const dateStr = new Date(run.executed_at).toLocaleString([], {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    });
-
-                    if (run.was_silent) {
-                      return (
-                        <div
-                          key={run.id}
-                          style={{ "--stagger": idx } as React.CSSProperties}
-                          className="relative pl-6 py-1 text-xs text-muted flex items-center gap-2.5 substrate-fade-up"
-                        >
-                          <div className="absolute -left-[23px] top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-border border-4 border-background" />
-                          <span className="font-bold text-foreground/80">{dateStr}</span>
-                          <span className="text-muted-foreground">•</span>
-                          <span className="italic">Silent check completed. Metrics within normal bounds.</span>
-                        </div>
-                      );
-                    }
-
-                    const isFailed = run.status === "failed";
+                <ul className="space-y-1.5">
+                  {visible.map((task) => {
+                    const Icon = ICONS[task.task_type] ?? CalendarClock;
+                    const open = selected?.id === task.id;
                     return (
-                      <div
-                        key={run.id}
-                        style={{ "--stagger": idx } as React.CSSProperties}
-                        className="relative pl-6 substrate-fade-up"
-                      >
-                        {/* Timeline dot */}
-                        <div
-                          className={`absolute -left-[24px] top-4.5 w-3.5 h-3.5 rounded-full border-4 border-background ${
-                            isFailed ? "bg-rose-500 shadow-lg shadow-rose-500/20" : "bg-emerald-500 shadow-lg shadow-emerald-500/20"
-                          }`}
-                        />
-
-                        {/* Log Card */}
-                        <div className="rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-                          {/* Log Header */}
-                          <div className="flex justify-between items-center px-4 py-3 bg-card-hover/40 border-b border-border text-xs">
-                            <span className="font-bold text-foreground">{dateStr}</span>
-                            <div className="flex items-center gap-2.5 text-muted">
-                              {run.duration_ms > 0 && <span>{(run.duration_ms / 1000).toFixed(run.duration_ms < 10000 ? 1 : 0)}s</span>}
-                              {(run.cost_usd ?? 0) > 0 && <span title={`${run.tokens ?? 0} tokens`}>${(run.cost_usd ?? 0).toFixed((run.cost_usd ?? 0) < 0.01 ? 4 : 2)}</span>}
-                              {isFailed && (
-                                <Button size="sm" variant="secondary" onClick={() => void handleRunNow(selectedTask.id)}>
-                                  <RefreshCw /> Retry
-                                </Button>
-                              )}
-                              {run.status === "waiting" && onOpenThread && (
-                                <Button size="sm" variant="primary" onClick={() => onOpenThread(selectedTask.thread_id)}>
-                                  Review
-                                </Button>
-                              )}
-                              <span
-                                className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase border ${
-                                  isFailed 
-                                    ? "bg-rose-500/10 text-rose-500 border-rose-500/10" 
-                                    : "bg-emerald-500/10 text-emerald-500 border-emerald-500/10"
-                                }`}
-                              >
-                                {run.status}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Log Content */}
-                          <div className="p-4">
-                            {isFailed ? (
-                              <div className="text-xs text-rose-400 p-4 rounded-xl border border-rose-500/15 bg-rose-500/5 font-mono select-text whitespace-pre-wrap leading-relaxed">
-                                {run.error_message || "Agent execution failed unexpectedly."}
-                              </div>
-                            ) : (
-                              <div className="prose-chat select-text">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                  {run.output_summary}
-                                </ReactMarkdown>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <li key={task.id} className={cn("flex items-center gap-1 rounded-xl border px-2 py-2 transition-colors", open ? "border-accent/40 bg-accent/12" : "border-transparent hover:bg-card-hover")}>
+                        <button type="button" onClick={() => setSelected(task)} aria-current={open} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-1 text-left">
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-badge text-muted">
+                            <Icon className="size-4" aria-hidden />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium text-foreground">{task.name}</span>
+                            <span className="block truncate text-xs text-muted">
+                              {describe(scheduleOf(task))}
+                              {task.status === "active" && task.next_run_at ? ` · next ${when(task.next_run_at)}` : ""}
+                            </span>
+                          </span>
+                          {task.status !== "active" && <StatusBadge status={task.status} />}
+                        </button>
+                        <Button variant="ghost" size="icon" aria-label={`Run ${task.name} now`} onClick={() => void runNow(task)}>
+                          <Play />
+                        </Button>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               )}
-            </div>
+            </Pane>
           </div>
-
-          {/* Feedback reply container */}
-          <div className="px-6 py-4 border-t border-border bg-card/40 backdrop-blur-md sticky bottom-0 z-10">
-            <div className="max-w-3xl mx-auto">
-              <form onSubmit={handleSendFeedback} className="flex gap-2">
-                <input
-                  type="text"
-                  value={feedbackText}
-                  onChange={(e) => setFeedbackText(e.target.value)}
-                  placeholder="Adjust instructions for next run... (e.g. 'prioritize stock price comparison')"
-                  className="flex-1 px-4 py-2.5 bg-input border border-border rounded-xl text-sm focus:outline-none focus:border-violet-500/50"
-                />
-                <button
-                  type="submit"
-                  disabled={!feedbackText.trim() || isSendingFeedback}
-                  className="px-5 py-2.5 bg-accent-2 text-accent-2-foreground rounded-xl text-sm font-bold hover:bg-accent-2-hover transition-all flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none cursor-pointer shadow-sm min-h-unset min-w-unset btn-icon"
-                >
-                  {isSendingFeedback ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                </button>
-              </form>
-              <p className="text-[10px] text-muted mt-2 pl-1 select-none leading-relaxed">
-                Feedback instructions are saved to thread memory. The agent reviews past instructions and output histories on each schedule cycle.
-              </p>
-            </div>
+          <div className={cn("min-h-0", !selected && "hidden @4xl:block")}>
+            {selected ? (
+              <TaskDetail key={selected.id} task={selected} onBack={() => setSelected(null)} onChange={replace} onRun={runNow} onToggle={toggle} onDelete={remove} onOpenThread={onOpenThread} />
+            ) : (
+              <Pane className="items-center justify-center text-center">
+                <Clock className="size-8 text-muted" aria-hidden />
+                <p className="text-sm font-medium text-foreground">Pick a task to see its runs and settings</p>
+              </Pane>
+            )}
           </div>
         </div>
-      )}
+        {dialogs}
+      </div>
+    );
+  }
 
-      {/* ─── Config Edit / Parsing Confirmation Modal ─── */}
-      {showConfigModal && (
-        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-2xl max-w-lg w-full p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 duration-200 select-none">
-            <div className="flex justify-between items-center border-b border-border pb-3.5">
-              <h2 className="text-sm font-bold flex items-center gap-2">
-                <Sparkles className="w-4.5 h-4.5 text-violet-500" />
-                Confirm Task Schedule
-              </h2>
-              <button
-                onClick={() => setShowConfigModal(false)}
-                className="p-1 rounded-lg hover:bg-card-hover cursor-pointer btn-icon"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs overflow-y-auto max-h-[55vh] pr-1">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Task Name</label>
-                <input
-                  type="text"
-                  value={newConfig.name}
-                  onChange={(e) => setNewConfig((c) => ({ ...c, name: e.target.value }))}
-                  className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Instructions (Agent Prompt)</label>
-                <textarea
-                  value={newConfig.prompt}
-                  onChange={(e) => setNewConfig((c) => ({ ...c, prompt: e.target.value }))}
-                  rows={4}
-                  className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Schedule Type</label>
-                  <Select
-                    value={newConfig.kind}
-                    onValueChange={(v) => setNewConfig((c) => ({ ...c, kind: v as "cron" | "interval" }))}
-                    options={[
-                      { value: "cron", label: "Cron Expression" },
-                      { value: "interval", label: "Interval (Seconds)" },
-                    ]}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Expression / Value</label>
-                  <input
-                    type="text"
-                    value={newConfig.cron_expression}
-                    onChange={(e) => setNewConfig((c) => ({ ...c, cron_expression: e.target.value }))}
-                    className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Task Type</label>
-                  <Select
-                    value={newConfig.task_type}
-                    onValueChange={(v) =>
-                      setNewConfig((c) => ({ ...c, task_type: v as "report" | "monitor" | "reminder" | "learning" }))
-                    }
-                    options={[
-                      { value: "report", label: "Report / News Digest" },
-                      { value: "monitor", label: "Alert Monitor" },
-                      { value: "reminder", label: "Reminder Pings" },
-                      { value: "learning", label: "Continuous learning" },
-                    ]}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted uppercase tracking-wider">Context Lookback (Runs)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={20}
-                    value={newConfig.lookback_runs}
-                    onChange={(e) =>
-                      setNewConfig((c) => ({ ...c, lookback_runs: Number.parseInt(e.target.value, 10) || 0 }))
-                    }
-                    className="w-full p-2.5 bg-input border border-border rounded-xl text-xs focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <Checkbox
-                className="pt-2"
-                checked={newConfig.auto_disable}
-                onChange={(e) => setNewConfig((c) => ({ ...c, auto_disable: e.target.checked }))}
-                label="Auto-disable after first success (one-shot alert)"
-              />
-              <Checkbox
-                checked={newConfig.email_results}
-                onChange={(e) => setNewConfig((c) => ({ ...c, email_results: e.target.checked }))}
-                label="Email me the result of each run"
-              />
-            </div>
-
-            <div className="flex gap-2 justify-end border-t border-border pt-4 mt-2">
-              <button
-                onClick={() => setShowConfigModal(false)}
-                className="px-4 py-2 rounded-xl border border-border hover:bg-card-hover text-xs font-semibold cursor-pointer min-h-unset min-w-unset"
-              >
-                Discard
-              </button>
-              <button
-                onClick={handleCreateTask}
-                className="px-4 py-2 rounded-xl bg-accent-2 text-accent-2-foreground text-xs font-bold cursor-pointer min-h-unset min-w-unset"
-              >
-                Confirm & Create
-              </button>
-            </div>
-          </div>
+  return (
+    <Page title="Scheduled tasks" subtitle="Run tasks on a schedule or whenever you need them." actions={newTaskMenu}>
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center text-muted">
+          <Loader2 className="size-5 animate-spin" aria-label="Loading" />
         </div>
+      ) : (
+        <>
+          <PageEmpty icon={Clock} title="No scheduled tasks yet">
+            Have the assistant do something on a schedule, like a morning briefing, and read the result when it is ready.
+          </PageEmpty>
+          <Section title="Start from an example">
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {TEMPLATES.map((t) => (
+                <li key={t.name}>
+                  <button
+                    type="button"
+                    onClick={() => setDraft({ ...BLANK, name: t.name, prompt: t.prompt, task_type: t.task_type, choice: { ...DEFAULT_CHOICE, ...t.choice } })}
+                    className="flex w-full cursor-pointer items-start gap-3 rounded-lg p-2 text-left transition-colors hover:bg-card-hover"
+                  >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-badge text-muted">
+                      <t.icon className="size-4" aria-hidden />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-foreground">{t.name}</span>
+                      <span className="line-clamp-2 text-xs text-muted">{t.prompt}</span>
+                      <span className="mt-1 flex items-center gap-1 text-xs text-muted">
+                        <Clock className="size-3" aria-hidden /> {describe(toSchedule({ ...DEFAULT_CHOICE, ...t.choice }))}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        </>
       )}
-    </div>
+      {dialogs}
+    </Page>
   );
 }
 
-export default ScheduledPanel;
+/** The schedule controls shared by the create form and a task's settings: how often, and at what time. */
+function ScheduleFields({ choice, onChange }: { choice: Choice; onChange: (c: Choice) => void }) {
+  const timed = choice.frequency !== "hourly" && choice.frequency !== "custom";
+  return (
+    <>
+      <Select value={choice.frequency} onValueChange={(v) => onChange({ ...choice, frequency: v as Frequency })} options={FREQUENCIES} className="w-40" aria-label="Frequency" />
+      {choice.frequency === "weekly" && (
+        <Select value={String(choice.weekday)} onValueChange={(v) => onChange({ ...choice, weekday: Number(v) })} options={WEEKDAYS.map((d, i) => ({ value: String(i), label: d }))} className="w-36" aria-label="Day of the week" />
+      )}
+      {choice.frequency === "monthly" && (
+        <Input type="number" min={1} max={28} value={choice.day} onChange={(e) => onChange({ ...choice, day: Math.min(28, Math.max(1, Number(e.target.value) || 1)) })} className="w-20" aria-label="Day of the month" />
+      )}
+      {timed && <Input type="time" value={choice.time} onChange={(e) => onChange({ ...choice, time: e.target.value || "08:00" })} className="w-32" aria-label="Time" />}
+      {choice.frequency === "custom" && <Input value={choice.custom} onChange={(e) => onChange({ ...choice, custom: e.target.value })} placeholder="*/15 * * * *" className="w-44 font-mono" aria-label="Cron expression" />}
+    </>
+  );
+}
+
+function CreateDialog({ draft, onClose, onCreated }: { draft: Draft | null; onClose: () => void; onCreated: (t: ScheduledTask) => void }) {
+  const [form, setForm] = useState<Draft>(BLANK);
+  const [busy, setBusy] = useState(false);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    if (draft) setForm(draft);
+  }, [draft]);
+
+  const schedule = toSchedule(form.choice);
+  const ready = form.name.trim() && form.prompt.trim() && schedule.expression;
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      onCreated(
+        await api.createScheduledTask({
+          name: form.name.trim(),
+          prompt: form.prompt.trim(),
+          cron_expression: schedule.expression,
+          kind: schedule.kind,
+          task_type: form.task_type,
+          lookback_runs: form.lookback_runs,
+          auto_disable: form.auto_disable,
+          email_results: form.email_results,
+          ask_before_acting: form.ask_before_acting,
+        }),
+      );
+    } catch (err) {
+      reportError("Couldn't create the task", err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={draft !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent title="New scheduled task" className="max-w-xl">
+        <div className="space-y-4">
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted">Name</span>
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Daily briefing" />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted">Instructions</span>
+            <Textarea rows={5} value={form.prompt} onChange={(e) => setForm({ ...form, prompt: e.target.value })} placeholder="Plan my meals for the week and write the shopping list." />
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-24 text-sm text-foreground">Frequency</span>
+            <ScheduleFields choice={form.choice} onChange={(choice) => setForm({ ...form, choice })} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-24 text-sm text-foreground">Permissions</span>
+            <Select value={form.ask_before_acting ? "ask" : "auto"} onValueChange={(v) => setForm({ ...form, ask_before_acting: v === "ask" })} options={PERMISSIONS} className="w-80 max-w-full" aria-label="Permissions" />
+          </div>
+          <div className="rounded-lg border border-border">
+            <button type="button" onClick={() => setMore(!more)} aria-expanded={more} className="flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm text-foreground">
+              Advanced settings <ChevronDown className={`size-4 text-muted transition-transform ${more ? "rotate-180" : ""}`} aria-hidden />
+            </button>
+            {more && (
+              <div className="space-y-3 border-t border-border p-3">
+                <Checkbox checked={form.email_results} onChange={(e) => setForm({ ...form, email_results: e.target.checked })} label="Email me the result of each run" />
+                <Checkbox checked={form.auto_disable} onChange={(e) => setForm({ ...form, auto_disable: e.target.checked })} label="Stop after the first run that has something to report" />
+                <label className="flex items-center gap-2 text-sm text-foreground">
+                  Remember the last
+                  <Input type="number" min={0} max={20} value={form.lookback_runs} onChange={(e) => setForm({ ...form, lookback_runs: Math.max(0, Number(e.target.value) || 0) })} className="w-16" aria-label="Runs to remember" />
+                  runs
+                </label>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-muted">{describe(schedule)}</p>
+        </div>
+        <DialogFooter>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!ready || busy} onClick={() => void create()}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DescribeDialog({ open, onClose, onParsed }: { open: boolean; onClose: () => void; onParsed: (d: Draft) => void }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      const p = await api.parseScheduledTaskText(text);
+      onParsed({ ...BLANK, name: p.name, prompt: p.prompt, task_type: p.task_type, choice: toChoice({ kind: p.kind, expression: p.cron_expression }), auto_disable: p.task_type === "monitor" });
+      setText("");
+    } catch (err) {
+      reportError("Couldn't work out that schedule", err);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent title="Describe the task" description="Say what you want and when, like “every weekday at 8 summarise AI news”. You can adjust it before saving.">
+        <Textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Every Friday at 4pm, summarise what we worked on this week." autoFocus />
+        <DialogFooter>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!text.trim() || busy} onClick={() => void go()}>
+            {busy ? "Working it out…" : "Continue"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TaskDetail({ task, onBack, onChange, onRun, onToggle, onDelete, onOpenThread }: {
+  task: ScheduledTask;
+  onBack: () => void;
+  onChange: (t: ScheduledTask) => void;
+  onRun: (t: ScheduledTask) => Promise<void>;
+  onToggle: (t: ScheduledTask) => Promise<void>;
+  onDelete: (t: ScheduledTask) => Promise<void>;
+  onOpenThread?: (threadId: string) => void;
+}) {
+  const [runs, setRuns] = useState<ScheduledTaskRun[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [prompt, setPrompt] = useState(task.prompt);
+  const [choice, setChoice] = useState<Choice>(toChoice(scheduleOf(task)));
+  const [feedback, setFeedback] = useState("");
+
+  const loadRuns = useCallback(async () => {
+    try {
+      setRuns(await api.getScheduledTaskRuns(task.id, { limit: 50, include_silent: true }));
+    } catch (err) {
+      setRuns([]);
+      reportError("Couldn't load this task's runs", err);
+    }
+  }, [task.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load this task's runs when it opens
+    void loadRuns();
+  }, [loadRuns]);
+
+  const save = async (body: Parameters<typeof api.updateScheduledTask>[1], saved?: string) => {
+    try {
+      onChange(await api.updateScheduledTask(task.id, body));
+      if (saved) toast.success(saved);
+      return true;
+    } catch (err) {
+      reportError("Couldn't save that", err);
+      return false;
+    }
+  };
+
+  const changeSchedule = async (next: Choice) => {
+    setChoice(next);
+    const s = toSchedule(next);
+    if (s.expression) await save({ cron_expression: s.expression, kind: s.kind });
+  };
+
+  const sendFeedback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feedback.trim()) return;
+    try {
+      await api.addScheduledTaskFeedback(task.id, feedback.trim());
+      setFeedback("");
+      toast.success("Noted", "It will use this the next time the task runs.");
+    } catch (err) {
+      reportError("Couldn't save that", err);
+    }
+  };
+
+  return (
+    <Pane>
+      <PageHeading
+        title={task.name}
+      subtitle={`${describe(scheduleOf(task))}${task.status === "active" && task.next_run_at ? ` · next run ${when(task.next_run_at)}` : ""}`}
+        onBack={onBack}
+        backClassName="@4xl:hidden"
+        actions={
+        <>
+          <Button variant="primary" onClick={() => void onRun(task).then(() => setTimeout(() => void loadRuns(), 2000))}>
+            <Play /> Run now
+          </Button>
+          {onOpenThread && (
+            <Button onClick={() => onOpenThread(task.thread_id)}>
+              <MessageSquare /> Open conversation
+            </Button>
+          )}
+          <Menu>
+            <MenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="More">
+                <MoreHorizontal />
+              </Button>
+            </MenuTrigger>
+            <MenuContent align="end">
+              <MenuItem onSelect={() => void onToggle(task)}>
+                {task.status === "active" ? <Pause /> : <Play />} {task.status === "active" ? "Pause" : "Resume"}
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem tone="danger" onSelect={() => void onDelete(task)}>
+                <Trash2 /> Delete
+              </MenuItem>
+            </MenuContent>
+          </Menu>
+        </>
+      }
+      />
+      <>
+      <Section title="Instructions">
+        {editing ? (
+          <div className="space-y-2">
+            <Textarea rows={5} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => { setPrompt(task.prompt); setEditing(false); }}>Cancel</Button>
+              <Button variant="primary" disabled={!prompt.trim()} onClick={() => void save({ prompt: prompt.trim() }, "Saved").then((ok) => ok && setEditing(false))}>
+                Save
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start justify-between gap-3">
+            <p className="select-text whitespace-pre-wrap text-sm leading-relaxed text-foreground">{task.prompt}</p>
+            <Button variant="ghost" size="icon" aria-label="Edit instructions" onClick={() => setEditing(true)}>
+              <Pencil />
+            </Button>
+          </div>
+        )}
+      </Section>
+
+      <SettingGroup title="Settings">
+        <SettingRow label="Frequency" description="When it runs.">
+          <ScheduleFields choice={choice} onChange={(c) => void changeSchedule(c)} />
+        </SettingRow>
+        <SettingRow label="Permissions" description="What it may do without asking you first.">
+          <Select value={task.ask_before_acting === false ? "auto" : "ask"} onValueChange={(v) => void save({ ask_before_acting: v === "ask" }, v === "ask" ? "It will ask before changing anything" : "It will act on its own")} options={PERMISSIONS} className="w-80 max-w-full" aria-label="Permissions" />
+        </SettingRow>
+        <SettingRow label="Email the result" description="Send each run's result to your account email.">
+          <Checkbox checked={!!task.email_results} onChange={(e) => void save({ email_results: e.target.checked })} label="On" />
+        </SettingRow>
+        <SettingRow label="Stop after one report" description="Finish the task the first time a run has something to say.">
+          <Checkbox checked={task.auto_disable} onChange={(e) => void save({ auto_disable: e.target.checked })} label="On" />
+        </SettingRow>
+      </SettingGroup>
+
+      <Section title="Runs">
+        {runs === null ? (
+          <div className="flex justify-center py-6 text-muted">
+            <Loader2 className="size-5 animate-spin" aria-label="Loading" />
+          </div>
+        ) : runs.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted">No runs yet. Use “Run now” to try it.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {runs.map((run) => (
+              <RunRow key={run.id} run={run} onRetry={() => void onRun(task)} onReview={onOpenThread ? () => onOpenThread(task.thread_id) : undefined} />
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <form onSubmit={sendFeedback} className="flex gap-2">
+        <Input value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Adjust it for next time, e.g. “focus on price changes”" aria-label="Feedback for the next run" />
+        <Button type="submit" variant="primary" disabled={!feedback.trim()} aria-label="Send">
+          <Send />
+        </Button>
+      </form>
+      </>
+    </Pane>
+  );
+}
+
+function RunRow({ run, onRetry, onReview }: { run: ScheduledTaskRun; onRetry: () => void; onReview?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const failed = run.status === "failed";
+  const tone = failed ? "danger" : run.status === "waiting" ? "warning" : "success";
+  const text = failed ? run.error_message || "The run failed." : run.was_silent ? "Checked; nothing to report." : run.output_summary;
+  return (
+    <li className="py-2 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left">
+          <ChevronDown className={`size-3.5 shrink-0 text-muted transition-transform ${open ? "" : "-rotate-90"}`} aria-hidden />
+          <span className="text-sm text-foreground">{when(run.executed_at)}</span>
+          <Badge tone={tone}>{run.was_silent ? "quiet" : run.status}</Badge>
+          <span className="truncate text-xs text-muted">
+            {run.duration_ms > 0 ? `${(run.duration_ms / 1000).toFixed(run.duration_ms < 10000 ? 1 : 0)}s` : ""}
+            {(run.cost_usd ?? 0) > 0 ? ` · $${(run.cost_usd ?? 0).toFixed((run.cost_usd ?? 0) < 0.01 ? 4 : 2)}` : ""}
+          </span>
+        </button>
+        {failed && (
+          <Button size="sm" onClick={onRetry}>
+            <RefreshCw /> Retry
+          </Button>
+        )}
+        {run.status === "waiting" && onReview && (
+          <Button size="sm" variant="primary" onClick={onReview}>
+            Review
+          </Button>
+        )}
+      </div>
+      {open && (
+        <div className={`mt-2 select-text rounded-lg border border-border p-3 text-sm ${failed ? "font-mono text-danger" : "prose-chat"}`}>
+          {failed ? <p className="whitespace-pre-wrap text-xs">{text}</p> : <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>}
+        </div>
+      )}
+    </li>
+  );
+}

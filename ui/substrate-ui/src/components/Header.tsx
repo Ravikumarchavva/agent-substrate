@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { GitBranch, Check, ChevronDown, Pencil } from "lucide-react";
+import { GitBranch, Check, ChevronDown, Pencil, Monitor } from "lucide-react";
+import { Button } from "@/design";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import type { Branch } from "@/types";
 
@@ -13,6 +14,9 @@ interface HeaderProps {
   activeBranchId?: string;
   onSelectBranch?: (branchId: string) => void;
   onRenameBranch?: (branchId: string, newName: string) => void;
+  /** Show or hide the Computer panel (files, activity and terminal). */
+  onToggleComputer?: () => void;
+  computerOpen?: boolean;
 }
 
 export function Header({
@@ -23,6 +27,8 @@ export function Header({
   activeBranchId = "main",
   onSelectBranch,
   onRenameBranch,
+  onToggleComputer,
+  computerOpen = false,
 }: HeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
@@ -258,6 +264,11 @@ export function Header({
           </div>
         )}
       </div>
+      {onToggleComputer && (
+        <Button variant="ghost" size="sm" onClick={onToggleComputer} aria-pressed={computerOpen} className={computerOpen ? "text-foreground" : "text-muted"}>
+          <Monitor /> Computer
+        </Button>
+      )}
     </header>
   );
 }

@@ -8,6 +8,7 @@ describe("parseChatPath", () => {
     expect(parseChatPath("/settings/memory")).toMatchObject({ threadId: null, settingsTab: "memory" });
     expect(parseChatPath("/scheduled")).toEqual({ threadId: null, settingsTab: null, view: "scheduled" });
     expect(parseChatPath("/approvals")).toMatchObject({ view: "approvals", threadId: null });
+    expect(parseChatPath("/agents")).toEqual({ threadId: null, settingsTab: null, view: "agents" });
   });
 
   it("never mistakes a page name for a conversation id", () => {

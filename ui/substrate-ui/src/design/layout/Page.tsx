@@ -8,11 +8,11 @@ import { Button } from "../ui/Button";
  * The heading of a full-screen view: the page's name in large type, what it is for beneath it, the page's own actions on the right and, when
  * the page sits inside another (a task inside Scheduled), a back arrow. No bar, no border: it is part of the page, as in ChatGPT and Claude.
  */
-export function PageHeading({ title, subtitle, onBack, actions }: { title: string; subtitle?: string; onBack?: () => void; actions?: ReactNode }) {
+export function PageHeading({ title, subtitle, onBack, backClassName, actions }: { title: string; subtitle?: string; onBack?: () => void; backClassName?: string; actions?: ReactNode }) {
   return (
     <div className="flex items-start gap-3">
       {onBack && (
-        <Button variant="ghost" size="icon" aria-label="Back" onClick={onBack} className="-ml-2 mt-0.5">
+        <Button variant="ghost" size="icon" aria-label="Back" onClick={onBack} className={cn("-ml-2 mt-0.5", backClassName)}>
           <ArrowLeft />
         </Button>
       )}
@@ -25,6 +25,15 @@ export function PageHeading({ title, subtitle, onBack, actions }: { title: strin
   );
 }
 
+/** One scrolling pane with the page's padding and no heading of its own: half of a split page (a list beside what you opened). */
+export function Pane({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className="scroll-area h-full min-h-0 w-full">
+      <div className={cn("flex min-h-full flex-col gap-6 px-4 pb-8 pt-16 sm:px-8 sm:pt-8", className)}>{children}</div>
+    </div>
+  );
+}
+
 /**
  * Every full-screen view in the product (Scheduled, Approvals, Notifications, and every settings page) is a `Page`:
  *
@@ -33,13 +42,21 @@ export function PageHeading({ title, subtitle, onBack, actions }: { title: strin
  *   </Page>
  *
  * A `PageHeading` at the top of one scrolling area (no separate header bar). The page always fills the whole area, edge to edge. Nothing else sets its own heading size or scroll.
+ *
+ * Width is for using, not stretching. `layout="columns"` (settings pages made of separate groups) flows the groups into two columns once the page itself is
+ * wide enough (a container query, so a collapsed sidebar widens it too), and a group that needs the whole width is marked `data-span="all"`. A page that is one
+ * list or one table keeps `layout="single"` and splits the space its own way (a list beside the item you opened, a grid of cards).
  */
-export function Page({ title, subtitle, onBack, actions, children, className }: { title: string; subtitle?: string; icon?: LucideIcon; onBack?: () => void; actions?: ReactNode; children: ReactNode; className?: string }) {
+export function Page({ title, subtitle, onBack, actions, children, className, layout = "single" }: { title: string; subtitle?: string; icon?: LucideIcon; onBack?: () => void; actions?: ReactNode; children: ReactNode; className?: string; layout?: "single" | "columns" }) {
   return (
-    <div className="scroll-area h-full min-h-0 w-full bg-background text-foreground">
-      <div className={cn("flex min-h-full flex-col gap-6 px-4 py-8 sm:px-8", className)}>
+    <div className="scroll-area @container h-full min-h-0 w-full bg-background text-foreground">
+      <div className={cn("flex min-h-full flex-col gap-6 px-4 pb-8 pt-16 sm:px-8 sm:pt-8", className)}>
         <PageHeading title={title} subtitle={subtitle} onBack={onBack} actions={actions} />
-        {children}
+        {layout === "columns" ? (
+          <div className="space-y-6 @4xl:block @4xl:columns-2 @4xl:gap-6 @4xl:space-y-0 @4xl:[&>*]:mb-6 @4xl:[&>*]:break-inside-avoid @4xl:[&>[data-span=all]]:[column-span:all]">{children}</div>
+        ) : (
+          children
+        )}
       </div>
     </div>
   );

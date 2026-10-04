@@ -52,6 +52,8 @@ export type Thread = {
   pinned_at?: string | null;
   /** When it was archived (hidden from the main list), or null. */
   archived_at?: string | null;
+  /** The agent this conversation is with, if any. */
+  agent_id?: string | null;
 };
 
 /** A message that matched a search of the user's conversations. */

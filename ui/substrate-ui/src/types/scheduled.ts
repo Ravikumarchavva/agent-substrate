@@ -26,6 +26,8 @@ export interface ScheduledTask {
   auto_disable: boolean;
   /** Email the result of each run. */
   email_results?: boolean;
+  /** On: a tool that changes something outside the conversation waits for approval. Off: it runs on its own (destructive ones still ask). */
+  ask_before_acting?: boolean;
   created_at: string;
   updated_at: string;
   last_run_at: string | null;
@@ -42,6 +44,7 @@ export interface CreateScheduledTaskBody {
   lookback_runs?: number;
   auto_disable?: boolean;
   email_results?: boolean;
+  ask_before_acting?: boolean;
 }
 
 export interface UpdateScheduledTaskBody {
@@ -52,6 +55,8 @@ export interface UpdateScheduledTaskBody {
   status?: "active" | "paused" | "completed" | "error";
   lookback_runs?: number;
   auto_disable?: boolean;
+  ask_before_acting?: boolean;
+  email_results?: boolean;
 }
 
 export interface ScheduledTaskParseResponse {

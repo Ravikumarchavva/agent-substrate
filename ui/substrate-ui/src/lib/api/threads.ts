@@ -13,10 +13,11 @@ export const threadApi = {
     return requestJson<Thread[]>(`/threads?${params}`);
   },
 
-  async createThread(name?: string): Promise<Thread> {
+  /** `agentId`: start the conversation with one of the user's agents. */
+  async createThread(name?: string, agentId?: string | null): Promise<Thread> {
     return requestJson<Thread>("/threads", {
       method: "POST",
-      body: JSON.stringify({ name: name || "New Chat" }),
+      body: JSON.stringify({ name: name || "New Chat", ...(agentId ? { agent_id: agentId } : {}) }),
     });
   },
 
@@ -50,6 +51,13 @@ export const threadApi = {
     link.download = name;
     link.click();
     URL.revokeObjectURL(url);
+  },
+
+  /** The conversation as Markdown text, to copy. */
+  async getThreadMarkdown(threadId: string): Promise<string> {
+    const res = await fetch(`${API_BASE}/threads/${threadId}/export?format=md`, { credentials: "include" });
+    if (!res.ok) throw new ApiError(await getErrorMessage(res, "Couldn't read the conversation"), res.status);
+    return res.text();
   },
 
   /** The conversation's public link token, or null when it is not shared. */

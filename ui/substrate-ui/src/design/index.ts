@@ -18,7 +18,7 @@ export { Toaster, toast } from "./ui/Toast";
 export { Toolbar, ToolbarGroup, ToolbarItem } from "./ui/Toolbar";
 export { Tooltip, TooltipProvider } from "./ui/Tooltip";
 export { NavItem, type NavItemProps } from "./ui/NavItem";
-export { Page, PageEmpty, PageHeading, Section, SettingGroup, SettingRow } from "./layout/Page";
+export { Page, PageEmpty, PageHeading, Pane, Section, SettingGroup, SettingRow } from "./layout/Page";
 export { Container } from "./layout/Container";
 export { Stack } from "./layout/Stack";
 export { Heading } from "./type/Heading";

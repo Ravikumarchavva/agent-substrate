@@ -4,6 +4,8 @@ import { requestJson } from "./_client";
 export interface Preferences {
   custom_instructions: string;
   timezone: string;
+  /** What to call the user; empty means the name on their account. */
+  display_name: string;
   models: Record<string, string>;
 }
 

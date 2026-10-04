@@ -59,7 +59,9 @@ const subscribe = (l: () => void) => {
   return () => void listeners.delete(l);
 };
 const snapshot = () => items;
-const serverSnapshot = (): ToastItem[] => [];
+// One shared empty list: React requires the server snapshot to be the same value every call.
+const NO_TOASTS: ToastItem[] = [];
+const serverSnapshot = (): ToastItem[] => NO_TOASTS;
 
 const ICON = { success: CheckCircle2, error: AlertCircle, info: Info } as const;
 const ICON_TONE = { success: "text-success", error: "text-danger", info: "text-muted" } as const;

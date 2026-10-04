@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bell, CalendarClock, FileText, MessageSquare, LogOut, Moon, Search, Settings2, ShieldQuestion, SquarePen, Sun, User, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Bell, Bot, CalendarClock, FileText, MessageSquare, LogOut, Moon, Search, Settings2, ShieldQuestion, SquarePen, Sun, User, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Text, Tooltip, TooltipProvider, confirmAction } from "@/design";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
@@ -64,7 +64,9 @@ export function CollapsedRail({
   onOpenSettings,
   onOpenScheduled,
   onOpenApprovals,
+  onOpenAgents,
   onOpenNotifications,
+  isAgentsOpen,
   isScheduledOpen,
   isApprovalsOpen,
   isNotificationsOpen,
@@ -81,6 +83,8 @@ export function CollapsedRail({
   onOpenSettings: (tab?: SettingsTab) => void;
   onOpenScheduled: () => void;
   onOpenApprovals: () => void;
+  onOpenAgents: () => void;
+  isAgentsOpen?: boolean;
   onOpenNotifications: () => void;
   isScheduledOpen?: boolean;
   isApprovalsOpen?: boolean;
@@ -152,6 +156,7 @@ export function CollapsedRail({
             <>
           <RailButton icon={SquarePen} label="New chat" onClick={onNewChat} />
           <RailButton icon={Search} label="Search" onClick={onSearch} />
+          <RailButton icon={Bot} label="Agents" onClick={onOpenAgents} active={isAgentsOpen} />
           <RailButton icon={CalendarClock} label="Scheduled" onClick={onOpenScheduled} active={isScheduledOpen} />
           <RailButton icon={ShieldQuestion} label="Approvals" onClick={onOpenApprovals} active={isApprovalsOpen} count={approvalsCount} />
           <RailButton icon={Bell} label="Notifications" onClick={onOpenNotifications} active={isNotificationsOpen} count={unreadCount} />

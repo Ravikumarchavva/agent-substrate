@@ -33,9 +33,9 @@ export function isSettingsTab(value: string | null): value is SettingsTab {
  *   /settings             → { threadId: null, settingsTab: "general" }
  *   /settings/<tab>       → { threadId: null, settingsTab: <tab> }
  */
-export type ChatView = "scheduled" | "approvals" | "notifications";
+export type ChatView = "scheduled" | "approvals" | "notifications" | "agents";
 
-const VIEWS: readonly string[] = ["scheduled", "approvals", "notifications"];
+const VIEWS: readonly string[] = ["scheduled", "approvals", "notifications", "agents"];
 
 export function parseChatPath(pathname: string): {
   threadId: string | null;

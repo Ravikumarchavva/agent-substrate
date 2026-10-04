@@ -7,6 +7,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { MessageBubble } from "@/components/MessageBubble";
 import { Header } from "@/components/Header";
 import { ForkBranchModal } from "@/components/ForkBranchModal";
+import { RunInspector } from "@/components/RunInspector";
+import { AgentsPanel } from "@/components/AgentsPanel";
+import { ComputerPanel } from "@/components/ComputerPanel";
+import { ComposerLimit } from "@/components/ComposerLimit";
+import { HomeScreen } from "@/components/HomeScreen";
+import { useDisplayName } from "@/lib/display-name";
+import { getNewChatAgent, setNewChatAgent } from "@/lib/new-chat-agent";
+import { Select } from "@/design";
+import type { Agent } from "@/lib/api/agents";
 import { SubstrateMark } from "@/components/SubstrateMark";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
@@ -60,7 +69,7 @@ import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { reportError } from "@/lib/report-error";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { pullPreferences, watchPreferenceChanges } from "@/lib/preferences-sync";
-import { Send, Plus, FileText, Mail, ListTodo, CalendarClock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, type LucideIcon } from "lucide-react";
+import { Send, Plus, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, type LucideIcon } from "lucide-react";
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "substrate:last-active-thread";
 
@@ -107,7 +116,8 @@ function firstArtifactRef(content: string): string | null {
 }
 
 function ChatPageContent() {
-  const { isAuthenticated, isLoading: authLoading, isAdmin, loginWithGoogle, workspaceAuth } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, isAdmin, loginWithGoogle } = useAuth();
+  const shownName = useDisplayName(user?.name);
   const router = useRouter();
   const pathname = usePathname();
   const routeState = parseChatPath(pathname);
@@ -136,6 +146,7 @@ function ChatPageContent() {
 
   const scheduledPanelOpen = routeState.view === "scheduled";
   const approvalsPanelOpen = routeState.view === "approvals";
+  const agentsPanelOpen = routeState.view === "agents";
   const notificationsPanelOpen = routeState.view === "notifications";
   const [unreadCount, setUnreadCount] = useState(0);
   const [scheduledCount, setScheduledCount] = useState(0);
@@ -323,6 +334,7 @@ function ChatPageContent() {
   }, []);
   const handleOpenScheduled = useCallback(() => openView("scheduled"), [openView]);
   const handleOpenApprovals = useCallback(() => openView("approvals"), [openView]);
+  const handleOpenAgents = useCallback(() => openView("agents"), [openView]);
   const handleOpenNotifications = useCallback(() => openView("notifications"), [openView]);
 
   /** Leave Scheduled/Approvals for the conversation they came from (or a given one). */
@@ -347,7 +359,17 @@ function ChatPageContent() {
   const { threads, setThreads, loadThreads, hasMore, loadMore, showArchived, setShowArchived, handlePinThread, handleArchiveThread, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
     autoSelectFirstThread: !settingsPanelOpen,
   });
-  const { attachedFiles, setAttachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
+  // Agents the user has made, and which one a new conversation will be with ("" = the plain assistant).
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [newChatAgentId, setNewChatAgentIdState] = useState(getNewChatAgent);
+  const setNewChatAgentId = useCallback((id: string) => {
+    setNewChatAgentIdState(id);
+    setNewChatAgent(id);
+  }, []);
+  useEffect(() => {
+    api.getAgents().then(setAgents).catch(() => setAgents([]));
+  }, [settingsPanelOpen, agentsPanelOpen]);
+  const { attachedFiles, setAttachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads, newChatAgentId || null);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
   const { boards, upsertBoard, clearBoards, settleBoards } = useTaskBoards(currentThreadId);
   // Set when a file was deleted from this thread's storage (see
@@ -473,15 +495,6 @@ function ChatPageContent() {
     return result;
   }, [boards, boardAnchors, messages]);
 
-  type ManifestEntry = { tool_name: string; http_url: string; resource_uri: string };
-  const [mcpManifest, setMcpManifest] = useState<ManifestEntry[]>([]);
-  useEffect(() => {
-    fetch("/chat/api/backend/mcp-apps/manifest")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: ManifestEntry[]) => setMcpManifest(data))
-      .catch(() => { });
-  }, []);
-
   useEffect(() => {
     if (authLoading) {
       return;
@@ -580,8 +593,9 @@ function ChatPageContent() {
     if (wsRef.current) {
       handleStop();
     }
+    setNewChatAgentId("");
     await _handleNewChat({ onCreated: () => { setMessages([]); setMobileSidebarOpen(false); } });
-  }, [_handleNewChat]);
+  }, [_handleNewChat, setNewChatAgentId]);
 
   // Keyboard shortcuts: Ctrl/Cmd+Shift+O new chat, Ctrl/Cmd+K search conversations, "/" jump to the composer (when not already typing).
   useEffect(() => {
@@ -852,6 +866,59 @@ function ChatPageContent() {
     [currentThreadId, handleSelectBranch],
   );
 
+  // The Computer panel: the files, activity and terminal of this conversation's workspace (an agent's own, if it has one).
+  const [computerOpen, setComputerOpen] = useState(false);
+  const threadAgent = useMemo(() => {
+    const agentId = threads.find((t) => t.id === currentThreadId)?.agent_id;
+    return agentId ? (agents.find((a) => a.id === agentId) ?? null) : null;
+  }, [threads, currentThreadId, agents]);
+  const workspaceId = threadAgent ? threadAgent.workspace_id : currentThreadId;
+
+  // Run details + ratings: ratings are per run (the unit an answer comes from), loaded with the conversation.
+  const [inspectOpen, setInspectOpen] = useState(false);
+  const [ratings, setRatings] = useState<Record<string, -1 | 1>>({});
+  useEffect(() => {
+    if (!currentThreadId) return;
+    let cancelled = false;
+    api
+      .getRatings(currentThreadId)
+      .then((list) => !cancelled && setRatings(Object.fromEntries(list.map((r) => [r.for_id, r.value]))))
+      .catch(() => !cancelled && setRatings({}));
+    return () => {
+      cancelled = true;
+    };
+  }, [currentThreadId]);
+  const rateRun = useCallback(
+    async (runId: string, value: -1 | 0 | 1) => {
+      if (!currentThreadId) return;
+      try {
+        await api.rateRun(currentThreadId, runId, value);
+        setRatings((all) => {
+          const next = { ...all };
+          if (value === 0) delete next[runId];
+          else next[runId] = value;
+          return next;
+        });
+      } catch (err) {
+        reportError("Couldn't save your rating", err);
+      }
+    },
+    [currentThreadId],
+  );
+  // The latest answer's run is the last one the conversation has.
+  const [latestRunId, setLatestRunId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!currentThreadId || loading) return;
+    let cancelled = false;
+    api
+      .getRuns(currentThreadId)
+      .then((runs) => !cancelled && setLatestRunId(runs.length ? runs[runs.length - 1].run_id : null))
+      .catch(() => !cancelled && setLatestRunId(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [currentThreadId, loading, messages.length]);
+
   // Fork branch modal state
   const [forkModalOpen, setForkModalOpen] = useState(false);
   const [forkSourceBranchId, setForkSourceBranchId] = useState("main");
@@ -1075,7 +1142,7 @@ function ChatPageContent() {
     let threadId = currentThreadId;
     if (!threadId) {
       try {
-        const newThread = await api.createThread("New Chat");
+        const newThread = await api.createThread("New Chat", newChatAgentId || null);
         threadId = newThread.id;
         msgState.isNewThread = true;
         // DO NOT call selectThread or setThreads here! We want to keep the UI perfectly
@@ -1833,6 +1900,8 @@ function ChatPageContent() {
           isScheduledOpen={scheduledPanelOpen}
           scheduledCount={scheduledCount}
           onOpenApprovals={handleOpenApprovals}
+          onOpenAgents={handleOpenAgents}
+          isAgentsOpen={agentsPanelOpen}
           isApprovalsOpen={approvalsPanelOpen}
           approvalsCount={approvalsCount}
           onOpenNotifications={handleOpenNotifications}
@@ -1856,6 +1925,8 @@ function ChatPageContent() {
           onOpenSettings={openSettingsPanel}
           onOpenScheduled={handleOpenScheduled}
           onOpenApprovals={handleOpenApprovals}
+          onOpenAgents={handleOpenAgents}
+          isAgentsOpen={agentsPanelOpen}
           onOpenNotifications={handleOpenNotifications}
           isScheduledOpen={scheduledPanelOpen}
           isApprovalsOpen={approvalsPanelOpen}
@@ -1872,7 +1943,7 @@ function ChatPageContent() {
       {/* Main Content */}
       <div className="flex min-w-0 flex-1">
         <div className="relative flex min-w-0 flex-1 flex-col">
-          {!settingsPanelOpen && !scheduledPanelOpen && !approvalsPanelOpen && !notificationsPanelOpen && (
+          {!settingsPanelOpen && !scheduledPanelOpen && !approvalsPanelOpen && !notificationsPanelOpen && !agentsPanelOpen && (
             <Header
               onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
               desktopSidebarOpen={desktopSidebarOpen}
@@ -1881,6 +1952,8 @@ function ChatPageContent() {
               activeBranchId={activeBranchId}
               onSelectBranch={handleSelectBranch}
               onRenameBranch={handleRenameBranch}
+              onToggleComputer={() => setComputerOpen((o) => !o)}
+              computerOpen={computerOpen}
             />
           )}
           <div className="pointer-events-none absolute left-3 top-1.5 z-20 flex gap-2">
@@ -1911,6 +1984,13 @@ function ChatPageContent() {
             </div>
           ) : scheduledPanelOpen ? (
             <ScheduledPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} />
+          ) : agentsPanelOpen ? (
+            <AgentsPanel
+              onStartChat={(agentId) => {
+                setNewChatAgentId(agentId);
+                _handleNewChat();
+              }}
+            />
           ) : notificationsPanelOpen ? (
             <NotificationsPanel onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} />
           ) : approvalsPanelOpen ? (
@@ -1929,74 +2009,14 @@ function ChatPageContent() {
                 className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"
               >
                 {messages.length === 0 ? (
-                  <div className="flex h-full items-center justify-center">
-                    <div className="w-full max-w-2xl px-4 text-center sm:px-6">
-                      <div className="space-y-5">
-                        <SubstrateMark className="substrate-fade-up mx-auto h-10 w-10 text-foreground sm:h-12 sm:w-12" />
-                        <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
-                          <h2 className="text-xl font-semibold sm:text-2xl">How can I help you today?</h2>
-                          <p className="mt-2 text-sm text-muted">
-                            Ask me anything and I&apos;ll keep the working area clean and focused.
-                          </p>
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          {([
-                            { icon: FileText, text: "Summarize a document", onClick: () => fileInputRef.current?.click() },
-                            { icon: Mail, text: "Summarize my recent 5 emails", show: workspaceAuth },
-                            { icon: CalendarClock, text: "Schedule a daily briefing", onClick: handleOpenScheduled },
-                            { icon: ListTodo, text: "Plan tasks to organise a birthday party" },
-                            { icon: BarChart2, text: "Show a data visualisation" },
-                          ] as { icon: LucideIcon; text: string; show?: boolean; onClick?: () => void }[])
-                            .filter((chip) => chip.show !== false)
-                            .map(({ icon: Icon, text, onClick }, idx) => (
-                            <button
-                              key={idx}
-                              onClick={onClick ?? (() => doSendMessage(text))}
-                              className="substrate-pop-in substrate-press flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-muted transition-colors hover:bg-card-hover sm:p-3.5"
-                              style={{ '--stagger': idx + 2, background: "var(--card)", boxShadow: "var(--shadow-sm)" } as React.CSSProperties}
-                            >
-                              <Icon className="h-4 w-4 shrink-0 text-foreground" />
-                              <span>{text}</span>
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* MCP App launchers — direct open, no agent needed */}
-                        {mcpManifest.length > 0 && (
-                          <div className="mt-3">
-                            <p className="mb-2 text-xs text-muted font-medium uppercase tracking-wider">Apps</p>
-                            <div className="flex flex-wrap gap-2">
-                              {mcpManifest.map((entry) => {
-                                const label = entry.tool_name.replace(/_/g, " ");
-                                return (
-                                  <button
-                                    key={entry.resource_uri}
-                                    onClick={() => {
-                                      const name = entry.resource_uri.replace(/^ui:\/\//, "");
-                                      openInPanel({
-                                        id: `ui-${entry.resource_uri}`,
-                                        httpUrl: `/ui/${name}`,
-                                        toolName: name,
-                                        toolArguments: {},
-                                        timestamp: Date.now(),
-                                      });
-                                      setPanelCollapsed(false);
-                                    }}
-                                    className="substrate-press flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-muted transition-colors hover:bg-card-hover hover:text-foreground cursor-pointer"
-                                    style={{ boxShadow: "var(--shadow-sm)" }}
-                                  >
-                                    <span className="h-1.5 w-1.5 rounded-full bg-accent opacity-60" />
-                                    {label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <HomeScreen
+                    name={shownName}
+                    agents={agents}
+                    onOpenScheduled={handleOpenScheduled}
+                    onOpenAgents={handleOpenAgents}
+                    onOpenApprovals={handleOpenApprovals}
+                    onOpenFiles={() => openSettingsPanel("storage")}
+                  />
                 ) : (
                   <div className="mx-auto w-full space-y-8 py-8">
                     {messages.map((m) => {
@@ -2099,6 +2119,13 @@ function ChatPageContent() {
                               }}
                               messageId={m.id}
                               onForkBranch={handleForkFromMessage}
+                              onInspect={m.role === "assistant" && currentThreadId ? () => setInspectOpen(true) : undefined}
+                              onRate={
+                                m.role === "assistant" && !loading && latestRunId && m.id === messages[messages.length - 1]?.id
+                                  ? (value) => void rateRun(latestRunId, value)
+                                  : undefined
+                              }
+                              rating={latestRunId ? (ratings[latestRunId] ?? 0) : 0}
                               onRegenerate={
                                 !loading && m.role === "assistant" && m.id === messages[messages.length - 1]?.id
                                   ? () => {
@@ -2212,6 +2239,21 @@ function ChatPageContent() {
 
                       {/* Right group */}
                       <div className="ml-auto flex items-center gap-1.5">
+                        <ComposerLimit refreshOn={messages.length} />
+                        {agents.length > 0 && !currentThreadId && (
+                          <Select
+                            value={newChatAgentId || "none"}
+                            onValueChange={(v) => setNewChatAgentId(v === "none" ? "" : v)}
+                            options={[{ value: "none", label: "Assistant" }, ...agents.map((a) => ({ value: a.id, label: a.name }))]}
+                            aria-label="Chat with"
+                            className="w-36"
+                          />
+                        )}
+                        {currentThreadId && threads.find((t) => t.id === currentThreadId)?.agent_id && (
+                          <span className="rounded-full bg-badge px-2.5 py-1 text-xs font-medium text-badge-foreground">
+                            {agents.find((a) => a.id === threads.find((t) => t.id === currentThreadId)?.agent_id)?.name ?? "Agent"}
+                          </span>
+                        )}
                         <ModelPicker
                           models={CHAT_MODEL_OPTIONS}
                           selectedModel={selectedModel}
@@ -2278,6 +2320,18 @@ function ChatPageContent() {
           )}
         </div>
 
+        {!settingsPanelOpen && computerOpen && currentThreadId && (
+          <ComputerPanel
+            workspaceId={workspaceId}
+            title={threadAgent ? threadAgent.name : "Computer"}
+            messages={messages}
+            running={loading}
+            viewerOpen={panelItems.length > 0 && !panelCollapsed}
+            onOpenFile={(wid, path, name) => openArtifact(path, name, wid)}
+            onClose={() => setComputerOpen(false)}
+          />
+        )}
+
         {!settingsPanelOpen && (
           <AppPanel
             items={panelItems}
@@ -2306,6 +2360,8 @@ function ChatPageContent() {
         )}
 
       </div>
+
+      <RunInspector threadId={currentThreadId} open={inspectOpen} onClose={() => setInspectOpen(false)} ratings={ratings} onRate={(runId, value) => void rateRun(runId, value)} />
 
       {/* Fork Branch Modal */}
       <ForkBranchModal
@@ -2351,6 +2407,8 @@ function ChatPageContent() {
               isScheduledOpen={scheduledPanelOpen}
               scheduledCount={scheduledCount}
               onOpenApprovals={handleOpenApprovals}
+              onOpenAgents={handleOpenAgents}
+              isAgentsOpen={agentsPanelOpen}
               isApprovalsOpen={approvalsPanelOpen}
               approvalsCount={approvalsCount}
               onOpenNotifications={handleOpenNotifications}

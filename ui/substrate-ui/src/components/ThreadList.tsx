@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Archive, ArchiveRestore, Download, MoreHorizontal, Pencil, Pin, PinOff, Share2, Trash2, X, Check } from "lucide-react";
-import { Button, Menu, NavItem, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, confirmAction } from "@/design";
+import { Archive, ArchiveRestore, Copy, Download, MoreHorizontal, Pencil, Pin, PinOff, Share2, Trash2, X, Check } from "lucide-react";
+import { Button, Menu, NavItem, MenuContent, MenuItem, MenuSeparator, MenuTrigger, confirmAction, toast } from "@/design";
 import { api } from "@/lib/api";
 import { reportError } from "@/lib/report-error";
 import { ShareDialog } from "@/components/ShareDialog";
@@ -86,11 +86,20 @@ export function ThreadList(props: Props) {
     if (ok) await onDelete(thread.id);
   };
 
-  const exportAs = async (thread: Thread, format: "md" | "json") => {
+  const exportAs = async (thread: Thread) => {
     try {
-      await api.exportThread(thread.id, format);
+      await api.exportThread(thread.id, "md");
     } catch (err) {
       reportError("Couldn't export the conversation", err);
+    }
+  };
+
+  const copyAsMarkdown = async (thread: Thread) => {
+    try {
+      await navigator.clipboard.writeText(await api.getThreadMarkdown(thread.id));
+      toast.success("Copied");
+    } catch (err) {
+      reportError("Couldn't copy the conversation", err);
     }
   };
 
@@ -112,7 +121,8 @@ export function ThreadList(props: Props) {
       onPin={() => onPin(thread.id, !thread.pinned_at)}
       onArchive={() => onArchive(thread.id, !thread.archived_at && !showArchived)}
       onShare={() => setSharing(thread)}
-      onExport={(format) => void exportAs(thread, format)}
+      onExport={() => void exportAs(thread)}
+      onCopy={() => void copyAsMarkdown(thread)}
       onDelete={() => void remove(thread)}
     />
   );
@@ -195,7 +205,10 @@ function ThreadRow(props: {
   onPin: () => void;
   onArchive: () => void;
   onShare: () => void;
-  onExport: (format: "md" | "json") => void;
+  /** Download the conversation as a Markdown file. */
+  onExport: () => void;
+  /** Copy the conversation to the clipboard as Markdown. */
+  onCopy: () => void;
   onDelete: () => void;
 }) {
   const { thread, active, editing, archivedView } = props;
@@ -253,15 +266,12 @@ function ThreadRow(props: {
           <MenuItem onSelect={props.onShare}>
             <Share2 /> Share
           </MenuItem>
-          <MenuSub>
-            <MenuSubTrigger>
-              <Download /> Export
-            </MenuSubTrigger>
-            <MenuSubContent>
-              <MenuItem onSelect={() => props.onExport("md")}>Markdown</MenuItem>
-              <MenuItem onSelect={() => props.onExport("json")}>JSON</MenuItem>
-            </MenuSubContent>
-          </MenuSub>
+          <MenuItem onSelect={props.onExport}>
+            <Download /> Download
+          </MenuItem>
+          <MenuItem onSelect={props.onCopy}>
+            <Copy /> Copy
+          </MenuItem>
           <MenuItem onSelect={props.onArchive}>
             {archivedView ? <ArchiveRestore /> : <Archive />}
             {archivedView ? "Restore" : "Archive"}

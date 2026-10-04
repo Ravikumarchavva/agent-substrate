@@ -19,8 +19,12 @@ import {
   X,
   Download,
   GitFork,
+  ThumbsUp,
+  ThumbsDown,
+  Activity,
 } from "lucide-react";
 import { CitationSource, ToolCall, UploadedFile } from "@/types";
+import { Button } from "@/design";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { Mermaid } from "@/components/Mermaid";
 import { CitationChip } from "@/components/CitationChip";
@@ -353,6 +357,11 @@ type Props = {
   onOpenSource?: (source: CitationSource) => void;
   messageId?: string;
   onForkBranch?: (messageId: string) => void;
+  /** Rate this answer (shown on the latest answer): -1 bad, 1 good, 0 takes it back. */
+  onRate?: (value: -1 | 0 | 1) => void;
+  rating?: -1 | 0 | 1;
+  /** Open the run details for this conversation. */
+  onInspect?: () => void;
 };
 
 export function MessageBubble({
@@ -372,6 +381,9 @@ export function MessageBubble({
   onOpenSource,
   messageId,
   onForkBranch,
+  onRate,
+  rating = 0,
+  onInspect,
 }: Props) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
@@ -1215,6 +1227,21 @@ export function MessageBubble({
                   >
                     <GitFork className="w-3.5 h-3.5" />
                   </button>
+                )}
+                {onRate && (
+                  <>
+                    <Button variant="ghost" size="icon" className={`size-6 ${rating === 1 ? "text-success" : "text-muted"}`} onClick={() => onRate(rating === 1 ? 0 : 1)} aria-label="Good answer" aria-pressed={rating === 1}>
+                      <ThumbsUp />
+                    </Button>
+                    <Button variant="ghost" size="icon" className={`size-6 ${rating === -1 ? "text-danger" : "text-muted"}`} onClick={() => onRate(rating === -1 ? 0 : -1)} aria-label="Bad answer" aria-pressed={rating === -1}>
+                      <ThumbsDown />
+                    </Button>
+                  </>
+                )}
+                {onInspect && (
+                  <Button variant="ghost" size="icon" className="size-6 text-muted" onClick={onInspect} aria-label="Run details">
+                    <Activity />
+                  </Button>
                 )}
                 {timestamp && (
                   <span className="text-[11px] ml-1.5 text-muted">

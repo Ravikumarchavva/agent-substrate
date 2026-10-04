@@ -14,6 +14,8 @@ import { workspaceApi } from "./workspace";
 import { memoryApi } from "./memory";
 import { artifactsApi } from "./artifacts";
 import { branchApi } from "./branches";
+import { runsApi } from "./runs";
+import { agentsApi } from "./agents";
 
 export const api = {
   ...threadApi,
@@ -32,6 +34,8 @@ export const api = {
   ...preferencesApi,
   ...artifactsApi,
   ...branchApi,
+  ...runsApi,
+  ...agentsApi,
 };
 export { branchApi };
 

@@ -5,11 +5,35 @@ import { BarChart3, Download } from "lucide-react";
 import { Button, Page } from "@/design";
 import { api } from "@/lib/api";
 import { fetchRateLimitStatus, type RateLimitStatus } from "@/lib/api/rate_limit";
+import { fetchDocQuotaStatus, type DocQuotaStatus } from "@/lib/api/doc_quota";
+import { formatResetIn, limitTone } from "@/lib/limits";
 import type { Usage } from "@/lib/api/usage";
 import { reportError } from "@/lib/report-error";
 
 const money = (usd: number) => (usd === 0 ? "$0" : usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`);
 const count = (n: number) => new Intl.NumberFormat("en-US", { notation: n >= 100000 ? "compact" : "standard" }).format(n);
+
+/** A daily allowance: how much is used, what is left, and when it comes back. */
+function LimitRow({ title, noun, used, limit, resetIn }: { title: string; noun: string; used: number; limit: number; resetIn: number }) {
+  const tone = limitTone(used, limit);
+  return (
+    <div className="rounded-xl border border-border px-4 py-3">
+      <div className="flex items-baseline justify-between">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-sm tabular-nums text-muted">
+          {used} of {limit}
+        </p>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-border" role="progressbar" aria-valuenow={used} aria-valuemin={0} aria-valuemax={limit} aria-label={`${title} used`}>
+        <div className={`h-full rounded-full ${tone === "danger" ? "bg-danger" : tone === "warning" ? "bg-warning" : "bg-success"}`} style={{ width: `${Math.min(100, (used / Math.max(1, limit)) * 100)}%` }} />
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        {used >= limit ? `You've reached today's limit on ${noun}. ` : `${limit - used} ${noun} left. `}
+        It resets in {formatResetIn(resetIn)}.
+      </p>
+    </div>
+  );
+}
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -25,11 +49,13 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 export function UsageTab() {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [limit, setLimit] = useState<RateLimitStatus | null>(null);
+  const [docs, setDocs] = useState<DocQuotaStatus | null>(null);
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     api.getUsage(30).then(setUsage).catch((err) => reportError("Couldn't load your usage", err));
     void fetchRateLimitStatus().then(setLimit);
+    void fetchDocQuotaStatus().then(setDocs);
   }, []);
 
   const busiest = Math.max(1, ...(usage?.days.map((d) => d.messages) ?? [1]));
@@ -47,22 +73,10 @@ export function UsageTab() {
 
   return (
     <Page title="Usage" subtitle={usage?.note ?? "What you have used, so a limit is never a surprise."} icon={BarChart3}>
-    <div className="space-y-8">
-      {limit?.enabled && (
-        <div className="rounded-xl border border-border px-4 py-3">
-          <div className="flex items-baseline justify-between">
-            <p className="text-sm font-medium text-foreground">Today&apos;s messages</p>
-            <p className="text-sm tabular-nums text-muted">
-              {limit.used} of {limit.limit}
-            </p>
-          </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-border" role="progressbar" aria-valuenow={limit.used} aria-valuemin={0} aria-valuemax={limit.limit} aria-label="Messages used today">
-            <div className={`h-full rounded-full ${limit.used >= limit.limit ? "bg-danger" : limit.used >= limit.limit * 0.75 ? "bg-warning" : "bg-success"}`} style={{ width: `${Math.min(100, (limit.used / Math.max(1, limit.limit)) * 100)}%` }} />
-          </div>
-          <p className="mt-2 text-xs text-muted">
-            {limit.used >= limit.limit ? "You've reached today's limit. " : `${limit.limit - limit.used} left. `}
-            It resets in {Math.floor(limit.reset_in / 3600)}h {Math.floor((limit.reset_in % 3600) / 60)}m.
-          </p>
+      {(limit?.enabled || docs?.enabled) && (
+        <div className="grid gap-3 @2xl:grid-cols-2">
+          {limit?.enabled && <LimitRow title="Today's messages" noun="messages" used={limit.used} limit={limit.limit} resetIn={limit.reset_in} />}
+          {docs?.enabled && <LimitRow title="Today's documents" noun="documents" used={docs.used} limit={docs.limit} resetIn={docs.reset_in} />}
         </div>
       )}
 
@@ -100,7 +114,6 @@ export function UsageTab() {
           <Download /> {downloading ? "Preparing…" : "Download my data"}
         </Button>
       </div>
-    </div>
     </Page>
   );
 }

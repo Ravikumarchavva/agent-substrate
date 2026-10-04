@@ -471,7 +471,6 @@ export function SettingsPanel({
   const selectedSttModel = STT_MODEL_OPTIONS.find((option) => option.id === sttModel);
   const selectedTtsModel = TTS_MODEL_OPTIONS.find((option) => option.id === ttsModel);
   const selectedRealtimeModel = REALTIME_MODEL_OPTIONS.find((option) => option.id === realtimeModel);
-  const tabGroups = getVisibleSettingsTabGroups(isAdmin);
 
   const handleInlineTabChange = (tab: SettingsTab) => {
     setActiveTab(tab);
@@ -480,21 +479,6 @@ export function SettingsPanel({
 
   return (
     <div className={`flex flex-col ${FULL_PAGE_TABS.includes(activeTab) ? "h-full flex-1 min-h-0" : "min-h-full"}`}>
-      <div className="border-b border-border px-4 py-3 lg:hidden">
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {tabGroups.flatMap((group) => group.items).map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => handleInlineTabChange(id)}
-              className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${activeTab === id ? "bg-accent text-accent-foreground" : "bg-card text-muted hover:text-foreground"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div
         className={
           FULL_PAGE_TABS.includes(activeTab)

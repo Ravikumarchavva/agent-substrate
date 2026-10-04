@@ -56,3 +56,9 @@ If a control changes the screen you are on, it is violet. If it makes something 
 - **Colour roles:** orange is the action (primary buttons), violet is selected/active; success/warning/danger are for state only. Tokens, never hex.
 - **Dropdowns** are `Select`/`Menu`/`Combobox`; confirmations are `confirmAction`; feedback is `toast`. No native `select`, `confirm` or `alert`.
 - **A settings page** is `Page` → `SettingGroup`s → `SettingRow`s: a titled bordered group, each row with its label and one-line description on the left and its control on the right (`Segmented` for 2-4 choices, `Select`/`Combobox`, `Button`, `Checkbox`). Long text opens in place (`Textarea`). No summary cards, no stacked forms. `Section` is the same panel when the content is a list or a form.
+- **Use the width by meaning, never by splitting for its own sake.** Before laying out a wide page, sketch it: what belongs together, what is read together, what grows. Then pick the shape that fits that content:
+  - *A list and what you opened from it* → list on the left, the item on the right (`Pane` + `Pane`; Scheduled). Narrow screens show one, with a back arrow.
+  - *Settings made of unrelated groups* → `Page layout="columns"` (groups flow into two columns, General and Personalization), because each group stands alone.
+  - *A dashboard* (limits, then totals, then a chart) → rows of figures that are read together, with the chart full width (Usage). Not two columns.
+  - *One list or one table* → stays one block, full width (Storage, Approvals).
+  If the content has no second part, leave the space empty rather than inventing one.

@@ -6,6 +6,8 @@ import { Button, Input, Page, Section, SettingGroup, SettingRow, Textarea, confi
 import { schedulePreferencesPush } from "@/lib/preferences-sync";
 import type { InstructionValidationResult } from "@/types";
 import { api } from "@/lib/api";
+import { getDisplayName, setDisplayName } from "@/lib/display-name";
+import { useAuth } from "@/contexts/AuthContext";
 import { reportError } from "@/lib/report-error";
 import type { Memory } from "@/types";
 
@@ -14,6 +16,18 @@ export const CUSTOM_INSTRUCTIONS_KEY = "system_instructions_override";
 
 /** What the assistant knows about you: standing instructions you write, and the memories it keeps. Memories can be added, reworded and deleted; deleting is permanent. */
 export function PersonalizationTab() {
+  const { user } = useAuth();
+  // What to call you: kept in this browser and synced to the account; empty means the name on your account.
+  const [name, setName] = useState(() => (typeof window === "undefined" ? "" : getDisplayName()));
+  const [savedName, setSavedName] = useState(name);
+  const saveName = () => {
+    setDisplayName(name);
+    schedulePreferencesPush();
+    const kept = getDisplayName();
+    setName(kept);
+    setSavedName(kept);
+    toast.success(kept ? "Name saved" : "Using your account name");
+  };
   const [memories, setMemories] = useState<Memory[] | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -112,7 +126,24 @@ export function PersonalizationTab() {
   };
 
   return (
-    <Page title="Personalization" subtitle="What the assistant knows about you and how it should answer." icon={BrainCircuit}>
+    <Page layout="columns" title="Personalization" subtitle="What the assistant knows about you and how it should answer." icon={BrainCircuit}>
+      <SettingGroup title="About you">
+        <SettingRow label="Name" description={`What the assistant calls you, and what the greeting says. Leave it empty to use your account name${user?.name ? ` (${user.name})` : ""}.`}>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && name.trim() !== savedName && saveName()}
+            maxLength={60}
+            placeholder={user?.name ?? "Your name"}
+            aria-label="Name"
+            className="w-56"
+          />
+          <Button variant="primary" disabled={name.trim() === savedName} onClick={saveName}>
+            Save
+          </Button>
+        </SettingRow>
+      </SettingGroup>
+
       <SettingGroup title="Custom instructions">
         <SettingRow
           label="How should the assistant respond?"

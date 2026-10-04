@@ -54,7 +54,7 @@ export function GeneralTab({ onOpenTab }: { onOpenTab?: (tab: SettingsTab) => vo
   };
 
   return (
-    <Page title="General" subtitle="How the app looks and behaves for you." icon={Settings}>
+    <Page layout="columns" title="General" subtitle="How the app looks and behaves for you." icon={Settings}>
       <SettingGroup title="Appearance">
         <SettingRow label="Theme" description="Match your system, or pick one.">
           <Segmented<ThemePreference>

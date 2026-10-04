@@ -322,6 +322,9 @@ class ToolUseBlock(KernelModel):
     # Set by an LLM client when the model's arguments weren't valid JSON —
     # the harness reports it back to the model instead of running the tool.
     arguments_error: str | None = None
+    # Anything a provider attaches to this call that it wants back when the call is replayed as history, kept under the provider's own key
+    # (``{"gemini": {"thought_signature": "..."}}``). The harness never reads it; the client that set it is the one that sends it back.
+    extra: FrozenJson = Field(default_factory=FrozenDict)
 
     def __str__(self) -> str:
         return f"[ToolCall: {self.tool_name}({self.call_id})]"

@@ -15,15 +15,18 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
-from substrate_cloud.monolith.models import Agent
+from substrate_cloud.monolith.models import Agent, Thread
 from substrate_cloud.monolith.routes.chat_intents import _tool_name
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.stream.runs import last_message
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.services.delegation import TOOL_NAME
 from substrate_cloud.monolith.services.agent_service import (
     MAX_AGENTS_PER_USER,
+    ensure_main_thread,
     get_owned_agent,
     list_agents,
+    main_threads,
 )
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -54,8 +57,32 @@ class AgentOut(BaseModel):
     allowed_tools: Optional[List[str]] = None
     workspace_id: str
     created_at: datetime
+    # The agent's one conversation (absent until it is first opened) and when it last moved.
+    thread_id: Optional[uuid.UUID] = None
+    last_active: Optional[datetime] = None
+    # A one-line preview of the last thing said in that conversation, for the sidebar.
+    last_message: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class ThreadRef(BaseModel):
+    id: uuid.UUID
+
+
+def _out(agent: Agent, thread: Optional[Thread], last_message: Optional[str] = None) -> AgentOut:
+    return AgentOut(
+        id=agent.id,
+        name=agent.name,
+        role=agent.role,
+        instructions=agent.instructions,
+        allowed_tools=agent.allowed_tools,
+        workspace_id=agent.workspace_id,
+        created_at=agent.created_at,
+        thread_id=thread.id if thread else None,
+        last_active=thread.updated_at if thread else None,
+        last_message=last_message,
+    )
 
 
 class ToolInfo(BaseModel):
@@ -95,8 +122,16 @@ async def available_tools(ctx: ServerDependencies = Depends(get_ctx)):
 async def list_my_agents(
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
 ):
-    return await list_agents(db, user)
+    agents = await list_agents(db, user)
+    threads = await main_threads(db, [a.id for a in agents])
+    store = ctx.runtime.store if ctx.runtime is not None else None
+    previews = {
+        a.id: await last_message(store, str(threads[a.id].id)) if store and a.id in threads else None
+        for a in agents
+    }
+    return [_out(a, threads.get(a.id), previews[a.id]) for a in agents]
 
 
 @router.post("", response_model=AgentOut, status_code=201)
@@ -122,7 +157,8 @@ async def create_agent(
     )
     db.add(agent)
     await db.flush()
-    return agent
+    await db.refresh(agent)
+    return _out(agent, None)
 
 
 @router.get("/{agent_id}", response_model=AgentOut)
@@ -134,7 +170,7 @@ async def get_agent(
     agent = await get_owned_agent(db, agent_id, user)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    return agent
+    return _out(agent, (await main_threads(db, [agent.id])).get(agent.id))
 
 
 @router.patch("/{agent_id}", response_model=AgentOut)
@@ -160,7 +196,21 @@ async def update_agent(
     elif body.allowed_tools is not None:
         agent.allowed_tools = body.allowed_tools
     await db.flush()
-    return agent
+    await db.refresh(agent)
+    return _out(agent, (await main_threads(db, [agent.id])).get(agent.id))
+
+
+@router.post("/{agent_id}/thread", response_model=ThreadRef)
+async def open_agent_thread(
+    agent_id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+):
+    """The agent's conversation, made on first use. Open it to talk to the agent directly."""
+    agent = await get_owned_agent(db, agent_id, user)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return ThreadRef(id=(await ensure_main_thread(db, agent, user)).id)
 
 
 @router.delete("/{agent_id}", status_code=204)

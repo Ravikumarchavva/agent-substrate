@@ -19,6 +19,7 @@ is violated the test name says which.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -529,6 +530,25 @@ class RuntimeStoreConformance:
         await self.lease_one(store)
         result = await store.deliver(Delivery(agent=AGENT, msg=msg()))
         assert result.created_run is None and result.woke_run is None
+
+    async def test_concurrent_deliveries_to_an_idle_agent_create_one_run(
+        self, store: RuntimeStore
+    ) -> None:
+        # The race is a window of a few round trips, so give it many agents to land in.
+        agents = [Actor("agent", f"burst-{i}") for i in range(25)]
+        results = await asyncio.gather(
+            *(
+                store.deliver(Delivery(agent=a, msg=msg(target=a, n=n)))
+                for a in agents
+                for n in range(4)
+            )
+        )
+        created: dict[str, int] = {}
+        for i, r in enumerate(results):
+            if r.created_run is not None:
+                key = str(agents[i // 4])
+                created[key] = created.get(key, 0) + 1
+        assert all(created.get(str(a), 0) == 1 for a in agents), created
 
     async def test_a_message_that_keeps_failing_is_dead_lettered_and_stays_refused(
         self, store: RuntimeStore

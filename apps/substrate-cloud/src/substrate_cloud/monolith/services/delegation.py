@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -37,6 +38,15 @@ MAX_CALLS_PER_MESSAGE = 5
 WAIT_SECONDS = 180.0
 
 
+@dataclass(frozen=True)
+class AgentRef:
+    """The few facts about an agent the asker needs, copied out of the database session they were read in."""
+
+    id: uuid.UUID
+    name: str
+    role: str
+
+
 def _text(message: str, *, error: bool = False, **structured: Any) -> ToolExecutionResult:
     return ToolExecutionResult(
         content=[TextBlock(text=message)],
@@ -52,7 +62,7 @@ class AskAgentTool:
     risk = ToolRisk.SAFE
     idempotent = False
 
-    def __init__(self, ctx: Any, others: list[Agent], tool_name_of: Any) -> None:
+    def __init__(self, ctx: Any, others: list[AgentRef], tool_name_of: Any) -> None:
         self._ctx = ctx
         self._others = {a.name.lower(): a.id for a in others}
         self._tool_name_of = tool_name_of
@@ -188,7 +198,7 @@ class AskAgentTool:
         return _text(f"{target.name} {outcome}", error=True, **link)
 
 
-async def other_agents(ctx: Any, tenant_id: str, user_id: str, exclude: uuid.UUID | None) -> list[Agent]:
+async def other_agents(ctx: Any, tenant_id: str, user_id: str, exclude: uuid.UUID | None) -> list[AgentRef]:
     """The user's agents that can be asked, besides the one asking."""
     async with system_session(ctx.session_factory) as db:
         rows = await db.execute(
@@ -196,4 +206,4 @@ async def other_agents(ctx: Any, tenant_id: str, user_id: str, exclude: uuid.UUI
             .where(Agent.user_identifier == user_id, Agent.tenant_id == tenant_id)
             .order_by(Agent.created_at)
         )
-        return [a for a in rows.scalars().all() if a.id != exclude]
+        return [AgentRef(a.id, a.name, a.role) for a in rows.scalars().all() if a.id != exclude]

@@ -425,6 +425,9 @@ class SqlRuntimeStore:
         )
         if not wake:
             return DeliverResult(accepted=True)
+        # Without this, two deliveries to an idle actor each see "no active run" and both
+        # insert one; both then drain the same inbox.
+        await tx.lock(f"agent:{agent}")
         active = await tx.fetchone(
             "SELECT run_id, status FROM rt_runs WHERE agent = ? AND status IN ('pending', 'running', 'suspended') "
             "ORDER BY enqueued_at DESC, run_id DESC LIMIT 1",
@@ -566,6 +569,7 @@ class SqlRuntimeStore:
                 )
         # Mail that arrived while this run was finishing has nobody to read it.
         if outcome.kind == "complete":
+            await tx.lock(f"agent:{run['agent']}")
             leftover = await tx.fetchone(
                 "SELECT 1 AS x FROM rt_inbox WHERE agent = ? LIMIT 1", run["agent"]
             )

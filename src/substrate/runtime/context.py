@@ -657,23 +657,43 @@ class RunContext:
     # ------------------------------------------------------------------ messaging
 
     async def send(self, target: Actor, msg: Message) -> None:
-        """Fire-and-forget delivery; never suspends the caller."""
-        await self._commit(
-            deliveries=(
-                Delivery(agent=target, msg=msg, tenant=self.tenant_id or "default"),
+        """Fire-and-forget delivery; never suspends the caller.
+
+        Journaled: a run that replays (after an approval, an ``ask``, a retry) finds the
+        send already recorded and does not deliver it again.
+        """
+
+        def build(_p: str, _e: str):
+            return {"target": str(target)}, lambda entries: self._commit(
+                entries,
+                deliveries=(
+                    Delivery(agent=target, msg=msg, tenant=self.tenant_id or "default"),
+                ),
             )
-        )
+
+        await self._journal.record_atomic("send", {"target": str(target)}, build)
 
     async def emit(self, topic: Topic, msg: Message) -> None:
-        """Publish to every follower of ``topic``."""
-        followers = await self._store.followers_of(topic)
-        if followers:
-            await self._commit(
-                deliveries=tuple(
-                    Delivery(agent=f, msg=msg, tenant=self.tenant_id or "default")
-                    for f in followers
-                )
+        """Publish to every follower of ``topic``. Journaled like ``send``."""
+
+        def build(_p: str, _e: str):
+            return {"topic": str(topic)}, lambda entries: self._deliver_to_followers(
+                entries, topic, msg
             )
+
+        await self._journal.record_atomic("emit", {"topic": str(topic)}, build)
+
+    async def _deliver_to_followers(
+        self, entries: Sequence[NewEntry], topic: Topic, msg: Message
+    ) -> CommitResult:
+        followers = await self._store.followers_of(topic)
+        return await self._commit(
+            entries,
+            deliveries=tuple(
+                Delivery(agent=f, msg=msg, tenant=self.tenant_id or "default")
+                for f in followers
+            ),
+        )
 
     async def reply(self, to: Message, result: JsonObject) -> None:
         """Answer an ``ask``: signals the asker's run."""

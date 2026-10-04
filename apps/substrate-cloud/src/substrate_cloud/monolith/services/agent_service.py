@@ -28,6 +28,48 @@ async def get_owned_agent(
     return agent
 
 
+def _is_main() -> Any:
+    """SQL condition: a conversation the agent itself lives in, as opposed to one it was asked to do in someone else's name."""
+    return Thread.metadata_["delegated_from"].astext.is_(None)
+
+
+async def main_threads(db: AsyncSession, agent_ids: list[uuid.UUID]) -> dict[uuid.UUID, Thread]:
+    """Each agent's one conversation (the latest, should there ever be several), keyed by agent id."""
+    if not agent_ids:
+        return {}
+    rows = await db.execute(
+        select(Thread)
+        .where(
+            Thread.agent_id.in_(agent_ids),
+            Thread.deleted_at.is_(None),
+            _is_main(),
+        )
+        .order_by(Thread.updated_at.desc())
+    )
+    found: dict[uuid.UUID, Thread] = {}
+    for thread in rows.scalars().all():
+        found.setdefault(thread.agent_id, thread)  # type: ignore[arg-type]
+    return found
+
+
+async def ensure_main_thread(db: AsyncSession, agent: Agent, claims: AuthClaims) -> Thread:
+    """The agent's conversation, made the first time it is opened: talking to an agent is one continuing chat, like a contact, not a pile of sessions."""
+    existing = (await main_threads(db, [agent.id])).get(agent.id)
+    if existing is not None:
+        return existing
+    thread = Thread(
+        name=agent.name,
+        user_identifier=claims.sub,
+        tenant_id=claims.tenant_id or "default",
+        agent_id=agent.id,
+        tags=[],
+        metadata_={},
+    )
+    db.add(thread)
+    await db.flush()
+    return thread
+
+
 async def list_agents(db: AsyncSession, claims: AuthClaims) -> list[Agent]:
     rows = await db.execute(
         select(Agent)

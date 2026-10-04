@@ -90,6 +90,13 @@ def _encode_user(msg: ChatMessage) -> genai_types.Content:
     return genai_types.Content(role="user", parts=parts)
 
 
+def _signature_from(call: ToolUseBlock) -> bytes | None:
+    """The thought signature Gemini issued with this call (kept under ``extra["gemini"]``), as the bytes it expects back."""
+    ours = call.extra.get("gemini") if call.extra else None
+    raw = ours.get("thought_signature") if ours else None
+    return base64.b64decode(raw) if raw else None
+
+
 def _encode_assistant(msg: ChatMessage) -> genai_types.Content | None:
     """Assistant ChatMessage → Gemini Content with model role."""
     parts: list[genai_types.Part] = []
@@ -106,7 +113,9 @@ def _encode_assistant(msg: ChatMessage) -> genai_types.Content | None:
                 genai_types.Part(
                     function_call=genai_types.FunctionCall(
                         name=item.tool_name, args=tc_args
-                    )
+                    ),
+                    # Gemini rejects a replayed call that lacks the signature it issued with it.
+                    thought_signature=_signature_from(item),
                 )
             )
 

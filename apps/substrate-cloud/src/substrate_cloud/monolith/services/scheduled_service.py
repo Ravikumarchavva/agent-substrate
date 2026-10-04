@@ -6,15 +6,17 @@ import logging
 
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from substrate.types import RunLogKind
 from substrate_cloud.shared.settings import settings
+from substrate_cloud.monolith.database import system_session
 from substrate_cloud.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
+from substrate_cloud.monolith.services.notification_service import notify, send_email
 from substrate_cloud.factory import (
     build_agent_for_thread,
     build_chat_tools,
@@ -54,20 +56,73 @@ def format_lookback_context(runs: list[ScheduledTaskRun]) -> str:
     return "\n".join(lines)
 
 
+async def claim_firing(
+    db: AsyncSession, task_id: uuid.UUID, *, min_gap_s: float
+) -> bool:
+    """Win the right to run this firing. Every replica of the server hears every tick; the one whose ``UPDATE`` finds the task not claimed
+    within the last ``min_gap_s`` seconds runs it, and the rest see zero rows updated and skip. (Run now, by hand, does not claim.)"""
+    now = datetime.now(timezone.utc)
+    done = await db.execute(
+        update(ScheduledTask)
+        .where(
+            ScheduledTask.id == task_id,
+            (ScheduledTask.last_claimed_at.is_(None))
+            | (ScheduledTask.last_claimed_at < now - timedelta(seconds=min_gap_s)),
+        )
+        .values(last_claimed_at=now)
+    )
+    await db.commit()
+    return done.rowcount == 1
+
+
+def firing_gap_seconds(task: ScheduledTask) -> float:
+    """Shortest time that can honestly separate two firings of ``task``: half an interval, or 30 s for a cron (whose smallest step is a minute)."""
+    if task.kind == "interval":
+        try:
+            return max(1.0, int(task.cron_expression) / 2)
+        except ValueError:
+            return 30.0
+    return 30.0
+
+
+def run_cost(entries: list[Any]) -> tuple[int, float]:
+    """``(tokens, cost in USD)`` of the model calls in a run's journal."""
+    tokens, cost = 0, 0.0
+    for entry in entries:
+        if entry.kind == RunLogKind.LLM_CALL:
+            p = entry.payload or {}
+            tokens += int(p.get("tokens") or 0)
+            cost += float(p.get("cost_usd") or 0.0)
+    return tokens, cost
+
+
+def waiting_summary(kind: str, payload: dict[str, Any]) -> str:
+    """What a suspended run is waiting for, in a line a person can read in a notification."""
+    if kind == RunLogKind.APPROVAL_REQUESTED:
+        return f"Wants to use {payload.get('tool_name', 'a tool')} and needs your approval."
+    return str(payload.get("question") or "It has a question for you.")[:300]
+
+
 async def execute_scheduled_task(
     task_id: uuid.UUID,
     *,
     session_factory: async_sessionmaker[AsyncSession],
     app_state: Any,
+    manual: bool = False,
 ) -> None:
-    """Execute a single scheduled task run."""
+    """Execute a single scheduled task run. ``manual`` (Run now) skips the replica claim a timed firing needs."""
     logger.info("Executing scheduled task: %s", task_id)
-    async with session_factory() as db:
+    async with system_session(session_factory) as db:
         start = time.monotonic()
         try:
             task = await db.get(ScheduledTask, task_id)
             if not task:
                 logger.warning("Scheduled task not found: %s", task_id)
+                return
+            if not manual and not await claim_firing(
+                db, task_id, min_gap_s=firing_gap_seconds(task)
+            ):
+                logger.info("Scheduled task %s was claimed by another replica", task_id)
                 return
             if task.status != "active":
                 logger.info(
@@ -179,6 +234,7 @@ async def execute_scheduled_task(
             )
 
             output_text = ""
+            waiting_for: str | None = None
             async for entry in app_state.runtime.tail(run_id):
                 kind = entry.kind
                 p = entry.payload or {}
@@ -189,6 +245,15 @@ async def execute_scheduled_task(
                 elif kind == RunLogKind.RUN_FAILED:
                     error = p.get("error", "Agent run failed")
                     raise RuntimeError(error)
+                elif kind in (
+                    RunLogKind.APPROVAL_REQUESTED,
+                    RunLogKind.INPUT_REQUESTED,
+                ):
+                    # The run is parked, costing nothing, until the user answers in the conversation. Do not hold this task (and its
+                    # database session) open for however long that takes: record it, tell the user, and let the run resume later.
+                    waiting_for = waiting_summary(kind, p)
+                    break
+            tokens, cost = run_cost(await app_state.runtime.read(run_id))
 
             duration_ms = int((time.monotonic() - start) * 1000)
             is_silent = "[SILENT_CHECK]" in output_text
@@ -196,12 +261,36 @@ async def execute_scheduled_task(
             # 7. Persist run log
             run = ScheduledTaskRun(
                 task_id=task.id,
-                status="silent" if is_silent else "success",
-                output_summary=output_text[:500],
+                status=(
+                    "waiting" if waiting_for else "silent" if is_silent else "success"
+                ),
+                output_summary=(waiting_for or output_text)[:500],
                 duration_ms=duration_ms,
                 was_silent=is_silent,
+                tokens=tokens,
+                cost_usd=cost,
             )
             db.add(run)
+            if waiting_for:
+                await _tell(
+                    db,
+                    task,
+                    thread,
+                    "approval",
+                    f"“{task.name}” needs you",
+                    waiting_for,
+                    app_state,
+                )
+            elif not is_silent:
+                await _tell(
+                    db,
+                    task,
+                    thread,
+                    "task_run",
+                    f"“{task.name}” finished",
+                    output_text,
+                    app_state,
+                )
 
             # The run's user.message/text.delta are already durably in the
             # EventLogProtocol (ReActAgent logs them unconditionally) and will show
@@ -238,11 +327,54 @@ async def execute_scheduled_task(
                     error_message=str(exc),
                 )
                 db.add(run)
+                failed = await db.get(ScheduledTask, task_id)
+                failed_thread = (
+                    await db.get(Thread, failed.thread_id) if failed else None
+                )
+                if failed is not None and failed_thread is not None:
+                    await _tell(
+                        db, failed, failed_thread, "task_failed", f"“{failed.name}” failed",
+                        "The scheduled run did not complete. Open it to see what happened, or run it again.", app_state,
+                    )  # fmt: skip
                 await db.commit()
             except Exception as db_exc:
                 logger.error(
                     "Failed to persist failed run log for task %s: %s", task_id, db_exc
                 )
+
+
+async def _tell(
+    db: AsyncSession,
+    task: ScheduledTask,
+    thread: Thread,
+    kind: str,
+    title: str,
+    body: str,
+    app_state: Any,
+) -> None:
+    """A notification for the task's owner, and an email when they asked for results by email. Never raises: telling someone is secondary
+    to the run having happened."""
+    try:
+        if thread.user_identifier:
+            await notify(
+                db,
+                tenant_id=thread.tenant_id or "default",
+                user_identifier=thread.user_identifier,
+                kind=kind,
+                title=title,
+                body=body,
+                thread_id=task.thread_id,
+            )
+        if task.email_results and task.notify_email:
+            await send_email(
+                to=task.notify_email,
+                subject=title,
+                text=f"{body}\n\nOpen the conversation in the app to read it in full.",
+                api_key=getattr(settings, "RESEND_API_KEY", ""),
+                sender=getattr(settings, "NOTIFY_FROM_EMAIL", ""),
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("could not notify about scheduled task %s", task.id)
 
 
 async def load_active_tasks_into_scheduler(
@@ -251,7 +383,7 @@ async def load_active_tasks_into_scheduler(
 ) -> None:
     """Load active scheduled tasks from database and schedule them in TriggerScheduler."""
     logger.info("Loading active scheduled tasks into trigger scheduler...")
-    async with session_factory() as db:
+    async with system_session(session_factory) as db:
         stmt = select(ScheduledTask).where(ScheduledTask.status == "active")
         result = await db.execute(stmt)
         tasks = result.scalars().all()

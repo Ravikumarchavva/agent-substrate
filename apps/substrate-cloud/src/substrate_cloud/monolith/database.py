@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import Request
@@ -27,6 +28,13 @@ _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("threads", "deleted_at", "TIMESTAMPTZ"),
     ("threads", "locked_at", "TIMESTAMPTZ"),
     ("threads", "locked_reason", "TEXT"),
+    ("threads", "pinned_at", "TIMESTAMPTZ"),
+    ("threads", "archived_at", "TIMESTAMPTZ"),
+    ("scheduled_tasks", "email_results", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("scheduled_tasks", "notify_email", "VARCHAR"),
+    ("scheduled_tasks", "last_claimed_at", "TIMESTAMPTZ"),
+    ("scheduled_task_runs", "tokens", "INTEGER NOT NULL DEFAULT 0"),
+    ("scheduled_task_runs", "cost_usd", "DOUBLE PRECISION NOT NULL DEFAULT 0"),
     ("file_metadata", "extracted_text", "TEXT"),
     ("file_metadata", "extracted_at", "TIMESTAMPTZ"),
     ("file_metadata", "extraction_engine", "VARCHAR"),
@@ -97,6 +105,35 @@ async def init_db(
         expire_on_commit=False,
     )
     return engine, session_factory
+
+
+@asynccontextmanager
+async def system_session(
+    factory: async_sessionmaker[AsyncSession],
+) -> AsyncGenerator[AsyncSession, None]:
+    """A session for work the server does on its own, with no signed-in user (a scheduled task firing, the startup load of schedules).
+
+    Row-level security hides every tenant's rows from a connection that has not said which tenant it is acting for, so such a job would
+    find nothing, not even the task it was started for. This session acts for the platform: it bypasses the policies, and so must only be
+    used by code that picks the rows it touches itself. It holds one connection for its whole life (as ``get_db`` does), because the setting
+    lives on the connection and a commit would otherwise hand the session a different one."""
+    engine = factory.kw["bind"]
+    async with engine.connect() as conn:
+        async with factory(bind=conn) as session:
+            await session.execute(
+                text("SELECT set_config('app.bypass_rls', 'on', false)")
+            )
+            try:
+                yield session
+            finally:
+                try:
+                    await session.rollback()
+                    await session.execute(
+                        text("SELECT set_config('app.bypass_rls', '', false)")
+                    )
+                    await session.commit()
+                except Exception:  # noqa: BLE001 — the connection is closing; do not mask the job's own error
+                    pass
 
 
 async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:

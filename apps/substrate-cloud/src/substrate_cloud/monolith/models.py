@@ -13,12 +13,13 @@ Tables:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -107,6 +108,13 @@ class Thread(Base):
     locked_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Sidebar organisation: a pinned thread sorts first; an archived one is hidden from the main list (and kept, unlike delete).
+    pinned_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    archived_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     locked_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Relationships
@@ -133,6 +141,44 @@ class Thread(Base):
 
 
 # ── Elements (Attachments) ───────────────────────────────────────────────────
+
+
+class ThreadShare(Base):
+    """A read-only public link to a conversation. The ``token`` is the whole credential (32 random bytes, URL-safe), so this table is
+    read by token alone, without a tenant context; it deliberately has no row-level policy. ``name`` is the title at the time it was
+    shared, so the public page needs nothing from the (tenant-scoped) threads table."""
+
+    __tablename__ = "thread_shares"
+
+    token: Mapped[str] = mapped_column(String, primary_key=True)
+    thread_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("threads.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class UserPreferences(Base):
+    """What a user has chosen, kept with the account so it follows them to any browser or device: standing instructions for the assistant,
+    their timezone, and their default models. One row per user per tenant."""
+
+    __tablename__ = "user_preferences"
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_identifier: Mapped[str] = mapped_column(String, primary_key=True)
+    custom_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    timezone: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # Free-form model choices the UI keeps (chat model, effort, voice...): small, and only ever read back by the same UI.
+    models: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class Element(Base):
@@ -444,6 +490,36 @@ class AdapterPipeline(Base):
 # ── Scheduled Tasks ──────────────────────────────────────────────────────────
 
 
+class Notification(Base):
+    """Something the user should know about that happened while they were away: a scheduled run finished or failed, or the assistant is
+    waiting on them. Shown in the app's notification centre; ``read_at`` is set when they have seen it."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    user_identifier: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # "task_run" | "task_failed" | "approval"
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    thread_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        # stamped when the row is made, not when the transaction began, so notifications made together still have an order
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+    )
+    read_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class ScheduledTask(Base):
     __tablename__ = "scheduled_tasks"
 
@@ -476,6 +552,13 @@ class ScheduledTask(Base):
         String, nullable=False, default="report"
     )  # "report" | "monitor" | "reminder" | "learning"
     auto_disable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Email the result when a run finishes (to the address the task was created with). Off unless the user turns it on.
+    email_results: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    notify_email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # When a replica last claimed a firing: of several replicas that all hear the same tick, only the one that wins the claim runs it.
+    last_claimed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -521,6 +604,9 @@ class ScheduledTaskRun(Base):
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     was_silent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # What the run cost, summed from the model calls in its journal.
+    tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     # Relationships
     task: Mapped["ScheduledTask"] = relationship("ScheduledTask", back_populates="runs")

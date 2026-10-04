@@ -6,10 +6,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, text, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate_cloud.monolith.models import Thread, Feedback
+from substrate_cloud.monolith.models import Thread, ThreadShare, Feedback
 from substrate_cloud.shared.auth.claims import AuthClaims
 
 
@@ -105,19 +105,23 @@ async def list_threads(
     user_identifier: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
+    archived: bool = False,
 ) -> List[Dict[str, Any]]:
-    """List threads with message counts.
+    """The caller's threads: pinned first, then newest first. ``archived`` picks the archive instead of the main list.
 
-    ``user_identifier`` scopes the list to threads owned by that user.
-    Login is required to create a thread (see ``get_owned_thread``), so
-    there is no unowned-row case to special-case here.
-
-    Message counts come from the EventLogProtocol (``run_queue`` joined to
-    ``event_log``), not a separate steps table — see
-    ``routes/admin.py::list_all_threads`` for the same join pattern.
+    ``user_identifier`` scopes the list to threads owned by that user. Login is required to create a thread (see ``get_owned_thread``),
+    so there is no unowned-row case to special-case here. ``message_count`` is left 0: the messages live in the runtime's run log, so
+    the route fills it in from there (``stream.search.message_counts``).
     """
     query = (
-        select(Thread).order_by(Thread.updated_at.desc()).limit(limit).offset(offset)
+        select(Thread)
+        .order_by(
+            Thread.pinned_at.is_(None),
+            Thread.pinned_at.desc(),
+            Thread.updated_at.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
     )
 
     # Exclude scheduled tasks threads from regular recent threads list
@@ -129,6 +133,9 @@ async def list_threads(
     # deliberately not hard-erased — excluded here, still visible to a
     # separate admin/audit path.
     query = query.where(Thread.deleted_at.is_(None))
+    query = query.where(
+        Thread.archived_at.is_not(None) if archived else Thread.archived_at.is_(None)
+    )
 
     if user_id:
         query = query.where(Thread.user_id == user_id)
@@ -137,42 +144,38 @@ async def list_threads(
         query = query.where(Thread.user_identifier == user_identifier)
 
     result = await db.execute(query)
-    threads = list(result.scalars().all())
-    if not threads:
-        return []
+    return [thread_row(t) for t in result.scalars().all()]
 
-    thread_ids = [str(t.id) for t in threads]
-    count_rows = (
-        await db.execute(
-            text(
-                """
-                SELECT rq.thread_id AS thread_id, COUNT(el.*) AS message_count
-                FROM run_queue rq
-                JOIN event_log el ON el.run_id = rq.run_id
-                WHERE rq.thread_id = ANY(:thread_ids)
-                GROUP BY rq.thread_id
-                """
-            ),
-            {"thread_ids": thread_ids},
-        )
-    ).all()
-    counts = {r.thread_id: r.message_count for r in count_rows}
 
-    return [
-        {
-            "id": thread.id,
-            "name": thread.name,
-            "user_id": thread.user_id,
-            "tags": thread.tags,
-            "metadata": thread.metadata_,
-            "created_at": thread.created_at,
-            "updated_at": thread.updated_at,
-            "message_count": counts.get(str(thread.id), 0),
-            "locked_at": thread.locked_at,
-            "locked_reason": thread.locked_reason,
-        }
-        for thread in threads
-    ]
+def thread_row(thread: Thread, message_count: int = 0) -> Dict[str, Any]:
+    """A thread as the API returns it (``ThreadOut``)."""
+    return {
+        "id": thread.id,
+        "name": thread.name,
+        "user_id": thread.user_id,
+        "tags": thread.tags,
+        "metadata": thread.metadata_,
+        "created_at": thread.created_at,
+        "updated_at": thread.updated_at,
+        "message_count": message_count,
+        "locked_at": thread.locked_at,
+        "locked_reason": thread.locked_reason,
+        "pinned_at": thread.pinned_at,
+        "archived_at": thread.archived_at,
+    }
+
+
+async def owned_thread_ids(
+    db: AsyncSession, *, user_identifier: str, limit: int = 500
+) -> List[uuid.UUID]:
+    """Ids of the caller's live threads (archived ones included), newest activity first: what a search is allowed to look inside."""
+    rows = await db.execute(
+        select(Thread.id)
+        .where(Thread.user_identifier == user_identifier, Thread.deleted_at.is_(None))
+        .order_by(Thread.updated_at.desc())
+        .limit(limit)
+    )
+    return list(rows.scalars().all())
 
 
 async def update_thread(
@@ -182,9 +185,22 @@ async def update_thread(
     name: Optional[str] = None,
     tags: Optional[List[str]] = None,
     metadata: Optional[Dict[str, Any]] = None,
+    pinned: Optional[bool] = None,
+    archived: Optional[bool] = None,
 ) -> Optional[Thread]:
-    """Update thread metadata."""
+    """Update thread metadata. ``pinned`` / ``archived`` set or clear the matching timestamp (and do not bump ``updated_at``, so
+    organising the sidebar does not reorder it by recency)."""
     values: Dict[str, Any] = {}
+    now = datetime.now(timezone.utc)
+    organising = pinned is not None or archived is not None
+    if pinned is not None:
+        values["pinned_at"] = now if pinned else None
+    if archived is not None:
+        values["archived_at"] = now if archived else None
+        if archived:
+            values["pinned_at"] = (
+                None  # an archived thread is out of the way, not pinned
+            )
     if name is not None:
         values["name"] = name
     if tags is not None:
@@ -195,7 +211,8 @@ async def update_thread(
     if not values:
         return await get_thread(db, thread_id)
 
-    values["updated_at"] = datetime.now(timezone.utc)
+    if not (organising and set(values) <= {"pinned_at", "archived_at"}):
+        values["updated_at"] = now
 
     await db.execute(update(Thread).where(Thread.id == thread_id).values(**values))
     await db.flush()
@@ -220,6 +237,8 @@ async def delete_thread(db: AsyncSession, thread_id: uuid.UUID) -> bool:
         return False
     thread.deleted_at = datetime.now(timezone.utc)
     thread.updated_at = datetime.now(timezone.utc)
+    # A deleted conversation is no longer public: its share links stop working with it.
+    await db.execute(delete(ThreadShare).where(ThreadShare.thread_id == thread_id))
     await db.flush()
     return True
 

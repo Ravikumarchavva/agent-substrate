@@ -107,6 +107,8 @@ async def create_scheduled_task_endpoint(
         lookback_runs=body.lookback_runs,
         task_type=body.task_type,
         auto_disable=body.auto_disable,
+        email_results=bool(body.email_results) and bool(user.email),
+        notify_email=user.email or None,
     )
     db.add(task)
     await db.commit()
@@ -137,6 +139,7 @@ async def create_scheduled_task_endpoint(
         lookback_runs=task.lookback_runs,
         task_type=task.task_type,
         auto_disable=task.auto_disable,
+        email_results=task.email_results,
         created_at=task.created_at,
         updated_at=task.updated_at,
         next_run_at=next_run_at,
@@ -190,6 +193,7 @@ async def list_scheduled_tasks(
                 lookback_runs=task.lookback_runs,
                 task_type=task.task_type,
                 auto_disable=task.auto_disable,
+                email_results=task.email_results,
                 created_at=task.created_at,
                 updated_at=task.updated_at,
                 next_run_at=next_run_at,
@@ -239,6 +243,7 @@ async def get_scheduled_task(
         lookback_runs=task.lookback_runs,
         task_type=task.task_type,
         auto_disable=task.auto_disable,
+        email_results=task.email_results,
         created_at=task.created_at,
         updated_at=task.updated_at,
         next_run_at=next_run_at,
@@ -273,6 +278,7 @@ async def update_scheduled_task_endpoint(
     body: ScheduledTaskUpdate,
     db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Update a scheduled task's configuration, prompt, or status."""
     scheduler = ctx.trigger_scheduler
@@ -307,6 +313,10 @@ async def update_scheduled_task_endpoint(
         task.lookback_runs = body.lookback_runs
     if body.auto_disable is not None:
         task.auto_disable = body.auto_disable
+    if body.email_results is not None:
+        # Needs an address to send to: the one on the account making this change (the task keeps it).
+        task.notify_email = task.notify_email or user.email or None
+        task.email_results = body.email_results and bool(task.notify_email)
 
     task.updated_at = datetime.now(timezone.utc)
     await db.commit()
@@ -348,6 +358,7 @@ async def update_scheduled_task_endpoint(
         lookback_runs=task.lookback_runs,
         task_type=task.task_type,
         auto_disable=task.auto_disable,
+        email_results=task.email_results,
         created_at=task.created_at,
         updated_at=task.updated_at,
         next_run_at=next_run_at,
@@ -424,6 +435,7 @@ async def trigger_scheduled_task_now(
                 task_id,
                 session_factory=session_factory,
                 app_state=ctx,
+                manual=True,
             )
         except Exception as bg_err:
             logger.error("Failed manual scheduled task run: %s", bg_err)

@@ -45,6 +45,12 @@ from substrate_cloud.monolith.routes.tasks import router as tasks_router
 from substrate_cloud.monolith.routes.threads import router as threads_router
 from substrate_cloud.monolith.routes.artifacts import router as artifacts_router
 from substrate_cloud.monolith.routes.memory import router as memory_router
+from substrate_cloud.monolith.routes.export import router as export_router
+from substrate_cloud.monolith.routes.health import router as health_router
+from substrate_cloud.monolith.routes.usage import router as usage_router
+from substrate_cloud.monolith.routes.notifications import router as notifications_router
+from substrate_cloud.monolith.routes.preferences import router as preferences_router
+from substrate_cloud.monolith.routes.shared import router as shared_router
 from substrate_cloud.monolith.routes.triggers import router as triggers_router
 from substrate_cloud.monolith.routes.scheduled import router as scheduled_router
 from substrate_cloud.monolith.routes.workspace import router as workspace_router
@@ -396,6 +402,12 @@ def create_app() -> FastAPI:
     app.include_router(tasks_router)
     app.include_router(pipelines_router)
     app.include_router(triggers_router)
+    app.include_router(shared_router)
+    app.include_router(preferences_router)
+    app.include_router(notifications_router)
+    app.include_router(health_router)
+    app.include_router(usage_router)
+    app.include_router(export_router)
     app.include_router(scheduled_router)
     app.include_router(rag_router)
     app.include_router(files_router)

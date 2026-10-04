@@ -137,7 +137,7 @@ async def ensure_app_role(conn: AsyncConnection, *, password: str) -> None:
         owned = (
             await conn.execute(
                 text(
-                    "SELECT c.relname, c.relkind FROM pg_class c "
+                    "SELECT c.relname, c.relkind::text AS relkind FROM pg_class c "  # ::text, or asyncpg returns the "char" as bytes and a table is mistaken for a sequence
                     "WHERE c.relnamespace = 'public'::regnamespace "
                     "AND c.relkind IN ('r', 'S') "
                     "AND pg_get_userbyid(c.relowner) = :role "

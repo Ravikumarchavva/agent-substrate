@@ -30,6 +30,8 @@ class ThreadUpdate(BaseModel):
     name: Optional[str] = None
     tags: Optional[List[str]] = None
     metadata: Optional[JsonObject] = None
+    pinned: Optional[bool] = None
+    archived: Optional[bool] = None
 
 
 class ThreadOut(BaseModel):
@@ -49,6 +51,8 @@ class ThreadOut(BaseModel):
     # loads, not only after a send already 423s.
     locked_at: Optional[datetime] = None
     locked_reason: Optional[str] = None
+    pinned_at: Optional[datetime] = None
+    archived_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -287,6 +291,7 @@ class ScheduledTaskCreate(BaseModel):
     task_type: Optional[Literal["report", "monitor", "reminder", "learning"]] = "report"
     lookback_runs: Optional[int] = 5
     auto_disable: Optional[bool] = False
+    email_results: Optional[bool] = False
 
 
 class ScheduledTaskUpdate(BaseModel):
@@ -299,6 +304,7 @@ class ScheduledTaskUpdate(BaseModel):
     status: Optional[Literal["active", "paused", "completed", "error"]] = None
     lookback_runs: Optional[int] = None
     auto_disable: Optional[bool] = None
+    email_results: Optional[bool] = None
 
 
 class ScheduledTaskRunOut(BaseModel):
@@ -312,6 +318,8 @@ class ScheduledTaskRunOut(BaseModel):
     duration_ms: int
     was_silent: bool
     error_message: Optional[str] = None
+    tokens: int = 0
+    cost_usd: float = 0.0
 
     model_config = {"from_attributes": True}
 
@@ -330,6 +338,7 @@ class ScheduledTaskOut(BaseModel):
     lookback_runs: int
     task_type: str
     auto_disable: bool
+    email_results: bool = False
     created_at: datetime
     updated_at: datetime
     last_run_at: Optional[datetime] = None

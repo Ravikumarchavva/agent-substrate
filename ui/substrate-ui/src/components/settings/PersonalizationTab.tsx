@@ -1,20 +1,58 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
-import { Button, Input, confirmAction, toast } from "@/design";
+import { BrainCircuit, Check, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Button, Input, Page, Section, SettingGroup, SettingRow, Textarea, confirmAction, toast } from "@/design";
+import { schedulePreferencesPush } from "@/lib/preferences-sync";
+import type { InstructionValidationResult } from "@/types";
 import { api } from "@/lib/api";
 import { reportError } from "@/lib/report-error";
 import type { Memory } from "@/types";
 
 const MAX_CHARS = 500;
+export const CUSTOM_INSTRUCTIONS_KEY = "system_instructions_override";
 
-/** What the assistant has been told to remember about you. You can add, reword and delete it; deleting is permanent. */
-export function MemoryTab() {
+/** What the assistant knows about you: standing instructions you write, and the memories it keeps. Memories can be added, reworded and deleted; deleting is permanent. */
+export function PersonalizationTab() {
   const [memories, setMemories] = useState<Memory[] | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+
+  // Custom instructions: kept in this browser for the composer and synced to the account; checked against the content policy before saving.
+  const [instructions, setInstructions] = useState(() => (typeof window === "undefined" ? "" : (localStorage.getItem(CUSTOM_INSTRUCTIONS_KEY) ?? "")));
+  const [savedInstructions, setSavedInstructions] = useState(instructions);
+  const [editingInstructions, setEditingInstructions] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [instructionError, setInstructionError] = useState<string | null>(null);
+
+  const saveInstructions = async (text: string) => {
+    setInstructionError(null);
+    const value = text.trim();
+    if (value) {
+      setChecking(true);
+      try {
+        const verdict = (await api.checkCustomInstructions(value)) as InstructionValidationResult;
+        if (!verdict.allowed) {
+          setInstructionError(verdict.reason ?? "These instructions can't be saved: they break the content policy.");
+          return;
+        }
+      } catch {
+        setInstructionError("Couldn't check the instructions. Please try again.");
+        return;
+      } finally {
+        setChecking(false);
+      }
+      localStorage.setItem(CUSTOM_INSTRUCTIONS_KEY, value);
+    } else {
+      localStorage.removeItem(CUSTOM_INSTRUCTIONS_KEY);
+    }
+    schedulePreferencesPush();
+    setInstructions(value);
+    setSavedInstructions(value);
+    setEditingInstructions(false);
+    toast.success(value ? "Instructions saved" : "Instructions cleared");
+  };
 
   const load = useCallback(async () => {
     try {
@@ -74,15 +112,64 @@ export function MemoryTab() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Memory</h2>
-        <p className="mt-1 text-sm text-muted">
-          Things the assistant keeps in mind in every conversation, such as your preferences and facts about you. It adds some itself when you
-          ask it to remember something; you can add, reword or delete them here.
-        </p>
-      </div>
+    <Page title="Personalization" subtitle="What the assistant knows about you and how it should answer." icon={BrainCircuit}>
+      <SettingGroup title="Custom instructions">
+        <SettingRow
+          label="How should the assistant respond?"
+          description={savedInstructions ? <span className="line-clamp-2 whitespace-pre-wrap">{savedInstructions}</span> : "Standing instructions for every new message, such as tone or format. Nothing set yet."}
+        >
+          {!editingInstructions && (
+            <Button variant="secondary" onClick={() => setEditingInstructions(true)}>
+              <Pencil /> {savedInstructions ? "Edit" : "Add"}
+            </Button>
+          )}
+        </SettingRow>
+        {editingInstructions && (
+          <div className="space-y-3 px-4 py-3">
+            <Textarea
+              value={instructions}
+              onChange={(e) => {
+                setInstructions(e.target.value);
+                setInstructionError(null);
+              }}
+              rows={6}
+              maxLength={2000}
+              autoFocus
+              aria-label="Custom instructions"
+              placeholder="e.g. Always respond in British English. Keep answers concise."
+            />
+            {instructionError && (
+              <p role="alert" className="text-sm text-danger">
+                {instructionError}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <Button variant="primary" disabled={checking} onClick={() => void saveInstructions(instructions)}>
+                {checking && <Loader2 className="animate-spin" />}
+                {checking ? "Checking…" : "Save"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setInstructions(savedInstructions);
+                  setInstructionError(null);
+                  setEditingInstructions(false);
+                }}
+              >
+                Cancel
+              </Button>
+              {savedInstructions && (
+                <Button variant="danger" className="ml-auto" onClick={() => void saveInstructions("")}>
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </SettingGroup>
 
+      <Section title="Memory" description="Things the assistant keeps in mind in every conversation. It adds some itself when you ask it to remember something.">
+        <div className="space-y-4">
       <form
         className="flex gap-2"
         onSubmit={(e) => {
@@ -149,6 +236,8 @@ export function MemoryTab() {
           ))}
         </ul>
       )}
-    </div>
+        </div>
+      </Section>
+    </Page>
   );
 }

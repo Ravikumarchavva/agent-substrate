@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
+  Archive,
   BarChart3,
   BrainCircuit,
   HardDrive,
@@ -9,6 +10,7 @@ import {
   Settings,
   ShieldCheck,
   SlidersHorizontal,
+  type LucideIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,7 +21,6 @@ import type {
   AdminStorageUser,
   AdminThread,
   AdminUser,
-  InstructionValidationResult,
   OpenAITTSVoice,
   TTSPlaybackRate,
   TTSVoice,
@@ -60,8 +61,9 @@ import { ConnectorsTab } from "./ConnectorsTab";
 import { ModelsTab } from "./ModelsTab";
 import { AdminTab } from "./AdminTab";
 import { StorageTab } from "./StorageTab";
-import { MemoryTab } from "./MemoryTab";
+import { PersonalizationTab } from "./PersonalizationTab";
 import { UsageTab } from "./UsageTab";
+import { ArchivedTab } from "./ArchivedTab";
 import { confirmAction } from "@/design";
 import { schedulePreferencesPush } from "@/lib/preferences-sync";
 import { reportError } from "@/lib/report-error";
@@ -70,6 +72,7 @@ export type SettingsTab =
   | "general"
   | "memory"
   | "usage"
+  | "archived"
   | "apps"
   | "llm"
   | "storage"
@@ -84,7 +87,7 @@ interface SettingsNavItem {
   id: SettingsTab;
   label: string;
   description: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
   requiresAdmin?: boolean;
 }
 
@@ -98,8 +101,9 @@ export const SETTINGS_TAB_GROUPS: SettingsNavGroup[] = [
     title: "Personal",
     items: [
       { id: "general", label: "General", description: "Timezone and prompt defaults", icon: Settings },
-      { id: "memory", label: "Memory", description: "What the assistant remembers about you", icon: BrainCircuit },
+      { id: "memory", label: "Personalization", description: "Instructions and memories", icon: BrainCircuit },
       { id: "usage", label: "Usage", description: "Messages, tokens and cost", icon: BarChart3 },
+      { id: "archived", label: "Archived", description: "Conversations you put away", icon: Archive },
       { id: "storage", label: "Storage", description: "Uploaded and generated files", icon: HardDrive },
     ],
   },
@@ -127,8 +131,9 @@ export function getVisibleSettingsTabGroups(isAdmin: boolean): SettingsNavGroup[
     .filter((group) => group.items.length > 0);
 }
 
-const CUSTOM_INSTRUCTIONS_STORAGE_KEY = "system_instructions_override";
-const TIMEZONE_STORAGE_KEY = "user_timezone";
+/** Tabs that are a full `Page` (own header, own scrolling) rather than a form in a padded column. */
+const FULL_PAGE_TABS: SettingsTab[] = ["general", "memory", "usage", "archived", "storage", "apps", "llm", "admin"];
+
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -162,11 +167,6 @@ export function SettingsPanel({
   } = useAuth();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
-  const [customInstructions, setCustomInstructions] = useState("");
-  const [timezone, setTimezone] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [modelPreferencesNotice, setModelPreferencesNotice] = useState<SettingsNotice | null>(null);
   const [disconnectingApp, setDisconnectingApp] = useState<"google" | "spotify" | "workspace" | null>(null);
 
@@ -201,8 +201,6 @@ export function SettingsPanel({
   const [savingQuotaUserId, setSavingQuotaUserId] = useState<string | null>(null);
 
   const syncLocalSettings = useCallback(() => {
-    setCustomInstructions(localStorage.getItem(CUSTOM_INSTRUCTIONS_STORAGE_KEY) ?? "");
-    setTimezone(localStorage.getItem(TIMEZONE_STORAGE_KEY) ?? "");
 
     const preferredTtsModel = getPreferredTTSModel();
     setChatModel(getPreferredChatModel());
@@ -212,8 +210,6 @@ export function SettingsPanel({
     setTtsPlaybackRate(getPreferredTTSPlaybackRate());
     setRealtimeModel(getPreferredRealtimeModel());
 
-    setSaveError(null);
-    setSaveSuccess(false);
     setModelPreferencesNotice(null);
   }, []);
 
@@ -341,36 +337,6 @@ export function SettingsPanel({
       .finally(() => setSavingQuotaUserId(null));
   }, []);
 
-  const handleSaveInstructions = async () => {
-    setSaveError(null);
-    setSaveSuccess(false);
-
-    if (!customInstructions.trim()) {
-      localStorage.removeItem(CUSTOM_INSTRUCTIONS_STORAGE_KEY);
-      schedulePreferencesPush();
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2500);
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const data = await api.checkCustomInstructions(customInstructions.trim()) as InstructionValidationResult;
-      if (!data.allowed) {
-        setSaveError(data.reason ?? "Prompt not saved: content policy violation.");
-        return;
-      }
-      localStorage.setItem(CUSTOM_INSTRUCTIONS_STORAGE_KEY, customInstructions.trim());
-      schedulePreferencesPush();
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2500);
-    } catch {
-      setSaveError("Failed to validate instructions. Please try again.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleExpandThread = async (threadId: string) => {
     if (expandedThreadId === threadId) {
       setExpandedThreadId(null);
@@ -405,13 +371,6 @@ export function SettingsPanel({
     } finally {
       setDeletingThreadId(null);
     }
-  };
-
-  const handleTimezoneChange = (value: string) => {
-    setTimezone(value);
-    if (value.trim()) localStorage.setItem(TIMEZONE_STORAGE_KEY, value.trim());
-    else localStorage.removeItem(TIMEZONE_STORAGE_KEY);
-    schedulePreferencesPush();
   };
 
   const handleSaveModelPreferences = () => {
@@ -520,7 +479,7 @@ export function SettingsPanel({
   };
 
   return (
-    <div className={`flex flex-col ${activeTab === "storage" ? "h-full flex-1 min-h-0" : "min-h-full"}`}>
+    <div className={`flex flex-col ${FULL_PAGE_TABS.includes(activeTab) ? "h-full flex-1 min-h-0" : "min-h-full"}`}>
       <div className="border-b border-border px-4 py-3 lg:hidden">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {tabGroups.flatMap((group) => group.items).map(({ id, label }) => (
@@ -538,24 +497,12 @@ export function SettingsPanel({
 
       <div
         className={
-          activeTab === "storage"
+          FULL_PAGE_TABS.includes(activeTab)
             ? "flex-1 min-h-0 h-full w-full flex flex-col"
             : "mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10"
         }
       >
-        {activeTab === "general" && (
-          <GeneralTab
-            customInstructions={customInstructions}
-            setCustomInstructions={setCustomInstructions}
-            isSaving={isSaving}
-            saveError={saveError}
-            setSaveError={setSaveError}
-            saveSuccess={saveSuccess}
-            handleSaveInstructions={handleSaveInstructions}
-            timezone={timezone}
-            onTimezoneChange={handleTimezoneChange}
-          />
-        )}
+        {activeTab === "general" && <GeneralTab onOpenTab={handleInlineTabChange} />}
 
         {activeTab === "apps" && (
           <ConnectorsTab
@@ -607,9 +554,11 @@ export function SettingsPanel({
         )}
 
 
-        {activeTab === "memory" && <MemoryTab />}
+        {activeTab === "memory" && <PersonalizationTab />}
 
         {activeTab === "usage" && <UsageTab />}
+
+        {activeTab === "archived" && <ArchivedTab />}
 
         {activeTab === "storage" && <StorageTab />}
 

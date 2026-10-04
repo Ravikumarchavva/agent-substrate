@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Archive, ArchiveRestore, Download, MoreHorizontal, Pencil, Pin, PinOff, Share2, Trash2, X, Check } from "lucide-react";
-import { Button, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, confirmAction } from "@/design";
+import { Button, Menu, NavItem, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, confirmAction } from "@/design";
 import { api } from "@/lib/api";
 import { reportError } from "@/lib/report-error";
 import { ShareDialog } from "@/components/ShareDialog";
@@ -119,10 +119,10 @@ export function ThreadList(props: Props) {
 
   return (
     <div className="flex-1 overflow-y-auto px-2 pb-3 pt-4">
-      <p className="px-1 pb-2 text-2xs font-semibold uppercase tracking-wider text-muted">{showArchived ? "Archived" : "Recents"}</p>
+      <p className="px-1 pb-2 text-2xs font-semibold uppercase tracking-wider text-muted">Recents</p>
 
       {threads.length === 0 ? (
-        <p className="px-3 py-8 text-center text-xs text-muted">{showArchived ? "Nothing archived" : "No conversations yet"}</p>
+        <p className="px-3 py-8 text-center text-xs text-muted">No conversations yet</p>
       ) : (
         <>
           {query && titleMatches.length === 0 && hits.length === 0 && (
@@ -156,7 +156,7 @@ export function ThreadList(props: Props) {
                     <button
                       type="button"
                       onClick={() => onSelect(hit.thread_id)}
-                      className="w-full cursor-pointer rounded-xl px-3 py-2 text-left transition-colors hover:bg-card-hover"
+                      className="w-full cursor-pointer rounded-lg px-3 py-2 text-left transition-colors hover:bg-card-hover"
                     >
                       <p className="truncate text-xs font-medium text-foreground">{hit.thread_name ?? "Conversation"}</p>
                       <p className="mt-0.5 line-clamp-2 text-xs text-muted">
@@ -171,17 +171,11 @@ export function ThreadList(props: Props) {
           )}
 
           {hasMore && !query && (
-            <Button variant="ghost" className="w-full" onClick={onLoadMore}>
-              Show more
-            </Button>
+            <NavItem onClick={onLoadMore}>Show more</NavItem>
           )}
         </>
       )}
 
-      <Button variant="ghost" className="mt-2 w-full justify-start" onClick={() => onToggleArchived(!showArchived)}>
-        {showArchived ? <ArchiveRestore /> : <Archive />}
-        {showArchived ? "Back to conversations" : "Archived"}
-      </Button>
 
       <ShareDialog thread={sharing} onClose={() => setSharing(null)} />
     </div>
@@ -232,12 +226,11 @@ function ThreadRow(props: {
 
   return (
     <div
-      className={`group relative flex items-center rounded-xl transition-colors ${active ? "bg-card-hover text-foreground" : "text-foreground hover:bg-card-hover"}`}
-      style={active ? { boxShadow: "var(--shadow-sm)" } : undefined}
+      className={`group relative flex h-control-lg items-center rounded-lg transition-colors ${active ? "bg-accent/12" : "hover:bg-card-hover"}`}
     >
-      <button type="button" onClick={props.onSelect} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-3 text-left" aria-current={active ? "page" : undefined}>
+      <button type="button" onClick={props.onSelect} className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 text-left" aria-current={active ? "page" : undefined}>
         {thread.pinned_at && <Pin className="size-3 shrink-0 text-muted" aria-label="Pinned" />}
-        <span className={`truncate text-sm leading-6 ${active ? "font-medium" : ""}`} title={thread.name}>
+        <span className="truncate text-sm font-medium" title={thread.name}>
           {thread.name}
         </span>
       </button>

@@ -48,3 +48,11 @@ If a control changes the screen you are on, it is violet. If it makes something 
 
 - A new control: a `cva` component in `ui/`, heights from the control scale, behaviour from Radix, **and** a row in `/design-system`.
 - A new colour: add a semantic token for both themes. Do not add a one-off hex.
+
+## Layout and behaviour rules (apply everywhere)
+
+- **Full-screen views are a `Page`** (`@/design`): one header (back, title, subtitle, actions) and a body that fills the width and height. Never a narrow centred column floating in empty space; "nothing here yet" is a `PageEmpty`, which fills the page too.
+- **One way to scroll:** a region that scrolls takes the `scroll-area` class (smooth, contained, stable gutter, respects reduced motion). The header does not scroll.
+- **Colour roles:** orange is the action (primary buttons), violet is selected/active; success/warning/danger are for state only. Tokens, never hex.
+- **Dropdowns** are `Select`/`Menu`/`Combobox`; confirmations are `confirmAction`; feedback is `toast`. No native `select`, `confirm` or `alert`.
+- **A settings page** is `Page` → `SettingGroup`s → `SettingRow`s: a titled bordered group, each row with its label and one-line description on the left and its control on the right (`Segmented` for 2-4 choices, `Select`/`Combobox`, `Button`, `Checkbox`). Long text opens in place (`Textarea`). No summary cards, no stacked forms. `Section` is the same panel when the content is a list or a form.

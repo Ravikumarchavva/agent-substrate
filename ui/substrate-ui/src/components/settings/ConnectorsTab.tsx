@@ -1,5 +1,6 @@
 "use client";
 
+import { Page } from "@/design";
 import { useMemo, useState } from "react";
 import { CalendarDays, CheckCircle2, FolderKanban, Link2, Loader2, Mail, Search, Sparkles } from "lucide-react";
 import { DocsIcon, GitHubIcon, GoogleIcon, SpotifyIcon } from "./icons";
@@ -180,13 +181,8 @@ export function ConnectorsTab({
   ];
 
   return (
+    <Page title="Connectors" subtitle="A workspace inspired by the reference connector admin screens, adapted to the integrations this app actually has today.">
     <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-foreground">Connectors</h2>
-        <p className="max-w-3xl text-sm leading-6 text-muted">
-          A workspace inspired by the reference connector admin screens, adapted to the integrations this app actually has today.
-        </p>
-      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 rounded-2xl bg-surface-alt p-1">
@@ -269,5 +265,6 @@ export function ConnectorsTab({
         </div>
       )}
     </div>
+    </Page>
   );
 }

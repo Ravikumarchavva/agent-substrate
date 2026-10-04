@@ -29,7 +29,7 @@ import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getVisibleSettingsTabGroups, type SettingsTab } from "./settings/SettingsPanel";
-import { confirmAction } from "@/design";
+import { NavItem, confirmAction } from "@/design";
 import { ThreadList } from "@/components/ThreadList";
 
 type SidebarMode = "chat" | "settings";
@@ -92,35 +92,6 @@ function groupByDate(threads: Thread[]): Record<string, Thread[]> {
   }
 
   return groups;
-}
-
-interface QuickActionButtonProps {
-  icon: LucideIcon;
-  label: string;
-  onClick: () => void;
-  isActive?: boolean;
-  badge?: number;
-}
-
-function QuickActionButton({ icon: Icon, label, onClick, isActive = false, badge }: QuickActionButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={isActive ? "page" : undefined}
-      className={`substrate-press flex h-control-lg w-full cursor-pointer items-center justify-between rounded-lg px-3 text-left text-sm transition-colors ${isActive ? "bg-accent/12 text-foreground" : "text-foreground hover:bg-card-hover"}`}
-    >
-      <div className="flex items-center gap-3 min-w-0">
-        <Icon className={`size-4 shrink-0 ${isActive ? "text-accent" : "text-muted"}`} />
-        <span className="truncate font-medium">{label}</span>
-      </div>
-      {badge !== undefined && badge > 0 && (
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold bg-accent text-accent-foreground`}>
-          {badge}
-        </span>
-      )}
-    </button>
-  );
 }
 
 export function Sidebar({
@@ -248,17 +219,10 @@ export function Sidebar({
         <div className="px-2 pt-2">
           <div className="space-y-1">
             {isSettingsMode ? (
-              <QuickActionButton icon={ArrowLeft} label="Back to chats" onClick={() => onBackToChat?.()} />
+              <NavItem icon={ArrowLeft} onClick={() => onBackToChat?.()}>Back to chats</NavItem>
             ) : (
               chatQuickActions.map((action) => (
-                <QuickActionButton
-                  key={action.label}
-                  icon={action.icon}
-                  label={action.label}
-                  onClick={action.onClick}
-                  isActive={action.isActive}
-                  badge={action.badge}
-                />
+                <NavItem key={action.label} icon={action.icon} onClick={action.onClick} active={action.isActive} badge={action.badge}>{action.label}</NavItem>
               ))
             )}
           </div>
@@ -266,31 +230,20 @@ export function Sidebar({
 
         {isSettingsMode ? (
           <div className="flex-1 overflow-y-auto px-2 py-4">
-            <div className="space-y-5">
+            <div className="space-y-4">
               {settingsGroups.map((group) => (
                 <div key={group.title}>
-                  <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-muted">
+                  <p className="px-1 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-muted">
                     {group.title}
                   </p>
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {group.items.map((item) => {
                       const Icon = item.icon;
                       const active = item.id === settingsTab;
                       return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => onSelectSettingsTab?.(item.id)}
-                          className={`flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition-colors cursor-pointer ${active ? "bg-background text-foreground" : "text-foreground hover:bg-background"}`}
-                        >
-                          <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${active ? "bg-accent text-accent-foreground" : "bg-badge text-muted"}`}>
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium">{item.label}</div>
-                            <div className="mt-1 text-xs leading-5 text-muted">{item.description}</div>
-                          </div>
-                        </button>
+                        <NavItem key={item.id} icon={Icon} active={active} onClick={() => onSelectSettingsTab?.(item.id)}>
+                          {item.label}
+                        </NavItem>
                       );
                     })}
                   </div>

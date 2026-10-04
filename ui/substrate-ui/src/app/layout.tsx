@@ -19,6 +19,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Assistant",
   description: "Chat with your personal AI assistant.",
+  icons: { icon: "/chat/favicon.svg" },
   other: {
     "darkreader-lock": "",
   },

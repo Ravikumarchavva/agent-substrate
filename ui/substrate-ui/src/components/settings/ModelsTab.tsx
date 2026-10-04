@@ -13,7 +13,7 @@ import {
   getDefaultVoiceForModel,
   isVoiceCompatible,
 } from "@/lib/model-preferences";
-import { Select } from "@/design";
+import { Page, Select } from "@/design";
 
 interface SettingsNotice {
   tone: "success" | "info";
@@ -198,13 +198,8 @@ export function ModelsTab({
   ];
 
   return (
+    <Page title="LLM Setup" subtitle="Dedicated model and voice controls inspired by the admin screenshots, but wired to the same local preferences the chat composer already uses.">
     <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-foreground">LLM Setup</h2>
-        <p className="max-w-3xl text-sm leading-6 text-muted">
-          Dedicated model and voice controls inspired by the admin screenshots, but wired to the same local preferences the chat composer already uses.
-        </p>
-      </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="rounded-[26px] p-6 xl:col-span-2" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
@@ -336,5 +331,6 @@ export function ModelsTab({
         </div>
       </div>
     </div>
+    </Page>
   );
 }

@@ -26,7 +26,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "@/lib/api";
 import type { ScheduledTask, ScheduledTaskRun } from "@/types";
-import { Button, Checkbox, Select, confirmAction, toast } from "@/design";
+import { Button, Checkbox, PageHeading, Select, confirmAction, toast } from "@/design";
 import { reportError } from "@/lib/report-error";
 
 interface ScheduledPanelProps {
@@ -319,48 +319,21 @@ export function ScheduledPanel({ onBack, onOpenThread }: ScheduledPanelProps) {
   };
 
   return (
-    <div className="flex h-full w-full flex-col bg-background text-foreground relative overflow-hidden">
-      {/* ─── Main Header ─── */}
-      <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-card/50 backdrop-blur-md sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          {selectedTask ? (
-            <button
-              onClick={() => setSelectedTask(null)}
-              className="p-2 -ml-2 rounded-xl hover:bg-card-hover transition-all duration-200 cursor-pointer text-muted hover:text-foreground btn-icon"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          ) : (
-            <button
-              onClick={onBack}
-              aria-label="Back"
-              className="p-2 -ml-2 rounded-xl hover:bg-card-hover transition-all duration-200 cursor-pointer text-muted hover:text-foreground btn-icon"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          )}
-          <div>
-            <h1 className="text-base font-bold flex items-center gap-2">
-              <CalendarClock className="w-5 h-5 text-muted" />
-              {selectedTask ? selectedTask.name : "Scheduled Tasks"}
-            </h1>
-            <p className="text-xs text-muted">
-              {selectedTask
-                ? `${selectedTask.task_type.toUpperCase()} • ${formatScheduleText(selectedTask)}`
-                : "Automate agent loops and background processes"}
-            </p>
-          </div>
-        </div>
-
-        {!selectedTask && (
-          <button
-            onClick={fetchTasks}
-            className="p-2 rounded-xl hover:bg-card-hover transition-colors cursor-pointer text-muted hover:text-foreground btn-icon border border-border"
-            title="Refresh list"
-           aria-label="Refresh list">
-            <RefreshCw className="w-4 h-4" />
-          </button>
-        )}
+    <div className="relative flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
+      {/* ─── Header: the same slim header every page has (see design Page) ─── */}
+      <div className="shrink-0 px-4 pt-8 sm:px-8">
+        <PageHeading
+          title={selectedTask ? selectedTask.name : "Scheduled"}
+          subtitle={selectedTask ? `${selectedTask.task_type.toUpperCase()} • ${formatScheduleText(selectedTask)}` : "Automate agent loops and background processes."}
+          onBack={selectedTask ? () => setSelectedTask(null) : undefined}
+          actions={
+            !selectedTask ? (
+              <Button variant="secondary" onClick={fetchTasks} title="Refresh list">
+                <RefreshCw /> <span className="hidden sm:inline">Refresh</span>
+              </Button>
+            ) : undefined
+          }
+        />
       </div>
 
       {errorMsg && (
@@ -372,9 +345,9 @@ export function ScheduledPanel({ onBack, onOpenThread }: ScheduledPanelProps) {
 
       {/* ─── View 1: Task List ─── */}
       {!selectedTask ? (
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+        <div className="scroll-area flex flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
           {/* Scheduling Input Bar */}
-          <form onSubmit={handleNLPSubmit} className="relative substrate-fade-up max-w-3xl mx-auto">
+          <form onSubmit={handleNLPSubmit} className="relative substrate-fade-up">
             <div className="relative flex items-center overflow-hidden rounded-2xl border border-border bg-card shadow-md focus-within:border-violet-500/50 focus-within:ring-1 focus-within:ring-violet-500/20 transition-all duration-300">
               <Sparkles className="absolute left-4 w-4 h-4 text-violet-500 animate-pulse" />
               <input
@@ -409,7 +382,7 @@ export function ScheduledPanel({ onBack, onOpenThread }: ScheduledPanelProps) {
               <span className="text-xs font-semibold uppercase tracking-wider">Loading schedules...</span>
             </div>
           ) : tasks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 px-6 border border-border rounded-2xl bg-card shadow-sm max-w-xl mx-auto text-center substrate-fade-up">
+            <div className="flex flex-1 flex-col items-center justify-center py-16 px-6 border border-dashed border-border rounded-2xl text-center substrate-fade-up">
               <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center mb-6 text-violet-500">
                 <CalendarClock className="w-8 h-8" />
               </div>
@@ -594,8 +567,8 @@ export function ScheduledPanel({ onBack, onOpenThread }: ScheduledPanelProps) {
           </div>
 
           {/* Timeline Execution Logs Feed */}
-          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-            <div className="max-w-4xl mx-auto space-y-6">
+          <div className="scroll-area flex flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
+            <div className="space-y-6">
               <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted mb-2">Run Logs & Timeline</h2>
               
               {loadingRuns ? (
@@ -604,7 +577,7 @@ export function ScheduledPanel({ onBack, onOpenThread }: ScheduledPanelProps) {
                   <span className="text-xs font-semibold uppercase tracking-wider">Loading timeline logs...</span>
                 </div>
               ) : runs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-border rounded-2xl bg-card/10 text-muted text-center max-w-md mx-auto">
+                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-border rounded-2xl bg-card/10 text-muted text-center">
                   <Clock className="w-8 h-8 text-muted-foreground mb-3 animate-pulse" />
                   <p className="text-sm font-bold text-foreground">No run history yet</p>
                   <p className="text-xs text-muted mt-1">Click &quot;Run Now&quot; to trigger the initial background process manually.</p>

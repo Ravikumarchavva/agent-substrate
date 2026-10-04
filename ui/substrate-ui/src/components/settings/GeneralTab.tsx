@@ -1,216 +1,139 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { Globe2, Loader2, Sparkles } from "lucide-react";
-import { Combobox } from "@/design";
+import { useState } from "react";
+import { Archive, Download, HardDrive, Settings } from "lucide-react";
+import { Button, Combobox, Page, Segmented, SettingGroup, SettingRow } from "@/design";
+import { useTheme, type ThemePreference } from "@/contexts/ThemeContext";
+import { api } from "@/lib/api";
+import { readChatWidth, readMotion, setChatWidth, setMotion, type ChatWidth, type Motion } from "@/lib/appearance";
 import { schedulePreferencesPush } from "@/lib/preferences-sync";
+import { reportError } from "@/lib/report-error";
+import type { SettingsTab } from "./SettingsPanel";
 
 // Common zones first (some engines list India as Asia/Calcutta, so "Kolkata" would not be found), then every IANA zone the browser knows.
-const COMMON_TIMEZONES = [
-  "Asia/Kolkata",
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Sao_Paulo",
-  "Europe/London",
-  "Europe/Paris",
-  "Europe/Berlin",
-  "Asia/Dubai",
-  "Asia/Singapore",
-  "Asia/Tokyo",
-  "Australia/Sydney",
-  "UTC",
-];
+const COMMON_TIMEZONES = ["Asia/Kolkata", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Sao_Paulo", "Europe/London", "Europe/Paris", "Europe/Berlin", "Asia/Dubai", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney", "UTC"];
 const TIMEZONES = [...new Set([...COMMON_TIMEZONES, ...Intl.supportedValuesOf("timeZone")])];
 
-function Notice({
-  tone,
-  children,
-}: {
-  tone: "success" | "error" | "info";
-  children: ReactNode;
-}) {
-  const toneClass =
-    tone === "success"
-      ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-200"
-      : tone === "error"
-        ? "border-rose-500/25 bg-rose-500/10 text-rose-200"
-        : "border-border bg-card text-muted";
+export const TIMEZONE_KEY = "user_timezone";
+
+const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
+const MOD = isMac ? "⌘" : "Ctrl";
+
+const SHORTCUTS: [string, string][] = [
+  ["New chat", `${MOD} + Shift + O`],
+  ["Search conversations", `${MOD} + K`],
+  ["Jump to the message box", "/"],
+  ["Send the message", "Enter"],
+  ["New line in the message", "Shift + Enter"],
+];
+
+/** App-wide options: how it looks, what time it is for you, the shortcuts, and your data. What the assistant knows about you is in Personalization. */
+export function GeneralTab({ onOpenTab }: { onOpenTab?: (tab: SettingsTab) => void }) {
+  const { preference, setPreference } = useTheme();
+  const [width, setWidthState] = useState<ChatWidth>(readChatWidth);
+  const [motion, setMotionState] = useState<Motion>(readMotion);
+  const [timezone, setTimezone] = useState(() => (typeof window === "undefined" ? "" : (localStorage.getItem(TIMEZONE_KEY) ?? "")));
+  const [downloading, setDownloading] = useState(false);
+
+  const changeTimezone = (value: string) => {
+    setTimezone(value);
+    if (value.trim()) localStorage.setItem(TIMEZONE_KEY, value.trim());
+    else localStorage.removeItem(TIMEZONE_KEY);
+    schedulePreferencesPush();
+  };
+
+  const download = async () => {
+    setDownloading(true);
+    try {
+      await api.downloadMyData();
+    } catch (err) {
+      reportError("Couldn't export your data", err);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
-    <div className={`rounded-xl border px-4 py-3 text-sm ${toneClass}`}>
-      {children}
-    </div>
-  );
-}
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        {description && (
-          <p className="mt-1 text-xs text-muted">{description}</p>
-        )}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <label className="block space-y-1.5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-medium text-muted">{label}</span>
-        {hint && <span className="text-[11px] text-muted">{hint}</span>}
-      </div>
-      {children}
-    </label>
-  );
-}
-
-function FeatureCard({
-  icon,
-  title,
-  description,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div
-      className="rounded-[22px] p-5"
-      style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
-    >
-      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-badge text-foreground">
-        {icon}
-      </div>
-      <h4 className="text-sm font-semibold text-foreground">{title}</h4>
-      <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
-    </div>
-  );
-}
-
-interface GeneralTabProps {
-  customInstructions: string;
-  setCustomInstructions: (v: string) => void;
-  isSaving: boolean;
-  saveError: string | null;
-  setSaveError: (v: string | null) => void;
-  saveSuccess: boolean;
-  handleSaveInstructions: () => void;
-  timezone: string;
-  onTimezoneChange: (v: string) => void;
-}
-
-export function GeneralTab({
-  customInstructions,
-  setCustomInstructions,
-  isSaving,
-  saveError,
-  setSaveError,
-  saveSuccess,
-  handleSaveInstructions,
-  timezone,
-  onTimezoneChange,
-}: GeneralTabProps) {
-  return (
-    <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-foreground">General</h2>
-        <p className="max-w-2xl text-sm leading-6 text-muted">
-          Personal defaults that shape every conversation before tools, models, or connectors take over.
-        </p>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <FeatureCard
-          icon={<Globe2 className="h-5 w-5" />}
-          title="Timezone memory"
-          description="Calendar actions and time-aware prompts inherit this automatically."
-        />
-        <FeatureCard
-          icon={<Sparkles className="h-5 w-5" />}
-          title="Instruction memory"
-          description="Your custom instructions act like a standing preference for all new chats."
-        />
-        <div
-          className="rounded-[22px] p-5"
-          style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
-        >
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Summary</div>
-          <p className="mt-4 text-sm text-muted">Current timezone</p>
-          <p className="mt-1 text-lg font-semibold text-foreground">{timezone || "Not set yet"}</p>
-          <p className="mt-4 text-sm text-muted">
-            {customInstructions.trim() ? "Custom instructions are active." : "No custom instructions saved yet."}
-          </p>
-        </div>
-      </div>
-
-      <Section title="User preferences" description="Applied automatically to every conversation.">
-        <Field label="Timezone" hint="IANA format recommended">
-          <Combobox
-            value={timezone}
-            onValueChange={onTimezoneChange}
-            placeholder="e.g. Asia/Kolkata"
-            options={TIMEZONES}
+    <Page title="General" subtitle="How the app looks and behaves for you." icon={Settings}>
+      <SettingGroup title="Appearance">
+        <SettingRow label="Theme" description="Match your system, or pick one.">
+          <Segmented<ThemePreference>
+            label="Theme"
+            value={preference}
+            onChange={setPreference}
+            options={[
+              { value: "system", label: "System" },
+              { value: "light", label: "Light" },
+              { value: "dark", label: "Dark" },
+            ]}
           />
-          {timezone && (
-            <p className="mt-1.5 text-xs text-muted">Saved — will be used for calendar events and time-aware tasks.</p>
-          )}
-        </Field>
-      </Section>
+        </SettingRow>
+        <SettingRow label="Chat width" description="How wide the conversation and the message box are.">
+          <Segmented<ChatWidth>
+            label="Chat width"
+            value={width}
+            onChange={(v) => {
+              setWidthState(v);
+              setChatWidth(v);
+              schedulePreferencesPush();
+            }}
+            options={[
+              { value: "narrow", label: "Narrow" },
+              { value: "medium", label: "Medium" },
+              { value: "wide", label: "Wide" },
+            ]}
+          />
+        </SettingRow>
+        <SettingRow label="Motion" description="Reduce animation and smooth scrolling.">
+          <Segmented<Motion>
+            label="Motion"
+            value={motion}
+            onChange={(v) => {
+              setMotionState(v);
+              setMotion(v);
+              schedulePreferencesPush();
+            }}
+            options={[
+              { value: "system", label: "System" },
+              { value: "reduced", label: "Reduced" },
+            ]}
+          />
+        </SettingRow>
+      </SettingGroup>
 
-      <div className="h-px bg-border" />
+      <SettingGroup title="Time">
+        <SettingRow label="Timezone" description="Calendar events and “every morning” schedules use it. Pick a city, for example Asia/Kolkata.">
+          <div className="w-64">
+            <Combobox value={timezone} onValueChange={changeTimezone} placeholder="Choose a timezone" options={TIMEZONES} />
+          </div>
+        </SettingRow>
+      </SettingGroup>
 
-      <Section title="Custom instructions" description="Appended to the system prompt to shape tone and context.">
-        <textarea
-          value={customInstructions}
-          onChange={(e) => { setCustomInstructions(e.target.value); setSaveError(null); }}
-          rows={6}
-          className="w-full resize-none rounded-xl border border-border bg-background p-4 text-sm leading-7 outline-none transition focus:ring-2 focus:ring-accent"
-          placeholder="e.g. Always respond in British English. Keep answers concise."
-        />
-        {saveError && <Notice tone="error">{saveError}</Notice>}
-        {saveSuccess && <Notice tone="success">Instructions saved.</Notice>}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSaveInstructions}
-            disabled={isSaving}
-            className="inline-flex items-center gap-2 rounded-xl bg-accent-2 px-4 py-2 text-sm font-medium text-accent-2-foreground transition-opacity hover:bg-accent-2-hover disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-          >
-            {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isSaving ? "Checking…" : "Save"}
-          </button>
-          {customInstructions && (
-            <button
-              onClick={() => { setCustomInstructions(""); localStorage.removeItem("system_instructions_override"); schedulePreferencesPush(); setSaveError(null); }}
-              className="rounded-xl border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-card-hover cursor-pointer"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      </Section>
-    </div>
+      <SettingGroup title="Keyboard shortcuts">
+        {SHORTCUTS.map(([action, keys]) => (
+          <SettingRow key={action} label={action}>
+            <kbd className="rounded-md border border-border bg-background px-2 py-1 font-mono text-2xs text-muted">{keys}</kbd>
+          </SettingRow>
+        ))}
+      </SettingGroup>
+
+      <SettingGroup title="Your data">
+        <SettingRow label="Download my data" description="Your conversations, memories, preferences and scheduled tasks as one file.">
+          <Button variant="secondary" disabled={downloading} onClick={() => void download()}>
+            <Download /> {downloading ? "Preparing…" : "Download"}
+          </Button>
+        </SettingRow>
+        <SettingRow label="Archived conversations" description="Conversations you put away. Restore or delete them.">
+          <Button variant="secondary" onClick={() => onOpenTab?.("archived")}>
+            <Archive /> Open
+          </Button>
+        </SettingRow>
+        <SettingRow label="Files" description="What you uploaded and what the assistant made.">
+          <Button variant="secondary" onClick={() => onOpenTab?.("storage")}>
+            <HardDrive /> Open
+          </Button>
+        </SettingRow>
+      </SettingGroup>
+    </Page>
   );
 }

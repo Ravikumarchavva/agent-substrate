@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { CHAT_WIDTH_KEY, MOTION_KEY, applyAppearance } from "@/lib/appearance";
 import {
   CHAT_MODEL_STORAGE_KEY,
   MODEL_PREFERENCES_UPDATED_EVENT,
@@ -29,6 +30,8 @@ const MODEL_KEYS = [
   REALTIME_MODEL_STORAGE_KEY,
   REALTIME_VOICE_STORAGE_KEY,
   REASONING_STORAGE_KEY,
+  CHAT_WIDTH_KEY,
+  MOTION_KEY,
 ] as const;
 
 const PUSH_DELAY_MS = 800;
@@ -87,6 +90,7 @@ export async function pullPreferences(): Promise<void> {
     set(CUSTOM_INSTRUCTIONS_KEY, remote.custom_instructions);
     set(TIMEZONE_KEY, remote.timezone);
     for (const key of MODEL_KEYS) set(key, remote.models[key] ?? "");
+    applyAppearance();
     window.dispatchEvent(new CustomEvent(MODEL_PREFERENCES_UPDATED_EVENT, { detail: { key: null, value: null } }));
   } finally {
     applying = false;

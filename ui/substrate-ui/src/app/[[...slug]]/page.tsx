@@ -1849,14 +1849,30 @@ function ChatPageContent() {
         <CollapsedRail
           onExpand={() => setDesktopSidebarOpen(true)}
           onNewChat={handleNewChat}
+          onSearch={() => {
+            setDesktopSidebarOpen(true);
+            setTimeout(() => document.querySelector<HTMLInputElement>("[data-thread-search]")?.focus(), 50);
+          }}
           onOpenSettings={openSettingsPanel}
+          onOpenScheduled={handleOpenScheduled}
+          onOpenApprovals={handleOpenApprovals}
+          onOpenNotifications={handleOpenNotifications}
+          isScheduledOpen={scheduledPanelOpen}
+          isApprovalsOpen={approvalsPanelOpen}
+          isNotificationsOpen={notificationsPanelOpen}
+          approvalsCount={approvalsCount}
+          unreadCount={unreadCount}
+          mode={settingsPanelOpen ? "settings" : "chat"}
+          settingsTab={settingsPanelTab}
+          onSelectSettingsTab={selectSettingsTab}
+          onBackToChat={closeSettingsPanel}
         />
       )}
 
       {/* Main Content */}
       <div className="flex min-w-0 flex-1">
         <div className="relative flex min-w-0 flex-1 flex-col">
-          {!settingsPanelOpen && (
+          {!settingsPanelOpen && !scheduledPanelOpen && !approvalsPanelOpen && !notificationsPanelOpen && (
             <Header
               onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
               desktopSidebarOpen={desktopSidebarOpen}
@@ -1881,7 +1897,7 @@ function ChatPageContent() {
           {settingsPanelOpen ? (
             <div
               className={`flex-1 min-h-0 flex flex-col ${
-                settingsPanelTab === "storage"
+                true
                   ? "h-full overflow-hidden"
                   : "overflow-y-auto"
               }`}
@@ -1896,9 +1912,9 @@ function ChatPageContent() {
           ) : scheduledPanelOpen ? (
             <ScheduledPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} />
           ) : notificationsPanelOpen ? (
-            <NotificationsPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} />
+            <NotificationsPanel onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} />
           ) : approvalsPanelOpen ? (
-            <ApprovalsPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} />
+            <ApprovalsPanel onOpenThread={(threadId) => handleCloseView(threadId)} />
           ) : (
             <>
               <div
@@ -2083,6 +2099,15 @@ function ChatPageContent() {
                               }}
                               messageId={m.id}
                               onForkBranch={handleForkFromMessage}
+                              onRegenerate={
+                                !loading && m.role === "assistant" && m.id === messages[messages.length - 1]?.id
+                                  ? () => {
+                                      // Ask the same question again as a new turn: the earlier answer stays in the history.
+                                      const question = [...messages].reverse().find((x) => x.role === "user")?.content;
+                                      if (question) doSendMessage(question);
+                                    }
+                                  : undefined
+                              }
                             />
                             {anchoredBoards && anchoredBoards.length > 0 && (
                               <div className="px-4 sm:px-6">

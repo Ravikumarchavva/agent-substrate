@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
-import { Button } from "@/design";
+import { BarChart3, Download } from "lucide-react";
+import { Button, Page } from "@/design";
 import { api } from "@/lib/api";
 import { fetchRateLimitStatus, type RateLimitStatus } from "@/lib/api/rate_limit";
 import type { Usage } from "@/lib/api/usage";
@@ -46,12 +46,8 @@ export function UsageTab() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-8">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Usage</h2>
-        <p className="mt-1 text-sm text-muted">{usage?.note ?? "What you have used, so a limit is never a surprise."}</p>
-      </div>
-
+    <Page title="Usage" subtitle={usage?.note ?? "What you have used, so a limit is never a surprise."} icon={BarChart3}>
+    <div className="space-y-8">
       {limit?.enabled && (
         <div className="rounded-xl border border-border px-4 py-3">
           <div className="flex items-baseline justify-between">
@@ -105,5 +101,6 @@ export function UsageTab() {
         </Button>
       </div>
     </div>
+    </Page>
   );
 }

@@ -18,7 +18,7 @@ other.
   <img alt="pnpm" src="https://img.shields.io/badge/pnpm-11-F69220?logo=pnpm&logoColor=white" />
 </p>
 
-<img src="public/example.png" alt="substrate-ui — chat with the artifact panel open" width="900" />
+<img src="docs/screenshots/demo.gif" alt="substrate-ui: streaming chat, Scheduled, Approvals, Notifications and Settings" width="900" />
 
 </div>
 
@@ -26,38 +26,33 @@ other.
 
 ## What it does
 
-`substrate-ui` is the end-user chatbot for the **agent-framework** platform. It
-streams an agent's responses and renders them as a live, interactive workspace —
-then lets you take the wheel on anything the agent produces.
+`substrate-ui` is the end-user chatbot for the **agent-framework** platform. It streams an agent's responses and renders them as a live, interactive workspace, then lets you take the wheel on anything the agent produces.
 
-- 💬 **Streaming chat** — responses stream over SSE with reasoning, tool calls,
-  and a collapsible tool-progress summary.
-- 📎 **Artifact panel** — code-interpreter output (HTML / PDF / images / CSV /
-  Office / code) opens on the right, Claude/ChatGPT-style. The main artifact
-  auto-opens when a run finishes.
-- ✍️ **Edit in place, with versioning** — Office files open in
-  **BetterOffice** (client-side, no server needed) and code/text in
-  **Monaco**, saving back through a version lineage so **human edits and the
-  agent's rewrites reconcile instead of overwriting each other**.
-- ✅ **Human-in-the-loop** — the agent can pause and ask; approval cards render
-  inline.
-- 🗂️ **Live task board** — a Kanban board mirrors the agent's task manager.
-- 🧩 **MCP App widgets** — tools can ship interactive UIs into the panel.
+- 💬 **Streaming chat**: SSE with reasoning, tool calls, citations, read-aloud and regenerate. Per-model thinking effort.
+- 📎 **Artifact panel**: code-interpreter output (HTML / PDF / images / CSV / Office / code) opens on the right. Office files edit in **BetterOffice** (client-side) and code in **Monaco**, saving through a version lineage so **human edits and the agent's rewrites reconcile**.
+- 📄 **Documents**: upload a file and the assistant reads it by outline and section. A model-written summary and topic are shown in **Storage**; long documents are navigated, not pasted in.
+- 🗂️ **Conversations**: pin, archive, search inside messages, export as Markdown or JSON, and share a read-only public link. Branching from any message.
+- ⏰ **Scheduled**: recurring tasks with run history, cost, retry, and results in Notifications (and by email if you ask).
+- ✅ **Approvals**: one inbox for everything the assistant is waiting on you for, across conversations.
+- 🧠 **Personalization and Memory**: standing instructions, plus the facts the assistant remembers that you can add, reword and delete.
+- 📊 **Usage**: messages, tokens and cost by day, and your daily limits always visible.
+- ⚙️ **Settings**: theme, chat width, motion, timezone, keyboard shortcuts, connectors (Google Workspace, Spotify, MCP), models and voices, and **Download my data**.
+- 🧩 **MCP App widgets**: tools can ship interactive UIs into the panel.
+
+Everything uses one design system (`src/design`, see [`DESIGN.md`](src/design/DESIGN.md)): the same buttons, rows, pages, dropdowns and colour roles (orange acts, violet selects).
 
 ## Screenshots
 
 <div align="center">
-  <img src="public/example.png" alt="Editing an agent-generated file in the panel" width="900" />
+  <img src="docs/screenshots/demo.gif" alt="A tour of the app" width="900" />
 </div>
 
-> More screenshots can be dropped into [`docs/screenshots/`](docs/screenshots/)
-> and referenced here — the BetterOffice editor, the version-history dropdown,
-> and the Monaco code editor each make a good shot.
+> The recording was made against a local stack with a throwaway account: new chat, a streamed answer, Scheduled, Approvals, Notifications, then General, Personalization, Usage and Storage settings.
 
 ## How it fits together
 
 ```
-ravi (SaaS control plane)
+agent-substrate-platform (SaaS control plane)
   └─ user creates a chatbot Instance
         └─ substrate-ui  ← you are here (the chat shell)
               └─ talks to agent-substrate over HTTP + SSE
@@ -69,6 +64,8 @@ is the interface. Office editing runs entirely client-side via BetterOffice —
 no separate document server.
 
 ## Quick start
+
+You need Node 22+, pnpm, and a running [`agent-substrate`](../agent-substrate) backend (which needs PostgreSQL and Redis; see its [tech stack](../agent-substrate/README.md#-tech-stack-required-vs-opt-in)). This app needs only a database for its own sign-in tables.
 
 ```bash
 pnpm install --frozen-lockfile
@@ -108,6 +105,7 @@ Copy `.env.local.example` → `.env.local`:
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | Google OAuth login. |
 | `ENCRYPTION_KEY` | Encrypts stored Spotify/Workspace OAuth tokens (`openssl rand -hex 32`). Must be this exact name. |
 | `ADMIN_EMAIL` | Grants access to `/api/admin/*`. |
+| `NEXT_PUBLIC_BRAND_LOGO_URL` | Optional: your own logo (an image URL) in place of the default two-square mark. Replace `public/favicon.svg` for the browser tab. |
 | `BYPASS_OAUTH` | Dev-only: skip real Google OAuth and sign in as a placeholder account. Only takes effect when `NODE_ENV !== "production"` — never a live risk in a real deployment. |
 
 > **Identity note:** `/api/chat` and the `/api/backend/*` proxy sign tokens from
@@ -123,7 +121,7 @@ Copy `.env.local.example` → `.env.local`:
   ([`route.ts`](src/app/api/backend/%5B...path%5D/route.ts)), which injects the
   signed engine JWT.
 - The chat page, SSE loop, and panel wiring live in
-  [`src/app/page.tsx`](src/app/page.tsx); the artifact surfaces are
+  [`src/app/[[...slug]]/page.tsx`](src/app/%5B%5B...slug%5D%5D/page.tsx); the artifact surfaces are
   [`FileArtifactViewer`](src/components/FileArtifactViewer.tsx),
   [`BetterOfficeEditor`](src/components/BetterOfficeEditor.tsx), and
   [`CodeEditorView`](src/components/CodeEditorView.tsx).

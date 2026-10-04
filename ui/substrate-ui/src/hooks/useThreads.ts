@@ -128,7 +128,7 @@ export function useThreads(
         await api.updateThread(threadId, { archived });
         if (currentThreadId === threadId && archived) selectThread(null);
         setThreads((current) => current.filter((t) => t.id !== threadId));
-        toast.success(archived ? "Archived" : "Restored", archived ? "Find it under Archived at the bottom of the list." : undefined);
+        toast.success(archived ? "Archived" : "Restored", archived ? "Find it under Settings → Archived." : undefined);
       } catch (error) {
         reportError(archived ? "Couldn't archive the conversation" : "Couldn't restore the conversation", error);
       }

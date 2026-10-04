@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { Button, Page, Segmented } from "@/design";
 import { ChevronRight, Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import type {
   AdminStats,
@@ -149,73 +150,40 @@ export function AdminTab({
   handleSaveQuota,
 }: AdminTabProps) {
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-foreground">Admin</h2>
-        <p className="max-w-3xl text-sm leading-6 text-muted">
-          Conversation and user operations in a cleaner, denser review surface.
-        </p>
-      </div>
-
+    <Page title="Admin" subtitle="Conversations and users across the workspace.">
       {adminLoadNotice && (
         <p className="rounded-[18px] bg-badge px-4 py-3 text-sm text-muted">
           {adminLoadNotice}
         </p>
       )}
 
-      {/* Stats cards */}
       {adminStats && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           {[
             { label: "Threads", value: adminStats.total_threads },
             { label: "Steps", value: adminStats.total_steps },
           ].map((stat) => (
-            <div key={stat.label} className="rounded-[24px] p-5" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
-              <p className="text-xs font-medium uppercase tracking-wider text-muted">
-                {stat.label}
-              </p>
-              <p className="mt-3 text-4xl font-semibold text-foreground">{stat.value}</p>
+            <div key={stat.label} className="rounded-xl border border-border bg-background/40 px-4 py-3">
+              <p className="text-xs text-muted">{stat.label}</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{stat.value}</p>
             </div>
           ))}
         </div>
       )}
 
-      {/* Tab bar + refresh */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-2 rounded-2xl bg-surface-alt p-1">
-          {tabOptions.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setAdminTab(tab)}
-              className={`cursor-pointer rounded-xl px-4 py-2 text-sm font-medium capitalize transition-colors ${
-                adminTab === tab
-                  ? "bg-accent text-accent-foreground"
-                  : "border border-transparent text-muted hover:text-foreground"
-              }`}
-              style={adminTab === tab ? { boxShadow: "var(--shadow-sm)" } : undefined}
-            >
-              {tab} (
-              {tab === "users"
-                ? adminUsers.length
-                : tab === "threads"
-                  ? adminThreads.length
-                  : adminStorageUsers.length}
-              )
-            </button>
-          ))}
-        </div>
-
-        <button
-          onClick={loadAdminData}
-          disabled={adminLoading}
-          className="inline-flex cursor-pointer items-center gap-2 self-start rounded-xl bg-card px-4 py-2 text-sm text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
-          style={{ boxShadow: "var(--shadow-sm)" }}
-          aria-label="Refresh admin data"
-        >
-          <RefreshCw className={`h-4 w-4 ${adminLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmented<"users" | "threads" | "storage">
+          label="Admin section"
+          value={adminTab}
+          onChange={setAdminTab}
+          options={tabOptions.map((tab) => ({
+            value: tab,
+            label: `${tab[0].toUpperCase()}${tab.slice(1)} (${tab === "users" ? adminUsers.length : tab === "threads" ? adminThreads.length : adminStorageUsers.length})`,
+          }))}
+        />
+        <Button variant="secondary" onClick={loadAdminData} disabled={adminLoading} aria-label="Refresh admin data">
+          <RefreshCw className={adminLoading ? "animate-spin" : ""} /> Refresh
+        </Button>
       </div>
 
       {/* Content */}
@@ -431,6 +399,6 @@ export function AdminTab({
           )}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

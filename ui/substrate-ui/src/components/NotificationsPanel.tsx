@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, Bell, CalendarCheck, ShieldQuestion } from "lucide-react";
-import { Button } from "@/design";
+import { AlertTriangle, Bell, CalendarCheck, ShieldQuestion } from "lucide-react";
+import { Button, Page, PageEmpty } from "@/design";
 import { api } from "@/lib/api";
 import type { AppNotification } from "@/lib/api/notifications";
 
@@ -17,7 +17,7 @@ function when(iso: string): string {
 }
 
 /** What happened while you were away. Opening one takes you to its conversation and marks it read. */
-export function NotificationsPanel({ onBack, onOpenThread, onChanged }: { onBack: () => void; onOpenThread: (threadId: string) => void; onChanged: () => void }) {
+export function NotificationsPanel({ onOpenThread, onChanged }: { onOpenThread: (threadId: string) => void; onChanged: () => void }) {
   const [items, setItems] = useState<AppNotification[] | null>(null);
 
   const load = useCallback(async () => setItems((await api.getNotifications()).items), []);
@@ -45,30 +45,24 @@ export function NotificationsPanel({ onBack, onOpenThread, onChanged }: { onBack
   const unread = (items ?? []).filter((n) => !n.read_at).length;
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-6">
-      <div className="mb-6 flex items-center gap-2">
-        <Button variant="ghost" size="icon" aria-label="Back" onClick={onBack}>
-          <ArrowLeft />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-lg font-semibold text-foreground">Notifications</h1>
-          <p className="text-sm text-muted">Scheduled results, failures and requests that came in while you were away.</p>
-        </div>
-        {unread > 0 && (
+    <Page
+      title="Notifications"
+      subtitle="Scheduled results, failures and requests that came in while you were away."
+      icon={Bell}
+      actions={
+        unread > 0 ? (
           <Button variant="secondary" onClick={() => void readAll()}>
             Mark all read
           </Button>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
       {items === null ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border px-4 py-12 text-center">
-          <Bell className="mx-auto size-6 text-muted" aria-hidden />
-          <p className="mt-2 text-sm font-medium text-foreground">You&apos;re all caught up</p>
-          <p className="mt-1 text-xs text-muted">Results of scheduled tasks show up here.</p>
-        </div>
+        <PageEmpty icon={Bell} title="You're all caught up">
+          Results of scheduled tasks show up here.
+        </PageEmpty>
       ) : (
         <ul className="divide-y divide-border rounded-xl border border-border">
           {items.map((n) => {
@@ -89,6 +83,6 @@ export function NotificationsPanel({ onBack, onOpenThread, onChanged }: { onBack
           })}
         </ul>
       )}
-    </div>
+    </Page>
   );
 }

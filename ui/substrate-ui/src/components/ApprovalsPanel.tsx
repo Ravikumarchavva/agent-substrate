@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, CheckCircle2, HelpCircle, ShieldQuestion } from "lucide-react";
-import { Badge, Button } from "@/design";
+import { CheckCircle2, HelpCircle, ShieldQuestion } from "lucide-react";
+import { Badge, Button, Page, PageEmpty } from "@/design";
 import { api } from "@/lib/api";
 import type { PendingApproval } from "@/lib/api/approvals";
 
@@ -16,9 +16,8 @@ function ago(iso: string | null): string {
 }
 
 /** Everything the assistant is waiting on you for, across all conversations. Answering happens in the conversation. */
-export function ApprovalsPanel({ onBack, onOpenThread }: { onBack: () => void; onOpenThread: (threadId: string) => void }) {
+export function ApprovalsPanel({ onOpenThread }: { onOpenThread: (threadId: string) => void }) {
   const [items, setItems] = useState<PendingApproval[] | null>(null);
-
   const load = useCallback(async () => setItems(await api.getApprovals()), []);
 
   useEffect(() => {
@@ -29,25 +28,13 @@ export function ApprovalsPanel({ onBack, onOpenThread }: { onBack: () => void; o
   }, [load]);
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-6">
-      <div className="mb-6 flex items-center gap-2">
-        <Button variant="ghost" size="icon" aria-label="Back" onClick={onBack}>
-          <ArrowLeft />
-        </Button>
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">Approvals</h1>
-          <p className="text-sm text-muted">Where the assistant is waiting for your go-ahead or your answer.</p>
-        </div>
-      </div>
-
+    <Page title="Approvals" subtitle="Where the assistant is waiting for your go-ahead or your answer." icon={ShieldQuestion}>
       {items === null ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border px-4 py-12 text-center">
-          <CheckCircle2 className="mx-auto size-6 text-success" aria-hidden />
-          <p className="mt-2 text-sm font-medium text-foreground">Nothing is waiting on you</p>
-          <p className="mt-1 text-xs text-muted">When the assistant needs permission or an answer, it shows up here.</p>
-        </div>
+        <PageEmpty icon={CheckCircle2} title="Nothing is waiting on you">
+          When the assistant needs permission or an answer, it shows up here.
+        </PageEmpty>
       ) : (
         <ul className="divide-y divide-border rounded-xl border border-border">
           {items.map((item) => (
@@ -68,6 +55,6 @@ export function ApprovalsPanel({ onBack, onOpenThread }: { onBack: () => void; o
           ))}
         </ul>
       )}
-    </div>
+    </Page>
   );
 }

@@ -1,23 +1,19 @@
 import type { SVGProps } from "react";
 
-export function SubstrateMark(props: SVGProps<SVGSVGElement>) {
+/**
+ * The product mark, shown in the sidebar and empty states. The default is the platform's two-square logo, so a chatbot deployed from the
+ * platform looks like it. To use your own, set `NEXT_PUBLIC_BRAND_LOGO_URL` (any image URL) and it replaces this everywhere.
+ */
+export function SubstrateMark({ className, ...props }: SVGProps<SVGSVGElement>) {
+  const custom = process.env.NEXT_PUBLIC_BRAND_LOGO_URL;
+  if (custom) {
+    // eslint-disable-next-line @next/next/no-img-element -- a deployer-supplied URL of unknown origin and size
+    return <img src={custom} alt="" aria-hidden="true" className={`object-contain ${className ?? ""}`} />;
+  }
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-      {...props}
-    >
-      {/* Sun core */}
-      <circle cx="12" cy="12" r="5" />
-      {/* Rays */}
-      <path
-        d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className={className} {...props}>
+      <rect x="2" y="2" width="13" height="13" rx="2.5" fill="var(--accent)" transform="rotate(8 8 8)" />
+      <rect x="9" y="9" width="13" height="13" rx="2.5" fill="var(--accent-2)" transform="rotate(8 15 15)" />
     </svg>
   );
 }

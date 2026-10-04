@@ -69,6 +69,9 @@ select {
 ::-webkit-scrollbar-thumb:hover { background: var(--card-hover); }
 *                          { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
+/* The one way a region scrolls: smooth, contained (no bounce into the page behind), and the bar never shifts the layout. */
+.scroll-area { overflow-y: auto; scroll-behavior: smooth; overscroll-behavior: contain; scrollbar-gutter: stable; }
+@media (prefers-reduced-motion: reduce) { .scroll-area { scroll-behavior: auto; } }
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
@@ -302,3 +305,10 @@ select {
     transition-duration: 0.01ms !important;
   }
 }
+/* The same, chosen in Settings → General instead of by the operating system. */
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+.reduce-motion .scroll-area { scroll-behavior: auto; }

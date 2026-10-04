@@ -136,7 +136,7 @@ class CodeInterpreterTool:
 
         timeout_s = max(1, min(int(timeout or self._default_timeout_s), _MAX_TIMEOUT))
         run_scope = scope_of(ctx)
-        thread_id = run_scope.thread_id
+        thread_id = run_scope.workspace
         session_id = (
             thread_id
             if thread_id and thread_id != _DEFAULT_SESSION

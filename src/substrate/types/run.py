@@ -81,7 +81,8 @@ class RunScope:
     reads, so an identity it supplies is an authorization hole.
 
     ``thread_id`` is the conversation that owns files, documents and task
-    boards; empty when there isn't one. A sub-agent inherits its parent's (it
+    boards; empty when there isn't one. ``workspace_id`` names the workspace those files live in when it is not the conversation's own
+    (an agent with a persistent workspace of its own shares it across all its conversations); empty means the conversation's. A sub-agent inherits its parent's (it
     works inside the same conversation), even though its own message history
     lives under a separate, run-scoped session id.
     """
@@ -90,6 +91,7 @@ class RunScope:
     user_id: str | None = None
     thread_id: str = ""
     branch_id: str = "main"
+    workspace_id: str = ""
     agent_id: str = ""
     agent_label: str = ""
     parent_agent_id: str | None = None
@@ -117,10 +119,16 @@ class RunScope:
             user_id=_str("user_id"),
             thread_id=_str("thread_id") or thread_id,
             branch_id=_str("branch_id") or "main",
+            workspace_id=_str("workspace_id") or "",
             agent_id=agent_id,
             agent_label=agent_label,
             parent_agent_id=_str("parent_agent_id"),
         )
+
+    @property
+    def workspace(self) -> str:
+        """The id the workspace's files are keyed by: its own when it has one, else the conversation's."""
+        return self.workspace_id or self.thread_id
 
     def child_metadata(self) -> dict[str, str]:
         """Message metadata that makes a spawned child inherit this scope —
@@ -130,6 +138,7 @@ class RunScope:
             "user_id": self.user_id,
             "thread_id": self.thread_id,
             "branch_id": self.branch_id,
+            "workspace_id": self.workspace_id,
             "parent_agent_id": self.agent_id or None,
         }
         return {k: v for k, v in inherited.items() if v}

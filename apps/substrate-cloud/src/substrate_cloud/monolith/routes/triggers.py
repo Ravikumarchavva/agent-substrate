@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.monolith.services import trigger_store
 from substrate_cloud.shared.auth.claims import AuthClaims
 
 router = APIRouter(prefix="/triggers", tags=["triggers"])
@@ -101,6 +102,20 @@ async def create_cron_trigger(
         target_params=_owned(user.tenant_id, body.target_params),
     )
     await scheduler.add_trigger(trigger)
+    await trigger_store.remember(
+        getattr(request.app.state, "session_factory", None),
+        trigger_store.CRON,
+        trigger.name,
+        user.tenant_id,
+        {
+            "name": trigger.name,
+            "kind": trigger.kind,
+            "schedule": trigger.schedule,
+            "target_type": trigger.target_type,
+            "target_name": trigger.target_name,
+            "target_params": trigger.target_params,
+        },
+    )
     return {"status": "created", "name": body.name}
 
 
@@ -112,6 +127,9 @@ async def delete_cron_trigger(
     removed = await scheduler.remove_trigger(_own(user.tenant_id, name))
     if not removed:
         raise HTTPException(status_code=404, detail=f"Trigger '{name}' not found")
+    await trigger_store.forget(
+        getattr(request.app.state, "session_factory", None), trigger_store.CRON, _own(user.tenant_id, name)
+    )
     return {"status": "deleted", "name": name}
 
 
@@ -143,6 +161,19 @@ async def create_webhook(
         target_name=body.target_name,
         target_params=_owned(user.tenant_id, body.target_params),
     )
+    await trigger_store.remember(
+        getattr(request.app.state, "session_factory", None),
+        trigger_store.WEBHOOK,
+        webhook.path,
+        user.tenant_id,
+        {
+            "name": webhook.name,
+            "target_type": webhook.target_type,
+            "target_name": webhook.target_name,
+            "target_params": webhook.target_params,
+            "secret": webhook.secret,
+        },
+    )
     shown = (
         _view(user.tenant_id, _view(user.tenant_id, webhook.to_dict(), "path") or {})
         or {}
@@ -160,6 +191,11 @@ async def delete_webhook(
         raise HTTPException(
             status_code=404, detail=f"Webhook at /webhooks/{path} not found"
         )
+    await trigger_store.forget(
+        getattr(request.app.state, "session_factory", None),
+        trigger_store.WEBHOOK,
+        _own(user.tenant_id, path),
+    )
     return {"status": "deleted", "path": path}
 
 
@@ -212,6 +248,20 @@ async def create_condition(
         target_params=_owned(user.tenant_id, body.target_params),
     )
     await monitor.add_condition(condition)
+    await trigger_store.remember(
+        getattr(request.app.state, "session_factory", None),
+        trigger_store.CONDITION,
+        condition.name,
+        user.tenant_id,
+        {
+            "name": condition.name,
+            "event_type": condition.event_type,
+            "filters": condition.filters,
+            "target_type": condition.target_type,
+            "target_name": condition.target_name,
+            "target_params": condition.target_params,
+        },
+    )
     return {"status": "created", "name": body.name}
 
 
@@ -223,6 +273,11 @@ async def delete_condition(
     removed = await monitor.remove_condition(_own(user.tenant_id, name))
     if not removed:
         raise HTTPException(status_code=404, detail=f"Condition '{name}' not found")
+    await trigger_store.forget(
+        getattr(request.app.state, "session_factory", None),
+        trigger_store.CONDITION,
+        _own(user.tenant_id, name),
+    )
     return {"status": "deleted", "name": name}
 
 

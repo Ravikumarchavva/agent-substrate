@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -310,6 +311,7 @@ async def lifespan(app: FastAPI):
 
     # ── Load persistent scheduled tasks ──────────────────────────────────────
     from substrate_cloud.monolith.services.scheduled_service import (
+        catch_up_missed_tasks,
         execute_scheduled_task,
         load_active_tasks_into_scheduler,
     )
@@ -325,10 +327,38 @@ async def lifespan(app: FastAPI):
         app.state.trigger_scheduler,
         app.state.session_factory,
     )
+    # Crons, webhooks and conditions people made before the last restart.
+    from substrate_cloud.monolith.services import trigger_store
+
+    restored = await trigger_store.restore(
+        app.state.session_factory,
+        scheduler=getattr(app.state, "trigger_scheduler", None),
+        webhooks=getattr(app.state, "webhook_registry", None),
+        conditions=getattr(app.state, "condition_monitor", None),
+    )
+    if restored:
+        logging.getLogger(__name__).info("Restored %d trigger(s)", restored)
+    # Firings that came due while the server was down run once now, in the background (the app need not wait for them).
+    app.state.catch_up = (
+        asyncio.create_task(
+            catch_up_missed_tasks(
+                app.state.session_factory,
+                lambda task_id: execute_scheduled_task(
+                    task_id,
+                    session_factory=app.state.session_factory,
+                    app_state=app.state.ctx,
+                ),
+            )
+        )
+        if settings.SCHEDULER_CATCH_UP
+        else None
+    )
 
     yield
 
     # Shutdown
+    if app.state.catch_up is not None:
+        app.state.catch_up.cancel()
     runtime_stack = getattr(app.state, "runtime_stack", None)
     if runtime_stack:
         await runtime_stack.aclose()

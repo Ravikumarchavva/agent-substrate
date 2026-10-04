@@ -48,6 +48,7 @@ from substrate_cloud.monolith.services.thread_service import (
     thread_row,
 )
 from substrate_cloud.stream import project_thread
+from substrate_cloud.stream.runs import RunDetail, inspect_thread
 from substrate_cloud.stream.export import filename, messages_of, to_markdown
 from substrate_cloud.stream.search import message_counts, search_messages
 
@@ -271,6 +272,22 @@ async def export_thread_endpoint(
             "Cache-Control": "no-store",
         },
     )
+
+
+@router.get("/{thread_id}/runs", response_model=List[RunDetail])
+async def get_thread_runs(
+    thread_id: uuid.UUID,
+    ctx: ServerDependencies = Depends(get_ctx),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+):
+    """What the conversation's runs did: time, model calls, tokens, cost, tools and their outcome. For the person who owns it."""
+    thread = await get_owned_thread(db, thread_id, user)
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    if ctx.runtime is None:
+        raise HTTPException(status_code=503, detail="Runtime not configured")
+    return await inspect_thread(ctx.runtime.store, str(thread_id))
 
 
 class ShareOut(BaseModel):

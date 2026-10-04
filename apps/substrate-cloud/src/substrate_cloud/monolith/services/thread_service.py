@@ -264,3 +264,30 @@ async def create_feedback(
     db.add(feedback)
     await db.flush()
     return feedback
+
+
+async def set_feedback(
+    db: AsyncSession,
+    *,
+    for_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    value: int,
+    comment: Optional[str] = None,
+) -> Optional[Feedback]:
+    """The one rating a conversation's answer has: replaces an earlier one, and ``0`` takes it back (returns ``None``)."""
+    await db.execute(
+        delete(Feedback).where(
+            Feedback.for_id == for_id, Feedback.thread_id == thread_id
+        )
+    )
+    if value == 0:
+        await db.flush()
+        return None
+    return await create_feedback(
+        db, for_id=for_id, thread_id=thread_id, value=value, comment=comment
+    )
+
+
+async def list_feedback(db: AsyncSession, thread_id: uuid.UUID) -> list[Feedback]:
+    result = await db.execute(select(Feedback).where(Feedback.thread_id == thread_id))
+    return list(result.scalars().all())

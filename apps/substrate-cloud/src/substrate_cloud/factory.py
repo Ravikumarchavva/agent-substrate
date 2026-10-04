@@ -670,6 +670,7 @@ async def build_agent_for_thread(
     register: bool = True,
     pinned: bool = True,
     reasoning: Any = None,
+    approval_required_risk: Any = None,
 ) -> Any:
     """Build and register a kernel Agent for this thread.
 
@@ -785,6 +786,7 @@ async def build_agent_for_thread(
         approval_handler=approval_handler,
         middleware=[safety_middleware] if safety_middleware is not None else None,
         reasoning=reasoning,
+        approval_required_risk=approval_required_risk,
     )
     if register:
         await runtime.register(agent, pinned=pinned)

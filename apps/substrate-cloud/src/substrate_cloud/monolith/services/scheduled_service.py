@@ -7,11 +7,13 @@ import logging
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from collections.abc import Awaitable, Callable
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from substrate.tools import ToolRisk
 from substrate.types import RunLogKind
 from substrate_cloud.shared.settings import settings
 from substrate_cloud.monolith.database import system_session
@@ -207,6 +209,10 @@ async def execute_scheduled_task(
                 tenant_id=thread.tenant_id,
                 runtime=app_state.runtime,
                 safety_middleware=app_state.safety_middleware,
+                # Off means high-risk tools run on their own; destructive ones still ask.
+                approval_required_risk=(
+                    None if task.ask_before_acting else ToolRisk.CRITICAL
+                ),
             )
 
             # 6. Submit to runtime
@@ -375,6 +381,70 @@ async def _tell(
             )
     except Exception:  # noqa: BLE001
         logger.exception("could not notify about scheduled task %s", task.id)
+
+
+def missed_firing(
+    kind: str, expression: str, since: datetime, now: datetime
+) -> bool:
+    """Did a schedule come due between ``since`` and ``now`` (so the server was down for it)?"""
+    if kind == "interval":
+        try:
+            return now - since >= timedelta(seconds=int(expression))
+        except ValueError:
+            return False
+    from apscheduler.triggers.cron import CronTrigger
+
+    try:
+        due = CronTrigger.from_crontab(expression, start_time=since).next()
+    except Exception:  # noqa: BLE001 - a bad expression is reported where it is scheduled
+        return False
+    return due is not None and due <= now
+
+
+async def catch_up_missed_tasks(
+    session_factory: async_sessionmaker[AsyncSession],
+    run: Callable[[uuid.UUID], Awaitable[None]],
+    *,
+    now: datetime | None = None,
+) -> list[uuid.UUID]:
+    """Run, once each, the active tasks whose firing came due while the server was down. The scheduler lives in memory and only looks forward,
+    so without this a restart silently skips a daily report. One catch-up per task however many firings were missed, one after another."""
+    now = now or datetime.now(timezone.utc)
+    async with system_session(session_factory) as db:
+        last_run = {
+            task_id: at
+            for task_id, at in (
+                await db.execute(
+                    select(
+                        ScheduledTaskRun.task_id, func.max(ScheduledTaskRun.executed_at)
+                    ).group_by(ScheduledTaskRun.task_id)
+                )
+            ).all()
+        }
+        tasks = (
+            (
+                await db.execute(
+                    select(ScheduledTask).where(ScheduledTask.status == "active")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        overdue = []
+        for task in tasks:
+            seen = [
+                t
+                for t in (task.last_claimed_at, last_run.get(task.id), task.created_at)
+                if t is not None
+            ]
+            if seen and missed_firing(task.kind, task.cron_expression, max(seen), now):
+                overdue.append(task.id)
+    for task_id in overdue:
+        try:
+            await run(task_id)
+        except Exception:  # noqa: BLE001 - one bad task must not stop the rest
+            logger.exception("catch-up run of scheduled task %s failed", task_id)
+    return overdue
 
 
 async def load_active_tasks_into_scheduler(

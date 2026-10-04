@@ -8,6 +8,8 @@ from substrate_cloud.monolith.services.thread_service import (  # noqa: F401
     delete_thread,
     get_owned_thread,
     get_thread,
+    list_feedback,
     list_threads,
+    set_feedback,
     update_thread,
 )

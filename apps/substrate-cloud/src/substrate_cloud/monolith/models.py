@@ -26,6 +26,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
@@ -116,6 +117,10 @@ class Thread(Base):
         DateTime(timezone=True), nullable=True
     )
     locked_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # The agent profile this conversation is with, if any. Its files live in that agent's own workspace, shared by all its conversations.
+    agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Relationships
     user: Mapped[Optional["User"]] = relationship(back_populates="threads")
@@ -143,6 +148,37 @@ class Thread(Base):
 # ── Elements (Attachments) ───────────────────────────────────────────────────
 
 
+class Agent(Base):
+    """A saved agent profile: a name and role, standing instructions, the tools it may use, and a persistent workspace of its own (files that
+    stay between conversations). Owned by one user within a tenant."""
+
+    __tablename__ = "agents"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    user_identifier: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False, default="")
+    instructions: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Tool names this agent may use; ``None`` means every tool the deployment offers.
+    allowed_tools: Mapped[Optional[List[str]]] = mapped_column(
+        ARRAY(String), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    @property
+    def workspace_id(self) -> str:
+        """The id this agent's files are keyed by (the path segment where a conversation's id would be)."""
+        return f"dot-{self.id}"
+
+
 class ThreadShare(Base):
     """A read-only public link to a conversation. The ``token`` is the whole credential (32 random bytes, URL-safe), so this table is
     read by token alone, without a tenant context; it deliberately has no row-level policy. ``name`` is the title at the time it was
@@ -159,6 +195,26 @@ class ThreadShare(Base):
     )
     tenant_id: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class TriggerRecord(Base):
+    """A cron / webhook / condition trigger, kept so it survives a restart (the scheduler, webhook registry and condition monitor are in memory).
+    ``key`` is how the registry names it (tenant-prefixed); ``definition`` is everything needed to register it again. Read only by the server
+    itself on start and by the routes that make and delete triggers, so it has no row-level policy."""
+
+    __tablename__ = "trigger_records"
+    __table_args__ = (UniqueConstraint("kind", "key", name="uq_trigger_kind_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    kind: Mapped[str] = mapped_column(String, nullable=False)  # cron | webhook | condition
+    key: Mapped[str] = mapped_column(String, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    definition: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -555,6 +611,11 @@ class ScheduledTask(Base):
     # Email the result when a run finishes (to the address the task was created with). Off unless the user turns it on.
     email_results: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     notify_email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # On (the default): a tool that changes something outside the conversation waits for the person to approve it. Off: such tools run on their own,
+    # except the destructive ones, which always ask.
+    ask_before_acting: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     # When a replica last claimed a firing: of several replicas that all hear the same tick, only the one that wins the claim runs it.
     last_claimed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

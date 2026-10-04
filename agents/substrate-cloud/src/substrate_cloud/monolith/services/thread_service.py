@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate_cloud.monolith.models import Thread, ThreadShare, Feedback
@@ -129,6 +129,11 @@ async def list_threads(
     # Exclude scheduled tasks threads from regular recent threads list
     query = query.where(
         (Thread.tags == None) | (~Thread.tags.contains(["scheduled_task"]))  # noqa: E711
+    )
+
+    # A conversation with an agent lives under that agent, not in Recents (the ones an agent was only asked to do, which sit in Archived, stay listed).
+    query = query.where(
+        or_(Thread.agent_id.is_(None), Thread.metadata_["delegated_from"].astext.is_not(None))
     )
 
     # Soft-deleted threads (see delete_thread) are gone for their owner but

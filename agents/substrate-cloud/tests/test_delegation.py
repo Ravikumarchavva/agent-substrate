@@ -6,21 +6,21 @@ import uuid
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import text
 
 from substrate.testing.scripted import ScriptedModel
 from substrate.types import RunScope
-from substrate_cloud.monolith.models import Agent
 from substrate_cloud.monolith.services.delegation import (
     MAX_CALLS_PER_MESSAGE,
+    AgentRef,
     AskAgentTool,
+    other_agents,
 )
 
 from test_scheduled_notifications import session
 
 
 def agent(name="Scout", role="Researcher"):
-    return Agent(id=uuid.uuid4(), tenant_id="t", user_identifier="u", name=name, role=role, instructions="")
+    return AgentRef(id=uuid.uuid4(), name=name, role=role)
 
 
 def run_ctx(tenant="t", user="u", thread="t1"):
@@ -53,10 +53,10 @@ async def test_the_other_agent_answers_in_its_own_archived_conversation():
         real_model = ctx.model_client
         ctx.model_client = ScriptedModel("The answer is 42.")
         try:
-            async with app.state.session_factory() as db:
-                await db.execute(text("SELECT set_config('app.bypass_rls', 'on', false)"))
-                scout = await db.get(Agent, uuid.UUID(made["id"]))
-                tool = AskAgentTool(ctx, [scout], lambda t: getattr(t, "name", ""))
+            # Read the way the chat route reads them: after the database session has closed, so nothing may depend on it.
+            others = await other_agents(ctx, c.tenant, "u1", exclude=None)
+            assert [a.name for a in others] == ["Scout"]
+            tool = AskAgentTool(ctx, others, lambda t: getattr(t, "name", ""))
             result = await tool.execute(ctx=run_ctx(tenant=c.tenant, user="u1", thread=parent), agent="scout", request="What is 6 x 7?")
         finally:
             ctx.model_client = real_model

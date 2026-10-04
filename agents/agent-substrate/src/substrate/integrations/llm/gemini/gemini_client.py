@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional, 
 from google import genai
 from google.genai import types as genai_types
 
+import base64
 import uuid
 from substrate.models.modalities import fit_to_capabilities
 from substrate.models.registry import resolve_capabilities
@@ -38,6 +39,15 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+
+def _extra_of(part: Any) -> dict[str, Any]:
+    """What Gemini attached to a function-call part that it needs back with the call: its thought signature (bytes on the wire, kept as base64 text)."""
+    raw = getattr(part, "thought_signature", None)
+    if not raw:
+        return {}
+    signature = raw if isinstance(raw, str) else base64.b64encode(raw).decode("ascii")
+    return {"gemini": {"thought_signature": signature}}
 
 
 def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str, Any]]]:
@@ -353,6 +363,7 @@ class GeminiClient(ChatModel):
                                 call_id=str(uuid.uuid4()),
                                 tool_name=fc.name or "gemini_tool",
                                 arguments=dict(fc.args) if fc.args else {},
+                                extra=_extra_of(part),
                             )
                         )
 
@@ -435,6 +446,7 @@ class GeminiClient(ChatModel):
                                     call_id=str(uuid.uuid4()),
                                     tool_name=fc.name or "gemini_tool",
                                     arguments=dict(fc.args) if fc.args else {},
+                                    extra=_extra_of(part),
                                 )
                             )
 

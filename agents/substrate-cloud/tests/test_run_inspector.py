@@ -9,7 +9,7 @@ import pytest
 from substrate.runtime import NewEntry, RunSpec
 from substrate.testing.runtime import runtime_store
 from substrate.types import Actor
-from substrate_cloud.stream.runs import inspect_thread
+from substrate_cloud.stream.runs import inspect_thread, last_message
 
 from test_scheduled_notifications import session
 
@@ -74,3 +74,17 @@ async def test_you_cannot_rate_or_inspect_someone_elses_conversation():
         assert (await c.post("/feedbacks", json={"for_id": str(uuid.uuid4()), "thread_id": stranger, "value": 1})).status_code == 404
         assert (await c.get(f"/threads/{stranger}/feedback")).status_code == 404
         assert (await c.get(f"/threads/{stranger}/runs")).status_code == 404
+
+
+async def test_the_last_thing_said_is_a_one_line_preview(log):
+    run = await log.create_run(RunSpec(agent=Actor(type="agent", key="a"), tenant="acme", thread_id="t9"))
+    await log.annotate(run.run_id, [NewEntry(kind=k, payload=p) for k, p in [
+        ("user.message", {"text": "What is\nthe plan?"}),
+        ("assistant.message", {"text": "First  we ship.\nThen we rest."}),
+    ]])  # fmt: skip
+    assert await last_message(log, "t9") == "First we ship. Then we rest."
+    assert await last_message(log, "nobody") is None
+    only_user = await log.create_run(RunSpec(agent=Actor(type="agent", key="a"), tenant="acme", thread_id="t10"))
+    await log.annotate(only_user.run_id, [NewEntry(kind="user.message", payload={"text": "hello" * 60})])
+    preview = await last_message(log, "t10")
+    assert preview.endswith("…") and len(preview) <= 141

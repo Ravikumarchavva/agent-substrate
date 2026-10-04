@@ -643,3 +643,60 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
             f"— got {log_call_count}. If this is 1, the test setup is wrong "
             "and isn't exercising the replay path log_once is meant to guard."
         )
+
+
+# ---------------------------------------------------------------------------
+# 7. send/emit are journaled — a replay does not deliver twice
+# ---------------------------------------------------------------------------
+
+
+class CountingListener:
+    def __init__(self, agent_id: Actor) -> None:
+        self.id = agent_id
+        self.seen: list[str] = []
+
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        self.seen.extend(m.id for m in inbox)
+
+
+class Echo:
+    def __init__(self, agent_id: Actor) -> None:
+        self.id = agent_id
+
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for m in inbox:
+            await ctx.reply(m, {"ok": True})
+
+
+class SendsThenSuspends:
+    """Sends and emits, then suspends on an ask: the resume replays the whole body."""
+
+    def __init__(self, agent_id: Actor, peer: Actor, helper: Actor) -> None:
+        self.id = agent_id
+        self.peer = peer
+        self.helper = helper
+        self.done = asyncio.Event()
+
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        await ctx.send(self.peer, _msg(self.peer, {"n": 1}))
+        await ctx.emit(Topic("news/feed"), _msg(Topic("news/feed"), {"n": 2}))
+        await ctx.ask(self.helper, _msg(self.helper, {}), timeout=3.0)
+        self.done.set()
+
+
+async def test_send_and_emit_deliver_once_when_the_run_replays() -> None:
+    sender_id, peer_id = _agent_id("sender"), _agent_id("peer")
+    follower_id, helper_id = _agent_id("follower"), _agent_id("helper")
+    peer, follower = CountingListener(peer_id), CountingListener(follower_id)
+    sender = SendsThenSuspends(sender_id, peer_id, helper_id)
+
+    async with ephemeral_runtime() as rt:
+        for a in (peer, follower, Echo(helper_id), sender):
+            await rt.register(a)
+        await rt.follow(follower_id, "news", "feed")
+        await rt.submit(sender_id, _msg(sender_id, {}))
+        await asyncio.wait_for(sender.done.wait(), timeout=5.0)
+        await asyncio.sleep(0.3)
+
+    assert len(peer.seen) == 1, peer.seen
+    assert len(follower.seen) == 1, follower.seen

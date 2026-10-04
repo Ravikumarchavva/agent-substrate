@@ -67,6 +67,15 @@ async def test_agents_are_private_validated_and_start_conversations():
         assert patched["allowed_tools"] == [pick]
         assert (await c.patch(f"/agents/{made['id']}", json={"all_tools": True})).json()["allowed_tools"] is None
 
+        # Talking to an agent is one continuing conversation, opened on first use and kept out of Recents.
+        assert (await c.get("/agents")).json()[0]["thread_id"] is None
+        first = (await c.post(f"/agents/{made['id']}/thread")).json()["id"]
+        assert (await c.post(f"/agents/{made['id']}/thread")).json()["id"] == first  # the same chat every time
+        listed = (await c.get("/agents")).json()[0]
+        assert listed["thread_id"] == first and listed["last_active"] is not None
+        assert first not in [t["id"] for t in (await c.get("/threads")).json()]
+        assert (await c.post(f"/agents/{uuid.uuid4()}/thread")).status_code == 404
+
         thread = (await c.post("/threads", json={"name": "t", "agent_id": made["id"]})).json()
         assert thread["agent_id"] == made["id"]
         assert (await c.post("/threads", json={"name": "t", "agent_id": str(uuid.uuid4())})).status_code == 404

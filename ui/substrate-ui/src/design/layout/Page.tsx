@@ -91,7 +91,7 @@ export function SettingRow({ label, description, children, className }: { label:
         <p className="text-sm font-medium text-foreground">{label}</p>
         {description && <p className="mt-0.5 text-xs leading-relaxed text-muted">{description}</p>}
       </div>
-      {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+      {children && <div className="ml-auto flex shrink-0 items-center gap-2">{children}</div>}
     </div>
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2, X } from "lucide-react";
-import { Badge, Button, Input, Section, Select, confirmAction } from "@/design";
+import { Coins, Trash2, X } from "lucide-react";
+import { Badge, Button, Input, Meter, Section, Select, confirmAction } from "@/design";
 import { api } from "@/lib/api";
 import type { Agent } from "@/lib/api/agents";
 import type { Group, MemberMode } from "@/lib/api/groups";
@@ -26,6 +26,7 @@ type Props = {
 /** Who is in the group and how closely each follows it; rename it, add or remove agents, or delete it. */
 export function GroupInfo({ group, agents, onChanged, onDeleted }: Props) {
   const [name, setName] = useState(group.name);
+  const [cap, setCap] = useState(String(group.token_cap));
   const outside = agents.filter((a) => !group.members.some((m) => m.agent_id === a.id));
 
   const run = async (action: () => Promise<Group | void>, failure: string) => {
@@ -99,6 +100,24 @@ export function GroupInfo({ group, agents, onChanged, onDeleted }: Props) {
             />
           </div>
         )}
+      </Section>
+
+      <Section title="Budget" description="The most the agents may use in this group in all. When it is reached they stop replying until you raise it.">
+        <div className="flex items-center gap-3">
+          <Meter icon={Coins} label="Group budget" used={group.tokens_used} limit={group.token_cap} />
+          <p className="min-w-0 flex-1 text-sm text-foreground">
+            {group.tokens_used.toLocaleString()} of {group.token_cap.toLocaleString()} tokens used
+          </p>
+        </div>
+        <div className="mt-3 flex gap-2">
+          <Input type="number" inputMode="numeric" min={1000} step={50000} value={cap} onChange={(e) => setCap(e.target.value)} aria-label="Token limit" />
+          <Button
+            disabled={!(Number(cap) >= 1000) || Number(cap) === group.token_cap}
+            onClick={() => void run(() => api.setGroupTokenCap(group.id, Math.round(Number(cap))), "Couldn't change the limit")}
+          >
+            Set limit
+          </Button>
+        </div>
       </Section>
 
       {group.paused && (

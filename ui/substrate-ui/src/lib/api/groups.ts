@@ -22,6 +22,9 @@ export interface Group {
   unread: number;
   /** Agents spoke a long time without a person; a message from the user resumes it. */
   paused: boolean;
+  /** What the agents have used in this group, and the most they may. */
+  tokens_used: number;
+  token_cap: number;
 }
 
 export interface GroupEntry {
@@ -65,13 +68,17 @@ export const groupsApi = {
     return requestJson<Group>(`/groups/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
   },
 
+  async setGroupTokenCap(id: string, tokenCap: number): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}`, { method: "PATCH", body: JSON.stringify({ token_cap: tokenCap }) });
+  },
+
   async deleteGroup(id: string): Promise<void> {
     await requestVoid(`/groups/${id}`, { method: "DELETE" });
   },
 
-  /** What was said after `after` (the whole log when omitted). */
-  async getGroupMessages(id: string, after = -1): Promise<GroupMessages> {
-    return requestJson<GroupMessages>(`/groups/${id}/messages?after=${after}`);
+  /** What was said after `after` (the whole log when omitted). With `waitSeconds` the server holds the request until something is said. */
+  async getGroupMessages(id: string, after = -1, waitSeconds = 0): Promise<GroupMessages> {
+    return requestJson<GroupMessages>(`/groups/${id}/messages?after=${after}&wait=${waitSeconds}`);
   },
 
   async sendGroupMessage(id: string, text: string, replyTo: number | null): Promise<GroupEntry> {

@@ -13,8 +13,6 @@ import { GroupInfo } from "./GroupInfo";
 import { Messages } from "./Messages";
 import { typingLine } from "./text";
 
-const POLL_MS = 1500;
-
 type Props = {
   group: Group;
   agents: Agent[];
@@ -26,7 +24,7 @@ type Props = {
 
 /**
  * One group: the conversation in the middle and, beside it (on a wide screen) or in its place (on a narrow one), who is in it.
- * New messages are fetched every moment the page is visible, only those after the last one seen.
+ * New messages arrive as they are posted: the page keeps one request open to the server and shows what comes back.
  */
 export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props) {
   const [entries, setEntries] = useState<GroupEntry[]>([]);
@@ -38,28 +36,36 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
   useEffect(() => {
     let alive = true;
     let after = -1;
-    const tick = async () => {
-      if (document.hidden) return;
-      try {
-        const next = await api.getGroupMessages(group.id, after);
-        if (!alive) return;
-        setTyping(next.working);
-        if (next.entries.length === 0) return;
-        after = next.latest;
-        setEntries((all) => [...all, ...next.entries.filter((e) => !all.some((x) => x.seq === e.seq))]);
-        await api.markGroupRead(group.id, next.latest);
-        if (alive) onChanged();
-      } catch {
-        // The next tick tries again; a dropped poll is not worth an alert.
+    // Ask, and let the server hold the request until something is said: a message appears the moment it is posted. The first
+    // request does not wait, so the page fills at once.
+    const loop = async () => {
+      let first = true;
+      while (alive) {
+        if (document.hidden) {
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
+        try {
+          const next = await api.getGroupMessages(group.id, after, first ? 0 : 2);
+          first = false;
+          if (!alive) return;
+          setTyping(next.working);
+          if (next.entries.length === 0) continue;
+          after = next.latest;
+          setEntries((all) => [...all, ...next.entries.filter((e) => !all.some((x) => x.seq === e.seq))]);
+          await api.markGroupRead(group.id, next.latest);
+          if (alive) onChanged();
+        } catch {
+          // A dropped request is not worth an alert; try again shortly.
+          await new Promise((r) => setTimeout(r, 2000));
+        }
       }
     };
-    void tick();
-    const timer = setInterval(() => void tick(), POLL_MS);
+    void loop();
     return () => {
       alive = false;
-      clearInterval(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one poll loop per group; onChanged is only called, never read
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one loop per group; onChanged is only called, never read
   }, [group.id]);
 
   const send = useCallback(

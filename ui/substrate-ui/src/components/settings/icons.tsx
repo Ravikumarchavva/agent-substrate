@@ -25,7 +25,7 @@ export function GoogleIcon({ className = "h-4 w-4" }: BrandIconProps) {
   );
 }
 
-export function SpotifyIcon({ className = "h-5 w-5 text-[#1DB954]" }: BrandIconProps) {
+export function SpotifyIcon({ className = "h-5 w-5 text-success" }: BrandIconProps) {
   return (
     <svg
       className={className}

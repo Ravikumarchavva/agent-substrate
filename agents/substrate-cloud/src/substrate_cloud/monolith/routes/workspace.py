@@ -45,7 +45,7 @@ from substrate_cloud.monolith.file_versioning import (
 from substrate_cloud.monolith.models import FileMetadata, FileVersion, Thread
 from substrate_cloud.monolith.security.deps import get_current_user
 from substrate_cloud.monolith.services import get_owned_thread
-from substrate_cloud.monolith.services.agent_service import get_owned_agent, list_agents
+from substrate_cloud.monolith.services.agents.service import get_owned_agent, list_agents
 from substrate_cloud.shared.auth.claims import AuthClaims
 
 router = APIRouter(

@@ -10,7 +10,7 @@ import pytest
 
 from substrate.types import RunScope
 from substrate_cloud.monolith.models import Agent
-from substrate_cloud.monolith.services.agent_service import (
+from substrate_cloud.monolith.services.agents.service import (
     agent_instructions_block,
     narrow_tools,
     workspace_id_for,

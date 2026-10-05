@@ -5,6 +5,11 @@ from __future__ import annotations
 from substrate.agents.base import (
     BaseAgent,
 )
+from substrate.agents.channel import (
+    PASS,
+    ChannelMemberAgent,
+    ChannelMemberConfig,
+)
 from substrate.agents.flows import (
     ConditionalFlow,
     ParallelFlow,
@@ -26,8 +31,11 @@ from substrate.agents.spawn import (
 
 __all__ = [
     "BaseAgent",
+    "ChannelMemberAgent",
+    "ChannelMemberConfig",
     "ConditionalFlow",
     "OrchestratorAgent",
+    "PASS",
     "ParallelFlow",
     "ReActAgent",
     "SequentialFlow",

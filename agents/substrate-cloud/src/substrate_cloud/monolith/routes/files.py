@@ -44,7 +44,7 @@ from substrate_cloud.monolith.routes.chat_context import (
 )
 from substrate_cloud.monolith.security.deps import get_current_user
 from substrate_cloud.monolith.services import get_owned_thread
-from substrate_cloud.monolith.services.agent_service import get_owned_agent
+from substrate_cloud.monolith.services.agents.service import get_owned_agent
 from substrate_cloud.shared.auth.claims import AuthClaims
 from substrate_cloud.shared.contracts.file_store import (
     FileUploadResponse,

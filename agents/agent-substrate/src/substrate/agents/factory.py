@@ -17,6 +17,7 @@ from substrate.context.history import ThreadStore
 from substrate.stores import Store
 
 if TYPE_CHECKING:
+    from substrate.agents.channel import ChannelMemberConfig
     from substrate.agents.react import ReActAgent
 
 logger = logging.getLogger(__name__)
@@ -95,8 +96,10 @@ def create_assistant_agent(
     approval_handler: ApprovalHandler | None = None,
     approval_required_risk: ToolRisk | None = None,
     reasoning: ReasoningEffort | None = None,
+    channel: ChannelMemberConfig | None = None,
 ) -> ReActAgent:
-    """Create a configured ``ReActAgent``.
+    """Create a configured ``ReActAgent`` (a ``ChannelMemberAgent`` when ``channel`` is given: one that
+    lives in channels, woken by what is said there and choosing whether to answer).
 
     The agent is returned unregistered — callers are responsible for calling
     ``await runtime.register(agent)`` before submitting work.  This keeps the
@@ -157,17 +160,21 @@ def create_assistant_agent(
     for t in tools or []:
         toolbox.add(t)
 
-    return ReActAgent(
-        name,
-        model=model_client,
-        tools=toolbox if tools else None,
-        system_instructions=system_instructions or "",
-        context=ctx,
-        max_iterations=max_iterations,
-        session_id=session_id,
-        initial_tool_choice=initial_tool_choice,
-        approval_handler=approval_handler,
-        approval_required_risk=approval_required_risk,
-        middleware=MiddlewarePipeline(list(middleware or [])),
-        reasoning=reasoning,
-    )
+    build = {
+        "model": model_client,
+        "tools": toolbox if tools else None,
+        "system_instructions": system_instructions or "",
+        "context": ctx,
+        "max_iterations": max_iterations,
+        "session_id": session_id,
+        "initial_tool_choice": initial_tool_choice,
+        "approval_handler": approval_handler,
+        "approval_required_risk": approval_required_risk,
+        "middleware": MiddlewarePipeline(list(middleware or [])),
+        "reasoning": reasoning,
+    }
+    if channel is not None:
+        from substrate.agents.channel import ChannelMemberAgent
+
+        return ChannelMemberAgent(name, channel=channel, **build)  # type: ignore[arg-type]
+    return ReActAgent(name, **build)  # type: ignore[arg-type]

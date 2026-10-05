@@ -42,13 +42,14 @@ from typing import Annotated, Literal, Protocol, runtime_checkable
 
 from pydantic import Field
 
-from substrate.types.supervision import Priority, Supervision
+from substrate.types.supervision import ExecutionBudget, Priority, Supervision
 from substrate.types.content import JsonObject, KernelModel
 from substrate.types.error_info import ErrorInfo
 from substrate.types.identity import Actor, Topic
 from substrate.types.trace import TraceContext
 from substrate.runtime.message import Message
 from substrate.types.run_status import RunId, RunStatus
+from substrate.runtime.channel import ChannelStore
 from substrate.runtime.inbox import DeadLetterEntry
 from substrate.types.run_log import RunLogEntry
 from substrate.runtime.scheduler import RunRetryPolicy
@@ -75,6 +76,8 @@ class RunSpec(KernelModel):
     trace: TraceContext | None = None
     # Opaque to the engine: what a host needs to rebuild this run's agent after a restart.
     recipe: JsonObject | None = None
+    # Budget accounts (``accounts.py``) every model call of this run, and its children, is charged to.
+    accounts: tuple[str, ...] = ()
 
 
 class RunRecord(KernelModel):
@@ -197,6 +200,8 @@ class Delivery(KernelModel):
     agent: Actor
     msg: Message
     tenant: str = "default"
+    # Accounts for the run this delivery creates, if it has to create one.
+    accounts: tuple[str, ...] = ()
 
 
 class SpawnSpec(KernelModel):
@@ -288,7 +293,7 @@ class StoreStats(KernelModel):
 
 
 @runtime_checkable
-class RuntimeStore(Protocol):
+class RuntimeStore(ChannelStore, Protocol):
     """The durable runtime's persistence. Every method is one transaction."""
 
     # -- lifecycle -----------------------------------------------------------
@@ -417,6 +422,10 @@ class RuntimeStore(Protocol):
 
     async def pending_count(self, agent: Actor) -> int: ...
 
+    async def working(self, agents: Sequence[Actor]) -> list[Actor]:
+        """Those of ``agents`` with a run queued or executing right now (one waiting on a person is not working)."""
+        ...
+
     async def dead_letters(self, agent: Actor) -> list[DeadLetterEntry]: ...
 
     async def redrive(self, agent: Actor, msg_id: str) -> bool:
@@ -452,6 +461,33 @@ class RuntimeStore(Protocol):
     async def tree_spend(self, run_id: RunId) -> Spend:
         """Everything spent so far by the execution tree ``run_id`` belongs to — that run, its
         parent and siblings, and every descendant. What a tree-wide budget is checked against."""
+        ...
+
+    # -- budget accounts -----------------------------------------------------
+    #
+    # A budget on an execution tree bounds one request. A conversation between agents is a cycle
+    # across many trees (each wake is a new root). An *account* is a named total — a channel, an
+    # agent, a tenant — and a run lists the accounts it is charged to (``RunSpec.accounts``); each
+    # model call debits all of them in the transaction that records it, and children inherit their
+    # parent's. A run stops before its next call when any of its accounts is at a limit, and a
+    # channel does not wake a member whose accounts are.
+
+    async def account_limit(self, account: str, budget: ExecutionBudget) -> None:
+        """Set an account's limits (tokens, cost, turns; ``None`` is unlimited)."""
+        ...
+
+    async def account_spend(self, account: str) -> Spend: ...
+
+    async def accounts_exhausted(
+        self, accounts: Sequence[str], *, strict: bool = False
+    ) -> str | None:
+        """The first account at (``strict``: past) one of its limits, or ``None``."""
+        ...
+
+    async def run_accounts_exhausted(
+        self, run_id: RunId, *, strict: bool = False
+    ) -> str | None:
+        """``accounts_exhausted`` for the accounts a run is charged to."""
         ...
 
     async def erase(self, *, tenant: str, thread_id: str | None = None) -> int:

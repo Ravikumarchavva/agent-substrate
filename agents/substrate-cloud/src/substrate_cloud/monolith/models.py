@@ -179,6 +179,69 @@ class Agent(Base):
         return f"dot-{self.id}"
 
 
+class Group(Base):
+    """A conversation between the user and several of their agents. What is said lives in the runtime's channel ``group/<id>``; this holds
+    who is in it and how far the user has read."""
+
+    __tablename__ = "groups"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    user_identifier: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    # How many entries in a row agents may add without a person before the group pauses.
+    breaker: Mapped[int] = mapped_column(Integer, nullable=False, default=40)
+    # The last channel entry the user has seen.
+    user_read_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=-1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    @property
+    def channel(self) -> str:
+        return f"group/{self.id}"
+
+
+class GroupMember(Base):
+    __tablename__ = "group_members"
+
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("groups.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # all: considers every message; mentions: only when addressed; muted: only when named.
+    mode: Mapped[str] = mapped_column(String, nullable=False, default="all")
+
+
+class AgentContact(Base):
+    """An agent another agent may message one to one: its allow-list. ``note`` is what the owner tells it about why."""
+
+    __tablename__ = "agent_contacts"
+
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    contact_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    note: Mapped[str] = mapped_column(String, nullable=False, default="")
+
+
 class ThreadShare(Base):
     """A read-only public link to a conversation. The ``token`` is the whole credential (32 random bytes, URL-safe), so this table is
     read by token alone, without a tenant context; it deliberately has no row-level policy. ``name`` is the title at the time it was

@@ -97,9 +97,9 @@ class Runtime:
         self._source = store if isinstance(store, Store) else None
         self._owns_source = False
         if isinstance(store, Store):
-            from substrate.runtime.sql_store import SqlRuntimeStore
+            from substrate.runtime.persistence.store import DurableRuntimeStore
 
-            store = SqlRuntimeStore(store.database)
+            store = DurableRuntimeStore(store.database)
         self._store = store
         self._resolver = resolver or ActorResolver()
         self._worker = Worker(

@@ -1,4 +1,4 @@
-"""SqlRuntimeStore — the runtime store, written once, over the store's relational database.
+"""DurableRuntimeStore — the runtime store, written once, over the store's relational database.
 
 The engine owns every rule (what a terminal transition does, how a suspension avoids losing a wakeup, how a
 spawn is budgeted); the database owns *atomicity*. Written per database, those rules were duplicated three
@@ -26,6 +26,8 @@ from substrate.types.run_status import RunId, RunStatus
 from substrate.runtime.inbox import DeadLetterEntry, DeadLetterReason
 from substrate.types.run_log import RunLogEntry, RunLogKind
 from substrate.runtime.scheduler import RunRetryPolicy
+from substrate.runtime.persistence.accounts import Accounts
+from substrate.runtime.persistence.channels import _SCHEMA_CHANNELS, Channels, _schema_dedup
 from substrate.runtime.store import (
     Cancel,
     Commit,
@@ -187,7 +189,7 @@ def _utcnow() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
-class SqlRuntimeStore:
+class DurableRuntimeStore(Channels, Accounts):
     """``RuntimeStore`` over a ``Database``."""
 
     def __init__(
@@ -205,7 +207,9 @@ class SqlRuntimeStore:
     # ------------------------------------------------------------------ lifecycle
 
     async def start(self) -> None:
-        await migrate(self._db, "runtime", [_SCHEMA_V1])
+        await migrate(
+            self._db, "runtime", [_SCHEMA_V1, _SCHEMA_CHANNELS, _schema_dedup]
+        )
 
     async def aclose(self) -> None:
         """The database belongs to whoever opened it (the ``Store``), not to the runtime that uses it."""
@@ -331,6 +335,16 @@ class SqlRuntimeStore:
                 entry.spend.turns,
                 run_id,
             )
+            await tx.execute(
+                "INSERT INTO rt_accounts (account, tokens, cost_micros, turns) "
+                "SELECT account, ?, ?, ? FROM rt_run_accounts WHERE run_id = ? "
+                "ON CONFLICT (account) DO UPDATE SET tokens = rt_accounts.tokens + EXCLUDED.tokens, "
+                "cost_micros = rt_accounts.cost_micros + EXCLUDED.cost_micros, turns = rt_accounts.turns + EXCLUDED.turns",
+                entry.spend.tokens,
+                round(entry.spend.cost_usd * 1_000_000),
+                entry.spend.turns,
+                run_id,
+            )
         return seq
 
     async def _make_pending(self, tx: Tx, run_id: str) -> None:
@@ -389,6 +403,12 @@ class SqlRuntimeStore:
                 json.dumps(spec.recipe) if spec.recipe is not None else None,
                 _ts(self._clock()),
             )
+            for account in spec.accounts:
+                await tx.execute(
+                    "INSERT INTO rt_run_accounts (run_id, account) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                    run_id,
+                    account,
+                )
         except Exception as exc:
             if spec.thread_id is not None and self._db.is_unique_violation(exc):
                 raise ThreadBusyError(
@@ -440,6 +460,7 @@ class SqlRuntimeStore:
                     agent=delivery.agent,
                     tenant=delivery.tenant,
                     trace=TraceContext.new(),
+                    accounts=delivery.accounts,
                 ),
             )
             return DeliverResult(accepted=True, created_run=RunId(row["run_id"]))
@@ -912,9 +933,21 @@ class SqlRuntimeStore:
                     f"run tree {supervision.run_id} is at its headcount cap "
                     f"({active}/{supervision.spawn_budget.max_agents} agents); cannot spawn {spawn.child.agent}"
                 )
+        inherited = await tx.fetchall(
+            "SELECT account FROM rt_run_accounts WHERE run_id = ?", parent["run_id"]
+        )
         row = await self._insert_run(
             tx,
-            spawn.child.model_copy(update={"parent_run_id": RunId(parent["run_id"])}),
+            spawn.child.model_copy(
+                update={
+                    "parent_run_id": RunId(parent["run_id"]),
+                    "accounts": tuple(
+                        dict.fromkeys(
+                            (*spawn.child.accounts, *(r["account"] for r in inherited))
+                        )
+                    ),
+                }
+            ),
         )
         await self._deliver(
             tx,
@@ -1118,6 +1151,20 @@ class SqlRuntimeStore:
 
         return await self._tx(do)
 
+    async def working(self, agents: Sequence[Actor]) -> list[Actor]:
+        if not agents:
+            return []
+
+        async def do(tx: Tx) -> list[Actor]:
+            marks = ", ".join("?" for _ in agents)
+            rows = await tx.fetchall(
+                f"SELECT DISTINCT agent FROM rt_runs WHERE status IN ('pending', 'running') AND agent IN ({marks})",
+                *[str(a) for a in agents],
+            )
+            return [Actor.from_str(r["agent"]) for r in rows]
+
+        return await self._tx(do)
+
     async def dead_letters(self, agent: Actor) -> list[DeadLetterEntry]:
         async def do(tx: Tx) -> list[DeadLetterEntry]:
             rows = await tx.fetchall(
@@ -1316,4 +1363,4 @@ class SqlRuntimeStore:
         return await self._tx(do)
 
 
-__all__ = ["SqlRuntimeStore"]
+__all__ = ["DurableRuntimeStore"]

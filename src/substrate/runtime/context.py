@@ -709,8 +709,9 @@ class RunContext:
         mentions: Sequence[str] = (),
         reply_to: int | None = None,
         read_up_to: int | None = None,
+        data: JsonObject | None = None,
     ) -> AppendResult:
-        """Speak in a channel as this agent, once across all replays.
+        """Speak in a channel as this agent, once across all replays. ``data`` rides with the entry (attachments, say).
 
         With ``read_up_to`` the post is refused (``stale``) when others have spoken since that
         ``seq``: read again and reconsider. The run's id is the entry's ``caused_by``.
@@ -726,6 +727,7 @@ class RunContext:
                 caused_by=self.run_id,
                 read_up_to=read_up_to,
                 dedup_key=current_idempotency_key(),
+                data=data,
             )
             return result.model_dump(mode="json")
 

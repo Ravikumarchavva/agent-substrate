@@ -183,6 +183,41 @@ async def test_the_digest_says_who_each_message_is_for() -> None:
         await rt.register(member("quill", model, names))
         store = rt.store
         await store.channel_open(G, members=[Member(agent=scout), Member(agent=quill)])
-        await store.channel_append(G, sender=HUMAN, text="@Scout capital of Japan?", mentions=[str(scout)])
+        await store.channel_append(
+            G, sender=HUMAN, text="@Scout capital of Japan?", mentions=[str(scout)]
+        )
         await settle(store)
     assert "(to Scout)" in last_text(model.seen[0])
+
+
+async def test_the_digest_shows_what_was_attached_and_what_it_says() -> None:
+    scout = Actor("member", "scout@g")
+    model = ScriptedModel(PASS)
+    async with ephemeral_runtime() as rt:
+        await rt.register(member("scout", model, roster(scout)))
+        store = rt.store
+        await store.channel_open(G, members=[Member(agent=scout)])
+        await store.channel_append(
+            G,
+            sender=HUMAN,
+            text="here is the budget",
+            data={
+                "attachments": [
+                    {
+                        "name": "budget.csv",
+                        "size": 2048,
+                        "excerpt": "item,eur\nflights,900",
+                        "truncated": True,
+                    },
+                    {"name": "photo.png", "size": 9},
+                ]
+            },
+        )
+        await settle(store)
+    seen = last_text(model.seen[0])
+    assert "(attached: budget.csv, 2048 bytes)" in seen
+    assert (
+        "contents of budget.csv [only the start is shown]:" in seen
+        and "| flights,900" in seen
+    )
+    assert "(attached: photo.png, 9 bytes)\n    (no text could be read from it)" in seen

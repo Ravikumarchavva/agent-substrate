@@ -208,6 +208,11 @@ class Group(Base):
     def channel(self) -> str:
         return f"group/{self.id}"
 
+    @property
+    def workspace_id(self) -> str:
+        """The id the group's shared files are keyed by: everything uploaded here, or made by an agent here, is visible to all of them."""
+        return f"group-{self.id}"
+
 
 class GroupMember(Base):
     __tablename__ = "group_members"
@@ -276,10 +281,14 @@ class TriggerRecord(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    kind: Mapped[str] = mapped_column(String, nullable=False)  # cron | webhook | condition
+    kind: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # cron | webhook | condition
     key: Mapped[str] = mapped_column(String, nullable=False)
     tenant_id: Mapped[str] = mapped_column(String, nullable=False)
-    definition: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    definition: Mapped[Dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

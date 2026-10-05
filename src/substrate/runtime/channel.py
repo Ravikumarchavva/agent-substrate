@@ -36,7 +36,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
-from substrate.types.content import KernelModel
+from pydantic import Field
+
+from substrate.types.content import JsonObject, KernelModel
 from substrate.types.identity import Actor
 
 
@@ -90,6 +92,8 @@ class ChannelEntry(KernelModel):
     """What made the sender speak: a run id, an entry ``seq``, a webhook. Free-form, for tracing."""
     depth: int = 0
     """Entries in a row, up to this one, spoken by agents with no human between."""
+    data: JsonObject = Field(default_factory=dict)
+    """Anything structured that rides with the entry (attachments, say); the channel does not look inside."""
     at: datetime
 
 
@@ -137,6 +141,7 @@ class ChannelStore(Protocol):
         read_up_to: int | None = None,
         kind: EntryKind = EntryKind.MESSAGE,
         dedup_key: str | None = None,
+        data: JsonObject | None = None,
     ) -> AppendResult:
         """Append an entry, advance the sender's own cursor past it, and wake the members it
         concerns, all in one transaction. With a ``dedup_key``, a repeat of an append that already

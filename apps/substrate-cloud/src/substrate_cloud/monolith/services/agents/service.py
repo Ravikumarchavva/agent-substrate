@@ -64,7 +64,9 @@ def _is_main() -> Any:
     return Thread.metadata_["delegated_from"].astext.is_(None)
 
 
-async def main_threads(db: AsyncSession, agent_ids: list[uuid.UUID]) -> dict[uuid.UUID, Thread]:
+async def main_threads(
+    db: AsyncSession, agent_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, Thread]:
     """Each agent's one conversation (the latest, should there ever be several), keyed by agent id."""
     if not agent_ids:
         return {}
@@ -83,7 +85,9 @@ async def main_threads(db: AsyncSession, agent_ids: list[uuid.UUID]) -> dict[uui
     return found
 
 
-async def ensure_main_thread(db: AsyncSession, agent: Agent, claims: AuthClaims) -> Thread:
+async def ensure_main_thread(
+    db: AsyncSession, agent: Agent, claims: AuthClaims
+) -> Thread:
     """The agent's conversation, made the first time it is opened: talking to an agent is one continuing chat, like a contact, not a pile of sessions."""
     existing = (await main_threads(db, [agent.id])).get(agent.id)
     if existing is not None:

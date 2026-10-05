@@ -21,6 +21,7 @@ from substrate.runtime.message import DataPayload, Message
 from substrate.runtime.persistence.accounts import exhausted
 from substrate.runtime.store import Delivery
 from substrate.stores.database import Database, Row, Tx
+from substrate.types.content import JsonObject
 from substrate.types.identity import Actor
 
 _SCHEMA_CHANNELS = """
@@ -83,6 +84,12 @@ def _schema_dedup(database: Database) -> str:
     )
 
 
+def _schema_entry_data(database: Database) -> str:
+    """What rides with an entry (attachments): kept as JSON text beside it."""
+    exists = "IF NOT EXISTS " if database.dialect == "postgresql" else ""
+    return f"ALTER TABLE rt_channel_entries ADD COLUMN {exists}data_json TEXT;"
+
+
 _SYSTEM = Actor("system", "channel")
 
 
@@ -97,6 +104,7 @@ def _entry(row: Row) -> ChannelEntry:
         reply_to=row["reply_to"],
         caused_by=row["caused_by"],
         depth=row["depth"],
+        data=json.loads(row["data_json"]) if row["data_json"] else {},
         at=datetime.fromtimestamp(row["at"], tz=timezone.utc),
     )
 
@@ -248,6 +256,7 @@ class Channels:
         read_up_to: int | None = None,
         kind: EntryKind = EntryKind.MESSAGE,
         dedup_key: str | None = None,
+        data: JsonObject | None = None,
     ) -> AppendResult:
         async def do(tx: Tx) -> AppendResult:
             await tx.lock(f"channel:{channel}")
@@ -309,6 +318,7 @@ class Channels:
                 caused_by,
                 streak,
                 dedup_key,
+                data,
             )
             await tx.execute(
                 "UPDATE rt_channels SET next_seq = ?, streak = ?, paused = ? WHERE channel = ?",
@@ -387,11 +397,12 @@ class Channels:
         caused_by: str | None,
         depth: int,
         dedup_key: str | None = None,
+        data: JsonObject | None = None,
     ) -> None:
         await tx.execute(
             "INSERT INTO rt_channel_entries "
-            "(channel, seq, sender, kind, text, mentions_json, reply_to, caused_by, depth, at, dedup_key) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "(channel, seq, sender, kind, text, mentions_json, reply_to, caused_by, depth, at, dedup_key, data_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             channel,
             seq,
             str(sender),
@@ -403,6 +414,7 @@ class Channels:
             depth,
             self._clock().timestamp(),
             dedup_key,
+            json.dumps(data) if data else None,
         )
 
 

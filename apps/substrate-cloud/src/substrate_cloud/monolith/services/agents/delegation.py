@@ -45,7 +45,9 @@ class AgentRef:
     note: str = ""
 
 
-def _text(message: str, *, error: bool = False, **structured: Any) -> ToolExecutionResult:
+def _text(
+    message: str, *, error: bool = False, **structured: Any
+) -> ToolExecutionResult:
     return ToolExecutionResult(
         content=[TextBlock(text=message)],
         is_error=error,
@@ -66,7 +68,8 @@ class AskAgentTool:
         self._tool_name_of = tool_name_of
         self._calls = 0
         roster = "; ".join(
-            f"{a.name} ({a.role or 'no role set'}{': ' + a.note if a.note else ''})" for a in others
+            f"{a.name} ({a.role or 'no role set'}{': ' + a.note if a.note else ''})"
+            for a in others
         )
         self.description = (
             "Ask one of your other agents to do a piece of work and get its answer back. It works in its own conversation with its own tools and "
@@ -76,7 +79,10 @@ class AskAgentTool:
             "type": "object",
             "properties": {
                 "agent": {"type": "string", "description": "The agent's name."},
-                "request": {"type": "string", "description": "What you want it to do, with all the context it needs."},
+                "request": {
+                    "type": "string",
+                    "description": "What you want it to do, with all the context it needs.",
+                },
             },
             "required": ["agent", "request"],
             "additionalProperties": False,
@@ -87,7 +93,9 @@ class AskAgentTool:
     ) -> ToolExecutionResult:
         scope = scope_of(ctx)
         if not scope.tenant_id or not scope.user_id:
-            return _text("Asking another agent needs a signed-in conversation.", error=True)
+            return _text(
+                "Asking another agent needs a signed-in conversation.", error=True
+            )
         agent_id = self._others.get(agent.strip().lower())
         if agent_id is None:
             return _text(
@@ -103,18 +111,33 @@ class AskAgentTool:
                 error=True,
             )
         try:
-            return await self._run(agent_id, request.strip(), scope.tenant_id, scope.user_id, scope.thread_id)
+            return await self._run(
+                agent_id,
+                request.strip(),
+                scope.tenant_id,
+                scope.user_id,
+                scope.thread_id,
+            )
         except Exception as exc:  # noqa: BLE001 - a failed delegate is a result for the asker, not a crash
             logger.exception("delegation to %s failed", agent)
             return _text(f"{agent} could not do that: {exc}", error=True)
 
     async def _run(
-        self, agent_id: uuid.UUID, request: str, tenant_id: str, user_id: str, parent_thread: str
+        self,
+        agent_id: uuid.UUID,
+        request: str,
+        tenant_id: str,
+        user_id: str,
+        parent_thread: str,
     ) -> ToolExecutionResult:
         ctx = self._ctx
         async with system_session(ctx.session_factory) as db:
             target = await db.get(Agent, agent_id)
-            if target is None or target.user_identifier != user_id or target.tenant_id != tenant_id:
+            if (
+                target is None
+                or target.user_identifier != user_id
+                or target.tenant_id != tenant_id
+            ):
                 return _text("That agent is no longer available.", error=True)
             thread = Thread(
                 name=f"{target.name}: {request[:50]}",
@@ -132,16 +155,25 @@ class AskAgentTool:
             profile = AgentProfile.of(target)
 
         delegate = await assemble_agent(
-            ctx, profile, session_id=thread_id, drop_tools=(TOOL_NAME,)  # one level only: the delegate cannot delegate
+            ctx,
+            profile,
+            session_id=thread_id,
+            drop_tools=(TOOL_NAME,),  # one level only: the delegate cannot delegate
         )
         msg = Message(
             target=delegate.id,
             sender=Actor(type="delegator"),
             payload=ChatPayload(
-                message=KernelChatMessage(role=Role.USER, content=[KernelTextBlock(text=request)])
+                message=KernelChatMessage(
+                    role=Role.USER, content=[KernelTextBlock(text=request)]
+                )
             ),
             correlation_id=str(thread_id),
-            metadata={"user_id": user_id, "tenant_id": tenant_id, "workspace_id": profile.workspace_id},
+            metadata={
+                "user_id": user_id,
+                "tenant_id": tenant_id,
+                "workspace_id": profile.workspace_id,
+            },
         )
         await ctx.runtime.register(delegate)
         run_id = await ctx.runtime.submit(delegate.id, msg, thread_id=str(thread_id))
@@ -158,8 +190,15 @@ class AskAgentTool:
                     return "done"
                 elif entry.kind == RunLogKind.RUN_FAILED:
                     return f"failed: {payload.get('error', 'the run failed')}"
-                elif entry.kind in (RunLogKind.APPROVAL_REQUESTED, RunLogKind.INPUT_REQUESTED):
-                    waiting = str(payload.get("tool_name") or payload.get("question") or "your input")
+                elif entry.kind in (
+                    RunLogKind.APPROVAL_REQUESTED,
+                    RunLogKind.INPUT_REQUESTED,
+                ):
+                    waiting = str(
+                        payload.get("tool_name")
+                        or payload.get("question")
+                        or "your input"
+                    )
                     return "waiting"
             return "done"
 
@@ -177,11 +216,16 @@ class AskAgentTool:
                 **link,
             )
         if outcome == "running":
-            return _text(f"{target.name} is still working. Its conversation is {thread_id}. Partial answer so far: {answer.strip() or '(none yet)'}", **link)
+            return _text(
+                f"{target.name} is still working. Its conversation is {thread_id}. Partial answer so far: {answer.strip() or '(none yet)'}",
+                **link,
+            )
         return _text(f"{target.name} {outcome}", error=True, **link)
 
 
-async def other_agents(ctx: Any, tenant_id: str, user_id: str, exclude: uuid.UUID | None) -> list[AgentRef]:
+async def other_agents(
+    ctx: Any, tenant_id: str, user_id: str, exclude: uuid.UUID | None
+) -> list[AgentRef]:
     """The user's agents that can be asked, besides the one asking."""
     async with system_session(ctx.session_factory) as db:
         rows = await db.execute(
@@ -189,16 +233,26 @@ async def other_agents(ctx: Any, tenant_id: str, user_id: str, exclude: uuid.UUI
             .where(Agent.user_identifier == user_id, Agent.tenant_id == tenant_id)
             .order_by(Agent.created_at)
         )
-        return [AgentRef(a.id, a.name, a.role) for a in rows.scalars().all() if a.id != exclude]
+        return [
+            AgentRef(a.id, a.name, a.role)
+            for a in rows.scalars().all()
+            if a.id != exclude
+        ]
 
 
-async def contacts_for(ctx: Any, tenant_id: str, user_id: str, asker: uuid.UUID) -> list[AgentRef]:
+async def contacts_for(
+    ctx: Any, tenant_id: str, user_id: str, asker: uuid.UUID
+) -> list[AgentRef]:
     """The agents ``asker`` may message: its contacts, and only those. An agent is not handed the user's whole roster."""
     async with system_session(ctx.session_factory) as db:
         rows = await db.execute(
             select(Agent, AgentContact.note)
             .join(AgentContact, AgentContact.contact_id == Agent.id)
-            .where(AgentContact.agent_id == asker, Agent.user_identifier == user_id, Agent.tenant_id == tenant_id)
+            .where(
+                AgentContact.agent_id == asker,
+                Agent.user_identifier == user_id,
+                Agent.tenant_id == tenant_id,
+            )
             .order_by(Agent.created_at)
         )
         return [AgentRef(a.id, a.name, a.role, note) for a, note in rows.all()]

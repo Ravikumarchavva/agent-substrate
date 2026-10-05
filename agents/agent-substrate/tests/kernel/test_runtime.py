@@ -740,3 +740,21 @@ async def test_a_post_from_a_replaying_run_lands_once_and_a_read_is_stable() -> 
 
     assert [e.text for e in entries] == ["please do it", "on it"]
     assert poster.seen == ["please do it"]
+
+
+async def test_a_forgotten_actor_is_rebuilt_by_its_factory_on_the_next_message() -> None:
+    built: list[int] = []
+
+    def factory(actor: Actor) -> RecorderAgent:
+        built.append(1)
+        return RecorderAgent(actor)
+
+    target = Actor(type="thing", key="x")
+    async with ephemeral_runtime() as rt:
+        rt.register_factory("thing", factory)
+        await rt.submit(target, _msg(target, {"n": 1}))
+        await asyncio.sleep(0.3)
+        assert rt.forget(target) is True
+        await rt.submit(target, _msg(target, {"n": 2}))
+        await asyncio.sleep(0.3)
+    assert len(built) == 2

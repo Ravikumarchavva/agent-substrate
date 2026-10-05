@@ -11,7 +11,7 @@ import pytest
 from substrate.testing.conformance.file_store import FileStoreConformance
 from substrate.testing.conformance.graph_store import GraphStoreConformance
 from substrate.testing.conformance.memory_store import MemoryStoreConformance
-from substrate.runtime.persistence.store import DurableRuntimeStore
+from substrate.runtime.persistence.store import RuntimeStore
 from substrate.testing.conformance.runtime_store import NOW, RuntimeStoreConformance
 from substrate.testing.conformance.short_term_memory import ShortTermMemoryConformance
 from substrate.testing.conformance.task_store import TaskStoreConformance
@@ -96,6 +96,6 @@ class TestPostgresRuntimeStore(RuntimeStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
         async for s in schema_store(tmp_path):
-            runtime = DurableRuntimeStore(s.database, clock=lambda: NOW)
+            runtime = RuntimeStore(s.database, clock=lambda: NOW)
             await runtime.start()
             yield runtime

@@ -151,6 +151,11 @@ class ChannelStore(Protocol):
         """The latest ``limit`` entries, oldest first."""
         ...
 
+    async def channel_wait(self, channel: str, after: int, timeout_s: float) -> bool:
+        """Return once the channel has an entry beyond ``after`` (``True``), or after ``timeout_s`` (``False``): what a
+        reader holds open instead of polling. May return early; the caller reads to find out."""
+        ...
+
     async def channel_delete(self, channel: str) -> None:
         """Remove the channel with its entries and members. Runs already woken finish on their own."""
         ...

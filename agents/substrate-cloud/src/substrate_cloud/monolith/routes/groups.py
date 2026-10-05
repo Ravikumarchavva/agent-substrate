@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from substrate.types import Actor
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
 from substrate_cloud.monolith.models import Group
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
@@ -36,6 +37,7 @@ class GroupIn(BaseModel):
 
 class GroupPatch(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=60)
+    token_cap: Optional[int] = Field(default=None, ge=1000, le=groups.MAX_TOKEN_CAP)
 
 
 class MemberOut(BaseModel):
@@ -56,6 +58,9 @@ class GroupOut(BaseModel):
     last_sender: Optional[str] = None
     unread: int = 0
     paused: bool = False
+    # What the agents have used in this group and the most they may.
+    tokens_used: int = 0
+    token_cap: int = 0
 
 
 class EntryOut(BaseModel):
@@ -148,6 +153,8 @@ async def _out(db: AsyncSession, store, group: Group) -> GroupOut:
         last_sender=names.get(str(last.sender), "Group") if last else None,
         unread=sum(1 for e in unseen if str(e.sender) != mine),
         paused=bool(last and last.kind.value == "system"),
+        tokens_used=await groups.tokens_used(store, group),
+        token_cap=group.token_cap,
     )
 
 
@@ -220,7 +227,11 @@ async def rename_group(
     group = await _owned(db, group_id, user)
     if body.name is not None:
         group.name = body.name.strip()
+    if body.token_cap is not None:
+        await groups.set_token_cap(_store(ctx), group, body.token_cap)
     await db.commit()
+    await db.refresh(group)  # updated_at is set by the database on update
+    await groups.refresh_members(db, ctx.runtime, group.id)
     return await _out(db, _store(ctx), group)
 
 
@@ -242,6 +253,7 @@ async def read_messages(
     group_id: uuid.UUID,
     after: int = -1,
     limit: int = 200,
+    wait: float = 0,
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
     ctx: ServerDependencies = Depends(get_ctx),
@@ -249,12 +261,19 @@ async def read_messages(
     group = await _owned(db, group_id, user)
     names = await groups.roster(db, group)
     mine = str(groups.user_actor(group.user_identifier))
-    entries = await _store(ctx).channel_read(
-        group.channel, after=after, limit=min(max(limit, 1), 500)
-    )
+    channel = group.channel
+    store = _store(ctx)
+    if wait > 0:
+        # Hold the request open until something is said (or the wait ends) rather than make the client ask again and again. The
+        # database connection goes back to the pool meanwhile.
+        await db.commit()
+        await store.channel_wait(channel, after, min(wait, 3.0))
+    entries = await store.channel_read(channel, after=after, limit=min(max(limit, 1), 500))
+    busy = await store.working([Actor.from_str(a) for a in names if a != mine])
     return MessagesOut(
         entries=[_entry(e, names, mine) for e in entries],
         latest=entries[-1].seq if entries else after,
+        working=[names[str(a)] for a in busy],
     )
 
 
@@ -311,6 +330,7 @@ async def add_member(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     await db.commit()
+    await groups.refresh_members(db, ctx.runtime, group.id)
     return await _out(db, store, group)
 
 
@@ -329,6 +349,7 @@ async def set_member_mode(
         raise HTTPException(404, "That agent is not in this group.")
     await groups.add_member(db, store, group, user, agent_id, _check_mode(body.mode))
     await db.commit()
+    await groups.refresh_members(db, ctx.runtime, group.id)
     return await _out(db, store, group)
 
 
@@ -347,6 +368,7 @@ async def remove_member(
         )
     await groups.remove_member(db, _store(ctx), group, agent_id)
     await db.commit()
+    await groups.refresh_members(db, ctx.runtime, group.id)
 
 
 # -- contacts ------------------------------------------------------------------------------------------------------------------------
@@ -373,6 +395,7 @@ async def put_contacts(
     body: ContactsIn,
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
 ):
     agent = await get_owned_agent(db, agent_id, user)
     if agent is None:

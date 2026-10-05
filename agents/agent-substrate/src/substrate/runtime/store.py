@@ -490,9 +490,12 @@ class RuntimeStore(ChannelStore, Protocol):
         """``accounts_exhausted`` for the accounts a run is charged to."""
         ...
 
-    async def erase(self, *, tenant: str, thread_id: str | None = None) -> int:
+    async def erase(
+        self, *, tenant: str, thread_id: str | None = None, agent: Actor | None = None
+    ) -> int:
         """Delete every run, log entry, message and signal belonging to a tenant
-        (or one of its threads). Returns the number of runs removed."""
+        (or one of its threads, or one of its actors, which also clears that actor's
+        budget account). Returns the number of runs removed."""
         ...
 
     async def prune(self, *, before: datetime) -> int:

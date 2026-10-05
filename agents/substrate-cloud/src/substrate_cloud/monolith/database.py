@@ -36,6 +36,7 @@ _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("scheduled_tasks", "last_claimed_at", "TIMESTAMPTZ"),
     ("scheduled_tasks", "ask_before_acting", "BOOLEAN NOT NULL DEFAULT TRUE"),
     ("user_preferences", "display_name", "VARCHAR"),
+    ("groups", "token_cap", "INTEGER NOT NULL DEFAULT 1000000"),
     ("scheduled_task_runs", "tokens", "INTEGER NOT NULL DEFAULT 0"),
     ("scheduled_task_runs", "cost_usd", "DOUBLE PRECISION NOT NULL DEFAULT 0"),
     ("file_metadata", "extracted_text", "TEXT"),

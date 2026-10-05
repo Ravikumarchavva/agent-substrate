@@ -17,7 +17,9 @@ from substrate.tools import ToolRisk
 from substrate.types import RunLogKind
 from substrate_cloud.shared.settings import settings
 from substrate_cloud.monolith.database import system_session
-from substrate_cloud.monolith.models import ScheduledTask, ScheduledTaskRun, Thread
+from substrate_cloud.monolith.models import Agent, ScheduledTask, ScheduledTaskRun, Thread
+from substrate_cloud.monolith.services.agents.assembly import assemble_agent
+from substrate_cloud.monolith.services.agents.service import AgentProfile
 from substrate_cloud.monolith.services.notification_service import notify, send_email
 from substrate_cloud.factory import (
     build_agent_for_thread,
@@ -177,10 +179,8 @@ async def execute_scheduled_task(
             # 2. Build lookback context
             lookback_block = format_lookback_context(recent_runs)
 
-            # 3. Build system instructions with lookback preamble
-            base_instructions = app_state.system_instructions
-            scheduled_instructions = (
-                f"{base_instructions}\n\n"
+            # 3. The task's own instructions, with what previous runs did
+            task_block = (
                 f"---\n"
                 f'**You are executing a scheduled task: "{task.name}"**\n'
                 f"Current date/time: {datetime.now(timezone.utc).isoformat()}\n\n"
@@ -190,30 +190,39 @@ async def execute_scheduled_task(
                 f"Build on past context. If this is a monitoring task and the "
                 f"condition is NOT met, respond with exactly: [SILENT_CHECK]\n"
             )
+            # Off means high-risk tools run on their own; destructive ones still ask.
+            approval_risk = None if task.ask_before_acting else ToolRisk.CRITICAL
 
-            # 4. Acquire bridge and build tools
-            bridge = await app_state.bridge_registry.acquire(str(task.thread_id))
-            tools = build_chat_tools(app_state.tools, bridge)
-
-            # 5. Build agent for the thread
-            agent = await build_agent_for_thread(
-                task.thread_id,
-                model_client=app_state.model_client,
-                tools=tools,
-                system_instructions=scheduled_instructions,
-                cfg=settings,
-                history=app_state.history,
-                short_term_memory=app_state.short_term_memory,
-                long_term_memory=app_state.long_term_memory,
-                user_id=str(task.user_id) if task.user_id else None,
-                tenant_id=thread.tenant_id,
-                runtime=app_state.runtime,
-                safety_middleware=app_state.safety_middleware,
-                # Off means high-risk tools run on their own; destructive ones still ask.
-                approval_required_risk=(
-                    None if task.ask_before_acting else ToolRisk.CRITICAL
-                ),
-            )
+            # 4-5. Build the agent. A task on an agent's conversation runs as that agent: its role, the tools it may use, its files.
+            workspace_id = None
+            agent_row = await db.get(Agent, thread.agent_id) if thread.agent_id else None
+            if agent_row is not None:
+                profile = AgentProfile.of(agent_row)
+                workspace_id = profile.workspace_id
+                agent = await assemble_agent(
+                    app_state,
+                    profile,
+                    session_id=task.thread_id,
+                    extra_instructions="\n\n" + task_block,
+                    approval_required_risk=approval_risk,
+                )
+            else:
+                bridge = await app_state.bridge_registry.acquire(str(task.thread_id))
+                agent = await build_agent_for_thread(
+                    task.thread_id,
+                    model_client=app_state.model_client,
+                    tools=build_chat_tools(app_state.tools, bridge),
+                    system_instructions=f"{app_state.system_instructions}\n\n{task_block}",
+                    cfg=settings,
+                    history=app_state.history,
+                    short_term_memory=app_state.short_term_memory,
+                    long_term_memory=app_state.long_term_memory,
+                    user_id=str(task.user_id) if task.user_id else None,
+                    tenant_id=thread.tenant_id,
+                    runtime=app_state.runtime,
+                    safety_middleware=app_state.safety_middleware,
+                    approval_required_risk=approval_risk,
+                )
 
             # 6. Submit to runtime
             msg = Message(
@@ -226,7 +235,10 @@ async def execute_scheduled_task(
                 ),
                 correlation_id=str(task.thread_id),
                 # Whose run this is, so tools that act for a person (memory) act for this one.
-                metadata={"user_id": str(task.user_id)} if task.user_id else {},
+                metadata={
+                    **({"user_id": str(task.user_id)} if task.user_id else {}),
+                    **({"workspace_id": workspace_id} if workspace_id else {}),
+                },
             )
 
             start = time.monotonic()

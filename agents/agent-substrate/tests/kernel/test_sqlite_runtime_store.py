@@ -8,7 +8,7 @@ from substrate.testing.conformance.runtime_store import NOW, RuntimeStoreConform
 from substrate.testing.runtime import runtime_store
 
 
-class TestDurableRuntimeStoreOnSqlite(RuntimeStoreConformance):
+class TestRuntimeStoreOnSqlite(RuntimeStoreConformance):
     @pytest.fixture
     async def store(self, tmp_path):
         store = runtime_store(tmp_path / "store", clock=lambda: NOW)

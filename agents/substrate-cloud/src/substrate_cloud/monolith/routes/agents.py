@@ -21,6 +21,12 @@ from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.stream.runs import last_message
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.services.agents.delegation import TOOL_NAME
+from substrate_cloud.monolith.services.groups.service import (
+    groups_of,
+    leave_all_groups,
+    refresh_agent,
+    refresh_members,
+)
 from substrate_cloud.monolith.services.agents.service import (
     MAX_AGENTS_PER_USER,
     ensure_main_thread,
@@ -197,7 +203,10 @@ async def update_agent(
         agent.allowed_tools = body.allowed_tools
     await db.flush()
     await db.refresh(agent)
-    return _out(agent, (await main_threads(db, [agent.id])).get(agent.id))
+    out = _out(agent, (await main_threads(db, [agent.id])).get(agent.id))
+    await db.commit()
+    await refresh_agent(db, ctx.runtime, agent_id)
+    return out
 
 
 @router.post("/{agent_id}/thread", response_model=ThreadRef)
@@ -234,5 +243,10 @@ async def delete_agent(
         )
         for key, _size, _mtime in await store.list_prefix(prefix):
             await store.delete(key)
+    group_ids = await groups_of(db, agent_id)
     await db.delete(agent)
-    await db.flush()
+    await db.commit()
+    if ctx.runtime is not None:
+        await leave_all_groups(ctx.runtime.store, ctx.runtime, agent_id, group_ids)
+        for group_id in group_ids:
+            await refresh_members(db, ctx.runtime, group_id)

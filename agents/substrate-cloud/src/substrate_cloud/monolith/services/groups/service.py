@@ -26,8 +26,9 @@ from substrate_cloud.shared.auth.claims import AuthClaims
 
 MEMBER_TYPE = "member"
 MAX_MEMBERS = 12
-# What one group may spend in all, however long it runs and however many agents talk: the bound that replaces a cap on replies.
-GROUP_TOKEN_CAP = 1_000_000
+# What a new group may spend in all, however long it runs and however many agents talk: the bound that replaces a cap on replies.
+DEFAULT_TOKEN_CAP = 1_000_000
+MAX_TOKEN_CAP = 100_000_000
 MODES = {m.value for m in Mode}
 
 
@@ -132,10 +133,17 @@ async def create_group(
         ],
         breaker=group.breaker,
     )
-    await store.account_limit(
-        f"channel:{group.channel}", ExecutionBudget(max_tokens=GROUP_TOKEN_CAP)
-    )
+    await set_token_cap(store, group, group.token_cap)
     return group
+
+
+async def set_token_cap(store: Any, group: Group, cap: int) -> None:
+    group.token_cap = cap
+    await store.account_limit(f"channel:{group.channel}", ExecutionBudget(max_tokens=cap))
+
+
+async def tokens_used(store: Any, group: Group) -> int:
+    return (await store.account_spend(f"channel:{group.channel}")).tokens
 
 
 async def add_member(
@@ -238,3 +246,36 @@ async def set_contacts(
         else:
             db.add(AgentContact(agent_id=agent.id, contact_id=contact_id, note=note))
     await db.flush()
+
+
+async def refresh_members(db: AsyncSession, runtime: Any, group_id: uuid.UUID) -> None:
+    """Make every member of a group rebuild from current data on its next message: who is in the group, what it is called, how each agent is
+    defined. A member holds its roster and profile from when it was built, so this is called after any change to them."""
+    if runtime is None:
+        return
+    for member, _ in await group_members(db, group_id):
+        runtime.forget(member_actor(member.agent_id, group_id))
+
+
+async def groups_of(db: AsyncSession, agent_id: uuid.UUID) -> list[uuid.UUID]:
+    rows = await db.execute(
+        select(GroupMember.group_id).where(GroupMember.agent_id == agent_id)
+    )
+    return [g for (g,) in rows.all()]
+
+
+async def refresh_agent(db: AsyncSession, runtime: Any, agent_id: uuid.UUID) -> None:
+    """The same, for every group an agent is in, after its profile or contacts changed (the others know it by name too)."""
+    for group_id in await groups_of(db, agent_id):
+        await refresh_members(db, runtime, group_id)
+
+
+async def leave_all_groups(
+    store: Any, runtime: Any, agent_id: uuid.UUID, group_ids: list[uuid.UUID]
+) -> None:
+    """After an agent is deleted: it stops being woken in its groups, and the others rebuild without it."""
+    for group_id in group_ids:
+        actor = member_actor(agent_id, group_id)
+        await store.channel_remove_member(f"group/{group_id}", actor)
+        if runtime is not None:
+            runtime.forget(actor)

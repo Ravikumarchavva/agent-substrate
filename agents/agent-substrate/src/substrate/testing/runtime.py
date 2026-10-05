@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from substrate.runtime.runtime import Runtime
-from substrate.runtime.persistence.store import DurableRuntimeStore
+from substrate.runtime.persistence.store import RuntimeStore
 from substrate.stores import Store
 
 
@@ -26,7 +26,7 @@ async def ephemeral_runtime(**options: Any) -> AsyncGenerator[Runtime]:
             yield runtime
 
 
-class _FolderRuntimeStore(DurableRuntimeStore):
+class _FolderRuntimeStore(RuntimeStore):
     """A runtime store that owns the folder store it runs on, for tests that use a store without a ``Runtime``."""
 
     def __init__(self, folder: str | Path | None, **options: Any) -> None:
@@ -47,7 +47,7 @@ class _FolderRuntimeStore(DurableRuntimeStore):
             shutil.rmtree(self._folder, ignore_errors=True)
 
 
-def runtime_store(folder: str | Path | None = None, **options: Any) -> DurableRuntimeStore:
+def runtime_store(folder: str | Path | None = None, **options: Any) -> RuntimeStore:
     """A runtime store on a store in ``folder`` (a temporary one, removed on close, when none is given).
     ``start()`` opens it and ``aclose()`` closes it."""
     return _FolderRuntimeStore(folder, **options)

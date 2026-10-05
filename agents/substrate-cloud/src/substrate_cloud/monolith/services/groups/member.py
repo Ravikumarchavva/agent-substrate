@@ -13,7 +13,11 @@ from substrate_cloud.monolith.models import Agent, Group, GroupMember
 from substrate_cloud.monolith.routes.chat_intents import _tool_name
 from substrate_cloud.monolith.services.agents.assembly import assemble_agent
 from substrate_cloud.monolith.services.agents.service import AgentProfile
-from substrate_cloud.monolith.services.agents.delegation import TOOL_NAME, AskAgentTool, contacts_for
+from substrate_cloud.monolith.services.agents.delegation import (
+    TOOL_NAME,
+    AskAgentTool,
+    contacts_for,
+)
 from substrate_cloud.monolith.services.groups.service import (
     MEMBER_TYPE,
     parse_member,
@@ -57,14 +61,18 @@ def register_member_factory(runtime: Any, get_deps: Callable[[], Any]) -> None:
             names = await roster(db, group)
             me = agent.name
             title = group.name
-        contacts = await contacts_for(deps, profile.tenant_id, profile.user_id, agent_id)
+        contacts = await contacts_for(
+            deps, profile.tenant_id, profile.user_id, agent_id
+        )
         permitted = profile.allowed_tools is None or TOOL_NAME in profile.allowed_tools
         return await assemble_agent(
             deps,
             profile,
             session_id=actor.key,
             extra_instructions=group_instructions(title, me, names),
-            extra_tools=[AskAgentTool(deps, contacts, _tool_name)] if contacts and permitted else [],
+            extra_tools=[AskAgentTool(deps, contacts, _tool_name)]
+            if contacts and permitted
+            else [],
             register=False,
             name=MEMBER_TYPE,
             channel=channel_member_config(

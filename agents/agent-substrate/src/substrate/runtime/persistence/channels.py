@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
@@ -101,11 +102,12 @@ def _entry(row: Row) -> ChannelEntry:
 
 
 class Channels:
-    """Mixed into ``DurableRuntimeStore``; uses its transaction helper, clock and inbox delivery."""
+    """Mixed into ``RuntimeStore``; uses its transaction helper, clock and inbox delivery."""
 
     _clock: Callable[[], datetime]
     _tx: Callable[[Callable[[Tx], Awaitable[Any]]], Awaitable[Any]]
     _deliver: Callable[..., Awaitable[Any]]
+    _channel_events: dict[str, asyncio.Event]
 
     async def channel_open(
         self,
@@ -194,11 +196,32 @@ class Channels:
 
         return await self._tx(do)
 
+    async def channel_wait(self, channel: str, after: int, timeout_s: float) -> bool:
+        loop = asyncio.get_running_loop()
+        end = loop.time() + timeout_s
+        while True:
+            (last,) = await self.channel_last(channel, 1) or [None]
+            if last is not None and last.seq > after:
+                return True
+            left = end - loop.time()
+            if left <= 0:
+                return False
+            event = self._channel_events.setdefault(channel, asyncio.Event())
+            event.clear()
+            # Another process's append cannot set this event, so look again every second.
+            try:
+                await asyncio.wait_for(event.wait(), timeout=min(left, 1.0))
+            except asyncio.TimeoutError:
+                pass
+
     async def channel_delete(self, channel: str) -> None:
         async def do(tx: Tx) -> None:
             await tx.lock(f"channel:{channel}")
             for table in ("rt_channel_entries", "rt_channel_members", "rt_channels"):
                 await tx.execute(f"DELETE FROM {table} WHERE channel = ?", channel)
+            await tx.execute(
+                "DELETE FROM rt_accounts WHERE account = ?", f"channel:{channel}"
+            )
 
         await self._tx(do)
 
@@ -346,7 +369,10 @@ class Channels:
                 woken.append(target)
             return AppendResult(seq=seq, latest=seq, woken=tuple(woken))
 
-        return await self._tx(do)
+        result = await self._tx(do)
+        if result.seq is not None and (event := self._channel_events.get(channel)):
+            event.set()
+        return result
 
     async def _write_entry(
         self,

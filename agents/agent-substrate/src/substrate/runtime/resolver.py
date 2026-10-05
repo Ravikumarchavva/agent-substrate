@@ -141,6 +141,11 @@ class ActorResolver:
         logger.debug("Evicted idle actor %s", actor)
         return True
 
+    def forget(self, actor: Actor) -> bool:
+        """Drop a live actor that was built by a factory, so the next message builds it afresh from whatever it is
+        made of now. A pinned (explicitly registered) actor stays. Work already running keeps its instance."""
+        return self._evict(actor)
+
     # -- introspection --------------------------------------------------------
 
     @property

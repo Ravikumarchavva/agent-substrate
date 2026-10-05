@@ -6,6 +6,7 @@ its run would."""
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 
 import pytest
 
@@ -218,3 +219,76 @@ class ChannelTests:
         assert await store.channel_members(CH) == []
         await store.channel_open(CH, members=[Member(agent=SCOUT)])
         assert (await store.channel_append(CH, sender=HUMAN, text="y")).seq == 0
+
+    async def test_a_waiter_returns_when_an_entry_arrives_and_times_out_when_none_does(
+        self, store
+    ):
+        await self.open(store)
+        assert await store.channel_wait(CH, -1, 0.1) is False
+        waiter = asyncio.create_task(store.channel_wait(CH, -1, 5.0))
+        await asyncio.sleep(0.05)
+        await store.channel_append(CH, sender=HUMAN, text="x")
+        assert await asyncio.wait_for(waiter, 3.0) is True
+        assert await store.channel_wait(CH, 0, 0.1) is False
+
+    async def test_erasing_an_actor_removes_its_runs_mail_and_budget_but_not_others(
+        self, store
+    ):
+        from substrate.runtime.store import Commit, NewEntry, Spend
+
+        await self.open(store)
+        await store.channel_append(CH, sender=HUMAN, text="hi")
+        leases = await store.lease(
+            worker_id="w",
+            capacity=5,
+            lease_s=30,
+            now=datetime(2030, 1, 1, tzinfo=timezone.utc),
+        )
+        for lease in leases:
+            await store.commit(
+                lease,
+                Commit(
+                    entries=(NewEntry(kind="llm.call", spend=Spend(tokens=5, turns=1)),)
+                ),
+            )
+        assert (await store.account_spend(f"agent:{SCOUT}")).tokens == 5
+        removed = await store.erase(tenant="default", agent=SCOUT)
+        assert removed == 1
+        assert (await store.account_spend(f"agent:{SCOUT}")).tokens == 0
+        assert (await store.account_spend(f"agent:{QUILL}")).tokens == 5
+        assert await store.erase(tenant="default", agent=SCOUT) == 0
+
+    async def test_a_deleted_channel_takes_its_budget_account_with_it(self, store):
+        await self.open(store)
+        await store.channel_append(CH, sender=HUMAN, text="hi")
+        leases = await store.lease(
+            worker_id="w",
+            capacity=1,
+            lease_s=30,
+            now=datetime(2030, 1, 1, tzinfo=timezone.utc),
+        )
+        from substrate.runtime.store import Commit, NewEntry, Spend
+
+        await store.commit(
+            leases[0],
+            Commit(
+                entries=(NewEntry(kind="llm.call", spend=Spend(tokens=9, turns=1)),)
+            ),
+        )
+        assert (await store.account_spend(f"channel:{CH}")).tokens == 9
+        await store.channel_delete(CH)
+        assert (await store.account_spend(f"channel:{CH}")).tokens == 0
+
+    async def test_erasing_a_tenant_removes_its_channels_and_leaves_other_tenants(
+        self, store
+    ):
+        await store.channel_open("a", tenant="t1", members=[Member(agent=SCOUT)])
+        await store.channel_open("b", tenant="t2", members=[Member(agent=QUILL)])
+        await store.channel_append("a", sender=HUMAN, text="x")
+        await store.channel_append("b", sender=HUMAN, text="y")
+        await store.erase(tenant="t1")
+        assert (
+            await store.channel_read("a") == []
+            and await store.channel_members("a") == []
+        )
+        assert [e.text for e in await store.channel_read("b")] == ["y"]

@@ -4,7 +4,7 @@
     "**/__pycache__",
     "src/substrate/testing"
   ],
-  "pythonVersion": "3.13",
+  "pythonVersion": "3.14",
   "typeCheckingMode": "basic",
   "reportMissingImports": "none",
   "reportMissingTypeStubs": false,

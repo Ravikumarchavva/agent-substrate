@@ -20,7 +20,11 @@ Python async AI-agent framework with two deployment modes:
 1. **Monolith** — single FastAPI server at `apps/substrate-cloud/src/substrate_cloud/monolith/`
 2. **Microservices** — 12 independent FastAPI services at `apps/substrate-cloud/src/substrate_cloud/services/`
 
-Stack: Python 3.13, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 18, Redis 7, OpenTelemetry → Tempo.
+Stack: Python 3.14, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 18, Redis 7, OpenTelemetry → Tempo.
+
+Python: `.python-version` is the one pin (the Makefile and CI read it); `requires-python` is `>=3.13` only because the PaddleOCR
+`document-intelligence` images install this package on 3.13 — Paddle publishes no cp314 wheel yet (3.4.0 stops at cp313). When one
+appears, raise every `requires-python` to 3.14 and move those three Dockerfiles up.
 
 Package manager: **`uv`** (never `pip`).
 

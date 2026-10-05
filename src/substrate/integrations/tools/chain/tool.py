@@ -261,7 +261,7 @@ def _wrap_user_code(code: str) -> str:
         "import asyncio as _asyncio\n\n"
         "async def __chain__():\n"
         f"{indented}\n\n"
-        "__chain_result__ = _asyncio.get_event_loop().run_until_complete(__chain__())\n"
+        "__chain_result__ = _asyncio.run(__chain__())\n"
         "print('__chain_return__:', __chain_result__)\n"
     )
 

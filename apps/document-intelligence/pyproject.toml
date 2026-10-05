@@ -2,7 +2,7 @@
 name = "document-intelligence"
 version = "0.1.0"
 description = "Document extraction over HTTP: layout-aware OCR, charts and tables as images, Office conversion, and a pre-parse security scan."
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 # What every mode needs. The OCR engines are in the extras below, because they are gigabytes and platform-specific.
 dependencies = [
     "agent-substrate[logging]",
@@ -11,7 +11,7 @@ dependencies = [
     "fastapi>=0.128.0",
     "uvicorn[standard]>=0.34.0",
     "pydantic-settings>=2.12.0",
-    "pillow>=10.4.0",
+    "pillow>=12.0.0",
     "numpy>=1.26.0",
     # the structural/security scan of an upload, before any parser touches it
     "doc-firewall>=0.5.1",
@@ -20,7 +20,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# PaddleOCR layout/chart/table extraction, CPU wheel — pick this or `paddle-gpu`, not both
+# PaddleOCR layout/chart/table extraction, CPU wheel — pick this or `paddle-gpu`, not both. Paddle publishes no cp314 wheel yet (3.4.0
+# stops at cp313), so the images that install these extras run Python 3.13; when one appears, raise every `requires-python` to 3.14.
 paddle = ["paddleocr[doc-parser]>=3.7.0", "paddlepaddle==3.3.0"]
 # same, CUDA wheel, and NVML for the GPU detection chain
 paddle-gpu = ["paddleocr[doc-parser]>=3.7.0", "paddlepaddle-gpu==3.3.0", "nvidia-ml-py>=12.0"]

@@ -7,14 +7,20 @@ agents own what to say.
 
 Attention
 ---------
-Every member has a ``Mode``. An append wakes a member only if its mode says the entry
-deserves a deliberation — decided here, cheaply, before any model runs:
+Every member has a ``Mode``, and an append wakes a member only if its mode says the entry
+deserves a look — decided here, cheaply, before any model runs. Why it woke is the wake's
+``reason`` (``WakeReason``):
 
-* ``ALL``      — every entry from anyone else.
-* ``MENTIONS`` — an entry that @mentions it, says @everyone, or replies to its own entry.
-* ``MUTED``    — only an entry that @mentions it by name.
+* ``DIRECT``  — the entry is for it: it @mentions it, says @everyone, or replies to its own entry.
+* ``ENGAGED`` — it is not for it, but the member was addressed or spoke within the channel's
+  ``engage_s`` and is still part of that conversation, as a person who was just talked to stays in it.
+* ``AMBIENT`` — nothing to do with it; it only listens to everything.
 
-A wake is a small message in the member's inbox (``data = {channel, seq}``); a burst
+``ALL`` is woken by every entry from anyone else (as ``AMBIENT`` when nothing else applies); ``MENTIONS``
+by ``DIRECT``, and by ``ENGAGED`` while it is part of a conversation; ``MUTED`` only when named.
+Being named, replied to or addressed to everyone, or speaking, begins the engagement window.
+
+A wake is a small message in the member's inbox (``data = {channel, seq, reason}``); a burst
 becomes one run because the member is already active for the later ones. What to read is
 always the log after the member's cursor, never the wake message.
 
@@ -46,6 +52,12 @@ class Mode(StrEnum):
     ALL = "all"
     MENTIONS = "mentions"
     MUTED = "muted"
+
+
+class WakeReason(StrEnum):
+    DIRECT = "direct"
+    ENGAGED = "engaged"
+    AMBIENT = "ambient"
 
 
 class EntryKind(StrEnum):
@@ -117,8 +129,16 @@ class ChannelStore(Protocol):
         tenant: str = "default",
         members: Sequence[Member] = (),
         breaker: int = 40,
+        engage_s: float = 600.0,
     ) -> None:
-        """Create the channel, or leave it as it is if it exists (members are added, not replaced)."""
+        """Create the channel, or leave it as it is if it exists (members are added, not replaced). ``engage_s`` is how long
+        a member keeps following a conversation it was drawn into (see ``WakeReason.ENGAGED``)."""
+        ...
+
+    async def channel_configure(
+        self, channel: str, *, breaker: int | None = None, engage_s: float | None = None
+    ) -> None:
+        """Change an open channel's breaker or engagement window; what is not given is left as it is."""
         ...
 
     async def channel_set_member(self, channel: str, member: Member) -> None:
@@ -178,5 +198,6 @@ __all__ = [
     "EntryKind",
     "Member",
     "Mode",
+    "WakeReason",
     "mentions_in",
 ]

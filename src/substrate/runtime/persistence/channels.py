@@ -16,6 +16,7 @@ from substrate.runtime.channel import (
     EntryKind,
     Member,
     Mode,
+    WakeReason,
 )
 from substrate.runtime.message import DataPayload, Message
 from substrate.runtime.persistence.accounts import exhausted
@@ -90,6 +91,15 @@ def _schema_entry_data(database: Database) -> str:
     return f"ALTER TABLE rt_channel_entries ADD COLUMN {exists}data_json TEXT;"
 
 
+def _schema_engagement(database: Database) -> str:
+    """How long a member follows a conversation it was drawn into, and until when it still does."""
+    exists = "IF NOT EXISTS " if database.dialect == "postgresql" else ""
+    return (
+        f"ALTER TABLE rt_channels ADD COLUMN {exists}engage_s DOUBLE PRECISION NOT NULL DEFAULT 600;\n"
+        f"ALTER TABLE rt_channel_members ADD COLUMN {exists}engaged_until DOUBLE PRECISION;"
+    )
+
+
 _SYSTEM = Actor("system", "channel")
 
 
@@ -124,18 +134,32 @@ class Channels:
         tenant: str = "default",
         members: Sequence[Member] = (),
         breaker: int = 40,
+        engage_s: float = 600.0,
     ) -> None:
         async def do(tx: Tx) -> None:
             await tx.lock(f"channel:{channel}")
             await tx.execute(
-                "INSERT INTO rt_channels (channel, tenant, breaker) VALUES (?, ?, ?) "
+                "INSERT INTO rt_channels (channel, tenant, breaker, engage_s) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT (channel) DO NOTHING",
                 channel,
                 tenant,
                 breaker,
+                engage_s,
             )
             for m in members:
                 await self._set_member(tx, channel, m)
+
+        await self._tx(do)
+
+    async def channel_configure(
+        self, channel: str, *, breaker: int | None = None, engage_s: float | None = None
+    ) -> None:
+        async def do(tx: Tx) -> None:
+            await tx.lock(f"channel:{channel}")
+            if breaker is not None:
+                await tx.execute("UPDATE rt_channels SET breaker = ? WHERE channel = ?", breaker, channel)
+            if engage_s is not None:
+                await tx.execute("UPDATE rt_channels SET engage_s = ? WHERE channel = ?", engage_s, channel)
 
         await self._tx(do)
 
@@ -274,7 +298,7 @@ class Channels:
                 )
                 if done is not None:
                     return AppendResult(seq=done["seq"], latest=latest)
-            by_agent = sender.type == "agent"
+            by_agent = sender.type != "user"  # anything that is not a person: ``agent``, ``member``…
             streak = ch["streak"]
             if by_agent and ch["paused"]:
                 return AppendResult(paused=True, latest=latest)
@@ -343,15 +367,38 @@ class Channels:
                 )
                 replied_to = row["sender"] if row else None
             woken: list[Actor] = []
+            now = self._clock().timestamp()
+            window = now + ch["engage_s"]
+            # What it is to speak is to be part of the conversation that follows.
+            await tx.execute(
+                "UPDATE rt_channel_members SET engaged_until = ? WHERE channel = ? AND member = ?",
+                window,
+                channel,
+                str(sender),
+            )
             members = await tx.fetchall(
-                "SELECT member, mode FROM rt_channel_members WHERE channel = ? AND member != ? ORDER BY member",
+                "SELECT member, mode, engaged_until FROM rt_channel_members WHERE channel = ? AND member != ? ORDER BY member",
                 channel,
                 str(sender),
             )
             for m in members:
                 address = m["member"]
-                if not _attends(Mode(m["mode"]), address, tuple(mentions), replied_to):
+                reason = _wake_reason(
+                    Mode(m["mode"]),
+                    address,
+                    tuple(mentions),
+                    replied_to,
+                    engaged=(m["engaged_until"] or 0) > now,
+                )
+                if reason is None:
                     continue
+                if reason is WakeReason.DIRECT:
+                    await tx.execute(
+                        "UPDATE rt_channel_members SET engaged_until = ? WHERE channel = ? AND member = ?",
+                        window,
+                        channel,
+                        address,
+                    )
                 target = Actor.from_str(address)
                 accounts = (
                     f"channel:{channel}",
@@ -368,7 +415,9 @@ class Channels:
                             id=f"chan:{channel}:{seq}:{address}",
                             target=target,
                             sender=sender,
-                            payload=DataPayload(data={"channel": channel, "seq": seq}),
+                            payload=DataPayload(
+                                data={"channel": channel, "seq": seq, "reason": reason.value}
+                            ),
                             correlation_id=f"chan:{channel}",
                         ),
                         tenant=ch["tenant"],
@@ -418,12 +467,20 @@ class Channels:
         )
 
 
-def _attends(
-    mode: Mode, address: str, mentions: tuple[str, ...], replied_to: str | None
-) -> bool:
+def _wake_reason(
+    mode: Mode,
+    address: str,
+    mentions: tuple[str, ...],
+    replied_to: str | None,
+    *,
+    engaged: bool,
+) -> WakeReason | None:
+    """Why an entry should wake a member in ``mode``, or ``None`` for no wake. Cheap on purpose: no model runs to decide it."""
     named = address in mentions
-    if mode is Mode.ALL:
-        return True
     if mode is Mode.MUTED:
-        return named
-    return named or EVERYONE in mentions or replied_to == address
+        return WakeReason.DIRECT if named else None
+    if named or EVERYONE in mentions or replied_to == address:
+        return WakeReason.DIRECT
+    if engaged:
+        return WakeReason.ENGAGED
+    return WakeReason.AMBIENT if mode is Mode.ALL else None

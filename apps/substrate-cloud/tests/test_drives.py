@@ -194,7 +194,7 @@ async def test_a_members_code_reads_what_the_user_shared_and_what_it_makes_lands
             up = await c.post(f"/groups/{group['id']}/files", files={"file": ("brief.txt", b"hello", "text/plain")})
             assert up.status_code == 201
 
-            await c.post(f"/groups/{group['id']}/messages", json={"text": "Summarise the brief."})
+            await c.post(f"/groups/{group['id']}/messages", json={"text": "@Scout summarise the brief."})
             for _ in range(80):
                 await asyncio.sleep(0.5)
                 if len((await c.get(f"/groups/{group['id']}/messages")).json()["entries"]) >= 2:
@@ -209,5 +209,47 @@ async def test_a_members_code_reads_what_the_user_shared_and_what_it_makes_lands
             assert {f["name"] for f in (await c.get(f"/groups/{group['id']}/files")).json()} == {"brief.txt", "summary.txt"}
             assert (await c.get("/workspace/file", params={"thread_id": home, "path": "mine.txt"})).content == b"private"
             assert (await c.get("/workspace/file", params={"thread_id": drive, "path": "mine.txt"})).status_code == 404  # the agent's own stays its own
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_a_member_sees_a_shared_picture_and_attaches_what_its_code_made():
+    import asyncio
+    import io
+
+    from PIL import Image
+
+    from substrate.models import Modality, ModelCapabilities
+    from substrate.testing.scripted import ScriptedModel, ToolCall
+    from substrate.types import MediaBlock
+
+    async with session() as c:
+        if not any(getattr(t, "name", "") == "code_interpreter" for t in app.state.ctx.tools.all()):
+            pytest.skip("no sandbox on this host")
+        try:
+            model = ScriptedModel(
+                ToolCall("code_interpreter", {"code": "open('/groups/trip/caption.txt', 'w').write('a blue square')"}),
+                ToolCall("attach", {"path": "/groups/trip/caption.txt"}),
+                "Here is the caption.",
+            )
+            model.capabilities = ModelCapabilities(model_id="sees", input_modalities=frozenset({Modality.TEXT, Modality.IMAGE}))
+            app.state.ctx.model_client = model
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"]}]})).json()
+            png = io.BytesIO()
+            Image.new("RGB", (40, 40), (0, 0, 255)).save(png, "PNG")
+            up = (await c.post(f"/groups/{group['id']}/files", files={"file": ("square.png", png.getvalue(), "image/png")})).json()
+
+            await c.post(f"/groups/{group['id']}/messages", json={"text": "@Scout caption this", "attachments": [up]})
+            for _ in range(80):
+                await asyncio.sleep(0.5)
+                entries = (await c.get(f"/groups/{group['id']}/messages")).json()["entries"]
+                if len(entries) >= 2:
+                    break
+            reply = entries[-1]
+            assert reply["text"] == "Here is the caption." and [a["name"] for a in reply["attachments"]] == ["caption.txt"]
+            assert any(isinstance(b, MediaBlock) and b.filename == "square.png" for m in model.seen[0] for b in m.content)
+            assert "a blue square" in (await c.get("/files/object", params={"key": reply["attachments"][0]["key"]})).text
         finally:
             await _wipe(c.tenant)

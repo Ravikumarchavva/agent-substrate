@@ -222,8 +222,11 @@ async def chat(
             raise HTTPException(status_code=422, detail="messages[] must not be empty")
         display_content = body.messages[-1].content
 
+        # An agent thinks with its own model in a conversation with it, whatever the composer's picker says.
         selected_model = (
-            body.model or getattr(request.app.state, "chat_model", "")
+            (thread_agent.model if thread_agent is not None else None)
+            or body.model
+            or getattr(request.app.state, "chat_model", "")
         ).strip()
         _api_keys = getattr(ctx, "api_keys", None) or getattr(
             request.app.state, "api_keys", {}

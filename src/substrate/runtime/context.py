@@ -262,9 +262,11 @@ class RunContext:
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        client: ChatModel | None = None,
     ) -> LLMResponse:  # noqa: B008
-        """A journaled model call. A replay returns the recorded response and never re-bills."""
-        client = self._llm_client
+        """A journaled model call. A replay returns the recorded response and never re-bills. ``client`` makes the call with another
+        model than the agent's own (a cheap one for a quick decision); it is charged to the run like any call."""
+        client = client or self._llm_client
         if client is None:
             raise RuntimeError(
                 "no LLM client: set agent.model before registering the agent"
@@ -735,6 +737,21 @@ class RunContext:
             "channel.post", {"channel": channel, "text": text}, append, idempotent=True
         )
         return AppendResult.model_validate(outcome.value)
+
+    async def recall_channel(
+        self, channel: str, *, before: int, limit: int = 6
+    ) -> list[ChannelEntry]:
+        """The ``limit`` entries just before ``before``, without moving any cursor: what was said earlier, for context. Journaled, so a
+        replay sees what the first attempt saw."""
+
+        async def read() -> JsonObject:
+            entries = await self._store.channel_read(channel, after=max(-1, before - limit - 1), limit=limit)
+            return {"entries": [e.model_dump(mode="json") for e in entries if e.seq < before]}
+
+        outcome = await self._journal.effect(
+            "channel.recall", {"channel": channel, "before": before}, read, idempotent=True
+        )
+        return [ChannelEntry.model_validate(e) for e in outcome.value["entries"]]
 
     async def read_channel(
         self, channel: str, *, limit: int = 200

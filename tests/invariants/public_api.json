@@ -349,6 +349,7 @@
     "StoreStats",
     "Subscription",
     "Suspend",
+    "WakeReason",
     "Worker",
     "mentions_in"
   ],

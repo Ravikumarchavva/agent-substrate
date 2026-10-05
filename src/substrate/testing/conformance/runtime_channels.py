@@ -15,6 +15,7 @@ from substrate.runtime.channel import (
     EntryKind,
     Member,
     Mode,
+    WakeReason,
 )
 from substrate.types.identity import Actor
 
@@ -183,6 +184,28 @@ class ChannelTests:
         r = await store.channel_append(CH, sender=SCOUT, text="back")
         assert r.seq is not None and not r.paused
 
+    async def test_the_breaker_counts_every_speaker_that_is_not_a_person(self, store):
+        """Members of a platform's groups are ``member`` actors, not ``agent`` ones: whoever is not a person is an agent for this."""
+        a, b = Actor("member", "a@1"), Actor("member", "b@1")
+        await store.channel_open(CH, members=[Member(agent=a), Member(agent=b)], breaker=2)
+        await store.channel_append(CH, sender=HUMAN, text="go")
+        for sender in (a, b):
+            assert not (await store.channel_append(CH, sender=sender, text="x")).paused
+        assert (await store.channel_append(CH, sender=a, text="over")).paused
+
+    async def test_a_channels_breaker_and_window_can_be_changed_after_it_is_open(self, store):
+        await self.open(store, breaker=40)
+        await store.channel_configure(CH, breaker=2)
+        await store.channel_append(CH, sender=HUMAN, text="go")
+        for sender in (SCOUT, QUILL):
+            assert not (await store.channel_append(CH, sender=sender, text="x")).paused
+        assert (await store.channel_append(CH, sender=SCOUT, text="over")).paused
+        await store.channel_configure(CH, engage_s=0)  # leaves the breaker as it is
+        await store.channel_append(CH, sender=HUMAN, text="carry on")
+        assert (await store.channel_append(CH, sender=SCOUT, text="a")).paused is False
+        assert (await store.channel_append(CH, sender=QUILL, text="b")).paused is False
+        assert (await store.channel_append(CH, sender=SCOUT, text="c")).paused
+
     async def test_removing_a_member_stops_its_wakes(self, store):
         await self.open(store)
         await store.channel_remove_member(CH, MAX)
@@ -307,3 +330,51 @@ class ChannelTests:
             first.data == {"attachments": [{"name": "a.pdf", "size": 3}]}
             and second.data == {}
         )
+
+    # -- why a member was woken, and following a conversation one is part of ------------------------------------------------------------
+
+    async def latest_reason(self, store, agent) -> str | None:
+        """Why the member was woken by the newest entry that woke it (its inbox keeps the earlier wakes too)."""
+        wakes = sorted(await store.drain(agent), key=lambda w: _data(w)["seq"])
+        return _data(wakes[-1])["reason"] if wakes else None
+
+    async def test_a_wake_says_why_the_member_was_woken(self, store):
+        await self.open(store, modes={QUILL: Mode.MENTIONS})
+        r = await store.channel_append(CH, sender=HUMAN, text="@Scout look", mentions=[str(SCOUT)])
+        assert await self.latest_reason(store, SCOUT) == WakeReason.DIRECT  # named
+        assert await self.latest_reason(store, MAX) == WakeReason.AMBIENT  # listening to everything, not addressed
+        assert QUILL not in r.woken  # only wants what is for it
+
+    async def test_everyone_and_a_reply_to_ones_own_entry_are_addressed(self, store):
+        await self.open(store, modes={QUILL: Mode.MENTIONS})
+        await store.channel_append(CH, sender=HUMAN, text="all", mentions=[EVERYONE])
+        assert await self.latest_reason(store, QUILL) == WakeReason.DIRECT
+        own = await store.channel_append(CH, sender=QUILL, text="mine")
+        await store.channel_append(CH, sender=HUMAN, text="re", reply_to=own.seq)
+        assert await self.latest_reason(store, QUILL) == WakeReason.DIRECT
+
+    async def test_a_member_that_was_addressed_follows_the_conversation_without_being_named_again(self, store):
+        await self.open(store, modes={SCOUT: Mode.MENTIONS, QUILL: Mode.MENTIONS})
+        await store.channel_append(CH, sender=HUMAN, text="@Scout capital of Japan?", mentions=[str(SCOUT)])
+        r = await store.channel_append(CH, sender=HUMAN, text="and of Korea?")  # no one is named
+        assert SCOUT in r.woken and await self.latest_reason(store, SCOUT) == WakeReason.ENGAGED
+        assert QUILL not in r.woken  # it was never part of this
+
+    async def test_speaking_engages_a_member_too(self, store):
+        await self.open(store, modes={SCOUT: Mode.MENTIONS, QUILL: Mode.MENTIONS})
+        await store.channel_append(CH, sender=SCOUT, text="Seoul.")  # it spoke unprompted
+        r = await store.channel_append(CH, sender=HUMAN, text="thanks")
+        assert SCOUT in r.woken and await self.latest_reason(store, SCOUT) == WakeReason.ENGAGED
+        assert QUILL not in r.woken
+
+    async def test_a_window_of_no_time_never_engages(self, store):
+        await store.channel_open(CH, members=[Member(agent=SCOUT, mode=Mode.MENTIONS)], engage_s=0)
+        await store.channel_append(CH, sender=HUMAN, text="@Scout hi", mentions=[str(SCOUT)])
+        r = await store.channel_append(CH, sender=HUMAN, text="and?")
+        assert SCOUT not in r.woken
+
+    async def test_a_muted_member_never_follows_a_conversation(self, store):
+        await self.open(store, modes={SCOUT: Mode.MUTED})
+        await store.channel_append(CH, sender=HUMAN, text="@Scout hi", mentions=[str(SCOUT)])
+        r = await store.channel_append(CH, sender=HUMAN, text="and?")
+        assert SCOUT not in r.woken

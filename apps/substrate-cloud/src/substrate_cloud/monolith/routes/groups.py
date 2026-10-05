@@ -20,6 +20,7 @@ from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
 from substrate_cloud.monolith.models import Group
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
+from substrate_cloud.monolith.services import avatar, pins, transcription
 from substrate_cloud.monolith.services.groups import files as group_files
 from substrate_cloud.monolith.services.groups.drives import delete_workspace_files
 from substrate_cloud.monolith.services.groups import service as groups
@@ -30,7 +31,7 @@ router = APIRouter(tags=["groups"])
 
 class MemberIn(BaseModel):
     agent_id: uuid.UUID
-    mode: str = "all"
+    mode: str = groups.DEFAULT_MODE
 
 
 class GroupIn(BaseModel):
@@ -41,6 +42,10 @@ class GroupIn(BaseModel):
 class GroupPatch(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=60)
     token_cap: Optional[int] = Field(default=None, ge=1000, le=groups.MAX_TOKEN_CAP)
+    # Dollars the agents may spend here; ``0`` removes the limit.
+    budget_usd: Optional[float] = Field(default=None, ge=0, le=100_000)
+    # How many messages in a row agents may add without a person before the group pauses.
+    breaker: Optional[int] = Field(default=None, ge=4, le=200)
 
 
 class MemberOut(BaseModel):
@@ -48,6 +53,10 @@ class MemberOut(BaseModel):
     name: str
     role: str
     mode: str
+    avatar: Optional[str] = None
+    # What this agent has used in this group.
+    tokens_used: int = 0
+    cost_usd: float = 0.0
 
 
 class GroupOut(BaseModel):
@@ -66,6 +75,11 @@ class GroupOut(BaseModel):
     # What the agents have used in this group and the most they may.
     tokens_used: int = 0
     token_cap: int = 0
+    budget_usd: Optional[float] = None
+    cost_usd: float = 0.0
+    breaker: int = 0
+    avatar: Optional[str] = None
+    pinned_at: Optional[datetime] = None
 
 
 class AttachmentOut(BaseModel):
@@ -81,6 +95,8 @@ class AttachmentOut(BaseModel):
     preview_key: Optional[str] = None
     pages: Optional[int] = None
     modified: Optional[float] = None
+    # What a recording says, so the agents can read it.
+    transcript: Optional[str] = None
 
 
 class AttachmentIn(BaseModel):
@@ -92,6 +108,7 @@ class AttachmentIn(BaseModel):
     truncated: bool = False
     preview_key: Optional[str] = None
     pages: Optional[int] = None
+    transcript: Optional[str] = None
 
 
 class EntryOut(BaseModel):
@@ -180,10 +197,7 @@ async def _out(db: AsyncSession, store, group: Group) -> GroupOut:
         name=group.name,
         created_at=group.created_at,
         updated_at=group.updated_at,
-        members=[
-            MemberOut(agent_id=a.id, name=a.name, role=a.role, mode=m.mode)
-            for m, a in members
-        ],
+        members=[await _member_out(store, group, m, a) for m, a in members],
         last_message=_preview(last)[:140] if last else None,
         last_sender=names.get(str(last.sender), "Group") if last else None,
         unread=sum(1 for e in unseen if str(e.sender) != mine),
@@ -194,8 +208,20 @@ async def _out(db: AsyncSession, store, group: Group) -> GroupOut:
                 [Actor.from_str(x) for x in names if x != mine]
             )
         ],
-        tokens_used=await groups.tokens_used(store, group),
+        tokens_used=(channel_spend := await groups.spent(store, f"channel:{group.channel}")).tokens,
         token_cap=group.token_cap,
+        budget_usd=group.budget_usd,
+        cost_usd=channel_spend.cost_usd,
+        breaker=group.breaker,
+        avatar=group.avatar_key,
+        pinned_at=group.pinned_at,
+    )
+
+
+async def _member_out(store, group: Group, member, agent) -> MemberOut:
+    spend = await groups.spent(store, f"agent:{groups.member_actor(agent.id, group.id)}")
+    return MemberOut(
+        agent_id=agent.id, name=agent.name, role=agent.role, mode=member.mode, avatar=agent.avatar_key, tokens_used=spend.tokens, cost_usd=spend.cost_usd
     )
 
 
@@ -282,9 +308,85 @@ async def rename_group(
         group.name = body.name.strip()
     if body.token_cap is not None:
         await groups.set_token_cap(_store(ctx), group, body.token_cap)
+    if body.budget_usd is not None:
+        await groups.set_budget(_store(ctx), group, body.budget_usd or None)
+    if body.breaker is not None:
+        group.breaker = body.breaker
+        await _store(ctx).channel_configure(group.channel, breaker=body.breaker)
     await db.commit()
     await db.refresh(group)  # updated_at is set by the database on update
     await groups.refresh_members(db, ctx.runtime, group.id)
+    return await _out(db, _store(ctx), group)
+
+
+@router.put("/groups/{group_id}/avatar", response_model=GroupOut)
+async def set_group_avatar(
+    group_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    group = await _owned(db, group_id, user)
+    store = ctx.files_for(user.tenant_id)
+    if store is None:
+        raise HTTPException(503, "File storage is not configured.")
+    try:
+        group.avatar_key = await avatar.replace(
+            store, user.tenant_id or "default", user.sub, group.workspace_id, group.avatar_key, await file.read(avatar.MAX_UPLOAD_BYTES + 1)
+        )
+    except avatar.AvatarError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    await db.commit()
+    await db.refresh(group)
+    return await _out(db, _store(ctx), group)
+
+
+@router.delete("/groups/{group_id}/avatar", response_model=GroupOut)
+async def clear_group_avatar(
+    group_id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    group = await _owned(db, group_id, user)
+    store = ctx.files_for(user.tenant_id)
+    if store is not None:
+        await avatar.remove(store, group.avatar_key)
+    group.avatar_key = None
+    await db.commit()
+    await db.refresh(group)
+    return await _out(db, _store(ctx), group)
+
+
+@router.put("/groups/{group_id}/pin", response_model=GroupOut)
+async def pin_group(
+    group_id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    group = await _owned(db, group_id, user)
+    try:
+        await pins.set_pinned(db, group, True)
+    except pins.TooManyPinned as exc:
+        raise HTTPException(409, str(exc)) from exc
+    await db.commit()
+    await db.refresh(group)
+    return await _out(db, _store(ctx), group)
+
+
+@router.delete("/groups/{group_id}/pin", response_model=GroupOut)
+async def unpin_group(
+    group_id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    group = await _owned(db, group_id, user)
+    await pins.set_pinned(db, group, False)
+    await db.commit()
+    await db.refresh(group)
     return await _out(db, _store(ctx), group)
 
 
@@ -383,6 +485,12 @@ async def upload_group_file(
         if "quota" in type(exc).__name__.lower():
             raise HTTPException(413, str(exc)) from exc
         raise
+    if (file.content_type or "").startswith("audio/"):
+        # A recording is understood by what it says. If it cannot be transcribed it is shared all the same, as a file.
+        try:
+            saved["transcript"] = (await transcription.transcribe(ctx, data, file.filename or "audio.webm")).strip() or None
+        except transcription.TranscriptionUnavailable:
+            saved["transcript"] = None
     return AttachmentOut(**saved)
 
 
@@ -430,6 +538,8 @@ async def send_message(
             }
         if a.preview_key and group_files.belongs(group, user, a.preview_key):
             record |= {"preview_key": a.preview_key, "pages": a.pages}
+        if a.transcript:
+            record |= {"transcript": a.transcript[: group_files.EXCERPT_CHARS]}
         attachments.append(record)
     result = await groups.post_as_user(
         db,

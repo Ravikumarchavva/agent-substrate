@@ -31,6 +31,7 @@ from substrate.runtime.persistence.channels import (
     _SCHEMA_CHANNELS,
     Channels,
     _schema_dedup,
+    _schema_engagement,
     _schema_entry_data,
 )
 from substrate.runtime.store import (
@@ -216,7 +217,7 @@ class RuntimeStore(Channels, Accounts):
         await migrate(
             self._db,
             "runtime",
-            [_SCHEMA_V1, _SCHEMA_CHANNELS, _schema_dedup, _schema_entry_data],
+            [_SCHEMA_V1, _SCHEMA_CHANNELS, _schema_dedup, _schema_entry_data, _schema_engagement],
         )
 
     async def aclose(self) -> None:

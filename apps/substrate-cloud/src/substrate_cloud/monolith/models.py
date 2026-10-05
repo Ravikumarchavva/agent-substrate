@@ -172,6 +172,11 @@ class Agent(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    # Its picture (an object key), and when the user pinned its chat to the top of their list.
+    avatar_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    pinned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The model it thinks with (``provider/name``), or ``None`` for the deployment's own.
+    model: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     @property
     def workspace_id(self) -> str:
@@ -195,6 +200,8 @@ class Group(Base):
     breaker: Mapped[int] = mapped_column(Integer, nullable=False, default=40)
     # Most tokens the agents may spend in this group in all; once reached they stop being woken. The user raises it when they want to go on.
     token_cap: Mapped[int] = mapped_column(Integer, nullable=False, default=1_000_000)
+    # The most the agents may spend in this group in dollars, beside the token cap (which also bounds a model that has no price). ``None``: no dollar limit.
+    budget_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # The last channel entry the user has seen.
     user_read_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=-1)
     created_at: Mapped[datetime] = mapped_column(
@@ -203,6 +210,8 @@ class Group(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    avatar_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    pinned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     @property
     def channel(self) -> str:

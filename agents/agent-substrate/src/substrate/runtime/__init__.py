@@ -16,6 +16,7 @@ from substrate.runtime.channel import (
     EntryKind,
     Member,
     Mode,
+    WakeReason,
     mentions_in,
 )
 from substrate.runtime.communication import (
@@ -110,6 +111,7 @@ __all__ = [
     "EntryKind",
     "Member",
     "Mode",
+    "WakeReason",
     "mentions_in",
     "Effect",
     "EffectResult",

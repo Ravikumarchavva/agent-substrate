@@ -78,6 +78,8 @@ class SubstrateConfig(BaseSettings):
     # ── Model defaults ───────────────────────────────────────────────────────
     AGENT_MODE: str = "react"  # "react" | "orchestrator"
     CHAT_MODEL: str = "google/gemini-3.1-flash-lite"
+    # The small model an agent in a group uses for its quick look at a message that is not for it (answer SPEAK or PASS). Empty: the chat model.
+    GROUP_TRIAGE_MODEL: str = ""
     # A knowledge base is searched by meaning when it has an embedder: EMBEDDING_RERANKER_SERVICE_URL (the default stack: Qwen3-VL embedding
     # and reranking), or EMBEDDING_MODEL (a provider model, e.g. "openai/text-embedding-3-small"). With neither it is searched by words.
     EMBEDDING_MODEL: str = ""

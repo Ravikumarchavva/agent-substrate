@@ -28,26 +28,33 @@ _TEXT_TYPES = (
 )
 
 
+def prefix_of(tenant_id: str, user_id: str, workspace_id: str) -> str:
+    """Where a workspace's files are in storage, with the trailing slash."""
+    return conversation_shared_key(tenant_id, user_id, workspace_id, "x").removesuffix("x")
+
+
 def shared_prefix(group: Group, claims: AuthClaims) -> str:
-    return conversation_shared_key(
-        claims.tenant_id or "default", claims.sub, group.workspace_id, "x"
-    ).removesuffix("x")
+    return prefix_of(claims.tenant_id or "default", claims.sub, group.workspace_id)
 
 
 def safe_name(name: str) -> str:
     return posixpath.basename(name.replace("\\", "/")).strip() or "file"
 
 
-def attachment(
-    group: Group, claims: AuthClaims, relative: str, size: int, mime: str | None = None
-) -> dict[str, Any]:
-    """The record a message carries for one file: enough to show it, fetch it, and tell an agent where it is."""
+def record(prefix: str, relative: str, size: int, mime: str | None = None) -> dict[str, Any]:
+    """The record a message carries for one file under ``prefix``: enough to show it, fetch it, and tell an agent where it is."""
     return {
         "name": posixpath.basename(relative),
         "size": size,
         "mime": mime or mimetypes.guess_type(relative)[0] or "application/octet-stream",
-        "key": shared_prefix(group, claims) + relative,
+        "key": prefix + relative,
     }
+
+
+def attachment(
+    group: Group, claims: AuthClaims, relative: str, size: int, mime: str | None = None
+) -> dict[str, Any]:
+    return record(shared_prefix(group, claims), relative, size, mime)
 
 
 def _is_text(name: str, mime: str | None) -> bool:
@@ -134,8 +141,15 @@ async def make_preview(store: Any, prefix: str, candidate: str, data: bytes, mim
     return {"preview_key": key, "pages": pages}
 
 
-async def _taken(store: Any, prefix: str) -> set[str]:
-    return {key for key, _size, _mtime in await store.list_prefix(prefix)}
+async def unique_name(store: Any, folder: str, name: str) -> str:
+    """``name``, or ``name (2)``, ``name (3)``… until it is not taken in ``folder`` (a storage prefix with its slash): never replacing a file."""
+    taken = {key for key, _size, _mtime in await store.list_prefix(folder)}
+    stem, dot, ext = name.rpartition(".") if "." in name else (name, "", "")
+    candidate, n = name, 1
+    while f"{folder}{candidate}" in taken:
+        n += 1
+        candidate = f"{stem} ({n}).{ext}" if dot else f"{name} ({n})"
+    return candidate
 
 
 async def save_upload(
@@ -148,14 +162,8 @@ async def save_upload(
     reader: Any = None,
 ) -> dict[str, Any]:
     """Store one upload in the group's files, never replacing a file that is already there ("report (2).pdf")."""
-    name = safe_name(filename)
-    stem, dot, ext = name.rpartition(".") if "." in name else (name, "", "")
     prefix = shared_prefix(group, claims)
-    taken = await _taken(store, f"{prefix}{UPLOADS}/")
-    candidate, n = name, 1
-    while f"{prefix}{UPLOADS}/{candidate}" in taken:
-        n += 1
-        candidate = f"{stem} ({n}).{ext}" if dot else f"{name} ({n})"
+    candidate = await unique_name(store, f"{prefix}{UPLOADS}/", safe_name(filename))
     relative = f"{UPLOADS}/{candidate}"
     await store.upload(
         prefix + relative, data, content_type=mime or "application/octet-stream"

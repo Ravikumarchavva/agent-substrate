@@ -29,6 +29,7 @@ class AgentProfile:
     workspace_id: str
     user_id: str
     tenant_id: str
+    model: Optional[str] = None
 
     @classmethod
     def of(cls, agent: Agent) -> "AgentProfile":
@@ -43,6 +44,7 @@ class AgentProfile:
             workspace_id=agent.workspace_id,  # type: ignore[arg-type]
             user_id=agent.user_identifier,  # type: ignore[arg-type]
             tenant_id=agent.tenant_id,  # type: ignore[arg-type]
+            model=agent.model,  # type: ignore[arg-type]
         )
 
 

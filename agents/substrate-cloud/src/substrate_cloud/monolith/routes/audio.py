@@ -18,7 +18,7 @@ import logging
 
 import asyncio
 import json
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -36,18 +36,18 @@ from fastapi.responses import StreamingResponse
 from substrate_cloud.shared.settings import settings
 from substrate.integrations.llm.gemini.gemini_client import GeminiClient
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
-from substrate.integrations.tts.kokoro_client import KokoroTTSClient, get_kokoro_client
-from substrate.integrations.llm.factory import (
-    create_model_client,
-    detect_provider,
-    strip_provider_prefix,
-)
+from substrate.integrations.tts.kokoro_client import KokoroTTSClient
 from substrate_cloud.monolith.schemas import (
     RealtimeTokenResponse,
     TranscribeResponse,
     TTSRequest,
 )
 from substrate_cloud.monolith.security.deps import get_current_user
+from substrate_cloud.monolith.services.transcription import (
+    TranscriptionUnavailable,
+    resolve_model_client as _resolve_model_client,
+    transcribe,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,42 +63,6 @@ _MAX_AUDIO_BYTES = 25 * 1024 * 1024
 # Inactivity timeout for the Realtime proxy (seconds).
 # If the browser stops sending for this long the WS is closed automatically.
 _REALTIME_IDLE_TIMEOUT = 120.0
-
-
-def _resolve_model_client(
-    app_state: Any,
-    requested_model: str | None,
-    fallback_model: str,
-) -> tuple[Any, str, str]:
-    """Resolve the correct provider client for an incoming audio request.
-
-    Resolve the provider client without imposing an audio capability here.
-    Individual endpoints validate the capabilities they support.
-    """
-    effective_model = (
-        requested_model.strip()
-        if requested_model and requested_model.strip()
-        else fallback_model
-    )
-    if effective_model.startswith("local/kokoro"):
-        return get_kokoro_client(), "local", effective_model
-    default_client: Any = app_state.model_client
-    effective_provider = detect_provider(effective_model)
-    bare_model = strip_provider_prefix(effective_model)
-
-    if (
-        getattr(default_client, "provider", None) == effective_provider
-        and getattr(default_client, "model", None) == bare_model
-    ):
-        client = default_client
-    else:
-        client = create_model_client(
-            effective_model,
-            api_keys=getattr(app_state, "api_keys", {}),
-            **getattr(app_state, "model_client_kwargs", {}),
-        )
-
-    return client, effective_provider, bare_model
 
 
 # ── POST /audio/transcribe ────────────────────────────────────────────────────
@@ -126,37 +90,17 @@ async def transcribe_audio(
     if not raw:
         raise HTTPException(status_code=400, detail="Empty audio file")
 
-    model_client, provider, effective_model = _resolve_model_client(
-        request.app.state,
-        model,
-        settings.STT_MODEL,
-    )
-
-    if not isinstance(model_client, OpenAIClient):
-        raise HTTPException(
-            status_code=501,
-            detail=f"Transcription is only supported for OpenAI models, not '{provider}'",
-        )
-
-    if provider == "openrouter":
-        raise HTTPException(
-            status_code=501,
-            detail="OpenRouter chat models are not supported for transcription",
-        )
-
     try:
-        text = await model_client.transcribe(
-            audio_bytes=raw,
-            filename=file.filename or "audio.webm",
-            model=effective_model,
-            language=language or None,
-            prompt=prompt or None,
+        text = await transcribe(
+            request.app.state,
+            raw,
+            file.filename or "audio.webm",
+            model=model,
+            language=language,
+            prompt=prompt,
         )
-    except NotImplementedError as exc:
-        raise HTTPException(status_code=501, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.exception("Transcription failed")
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except TranscriptionUnavailable as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 
     return TranscribeResponse(text=text)
 

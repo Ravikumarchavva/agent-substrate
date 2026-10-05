@@ -28,6 +28,8 @@ MEMBER_TYPE = "member"
 MAX_MEMBERS = 12
 # What a new group may spend in all, however long it runs and however many agents talk: the bound that replaces a cap on replies.
 DEFAULT_TOKEN_CAP = 1_000_000
+# A new member listens for what is for it, and follows a conversation it is drawn into: quiet until addressed, as a person in a busy group is.
+DEFAULT_MODE = Mode.MENTIONS.value
 MAX_TOKEN_CAP = 100_000_000
 MODES = {m.value for m in Mode}
 
@@ -133,15 +135,30 @@ async def create_group(
         ],
         breaker=group.breaker,
     )
-    await set_token_cap(store, group, group.token_cap)
+    await apply_limits(store, group)
     return group
+
+
+async def apply_limits(store: Any, group: Group) -> None:
+    """The group's one account holds both limits: tokens (which bound a model with no price too) and dollars."""
+    await store.account_limit(
+        f"channel:{group.channel}",
+        ExecutionBudget(max_tokens=group.token_cap, max_cost_usd=group.budget_usd),
+    )
 
 
 async def set_token_cap(store: Any, group: Group, cap: int) -> None:
     group.token_cap = cap
-    await store.account_limit(
-        f"channel:{group.channel}", ExecutionBudget(max_tokens=cap)
-    )
+    await apply_limits(store, group)
+
+
+async def set_budget(store: Any, group: Group, budget_usd: float | None) -> None:
+    group.budget_usd = budget_usd
+    await apply_limits(store, group)
+
+
+async def spent(store: Any, account: str) -> Any:
+    return await store.account_spend(account)
 
 
 async def tokens_used(store: Any, group: Group) -> int:

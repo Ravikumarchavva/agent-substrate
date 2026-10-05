@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from substrate.types import Actor
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +21,9 @@ from substrate_cloud.monolith.routes.chat_intents import _tool_name
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.stream.runs import last_message
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
+from substrate_cloud.monolith.services import avatar, pins
 from substrate_cloud.monolith.services.agents.delegation import TOOL_NAME
+from substrate_cloud.monolith.services.agents.model import has_credentials, sees
 from substrate_cloud.monolith.services.groups.drives import delete_workspace_files
 from substrate_cloud.monolith.services.groups.service import (
     groups_of,
@@ -47,6 +49,8 @@ class AgentIn(BaseModel):
     instructions: str = Field(default="", max_length=8000)
     # ``None``: every tool the deployment offers.
     allowed_tools: Optional[List[str]] = None
+    # ``provider/name``; ``None``: the deployment's own.
+    model: Optional[str] = Field(default=None, max_length=120)
 
 
 class AgentPatch(BaseModel):
@@ -56,6 +60,9 @@ class AgentPatch(BaseModel):
     allowed_tools: Optional[List[str]] = None
     # ``allowed_tools: null`` is "every tool", so clearing it needs its own flag.
     all_tools: bool = False
+    model: Optional[str] = Field(default=None, max_length=120)
+    # Likewise ``model: null`` leaves it as it is, so going back to the deployment's own needs a flag.
+    default_model: bool = False
 
 
 class AgentOut(BaseModel):
@@ -73,6 +80,12 @@ class AgentOut(BaseModel):
     last_message: Optional[str] = None
     # Working on a reply to the user right now, for "typing…" in a list.
     working: bool = False
+    # Its picture (an object key served by ``/files/object``) and when its chat was pinned.
+    avatar: Optional[str] = None
+    pinned_at: Optional[datetime] = None
+    # Its own model, and whether that reads pictures (``None`` while it uses the deployment's).
+    model: Optional[str] = None
+    sees: Optional[bool] = None
 
     model_config = {"from_attributes": True}
 
@@ -99,6 +112,10 @@ def _out(
         last_active=thread.updated_at if thread else None,
         last_message=last_message,
         working=working,
+        avatar=agent.avatar_key,
+        pinned_at=agent.pinned_at,
+        model=agent.model,
+        sees=sees(agent.model),
     )
 
 
@@ -117,6 +134,12 @@ def _known_tools(ctx: ServerDependencies) -> dict[str, str]:
         "Ask one of your other agents to do a piece of work and get its answer."
     )
     return out
+
+
+def _check_model(ctx: ServerDependencies, model: Optional[str]) -> None:
+    """A model the deployment cannot call (no key for its provider) is refused when chosen, not discovered when the agent is first asked something."""
+    if model and not has_credentials(ctx, model):
+        raise HTTPException(status_code=422, detail=f"This deployment has no credentials for {model}.")
 
 
 def _check_tools(ctx: ServerDependencies, names: Optional[List[str]]) -> None:
@@ -186,6 +209,7 @@ async def create_agent(
             detail=f"You can have {MAX_AGENTS_PER_USER} agents. Delete one to add another.",
         )
     _check_tools(ctx, body.allowed_tools)
+    _check_model(ctx, body.model)
     agent = Agent(
         tenant_id=user.tenant_id or "default",
         user_identifier=user.sub,
@@ -193,6 +217,7 @@ async def create_agent(
         role=body.role.strip(),
         instructions=body.instructions,
         allowed_tools=body.allowed_tools,
+        model=body.model or None,
     )
     db.add(agent)
     await db.flush()
@@ -224,6 +249,7 @@ async def update_agent(
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
     _check_tools(ctx, body.allowed_tools)
+    _check_model(ctx, body.model)
     if body.name is not None:
         agent.name = body.name.strip()
         await rename_main_thread(db, agent)
@@ -231,6 +257,10 @@ async def update_agent(
         agent.role = body.role.strip()
     if body.instructions is not None:
         agent.instructions = body.instructions
+    if body.default_model:
+        agent.model = None
+    elif body.model is not None:
+        agent.model = body.model or None
     if body.all_tools:
         agent.allowed_tools = None
     elif body.allowed_tools is not None:
@@ -254,6 +284,84 @@ async def open_agent_thread(
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
     return ThreadRef(id=(await ensure_main_thread(db, agent, user)).id)
+
+
+async def _agent_out(db: AsyncSession, agent: Agent) -> AgentOut:
+    await db.refresh(agent)  # a commit expires it
+    return _out(agent, (await main_threads(db, [agent.id])).get(agent.id))
+
+
+@router.put("/{agent_id}/avatar", response_model=AgentOut)
+async def set_avatar(
+    agent_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    agent = await get_owned_agent(db, agent_id, user)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    store = ctx.files_for(user.tenant_id)
+    if store is None:
+        raise HTTPException(503, "File storage is not configured.")
+    try:
+        agent.avatar_key = await avatar.replace(
+            store, user.tenant_id or "default", user.sub, agent.workspace_id, agent.avatar_key, await file.read(avatar.MAX_UPLOAD_BYTES + 1)
+        )
+    except avatar.AvatarError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    await db.commit()
+    return await _agent_out(db, agent)
+
+
+@router.delete("/{agent_id}/avatar", response_model=AgentOut)
+async def clear_avatar(
+    agent_id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    agent = await get_owned_agent(db, agent_id, user)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    store = ctx.files_for(user.tenant_id)
+    if store is not None:
+        await avatar.remove(store, agent.avatar_key)
+    agent.avatar_key = None
+    await db.commit()
+    return await _agent_out(db, agent)
+
+
+@router.put("/{agent_id}/pin", response_model=AgentOut)
+async def pin_agent(
+    agent_id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+):
+    agent = await get_owned_agent(db, agent_id, user)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    try:
+        await pins.set_pinned(db, agent, True)
+    except pins.TooManyPinned as exc:
+        raise HTTPException(409, str(exc)) from exc
+    await db.commit()
+    return await _agent_out(db, agent)
+
+
+@router.delete("/{agent_id}/pin", response_model=AgentOut)
+async def unpin_agent(
+    agent_id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+):
+    agent = await get_owned_agent(db, agent_id, user)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    await pins.set_pinned(db, agent, False)
+    await db.commit()
+    return await _agent_out(db, agent)
 
 
 @router.delete("/{agent_id}", status_code=204)

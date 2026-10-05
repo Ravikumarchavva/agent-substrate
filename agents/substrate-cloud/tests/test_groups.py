@@ -47,7 +47,7 @@ async def test_groups_are_private_validated_and_hold_the_members_chosen():
             assert (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "loud"}]})).status_code == 422
 
             made = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"]}, {"agent_id": quill["id"], "mode": "mentions"}]})).json()
-            assert {m["name"]: m["mode"] for m in made["members"]} == {"Scout": "all", "Quill": "mentions"}
+            assert {m["name"]: m["mode"] for m in made["members"]} == {"Scout": "mentions", "Quill": "mentions"}
             assert [g["id"] for g in (await c.get("/groups")).json()] == [made["id"]]
 
             changed = (await c.patch(f"/groups/{made['id']}/members/{quill['id']}", json={"mode": "muted"})).json()
@@ -90,6 +90,8 @@ async def test_a_message_reaches_every_agent_and_only_one_of_two_answers():
             answered = []
 
             def reply(messages):
+                if "exactly one word: SPEAK or PASS" in messages[-1].text:
+                    return "SPEAK"  # the quick look at a message that was not addressed to anyone
                 # The first agent to look speaks; the second sees that answer in its digest and has nothing to add.
                 if answered:
                     return "[PASS]"
@@ -99,7 +101,7 @@ async def test_a_message_reaches_every_agent_and_only_one_of_two_answers():
             app.state.ctx.model_client = ScriptedModel(reply)
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
             quill = (await c.post("/agents", json={"name": "Quill"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"]}, {"agent_id": quill["id"]}]})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "all"}, {"agent_id": quill["id"], "mode": "all"}]})).json()
 
             sent = (await c.post(f"/groups/{group['id']}/messages", json={"text": "Where should we go?"})).json()
             assert sent["from_user"] and sent["seq"] == 0

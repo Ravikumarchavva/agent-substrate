@@ -120,6 +120,12 @@ def is_persistent_workspace(workspace_id: str) -> bool:
     return True
 
 
+def workspace_avatar_key(tenant_id: str, user_id: str, workspace_id: str, digest: str, ext: str) -> str:
+    """Where the picture of an agent or a group is kept: beside its workspace, never inside ``workspace/shared`` (so it is not one of its files). The
+    content hash is in the name because a stored object is served as immutable: a new picture is a new key."""
+    return f"{conversation_prefix(tenant_id, user_id, workspace_id)}/avatar/{_id(digest, 'digest')}.{_id(ext, 'extension')}"
+
+
 def conversation_version_key(
     tenant_id: str,
     user_id: str,
@@ -229,6 +235,7 @@ __all__ = [
     "conversation_workspace_prefix",
     "conversation_shared_key",
     "conversation_shared_prefix",
+    "workspace_avatar_key",
     "persistent_workspace_id",
     "is_persistent_workspace",
     "AGENT_HOME",

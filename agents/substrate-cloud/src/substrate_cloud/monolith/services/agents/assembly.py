@@ -13,6 +13,7 @@ from typing import Any
 from substrate.tools import ToolRisk
 from substrate_cloud.factory import build_agent_for_thread, build_chat_tools
 from substrate_cloud.monolith.routes.chat_intents import _tool_name
+from substrate_cloud.monolith.services.agents.model import client_for
 from substrate_cloud.monolith.services.agents.service import (
     AgentProfile,
     agent_instructions_block,
@@ -56,7 +57,7 @@ async def assemble_agent(
     )
     return await build_agent_for_thread(
         session_id,
-        model_client=deps.model_client,
+        model_client=client_for(deps, profile.model),
         tools=tools,
         system_instructions=deps.system_instructions
         + agent_instructions_block(profile, drives)

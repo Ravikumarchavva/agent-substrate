@@ -32,7 +32,7 @@ export const MenuItem = forwardRef<
     ref={ref}
     className={cn(
       "flex min-h-control-md cursor-pointer select-none items-center gap-2 rounded-md px-2.5 py-1 text-sm outline-none transition-colors " +
-        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:shrink-0",
       tone === "danger" ? "text-danger data-[highlighted]:bg-danger/10" : "text-foreground data-[highlighted]:bg-card-hover [&_svg]:text-muted",
       className,
     )}
@@ -62,7 +62,7 @@ export const MenuSubTrigger = forwardRef<
     ref={ref}
     className={cn(
       "flex min-h-control-md cursor-pointer select-none items-center gap-2 rounded-md px-2.5 py-1 text-sm text-foreground outline-none transition-colors " +
-        "data-[highlighted]:bg-card-hover data-[state=open]:bg-card-hover [&_svg]:size-4 [&_svg]:shrink-0",
+        "data-[highlighted]:bg-card-hover data-[state=open]:bg-card-hover [&_svg]:shrink-0",
       className,
     )}
     {...props}

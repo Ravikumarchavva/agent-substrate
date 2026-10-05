@@ -34,12 +34,12 @@ function Card({ icon: Icon, title, hint, onClick }: { icon: LucideIcon; title: s
  * and the files themselves).
  * No generic starters ("research a topic", "analyse data"): any assistant does those, so they say nothing about this one.
  */
-export function HomeScreen({ name, agents, onOpenScheduled, onOpenAgents, onOpenApprovals, onOpenFiles }: {
+export function HomeScreen({ name, agents, onOpenScheduled, onOpenAgents, onOpenNotifications, onOpenFiles }: {
   name?: string | null;
   agents: Agent[];
   onOpenScheduled: () => void;
   onOpenAgents: () => void;
-  onOpenApprovals: () => void;
+  onOpenNotifications: () => void;
   onOpenFiles: () => void;
 }) {
   // Decided after mount: the hour differs between the server and the browser.
@@ -54,7 +54,7 @@ export function HomeScreen({ name, agents, onOpenScheduled, onOpenAgents, onOpen
     <div className="flex h-full items-center justify-center">
       <div className="w-full max-w-chat space-y-6 px-3 py-10 sm:px-6">
         <header className="substrate-fade-up flex items-center gap-4">
-          <SubstrateMark className="size-10 shrink-0 text-foreground" />
+          <SubstrateMark className="icon-free size-10 shrink-0 text-foreground" />
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">{first ? `${greeting}, ${first}` : greeting}</h1>
             <p className="mt-0.5 text-sm text-muted">What would you like to get done?</p>
@@ -69,7 +69,7 @@ export function HomeScreen({ name, agents, onOpenScheduled, onOpenAgents, onOpen
             hint={agents.length ? agents.slice(0, 3).map((a) => a.name).join(" · ") : "A saved role with its own instructions, tools and files."}
             onClick={onOpenAgents}
           />
-          <Card icon={ShieldQuestion} title="Stay in control" hint="It asks before it changes anything, and you approve each step." onClick={onOpenApprovals} />
+          <Card icon={ShieldQuestion} title="Stay in control" hint="It asks before it changes anything, and you approve each step." onClick={onOpenNotifications} />
           <Card icon={FolderOpen} title="Your files" hint="What you attach and what it makes, kept in one place." onClick={onOpenFiles} />
         </div>
       </div>

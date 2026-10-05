@@ -1,11 +1,16 @@
 "use client";
 
-import { ArrowLeft, Bell, Bot, CalendarClock, FileText, MessageSquare, LogOut, Moon, Search, Settings2, ShieldQuestion, SquarePen, Sun, User, type LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Button, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Text, Tooltip, TooltipProvider, confirmAction } from "@/design";
+import { ArrowLeft, Bell, CalendarClock, FileText, MessageSquare, MessagesSquare, LogOut, Moon, Plus, Search, Settings2, Sun, User, type LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Button, cn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Text, Tooltip, TooltipProvider, confirmAction } from "@/design";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { SubstrateMark } from "@/components/SubstrateMark";
+import { Avatar } from "@/components/groups/Avatar";
+import { buildChatItems } from "@/components/chats/items";
 import { useAuth } from "@/contexts/AuthContext";
+import type { Agent } from "@/lib/api/agents";
+import type { Group } from "@/lib/api/groups";
+import { usePinnedChats } from "@/lib/pins";
 import { useTheme } from "@/contexts/ThemeContext";
 import { fetchDocQuotaStatus } from "@/lib/api/doc_quota";
 import { fetchRateLimitStatus } from "@/lib/api/rate_limit";
@@ -14,22 +19,45 @@ import { getVisibleSettingsTabGroups, type SettingsTab } from "./settings/Settin
 /** Every item in the rail sits on the same 44px square, so icons, meters and the avatar share one grid and one hover. */
 const SLOT = "relative flex size-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors";
 /** The same slot for the interactive ones: a design `Button`, restyled to the rail's square so focus, disabled and press behave like every button. */
-const BUTTON = "size-11 rounded-xl p-0 text-muted [&_svg]:size-6";
+const BUTTON = "size-11 h-11! w-11! rounded-xl p-0 text-muted";
 
-/** One icon in the rail: the slot, a tooltip for its name, a violet tint when its page is open, and a dot when something is waiting. */
-function RailButton({ icon: Icon, label, onClick, active, count }: { icon: LucideIcon; label: string; onClick: () => void; active?: boolean; count?: number }) {
+/** A count as a pill on the corner of an icon, "9+" past nine. */
+function Count({ n }: { n: number }) {
+  return <span className="absolute -right-1.5 -top-1 min-w-4 rounded-full bg-accent px-1 text-center text-2xs font-semibold leading-4 text-accent-foreground ring-2 ring-card">{n > 9 ? "9+" : n}</span>;
+}
+
+/**
+ * One destination in the rail: its icon with its name under it, a tinted pill when its page is open, and a count when something is waiting.
+ * `compact` drops the name (the settings pages, whose names are long) and keeps it as a tooltip.
+ */
+function RailButton({ icon: Icon, label, onClick, active, count, compact, highlight }: { icon: LucideIcon; label: string; onClick: () => void; active?: boolean; count?: number; compact?: boolean; highlight?: boolean }) {
   return (
     <Tooltip label={label} side="right">
       <Button
         variant="ghost"
-        size="icon"
         onClick={onClick}
         aria-label={label}
         aria-current={active ? "page" : undefined}
-        className={`${BUTTON} relative ${active ? "bg-accent/12 text-accent hover:bg-accent/12" : ""}`}
+        className={cn("relative h-auto! w-full flex-col gap-1 rounded-xl px-1 py-2 text-muted", compact && "size-11 h-11! w-11 py-0", active ? "bg-accent/12 text-accent hover:bg-accent/12" : highlight ? "text-accent-2 hover:bg-accent-2/12" : "hover:text-foreground")}
       >
-        <Icon aria-hidden />
-        {count !== undefined && count > 0 && <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-accent-2 ring-2 ring-card" aria-label={`${count} waiting`} />}
+        <span className="relative">
+          <Icon aria-hidden />
+          {count !== undefined && count > 0 && <Count n={count} />}
+        </span>
+        {!compact && <span className="w-full truncate text-center text-2xs font-medium leading-none">{label}</span>}
+      </Button>
+    </Tooltip>
+  );
+}
+
+/** A chat you pinned, as its avatar: a ring when it is the one open, a count for what you have not read, a green dot while it is typing. */
+function RailChat({ name, active, unread, typing, onClick }: { name: string; active: boolean; unread: number; typing: boolean; onClick: () => void }) {
+  return (
+    <Tooltip label={typing ? `${name} is typing…` : name} side="right">
+      <Button variant="ghost" onClick={onClick} aria-label={name} aria-current={active ? "page" : undefined} className={cn("relative size-11 h-11! rounded-full p-0", active && "ring-2 ring-accent")}>
+        <Avatar name={name} className="size-9 text-sm" />
+        {unread > 0 && !active && <Count n={unread} />}
+        {typing && <span className="absolute bottom-0.5 right-0.5 size-2.5 rounded-full bg-success ring-2 ring-card" aria-hidden />}
       </Button>
     </Tooltip>
   );
@@ -63,15 +91,18 @@ export function CollapsedRail({
   onSearch,
   onOpenSettings,
   onOpenScheduled,
-  onOpenApprovals,
   onOpenAgents,
   onOpenNotifications,
   isAgentsOpen,
   isScheduledOpen,
-  isApprovalsOpen,
   isNotificationsOpen,
-  approvalsCount,
   unreadCount,
+  agents = [],
+  groups = [],
+  openGroupId,
+  currentThreadId,
+  onOpenAgent,
+  onOpenGroup,
   mode = "chat",
   settingsTab,
   onSelectSettingsTab,
@@ -82,15 +113,19 @@ export function CollapsedRail({
   onSearch: () => void;
   onOpenSettings: (tab?: SettingsTab) => void;
   onOpenScheduled: () => void;
-  onOpenApprovals: () => void;
   onOpenAgents: () => void;
   isAgentsOpen?: boolean;
   onOpenNotifications: () => void;
   isScheduledOpen?: boolean;
-  isApprovalsOpen?: boolean;
   isNotificationsOpen?: boolean;
-  approvalsCount?: number;
   unreadCount?: number;
+  /** The chats you pin appear here as avatars. */
+  agents?: Agent[];
+  groups?: Group[];
+  openGroupId?: string | null;
+  currentThreadId?: string | null;
+  onOpenAgent?: (agent: Agent) => void;
+  onOpenGroup?: (groupId: string) => void;
   /** In settings the rail lists the settings pages (as the open sidebar does), not the chat pages. */
   mode?: "chat" | "settings";
   settingsTab?: SettingsTab;
@@ -119,11 +154,15 @@ export function CollapsedRail({
     };
   }, []);
 
+  const { pinned } = usePinnedChats();
+  const pinnedChats = useMemo(() => buildChatItems(agents, groups, pinned).filter((i) => i.pinned), [agents, groups, pinned]);
+  const chatUnread = groups.reduce((n, g) => n + g.unread, 0);
+
   const name = isAuthenticated && user ? (user.name ?? user.email ?? "My Account") : "My Account";
 
   return (
     <TooltipProvider>
-      <div className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-card py-3 lg:flex">
+      <div className="hidden w-18 shrink-0 flex-col items-center gap-1 border-r border-border bg-card px-1 py-3 lg:flex">
         <Tooltip label="Open sidebar" side="right">
           <Button
             variant="ghost"
@@ -136,30 +175,46 @@ export function CollapsedRail({
             aria-label="Open sidebar"
             className={BUTTON}
           >
-            {hoverLogo ? <SidebarToggleIcon direction="open" /> : <SubstrateMark className="size-6" />}
+            {hoverLogo ? <SidebarToggleIcon direction="open" /> : <SubstrateMark className="size-5" />}
           </Button>
         </Tooltip>
 
-        <div className="mt-3 flex flex-col items-center gap-1">
+        <div className="mt-3 flex w-full flex-col items-center gap-1">
           {mode === "settings" ? (
             <>
-              <RailButton icon={ArrowLeft} label="Back to chats" onClick={() => onBackToChat?.()} />
+              <RailButton compact icon={ArrowLeft} label="Back to chats" onClick={() => onBackToChat?.()} />
               {getVisibleSettingsTabGroups(isAdmin).map((group, i) => (
                 <div key={group.title} className={i === 0 ? "flex flex-col items-center gap-1" : "mt-1 flex flex-col items-center gap-1 border-t border-border pt-2"}>
                   {group.items.map((item) => (
-                    <RailButton key={item.id} icon={item.icon} label={item.label} onClick={() => onSelectSettingsTab?.(item.id)} active={item.id === settingsTab} />
+                    <RailButton compact key={item.id} icon={item.icon} label={item.label} onClick={() => onSelectSettingsTab?.(item.id)} active={item.id === settingsTab} />
                   ))}
                 </div>
               ))}
             </>
           ) : (
             <>
-          <RailButton icon={SquarePen} label="New chat" onClick={onNewChat} />
-          <RailButton icon={Search} label="Search" onClick={onSearch} />
-          <RailButton icon={Bot} label="Agents" onClick={onOpenAgents} active={isAgentsOpen} />
-          <RailButton icon={CalendarClock} label="Scheduled" onClick={onOpenScheduled} active={isScheduledOpen} />
-          <RailButton icon={ShieldQuestion} label="Approvals" onClick={onOpenApprovals} active={isApprovalsOpen} count={approvalsCount} />
-          <RailButton icon={Bell} label="Notifications" onClick={onOpenNotifications} active={isNotificationsOpen} count={unreadCount} />
+              <RailButton highlight icon={Plus} label="New" onClick={onNewChat} />
+              <RailButton icon={Search} label="Search" onClick={onSearch} />
+              <RailButton icon={MessagesSquare} label="Agents" onClick={onOpenAgents} active={isAgentsOpen || !!openGroupId} count={chatUnread} />
+              <RailButton icon={CalendarClock} label="Schedule" onClick={onOpenScheduled} active={isScheduledOpen} />
+              <RailButton icon={Bell} label="Alerts" onClick={onOpenNotifications} active={isNotificationsOpen} count={unreadCount} />
+              {pinnedChats.length > 0 && (
+                <div className="mt-1 flex flex-col items-center gap-1.5 border-t border-border pt-2.5">
+                  {pinnedChats.map((chat) => {
+                    const agent = chat.kind === "agent" ? agents.find((a) => a.id === chat.id) : undefined;
+                    return (
+                      <RailChat
+                        key={chat.key}
+                        name={chat.name}
+                        unread={chat.unread}
+                        typing={chat.typing.length > 0}
+                        active={chat.kind === "group" ? chat.id === openGroupId : !!agent?.thread_id && agent.thread_id === currentThreadId}
+                        onClick={() => (chat.kind === "group" ? onOpenGroup?.(chat.id) : agent && onOpenAgent?.(agent))}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -167,7 +222,7 @@ export function CollapsedRail({
         <div className="mt-auto flex flex-col items-center gap-1">
           {messages && <RailMeter icon={MessageSquare} label="Daily messages" used={messages.used} limit={messages.limit} />}
           {documents && <RailMeter icon={FileText} label="Daily documents" used={documents.used} limit={documents.limit} />}
-          <RailButton icon={theme === "dark" ? Sun : Moon} label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggleTheme} />
+          <RailButton compact icon={theme === "dark" ? Sun : Moon} label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggleTheme} />
 
           {/* a gap, and a hairline, between the settings of the app above and who you are below */}
           <div className="my-1 h-px w-6 bg-border" aria-hidden />

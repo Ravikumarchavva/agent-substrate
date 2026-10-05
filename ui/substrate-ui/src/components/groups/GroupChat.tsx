@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Info } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, Info, Paperclip } from "lucide-react";
 import { Button, cn } from "@/design";
 import { api } from "@/lib/api";
 import type { Agent } from "@/lib/api/agents";
-import type { Group, GroupEntry } from "@/lib/api/groups";
+import type { Group, GroupEntry, GroupFile } from "@/lib/api/groups";
 import { reportError } from "@/lib/report-error";
 import { Avatar } from "./Avatar";
-import { Composer } from "./Composer";
+import { Composer, type ComposerHandle } from "./Composer";
 import { GroupInfo } from "./GroupInfo";
 import { Messages } from "./Messages";
 import { typingLine } from "./text";
@@ -31,6 +31,10 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
   const [typing, setTyping] = useState<string[]>([]);
   const [replyTo, setReplyTo] = useState<GroupEntry | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [readByAll, setReadByAll] = useState(-1);
+  const [dragging, setDragging] = useState(false);
+  const composer = useRef<ComposerHandle>(null);
+  const dragDepth = useRef(0);
   const names = group.members.map((m) => m.name);
 
   useEffect(() => {
@@ -41,7 +45,8 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
     const loop = async () => {
       let first = true;
       while (alive) {
-        if (document.hidden) {
+        // The first look always happens (the history is there when you come back to the tab); after that, nothing is fetched while it is in the background.
+        if (document.hidden && !first) {
           await new Promise((r) => setTimeout(r, 1000));
           continue;
         }
@@ -50,6 +55,7 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
           first = false;
           if (!alive) return;
           setTyping(next.working);
+        setReadByAll(next.read_by_all);
           if (next.entries.length === 0) continue;
           after = next.latest;
           setEntries((all) => [...all, ...next.entries.filter((e) => !all.some((x) => x.seq === e.seq))]);
@@ -69,9 +75,9 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
   }, [group.id]);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, attachments: GroupFile[]) => {
       try {
-        const sent = await api.sendGroupMessage(group.id, text, replyTo?.seq ?? null);
+        const sent = await api.sendGroupMessage(group.id, text, replyTo?.seq ?? null, attachments);
         setEntries((all) => (all.some((x) => x.seq === sent.seq) ? all : [...all, sent]));
         setReplyTo(null);
       } catch (err) {
@@ -84,9 +90,33 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
 
   return (
     <div className="@container flex h-full min-h-0 w-full bg-background text-foreground">
-      <section className={cn("flex min-w-0 flex-1 flex-col", infoOpen && "hidden @3xl:flex")}>
+      <section
+        className={cn("relative flex min-w-0 flex-1 flex-col", infoOpen && "hidden @3xl:flex")}
+        onDragEnter={(e) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          dragDepth.current += 1;
+          setDragging(true);
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDragLeave={() => {
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          dragDepth.current = 0;
+          setDragging(false);
+          composer.current?.addFiles(Array.from(e.dataTransfer.files));
+        }}
+      >
+        {dragging && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-accent bg-background/90 text-accent">
+            <Paperclip className="icon-free size-8" aria-hidden />
+            <p className="text-sm font-semibold">Drop to share with {group.name}</p>
+          </div>
+        )}
         <header className="flex items-center gap-3 border-b border-border px-4 pb-3 pt-16 sm:pt-3">
-          <Button variant="ghost" size="icon" aria-label="Back to groups" onClick={onBack} className="@3xl:hidden">
+          <Button variant="ghost" size="icon" aria-label="Back to chats" onClick={onBack} className="xl:hidden">
             <ArrowLeft />
           </Button>
           <div className="flex -space-x-2" aria-hidden>
@@ -102,8 +132,8 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
             <Info />
           </Button>
         </header>
-        <Messages entries={entries} names={names} typing={typing} onReply={setReplyTo} />
-        <Composer names={names} replyTo={replyTo} onClearReply={() => setReplyTo(null)} onSend={send} />
+        <Messages entries={entries} names={names} typing={typing} readByAll={readByAll} onReply={setReplyTo} />
+        <Composer ref={composer} groupId={group.id} names={names} replyTo={replyTo} onClearReply={() => setReplyTo(null)} onSend={send} />
       </section>
       {infoOpen && (
         <aside className="scroll-area h-full min-h-0 w-full border-l border-border @3xl:w-96 @3xl:shrink-0">

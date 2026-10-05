@@ -273,7 +273,7 @@ function UnsupportedView({ fileUrl, fileName }: { fileUrl: string; fileName: str
   return (
     <Centered>
       <div className="flex flex-col items-center gap-3">
-        <FileWarning className="h-8 w-8 text-muted" />
+        <FileWarning className="icon-free h-8 w-8 text-muted" />
         <p>No inline preview for this file type yet.</p>
         <a
           href={fileUrl}

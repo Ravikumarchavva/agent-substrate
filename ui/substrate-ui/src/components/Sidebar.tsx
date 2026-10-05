@@ -28,6 +28,9 @@ import { SubstrateMark } from "@/components/SubstrateMark";
 import type { Agent } from "@/lib/api/agents";
 import type { Group } from "@/lib/api/groups";
 import { Avatar } from "@/components/groups/Avatar";
+import { typingLine } from "@/components/groups/text";
+import { buildChatItems } from "@/components/chats/items";
+import { usePinnedChats } from "@/lib/pins";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -57,7 +60,6 @@ type Props = {
   onOpenScheduled?: () => void;
   isScheduledOpen?: boolean;
   scheduledCount?: number;
-  onOpenApprovals?: () => void;
   onOpenAgents?: () => void;
   isAgentsOpen?: boolean;
   /** The user's agents: each is a conversation of its own, listed like a contact. */
@@ -67,8 +69,6 @@ type Props = {
   groups?: Group[];
   openGroupId?: string | null;
   onOpenGroup?: (groupId: string | null) => void;
-  isApprovalsOpen?: boolean;
-  approvalsCount?: number;
   onOpenNotifications?: () => void;
   isNotificationsOpen?: boolean;
   unreadCount?: number;
@@ -126,7 +126,6 @@ export function Sidebar({
   onOpenScheduled,
   isScheduledOpen,
   scheduledCount,
-  onOpenApprovals,
   onOpenAgents,
   isAgentsOpen,
   agents = [],
@@ -134,8 +133,6 @@ export function Sidebar({
   groups = [],
   openGroupId,
   onOpenGroup,
-  isApprovalsOpen,
-  approvalsCount,
   onOpenNotifications,
   isNotificationsOpen,
   unreadCount,
@@ -169,13 +166,34 @@ export function Sidebar({
 
   const settingsGroups = useMemo(() => getVisibleSettingsTabGroups(isAdmin), [isAdmin]);
 
+  // The chats you pinned (at most five) are the only agents and groups the sidebar lists; the rest are found under Agents.
+  const { pinned } = usePinnedChats();
+  const pinnedRows = useMemo(
+    () =>
+      buildChatItems(agents, groups, pinned)
+        .filter((i) => i.pinned)
+        .map((i) => ({
+          key: i.key,
+          name: i.name,
+          title: i.name,
+          preview: i.preview,
+          time: i.time,
+          unread: i.unread,
+          typing: i.typing.length > 0 ? (i.kind === "agent" ? "typing…" : typingLine(i.typing)) : "",
+          active: i.kind === "group" ? i.id === openGroupId : !!agents.find((a) => a.id === i.id)?.thread_id && agents.find((a) => a.id === i.id)?.thread_id === currentThreadId,
+          open: () => (i.kind === "group" ? onOpenGroup?.(i.id) : onOpenAgent?.(agents.find((a) => a.id === i.id)!)),
+        })),
+    [agents, groups, pinned, openGroupId, currentThreadId, onOpenGroup, onOpenAgent],
+  );
+
   const chatQuickActions = [
     { label: "New chat", icon: SquarePen, onClick: onNewChat },
     {
       label: "Agents",
       icon: Bot,
       onClick: onOpenAgents || (() => {}),
-      isActive: isAgentsOpen,
+      isActive: isAgentsOpen || !!openGroupId,
+      badge: groups.reduce((n, g) => n + g.unread, 0),
     },
     {
       label: "Scheduled",
@@ -183,13 +201,6 @@ export function Sidebar({
       onClick: onOpenScheduled || (() => {}),
       isActive: isScheduledOpen,
       badge: scheduledCount,
-    },
-    {
-      label: "Approvals",
-      icon: ShieldQuestion,
-      onClick: onOpenApprovals || (() => {}),
-      isActive: isApprovalsOpen,
-      badge: approvalsCount,
     },
     {
       label: "Notifications",
@@ -306,77 +317,32 @@ export function Sidebar({
               </div>
             </div>
 
-            {agents.length > 0 && (
+            {pinnedRows.length > 0 && (
               <div className="px-3 pb-2">
-                <div className="flex items-center justify-between px-1 pb-1.5">
-                  <p className="text-2xs font-semibold uppercase tracking-wider text-muted">Agents</p>
-                  <Button variant="ghost" size="icon-sm" onClick={onOpenAgents} aria-label="Manage agents">
-                    <Plus />
-                  </Button>
-                </div>
+                <p className="px-1 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-muted">Pinned</p>
                 <div className="space-y-0.5">
-                  {agents.map((agent) => {
-                    const active = !!agent.thread_id && agent.thread_id === currentThreadId;
-                    return (
-                      <Button
-                        key={agent.id}
-                        variant="ghost"
-                        onClick={() => onOpenAgent?.(agent)}
-                        aria-current={active ? "page" : undefined}
-                        title={agent.role || agent.name}
-                        className={cn("h-auto! min-h-0 w-full justify-start gap-3 whitespace-normal rounded-lg px-2.5 py-2 text-left font-normal", active ? "bg-accent/12" : "hover:bg-card-hover")}
-                      >
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent" aria-hidden>
-                          {agent.name.trim().charAt(0).toUpperCase() || "?"}
+                  {pinnedRows.map((row) => (
+                    <Button
+                      key={row.key}
+                      variant="ghost"
+                      onClick={row.open}
+                      aria-current={row.active ? "page" : undefined}
+                      title={row.title}
+                      className={cn("h-auto! min-h-0 w-full justify-start gap-3 whitespace-normal rounded-lg px-2.5 py-2 text-left font-normal", row.active ? "bg-accent/12" : "hover:bg-card-hover")}
+                    >
+                      <Avatar name={row.name} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline justify-between gap-2">
+                          <span className="truncate text-sm font-medium text-foreground">{row.name}</span>
+                          <span className="shrink-0 text-2xs text-muted">{shortTime(row.time)}</span>
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-baseline justify-between gap-2">
-                            <span className="truncate text-sm font-medium text-foreground">{agent.name}</span>
-                            <span className="shrink-0 text-2xs text-muted">{shortTime(agent.last_active)}</span>
-                          </span>
-                          <span className="block truncate text-xs text-muted">{agent.last_message ?? (agent.role || "Say hello")}</span>
+                        <span className="flex items-center justify-between gap-2">
+                          {row.typing ? <span className="block truncate text-xs font-medium text-success">{row.typing}</span> : <span className="block truncate text-xs text-muted">{row.preview}</span>}
+                          {row.unread > 0 && !row.active && <span className="shrink-0 rounded-full bg-accent px-1.5 text-2xs font-semibold text-accent-foreground">{row.unread}</span>}
                         </span>
-                      </Button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {(groups.length > 0 || agents.length > 0) && (
-              <div className="px-3 pb-2">
-                <div className="flex items-center justify-between px-1 pb-1.5">
-                  <p className="text-2xs font-semibold uppercase tracking-wider text-muted">Groups</p>
-                  <Button variant="ghost" size="icon-sm" onClick={() => onOpenGroup?.("new")} aria-label="New group">
-                    <Plus />
-                  </Button>
-                </div>
-                <div className="space-y-0.5">
-                  {groups.map((group) => {
-                    const active = group.id === openGroupId;
-                    return (
-                      <Button
-                        key={group.id}
-                        variant="ghost"
-                        onClick={() => onOpenGroup?.(group.id)}
-                        aria-current={active ? "page" : undefined}
-                        title={group.members.map((m) => m.name).join(", ")}
-                        className={cn("h-auto! min-h-0 w-full justify-start gap-3 whitespace-normal rounded-lg px-2.5 py-2 text-left font-normal", active ? "bg-accent/12" : "hover:bg-card-hover")}
-                      >
-                        <Avatar name={group.name} />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-baseline justify-between gap-2">
-                            <span className="truncate text-sm font-medium text-foreground">{group.name}</span>
-                            <span className="shrink-0 text-2xs text-muted">{shortTime(group.updated_at)}</span>
-                          </span>
-                          <span className="flex items-center justify-between gap-2">
-                            <span className="block truncate text-xs text-muted">{group.last_message ? `${group.last_sender}: ${group.last_message}` : group.members.map((m) => m.name).join(", ")}</span>
-                            {group.unread > 0 && !active && <span className="shrink-0 rounded-full bg-accent px-1.5 text-2xs font-semibold text-accent-foreground">{group.unread}</span>}
-                          </span>
-                        </span>
-                      </Button>
-                    );
-                  })}
+                      </span>
+                    </Button>
+                  ))}
                 </div>
               </div>
             )}
@@ -467,7 +433,7 @@ export function Sidebar({
                     }}
                     className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-card-hover"
                   >
-                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                    <svg data-icon className="shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                       <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />

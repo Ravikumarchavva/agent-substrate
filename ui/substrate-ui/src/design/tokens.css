@@ -166,3 +166,18 @@
 @utility size-control-sm { width: var(--control-sm); height: var(--control-sm); }
 @utility size-control-md { width: var(--control-md); height: var(--control-md); }
 @utility size-control-lg { width: var(--control-lg); height: var(--control-lg); }
+
+
+/*
+ * One icon size across the product. Every Lucide icon, and every custom icon marked `data-icon` (the sidebar toggle, brand glyphs), is --icon-size, whatever its parent (a button, a menu row, the rail, a tab), so no
+ * icon is ever bigger or smaller than its neighbours. Large decorative icons (an empty-state tile, a drop target) opt out with `icon-free`
+ * and set their own size. Not a per-component choice: change --icon-size here and everything follows.
+ */
+:root {
+  --icon-size: 1.125rem;
+}
+svg.lucide:not(.icon-free),
+svg[data-icon]:not(.icon-free) {
+  width: var(--icon-size) !important;
+  height: var(--icon-size) !important;
+}

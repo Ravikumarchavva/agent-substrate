@@ -258,7 +258,7 @@ export function ScheduledPanel({ onOpenThread }: ScheduledPanelProps) {
               <TaskDetail key={selected.id} task={selected} onBack={() => setSelected(null)} onChange={replace} onRun={runNow} onToggle={toggle} onDelete={remove} onOpenThread={onOpenThread} />
             ) : (
               <Pane className="items-center justify-center text-center">
-                <Clock className="size-8 text-muted" aria-hidden />
+                <Clock className="icon-free size-8 text-muted" aria-hidden />
                 <p className="text-sm font-medium text-foreground">Pick a task to see its runs and settings</p>
               </Pane>
             )}

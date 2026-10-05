@@ -22,9 +22,27 @@ export interface Group {
   unread: number;
   /** Agents spoke a long time without a person; a message from the user resumes it. */
   paused: boolean;
+  /** Members thinking about it right now. */
+  working: string[];
   /** What the agents have used in this group, and the most they may. */
   tokens_used: number;
   token_cap: number;
+}
+
+/** A file in a group: shared by someone in it, or made by an agent there. */
+export interface GroupFile {
+  name: string;
+  size: number;
+  mime: string;
+  /** Storage key; the file is at `buildObjectUrl(key)`. */
+  key: string;
+  /** The start of its text, which the agents are shown. Absent for a picture or a file with no text. */
+  excerpt?: string | null;
+  truncated?: boolean;
+  /** A picture of the first page (a PDF), at `buildObjectUrl(preview_key)`, and how many pages there are. */
+  preview_key?: string | null;
+  pages?: number | null;
+  modified?: number | null;
 }
 
 export interface GroupEntry {
@@ -38,6 +56,7 @@ export interface GroupEntry {
   /** Names of who it addresses (`everyone` for all). */
   mentions: string[];
   reply_to: number | null;
+  attachments: GroupFile[];
   at: string;
 }
 
@@ -46,6 +65,8 @@ export interface GroupMessages {
   latest: number;
   /** Members thinking about it right now. */
   working: string[];
+  /** The latest entry every agent has read: your messages up to here show as seen by all. */
+  read_by_all: number;
 }
 
 export interface Contact {
@@ -81,8 +102,22 @@ export const groupsApi = {
     return requestJson<GroupMessages>(`/groups/${id}/messages?after=${after}&wait=${waitSeconds}`);
   },
 
-  async sendGroupMessage(id: string, text: string, replyTo: number | null): Promise<GroupEntry> {
-    return requestJson<GroupEntry>(`/groups/${id}/messages`, { method: "POST", body: JSON.stringify({ text, reply_to: replyTo }) });
+  async sendGroupMessage(id: string, text: string, replyTo: number | null, attachments: GroupFile[] = []): Promise<GroupEntry> {
+    return requestJson<GroupEntry>(`/groups/${id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ text, reply_to: replyTo, attachments: attachments.map(({ key, name, size, mime, excerpt, truncated, preview_key, pages }) => ({ key, name, size, mime, excerpt, truncated, preview_key, pages })) }),
+    });
+  },
+
+  /** Add a file to the group's shared files; send it with a message to attach it. */
+  async uploadGroupFile(id: string, file: File): Promise<GroupFile> {
+    const form = new FormData();
+    form.append("file", file);
+    return requestJson<GroupFile>(`/groups/${id}/files`, { method: "POST", body: form });
+  },
+
+  async getGroupFiles(id: string): Promise<GroupFile[]> {
+    return requestJson<GroupFile[]>(`/groups/${id}/files`);
   },
 
   async markGroupRead(id: string, upto: number): Promise<void> {

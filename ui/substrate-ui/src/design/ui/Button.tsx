@@ -7,7 +7,7 @@ import { cn } from "../cn";
 export const buttonVariants = cva(
   "inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 whitespace-nowrap font-medium " +
     "transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent " +
-    "disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.5 [&_svg]:shrink-0",
+    "disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -20,8 +20,8 @@ export const buttonVariants = cva(
       size: {
         sm: "h-control-sm rounded-md px-2 text-xs",
         md: "h-control-md rounded-md px-2.5 text-xs",
-        lg: "h-control-lg rounded-lg px-4 text-sm [&_svg]:size-4",
-        icon: "size-control-md rounded-md text-xs [&_svg]:size-4",
+        lg: "h-control-lg rounded-lg px-4 text-sm",
+        icon: "size-control-md rounded-md text-xs",
         "icon-sm": "size-control-sm rounded-md text-xs",
       },
     },

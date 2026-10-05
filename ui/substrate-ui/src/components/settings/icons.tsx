@@ -4,7 +4,7 @@ interface BrandIconProps {
 
 export function GoogleIcon({ className = "h-4 w-4" }: BrandIconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+    <svg data-icon className={className} viewBox="0 0 24 24" aria-hidden="true">
       <path
         fill="#4285F4"
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -28,6 +28,7 @@ export function GoogleIcon({ className = "h-4 w-4" }: BrandIconProps) {
 export function SpotifyIcon({ className = "h-5 w-5 text-success" }: BrandIconProps) {
   return (
     <svg
+      data-icon
       className={className}
       viewBox="0 0 24 24"
       fill="currentColor"
@@ -40,7 +41,7 @@ export function SpotifyIcon({ className = "h-5 w-5 text-success" }: BrandIconPro
 
 export function GitHubIcon({ className = "h-5 w-5" }: BrandIconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <svg data-icon className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M12 1.5a10.5 10.5 0 0 0-3.32 20.46c.52.09.71-.22.71-.5v-1.74c-2.88.63-3.48-1.22-3.48-1.22-.48-1.19-1.16-1.5-1.16-1.5-.95-.65.08-.64.08-.64 1.05.08 1.6 1.08 1.6 1.08.93 1.59 2.45 1.13 3.05.86.1-.68.37-1.13.67-1.39-2.3-.26-4.71-1.15-4.71-5.12 0-1.13.4-2.06 1.07-2.79-.11-.26-.46-1.33.1-2.78 0 0 .87-.28 2.85 1.06a9.92 9.92 0 0 1 5.2 0c1.97-1.34 2.84-1.06 2.84-1.06.57 1.45.22 2.52.11 2.78.67.73 1.07 1.66 1.07 2.79 0 3.98-2.42 4.86-4.73 5.11.38.33.71.96.71 1.94v2.88c0 .28.19.6.72.5A10.5 10.5 0 0 0 12 1.5Z" />
     </svg>
   );
@@ -49,6 +50,7 @@ export function GitHubIcon({ className = "h-5 w-5" }: BrandIconProps) {
 export function DocsIcon({ className = "h-5 w-5" }: BrandIconProps) {
   return (
     <svg
+      data-icon
       className={className}
       viewBox="0 0 24 24"
       fill="none"

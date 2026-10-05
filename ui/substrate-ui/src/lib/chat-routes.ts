@@ -33,23 +33,25 @@ export function isSettingsTab(value: string | null): value is SettingsTab {
  *   /settings             → { threadId: null, settingsTab: "general" }
  *   /settings/<tab>       → { threadId: null, settingsTab: <tab> }
  */
-export type ChatView = "scheduled" | "approvals" | "notifications" | "agents" | "groups";
+export type ChatView = "scheduled" | "notifications" | "agents" | "groups";
 
-const VIEWS: readonly string[] = ["scheduled", "approvals", "notifications", "agents", "groups"];
+const VIEWS: readonly string[] = ["scheduled", "notifications", "agents", "groups"];
 
 export function parseChatPath(pathname: string): {
   threadId: string | null;
   settingsTab: SettingsTab | null;
-  /** A page of its own in place of the conversation (`/scheduled`, `/approvals`). */
+  /** A page of its own in place of the conversation (`/scheduled`, `/notifications`). */
   view: ChatView | null;
   /** The group open on the Groups page (`/groups/<id>`, or `new`). */
   groupId: string | null;
+  /** The agent open on the Agents page (`/agents/<id>`, or `new`). */
+  agentId: string | null;
 } {
   const segments = pathname.split("/").filter(Boolean);
 
-  // /scheduled or /approvals
+  // /scheduled or /notifications
   if (segments[0] && VIEWS.includes(segments[0])) {
-    return { threadId: null, settingsTab: null, view: segments[0] as ChatView, groupId: segments[0] === "groups" ? (segments[1] ?? null) : null };
+    return { threadId: null, settingsTab: null, view: segments[0] as ChatView, groupId: segments[0] === "groups" ? (segments[1] ?? null) : null, agentId: segments[0] === "agents" ? (segments[1] ?? null) : null };
   }
 
   // /settings or /settings/<tab>
@@ -61,11 +63,12 @@ export function parseChatPath(pathname: string): {
       settingsTab: resolvedTab,
       view: null,
       groupId: null,
+      agentId: null,
     };
   }
 
   // / or /<threadId>
-  return { threadId: segments[0] ?? null, settingsTab: null, view: null, groupId: null };
+  return { threadId: segments[0] ?? null, settingsTab: null, view: null, groupId: null, agentId: null };
 }
 
 /**

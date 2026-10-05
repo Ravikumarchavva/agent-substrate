@@ -114,7 +114,7 @@ export function PageEmpty({ icon: Icon, title, children, action }: { icon: Lucid
   return (
     <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-border bg-background/40 px-6 py-16 text-center">
       <div className="flex size-12 items-center justify-center rounded-xl bg-badge text-muted">
-        <Icon className="size-6" aria-hidden />
+        <Icon className="icon-free size-6" aria-hidden />
       </div>
       <p className="mt-4 text-sm font-semibold text-foreground">{title}</p>
       {children && <div className="mt-1 max-w-md text-xs leading-relaxed text-muted">{children}</div>}

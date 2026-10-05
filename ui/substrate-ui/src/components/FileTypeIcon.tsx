@@ -38,7 +38,7 @@ export function FileTypeIcon({
       style={{ width: px, height: px }}
     >
       <Icon
-        className="text-white"
+        className="icon-free text-white"
         style={{ width: px * 0.52, height: px * 0.52 }}
         strokeWidth={2}
       />

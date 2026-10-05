@@ -25,6 +25,12 @@ if they differ. Edit here, then sync. Never edit the copy.
 | Control height | `sm` 28 · `md` 32 (default) · `lg` 40 |
 | Motion | `--duration-fast/normal/slow`, `--ease-*` |
 
+## Icons
+
+Every Lucide icon is `--icon-size` (18px), set once in `tokens.css`, whatever its parent: a button, a menu row, the rail, a tab. Never size an icon in a component
+(`size-4`, `h-5 w-5`…); it would not apply anyway. An icon that is meant to be large (an empty-state tile, a drop target) says so with `icon-free` and
+sets its own size. To make all icons bigger or smaller, change `--icon-size`.
+
 ## Colour layers
 
 1. **Scales**: raw sizes; the same in every theme.

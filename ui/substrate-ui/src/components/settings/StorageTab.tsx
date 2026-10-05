@@ -889,7 +889,7 @@ export function StorageTab() {
             ) : currentViewData.folders.length === 0 && currentViewData.files.length === 0 ? (
               <div className="flex h-72 flex-col items-center justify-center gap-3">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-background border border-border shrink-0">
-                  <Folder className="h-7 w-7 text-muted opacity-40 shrink-0" />
+                  <Folder className="icon-free h-7 w-7 text-muted opacity-40 shrink-0" />
                 </div>
                 <div className="text-center max-w-xs">
                   <p className="text-sm font-medium text-foreground">{search ? `No matches for "${search}"` : "This folder is empty"}</p>

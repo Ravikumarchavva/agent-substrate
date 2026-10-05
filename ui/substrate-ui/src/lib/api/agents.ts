@@ -15,6 +15,8 @@ export interface Agent {
   last_active: string | null;
   /** A one-line preview of the last thing said in that conversation. */
   last_message: string | null;
+  /** Working on a reply to you right now. */
+  working: boolean;
 }
 
 export interface AgentInput {

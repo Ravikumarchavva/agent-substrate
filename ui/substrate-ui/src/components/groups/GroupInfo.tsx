@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Coins, Trash2, X } from "lucide-react";
-import { Badge, Button, Input, Meter, Section, Select, confirmAction } from "@/design";
+import { useEffect, useState } from "react";
+import { Coins, Pin, Trash2, X } from "lucide-react";
+import { Badge, Button, Input, Meter, Section, Select, confirmAction, toast } from "@/design";
 import { api } from "@/lib/api";
 import type { Agent } from "@/lib/api/agents";
-import type { Group, MemberMode } from "@/lib/api/groups";
+import type { Group, GroupFile, MemberMode } from "@/lib/api/groups";
 import { reportError } from "@/lib/report-error";
+import { chatKey, usePinnedChats } from "@/lib/pins";
+import { Attachment } from "./Attachments";
 import { Avatar } from "./Avatar";
 
 const MODES = [
@@ -25,8 +27,19 @@ type Props = {
 
 /** Who is in the group and how closely each follows it; rename it, add or remove agents, or delete it. */
 export function GroupInfo({ group, agents, onChanged, onDeleted }: Props) {
+  const { pinned, toggle } = usePinnedChats();
+  const isPinned = pinned.includes(chatKey("group", group.id));
   const [name, setName] = useState(group.name);
   const [cap, setCap] = useState(String(group.token_cap));
+  const [files, setFiles] = useState<GroupFile[] | null>(null);
+  // Everything the group shares, including what its agents made: refreshed when the group's last message changes.
+  useEffect(() => {
+    let alive = true;
+    api.getGroupFiles(group.id).then((f) => alive && setFiles(f)).catch(() => alive && setFiles([]));
+    return () => {
+      alive = false;
+    };
+  }, [group.id, group.last_message, group.updated_at]);
   const outside = agents.filter((a) => !group.members.some((m) => m.agent_id === a.id));
 
   const run = async (action: () => Promise<Group | void>, failure: string) => {
@@ -102,6 +115,22 @@ export function GroupInfo({ group, agents, onChanged, onDeleted }: Props) {
         )}
       </Section>
 
+      <Section title="Files" description="Shared with everyone in the group. The agents are shown the text of what you share; pictures they cannot read.">
+        {files === null ? (
+          <p className="text-xs text-muted">Loading…</p>
+        ) : files.length === 0 ? (
+          <p className="text-xs text-muted">Nothing shared yet. Attach a file to a message, or drop one into the chat.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {files.map((f) => (
+              <li key={f.key}>
+                <Attachment file={f} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
       <Section title="Budget" description="The most the agents may use in this group in all. When it is reached they stop replying until you raise it.">
         <div className="flex items-center gap-3">
           <Meter icon={Coins} label="Group budget" used={group.tokens_used} limit={group.token_cap} />
@@ -125,6 +154,17 @@ export function GroupInfo({ group, agents, onChanged, onDeleted }: Props) {
           Paused: the agents talked a long time without you. Send a message to continue.
         </Badge>
       )}
+
+      <Button
+        variant="ghost"
+        aria-pressed={isPinned}
+        onClick={() => {
+          if (toggle(chatKey("group", group.id)) === false) toast.error("You can pin up to 5 chats. Unpin one first.");
+        }}
+        className="w-full"
+      >
+        <Pin /> {isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
+      </Button>
 
       <Button variant="ghost" onClick={() => void remove()} className="w-full text-danger">
         <Trash2 /> Delete group

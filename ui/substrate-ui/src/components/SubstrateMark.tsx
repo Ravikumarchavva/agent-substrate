@@ -11,7 +11,7 @@ export function SubstrateMark({ className, ...props }: SVGProps<SVGSVGElement>) 
     return <img src={custom} alt="" aria-hidden="true" className={`object-contain ${className ?? ""}`} />;
   }
   return (
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className={className} {...props}>
+    <svg data-icon viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className={className} {...props}>
       <rect x="2" y="2" width="13" height="13" rx="2.5" fill="var(--accent)" transform="rotate(8 8 8)" />
       <rect x="9" y="9" width="13" height="13" rx="2.5" fill="var(--accent-2)" transform="rotate(8 15 15)" />
     </svg>

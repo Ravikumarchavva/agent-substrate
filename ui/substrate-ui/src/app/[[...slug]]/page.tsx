@@ -8,13 +8,11 @@ import { MessageBubble } from "@/components/MessageBubble";
 import { Header } from "@/components/Header";
 import { ForkBranchModal } from "@/components/ForkBranchModal";
 import { RunInspector } from "@/components/RunInspector";
-import { AgentsPanel } from "@/components/AgentsPanel";
-import { GroupsPanel } from "@/components/groups/GroupsPanel";
+import { ChatsPanel, type ChatSelection } from "@/components/chats/ChatsPanel";
 import { ComputerPanel } from "@/components/ComputerPanel";
 import { ComposerLimit } from "@/components/ComposerLimit";
 import { HomeScreen } from "@/components/HomeScreen";
 import { useDisplayName } from "@/lib/display-name";
-import { setAgentToEdit } from "@/lib/agent-focus";
 import type { Agent } from "@/lib/api/agents";
 import type { Group } from "@/lib/api/groups";
 import { SubstrateMark } from "@/components/SubstrateMark";
@@ -65,7 +63,6 @@ import {
 import { useAppPanel } from "@/hooks/useAppPanel";
 import { useTaskBoards } from "@/hooks/useTaskBoards";
 import { PlanCardStack } from "@/components/PlanCard";
-import { ApprovalsPanel } from "@/components/ApprovalsPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { reportError } from "@/lib/report-error";
 import { useFileDrop } from "@/hooks/useFileDrop";
@@ -146,7 +143,6 @@ function ChatPageContent() {
   const wasAuthenticatedRef = useRef(false);
 
   const scheduledPanelOpen = routeState.view === "scheduled";
-  const approvalsPanelOpen = routeState.view === "approvals";
   const agentsPanelOpen = routeState.view === "agents";
   const groupsPanelOpen = routeState.view === "groups";
   const notificationsPanelOpen = routeState.view === "notifications";
@@ -160,6 +156,8 @@ function ChatPageContent() {
   }, []);
 
   const currentThreadId = routeState.threadId ?? lastActiveThreadId;
+  // What the sidebar highlights: the open conversation, and nothing while a page of its own (Agents, Groups, Notifications…) is open.
+  const selectedThreadId = routeState.view !== null || routeState.settingsTab !== null ? null : currentThreadId;
   // Mirrors currentThreadId so an in-flight loadMessages() fetch can tell,
   // once it resolves, whether the user has already navigated to a different
   // thread — without this, a slow fetch for thread A resolving after the
@@ -328,19 +326,20 @@ function ChatPageContent() {
     router.push(buildChatRoute(lastActiveThreadId), { scroll: false });
   }, [lastActiveThreadId, router]);
 
-  // Scheduled and Approvals are pages with their own URL. The raw History API (not router.push) so the page does not remount
+  // Scheduled and Notifications are pages with their own URL. The raw History API (not router.push) so the page does not remount
   // and lose an in-flight reply (see selectThread).
   const openView = useCallback((view: ChatView, id?: string) => {
     setMobileSidebarOpen(false);
     window.history.pushState(null, "", buildViewPath(view, id));
   }, []);
   const handleOpenScheduled = useCallback(() => openView("scheduled"), [openView]);
-  const handleOpenApprovals = useCallback(() => openView("approvals"), [openView]);
   const handleOpenAgents = useCallback(() => openView("agents"), [openView]);
   const handleOpenNotifications = useCallback(() => openView("notifications"), [openView]);
   const handleOpenGroup = useCallback((groupId: string | null) => openView("groups", groupId ?? undefined), [openView]);
+  const handleSelectChat = useCallback((kind: "agent" | "group", id: string | null) => openView(kind === "agent" ? "agents" : "groups", id ?? undefined), [openView]);
+  const chatSelection: ChatSelection = groupsPanelOpen ? { kind: "group", id: routeState.groupId } : agentsPanelOpen ? { kind: "agent", id: routeState.agentId } : null;
 
-  /** Leave Scheduled/Approvals for the conversation they came from (or a given one). */
+  /** Leave Scheduled/Notifications for the conversation they came from (or a given one). */
   const handleCloseView = useCallback(
     (threadId?: string | null) => selectThread(threadId === undefined ? lastActiveThreadId : threadId, "push"),
     [lastActiveThreadId, selectThread],
@@ -360,7 +359,8 @@ function ChatPageContent() {
 
   // ── Custom Hooks ────────────────────────────────────────
   const { threads, setThreads, loadThreads, hasMore, loadMore, showArchived, setShowArchived, handlePinThread, handleArchiveThread, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
-    autoSelectFirstThread: !settingsPanelOpen,
+    // A page of its own (Groups, Agents, Scheduled…) stays where it was opened; only a conversation falls back to the first one.
+    autoSelectFirstThread: !settingsPanelOpen && routeState.view === null,
   });
   // Agents the user has made. Each has one conversation of its own, listed in the sidebar like a contact; its last activity is refreshed when a run ends.
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -378,6 +378,19 @@ function ChatPageContent() {
   useEffect(() => {
     refreshGroups();
   }, [groupsPanelOpen, routeState.groupId, refreshGroups]);
+  const refreshChats = useCallback(() => {
+    refreshAgents();
+    refreshGroups();
+  }, [refreshAgents, refreshGroups]);
+  // "typing…" and unread counts in the lists: look again every few seconds while the page is in front.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      refreshAgents();
+      refreshGroups();
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [refreshAgents, refreshGroups]);
   const { attachedFiles, setAttachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
   const { boards, upsertBoard, clearBoards, settleBoards } = useTaskBoards(currentThreadId);
@@ -894,9 +907,8 @@ function ChatPageContent() {
   );
   const editAgent = useCallback(() => {
     if (!threadAgent) return;
-    setAgentToEdit(threadAgent.id);
-    handleOpenAgents();
-  }, [threadAgent, handleOpenAgents]);
+    openView("agents", threadAgent.id);
+  }, [threadAgent, openView]);
 
   // Run details + ratings: ratings are per run (the unit an answer comes from), loaded with the conversation.
   const [inspectOpen, setInspectOpen] = useState(false);
@@ -1852,7 +1864,7 @@ function ChatPageContent() {
       <div className="flex min-h-dvh items-center justify-center bg-background px-4">
         <div className="text-center space-y-6 max-w-sm w-full">
           <div className="substrate-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center bg-accent text-accent-foreground">
-            <SubstrateMark className="h-8 w-8" />
+            <SubstrateMark className="icon-free h-8 w-8" />
           </div>
           <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
             <h1 className="text-2xl font-semibold">Welcome</h1>
@@ -1871,7 +1883,7 @@ function ChatPageContent() {
             style={{ '--stagger': 3, boxShadow: "var(--shadow-md)" } as React.CSSProperties}
           >
             {/* Google G */}
-            <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
+            <svg data-icon viewBox="0 0 24 24" aria-hidden="true">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -1907,7 +1919,7 @@ function ChatPageContent() {
       >
         <Sidebar
           threads={threads}
-          currentThreadId={currentThreadId}
+          currentThreadId={selectedThreadId}
           onNewChat={handleNewChat}
           onSelectThread={handleSelectThread}
           onDeleteThread={handleDeleteThread}
@@ -1923,7 +1935,6 @@ function ChatPageContent() {
           onOpenScheduled={handleOpenScheduled}
           isScheduledOpen={scheduledPanelOpen}
           scheduledCount={scheduledCount}
-          onOpenApprovals={handleOpenApprovals}
           onOpenAgents={handleOpenAgents}
           agents={agents}
           onOpenAgent={(a) => void openAgent(a.id)}
@@ -1931,11 +1942,9 @@ function ChatPageContent() {
           openGroupId={groupsPanelOpen ? routeState.groupId : null}
           onOpenGroup={handleOpenGroup}
           isAgentsOpen={agentsPanelOpen}
-          isApprovalsOpen={approvalsPanelOpen}
-          approvalsCount={approvalsCount}
           onOpenNotifications={handleOpenNotifications}
           isNotificationsOpen={notificationsPanelOpen}
-          unreadCount={unreadCount}
+          unreadCount={unreadCount + approvalsCount}
           mode={settingsPanelOpen ? "settings" : "chat"}
           settingsTab={settingsPanelTab}
           onSelectSettingsTab={selectSettingsTab}
@@ -1953,15 +1962,18 @@ function ChatPageContent() {
           }}
           onOpenSettings={openSettingsPanel}
           onOpenScheduled={handleOpenScheduled}
-          onOpenApprovals={handleOpenApprovals}
           onOpenAgents={handleOpenAgents}
           isAgentsOpen={agentsPanelOpen}
           onOpenNotifications={handleOpenNotifications}
           isScheduledOpen={scheduledPanelOpen}
-          isApprovalsOpen={approvalsPanelOpen}
           isNotificationsOpen={notificationsPanelOpen}
-          approvalsCount={approvalsCount}
-          unreadCount={unreadCount}
+          unreadCount={unreadCount + approvalsCount}
+          agents={agents}
+          groups={groups}
+          openGroupId={groupsPanelOpen ? routeState.groupId : null}
+          currentThreadId={selectedThreadId}
+          onOpenAgent={(a) => void openAgent(a.id)}
+          onOpenGroup={handleOpenGroup}
           mode={settingsPanelOpen ? "settings" : "chat"}
           settingsTab={settingsPanelTab}
           onSelectSettingsTab={selectSettingsTab}
@@ -1972,7 +1984,7 @@ function ChatPageContent() {
       {/* Main Content */}
       <div className="flex min-w-0 flex-1">
         <div className="relative flex min-w-0 flex-1 flex-col">
-          {!settingsPanelOpen && !scheduledPanelOpen && !approvalsPanelOpen && !notificationsPanelOpen && !agentsPanelOpen && (
+          {!settingsPanelOpen && !scheduledPanelOpen && !notificationsPanelOpen && !agentsPanelOpen && !groupsPanelOpen && (
             <Header
               onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
               desktopSidebarOpen={desktopSidebarOpen}
@@ -2015,14 +2027,17 @@ function ChatPageContent() {
             </div>
           ) : scheduledPanelOpen ? (
             <ScheduledPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} />
-          ) : agentsPanelOpen ? (
-            <AgentsPanel onStartChat={(agentId) => void openAgent(agentId)} />
-          ) : groupsPanelOpen ? (
-            <GroupsPanel groups={groups} agents={agents} groupId={routeState.groupId} onOpen={handleOpenGroup} onChanged={refreshGroups} />
+          ) : agentsPanelOpen || groupsPanelOpen ? (
+            <ChatsPanel
+              agents={agents}
+              groups={groups}
+              selection={chatSelection}
+              onSelect={handleSelectChat}
+              onChanged={refreshChats}
+              onMessageAgent={(agentId) => void openAgent(agentId)}
+            />
           ) : notificationsPanelOpen ? (
-            <NotificationsPanel onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} />
-          ) : approvalsPanelOpen ? (
-            <ApprovalsPanel onOpenThread={(threadId) => handleCloseView(threadId)} />
+            <NotificationsPanel onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} groups={groups} onOpenGroup={handleOpenGroup} />
           ) : (
             <>
               <div
@@ -2042,7 +2057,7 @@ function ChatPageContent() {
                     agents={agents}
                     onOpenScheduled={handleOpenScheduled}
                     onOpenAgents={handleOpenAgents}
-                    onOpenApprovals={handleOpenApprovals}
+                    onOpenNotifications={handleOpenNotifications}
                     onOpenFiles={() => openSettingsPanel("storage")}
                   />
                 ) : (
@@ -2404,7 +2419,7 @@ function ChatPageContent() {
           >
             <Sidebar
               threads={threads}
-              currentThreadId={currentThreadId}
+              currentThreadId={selectedThreadId}
               onNewChat={handleNewChat}
               onSelectThread={handleSelectThread}
               onDeleteThread={handleDeleteThread}
@@ -2420,7 +2435,6 @@ function ChatPageContent() {
               onOpenScheduled={handleOpenScheduled}
               isScheduledOpen={scheduledPanelOpen}
               scheduledCount={scheduledCount}
-              onOpenApprovals={handleOpenApprovals}
               onOpenAgents={handleOpenAgents}
               agents={agents}
               onOpenAgent={(a) => void openAgent(a.id)}
@@ -2428,11 +2442,9 @@ function ChatPageContent() {
               openGroupId={groupsPanelOpen ? routeState.groupId : null}
               onOpenGroup={handleOpenGroup}
               isAgentsOpen={agentsPanelOpen}
-              isApprovalsOpen={approvalsPanelOpen}
-              approvalsCount={approvalsCount}
               onOpenNotifications={handleOpenNotifications}
               isNotificationsOpen={notificationsPanelOpen}
-              unreadCount={unreadCount}
+              unreadCount={unreadCount + approvalsCount}
               mode={settingsPanelOpen ? "settings" : "chat"}
               settingsTab={settingsPanelTab}
               onSelectSettingsTab={selectSettingsTab}

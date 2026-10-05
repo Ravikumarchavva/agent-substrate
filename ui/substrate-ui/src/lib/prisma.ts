@@ -5,7 +5,8 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  // Every proxied request looks up its session, and the page polls: logging each query fills the terminal. PRISMA_LOG_QUERIES=1 turns it back on.
+  log: process.env.NODE_ENV === 'development' ? (process.env.PRISMA_LOG_QUERIES === '1' ? ['query', 'error', 'warn'] : ['error', 'warn']) : ['error'],
 })
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma

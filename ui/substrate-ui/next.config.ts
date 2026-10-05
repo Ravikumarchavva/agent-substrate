@@ -21,6 +21,12 @@ const nextConfig: NextConfig = {
   // testing from another device — left to just localhost by default so
   // this file doesn't ship anyone's personal dev environment.
   allowedDevOrigins: ['127.0.0.1'],
+  // The page polls a few endpoints every few seconds (the lists, an open group's messages). Listing every one buries the requests that matter.
+  logging: {
+    incomingRequests: {
+      ignore: [/\/api\/backend\/(agents|groups|scheduled|notifications|approvals|rate-limit\/status|groups\/[0-9a-f-]+\/messages)(\?.*)?$/],
+    },
+  },
   experimental: {
     // Enable if needed
   },

@@ -48,7 +48,7 @@ from substrate_cloud.monolith.services.thread_service import (
     thread_row,
 )
 from substrate_cloud.stream import project_thread
-from substrate_cloud.monolith.services.agent_service import get_owned_agent
+from substrate_cloud.monolith.services.agents.service import get_owned_agent
 from substrate_cloud.stream.runs import RunDetail, inspect_thread
 from substrate_cloud.stream.export import filename, messages_of, to_markdown
 from substrate_cloud.stream.search import message_counts, search_messages

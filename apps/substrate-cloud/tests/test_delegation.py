@@ -9,7 +9,7 @@ import pytest
 
 from substrate.testing.scripted import ScriptedModel
 from substrate.types import RunScope
-from substrate_cloud.monolith.services.delegation import (
+from substrate_cloud.monolith.services.agents.delegation import (
     MAX_CALLS_PER_MESSAGE,
     AgentRef,
     AskAgentTool,

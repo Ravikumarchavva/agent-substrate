@@ -700,3 +700,43 @@ async def test_send_and_emit_deliver_once_when_the_run_replays() -> None:
 
     assert len(peer.seen) == 1, peer.seen
     assert len(follower.seen) == 1, follower.seen
+
+
+# ---------------------------------------------------------------------------
+# 8. channels from an agent: post once across replays, read what is new
+# ---------------------------------------------------------------------------
+
+
+class PostsThenSuspends:
+    def __init__(self, agent_id: Actor, helper: Actor) -> None:
+        self.id = agent_id
+        self.helper = helper
+        self.seen: list[str] = []
+        self.done = asyncio.Event()
+
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        entries = await ctx.read_channel("g")
+        self.seen = [e.text for e in entries]
+        await ctx.post("g", "on it", read_up_to=entries[-1].seq)
+        await ctx.ask(self.helper, _msg(self.helper, {}), timeout=3.0)
+        self.done.set()
+
+
+async def test_a_post_from_a_replaying_run_lands_once_and_a_read_is_stable() -> None:
+    from substrate.runtime.channel import Member
+
+    poster_id, helper_id = Actor("agent", "poster@g"), _agent_id("helper2")
+    poster = PostsThenSuspends(poster_id, helper_id)
+    human = Actor("user", "ravi")
+
+    async with ephemeral_runtime() as rt:
+        await rt.register(poster)
+        await rt.register(Echo(helper_id))
+        store = rt._store  # noqa: SLF001
+        await store.channel_open("g", members=[Member(agent=poster_id)])
+        await store.channel_append("g", sender=human, text="please do it")
+        await asyncio.wait_for(poster.done.wait(), timeout=5.0)
+        entries = await store.channel_read("g")
+
+    assert [e.text for e in entries] == ["please do it", "on it"]
+    assert poster.seen == ["please do it"]

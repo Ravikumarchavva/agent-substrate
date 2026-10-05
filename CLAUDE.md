@@ -251,7 +251,7 @@ new orchestration in `agents/flows.py`, a new port in the concept that owns it *
 | A new memory backend | `integrations/memory/<name>.py` — implement `MemoryStore` and run `MemoryStoreConformance` against it |
 | A new history backend | `integrations/history/<name>.py` — implement `ThreadStore` (`stores/threads.py`) |
 | A new vector or graph store | implement `VectorStore` (`stores/vector.py`) / `GraphStore` (`stores/graph.py`) and run its conformance suite — or, to put everything on another database, write a `Database` adapter (`stores/database.py`; see `integrations/database/postgres_database.py`) |
-| A new runtime store | implement `RuntimeStore` (`runtime/store.py`) — or a new `Database` adapter for `SqlRuntimeStore` — and run `RuntimeStoreConformance` against it |
+| A new runtime store | implement `RuntimeStore` (`runtime/store.py`) — or a new `Database` adapter for `DurableRuntimeStore` — and run `RuntimeStoreConformance` against it |
 | A new document reader / OCR engine | implement `DocumentExtractor` or `Ocr` (`documents/protocols.py`) and pass it: `Reader(engine=…)` / `Reader(ocr=…, isolate=False)`; run `DocumentExtractorConformance` / `OcrConformance` |
 | A new embedder / reranker | implement `EmbeddingModel` / `Reranker` (`models/protocols.py`) and pass it: `Library(store, embedder=…, reranker=…)`; run `EmbeddingModelConformance` / `RerankerConformance` (a URL needs no code: `RemoteEmbedder` speaks the OpenAI wire) |
 | A new tool | a typed function with `@tool(risk=…, idempotent=…)` (`substrate.tools`) — or, for a shipped one, `integrations/tools/<name>/tool.py` implementing `Tool`, **declaring `risk` and `idempotent`** (auto-scanned, no registration needed) |

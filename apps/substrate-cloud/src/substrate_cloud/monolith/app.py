@@ -27,6 +27,8 @@ from substrate_cloud.monolith.database import init_db
 from substrate_cloud.monolith.dependencies import ServerDependencies
 from substrate_cloud.monolith.routes.admin import router as admin_router
 from substrate_cloud.monolith.routes.agents import router as agents_router
+from substrate_cloud.monolith.routes.groups import router as groups_router
+from substrate_cloud.monolith.services.groups.member import register_member_factory
 from substrate_cloud.monolith.routes.audio import router as audio_router
 from substrate_cloud.monolith.routes.workspace_oauth import (
     router as workspace_oauth_router,
@@ -219,6 +221,8 @@ async def lifespan(app: FastAPI):
         short_term_memory=infra.short_term_memory,
         long_term_memory=infra.long_term_memory,
     )
+
+    register_member_factory(infra.runtime, lambda: app.state.ctx)
 
     app.state.mcp_servers = {}
 
@@ -420,6 +424,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(workspace_oauth_router)
     app.include_router(agents_router)
+    app.include_router(groups_router)
     app.include_router(threads_router)
     app.include_router(branches_router)
     app.include_router(memory_router)

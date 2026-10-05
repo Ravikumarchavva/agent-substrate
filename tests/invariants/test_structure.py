@@ -302,7 +302,7 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
         "the vector-store conformance suite has gone missing"
     )
     shipped = {
-        "RuntimeStore": ("SqlRuntimeStoreOnSqlite", "TestPostgresRuntimeStore"),
+        "RuntimeStore": ("DurableRuntimeStoreOnSqlite", "TestPostgresRuntimeStore"),
         "MemoryStore": ("TestMemory", "TestPostgresMemory"),
         "ShortTermMemory": (
             "TestSessionState",

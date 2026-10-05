@@ -69,6 +69,7 @@ from substrate.runtime.store import (
 from substrate.runtime.supervisor import RunHandle, RunResult
 from substrate.types.wakeup import Wakeup
 from substrate.tools.chain import InvocationResult
+from substrate.runtime.channel import AppendResult, ChannelEntry
 from substrate.runtime.journal import Journal, current_idempotency_key
 from substrate.telemetry.metrics import instruments
 from substrate.telemetry import semconv
@@ -331,6 +332,11 @@ class RunContext:
         tree over fails the run), so total spend can exceed the cap only by calls already in
         flight when it was reached.
         """
+        account = await self._store.run_accounts_exhausted(
+            RunId(self.run_id), strict=strict
+        )
+        if account is not None:
+            raise BudgetExhaustedError(f"Budget account {account} is exhausted")
         supervision = self._meta.supervision
         budget = (
             supervision.execution_budget
@@ -694,6 +700,65 @@ class RunContext:
                 for f in followers
             ),
         )
+
+    async def post(
+        self,
+        channel: str,
+        text: str,
+        *,
+        mentions: Sequence[str] = (),
+        reply_to: int | None = None,
+        read_up_to: int | None = None,
+    ) -> AppendResult:
+        """Speak in a channel as this agent, once across all replays.
+
+        With ``read_up_to`` the post is refused (``stale``) when others have spoken since that
+        ``seq``: read again and reconsider. The run's id is the entry's ``caused_by``.
+        """
+
+        async def append() -> JsonObject:
+            result = await self._store.channel_append(
+                channel,
+                sender=self.agent.id,
+                text=text,
+                mentions=mentions,
+                reply_to=reply_to,
+                caused_by=self.run_id,
+                read_up_to=read_up_to,
+                dedup_key=current_idempotency_key(),
+            )
+            return result.model_dump(mode="json")
+
+        outcome = await self._journal.effect(
+            "channel.post", {"channel": channel, "text": text}, append, idempotent=True
+        )
+        return AppendResult.model_validate(outcome.value)
+
+    async def read_channel(
+        self, channel: str, *, limit: int = 200
+    ) -> list[ChannelEntry]:
+        """What this agent has not read yet in ``channel``, marked read. Journaled: a replay sees
+        what the first attempt saw, not whatever has been said since."""
+
+        async def read() -> JsonObject:
+            me = self.agent.id
+            cursor = next(
+                (
+                    m.cursor
+                    for m in await self._store.channel_members(channel)
+                    if m.agent == me
+                ),
+                -1,
+            )
+            entries = await self._store.channel_read(channel, after=cursor, limit=limit)
+            if entries:
+                await self._store.channel_mark_read(channel, me, entries[-1].seq)
+            return {"entries": [e.model_dump(mode="json") for e in entries]}
+
+        outcome = await self._journal.effect(
+            "channel.read", {"channel": channel}, read, idempotent=True
+        )
+        return [ChannelEntry.model_validate(e) for e in outcome.value["entries"]]
 
     async def reply(self, to: Message, result: JsonObject) -> None:
         """Answer an ``ask``: signals the asker's run."""

@@ -1,5 +1,6 @@
 """``ask_agent``: one agent asks another of the user's agents to do a piece of work and gets its answer back.
 
+An agent may ask only its contacts (the allow-list its owner sets); a plain conversation with no agent in it may ask any of the user's agents.
 The other agent runs in a conversation of its own (kept in Archived, linked to the one that asked), with its own role, tools and workspace, so everything
 it did can be read afterwards. It cannot delegate further: one level only, which is what stops two agents asking each other forever. Each agent a
 conversation may call is capped per message, and the wait is bounded; an agent that is still working when the wait ends is reported as still running.
@@ -22,14 +23,10 @@ from substrate.types import Actor, RunLogKind, TextBlock, scope_of
 from substrate.types import ChatMessage as KernelChatMessage
 from substrate.types import Role
 from substrate.types import TextBlock as KernelTextBlock
-from substrate_cloud.factory import build_agent_for_thread, build_chat_tools
 from substrate_cloud.monolith.database import system_session
-from substrate_cloud.monolith.models import Agent, Thread
-from substrate_cloud.monolith.services.agent_service import (
-    agent_instructions_block,
-    narrow_tools,
-)
-from substrate_cloud.shared.settings import settings
+from substrate_cloud.monolith.models import Agent, AgentContact, Thread
+from substrate_cloud.monolith.services.agents.assembly import assemble_agent
+from substrate_cloud.monolith.services.agents.service import AgentProfile
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +42,7 @@ class AgentRef:
     id: uuid.UUID
     name: str
     role: str
+    note: str = ""
 
 
 def _text(message: str, *, error: bool = False, **structured: Any) -> ToolExecutionResult:
@@ -67,7 +65,9 @@ class AskAgentTool:
         self._others = {a.name.lower(): a.id for a in others}
         self._tool_name_of = tool_name_of
         self._calls = 0
-        roster = "; ".join(f"{a.name} ({a.role or 'no role set'})" for a in others)
+        roster = "; ".join(
+            f"{a.name} ({a.role or 'no role set'}{': ' + a.note if a.note else ''})" for a in others
+        )
         self.description = (
             "Ask one of your other agents to do a piece of work and get its answer back. It works in its own conversation with its own tools and "
             f"files. Agents you can ask: {roster}. Give it everything it needs in the request: it cannot see this conversation."
@@ -129,27 +129,10 @@ class AskAgentTool:
             await db.commit()
             thread_id = thread.id
             # Plain values from here on: the rows belong to this session.
-            workspace_id = target.workspace_id
-            instructions = ctx.system_instructions + agent_instructions_block(target)
-            allowed = narrow_tools(  # the delegate never gets this tool: one level only
-                [t for t in build_chat_tools(ctx.tools, await ctx.bridge_registry.acquire(str(thread_id))) if getattr(t, "name", "") != TOOL_NAME],
-                target,
-                self._tool_name_of,
-            )
+            profile = AgentProfile.of(target)
 
-        delegate = await build_agent_for_thread(
-            thread_id,
-            model_client=ctx.model_client,
-            tools=allowed,
-            system_instructions=instructions,
-            cfg=settings,
-            history=ctx.history,
-            short_term_memory=ctx.short_term_memory,
-            long_term_memory=ctx.long_term_memory,
-            user_id=user_id,
-            tenant_id=tenant_id,
-            runtime=ctx.runtime,
-            safety_middleware=ctx.safety_middleware,
+        delegate = await assemble_agent(
+            ctx, profile, session_id=thread_id, drop_tools=(TOOL_NAME,)  # one level only: the delegate cannot delegate
         )
         msg = Message(
             target=delegate.id,
@@ -158,7 +141,7 @@ class AskAgentTool:
                 message=KernelChatMessage(role=Role.USER, content=[KernelTextBlock(text=request)])
             ),
             correlation_id=str(thread_id),
-            metadata={"user_id": user_id, "tenant_id": tenant_id, "workspace_id": workspace_id},
+            metadata={"user_id": user_id, "tenant_id": tenant_id, "workspace_id": profile.workspace_id},
         )
         await ctx.runtime.register(delegate)
         run_id = await ctx.runtime.submit(delegate.id, msg, thread_id=str(thread_id))
@@ -207,3 +190,15 @@ async def other_agents(ctx: Any, tenant_id: str, user_id: str, exclude: uuid.UUI
             .order_by(Agent.created_at)
         )
         return [AgentRef(a.id, a.name, a.role) for a in rows.scalars().all() if a.id != exclude]
+
+
+async def contacts_for(ctx: Any, tenant_id: str, user_id: str, asker: uuid.UUID) -> list[AgentRef]:
+    """The agents ``asker`` may message: its contacts, and only those. An agent is not handed the user's whole roster."""
+    async with system_session(ctx.session_factory) as db:
+        rows = await db.execute(
+            select(Agent, AgentContact.note)
+            .join(AgentContact, AgentContact.contact_id == Agent.id)
+            .where(AgentContact.agent_id == asker, Agent.user_identifier == user_id, Agent.tenant_id == tenant_id)
+            .order_by(Agent.created_at)
+        )
+        return [AgentRef(a.id, a.name, a.role, note) for a, note in rows.all()]

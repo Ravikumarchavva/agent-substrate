@@ -96,7 +96,7 @@ forbidden_modules = [
     "substrate.runtime.journal",
     "substrate.runtime.resolver",
     "substrate.runtime.runtime",
-    "substrate.runtime.sql_store",
+    "substrate.runtime.persistence.store",
     "substrate.runtime.tail",
     "substrate.runtime.tool_invoker",
     "substrate.runtime.worker",

@@ -45,14 +45,15 @@ from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.hooks import ChatContext, hooks
 from substrate_cloud.monolith.schemas import ChatRequest
 from substrate_cloud.monolith.services import get_owned_thread
-from substrate_cloud.monolith.services.agent_service import (
+from substrate_cloud.monolith.services.agents.service import (
     agent_instructions_block,
     get_owned_agent,
     narrow_tools,
 )
-from substrate_cloud.monolith.services.delegation import (
+from substrate_cloud.monolith.services.agents.delegation import (
     TOOL_NAME,
     AskAgentTool,
+    contacts_for,
     other_agents,
 )
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
@@ -317,8 +318,10 @@ async def chat(
             and (thread_agent is None or thread_agent.allowed_tools is None or TOOL_NAME in thread_agent.allowed_tools)
             and (body.allowed_tools is None or TOOL_NAME in body.allowed_tools)
         ):
-            others = await other_agents(
-                ctx, user.tenant_id or "default", user.sub, thread_agent.id if thread_agent else None
+            others = (
+                await contacts_for(ctx, user.tenant_id or "default", user.sub, thread_agent.id)
+                if thread_agent
+                else await other_agents(ctx, user.tenant_id or "default", user.sub, None)
             )
             if others:
                 deps["tools"] = [*deps["tools"], AskAgentTool(ctx, others, _tool_name)]

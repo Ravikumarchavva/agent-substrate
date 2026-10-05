@@ -20,8 +20,8 @@ from substrate_cloud.monolith.routes.chat_intents import _tool_name
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.stream.runs import last_message
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
-from substrate_cloud.monolith.services.delegation import TOOL_NAME
-from substrate_cloud.monolith.services.agent_service import (
+from substrate_cloud.monolith.services.agents.delegation import TOOL_NAME
+from substrate_cloud.monolith.services.agents.service import (
     MAX_AGENTS_PER_USER,
     ensure_main_thread,
     get_owned_agent,

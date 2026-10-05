@@ -51,6 +51,7 @@ CONTRACTS = (
     "context.protocols",
     "middleware.stage",
     "runtime.agent",
+    "runtime.channel",
     "runtime.communication",
     "runtime.effects",
     "runtime.inbox",

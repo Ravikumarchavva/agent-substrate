@@ -33,9 +33,13 @@ from substrate_cloud.config import SubstrateConfig
 from substrate.types import Actor
 from substrate.models import ChatModel
 from substrate.stores import ThreadStore
+from substrate.agents import PASS as _PASS
 from substrate.tools import Tool, ToolRisk, is_hosted_tool, is_provider_defined_tool
 
 logger = logging.getLogger(__name__)
+
+CHANNEL_PASS = _PASS
+"""What a group member answers with to stay silent (the engine's token, for the instructions that tell it so)."""
 
 
 # ── Return containers ─────────────────────────────────────────────────────────
@@ -650,7 +654,7 @@ async def resume_pending_runs(runtime: Any, *, registry: Any, model_client: Any)
 
 
 async def build_agent_for_thread(
-    thread_id: uuid.UUID,
+    thread_id: uuid.UUID | str,
     *,
     model_client: ChatModel,
     tools: List[Tool],
@@ -671,8 +675,13 @@ async def build_agent_for_thread(
     pinned: bool = True,
     reasoning: Any = None,
     approval_required_risk: Any = None,
+    name: str = "assistant",
+    channel: Any = None,
 ) -> Any:
     """Build and register a kernel Agent for this thread.
+
+    ``name`` is the actor type the agent is addressed by; ``channel`` (a ``ChannelMemberConfig``) makes it
+    an agent that lives in channels and chooses whether to answer what is said there.
 
     ``register``/``pinned`` only affect the final registration step, not
     construction: ``register=False`` returns the built agent without
@@ -774,7 +783,7 @@ async def build_agent_for_thread(
         return research.coordinator
 
     agent = create_assistant_agent(
-        name="assistant",
+        name=name,
         session_id=session_id,
         model_client=model_client,
         tools=tools,
@@ -787,6 +796,7 @@ async def build_agent_for_thread(
         middleware=[safety_middleware] if safety_middleware is not None else None,
         reasoning=reasoning,
         approval_required_risk=approval_required_risk,
+        channel=channel,
     )
     if register:
         await runtime.register(agent, pinned=pinned)
@@ -846,6 +856,13 @@ def register_assistant_actor_factory(
         )
 
     runtime.register_factory("assistant", _activate)
+
+
+def channel_member_config(names: dict[str, str], scope: dict[str, Any]) -> Any:
+    """What makes an agent one that lives in channels: who is in the channel by name, and whose run it is."""
+    from substrate.agents import ChannelMemberConfig
+
+    return ChannelMemberConfig(names=names, scope=scope)
 
 
 def build_chat_tools(toolbox: Any, bridge: Any) -> list[Any]:

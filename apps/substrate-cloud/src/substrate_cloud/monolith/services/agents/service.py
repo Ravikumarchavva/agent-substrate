@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -12,6 +13,36 @@ from substrate_cloud.monolith.models import Agent, Thread
 from substrate_cloud.shared.auth.claims import AuthClaims
 
 MAX_AGENTS_PER_USER = 20
+
+
+@dataclass(frozen=True)
+class AgentProfile:
+    """An agent's saved definition as plain values, copied out of the database session it was read in: what anything that builds the
+    agent (a chat, a delegation, a group) needs, with no request attached."""
+
+    id: uuid.UUID
+    name: str
+    role: str
+    instructions: str
+    allowed_tools: Optional[tuple[str, ...]]
+    workspace_id: str
+    user_id: str
+    tenant_id: str
+
+    @classmethod
+    def of(cls, agent: Agent) -> "AgentProfile":
+        return cls(
+            id=agent.id,  # type: ignore[arg-type]
+            name=agent.name,  # type: ignore[arg-type]
+            role=agent.role or "",  # type: ignore[arg-type]
+            instructions=agent.instructions or "",  # type: ignore[arg-type]
+            allowed_tools=tuple(agent.allowed_tools)
+            if agent.allowed_tools is not None
+            else None,  # type: ignore[arg-type]
+            workspace_id=agent.workspace_id,  # type: ignore[arg-type]
+            user_id=agent.user_identifier,  # type: ignore[arg-type]
+            tenant_id=agent.tenant_id,  # type: ignore[arg-type]
+        )
 
 
 async def get_owned_agent(
@@ -87,7 +118,7 @@ def workspace_id_for(thread: Thread, agent: Optional[Agent]) -> str:
     return agent.workspace_id if agent is not None else str(thread.id)
 
 
-def agent_instructions_block(agent: Agent) -> str:
+def agent_instructions_block(agent: Agent | AgentProfile) -> str:
     """What the model is told about the role it plays, appended to the base instructions."""
     lines = [f"\n\n---\nYou are acting as **{agent.name}**."]
     if agent.role.strip():
@@ -100,7 +131,9 @@ def agent_instructions_block(agent: Agent) -> str:
     return "\n".join(lines) + "\n"
 
 
-def narrow_tools(tools: list[Any], agent: Agent, name_of: Any) -> list[Any]:
+def narrow_tools(
+    tools: list[Any], agent: Agent | AgentProfile, name_of: Any
+) -> list[Any]:
     """The tools this agent may use: all of them unless it lists some."""
     if agent.allowed_tools is None:
         return tools

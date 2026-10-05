@@ -24,6 +24,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from substrate.testing.conformance.runtime_accounts import AccountTests
+from substrate.testing.conformance.runtime_channels import ChannelTests
 from substrate.types.supervision import Priority, SpawnBudget, Supervision
 from substrate.types.error_info import ErrorInfo
 from substrate.types.identity import Actor, Topic
@@ -60,7 +62,7 @@ def msg(target: Actor = AGENT, sender: str = "s", **data: object) -> Message:
     )
 
 
-class RuntimeStoreConformance:
+class RuntimeStoreConformance(ChannelTests, AccountTests):
     """Subclass and provide ``store``; every ``test_*`` here then runs against it."""
 
     @pytest.fixture
@@ -530,6 +532,21 @@ class RuntimeStoreConformance:
         await self.lease_one(store)
         result = await store.deliver(Delivery(agent=AGENT, msg=msg()))
         assert result.created_run is None and result.woke_run is None
+
+    async def test_working_names_the_agents_with_a_queued_or_running_run(
+        self, store: RuntimeStore
+    ) -> None:
+        idle = Actor("agent", "idle")
+        assert await store.working([]) == []
+        await store.deliver(Delivery(agent=AGENT, msg=msg()))
+        assert await store.working([AGENT, idle]) == [AGENT]
+        lease = await self.lease_one(store)
+        assert await store.working([AGENT, idle]) == [AGENT]
+        await store.commit(
+            lease,
+            Commit(outcome=Suspend(wake=Wakeup(kind="signal", signals=["never"]))),
+        )
+        assert await store.working([AGENT, idle]) == []
 
     async def test_concurrent_deliveries_to_an_idle_agent_create_one_run(
         self, store: RuntimeStore

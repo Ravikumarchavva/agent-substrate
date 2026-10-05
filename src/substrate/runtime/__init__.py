@@ -8,6 +8,16 @@ from substrate.runtime.agent import (
 from substrate.runtime.cancellation import (
     CancellationToken,
 )
+from substrate.runtime.channel import (
+    EVERYONE,
+    AppendResult,
+    ChannelEntry,
+    ChannelStore,
+    EntryKind,
+    Member,
+    Mode,
+    mentions_in,
+)
 from substrate.runtime.communication import (
     AskOutcome,
     RunStatusSummary,
@@ -92,7 +102,15 @@ __all__ = [
     "DeadLetterEntry",
     "DeadLetterReason",
     "DeliverResult",
+    "AppendResult",
+    "ChannelEntry",
+    "ChannelStore",
     "Delivery",
+    "EVERYONE",
+    "EntryKind",
+    "Member",
+    "Mode",
+    "mentions_in",
     "Effect",
     "EffectResult",
     "Fail",

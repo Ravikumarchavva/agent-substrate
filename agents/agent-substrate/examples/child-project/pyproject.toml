@@ -2,7 +2,7 @@
 name = "ticket-desk"
 version = "0.1.0"
 description = "A support-ticket agent built on agent-substrate — the acceptance project: it installs the library and copies nothing from its repository."
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 # The engine only. No OpenAI SDK, no database driver, no web framework: this agent brings its own model, tool and
 # thread store, which is what the library's extension points are for.
 dependencies = ["agent-substrate"]

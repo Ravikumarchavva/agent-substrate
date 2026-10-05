@@ -190,7 +190,9 @@ async def test_concurrency_safe_calls_run_together_and_keep_call_order():
         results = await _tool_results(rt, run_id)
 
     assert kind == "run.completed"
-    assert [r["output"] for r in results] == ["a ok", "b ok"]
+    # The log records a result as its call finishes, so its order is whichever finished first; what the model is shown next is the call order.
+    assert sorted(r["output"] for r in results) == ["a ok", "b ok"]
+    assert tool_result_texts(llm.seen[1]) == ["a ok", "b ok"]
     assert all(r["ok"] for r in results)
 
 
@@ -237,7 +239,7 @@ async def test_replay_after_a_crash_finds_each_batched_call_at_its_own_path():
 
     assert kind == "run.completed"
     assert sorted(tool.executions) == ["a", "a", "b", "b"]  # 2 batches, nothing re-run
-    assert [r["output"] for r in results] == ["a ok", "b ok", "a ok", "b ok"]
+    assert sorted(r["output"] for r in results) == ["a ok", "a ok", "b ok", "b ok"]
     # What the model was shown after the retry: batch 1 rebuilt from the
     # journal, each call getting its own result (a cache hit logs nothing, so
     # only this reveals a path mix-up).

@@ -9,7 +9,7 @@
 ## Project Overview
 Python async AI-agent framework built on **FastAPI** + **PostgreSQL** + **Redis**.
 Two deployment modes: **monolith** (`server/`) and **microservices** (`services/` — 12 services).
-Stack: Python 3.13, `uv` (never pip), SQLAlchemy 2 async, asyncpg, OpenTelemetry.
+Stack: Python 3.14, `uv` (never pip), SQLAlchemy 2 async, asyncpg, OpenTelemetry.
 
 ---
 

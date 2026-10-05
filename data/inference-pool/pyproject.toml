@@ -2,7 +2,7 @@
 name = "inference-pool"
 version = "0.1.0"
 description = "Spawn, supervise and load-balance llama-server children (or point at remote ones) — for the services that run a model."
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = ["agent-substrate", "httpx2>=2.7.0"]
 
 [project.optional-dependencies]

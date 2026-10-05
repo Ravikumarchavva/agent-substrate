@@ -2,16 +2,16 @@
 name = "substrate-cloud"
 version = "0.1.0"
 description = "The multi-tenant Substrate platform: the monolith API, its twelve services, and the composition root that picks backends. A consumer of the agent-substrate library."
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 # Everything the library keeps optional is chosen here, because this is where backends are chosen: the library's extras
 # for the vendors, stores and tools the platform wires up, plus the web, ORM, auth and observability it owns.
 dependencies = [
     "agent-substrate[serve,openai,anthropic,gemini,postgres,redis,scheduler,mcp,tts,tools,logging,web,code,s3,safety,sandbox]",
     "pydantic-settings>=2.12.0",
     "sqlalchemy>=2.0.46",
-    "greenlet>=3.0.0",
+    "greenlet>=3.2.4",
     # SQLAlchemy resolves a `postgresql+psycopg://` DATABASE_URL dynamically — nothing imports it by name
-    "psycopg[binary]>=3.2.0",
+    "psycopg[binary]>=3.3.0",
     # The engine only imports opentelemetry-api (a no-op until something configures an SDK); the SDK, the OTLP exporter
     # and the FastAPI instrumentation are what the platform wires up.
     "opentelemetry-sdk>=1.20.0",
@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0", "pillow>=10.4.0", "import-linter>=2.11"]
+test = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0", "pillow>=12.0.0", "import-linter>=2.11"]
 
 [project.scripts]
 substrate-cloud = "substrate_cloud.cli:main"

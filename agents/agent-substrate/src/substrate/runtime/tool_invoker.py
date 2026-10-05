@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import time
@@ -582,7 +583,7 @@ def _emit_progress(
             run_id=run_id,
             seq=seq,
         )
-        if asyncio.iscoroutinefunction(sink):
+        if inspect.iscoroutinefunction(sink):
             asyncio.ensure_future(sink(progress))
         elif callable(sink):
             sink(progress)

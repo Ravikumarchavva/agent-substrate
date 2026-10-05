@@ -1,4 +1,4 @@
-PYTHON_VERSION ?= 3.13
+PYTHON_VERSION ?= $(shell cat .python-version)
 TEST_DATABASE_URL ?= postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb
 TEST_REDIS_URL ?= redis://localhost:6379/0
 TEST_OPENAI_API_KEY ?= sk-test-placeholder
@@ -147,11 +147,6 @@ build:
 #     scheduler.py) — no persistent data store, so the vulnerable
 #     serialize/deserialize round-trip never runs. Re-audit if the data
 #     store is ever changed to a persistent backend.
-#   PYSEC-2026-87 (lxml, XXE-style local file read via default entity
-#     resolution) — pulled in transitively via crawl4ai, which pins
-#     lxml<6.dev0 (the fixed version is 6.1.0). We never import lxml
-#     directly or construct our own parser with custom entity-resolution
-#     settings.
 #   PYSEC-2026-597 (nltk, path traversal in url2pathname) — no fix version
 #     exists upstream yet. Pulled in transitively via crawl4ai only; we
 #     never import nltk directly or call its data-download helpers.
@@ -159,7 +154,6 @@ build:
 #     via crawl4ai only, never imported here. Re-audit when nltk > 3.10.3 exists.
 SECURITY_IGNORES = \
 	--ignore-vuln PYSEC-2026-282 \
-	--ignore-vuln PYSEC-2026-87 \
 	--ignore-vuln PYSEC-2026-597 \
 	--ignore-vuln PYSEC-2026-3740
 

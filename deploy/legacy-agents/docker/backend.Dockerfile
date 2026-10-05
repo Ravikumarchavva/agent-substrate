@@ -27,7 +27,7 @@ RUN git clone --branch 3.6 --depth 1 https://github.com/google/nsjail.git /nsjai
     && make clean && make
 
 # Backend Dockerfile for Python FastAPI
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS base
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS base
 
 # Install system dependencies.
 # nsjail: the default SANDBOX_RUNTIME isolates agent-generated code in Linux

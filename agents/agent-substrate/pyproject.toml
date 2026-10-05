@@ -13,14 +13,13 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Framework :: AsyncIO",
     "Typing :: Typed",
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 # The engine and nothing else: types, stores, runtime, agents, middleware. Everything that talks to a vendor,
 # a database server, or a network — and everything the reference server needs — is an extra named for what it
 # enables (docs/claude_docs/architecture/optional-dependencies.md). Rows I26/I31: importing `substrate` loads no driver, SDK or parser.
@@ -37,11 +36,11 @@ dependencies = [
 # docs/claude_docs/architecture/optional-dependencies.md, not here.
 [project.optional-dependencies]
 # OpenAI and OpenAI-compatible chat/embedding clients (also vLLM, llama.cpp, Ollama, LM Studio)
-openai = ["openai>=2.15.0", "tiktoken>=0.12.0", "httpx>=0.27.0", "pillow>=10.4.0"]
+openai = ["openai>=2.15.0", "tiktoken>=0.12.0", "httpx>=0.27.0", "pillow>=12.0.0"]
 # the JSON log formatter for `substrate.logger.setup_logging` — what an application (a service) uses to configure logging
 logging = ["python-json-logger>=2.0.7", "msgspec>=0.21.1"]
 # PostgreSQL as the store (integrations.database.postgres_store); vectors also need the pgvector extension
-postgres = ["asyncpg>=0.30.0"]
+postgres = ["asyncpg>=0.31.0"]
 # Redis: session cache, event bus
 redis = ["redis[hiredis]>=5.0.0"]
 # scheduled/cron triggers
@@ -51,7 +50,7 @@ mcp = ["mcp>=1.0.0"]
 # text-to-speech
 tts = ["kokoro>=0.9.4", "soundfile>=0.12.1"]
 # skills and curated artifacts (YAML front matter)
-tools = ["pyyaml>=6.0"]
+tools = ["pyyaml>=6.0.3"]
 # the interactive console and CLI chat
 console = ["rich>=14.3.2", "prompt-toolkit>=3.0.0", "pydantic-settings>=2.12.0"]
 # substrate.server.create_app: hand an agent object to a FastAPI app
@@ -86,18 +85,18 @@ sandbox = [
 ]
 # OCR without a system program: RapidOCR (PaddleOCR's own small models on ONNX Runtime, models inside the wheel). Preferred over the
 # `tesseract` program automatically when installed. Pulls opencv-python; on a headless server install opencv-python-headless first.
-ocr = ["rapidocr>=3.0.0", "onnxruntime>=1.20.0"]
+ocr = ["rapidocr>=3.0.0", "onnxruntime>=1.23.0"]
 # non-OpenAI LLM providers — LLMFactory lazy-imports each client, so only
 # the provider(s) you actually select need to be installed
-anthropic = ["anthropic>=0.95.0", "pillow>=10.4.0"]
-gemini = ["google-genai>=1.73.0", "pillow>=10.4.0"]
+anthropic = ["anthropic>=0.95.0", "pillow>=12.0.0"]
+gemini = ["google-genai>=1.73.0", "pillow>=12.0.0"]
 # S3-compatible object storage backend (alternative to the default local-disk store)
 s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
 # input-safety guardrail: jailbreak + NSFW classifiers (ONNX models via HF Hub) —
 # degrades gracefully if missing (MultimodalSafetyMiddleware fails open), so not core
 safety = [
-    "pillow>=10.4.0",
-    "onnxruntime>=1.20.0",
+    "pillow>=12.0.0",
+    "onnxruntime>=1.23.0",
     "tokenizers>=0.20.0",
     "huggingface-hub>=0.25.0",
     "confusable-homoglyphs>=3.3.1",
@@ -142,7 +141,7 @@ dev = [
     "ruff>=0.15.15",
     # tests only: an encrypted PDF to build, and a reference YAML parser for the frontmatter codec
     "pypdf>=6.13.0",
-    "pyyaml>=6.0",
+    "pyyaml>=6.0.3",
 ]
 
 [tool.pytest.ini_options]

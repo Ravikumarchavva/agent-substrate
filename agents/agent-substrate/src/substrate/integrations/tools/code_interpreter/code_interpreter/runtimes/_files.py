@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import mimetypes
 import os
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -27,10 +28,11 @@ def snapshot(root: Path) -> dict[str, tuple[int, int]]:
         for name in filenames:
             path = os.path.join(dirpath, name)
             try:
-                st = os.stat(path)
+                st = os.lstat(path)  # a symlink is not followed: it may point at a host file
             except OSError:
                 continue
-            snap[path] = (st.st_mtime_ns, st.st_size)
+            if stat.S_ISREG(st.st_mode):
+                snap[path] = (st.st_mtime_ns, st.st_size)
     return snap
 
 

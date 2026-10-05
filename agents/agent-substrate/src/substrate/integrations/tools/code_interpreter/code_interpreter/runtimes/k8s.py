@@ -46,6 +46,8 @@ class K8sRuntime:
         self._service = service or CodeInterpreterService(config=self._config)
 
     async def execute(self, spec: SandboxSpec) -> ExecResult:
+        if spec.mounts:
+            raise ValueError("the k8s runtime cannot mount further workspaces")
         if spec.network is not NetworkPolicy.DENY:
             # Egress is governed by the cluster NetworkPolicy, not per-call —
             # say so rather than silently ignoring the request.

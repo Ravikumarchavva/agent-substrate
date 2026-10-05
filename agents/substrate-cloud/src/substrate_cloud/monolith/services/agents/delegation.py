@@ -27,6 +27,7 @@ from substrate_cloud.monolith.database import system_session
 from substrate_cloud.monolith.models import Agent, AgentContact, Thread
 from substrate_cloud.monolith.services.agents.assembly import assemble_agent
 from substrate_cloud.monolith.services.agents.service import AgentProfile
+from substrate_cloud.monolith.services.groups.drives import drives_of, run_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -153,11 +154,13 @@ class AskAgentTool:
             thread_id = thread.id
             # Plain values from here on: the rows belong to this session.
             profile = AgentProfile.of(target)
+            drives = await drives_of(db, target.id)
 
         delegate = await assemble_agent(
             ctx,
             profile,
             session_id=thread_id,
+            drives=drives,
             drop_tools=(TOOL_NAME,),  # one level only: the delegate cannot delegate
         )
         msg = Message(
@@ -172,7 +175,7 @@ class AskAgentTool:
             metadata={
                 "user_id": user_id,
                 "tenant_id": tenant_id,
-                "workspace_id": profile.workspace_id,
+                **run_metadata(profile.workspace_id, drives),
             },
         )
         await ctx.runtime.register(delegate)
@@ -207,20 +210,20 @@ class AskAgentTool:
         except asyncio.TimeoutError:
             outcome = "running"
 
-        link = {"thread_id": str(thread_id), "agent": target.name}
+        link = {"thread_id": str(thread_id), "agent": profile.name}
         if outcome == "done":
             return _text(answer.strip() or "(it answered with nothing)", **link)
         if outcome == "waiting":
             return _text(
-                f"{target.name} stopped to wait for {waiting}. That needs you: open its conversation to answer. What it said so far: {answer.strip() or '(nothing)'}",
+                f"{profile.name} stopped to wait for {waiting}. That needs you: open its conversation to answer. What it said so far: {answer.strip() or '(nothing)'}",
                 **link,
             )
         if outcome == "running":
             return _text(
-                f"{target.name} is still working. Its conversation is {thread_id}. Partial answer so far: {answer.strip() or '(none yet)'}",
+                f"{profile.name} is still working. Its conversation is {thread_id}. Partial answer so far: {answer.strip() or '(none yet)'}",
                 **link,
             )
-        return _text(f"{target.name} {outcome}", error=True, **link)
+        return _text(f"{profile.name} {outcome}", error=True, **link)
 
 
 async def other_agents(

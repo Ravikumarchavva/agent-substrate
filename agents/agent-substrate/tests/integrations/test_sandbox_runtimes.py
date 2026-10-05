@@ -315,3 +315,69 @@ async def test_nsjail_caps_process_count_rlimits_cannot(workspace: Path) -> None
     assert "forked" in result.stdout
     forked = int(result.stdout.split()[1])
     assert forked < 200, "fork bomb was not capped by the sandbox's cgroup"
+
+
+# ── a second workspace beside the first: a group's drive at /groups/<label> ──────────────────────────────────────────────────────────────
+
+GROUP_DIR = "g/group-1/main"
+
+
+def _mount(label: str = "trip", session_dir: str = GROUP_DIR):
+    from substrate.workspace import WorkspaceScope
+
+    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import Mount
+
+    return Mount(label=label, session_dir=session_dir, scope=WorkspaceScope(tenant_id="t", user_id="alice", conversation_id="group-1"))
+
+
+async def test_a_mounted_workspace_is_at_groups_label_read_write_and_reported_with_its_path(workspace: Path) -> None:
+    runtime = _nsjail_or_skip(workspace)
+    (workspace / GROUP_DIR).mkdir(parents=True)
+    (workspace / GROUP_DIR / "brief.txt").write_text("shared brief")
+
+    result = await runtime.execute(
+        spec(
+            mounts=(_mount(),),
+            code=(
+                "print(open('/groups/trip/brief.txt').read())\n"
+                "open('/groups/trip/plan.txt', 'w').write('the plan')\n"
+                "open('/workspace/mine.txt', 'w').write('mine')\n"
+            ),
+        )
+    )
+
+    assert result.ok, result.stderr
+    assert "shared brief" in result.stdout
+    assert (workspace / GROUP_DIR / "plan.txt").read_text() == "the plan"
+    assert (workspace / ALICE_DIR / "mine.txt").read_text() == "mine"
+    assert not (workspace / ALICE_DIR / "plan.txt").exists()  # each file lands in its own workspace
+    assert sorted(f["name"] for f in result.output_files) == ["groups/trip/plan.txt", "mine.txt"]  # the brief it only read is not reported
+
+
+async def test_a_mounted_workspace_is_the_only_extra_thing_the_code_can_reach(workspace: Path) -> None:
+    runtime = _nsjail_or_skip(workspace)
+    (workspace / GROUP_DIR).mkdir(parents=True)
+
+    result = await runtime.execute(
+        spec(
+            mounts=(_mount(),),
+            code="import os\nprint(sorted(os.listdir('/groups')))\nprint(os.path.exists('/groups/trip/../../users'))\n",
+        )
+    )
+
+    assert result.ok, result.stderr
+    assert "['trip']" in result.stdout and "False" in result.stdout
+
+
+@pytest.mark.parametrize("runtime_name", ["nsjail", "inprocess"])
+async def test_a_mount_name_or_path_cannot_carry_a_mount_option_or_climb(workspace: Path, runtime_name: str) -> None:
+    runtime: SandboxRuntime = _nsjail_or_skip(workspace) if runtime_name == "nsjail" else InProcessRuntime(workspace)
+    for label, session_dir in [("a:b", GROUP_DIR), ("trip", "g:x/main"), ("trip", "../outside"), ("../trip", GROUP_DIR)]:
+        with pytest.raises(ValueError):
+            await runtime.execute(spec(mounts=(_mount(label, session_dir),), code="print(1)"))
+
+
+async def test_a_runtime_that_cannot_mount_says_so_rather_than_running_without(workspace: Path) -> None:
+    (workspace / GROUP_DIR).mkdir(parents=True)
+    with pytest.raises(ValueError, match="mount"):
+        await InProcessRuntime(workspace).execute(spec(mounts=(_mount(),), code="print(1)"))

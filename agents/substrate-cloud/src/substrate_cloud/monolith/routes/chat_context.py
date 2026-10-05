@@ -70,11 +70,11 @@ def _session_relative_path(object_key: str) -> str | None:
     upload (e.g. a bare user-scoped ``tenants/{tid}/users/{uid}/artifacts/...``
     key with no ``conversations/`` segment).
 
-    Must stay in step with ``agents/workspace/layout.py`` —
-    ``conversation_shared_key`` builds exactly the keys parsed here, and
-    ``code_interpreter/tool.py`` mounts that same ``.../workspace/shared``
-    prefix at the sandbox's ``/workspace``, so ``rest`` is the path the
-    sandbox sees.
+    Must stay in step with ``workspace/layout.py`` —
+    ``conversation_shared_key`` builds exactly the keys parsed here. For an
+    agent's home (and a group's drive) that ``.../workspace/shared`` prefix is
+    what the sandbox opens at ``/workspace`` (``/groups/<name>``), so ``rest``
+    is the path its code sees.
 
     Shared by the nsjail workspace-path branch of ``_attachment_dict``
     below and by the RAG-ingest metadata: both need the path a citation's

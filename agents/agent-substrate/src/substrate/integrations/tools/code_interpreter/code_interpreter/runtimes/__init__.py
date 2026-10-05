@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from .base import (
     ExecResult,
+    Mount,
     NetworkPolicy,
     SandboxRuntime,
     SandboxSpec,
@@ -40,6 +41,7 @@ __all__ = [
     "ExecResult",
     "InProcessRuntime",
     "K8sRuntime",
+    "Mount",
     "NetworkPolicy",
     "NsjailRuntime",
     "SandboxRuntime",

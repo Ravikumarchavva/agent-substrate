@@ -18,6 +18,7 @@ from substrate_cloud.monolith.services.agents.service import (
     agent_instructions_block,
     narrow_tools,
 )
+from substrate_cloud.monolith.services.groups.drives import Drive
 from substrate_cloud.shared.settings import settings
 
 
@@ -26,6 +27,7 @@ async def assemble_agent(
     profile: AgentProfile,
     *,
     session_id: str | uuid.UUID,
+    drives: tuple[Drive, ...] = (),
     extra_instructions: str = "",
     drop_tools: tuple[str, ...] = (),
     extra_tools: Sequence[Any] = (),
@@ -37,7 +39,8 @@ async def assemble_agent(
     """The agent for ``profile``, with its role, its permitted tools and its owner's memory, keeping its conversation under ``session_id``.
 
     ``drop_tools`` removes tools by name before the permission filter (a delegate is never given ``ask_agent``); ``extra_tools`` are added
-    after it, for tools the caller has already decided this agent gets (``ask_agent``, for its contacts). The caller registers nothing
+    after it, for tools the caller has already decided this agent gets (``ask_agent``, for its contacts). ``drives`` are the groups' folders its
+    code can open beside its own (see ``drives.py``); the caller puts the same ones on the run's message. The caller registers nothing
     itself: ``register=False`` is for a runtime actor factory, which registers what it is handed. ``name`` and ``channel`` make it an
     agent that lives in channels (see ``ChannelMemberConfig``).
     """
@@ -56,7 +59,7 @@ async def assemble_agent(
         model_client=deps.model_client,
         tools=tools,
         system_instructions=deps.system_instructions
-        + agent_instructions_block(profile)
+        + agent_instructions_block(profile, drives)
         + extra_instructions,
         cfg=settings,
         history=deps.history,

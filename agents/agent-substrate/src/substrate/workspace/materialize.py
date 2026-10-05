@@ -15,6 +15,8 @@ shared code, since neither side has a reason to depend on the other).
 from __future__ import annotations
 
 import os
+import shutil
+import stat
 from pathlib import Path
 
 from substrate.workspace.protocols import (
@@ -26,21 +28,25 @@ from substrate.workspace.protocols import (
 from .cas import BlobCAS
 
 
-def _walk_files(root: Path) -> list[Path]:
-    if not root.exists():
-        return []
-    return [p for p in root.rglob("*") if p.is_file()]
+def regular_files(root: Path) -> list[Path]:
+    """Every regular file under *root*. A symlink is skipped, not followed: code that ran in the workspace can leave ``leak -> /host/file``, and
+    reading through it here, outside the sandbox, would take that file into the workspace."""
+    found: list[Path] = []
+    for dirpath, _dirnames, filenames in os.walk(root, followlinks=False):
+        for name in filenames:
+            path = Path(dirpath) / name
+            if stat.S_ISREG(os.lstat(path).st_mode):
+                found.append(path)
+    return found
 
 
 async def materialize(cas: BlobCAS, manifest: WorkspaceManifest, dest: Path) -> None:
     """Populate *dest* with every file in *manifest*.
 
-    Hardlinks from the CAS's local cache when available (near-instant, no
-    byte copying); falls back to downloading through the CAS otherwise. A
-    hardlink target is safe here because every write goes through
-    ``commit()`` next, which reads bytes fresh and re-hashes — no code path
-    mutates a materialized file's inode in place and expects the CAS's
-    cached copy to change with it.
+    Copies from the CAS's local cache when available (no download); falls
+    back to downloading through the CAS otherwise. Always a copy, never a
+    hardlink: the code that runs next writes these files, possibly in place,
+    and a shared inode would change the cached blob every later checkout reads.
     """
     dest.mkdir(parents=True, exist_ok=True)
     for rel_path, entry in manifest.files.items():
@@ -50,17 +56,10 @@ async def materialize(cas: BlobCAS, manifest: WorkspaceManifest, dest: Path) -> 
             target.unlink()
 
         cache_path = cas.cache_path(entry.content)
-        linked = False
         if cache_path is not None and cache_path.exists():
-            try:
-                os.link(cache_path, target)
-                linked = True
-            except OSError:
-                linked = False  # cross-device link or similar — fall back
-
-        if not linked:
-            data = await cas.get(entry.content)
-            target.write_bytes(data)
+            shutil.copyfile(cache_path, target)
+        else:
+            target.write_bytes(await cas.get(entry.content))
 
         os.chmod(target, entry.mode)
 
@@ -86,7 +85,7 @@ async def commit(
     ``WorkspaceManifest`` requires for stable hashing and linear diff later.
     """
     entries: dict[str, WorkspaceFileEntry] = {}
-    for path in sorted(_walk_files(root)):
+    for path in sorted(regular_files(root)):
         rel_path = path.relative_to(root).as_posix()
         data = path.read_bytes()
         ref = await cas.put(data)
@@ -102,4 +101,4 @@ async def commit(
     )
 
 
-__all__ = ["materialize", "commit"]
+__all__ = ["materialize", "commit", "regular_files"]

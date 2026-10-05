@@ -563,10 +563,9 @@ async def upload_file(
     Object keys are scoped by tenant, user, and thread (when given):
     ``tenants/{tid}/users/{uid}/conversations/{thread_id}/workspace/shared/
     uploads/{name}`` or, with no thread, ``tenants/{tid}/users/{uid}/
-    uploads/{name}`` — see ``agents/workspace/layout.py``. This is the
-    same prefix the code interpreter's sandbox mounts for that thread, so a
-    thread-scoped upload lands exactly where that thread's sandbox session
-    can see it.
+    uploads/{name}`` — see ``workspace/layout.py``. In a conversation with an
+    agent this is the agent's own home, which its sandbox opens as
+    ``/workspace``, so the upload is there for its code.
 
     RAG-eligible types (currently PDF only — see ``EXTRACTABLE_CONTENT_TYPES``)
     get extra, synchronous-before-storing checks (upload-attempt quota, size

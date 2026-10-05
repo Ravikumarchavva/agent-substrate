@@ -96,3 +96,24 @@ async def test_agents_are_private_validated_and_start_conversations():
         # the conversation stays, as an ordinary one
         assert (await c.get(f"/threads/{thread['id']}")).json()["agent_id"] is None
         assert not [f for f in (await c.get("/workspace/files")).json()["files"] if f["session_id"] == made["workspace_id"]]
+
+
+@pytest.mark.requires_postgres
+async def test_an_agents_conversation_is_named_after_the_agent_wherever_it_is_read():
+    """The chat with an agent has no title of its own: it is the agent's name, so renaming the agent renames it, and nothing a client sends
+    (the first message, a rename) can retitle it."""
+    async with session() as c:
+        made = (await c.post("/agents", json={"name": "Scout", "role": "Researcher"})).json()
+        thread = (await c.post(f"/agents/{made['id']}/thread")).json()["id"]
+        row = (await c.get(f"/threads/{thread}")).json()
+        assert row["agent_id"] == made["id"] and row["name"] == "Scout"
+
+        await c.patch(f"/agents/{made['id']}", json={"name": "Scout Prime"})
+        assert (await c.get(f"/threads/{thread}")).json()["name"] == "Scout Prime"
+
+        # a client may not retitle it, whatever it sends
+        patched = (await c.patch(f"/threads/{thread}", json={"name": "hello there"})).json()
+        assert patched["name"] == "Scout Prime"
+        assert (await c.get(f"/threads/{thread}")).json()["name"] == "Scout Prime"
+
+        await c.delete(f"/agents/{made['id']}")

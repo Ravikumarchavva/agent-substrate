@@ -13,7 +13,7 @@ import pytest
 
 from substrate.models import ModelProfile, estimate_cost, get_model_profile, list_models
 
-KNOWN_PROVIDERS = {"openai", "anthropic", "gemini", "google", "groq"}
+KNOWN_PROVIDERS = {"openai", "anthropic", "gemini", "google", "groq", "moonshot"}
 
 
 # ── Registry completeness ────────────────────────────────────────────────────
@@ -125,3 +125,24 @@ def test_no_duplicate_names() -> None:
     assert len(names) == len(set(names)), "Duplicate model names in registry: " + str(
         [n for n in names if names.count(n) > 1]
     )
+
+
+# ── Models the product offers, however a host names them ─────────────────────
+
+
+def test_a_model_a_host_serves_under_its_vendors_name_is_the_same_model() -> None:
+    """NVIDIA NIM and OpenRouter name models ``vendor/model``; the registry knows the model, not the host."""
+    from substrate.integrations.llm import LLMFactory
+
+    assert LLMFactory.profile_for("openrouter/openai/gpt-4o-mini") is get_model_profile("gpt-4o-mini")
+    assert get_model_profile("openai/gpt-4o-mini") is get_model_profile("gpt-4o-mini")
+    assert get_model_profile("no-such-vendor/no-such-model") is None
+
+
+def test_kimi_k2_6_reads_images_as_the_model_picker_says() -> None:
+    from substrate.integrations.llm import LLMFactory, model_supports_vision
+
+    for name in ("nvidia/moonshotai/kimi-k2.6", "moonshotai/kimi-k2.6", "kimi-k2.6"):
+        profile = LLMFactory.profile_for(name)
+        assert profile is not None and profile.supports_vision and profile.context_length == 256_000, name
+    assert model_supports_vision("nvidia/moonshotai/kimi-k2.6")

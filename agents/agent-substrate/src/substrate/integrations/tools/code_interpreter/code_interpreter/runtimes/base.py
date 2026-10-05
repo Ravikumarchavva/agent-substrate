@@ -14,8 +14,11 @@ policy); each runtime enforces it with whatever primitive it has.
 from __future__ import annotations
 
 import enum
+import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
+
+from substrate.workspace import WorkspaceScope
 
 
 def is_display_artifact(mime_type: str) -> bool:
@@ -45,6 +48,30 @@ class NetworkPolicy(str, enum.Enum):
     FULL = "full"
 
 
+MOUNT_LABEL = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
+
+
+def valid_mount_label(label: str) -> bool:
+    """A folder name under ``/groups``: lower-case letters, digits, ``.``, ``_`` and ``-``. ``private`` is the agent's own folder, so it is not one."""
+    return MOUNT_LABEL.fullmatch(label) is not None and label != "private"
+
+
+@dataclass(frozen=True, slots=True)
+class Mount:
+    """Another workspace shown inside the sandbox at ``/groups/<label>``, read-write: a group's shared drive.
+
+    ``session_dir`` and ``scope`` are what the spec's own are for its own workspace: the scratch-relative key, and which workspace it is.
+    """
+
+    label: str
+    session_dir: str
+    scope: WorkspaceScope
+
+    def __post_init__(self) -> None:
+        if not valid_mount_label(self.label):
+            raise ValueError(f"invalid mount name: {self.label!r}")
+
+
 @dataclass(slots=True)
 class SandboxSpec:
     """One execution request.
@@ -70,6 +97,8 @@ class SandboxSpec:
     timeout_s: int = 60
     network: NetworkPolicy = NetworkPolicy.DENY
     memory_bytes: int = 2 * 1024 * 1024 * 1024
+    # Further workspaces to show beside the spec's own, each at ``/groups/<label>``.
+    mounts: tuple[Mount, ...] = ()
     # Extra runtime-specific hints (e.g. a venv path for PIP_ONLY). Kept opaque
     # so backends can differ without widening this dataclass.
     extra: dict[str, Any] = field(default_factory=dict)
@@ -141,9 +170,11 @@ class SandboxRuntime(Protocol):
 
 __all__ = [
     "ExecResult",
+    "Mount",
     "NetworkPolicy",
     "SandboxRuntime",
     "SandboxSpec",
     "SandboxUnavailableError",
     "is_display_artifact",
+    "valid_mount_label",
 ]

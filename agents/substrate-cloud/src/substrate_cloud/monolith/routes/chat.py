@@ -56,6 +56,7 @@ from substrate_cloud.monolith.services.agents.delegation import (
     contacts_for,
     other_agents,
 )
+from substrate_cloud.monolith.services.groups.drives import drives_of, run_metadata
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.monolith.sse.bridge import WebHITLBridge
 from substrate_cloud.shared.rate_limit import rate_limit
@@ -161,6 +162,8 @@ async def chat(
     thread_agent = (
         await get_owned_agent(db, thread.agent_id, user) if thread.agent_id else None
     )
+    # Its own folder is /workspace, and each group it is in is a shared folder beside it.
+    drives = await drives_of(db, thread_agent.id) if thread_agent is not None else ()
 
     # 1b. A file deleted from this thread's storage (routes/workspace.py::
     # delete_file, routes/files.py::delete_file) locks it read-only — the
@@ -309,7 +312,7 @@ async def chat(
         if thread_agent is not None:
             # The agent's permissions are a ceiling a request can narrow further but never widen.
             deps["tools"] = narrow_tools(deps["tools"], thread_agent, _tool_name)
-            deps["system_instructions"] += agent_instructions_block(thread_agent)
+            deps["system_instructions"] += agent_instructions_block(thread_agent, drives)
         # Other agents of the user's it may ask for help (unless its permissions leave that out or the request narrowed it away). A conversation
         # that is itself a delegate never gets this: asking is one level deep.
         delegated = bool((thread.metadata_ or {}).get("delegated_from"))
@@ -442,7 +445,7 @@ async def chat(
             "tenant_id": user.tenant_id,
             "branch_id": getattr(body, "branch_id", None) or "main",
             **(
-                {"workspace_id": thread_agent.workspace_id}
+                run_metadata(thread_agent.workspace_id, drives)
                 if thread_agent is not None
                 else {}
             ),

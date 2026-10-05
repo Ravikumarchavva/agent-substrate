@@ -254,11 +254,13 @@ async def set_contacts(
 
 async def refresh_members(db: AsyncSession, runtime: Any, group_id: uuid.UUID) -> None:
     """Make every member of a group rebuild from current data on its next message: who is in the group, what it is called, how each agent is
-    defined. A member holds its roster and profile from when it was built, so this is called after any change to them."""
+    defined. A member holds its roster and profile from when it was built, so this is called after any change to them. Each member is rebuilt
+    in every group it is in, not just this one: it opens all of them as folders, so a change here changes what it sees there."""
     if runtime is None:
         return
     for member, _ in await group_members(db, group_id):
-        runtime.forget(member_actor(member.agent_id, group_id))
+        for group in await groups_of(db, member.agent_id):
+            runtime.forget(member_actor(member.agent_id, group))
 
 
 async def groups_of(db: AsyncSession, agent_id: uuid.UUID) -> list[uuid.UUID]:

@@ -46,6 +46,7 @@ from substrate_cloud.monolith.models import FileMetadata, FileVersion, Thread
 from substrate_cloud.monolith.security.deps import get_current_user
 from substrate_cloud.monolith.services import get_owned_thread
 from substrate_cloud.monolith.services.agents.service import get_owned_agent, list_agents
+from substrate_cloud.monolith.services.groups.service import get_owned_group, list_groups
 from substrate_cloud.shared.auth.claims import AuthClaims
 
 router = APIRouter(
@@ -240,9 +241,10 @@ async def list_files(
         .scalars()
         .all()
     }
-    # The caller's agents' workspaces are listed too, under the agent's name.
+    # The caller's agents' homes and their groups' drives are listed too, under the agent's or the group's name.
     my_agents = await list_agents(db, claims)
-    owned_thread_ids |= {a.workspace_id for a in my_agents}
+    my_groups = await list_groups(db, claims)
+    owned_thread_ids |= {a.workspace_id for a in my_agents} | {g.workspace_id for g in my_groups}
 
     # One scan of the caller's whole prefix — not one call per thread plus
     # this, which used to list every conversation's shared files twice
@@ -285,6 +287,7 @@ async def list_files(
         ).all()
         thread_names = {str(row.id): row.name for row in rows}
     thread_names.update({a.workspace_id: a.name for a in my_agents})
+    thread_names.update({g.workspace_id: g.name for g in my_groups})
 
     # A file is user-owned iff it has a (non-deleted) FileMetadata row: uploads
     # go through routes/files.py which records one, while code-interpreter /
@@ -340,6 +343,15 @@ async def _thread_owner(db: AsyncSession, claims: AuthClaims, thread_id: str) ->
         if agent is None:
             raise HTTPException(status_code=404, detail="Thread not found")
         return agent.user_identifier
+    if thread_id.startswith("group-"):
+        # A group's drive, shared by the agents in it: only the group's owner may open it.
+        try:
+            group = await get_owned_group(db, uuid.UUID(thread_id[6:]), claims)
+        except ValueError:
+            group = None
+        if group is None:
+            raise HTTPException(status_code=404, detail="Thread not found")
+        return group.user_identifier
     try:
         thread_uuid = uuid.UUID(thread_id)
     except ValueError:

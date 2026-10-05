@@ -197,11 +197,11 @@ async def test_concurrent_commit_to_same_branch_conflicts_not_silently_lost(
 
 
 @pytest.mark.asyncio
-async def test_materialize_hardlinks_from_local_cache_on_second_checkout(
+async def test_a_second_checkout_comes_from_the_local_cache_as_independent_copies(
     tmp_path: Path,
 ) -> None:
-    """The materialization optimization: a blob already in the local cache
-    is hardlinked, not re-downloaded, on a second checkout."""
+    """A blob already in the local cache is copied, not re-downloaded, on a second checkout. Each checkout gets its own file: the code
+    that runs there writes it, and a shared inode would change what every later checkout reads."""
     store = Store.at(tmp_path / "store", file_quota_bytes=1_000_000).files
     cache_dir = tmp_path / "cache"
     cas = _cas(store, cache_dir=cache_dir)
@@ -212,11 +212,19 @@ async def test_materialize_hardlinks_from_local_cache_on_second_checkout(
     snap = await commit(cas, root, session_id="s1", branch_id="main", parent=None)
     assert snap.manifest is not None
 
-    dest1 = tmp_path / "dest1"
+    downloads: list[str] = []
+    download = store.download
+
+    async def counting(key: str) -> bytes:
+        downloads.append(key)
+        return await download(key)
+
+    store.download = counting  # type: ignore[method-assign]
+    dest1, dest2 = tmp_path / "dest1", tmp_path / "dest2"
     await materialize(cas, snap.manifest, dest1)
-    dest2 = tmp_path / "dest2"
     await materialize(cas, snap.manifest, dest2)
 
-    stat1 = (dest1 / "a.txt").stat()
-    stat2 = (dest2 / "a.txt").stat()
-    assert stat1.st_ino == stat2.st_ino  # same inode -> hardlinked, not copied
+    assert downloads == []
+    assert (dest1 / "a.txt").stat().st_ino != (dest2 / "a.txt").stat().st_ino
+    (dest1 / "a.txt").write_text("changed")
+    assert (dest2 / "a.txt").read_text() == "content"

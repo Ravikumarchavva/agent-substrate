@@ -36,6 +36,8 @@ class InProcessRuntime:
         self._root = Path(workspace_root).resolve()
 
     async def execute(self, spec: SandboxSpec) -> ExecResult:
+        if spec.mounts:
+            raise ValueError("the in-process runtime cannot mount further workspaces")
         session_path = (self._root / spec.session_dir.strip("/")).resolve()
         session_path.mkdir(parents=True, exist_ok=True)
         before = snapshot(session_path)

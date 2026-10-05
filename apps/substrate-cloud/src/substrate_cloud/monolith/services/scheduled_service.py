@@ -25,6 +25,7 @@ from substrate_cloud.monolith.models import (
 )
 from substrate_cloud.monolith.services.agents.assembly import assemble_agent
 from substrate_cloud.monolith.services.agents.service import AgentProfile
+from substrate_cloud.monolith.services.groups.drives import drives_of, run_metadata
 from substrate_cloud.monolith.services.notification_service import notify, send_email
 from substrate_cloud.factory import (
     build_agent_for_thread,
@@ -199,17 +200,19 @@ async def execute_scheduled_task(
             approval_risk = None if task.ask_before_acting else ToolRisk.CRITICAL
 
             # 4-5. Build the agent. A task on an agent's conversation runs as that agent: its role, the tools it may use, its files.
-            workspace_id = None
+            workspace: dict[str, Any] = {}
             agent_row = (
                 await db.get(Agent, thread.agent_id) if thread.agent_id else None
             )
             if agent_row is not None:
                 profile = AgentProfile.of(agent_row)
-                workspace_id = profile.workspace_id
+                drives = await drives_of(db, agent_row.id)
+                workspace = run_metadata(profile.workspace_id, drives)
                 agent = await assemble_agent(
                     app_state,
                     profile,
                     session_id=task.thread_id,
+                    drives=drives,
                     extra_instructions="\n\n" + task_block,
                     approval_required_risk=approval_risk,
                 )
@@ -244,7 +247,7 @@ async def execute_scheduled_task(
                 # Whose run this is, so tools that act for a person (memory) act for this one.
                 metadata={
                     **({"user_id": str(task.user_id)} if task.user_id else {}),
-                    **({"workspace_id": workspace_id} if workspace_id else {}),
+                    **workspace,
                 },
             )
 

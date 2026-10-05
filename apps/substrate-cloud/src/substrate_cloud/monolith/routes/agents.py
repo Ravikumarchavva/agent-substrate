@@ -22,6 +22,7 @@ from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.stream.runs import last_message
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.services.agents.delegation import TOOL_NAME
+from substrate_cloud.monolith.services.groups.drives import delete_workspace_files
 from substrate_cloud.monolith.services.groups.service import (
     groups_of,
     leave_all_groups,
@@ -34,6 +35,7 @@ from substrate_cloud.monolith.services.agents.service import (
     get_owned_agent,
     list_agents,
     main_threads,
+    rename_main_thread,
 )
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -224,6 +226,7 @@ async def update_agent(
     _check_tools(ctx, body.allowed_tools)
     if body.name is not None:
         agent.name = body.name.strip()
+        await rename_main_thread(db, agent)
     if body.role is not None:
         agent.role = body.role.strip()
     if body.instructions is not None:
@@ -264,18 +267,9 @@ async def delete_agent(
     agent = await get_owned_agent(db, agent_id, user)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    store = ctx.file_store
-    if hasattr(store, "list_prefix") and hasattr(store, "delete"):
-        from substrate.workspace.layout import conversation_prefix
-
-        prefix = (
-            conversation_prefix(
-                user.tenant_id or "default", user.sub, agent.workspace_id
-            )
-            + "/"
-        )
-        for key, _size, _mtime in await store.list_prefix(prefix):
-            await store.delete(key)
+    files = ctx.files_for(user.tenant_id)
+    if files is not None:
+        await delete_workspace_files(files, user.tenant_id or "default", user.sub, agent.workspace_id)
     group_ids = await groups_of(db, agent_id)
     await db.delete(agent)
     await db.commit()

@@ -99,6 +99,23 @@ def test_missing_metadata_means_no_identity_and_the_main_branch():
     assert scope.branch_id == "main"
 
 
+def test_mounts_travel_in_message_metadata_and_a_child_inherits_them():
+    """Other workspaces a run has open beside its own (a group's drive): named by the one who sent the message, never by the model."""
+    scope = RunScope.from_metadata(
+        {"workspace_id": "dot-1", "workspace_mounts": {"trip": "group-2", "kitchen": "group-3"}},
+        thread_id="th",
+        agent_id="a",
+        agent_label="A",
+    )
+    assert scope.mounts == (("kitchen", "group-3"), ("trip", "group-2"))  # in label order, so the same set is always the same scope
+    assert scope.child_metadata()["workspace_mounts"] == {"kitchen": "group-3", "trip": "group-2"}
+
+
+def test_a_scope_with_no_mounts_passes_none_on():
+    scope = RunScope.from_metadata({}, thread_id="th", agent_id="a", agent_label="A")
+    assert scope.mounts == () and "workspace_mounts" not in scope.child_metadata()
+
+
 async def test_a_tool_sees_the_scope_of_the_message_being_handled():
     probe = ProbeTool()
     llm = ScriptedLLM(

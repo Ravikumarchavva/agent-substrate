@@ -24,7 +24,7 @@ def test_a_members_address_round_trips():
 
 
 def test_the_model_is_told_to_stay_silent_with_the_pass_token():
-    block = group_instructions("Trip", "Scout", {"user/u": "Ravi", "member/a@g": "Scout", "member/b@g": "Quill"})
+    block = group_instructions("Trip", "Scout", {"user/u": "Ravi", "member/a@g": "Scout", "member/b@g": "Quill"}, "trip")
     assert "Ravi, Quill" in block and "[PASS]" in block and "Scout" in block
 
 

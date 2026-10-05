@@ -20,6 +20,7 @@ All arguments are identifiers, never client-supplied paths.
 
 from __future__ import annotations
 
+import uuid
 from pathlib import PurePosixPath
 
 
@@ -79,6 +80,44 @@ def conversation_shared_key(
         f"{conversation_workspace_prefix(tenant_id, user_id, conversation_id, branch_id)}"
         f"/shared/{safe_relative_path(path)}"
     )
+
+
+def conversation_shared_prefix(
+    tenant_id: str,
+    user_id: str,
+    conversation_id: str,
+    branch_id: str = "main",
+) -> str:
+    """Where the files of one workspace are, with the trailing slash: what ``conversation_shared_key`` puts a path under."""
+    return (
+        f"{conversation_workspace_prefix(tenant_id, user_id, conversation_id, branch_id)}/shared/"
+    )
+
+
+# The two workspaces that belong to someone rather than to a conversation: an agent's home and a group's shared drive.
+AGENT_HOME = "dot"
+GROUP_DRIVE = "group"
+
+
+def persistent_workspace_id(kind: str, owner_id: str) -> str:
+    """The id of an agent's home (``AGENT_HOME``) or a group's drive (``GROUP_DRIVE``): ``dot-<agent id>`` / ``group-<group id>``."""
+    return f"{kind}-{owner_id}"
+
+
+def is_persistent_workspace(workspace_id: str) -> bool:
+    """Whether *workspace_id* is an agent's home or a group's drive, not a conversation's.
+
+    Those are kept as the object tree itself (what uploads, the Files list and the sandbox all see), shared by every conversation and run
+    that opens them, and never branched. A conversation's workspace is a branchable snapshot of content-addressed files instead.
+    """
+    kind, _, owner = workspace_id.partition("-")
+    if kind not in (AGENT_HOME, GROUP_DRIVE):
+        return False
+    try:
+        uuid.UUID(owner)
+    except ValueError:
+        return False
+    return True
 
 
 def conversation_version_key(
@@ -147,11 +186,11 @@ def conversation_artifacts_prefix(
     """Session-scoped artifact bundle, a *sibling* of the conversation's
     ``workspace`` rather than a child of it.
 
-    Deliberately outside ``workspace/shared``: that prefix is bind-mounted
-    into the code-interpreter sandbox (see ``code_interpreter/tool.py``) and
-    enumerated as the user's files, so nesting curated artifacts under it
-    would both expose them to arbitrary sandboxed code and make every note
-    show up in the file explorer. Sandbox output stays ordinary workspace
+    Deliberately outside ``workspace/shared``: for an agent's home or a group's
+    drive that prefix is what the code-interpreter sandbox opens (see
+    ``runtimes/prefix_sync.py``) and it is enumerated as the user's files, so
+    nesting curated artifacts under it would both expose them to arbitrary
+    sandboxed code and make every note show up in the file explorer. Sandbox output stays ordinary workspace
     files; something reaches this prefix only when explicitly promoted."""
     return f"{conversation_prefix(tenant_id, user_id, conversation_id)}/artifacts"
 
@@ -161,8 +200,8 @@ def conversation_documents_prefix(
 ) -> str:
     """The conversation's ``Library`` collection: documents a user gave it, as an OKF bundle (``substrate.documents.Library``).
 
-    A sibling of ``workspace`` and ``artifacts``, outside ``workspace/shared`` for the same reason: that prefix is mounted into the
-    sandbox and listed as the user's files, and the bundle is the model's reading material, written only by ``Library.add``."""
+    A sibling of ``workspace`` and ``artifacts``, outside ``workspace/shared`` for the same reason: that prefix is what the sandbox opens
+    and is listed as the user's files, and the bundle is the model's reading material, written only by ``Library.add``."""
     return f"{conversation_prefix(tenant_id, user_id, conversation_id)}/documents"
 
 
@@ -189,6 +228,11 @@ __all__ = [
     "conversation_prefix",
     "conversation_workspace_prefix",
     "conversation_shared_key",
+    "conversation_shared_prefix",
+    "persistent_workspace_id",
+    "is_persistent_workspace",
+    "AGENT_HOME",
+    "GROUP_DRIVE",
     "conversation_version_key",
     "user_upload_key",
     "agent_private_prefix",

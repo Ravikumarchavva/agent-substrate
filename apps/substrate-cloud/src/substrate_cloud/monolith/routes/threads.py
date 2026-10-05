@@ -48,7 +48,11 @@ from substrate_cloud.monolith.services.thread_service import (
     thread_row,
 )
 from substrate_cloud.stream import project_thread
-from substrate_cloud.monolith.services.agents.service import get_owned_agent
+from substrate_cloud.monolith.services.agents.service import (
+    ensure_main_thread,
+    get_owned_agent,
+    is_agent_chat,
+)
 from substrate_cloud.stream.runs import RunDetail, inspect_thread
 from substrate_cloud.stream.export import filename, messages_of, to_markdown
 from substrate_cloud.stream.search import message_counts, search_messages
@@ -67,9 +71,12 @@ async def create_thread_endpoint(
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
-    """Create a new chat thread owned by the caller."""
-    if body.agent_id is not None and await get_owned_agent(db, body.agent_id, user) is None:
-        raise HTTPException(status_code=404, detail="Agent not found")
+    """Create a new chat thread owned by the caller. With ``agent_id`` it is the agent's one conversation, which is opened rather than added to."""
+    if body.agent_id is not None:
+        agent = await get_owned_agent(db, body.agent_id, user)
+        if agent is None:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        return ThreadOut(**thread_row(await ensure_main_thread(db, agent, user)))
     thread = await create_thread(
         db,
         name=body.name or "New Chat",
@@ -175,13 +182,14 @@ async def update_thread_endpoint(
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
 ):
-    """Update thread name, tags, or metadata."""
-    if not await get_owned_thread(db, thread_id, user):
+    """Update thread name, tags, or metadata. An agent's conversation keeps the agent's name."""
+    owned = await get_owned_thread(db, thread_id, user)
+    if not owned:
         raise HTTPException(status_code=404, detail="Thread not found")
     thread = await update_thread(
         db,
         thread_id,
-        name=body.name,
+        name=None if is_agent_chat(owned) else body.name,
         tags=body.tags,
         metadata=body.metadata,
         pinned=body.pinned,

@@ -99,6 +99,16 @@ _MODELS: list[ModelProfile] = [
         aliases=("gpt-4o-mini-2024-07-18",),
     ),
     ModelProfile(
+        name="kimi-k2.6",
+        provider="moonshot",
+        context_length=256_000,
+        max_output_tokens=32_768,
+        # Unpriced: served free on NVIDIA's catalogue; a host that charges has its own price.
+        supports_thinking=True,
+        modalities=("text", "image"),
+        aliases=("moonshotai/kimi-k2.6",),
+    ),
+    ModelProfile(
         name="gpt-4.1",
         provider="openai",
         context_length=1_047_576,
@@ -469,8 +479,9 @@ MODEL_REGISTRY: dict[str, ModelProfile] = _build_registry()
 
 
 def get_model_profile(model: str) -> ModelProfile | None:
-    """Look up a model's profile by name or alias."""
-    return MODEL_REGISTRY.get(model)
+    """Look up a model's profile by name or alias. A host that serves another vendor's model names it ``vendor/model`` (``openai/gpt-4o-mini`` on
+    OpenRouter): that is the vendor's model, so the name after the last ``/`` is tried when the whole one is not known."""
+    return MODEL_REGISTRY.get(model) or MODEL_REGISTRY.get(model.rsplit("/", 1)[-1])
 
 
 def get_context_length(model: str, default: int = 128_000) -> int:

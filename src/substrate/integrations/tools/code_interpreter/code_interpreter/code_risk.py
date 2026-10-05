@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 
 import ast
+import posixpath
 from typing import TYPE_CHECKING
 
 from substrate.tools import ToolRisk
@@ -48,9 +49,15 @@ _NETWORK_MODULES = {
 }
 _SHELL_MODULES = {"subprocess", "pty", "pexpect"}
 
-# Paths a write is allowed to target without gating. Everything else absolute
-# is treated as an out-of-workspace write.
-_ALLOWED_WRITE_PREFIXES = ("/app/workspace", "/tmp", "./", "workspace/")
+# Folders a write may target without gating: the agent's own (/workspace), the group folders it shares (/groups/<name>) and scratch space.
+# Any other absolute path is treated as an out-of-workspace write.
+_WRITABLE_FOLDERS = ("/app/workspace", "/workspace", "/groups", "/tmp")
+
+
+def _writes_outside_workspace(path: str) -> bool:
+    """Whether an absolute *path* is somewhere other than inside a writable folder (``..`` is resolved first, so it cannot climb out)."""
+    resolved = posixpath.normpath(path)
+    return not any(resolved.startswith(folder + "/") for folder in _WRITABLE_FOLDERS)
 
 # Attribute-call signatures (module.attr) that delete files.
 _DELETE_CALLS = {
@@ -155,7 +162,7 @@ class _RiskVisitor(ast.NodeVisitor):
             return
         if node.args and isinstance(node.args[0], ast.Constant):
             path = str(node.args[0].value)
-            if path.startswith("/") and not path.startswith(_ALLOWED_WRITE_PREFIXES):
+            if path.startswith("/") and _writes_outside_workspace(path):
                 self.reasons.add("writes files outside the workspace")
 
 

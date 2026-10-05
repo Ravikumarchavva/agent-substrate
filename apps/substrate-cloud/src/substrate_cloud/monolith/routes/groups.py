@@ -21,6 +21,7 @@ from substrate_cloud.monolith.models import Group
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.services.groups import files as group_files
+from substrate_cloud.monolith.services.groups.drives import delete_workspace_files
 from substrate_cloud.monolith.services.groups import service as groups
 from substrate_cloud.monolith.services.agents.service import get_owned_agent
 
@@ -254,6 +255,7 @@ async def create_group(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     await db.commit()
+    await groups.refresh_members(db, ctx.runtime, group.id)
     return await _out(db, store, group)
 
 
@@ -294,9 +296,18 @@ async def delete_group(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     group = await _owned(db, group_id, user)
+    members = [agent.id for _, agent in await groups.group_members(db, group.id)]
+    workspace_id = group.workspace_id
     await _store(ctx).channel_delete(group.channel)
+    files = ctx.files_for(user.tenant_id)
+    if files is not None:
+        await delete_workspace_files(files, user.tenant_id or "default", user.sub, workspace_id)
     await db.delete(group)
     await db.commit()
+    if ctx.runtime is not None:
+        for agent_id in members:
+            ctx.runtime.forget(groups.member_actor(agent_id, group_id))
+            await groups.refresh_agent(db, ctx.runtime, agent_id)  # it has one folder fewer, and so do the others it shares groups with
 
 
 @router.get("/groups/{group_id}/messages", response_model=MessagesOut)
@@ -508,6 +519,7 @@ async def remove_member(
     await groups.remove_member(db, _store(ctx), group, agent_id)
     await db.commit()
     await groups.refresh_members(db, ctx.runtime, group.id)
+    await groups.refresh_agent(db, ctx.runtime, agent_id)  # it is not in this group's list now, but it still has its others
 
 
 # -- contacts ------------------------------------------------------------------------------------------------------------------------

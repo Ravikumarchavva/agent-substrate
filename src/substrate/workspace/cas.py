@@ -30,9 +30,9 @@ class BlobCAS:
 
     ``local_cache_dir``, if given, is a local scratch directory this CAS
     also writes every blob into (keyed by hash) — populated on both ``put``
-    and ``get``. ``materialize.py`` hardlinks from this cache instead of
-    copying bytes when checking out a snapshot, which is what makes
-    materialization near-instant after the first time a blob is touched,
+    and ``get``. ``materialize.py`` copies from this cache instead of
+    downloading when checking out a snapshot, which is what makes
+    materialization fast after the first time a blob is touched,
     regardless of whether the backing ``FileStore`` is local disk or S3.
     Optional: without it, ``get`` just downloads every time.
     """

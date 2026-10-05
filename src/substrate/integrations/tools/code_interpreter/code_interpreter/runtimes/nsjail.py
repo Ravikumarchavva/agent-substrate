@@ -333,6 +333,9 @@ class NsjailRuntime:
     async def execute(self, spec: SandboxSpec) -> ExecResult:
         session_path = self._resolve_session(spec.session_dir)
         session_path.mkdir(parents=True, exist_ok=True)
+        mounted = [(m.label, self._resolve_session(m.session_dir)) for m in spec.mounts]
+        for _label, path in mounted:
+            path.mkdir(parents=True, exist_ok=True)
 
         if spec.code is not None:
             argv = [self._python_bin, "-c", f"{_PY_PREAMBLE}\n{spec.code}"]
@@ -348,6 +351,7 @@ class NsjailRuntime:
             return ExecResult(stderr="No code or command supplied.", exit_code=2)
 
         before = snapshot(session_path)
+        mounted_before = [snapshot(path) for _label, path in mounted]
         cmd = self._nsjail_argv(spec) + argv
 
         try:
@@ -377,6 +381,10 @@ class NsjailRuntime:
         stdout = raw_out.decode("utf-8", errors="replace")
         stderr = raw_err.decode("utf-8", errors="replace")
         output_files = collect_changed(session_path, before)
+        for (label, path), earlier in zip(mounted, mounted_before):
+            for entry in collect_changed(path, earlier):
+                entry["name"] = f"groups/{label}/{entry['name']}"
+                output_files.append(entry)
         return ExecResult(
             stdout=stdout,
             stderr=stderr,
@@ -393,7 +401,8 @@ class NsjailRuntime:
     def _resolve_session(self, session_dir: str) -> Path:
         """Reject traversal — the same rule ``the store's key check`` uses, so both sides of the mount agree."""
         key = session_dir.strip("/")
-        if not key or ".." in Path(key).parts:
+        # ``:`` separates the two halves of a bind mount, so a path holding one could name a destination of its own.
+        if not key or ".." in Path(key).parts or ":" in key:
             raise ValueError(f"Invalid session_dir: {session_dir!r}")
         candidate = (self._root / key).resolve()
         try:
@@ -441,6 +450,10 @@ class NsjailRuntime:
 
         # Shared conversation workspace, read-write.
         argv += ["-B", f"{session_path}:/workspace"]
+
+        # Other workspaces beside it (a group's drive), each read-write at its own folder.
+        for mount in spec.mounts:
+            argv += ["-B", f"{self._resolve_session(mount.session_dir)}:/groups/{mount.label}"]
 
         private_dir = spec.extra.get("private_dir")
         if private_dir:

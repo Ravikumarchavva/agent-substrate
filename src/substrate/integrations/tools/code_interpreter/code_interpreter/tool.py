@@ -25,13 +25,14 @@ import logging
 import shlex
 from typing import Any
 
-from substrate.workspace import workspace_scope
+from substrate.workspace import WorkspaceScope, workspace_scope
+from substrate.workspace.layout import is_persistent_workspace
 from substrate.types import scope_of
 from substrate.tools import ToolExecutionResult
 from substrate.tools import ToolRisk
 
 from .code_risk import classify_and_summarize
-from .runtimes.base import NetworkPolicy, SandboxRuntime, SandboxSpec
+from .runtimes.base import Mount, NetworkPolicy, SandboxRuntime, SandboxSpec, valid_mount_label
 from .sandbox_response import (
     PRESENTATION_GUIDANCE,
     sandbox_error_result,
@@ -42,6 +43,8 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_SESSION = "default"
 _MAX_TIMEOUT = 300
+# The most workspaces a run opens beside its own.
+MAX_MOUNTS = 16
 
 
 class CodeInterpreterTool:
@@ -149,6 +152,12 @@ class CodeInterpreterTool:
             return sandbox_error_result(
                 "Sandbox execution requires a tenant-scoped, signed-in conversation."
             )
+        if is_persistent_workspace(session_id):
+            # An agent's home is one tree whichever conversation it is asked in: it has no branches.
+            scope = scope.model_copy(update={"branch_id": "main"})
+        mounts = _mounts(run_scope.mounts, scope, session_id)
+        if isinstance(mounts, str):
+            return sandbox_error_result(mounts)
 
         # Scratch-relative keys, not object-store keys: runtimes/staged.py
         # materializes the branch's workspace snapshot into local scratch
@@ -178,6 +187,7 @@ class CodeInterpreterTool:
             timeout_s=timeout_s,
             network=self._network,
             memory_bytes=self._memory_bytes,
+            mounts=mounts,
         )
 
         logger.info(
@@ -208,4 +218,27 @@ class CodeInterpreterTool:
         await self._runtime.stop()
 
 
-__all__ = ["CodeInterpreterTool"]
+def _mounts(wanted: tuple[tuple[str, str], ...], scope: WorkspaceScope, own: str) -> tuple[Mount, ...] | str:
+    """The workspaces to open beside the run's own, or a message saying why they cannot be. They come from the run's scope, set by whoever
+    started it, and each must be an agent's home or a group's drive: nothing the model wrote reaches here, and nothing else can be mounted."""
+    if len(wanted) > MAX_MOUNTS:
+        return f"Cannot mount {len(wanted)} workspaces; at most {MAX_MOUNTS}."
+    mounts: list[Mount] = []
+    for label, workspace in wanted:
+        if not valid_mount_label(label):
+            return f"Invalid workspace folder name {label!r}."
+        if not is_persistent_workspace(workspace):
+            return f"Cannot mount {workspace!r}: only an agent's home or a group's drive can be."
+        if workspace == own:
+            continue
+        mounts.append(
+            Mount(
+                label=label,
+                session_dir=f"{workspace}/main",
+                scope=WorkspaceScope(tenant_id=scope.tenant_id, user_id=scope.user_id, conversation_id=workspace, branch_id="main"),
+            )
+        )
+    return tuple(mounts)
+
+
+__all__ = ["CodeInterpreterTool", "MAX_MOUNTS"]

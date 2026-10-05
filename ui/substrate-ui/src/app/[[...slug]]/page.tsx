@@ -50,9 +50,11 @@ import {
 } from "@/lib/model-preferences";
 import { parseChatPath, buildChatPath, buildChatRoute, buildSettingsPath, buildViewPath, type ChatView } from "@/lib/chat-routes";
 import { formatFileSize } from "@/lib/file-utils";
+import { shouldAutoTitle } from "@/lib/thread-title";
 import { FileTypeIcon } from "@/components/FileTypeIcon";
 import { useAuth } from "@/contexts/AuthContext";
 import { useThreads } from "@/hooks/useThreads";
+import { useThreadRecord } from "@/hooks/useThreadRecord";
 import type { WireEvent } from "@/protocol";
 import {
   useFileAttachments,
@@ -889,7 +891,13 @@ function ChatPageContent() {
 
   // The Computer panel: the files, activity and terminal of this conversation's workspace (an agent's own, if it has one).
   const [computerOpen, setComputerOpen] = useState(false);
-  const threadAgent = useMemo(() => (currentThreadId ? (agents.find((a) => a.thread_id === currentThreadId) ?? null) : null), [currentThreadId, agents]);
+  // What the open conversation is with comes from its own record, not from the agents list, which may not have loaded when it opens.
+  const currentThread = useThreadRecord(currentThreadId, threads);
+  const threadAgent = useMemo(
+    () => (currentThreadId ? (agents.find((a) => a.id === currentThread?.agent_id || a.thread_id === currentThreadId) ?? null) : null),
+    [currentThreadId, currentThread, agents],
+  );
+  const isAgentChat = !!threadAgent || !!currentThread?.agent_id;
   const workspaceId = threadAgent ? threadAgent.workspace_id : currentThreadId;
 
   // Talk to an agent directly: open its one conversation (made the first time), like opening a contact.
@@ -1213,7 +1221,7 @@ function ChatPageContent() {
     }
 
     // Update thread name on the first message
-    if (messages.length === 0) {
+    if (shouldAutoTitle(isAgentChat ? { agent_id: threadAgent?.id ?? currentThread?.agent_id } : null, messages.length)) {
       const name = currentInput.slice(0, 50) + (currentInput.length > 50 ? "..." : "");
       handleRenameThread(threadId, name);
     }
@@ -1988,10 +1996,10 @@ function ChatPageContent() {
             <Header
               onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
               desktopSidebarOpen={desktopSidebarOpen}
-              threadName={threadAgent ? threadAgent.name : threads.find((t) => t.id === currentThreadId)?.name}
-              agentName={threadAgent?.name}
+              threadName={threadAgent ? threadAgent.name : currentThread?.name}
+              agentName={threadAgent?.name ?? (isAgentChat ? currentThread?.name : undefined)}
               onEditAgent={threadAgent ? editAgent : undefined}
-              branches={threadAgent ? [] : branches}
+              branches={isAgentChat ? [] : branches}
               activeBranchId={activeBranchId}
               onSelectBranch={handleSelectBranch}
               onRenameBranch={handleRenameBranch}

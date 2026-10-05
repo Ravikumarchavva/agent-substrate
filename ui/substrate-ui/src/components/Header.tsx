@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { GitBranch, Check, ChevronDown, Pencil, Monitor } from "lucide-react";
+import { GitBranch, Check, ChevronDown, Pencil, Monitor, Bot } from "lucide-react";
 import { Button } from "@/design";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import type { Branch } from "@/types";
@@ -17,6 +17,9 @@ interface HeaderProps {
   /** Show or hide the Computer panel (files, activity and terminal). */
   onToggleComputer?: () => void;
   computerOpen?: boolean;
+  /** Set when the conversation is with an agent: its name replaces the branch picker (an agent chat is one continuing conversation) and Edit agent appears. */
+  agentName?: string;
+  onEditAgent?: () => void;
 }
 
 export function Header({
@@ -29,6 +32,8 @@ export function Header({
   onRenameBranch,
   onToggleComputer,
   computerOpen = false,
+  agentName,
+  onEditAgent,
 }: HeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
@@ -102,8 +107,15 @@ export function Header({
           </button>
         )}
 
+        {agentName && (
+          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Bot className="size-4 text-muted" aria-hidden />
+            {agentName}
+          </span>
+        )}
+
         {/* Branch Selector Pill */}
-        {(threadName || branches.length > 0) && (
+        {!agentName && (threadName || branches.length > 0) && (
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
@@ -264,11 +276,18 @@ export function Header({
           </div>
         )}
       </div>
+      <div className="flex items-center gap-1">
+      {onEditAgent && (
+        <Button variant="ghost" size="sm" onClick={onEditAgent} className="text-muted">
+          <Pencil /> Edit agent
+        </Button>
+      )}
       {onToggleComputer && (
         <Button variant="ghost" size="sm" onClick={onToggleComputer} aria-pressed={computerOpen} className={computerOpen ? "text-foreground" : "text-muted"}>
           <Monitor /> Computer
         </Button>
       )}
+      </div>
     </header>
   );
 }

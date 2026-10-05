@@ -9,13 +9,14 @@ import { Header } from "@/components/Header";
 import { ForkBranchModal } from "@/components/ForkBranchModal";
 import { RunInspector } from "@/components/RunInspector";
 import { AgentsPanel } from "@/components/AgentsPanel";
+import { GroupsPanel } from "@/components/groups/GroupsPanel";
 import { ComputerPanel } from "@/components/ComputerPanel";
 import { ComposerLimit } from "@/components/ComposerLimit";
 import { HomeScreen } from "@/components/HomeScreen";
 import { useDisplayName } from "@/lib/display-name";
-import { getNewChatAgent, setNewChatAgent } from "@/lib/new-chat-agent";
-import { Select } from "@/design";
+import { setAgentToEdit } from "@/lib/agent-focus";
 import type { Agent } from "@/lib/api/agents";
+import type { Group } from "@/lib/api/groups";
 import { SubstrateMark } from "@/components/SubstrateMark";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
@@ -147,6 +148,7 @@ function ChatPageContent() {
   const scheduledPanelOpen = routeState.view === "scheduled";
   const approvalsPanelOpen = routeState.view === "approvals";
   const agentsPanelOpen = routeState.view === "agents";
+  const groupsPanelOpen = routeState.view === "groups";
   const notificationsPanelOpen = routeState.view === "notifications";
   const [unreadCount, setUnreadCount] = useState(0);
   const [scheduledCount, setScheduledCount] = useState(0);
@@ -328,14 +330,15 @@ function ChatPageContent() {
 
   // Scheduled and Approvals are pages with their own URL. The raw History API (not router.push) so the page does not remount
   // and lose an in-flight reply (see selectThread).
-  const openView = useCallback((view: ChatView) => {
+  const openView = useCallback((view: ChatView, id?: string) => {
     setMobileSidebarOpen(false);
-    window.history.pushState(null, "", buildViewPath(view));
+    window.history.pushState(null, "", buildViewPath(view, id));
   }, []);
   const handleOpenScheduled = useCallback(() => openView("scheduled"), [openView]);
   const handleOpenApprovals = useCallback(() => openView("approvals"), [openView]);
   const handleOpenAgents = useCallback(() => openView("agents"), [openView]);
   const handleOpenNotifications = useCallback(() => openView("notifications"), [openView]);
+  const handleOpenGroup = useCallback((groupId: string | null) => openView("groups", groupId ?? undefined), [openView]);
 
   /** Leave Scheduled/Approvals for the conversation they came from (or a given one). */
   const handleCloseView = useCallback(
@@ -359,17 +362,23 @@ function ChatPageContent() {
   const { threads, setThreads, loadThreads, hasMore, loadMore, showArchived, setShowArchived, handlePinThread, handleArchiveThread, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
     autoSelectFirstThread: !settingsPanelOpen,
   });
-  // Agents the user has made, and which one a new conversation will be with ("" = the plain assistant).
+  // Agents the user has made. Each has one conversation of its own, listed in the sidebar like a contact; its last activity is refreshed when a run ends.
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [newChatAgentId, setNewChatAgentIdState] = useState(getNewChatAgent);
-  const setNewChatAgentId = useCallback((id: string) => {
-    setNewChatAgentIdState(id);
-    setNewChatAgent(id);
+  const refreshAgents = useCallback(() => {
+    api.getAgents().then(setAgents).catch(() => setAgents([]));
   }, []);
   useEffect(() => {
-    api.getAgents().then(setAgents).catch(() => setAgents([]));
-  }, [settingsPanelOpen, agentsPanelOpen]);
-  const { attachedFiles, setAttachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads, newChatAgentId || null);
+    refreshAgents();
+  }, [settingsPanelOpen, agentsPanelOpen, loading, refreshAgents]);
+  // Groups: the user and several agents in one conversation. Refreshed whenever the Groups page is opened or a group changes (new message, member, name).
+  const [groups, setGroups] = useState<Group[]>([]);
+  const refreshGroups = useCallback(() => {
+    api.getGroups().then(setGroups).catch(() => setGroups([]));
+  }, []);
+  useEffect(() => {
+    refreshGroups();
+  }, [groupsPanelOpen, routeState.groupId, refreshGroups]);
+  const { attachedFiles, setAttachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
   const { boards, upsertBoard, clearBoards, settleBoards } = useTaskBoards(currentThreadId);
   // Set when a file was deleted from this thread's storage (see
@@ -593,9 +602,8 @@ function ChatPageContent() {
     if (wsRef.current) {
       handleStop();
     }
-    setNewChatAgentId("");
     await _handleNewChat({ onCreated: () => { setMessages([]); setMobileSidebarOpen(false); } });
-  }, [_handleNewChat, setNewChatAgentId]);
+  }, [_handleNewChat]);
 
   // Keyboard shortcuts: Ctrl/Cmd+Shift+O new chat, Ctrl/Cmd+K search conversations, "/" jump to the composer (when not already typing).
   useEffect(() => {
@@ -868,11 +876,27 @@ function ChatPageContent() {
 
   // The Computer panel: the files, activity and terminal of this conversation's workspace (an agent's own, if it has one).
   const [computerOpen, setComputerOpen] = useState(false);
-  const threadAgent = useMemo(() => {
-    const agentId = threads.find((t) => t.id === currentThreadId)?.agent_id;
-    return agentId ? (agents.find((a) => a.id === agentId) ?? null) : null;
-  }, [threads, currentThreadId, agents]);
+  const threadAgent = useMemo(() => (currentThreadId ? (agents.find((a) => a.thread_id === currentThreadId) ?? null) : null), [currentThreadId, agents]);
   const workspaceId = threadAgent ? threadAgent.workspace_id : currentThreadId;
+
+  // Talk to an agent directly: open its one conversation (made the first time), like opening a contact.
+  const openAgent = useCallback(
+    async (agentId: string) => {
+      try {
+        const threadId = await api.openAgentThread(agentId);
+        refreshAgents();
+        handleSelectThread(threadId);
+      } catch (err) {
+        reportError("Couldn't open the agent", err);
+      }
+    },
+    [refreshAgents, handleSelectThread],
+  );
+  const editAgent = useCallback(() => {
+    if (!threadAgent) return;
+    setAgentToEdit(threadAgent.id);
+    handleOpenAgents();
+  }, [threadAgent, handleOpenAgents]);
 
   // Run details + ratings: ratings are per run (the unit an answer comes from), loaded with the conversation.
   const [inspectOpen, setInspectOpen] = useState(false);
@@ -1142,7 +1166,7 @@ function ChatPageContent() {
     let threadId = currentThreadId;
     if (!threadId) {
       try {
-        const newThread = await api.createThread("New Chat", newChatAgentId || null);
+        const newThread = await api.createThread("New Chat");
         threadId = newThread.id;
         msgState.isNewThread = true;
         // DO NOT call selectThread or setThreads here! We want to keep the UI perfectly
@@ -1901,6 +1925,11 @@ function ChatPageContent() {
           scheduledCount={scheduledCount}
           onOpenApprovals={handleOpenApprovals}
           onOpenAgents={handleOpenAgents}
+          agents={agents}
+          onOpenAgent={(a) => void openAgent(a.id)}
+          groups={groups}
+          openGroupId={groupsPanelOpen ? routeState.groupId : null}
+          onOpenGroup={handleOpenGroup}
           isAgentsOpen={agentsPanelOpen}
           isApprovalsOpen={approvalsPanelOpen}
           approvalsCount={approvalsCount}
@@ -1947,8 +1976,10 @@ function ChatPageContent() {
             <Header
               onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
               desktopSidebarOpen={desktopSidebarOpen}
-              threadName={threads.find((t) => t.id === currentThreadId)?.name}
-              branches={branches}
+              threadName={threadAgent ? threadAgent.name : threads.find((t) => t.id === currentThreadId)?.name}
+              agentName={threadAgent?.name}
+              onEditAgent={threadAgent ? editAgent : undefined}
+              branches={threadAgent ? [] : branches}
               activeBranchId={activeBranchId}
               onSelectBranch={handleSelectBranch}
               onRenameBranch={handleRenameBranch}
@@ -1985,12 +2016,9 @@ function ChatPageContent() {
           ) : scheduledPanelOpen ? (
             <ScheduledPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} />
           ) : agentsPanelOpen ? (
-            <AgentsPanel
-              onStartChat={(agentId) => {
-                setNewChatAgentId(agentId);
-                _handleNewChat();
-              }}
-            />
+            <AgentsPanel onStartChat={(agentId) => void openAgent(agentId)} />
+          ) : groupsPanelOpen ? (
+            <GroupsPanel groups={groups} agents={agents} groupId={routeState.groupId} onOpen={handleOpenGroup} onChanged={refreshGroups} />
           ) : notificationsPanelOpen ? (
             <NotificationsPanel onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} />
           ) : approvalsPanelOpen ? (
@@ -2118,7 +2146,7 @@ function ChatPageContent() {
                                 });
                               }}
                               messageId={m.id}
-                              onForkBranch={handleForkFromMessage}
+                              onForkBranch={threadAgent ? undefined : handleForkFromMessage}
                               onInspect={m.role === "assistant" && currentThreadId ? () => setInspectOpen(true) : undefined}
                               onRate={
                                 m.role === "assistant" && !loading && latestRunId && m.id === messages[messages.length - 1]?.id
@@ -2240,20 +2268,6 @@ function ChatPageContent() {
                       {/* Right group */}
                       <div className="ml-auto flex items-center gap-1.5">
                         <ComposerLimit refreshOn={messages.length} />
-                        {agents.length > 0 && !currentThreadId && (
-                          <Select
-                            value={newChatAgentId || "none"}
-                            onValueChange={(v) => setNewChatAgentId(v === "none" ? "" : v)}
-                            options={[{ value: "none", label: "Assistant" }, ...agents.map((a) => ({ value: a.id, label: a.name }))]}
-                            aria-label="Chat with"
-                            className="w-36"
-                          />
-                        )}
-                        {currentThreadId && threads.find((t) => t.id === currentThreadId)?.agent_id && (
-                          <span className="rounded-full bg-badge px-2.5 py-1 text-xs font-medium text-badge-foreground">
-                            {agents.find((a) => a.id === threads.find((t) => t.id === currentThreadId)?.agent_id)?.name ?? "Agent"}
-                          </span>
-                        )}
                         <ModelPicker
                           models={CHAT_MODEL_OPTIONS}
                           selectedModel={selectedModel}
@@ -2408,6 +2422,11 @@ function ChatPageContent() {
               scheduledCount={scheduledCount}
               onOpenApprovals={handleOpenApprovals}
               onOpenAgents={handleOpenAgents}
+              agents={agents}
+              onOpenAgent={(a) => void openAgent(a.id)}
+              groups={groups}
+              openGroupId={groupsPanelOpen ? routeState.groupId : null}
+              onOpenGroup={handleOpenGroup}
               isAgentsOpen={agentsPanelOpen}
               isApprovalsOpen={approvalsPanelOpen}
               approvalsCount={approvalsCount}

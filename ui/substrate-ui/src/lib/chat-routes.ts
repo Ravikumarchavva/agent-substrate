@@ -33,21 +33,23 @@ export function isSettingsTab(value: string | null): value is SettingsTab {
  *   /settings             → { threadId: null, settingsTab: "general" }
  *   /settings/<tab>       → { threadId: null, settingsTab: <tab> }
  */
-export type ChatView = "scheduled" | "approvals" | "notifications" | "agents";
+export type ChatView = "scheduled" | "approvals" | "notifications" | "agents" | "groups";
 
-const VIEWS: readonly string[] = ["scheduled", "approvals", "notifications", "agents"];
+const VIEWS: readonly string[] = ["scheduled", "approvals", "notifications", "agents", "groups"];
 
 export function parseChatPath(pathname: string): {
   threadId: string | null;
   settingsTab: SettingsTab | null;
   /** A page of its own in place of the conversation (`/scheduled`, `/approvals`). */
   view: ChatView | null;
+  /** The group open on the Groups page (`/groups/<id>`, or `new`). */
+  groupId: string | null;
 } {
   const segments = pathname.split("/").filter(Boolean);
 
   // /scheduled or /approvals
   if (segments[0] && VIEWS.includes(segments[0])) {
-    return { threadId: null, settingsTab: null, view: segments[0] as ChatView };
+    return { threadId: null, settingsTab: null, view: segments[0] as ChatView, groupId: segments[0] === "groups" ? (segments[1] ?? null) : null };
   }
 
   // /settings or /settings/<tab>
@@ -58,11 +60,12 @@ export function parseChatPath(pathname: string): {
       threadId: null,
       settingsTab: resolvedTab,
       view: null,
+      groupId: null,
     };
   }
 
   // / or /<threadId>
-  return { threadId: segments[0] ?? null, settingsTab: null, view: null };
+  return { threadId: segments[0] ?? null, settingsTab: null, view: null, groupId: null };
 }
 
 /**
@@ -96,8 +99,8 @@ export function buildChatRoute(threadId: string | null): string {
 }
 
 /** The browser path of a page like Scheduled (basePath included, for the raw History API). */
-export function buildViewPath(view: ChatView): string {
-  return `/chat/${view}`;
+export function buildViewPath(view: ChatView, id?: string): string {
+  return id ? `/chat/${view}/${id}` : `/chat/${view}`;
 }
 
 /**

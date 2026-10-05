@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   ShieldQuestion,
   Bot,
+  Plus,
   SquarePen,
   Sun,
   Trash2,
@@ -24,12 +25,16 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { SubstrateMark } from "@/components/SubstrateMark";
+import type { Agent } from "@/lib/api/agents";
+import type { Group } from "@/lib/api/groups";
+import { Avatar } from "@/components/groups/Avatar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDisplayName } from "@/lib/display-name";
 import { getVisibleSettingsTabGroups, type SettingsTab } from "./settings/SettingsPanel";
-import { NavItem, confirmAction } from "@/design";
+import { Button, NavItem, cn, confirmAction } from "@/design";
+import { shortTime } from "@/lib/short-time";
 import { ThreadList } from "@/components/ThreadList";
 
 type SidebarMode = "chat" | "settings";
@@ -55,6 +60,13 @@ type Props = {
   onOpenApprovals?: () => void;
   onOpenAgents?: () => void;
   isAgentsOpen?: boolean;
+  /** The user's agents: each is a conversation of its own, listed like a contact. */
+  agents?: Agent[];
+  onOpenAgent?: (agent: Agent) => void;
+  /** The user's groups: agents and the user in one conversation. */
+  groups?: Group[];
+  openGroupId?: string | null;
+  onOpenGroup?: (groupId: string | null) => void;
   isApprovalsOpen?: boolean;
   approvalsCount?: number;
   onOpenNotifications?: () => void;
@@ -117,6 +129,11 @@ export function Sidebar({
   onOpenApprovals,
   onOpenAgents,
   isAgentsOpen,
+  agents = [],
+  onOpenAgent,
+  groups = [],
+  openGroupId,
+  onOpenGroup,
   isApprovalsOpen,
   approvalsCount,
   onOpenNotifications,
@@ -288,6 +305,81 @@ export function Sidebar({
                 )}
               </div>
             </div>
+
+            {agents.length > 0 && (
+              <div className="px-3 pb-2">
+                <div className="flex items-center justify-between px-1 pb-1.5">
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-muted">Agents</p>
+                  <Button variant="ghost" size="icon-sm" onClick={onOpenAgents} aria-label="Manage agents">
+                    <Plus />
+                  </Button>
+                </div>
+                <div className="space-y-0.5">
+                  {agents.map((agent) => {
+                    const active = !!agent.thread_id && agent.thread_id === currentThreadId;
+                    return (
+                      <Button
+                        key={agent.id}
+                        variant="ghost"
+                        onClick={() => onOpenAgent?.(agent)}
+                        aria-current={active ? "page" : undefined}
+                        title={agent.role || agent.name}
+                        className={cn("h-auto! min-h-0 w-full justify-start gap-3 whitespace-normal rounded-lg px-2.5 py-2 text-left font-normal", active ? "bg-accent/12" : "hover:bg-card-hover")}
+                      >
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent" aria-hidden>
+                          {agent.name.trim().charAt(0).toUpperCase() || "?"}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="truncate text-sm font-medium text-foreground">{agent.name}</span>
+                            <span className="shrink-0 text-2xs text-muted">{shortTime(agent.last_active)}</span>
+                          </span>
+                          <span className="block truncate text-xs text-muted">{agent.last_message ?? (agent.role || "Say hello")}</span>
+                        </span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {(groups.length > 0 || agents.length > 0) && (
+              <div className="px-3 pb-2">
+                <div className="flex items-center justify-between px-1 pb-1.5">
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-muted">Groups</p>
+                  <Button variant="ghost" size="icon-sm" onClick={() => onOpenGroup?.("new")} aria-label="New group">
+                    <Plus />
+                  </Button>
+                </div>
+                <div className="space-y-0.5">
+                  {groups.map((group) => {
+                    const active = group.id === openGroupId;
+                    return (
+                      <Button
+                        key={group.id}
+                        variant="ghost"
+                        onClick={() => onOpenGroup?.(group.id)}
+                        aria-current={active ? "page" : undefined}
+                        title={group.members.map((m) => m.name).join(", ")}
+                        className={cn("h-auto! min-h-0 w-full justify-start gap-3 whitespace-normal rounded-lg px-2.5 py-2 text-left font-normal", active ? "bg-accent/12" : "hover:bg-card-hover")}
+                      >
+                        <Avatar name={group.name} />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="truncate text-sm font-medium text-foreground">{group.name}</span>
+                            <span className="shrink-0 text-2xs text-muted">{shortTime(group.updated_at)}</span>
+                          </span>
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="block truncate text-xs text-muted">{group.last_message ? `${group.last_sender}: ${group.last_message}` : group.members.map((m) => m.name).join(", ")}</span>
+                            {group.unread > 0 && !active && <span className="shrink-0 rounded-full bg-accent px-1.5 text-2xs font-semibold text-accent-foreground">{group.unread}</span>}
+                          </span>
+                        </span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <ThreadList
               threads={threads}

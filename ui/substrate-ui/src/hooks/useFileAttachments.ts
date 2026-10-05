@@ -89,8 +89,6 @@ export function useFileAttachments(
   currentThreadId: string | null,
   promoteThreadUrl: (threadId: string) => void,
   setThreads: React.Dispatch<React.SetStateAction<Thread[]>>,
-  /** The agent a brand-new conversation (started by attaching a file) should be with. */
-  newThreadAgentId: string | null = null,
 ) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFilePreview[]>([]);
@@ -174,7 +172,7 @@ export function useFileAttachments(
     let threadId = currentThreadId;
     if (!threadId) {
       try {
-        const newThread = await api.createThread("New Chat", newThreadAgentId);
+        const newThread = await api.createThread("New Chat");
         setThreads((current) => [newThread, ...current]);
         // A real Next.js navigation (router.push) here would change the
         // /chat/[[...slug]] catch-all segment and REMOUNT the page — which
@@ -214,7 +212,7 @@ export function useFileAttachments(
     } finally {
       setUploadingFile(false);
     }
-  }, [currentThreadId, promoteThreadUrl, setThreads, pollFileIds, newThreadAgentId]);
+  }, [currentThreadId, promoteThreadUrl, setThreads, pollFileIds]);
 
   const handleFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);

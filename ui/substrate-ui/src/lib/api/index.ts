@@ -16,6 +16,7 @@ import { artifactsApi } from "./artifacts";
 import { branchApi } from "./branches";
 import { runsApi } from "./runs";
 import { agentsApi } from "./agents";
+import { groupsApi } from "./groups";
 
 export const api = {
   ...threadApi,
@@ -36,6 +37,7 @@ export const api = {
   ...branchApi,
   ...runsApi,
   ...agentsApi,
+  ...groupsApi,
 };
 export { branchApi };
 

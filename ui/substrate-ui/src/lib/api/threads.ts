@@ -13,6 +13,11 @@ export const threadApi = {
     return requestJson<Thread[]>(`/threads?${params}`);
   },
 
+  /** One conversation, by id (an agent's conversation is not in the list, so a page opened on it checks it directly). */
+  async getThread(threadId: string): Promise<Thread> {
+    return requestJson<Thread>(`/threads/${threadId}`);
+  },
+
   /** `agentId`: start the conversation with one of the user's agents. */
   async createThread(name?: string, agentId?: string | null): Promise<Thread> {
     return requestJson<Thread>("/threads", {

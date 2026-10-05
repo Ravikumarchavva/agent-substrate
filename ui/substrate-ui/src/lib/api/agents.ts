@@ -10,6 +10,11 @@ export interface Agent {
   /** Where its files live; the Storage page shows them under its name. */
   workspace_id: string;
   created_at: string;
+  /** The agent's one conversation; absent until it is first opened. */
+  thread_id: string | null;
+  last_active: string | null;
+  /** A one-line preview of the last thing said in that conversation. */
+  last_message: string | null;
 }
 
 export interface AgentInput {
@@ -43,6 +48,11 @@ export const agentsApi = {
       method: "PATCH",
       body: JSON.stringify(allowed_tools === null ? { ...rest, all_tools: true } : { ...rest, allowed_tools }),
     });
+  },
+
+  /** The agent's conversation (made the first time), to talk to it directly. */
+  async openAgentThread(id: string): Promise<string> {
+    return (await requestJson<{ id: string }>(`/agents/${id}/thread`, { method: "POST" })).id;
   },
 
   async deleteAgent(id: string): Promise<void> {

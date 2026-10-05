@@ -27,8 +27,11 @@ export function useThreads(
       setThreads(fetchedThreads);
       setHasMore(fetchedThreads.length >= THREAD_PAGE_SIZE);
 
+      // An agent's conversation is not in the list (it lives under its agent), so a page opened on one is not a stray id to redirect away from.
+      const isAgentThread = async () => (currentThreadId ? !!(await api.getThread(currentThreadId).catch(() => null))?.agent_id : false);
+
       if (fetchedThreads.length === 0) {
-        if (autoSelectFirstThread && currentThreadId) {
+        if (autoSelectFirstThread && currentThreadId && !(await isAgentThread())) {
           selectThread(null);
         }
         hasAutoSelected.current = true;
@@ -39,7 +42,7 @@ export function useThreads(
         ? fetchedThreads.some((thread: Thread) => thread.id === currentThreadId)
         : false;
 
-      if (currentThreadId && !hasCurrentThread && autoSelectFirstThread && !hasAutoSelected.current) {
+      if (currentThreadId && !hasCurrentThread && autoSelectFirstThread && !hasAutoSelected.current && !(await isAgentThread())) {
         selectThread(fetchedThreads[0].id);
       }
       hasAutoSelected.current = true;

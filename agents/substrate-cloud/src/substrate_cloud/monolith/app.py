@@ -28,6 +28,7 @@ from substrate_cloud.monolith.dependencies import ServerDependencies
 from substrate_cloud.monolith.routes.admin import router as admin_router
 from substrate_cloud.monolith.routes.agents import router as agents_router
 from substrate_cloud.monolith.routes.groups import router as groups_router
+from substrate_cloud.monolith.access_log import quiet_polls
 from substrate_cloud.monolith.services.groups.member import register_member_factory
 from substrate_cloud.monolith.routes.audio import router as audio_router
 from substrate_cloud.monolith.routes.workspace_oauth import (
@@ -406,6 +407,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    quiet_polls()
     """Build and return the FastAPI application."""
     app = FastAPI(
         title="Agent Framework Chat Server",

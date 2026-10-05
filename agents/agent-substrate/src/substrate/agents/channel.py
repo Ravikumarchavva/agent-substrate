@@ -111,6 +111,18 @@ class ChannelMemberAgent(ReActAgent):
                 to = f" (to {', '.join(self._name(a) for a in e.mentions)})"
             re_ = f" (replying to #{e.reply_to})" if e.reply_to is not None else ""
             lines.append(f"#{e.seq} {self._name(str(e.sender))}{re_}{to}: {e.text}")
+            for a in e.data.get("attachments", []):
+                lines.append(
+                    f"    (attached: {a.get('name')}, {a.get('size', 0)} bytes)"
+                )
+                if a.get("excerpt"):
+                    more = " [only the start is shown]" if a.get("truncated") else ""
+                    body = "\n".join(
+                        "    | " + row for row in str(a["excerpt"]).splitlines()
+                    )
+                    lines.append(f"    contents of {a.get('name')}{more}:\n{body}")
+                else:
+                    lines.append("    (no text could be read from it)")
         lines.append(f"\nReply as yourself, or answer exactly {PASS} to stay silent.")
         return "\n".join(lines)
 

@@ -292,3 +292,18 @@ class ChannelTests:
             and await store.channel_members("a") == []
         )
         assert [e.text for e in await store.channel_read("b")] == ["y"]
+
+    async def test_structured_data_rides_with_an_entry(self, store):
+        await self.open(store)
+        await store.channel_append(
+            CH,
+            sender=HUMAN,
+            text="see file",
+            data={"attachments": [{"name": "a.pdf", "size": 3}]},
+        )
+        await store.channel_append(CH, sender=HUMAN, text="plain")
+        first, second = await store.channel_read(CH)
+        assert (
+            first.data == {"attachments": [{"name": "a.pdf", "size": 3}]}
+            and second.data == {}
+        )

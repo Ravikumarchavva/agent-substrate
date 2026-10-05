@@ -10,15 +10,17 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.types import Actor
+from substrate_cloud.document_reader import document_reader
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
 from substrate_cloud.monolith.models import Group
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
+from substrate_cloud.monolith.services.groups import files as group_files
 from substrate_cloud.monolith.services.groups import service as groups
 from substrate_cloud.monolith.services.agents.service import get_owned_agent
 
@@ -58,9 +60,37 @@ class GroupOut(BaseModel):
     last_sender: Optional[str] = None
     unread: int = 0
     paused: bool = False
+    # Members thinking about it right now, for "Scout is typing…" in a list.
+    working: List[str] = []
     # What the agents have used in this group and the most they may.
     tokens_used: int = 0
     token_cap: int = 0
+
+
+class AttachmentOut(BaseModel):
+    name: str
+    size: int
+    mime: str
+    # Storage key; fetch it from /files/object?key=…
+    key: str
+    # The start of its text, which the agents are shown; absent for a picture or a file with no text.
+    excerpt: Optional[str] = None
+    truncated: bool = False
+    # A picture of the first page, for a PDF, and how many pages it has.
+    preview_key: Optional[str] = None
+    pages: Optional[int] = None
+    modified: Optional[float] = None
+
+
+class AttachmentIn(BaseModel):
+    key: str
+    name: str
+    size: int = 0
+    mime: str = "application/octet-stream"
+    excerpt: Optional[str] = None
+    truncated: bool = False
+    preview_key: Optional[str] = None
+    pages: Optional[int] = None
 
 
 class EntryOut(BaseModel):
@@ -72,6 +102,7 @@ class EntryOut(BaseModel):
     text: str
     mentions: List[str]
     reply_to: Optional[int] = None
+    attachments: List[AttachmentOut] = []
     at: datetime
 
 
@@ -80,11 +111,14 @@ class MessagesOut(BaseModel):
     latest: int
     # Members thinking about it right now, for "Scout is typing…".
     working: List[str] = []
+    # The latest entry every agent in the group has read: the user's messages up to here show as seen by all.
+    read_by_all: int = -1
 
 
 class SendIn(BaseModel):
-    text: str = Field(min_length=1, max_length=8000)
+    text: str = Field(default="", max_length=8000)
     reply_to: Optional[int] = None
+    attachments: List[AttachmentIn] = Field(default_factory=list, max_length=10)
 
 
 class ModeIn(BaseModel):
@@ -149,13 +183,29 @@ async def _out(db: AsyncSession, store, group: Group) -> GroupOut:
             MemberOut(agent_id=a.id, name=a.name, role=a.role, mode=m.mode)
             for m, a in members
         ],
-        last_message=last.text[:140] if last else None,
+        last_message=_preview(last)[:140] if last else None,
         last_sender=names.get(str(last.sender), "Group") if last else None,
         unread=sum(1 for e in unseen if str(e.sender) != mine),
         paused=bool(last and last.kind.value == "system"),
+        working=[
+            names[str(a)]
+            for a in await store.working(
+                [Actor.from_str(x) for x in names if x != mine]
+            )
+        ],
         tokens_used=await groups.tokens_used(store, group),
         token_cap=group.token_cap,
     )
+
+
+def _preview(entry) -> str:
+    """One line for a list: what was said, or the files when that is all there was."""
+    if entry.text.strip():
+        return entry.text
+    files = entry.data.get("attachments", [])
+    if len(files) == 1:
+        return f"📎 {files[0].get('name', 'file')}"
+    return f"📎 {len(files)} files" if files else ""
 
 
 def _entry(e, names: dict[str, str], mine: str) -> EntryOut:
@@ -168,6 +218,7 @@ def _entry(e, names: dict[str, str], mine: str) -> EntryOut:
         text=e.text,
         mentions=[names.get(m, m) for m in e.mentions],
         reply_to=e.reply_to,
+        attachments=[AttachmentOut(**a) for a in e.data.get("attachments", [])],
         at=e.at,
     )
 
@@ -268,13 +319,77 @@ async def read_messages(
         # database connection goes back to the pool meanwhile.
         await db.commit()
         await store.channel_wait(channel, after, min(wait, 3.0))
-    entries = await store.channel_read(channel, after=after, limit=min(max(limit, 1), 500))
+    entries = await store.channel_read(
+        channel, after=after, limit=min(max(limit, 1), 500)
+    )
     busy = await store.working([Actor.from_str(a) for a in names if a != mine])
     return MessagesOut(
         entries=[_entry(e, names, mine) for e in entries],
         latest=entries[-1].seq if entries else after,
         working=[names[str(a)] for a in busy],
+        # A member that only listens for mentions never reads the rest, so only those that follow everything count.
+        read_by_all=min(
+            (
+                m.cursor
+                for m in await store.channel_members(channel)
+                if m.mode.value == "all"
+            ),
+            default=-1,
+        ),
     )
+
+
+@router.post("/groups/{group_id}/files", response_model=AttachmentOut, status_code=201)
+async def upload_group_file(
+    group_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    """Add a file to the group's shared files; attach it to a message by sending its ``key``."""
+    group = await _owned(db, group_id, user)
+    store = ctx.files_for(user.tenant_id)
+    if store is None:
+        raise HTTPException(503, "File storage is not configured.")
+    data = await file.read()
+    if len(data) > group_files.MAX_FILE_BYTES:
+        raise HTTPException(
+            413,
+            f"A file can be at most {group_files.MAX_FILE_BYTES // (1024 * 1024)} MB.",
+        )
+    try:
+        saved = await group_files.save_upload(
+            store,
+            group,
+            user,
+            file.filename or "file",
+            data,
+            file.content_type,
+            document_reader(),
+        )
+    except Exception as exc:  # noqa: BLE001 - quota and storage errors are the user's to read, not a crash
+        if "quota" in type(exc).__name__.lower():
+            raise HTTPException(413, str(exc)) from exc
+        raise
+    return AttachmentOut(**saved)
+
+
+@router.get("/groups/{group_id}/files", response_model=List[AttachmentOut])
+async def list_group_files(
+    group_id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    """Everything in the group's shared files: what you uploaded and what the agents made."""
+    group = await _owned(db, group_id, user)
+    store = ctx.files_for(user.tenant_id)
+    if store is None:
+        return []
+    return [
+        AttachmentOut(**f) for f in await group_files.list_files(store, group, user)
+    ]
 
 
 @router.post("/groups/{group_id}/messages", response_model=EntryOut, status_code=201)
@@ -287,8 +402,32 @@ async def send_message(
 ):
     group = await _owned(db, group_id, user)
     store = _store(ctx)
+    text = body.text.strip()
+    if not text and not body.attachments:
+        raise HTTPException(422, "Write something or attach a file.")
+    attachments = []
+    for a in body.attachments:
+        if not group_files.belongs(group, user, a.key):
+            raise HTTPException(422, f"{a.name} is not one of this group's files.")
+        relative = a.key.removeprefix(group_files.shared_prefix(group, user))
+        record = group_files.attachment(group, user, relative, a.size, a.mime)
+        if a.excerpt:
+            # The text the upload read, handed back with the message; it is the sender's own content, clipped to the same size.
+            record |= {
+                "excerpt": a.excerpt[: group_files.EXCERPT_CHARS],
+                "truncated": a.truncated,
+            }
+        if a.preview_key and group_files.belongs(group, user, a.preview_key):
+            record |= {"preview_key": a.preview_key, "pages": a.pages}
+        attachments.append(record)
     result = await groups.post_as_user(
-        db, store, group, user, body.text.strip(), body.reply_to
+        db,
+        store,
+        group,
+        user,
+        text,
+        body.reply_to,
+        {"attachments": attachments} if attachments else None,
     )
     if result.seq is None:
         raise HTTPException(409, "The group could not take that message.")

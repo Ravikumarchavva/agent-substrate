@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
+from substrate.types import Actor
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,6 +69,8 @@ class AgentOut(BaseModel):
     last_active: Optional[datetime] = None
     # A one-line preview of the last thing said in that conversation, for the sidebar.
     last_message: Optional[str] = None
+    # Working on a reply to the user right now, for "typing…" in a list.
+    working: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -76,7 +79,12 @@ class ThreadRef(BaseModel):
     id: uuid.UUID
 
 
-def _out(agent: Agent, thread: Optional[Thread], last_message: Optional[str] = None) -> AgentOut:
+def _out(
+    agent: Agent,
+    thread: Optional[Thread],
+    last_message: Optional[str] = None,
+    working: bool = False,
+) -> AgentOut:
     return AgentOut(
         id=agent.id,
         name=agent.name,
@@ -88,6 +96,7 @@ def _out(agent: Agent, thread: Optional[Thread], last_message: Optional[str] = N
         thread_id=thread.id if thread else None,
         last_active=thread.updated_at if thread else None,
         last_message=last_message,
+        working=working,
     )
 
 
@@ -102,7 +111,9 @@ def _known_tools(ctx: ServerDependencies) -> dict[str, str]:
         name = _tool_name(tool)
         if name:
             out[name] = str(getattr(tool, "description", "") or "")[:200]
-    out[TOOL_NAME] = "Ask one of your other agents to do a piece of work and get its answer."
+    out[TOOL_NAME] = (
+        "Ask one of your other agents to do a piece of work and get its answer."
+    )
     return out
 
 
@@ -134,10 +145,30 @@ async def list_my_agents(
     threads = await main_threads(db, [a.id for a in agents])
     store = ctx.runtime.store if ctx.runtime is not None else None
     previews = {
-        a.id: await last_message(store, str(threads[a.id].id)) if store and a.id in threads else None
+        a.id: await last_message(store, str(threads[a.id].id))
+        if store and a.id in threads
+        else None
         for a in agents
     }
-    return [_out(a, threads.get(a.id), previews[a.id]) for a in agents]
+    busy = (
+        {
+            a.key
+            for a in await store.working(
+                [Actor("assistant", str(t.id)) for t in threads.values()]
+            )
+        }
+        if store
+        else set()
+    )
+    return [
+        _out(
+            a,
+            threads.get(a.id),
+            previews[a.id],
+            a.id in threads and str(threads[a.id].id) in busy,
+        )
+        for a in agents
+    ]
 
 
 @router.post("", response_model=AgentOut, status_code=201)
@@ -238,7 +269,9 @@ async def delete_agent(
         from substrate.workspace.layout import conversation_prefix
 
         prefix = (
-            conversation_prefix(user.tenant_id or "default", user.sub, agent.workspace_id)
+            conversation_prefix(
+                user.tenant_id or "default", user.sub, agent.workspace_id
+            )
             + "/"
         )
         for key, _size, _mtime in await store.list_prefix(prefix):

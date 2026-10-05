@@ -213,3 +213,86 @@ async def test_the_groups_token_cap_is_set_validated_and_used_is_reported():
             assert (await c.get(f"/groups/{group['id']}")).json()["token_cap"] == 250_000
         finally:
             await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_files_are_uploaded_to_the_group_listed_and_attached_to_a_message_only_if_they_are_its_own():
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            other = (await c.post("/groups", json={"name": "Other", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            up = await c.post(f"/groups/{group['id']}/files", files={"file": ("../../budget.csv", b"a,b\n1,2\n", "text/csv")})
+            assert up.status_code == 201, up.text
+            first = up.json()
+            assert first["name"] == "budget.csv" and first["size"] == 8
+            # The text of the file is read now, so the agents are shown it with the message.
+            assert first["excerpt"] == "a,b\n1,2" and first["truncated"] is False
+            # The same name again does not replace it.
+            second = (await c.post(f"/groups/{group['id']}/files", files={"file": ("budget.csv", b"x", "text/csv")})).json()
+            assert second["name"] == "budget (2).csv"
+            assert {f["name"] for f in (await c.get(f"/groups/{group['id']}/files")).json()} == {"budget.csv", "budget (2).csv"}
+            assert (await c.get(f"/groups/{other['id']}/files")).json() == []
+
+            sent = await c.post(f"/groups/{group['id']}/messages", json={"text": "", "attachments": [first]})
+            assert sent.status_code == 201, sent.text
+            assert [a["name"] for a in sent.json()["attachments"]] == ["budget.csv"]
+            # What the agents get to see travels in the entry itself.
+            stored = (await app.state.ctx.runtime.store.channel_read(f"group/{group['id']}"))[0]
+            assert stored.data["attachments"][0]["excerpt"] == "a,b\n1,2"
+            # A key from another group (or anywhere else) cannot be attached.
+            stolen = await c.post(f"/groups/{other['id']}/messages", json={"text": "hi", "attachments": [{"key": first["key"], "name": "budget.csv"}]})
+            assert stolen.status_code == 422
+            assert (await c.post(f"/groups/{group['id']}/messages", json={"text": ""})).status_code == 422
+
+            messages = (await c.get(f"/groups/{group['id']}/messages")).json()
+            assert messages["entries"][0]["attachments"][0]["key"] == first["key"]
+            # Served by the existing object route, to its owner only.
+            got = await c.get("/files/object", params={"key": first["key"]})
+            assert got.status_code == 200 and got.content == b"a,b\n1,2\n"
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_a_list_previews_files_when_a_message_is_only_files():
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            up = (await c.post(f"/groups/{group['id']}/files", files={"file": ("plan.pdf", b"%PDF-1", "application/pdf")})).json()
+            await c.post(f"/groups/{group['id']}/messages", json={"text": "", "attachments": [up]})
+            listed = (await c.get("/groups")).json()[0]
+            assert listed["last_message"] == "📎 plan.pdf" and listed["working"] == []
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_a_pdf_gets_a_first_page_preview_and_a_page_count_that_stay_out_of_the_file_list():
+    import io
+
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument.new()
+    pdf.new_page(200, 200)
+    pdf.new_page(200, 200)
+    raw = io.BytesIO()
+    pdf.save(raw)
+
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            up = (await c.post(f"/groups/{group['id']}/files", files={"file": ("plan.pdf", raw.getvalue(), "application/pdf")})).json()
+            assert up["pages"] == 2 and up["preview_key"].endswith(".previews/plan.pdf.png")
+            png = await c.get("/files/object", params={"key": up["preview_key"]})
+            assert png.status_code == 200 and png.content[:4] == b"\x89PNG"
+            assert [f["name"] for f in (await c.get(f"/groups/{group['id']}/files")).json()] == ["plan.pdf"]
+            sent = (await c.post(f"/groups/{group['id']}/messages", json={"text": "", "attachments": [up]})).json()
+            assert sent["attachments"][0]["pages"] == 2 and sent["attachments"][0]["preview_key"] == up["preview_key"]
+            # Text files have no picture; they show their first lines instead.
+            txt = (await c.post(f"/groups/{group['id']}/files", files={"file": ("a.txt", b"hello", "text/plain")})).json()
+            assert txt["preview_key"] is None and txt["excerpt"] == "hello"
+        finally:
+            await _wipe(c.tenant)

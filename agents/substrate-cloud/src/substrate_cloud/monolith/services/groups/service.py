@@ -139,7 +139,9 @@ async def create_group(
 
 async def set_token_cap(store: Any, group: Group, cap: int) -> None:
     group.token_cap = cap
-    await store.account_limit(f"channel:{group.channel}", ExecutionBudget(max_tokens=cap))
+    await store.account_limit(
+        f"channel:{group.channel}", ExecutionBudget(max_tokens=cap)
+    )
 
 
 async def tokens_used(store: Any, group: Group) -> int:
@@ -193,6 +195,7 @@ async def post_as_user(
     claims: AuthClaims,
     text: str,
     reply_to: Optional[int] = None,
+    data: Optional[dict] = None,
 ) -> AppendResult:
     """The user speaks. ``@Name`` and ``@everyone`` in the text address agents; the entry wakes whoever it concerns."""
     names = await roster(db, group)
@@ -204,6 +207,7 @@ async def post_as_user(
         mentions=mentions,
         reply_to=reply_to,
         caused_by="user",
+        data=data,
     )
 
 

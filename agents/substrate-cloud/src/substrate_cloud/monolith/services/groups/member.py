@@ -37,7 +37,8 @@ def group_instructions(group_name: str, me: str, names: dict[str, str]) -> str:
         "Keep messages short and in your own voice.\n"
         "To address someone write @Name; @everyone addresses all of them. Do not repeat what another member already said.\n"
         f"When you have nothing to add, answer with exactly {PASS} and nothing else.\n"
-        "You see only what was said in the group, and what you did elsewhere stays with you.\n"
+        "You see only what was said in the group, and what you did elsewhere stays with you. "
+        "When a file is shared you are shown the start of its text under the message; pictures you cannot see, and you should say so rather than guess.\n"
     )
 
 
@@ -61,6 +62,7 @@ def register_member_factory(runtime: Any, get_deps: Callable[[], Any]) -> None:
             names = await roster(db, group)
             me = agent.name
             title = group.name
+            group_workspace = group.workspace_id
         contacts = await contacts_for(
             deps, profile.tenant_id, profile.user_id, agent_id
         )
@@ -80,7 +82,7 @@ def register_member_factory(runtime: Any, get_deps: Callable[[], Any]) -> None:
                 {
                     "user_id": profile.user_id,
                     "tenant_id": profile.tenant_id,
-                    "workspace_id": profile.workspace_id,
+                    "workspace_id": group_workspace,
                 },
             ),
         )

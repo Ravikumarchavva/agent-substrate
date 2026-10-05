@@ -17,7 +17,12 @@ from substrate.tools import ToolRisk
 from substrate.types import RunLogKind
 from substrate_cloud.shared.settings import settings
 from substrate_cloud.monolith.database import system_session
-from substrate_cloud.monolith.models import Agent, ScheduledTask, ScheduledTaskRun, Thread
+from substrate_cloud.monolith.models import (
+    Agent,
+    ScheduledTask,
+    ScheduledTaskRun,
+    Thread,
+)
 from substrate_cloud.monolith.services.agents.assembly import assemble_agent
 from substrate_cloud.monolith.services.agents.service import AgentProfile
 from substrate_cloud.monolith.services.notification_service import notify, send_email
@@ -195,7 +200,9 @@ async def execute_scheduled_task(
 
             # 4-5. Build the agent. A task on an agent's conversation runs as that agent: its role, the tools it may use, its files.
             workspace_id = None
-            agent_row = await db.get(Agent, thread.agent_id) if thread.agent_id else None
+            agent_row = (
+                await db.get(Agent, thread.agent_id) if thread.agent_id else None
+            )
             if agent_row is not None:
                 profile = AgentProfile.of(agent_row)
                 workspace_id = profile.workspace_id
@@ -395,9 +402,7 @@ async def _tell(
         logger.exception("could not notify about scheduled task %s", task.id)
 
 
-def missed_firing(
-    kind: str, expression: str, since: datetime, now: datetime
-) -> bool:
+def missed_firing(kind: str, expression: str, since: datetime, now: datetime) -> bool:
     """Did a schedule come due between ``since`` and ``now`` (so the server was down for it)?"""
     if kind == "interval":
         try:

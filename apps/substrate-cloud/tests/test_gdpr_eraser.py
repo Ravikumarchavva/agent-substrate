@@ -470,3 +470,44 @@ async def test_erasing_a_user_removes_the_documents_their_conversations_were_giv
         )  # no folder store: nothing to erase
     finally:
         await store.aclose()
+
+
+@pytest.mark.requires_postgres
+async def test_erasure_reaches_groups_their_members_runs_and_the_agents(
+    db: AsyncSession, db_factory, cfg, tmp_path
+):
+    """A group holds what the user said, what each agent in it did about it, and the agents' own instructions: all of it is the user's data."""
+    from substrate.runtime import Member
+    from substrate.types import Actor
+    from substrate_cloud.monolith.models import Agent, Group, GroupMember
+    from substrate_cloud.monolith.services.groups.service import member_actor
+
+    tenant_id = f"tenant-{uuid.uuid4()}"
+    user_id = f"user-{uuid.uuid4()}"
+    agent = Agent(id=uuid.uuid4(), tenant_id=tenant_id, user_identifier=user_id, name="Scout", instructions="private notes")
+    group = Group(id=uuid.uuid4(), tenant_id=tenant_id, user_identifier=user_id, name="Trip")
+    db.add_all([agent, group])
+    await db.flush()
+    db.add(GroupMember(group_id=group.id, agent_id=agent.id))
+    await db.commit()
+
+    runtime = runtime_store(tmp_path / "rt.sqlite3")
+    await runtime.start()
+    try:
+        actor = member_actor(agent.id, group.id)
+        await runtime.channel_open(group.channel, tenant=tenant_id, members=[Member(agent=actor)])
+        await runtime.channel_append(group.channel, sender=Actor("user", user_id), text="my secret plan")
+        assert await runtime.stats() and (await runtime.stats()).pending == 1
+
+        summary = await erase_user(
+            db, store=FakeStore(), redis=None, tenant_id=tenant_id, user_id=user_id, cfg=cfg, runtime_store=runtime
+        )
+
+        assert summary.groups_deleted == 1 and summary.agents_deleted == 1
+        assert await runtime.channel_read(group.channel) == []
+        assert (await runtime.stats()).pending == 0  # the member's woken run is gone with it
+        async with db_factory() as verify:
+            assert await verify.get(Group, group.id) is None
+            assert await verify.get(Agent, agent.id) is None
+    finally:
+        await runtime.aclose()

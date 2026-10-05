@@ -1,4 +1,4 @@
-"""DurableRuntimeStore — the runtime store, written once, over the store's relational database.
+"""RuntimeStore — the runtime store, written once, over the store's relational database.
 
 The engine owns every rule (what a terminal transition does, how a suspension avoids losing a wakeup, how a
 spawn is budgeted); the database owns *atomicity*. Written per database, those rules were duplicated three
@@ -27,7 +27,11 @@ from substrate.runtime.inbox import DeadLetterEntry, DeadLetterReason
 from substrate.types.run_log import RunLogEntry, RunLogKind
 from substrate.runtime.scheduler import RunRetryPolicy
 from substrate.runtime.persistence.accounts import Accounts
-from substrate.runtime.persistence.channels import _SCHEMA_CHANNELS, Channels, _schema_dedup
+from substrate.runtime.persistence.channels import (
+    _SCHEMA_CHANNELS,
+    Channels,
+    _schema_dedup,
+)
 from substrate.runtime.store import (
     Cancel,
     Commit,
@@ -189,7 +193,7 @@ def _utcnow() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
-class DurableRuntimeStore(Channels, Accounts):
+class RuntimeStore(Channels, Accounts):
     """``RuntimeStore`` over a ``Database``."""
 
     def __init__(
@@ -203,6 +207,7 @@ class DurableRuntimeStore(Channels, Accounts):
         self._clock = clock
         self._max_attempts = max_delivery_attempts
         self._appended: dict[str, asyncio.Event] = {}
+        self._channel_events: dict[str, asyncio.Event] = {}
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -1308,12 +1313,17 @@ class DurableRuntimeStore(Channels, Accounts):
 
         return await self._tx(do)
 
-    async def erase(self, *, tenant: str, thread_id: str | None = None) -> int:
+    async def erase(
+        self, *, tenant: str, thread_id: str | None = None, agent: Actor | None = None
+    ) -> int:
         async def do(tx: Tx) -> int:
             where, args = "tenant = ?", [tenant]
             if thread_id is not None:
                 where += " AND thread_id = ?"
                 args.append(thread_id)
+            if agent is not None:
+                where += " AND agent = ?"
+                args.append(str(agent))
             rows = await tx.fetchall(
                 f"SELECT run_id, agent FROM rt_runs WHERE {where}", *args
             )
@@ -1323,19 +1333,47 @@ class DurableRuntimeStore(Channels, Accounts):
                 for table in ("rt_events", "rt_run_wake", "rt_signals"):
                     await tx.execute(f"DELETE FROM {table} WHERE run_id = ?", run_id)
                 await tx.execute("DELETE FROM rt_spawns WHERE child_run_id = ?", run_id)
+                await tx.execute("DELETE FROM rt_run_accounts WHERE run_id = ?", run_id)
             await tx.execute(f"DELETE FROM rt_runs WHERE {where}", *args)
+            if thread_id is None and agent is None:
+                # The whole tenant: its channels (entries, members) and the budgets that were kept for them.
+                for ch in await tx.fetchall(
+                    "SELECT channel FROM rt_channels WHERE tenant = ?", tenant
+                ):
+                    for table in (
+                        "rt_channel_entries",
+                        "rt_channel_members",
+                        "rt_channels",
+                    ):
+                        await tx.execute(
+                            f"DELETE FROM {table} WHERE channel = ?", ch["channel"]
+                        )
+                    await tx.execute(
+                        "DELETE FROM rt_accounts WHERE account = ?",
+                        f"channel:{ch['channel']}",
+                    )
+                await tx.execute(
+                    "DELETE FROM rt_accounts WHERE account = ?", f"tenant:{tenant}"
+                )
             await tx.execute(
                 "DELETE FROM rt_spend WHERE tree_id NOT IN (SELECT tree_id FROM rt_runs)"
             )
-            for agent in agents:
+            if agent is not None:
+                agents.add(str(agent))
+                await tx.execute(
+                    "DELETE FROM rt_accounts WHERE account = ?", f"agent:{agent}"
+                )
+            for address in agents:
                 if (
                     await tx.fetchone(
-                        "SELECT 1 AS x FROM rt_runs WHERE agent = ? LIMIT 1", agent
+                        "SELECT 1 AS x FROM rt_runs WHERE agent = ? LIMIT 1", address
                     )
                     is None
                 ):
                     for table in ("rt_inbox", "rt_inbox_processed", "rt_dead_letters"):
-                        await tx.execute(f"DELETE FROM {table} WHERE agent = ?", agent)
+                        await tx.execute(
+                            f"DELETE FROM {table} WHERE agent = ?", address
+                        )
             return len(rows)
 
         return await self._tx(do)
@@ -1363,4 +1401,4 @@ class DurableRuntimeStore(Channels, Accounts):
         return await self._tx(do)
 
 
-__all__ = ["DurableRuntimeStore"]
+__all__ = ["RuntimeStore"]

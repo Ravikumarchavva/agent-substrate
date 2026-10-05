@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from substrate.runtime.persistence.store import DurableRuntimeStore
+from substrate.runtime.persistence.store import RuntimeStore
 
-__all__ = ["DurableRuntimeStore"]
+__all__ = ["RuntimeStore"]

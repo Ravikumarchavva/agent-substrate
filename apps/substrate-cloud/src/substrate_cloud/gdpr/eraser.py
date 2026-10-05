@@ -16,7 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.stores import Erased, MemoryNamespace, Store
 from substrate.workspace.layout import tenant_prefix, user_prefix
-from substrate_cloud.monolith.models import FileMetadata, Thread, User
+from substrate.types import Actor
+from substrate_cloud.monolith.models import Agent, FileMetadata, Group, GroupMember, Thread, User
+from substrate_cloud.monolith.services.groups.service import member_actor
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +36,8 @@ class ErasureSummary:
     task_boards_deleted: int = 0
     vectors_deleted: int = 0
     graph_entities_deleted: int = 0
+    groups_deleted: int = 0
+    agents_deleted: int = 0
 
     def as_dict(self) -> dict[str, int | str | None]:
         return asdict(self)
@@ -68,6 +72,24 @@ async def _redis_sweep(redis: Any, identifiers: set[str]) -> int:
     return deleted
 
 
+async def _erase_groups(
+    db: AsyncSession, *, groups: list[Group], runtime_store: Any, folder: Store | None, tenant_id: str
+) -> int:
+    """What the user's groups hold: what was said (the channel), what each member did about it (its runs, its conversation, its budget).
+    Must run while the membership rows still exist, as they say who the members are."""
+    for group in groups:
+        members = (await db.execute(select(GroupMember).where(GroupMember.group_id == group.id))).scalars().all()
+        actors: list[Actor] = [member_actor(m.agent_id, group.id) for m in members]
+        if runtime_store is not None:
+            await runtime_store.channel_delete(group.channel)
+            for actor in actors:
+                await runtime_store.erase(tenant=tenant_id, agent=actor)
+        if folder is not None:
+            for actor in actors:
+                await folder.tenant(tenant_id).erase_conversation(actor.key)
+    return len(groups)
+
+
 async def erase_user(
     db: AsyncSession,
     *,
@@ -92,6 +114,16 @@ async def erase_user(
         ).scalars()
     )
     thread_ids = {str(thread.id) for thread in threads}
+    groups = list(
+        (
+            await db.execute(
+                select(Group).where(Group.tenant_id == tenant_id, Group.user_identifier == user_id)
+            )
+        ).scalars()
+    )
+    groups_deleted = await _erase_groups(
+        db, groups=groups, runtime_store=runtime_store, folder=folder, tenant_id=tenant_id
+    )
     # `user_id` is the caller's own sub (the same string threads.user_identifier
     # stores) — a `users` row only ever exists under its UUID primary key when
     # that sub happens to parse as one (see routes/files.py::_ensure_user);
@@ -114,6 +146,11 @@ async def erase_user(
     # Thread deletion cascades elements, feedback and scheduled-task rows.
     if thread_ids:
         await db.execute(delete(Thread).where(Thread.id.in_(thread_ids)))
+    await db.execute(delete(Group).where(Group.tenant_id == tenant_id, Group.user_identifier == user_id))
+    # The agents themselves: their instructions are the user's own writing. Members and contacts go with them.
+    agents_result = await db.execute(
+        delete(Agent).where(Agent.tenant_id == tenant_id, Agent.user_identifier == user_id)
+    )
     if user_uuid is not None:
         await db.execute(delete(User).where(User.id == user_uuid))
     await db.commit()
@@ -160,6 +197,8 @@ async def erase_user(
         runs,
         erased.thread_nodes,
         erased.task_boards,
+        groups_deleted=groups_deleted,
+        agents_deleted=agents_result.rowcount or 0,
     )
 
 
@@ -186,6 +225,8 @@ async def erase_tenant(
         delete(FileMetadata).where(FileMetadata.org_id == tenant_id)
     )
     await db.execute(delete(Thread).where(Thread.tenant_id == tenant_id))
+    groups_result = await db.execute(delete(Group).where(Group.tenant_id == tenant_id))
+    agents_result = await db.execute(delete(Agent).where(Agent.tenant_id == tenant_id))
     await db.commit()
     # Everything the folder store holds for the tenant — conversation DAG, tasks, vectors, graph, files, memory.
     erased = await folder.tenant(tenant_id).erase() if folder is not None else Erased()
@@ -216,4 +257,6 @@ async def erase_tenant(
         erased.task_boards,
         erased.vectors,
         erased.graph_entities,
+        groups_deleted=groups_result.rowcount or 0,
+        agents_deleted=agents_result.rowcount or 0,
     )

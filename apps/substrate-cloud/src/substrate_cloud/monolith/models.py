@@ -193,6 +193,8 @@ class Group(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     # How many entries in a row agents may add without a person before the group pauses.
     breaker: Mapped[int] = mapped_column(Integer, nullable=False, default=40)
+    # Most tokens the agents may spend in this group in all; once reached they stop being woken. The user raises it when they want to go on.
+    token_cap: Mapped[int] = mapped_column(Integer, nullable=False, default=1_000_000)
     # The last channel entry the user has seen.
     user_read_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=-1)
     created_at: Mapped[datetime] = mapped_column(

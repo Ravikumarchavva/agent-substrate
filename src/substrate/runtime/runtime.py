@@ -97,9 +97,11 @@ class Runtime:
         self._source = store if isinstance(store, Store) else None
         self._owns_source = False
         if isinstance(store, Store):
-            from substrate.runtime.persistence.store import DurableRuntimeStore
+            from substrate.runtime.persistence.store import (
+                RuntimeStore as PersistedRuntimeStore,
+            )
 
-            store = DurableRuntimeStore(store.database)
+            store = PersistedRuntimeStore(store.database)
         self._store = store
         self._resolver = resolver or ActorResolver()
         self._worker = Worker(
@@ -132,6 +134,11 @@ class Runtime:
         sub_agents: list[SubAgentConfig] = getattr(agent, "_sub_agents", [])
         for cfg in sub_agents:
             self._resolver.register_instance(cfg.agent)
+
+    def forget(self, actor: Actor) -> bool:
+        """Drop a factory-built actor from memory, so its next message rebuilds it from current data (a changed
+        profile, a changed roster). ``False`` if it was not resident or was registered directly."""
+        return self._resolver.forget(actor)
 
     def register_factory(self, actor_type: str, factory: ActorFactory) -> None:
         """Say how to build *any* actor of a type on demand — one entry per type

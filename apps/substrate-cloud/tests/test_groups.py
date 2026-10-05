@@ -115,10 +115,10 @@ async def test_a_message_reaches_every_agent_and_only_one_of_two_answers():
 
             assert len(entries) == 2, entries
             assert entries[1]["sender"] in {"Scout", "Quill"} and not entries[1]["from_user"]
-            assert entries[1]["text"] == "Here is what I found."
+            # (A server running against the same database may pick the run up first, with its own model: only who spoke is asserted.)
 
             listed = (await c.get("/groups")).json()[0]
-            assert listed["unread"] == 1 and listed["last_message"] == "Here is what I found."
+            assert listed["unread"] == 1 and listed["last_message"] == entries[1]["text"][:140]
             await c.post(f"/groups/{group['id']}/read", json={"upto": entries[-1]["seq"]})
             assert (await c.get("/groups")).json()[0]["unread"] == 0
         finally:
@@ -148,5 +148,68 @@ async def test_an_agent_added_later_was_not_there_for_what_came_before():
             await c.patch(f"/groups/{group['id']}/members/{scout['id']}", json={"mode": "all"})
             members = {m.agent.key.split("@")[0]: m.cursor for m in await store.channel_members(f"group/{group['id']}")}
             assert members[scout["id"]] == -1
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_changes_to_a_group_or_an_agent_make_members_rebuild_and_a_deleted_agent_leaves():
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            quill = (await c.post("/agents", json={"name": "Quill"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"]}, {"agent_id": quill["id"]}]})).json()
+            runtime = app.state.ctx.runtime
+            forgotten: list[str] = []
+            real = runtime.forget
+            runtime.forget = lambda actor: forgotten.append(actor.key) or real(actor)
+            try:
+                await c.patch(f"/agents/{quill['id']}", json={"name": "Quillian"})
+                # Scout must learn Quill's new name too, so both members are rebuilt.
+                assert {k.split("@")[0] for k in forgotten} == {scout["id"], quill["id"]}
+                forgotten.clear()
+                await c.patch(f"/groups/{group['id']}", json={"name": "Trip 2"})
+                assert len(forgotten) == 2
+            finally:
+                runtime.forget = real
+            assert (await c.delete(f"/agents/{quill['id']}")).status_code == 204
+            members = await runtime.store.channel_members(f"group/{group['id']}")
+            assert [m.agent.key.split("@")[0] for m in members] == [scout["id"]]
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_a_reader_waiting_for_messages_gets_one_the_moment_it_is_sent_and_sees_who_is_working():
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            waiting = asyncio.create_task(c.get(f"/groups/{group['id']}/messages", params={"after": -1, "wait": 3}))
+            await asyncio.sleep(0.4)
+            started = asyncio.get_event_loop().time()
+            await c.post(f"/groups/{group['id']}/messages", json={"text": "hello"})
+            body = (await asyncio.wait_for(waiting, 5)).json()
+            assert [e["text"] for e in body["entries"]] == ["hello"]
+            assert asyncio.get_event_loop().time() - started < 1.5
+            quiet = (await c.get(f"/groups/{group['id']}/messages", params={"after": 0, "wait": 0.2})).json()
+            assert quiet["entries"] == [] and quiet["working"] == []
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_the_groups_token_cap_is_set_validated_and_used_is_reported():
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"]}]})).json()
+            assert group["token_cap"] == 1_000_000 and group["tokens_used"] == 0
+            assert (await c.patch(f"/groups/{group['id']}", json={"token_cap": 5})).status_code == 422
+            changed = (await c.patch(f"/groups/{group['id']}", json={"token_cap": 250_000})).json()
+            assert changed["token_cap"] == 250_000
+            limit = await app.state.ctx.runtime.store.accounts_exhausted([f"channel:group/{group['id']}"])
+            assert limit is None
+            assert (await c.get(f"/groups/{group['id']}")).json()["token_cap"] == 250_000
         finally:
             await _wipe(c.tenant)

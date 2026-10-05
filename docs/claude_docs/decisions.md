@@ -21,7 +21,7 @@ used and the seam is where the defects lived.
 
 The three per-protocol runtime backends (event log, inbox, scheduler, signals, supervisor × in-memory /
 SQLite / Postgres, ~3.2k lines) are replaced by one command-oriented `RuntimeStore` whose `commit` is a
-single transaction, implemented once as `DurableRuntimeStore` over a small `Database` protocol (SQLite in
+single transaction, implemented once as `RuntimeStore` over a small `Database` protocol (SQLite in
 the kernel, asyncpg in `integrations/runtime`). There is deliberately no in-memory store: tests use a
 store in a throwaway folder through the same code. **Consequence accepted:** an embedded database in a folder is the
 zero-infra floor, so a process always has real files to write.

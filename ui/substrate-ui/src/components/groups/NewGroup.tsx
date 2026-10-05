@@ -29,7 +29,7 @@ export function NewGroup({ agents, onBack, onCreated }: Props) {
   const create = async () => {
     setBusy(true);
     try {
-      onCreated(await api.createGroup(name.trim(), chosen.map((agent_id) => ({ agent_id, mode: "all" }))));
+      onCreated(await api.createGroup(name.trim(), chosen.map((agent_id) => ({ agent_id, mode: "mentions" }))));
     } catch (err) {
       reportError("Couldn't create the group", err);
     } finally {

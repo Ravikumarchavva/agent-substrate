@@ -8,6 +8,10 @@ export interface GroupMember {
   name: string;
   role: string;
   mode: MemberMode;
+  avatar: string | null;
+  /** What this agent has used in the group. */
+  tokens_used: number;
+  cost_usd: number;
 }
 
 export interface Group {
@@ -27,6 +31,13 @@ export interface Group {
   /** What the agents have used in this group, and the most they may. */
   tokens_used: number;
   token_cap: number;
+  /** The most the agents may spend here in dollars, or null for no limit; and what they have spent. */
+  budget_usd: number | null;
+  cost_usd: number;
+  /** How many messages in a row the agents may add without you before the group pauses. */
+  breaker: number;
+  avatar: string | null;
+  pinned_at: string | null;
 }
 
 /** A file in a group: shared by someone in it, or made by an agent there. */
@@ -43,6 +54,8 @@ export interface GroupFile {
   preview_key?: string | null;
   pages?: number | null;
   modified?: number | null;
+  /** What a recording says, which the agents read. */
+  transcript?: string | null;
 }
 
 export interface GroupEntry {
@@ -93,6 +106,11 @@ export const groupsApi = {
     return requestJson<Group>(`/groups/${id}`, { method: "PATCH", body: JSON.stringify({ token_cap: tokenCap }) });
   },
 
+  /** `budget_usd: 0` removes the dollar limit. */
+  async setGroupLimits(id: string, limits: { budget_usd?: number; breaker?: number }): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}`, { method: "PATCH", body: JSON.stringify(limits) });
+  },
+
   async deleteGroup(id: string): Promise<void> {
     await requestVoid(`/groups/${id}`, { method: "DELETE" });
   },
@@ -120,11 +138,25 @@ export const groupsApi = {
     return requestJson<GroupFile[]>(`/groups/${id}/files`);
   },
 
+  async setGroupAvatar(id: string, file: File): Promise<Group> {
+    const form = new FormData();
+    form.append("file", file);
+    return requestJson<Group>(`/groups/${id}/avatar`, { method: "PUT", body: form });
+  },
+
+  async clearGroupAvatar(id: string): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}/avatar`, { method: "DELETE" });
+  },
+
+  async setGroupPinned(id: string, pinned: boolean): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}/pin`, { method: pinned ? "PUT" : "DELETE" });
+  },
+
   async markGroupRead(id: string, upto: number): Promise<void> {
     await requestVoid(`/groups/${id}/read`, { method: "POST", body: JSON.stringify({ upto }) });
   },
 
-  async addGroupMember(id: string, agentId: string, mode: MemberMode = "all"): Promise<Group> {
+  async addGroupMember(id: string, agentId: string, mode: MemberMode = "mentions"): Promise<Group> {
     return requestJson<Group>(`/groups/${id}/members`, { method: "POST", body: JSON.stringify({ agent_id: agentId, mode }) });
   },
 

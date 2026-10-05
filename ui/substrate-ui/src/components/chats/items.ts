@@ -9,6 +9,8 @@ export type ChatItem = {
   kind: ChatKind;
   id: string;
   name: string;
+  /** Its picture (a stored key), or null for initials. */
+  avatar: string | null;
   /** The last thing said (with who said it, in a group), or the role when nothing has been. */
   preview: string;
   /** Who is typing right now, as a line ("Scout is typing…"), or empty. */
@@ -20,7 +22,7 @@ export type ChatItem = {
 
 export type ChatFilter = "all" | "unread" | "groups" | "agents";
 
-export function buildChatItems(agents: Agent[], groups: Group[], pinned: readonly string[]): ChatItem[] {
+export function buildChatItems(agents: Agent[], groups: Group[]): ChatItem[] {
   const items: ChatItem[] = [
     ...groups.map(
       (g): ChatItem => ({
@@ -28,11 +30,12 @@ export function buildChatItems(agents: Agent[], groups: Group[], pinned: readonl
         kind: "group",
         id: g.id,
         name: g.name,
+        avatar: g.avatar,
         preview: g.last_message ? `${g.last_sender ?? "Group"}: ${previewOf(g.last_message, [])}` : g.members.map((m) => m.name).join(", "),
         typing: g.working,
         time: g.updated_at,
         unread: g.unread,
-        pinned: pinned.includes(chatKey("group", g.id)),
+        pinned: !!g.pinned_at,
       }),
     ),
     ...agents.map(
@@ -41,16 +44,18 @@ export function buildChatItems(agents: Agent[], groups: Group[], pinned: readonl
         kind: "agent",
         id: a.id,
         name: a.name,
+        avatar: a.avatar,
         preview: a.last_message ?? (a.role || "No role set"),
         typing: a.working ? [a.name] : [],
         time: a.last_active,
         unread: 0,
-        pinned: pinned.includes(chatKey("agent", a.id)),
+        pinned: !!a.pinned_at,
       }),
     ),
   ];
-  // Pinned first, then the most recently active.
-  return items.sort((x, y) => Number(y.pinned) - Number(x.pinned) || (y.time ? Date.parse(y.time) : 0) - (x.time ? Date.parse(x.time) : 0));
+  // Pinned first, in the order they were pinned; then the most recently active.
+  const pinnedAt = (i: ChatItem) => Date.parse((i.kind === "agent" ? agents.find((a) => a.id === i.id)?.pinned_at : groups.find((g) => g.id === i.id)?.pinned_at) ?? "") || 0;
+  return items.sort((x, y) => Number(y.pinned) - Number(x.pinned) || (x.pinned && y.pinned ? pinnedAt(x) - pinnedAt(y) : 0) || (y.time ? Date.parse(y.time) : 0) - (x.time ? Date.parse(x.time) : 0));
 }
 
 export function filterChatItems(items: ChatItem[], filter: ChatFilter, query: string): ChatItem[] {
@@ -61,6 +66,11 @@ export function filterChatItems(items: ChatItem[], filter: ChatFilter, query: st
     if (filter === "agents" && i.kind !== "agent") return false;
     return !q || i.name.toLowerCase().includes(q) || i.preview.toLowerCase().includes(q);
   });
+}
+
+/** Whether a row is the chat that is open: the agent or group the address names. */
+export function isOpenChat(item: Pick<ChatItem, "kind" | "id">, open: { agentId?: string | null; groupId?: string | null }): boolean {
+  return item.kind === "agent" ? item.id === open.agentId : item.id === open.groupId;
 }
 
 /** Everything unread, for the badge on the Agents entry in the sidebar. */

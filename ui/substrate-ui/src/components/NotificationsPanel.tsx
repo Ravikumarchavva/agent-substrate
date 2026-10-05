@@ -114,7 +114,7 @@ export function NotificationsPanel({ onOpenThread, onChanged, groups, onOpenGrou
               {unreadGroups.map((g) => (
                 <li key={g.id}>
                   <Button variant="ghost" className="h-auto w-full items-center justify-start gap-3 rounded-none px-4 py-3 text-left whitespace-normal" onClick={() => onOpenGroup(g.id)}>
-                    <Avatar name={g.name} />
+                    <Avatar name={g.name} src={g.avatar} />
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold text-foreground">{g.name}</span>
                       <span className="mt-0.5 line-clamp-1 block text-xs text-muted">{g.last_sender ? `${g.last_sender}: ` : ""}{g.last_message}</span>

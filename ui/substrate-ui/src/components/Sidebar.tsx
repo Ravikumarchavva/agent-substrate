@@ -29,8 +29,7 @@ import type { Agent } from "@/lib/api/agents";
 import type { Group } from "@/lib/api/groups";
 import { Avatar } from "@/components/groups/Avatar";
 import { typingLine } from "@/components/groups/text";
-import { buildChatItems } from "@/components/chats/items";
-import { usePinnedChats } from "@/lib/pins";
+import { buildChatItems, isOpenChat } from "@/components/chats/items";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -68,6 +67,8 @@ type Props = {
   /** The user's groups: agents and the user in one conversation. */
   groups?: Group[];
   openGroupId?: string | null;
+  /** The agent whose conversation is open, to mark its row. */
+  openAgentId?: string | null;
   onOpenGroup?: (groupId: string | null) => void;
   onOpenNotifications?: () => void;
   isNotificationsOpen?: boolean;
@@ -132,6 +133,7 @@ export function Sidebar({
   onOpenAgent,
   groups = [],
   openGroupId,
+  openAgentId = null,
   onOpenGroup,
   onOpenNotifications,
   isNotificationsOpen,
@@ -167,23 +169,23 @@ export function Sidebar({
   const settingsGroups = useMemo(() => getVisibleSettingsTabGroups(isAdmin), [isAdmin]);
 
   // The chats you pinned (at most five) are the only agents and groups the sidebar lists; the rest are found under Agents.
-  const { pinned } = usePinnedChats();
   const pinnedRows = useMemo(
     () =>
-      buildChatItems(agents, groups, pinned)
+      buildChatItems(agents, groups)
         .filter((i) => i.pinned)
         .map((i) => ({
           key: i.key,
           name: i.name,
+          avatar: i.avatar,
           title: i.name,
           preview: i.preview,
           time: i.time,
           unread: i.unread,
           typing: i.typing.length > 0 ? (i.kind === "agent" ? "typing…" : typingLine(i.typing)) : "",
-          active: i.kind === "group" ? i.id === openGroupId : !!agents.find((a) => a.id === i.id)?.thread_id && agents.find((a) => a.id === i.id)?.thread_id === currentThreadId,
+          active: isOpenChat(i, { agentId: openAgentId, groupId: openGroupId }),
           open: () => (i.kind === "group" ? onOpenGroup?.(i.id) : onOpenAgent?.(agents.find((a) => a.id === i.id)!)),
         })),
-    [agents, groups, pinned, openGroupId, currentThreadId, onOpenGroup, onOpenAgent],
+    [agents, groups, openGroupId, openAgentId, onOpenGroup, onOpenAgent],
   );
 
   const chatQuickActions = [
@@ -330,7 +332,7 @@ export function Sidebar({
                       title={row.title}
                       className={cn("h-auto! min-h-0 w-full justify-start gap-3 whitespace-normal rounded-lg px-2.5 py-2 text-left font-normal", row.active ? "bg-accent/12" : "hover:bg-card-hover")}
                     >
-                      <Avatar name={row.name} />
+                      <Avatar name={row.name} src={row.avatar} />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-baseline justify-between gap-2">
                           <span className="truncate text-sm font-medium text-foreground">{row.name}</span>

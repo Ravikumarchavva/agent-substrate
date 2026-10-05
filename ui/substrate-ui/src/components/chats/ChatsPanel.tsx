@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { MessagesSquare } from "lucide-react";
 import { cn, confirmAction, toast } from "@/design";
 import { api } from "@/lib/api";
 import type { Agent, ToolInfo } from "@/lib/api/agents";
 import type { Group } from "@/lib/api/groups";
-import { chatKey, usePinnedChats, type ChatKind } from "@/lib/pins";
+import { chatKey, MAX_PINS, setPinned, type ChatKind } from "@/lib/pins";
 import { reportError } from "@/lib/report-error";
 import { GroupChat } from "@/components/groups/GroupChat";
 import { NewGroup } from "@/components/groups/NewGroup";
@@ -15,39 +15,44 @@ import { ChatList } from "./ChatList";
 import { buildChatItems } from "./items";
 
 export const NEW = "new";
-export type ChatSelection = { kind: ChatKind; id: string | null } | null;
+/** What the address names: an agent (its conversation, or its profile with `tab: "info"`) or a group. */
+export type ChatSelection = { kind: ChatKind; id: string | null; tab?: "info" | null } | null;
 
 type Props = {
   agents: Agent[];
   groups: Group[];
   /** What the address says is open: an agent or a group, `new` for the form, or nothing. */
   selection: ChatSelection;
-  onSelect: (kind: ChatKind, id: string | null) => void;
+  onSelect: (kind: ChatKind, id: string | null, tab?: "info") => void;
   /** Agents or groups changed (made, edited, deleted, read): lists elsewhere should refresh. */
   onChanged: () => void;
-  /** Talk to an agent one to one, in its own conversation. */
-  onMessageAgent: (agentId: string) => void;
+  /** The open agent's conversation, drawn by the page (it owns the streaming state), shown where its profile would be. */
+  conversation: ReactNode;
 };
 
 /**
  * The messenger: every agent and group as a chat list on the left, and whatever you opened on the right: a group's conversation, or an agent as a contact.
  * On a phone it is one or the other. Pinned chats are the ones the sidebar keeps; the rest are found here.
  */
-export function ChatsPanel({ agents, groups, selection, onSelect, onChanged, onMessageAgent }: Props) {
-  const { pinned, toggle, isFull } = usePinnedChats();
+export function ChatsPanel({ agents, groups, selection, onSelect, onChanged, conversation }: Props) {
   const [tools, setTools] = useState<ToolInfo[]>([]);
   useEffect(() => {
     api.getAgentTools().then(setTools).catch((err) => reportError("Couldn't load the tool list", err));
   }, []);
 
-  const items = useMemo(() => buildChatItems(agents, groups, pinned), [agents, groups, pinned]);
+  const items = useMemo(() => buildChatItems(agents, groups), [agents, groups]);
   const selectedKey = selection?.id && selection.id !== NEW ? chatKey(selection.kind, selection.id) : null;
   const agent = selection?.kind === "agent" && selection.id ? (agents.find((a) => a.id === selection.id) ?? null) : null;
   const group = selection?.kind === "group" && selection.id ? (groups.find((g) => g.id === selection.id) ?? null) : null;
   const detailOpen = selection !== null && selection.id !== null;
 
-  const pin = (key: string, name: string) => {
-    if (toggle(key) === false) toast.error(`You can pin up to 5 chats. Unpin one to pin ${name}.`);
+  const pin = async (kind: ChatKind, id: string, pinned: boolean, name: string) => {
+    try {
+      if (!(await setPinned(kind, id, pinned))) toast.error(`You can pin up to ${MAX_PINS} chats. Unpin one to pin ${name}.`);
+      onChanged();
+    } catch (err) {
+      reportError("Couldn't change the pin", err);
+    }
   };
 
   const removeAgent = async (a: Agent) => {
@@ -69,7 +74,7 @@ export function ChatsPanel({ agents, groups, selection, onSelect, onChanged, onM
             items={items}
             selectedKey={selectedKey}
             onSelect={(i) => onSelect(i.kind, i.id)}
-            onTogglePin={(i) => pin(i.key, i.name)}
+            onTogglePin={(i) => void pin(i.kind, i.id, !i.pinned, i.name)}
             onNew={(kind) => onSelect(kind, NEW)}
           />
         </div>
@@ -95,22 +100,25 @@ export function ChatsPanel({ agents, groups, selection, onSelect, onChanged, onM
                 onSelect("group", null);
               }}
             />
+          ) : agent && selection?.tab !== "info" ? (
+            <div className="relative flex h-full min-w-0 flex-col">{conversation}</div>
           ) : selection?.kind === "agent" && (selection.id === NEW || agent) ? (
             <AgentDetail
               key={agent?.id ?? NEW}
               agent={agent}
               others={agents.filter((a) => a.id !== agent?.id)}
               groups={agent ? groups.filter((g) => g.members.some((m) => m.agent_id === agent.id)) : []}
-              pinned={!!agent && pinned.includes(chatKey("agent", agent.id)) }
-              onTogglePin={() => agent && (isFull && !pinned.includes(chatKey("agent", agent.id)) ? toast.error("You can pin up to 5 chats. Unpin one first.") : pin(chatKey("agent", agent.id), agent.name))}
+              pinned={!!agent?.pinned_at}
+              onTogglePin={() => agent && void pin("agent", agent.id, !agent.pinned_at, agent.name)}
               onOpenGroup={(id) => onSelect("group", id)}
               tools={tools}
-              onBack={() => onSelect("agent", null)}
+              onBack={() => onSelect("agent", agent ? agent.id : null)}
               onSaved={(saved) => {
                 onChanged();
-                onSelect("agent", saved.id);
+                onSelect("agent", saved.id, agent ? "info" : undefined);
               }}
-              onChat={() => agent && onMessageAgent(agent.id)}
+              onPictureChanged={onChanged}
+              onChat={() => agent && onSelect("agent", agent.id)}
               onDelete={() => agent && void removeAgent(agent)}
             />
           ) : (

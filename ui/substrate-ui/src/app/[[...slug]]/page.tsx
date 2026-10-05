@@ -12,6 +12,7 @@ import { ChatsPanel, type ChatSelection } from "@/components/chats/ChatsPanel";
 import { ComputerPanel } from "@/components/ComputerPanel";
 import { ComposerLimit } from "@/components/ComposerLimit";
 import { HomeScreen } from "@/components/HomeScreen";
+import { AgentIntro } from "@/components/chats/AgentIntro";
 import { useDisplayName } from "@/lib/display-name";
 import type { Agent } from "@/lib/api/agents";
 import type { Group } from "@/lib/api/groups";
@@ -51,6 +52,7 @@ import {
 import { parseChatPath, buildChatPath, buildChatRoute, buildSettingsPath, buildViewPath, type ChatView } from "@/lib/chat-routes";
 import { formatFileSize } from "@/lib/file-utils";
 import { shouldAutoTitle } from "@/lib/thread-title";
+import { importLocalPins } from "@/lib/pins";
 import { FileTypeIcon } from "@/components/FileTypeIcon";
 import { useAuth } from "@/contexts/AuthContext";
 import { useThreads } from "@/hooks/useThreads";
@@ -157,7 +159,12 @@ function ChatPageContent() {
     writeLastActiveThreadId(threadId);
   }, []);
 
-  const currentThreadId = routeState.threadId ?? lastActiveThreadId;
+  const [agents, setAgents] = useState<Agent[]>([]);
+  // `/agents/<id>` is the conversation with that agent: its one thread, opened (made the first time) once the agent is known.
+  const agentChatId = agentsPanelOpen && routeState.agentId && routeState.agentId !== "new" && routeState.agentTab === null ? routeState.agentId : null;
+  const [openedAgentThreads, setOpenedAgentThreads] = useState<Record<string, string>>({});
+  const agentChatThreadId = agentChatId ? (agents.find((a) => a.id === agentChatId)?.thread_id ?? openedAgentThreads[agentChatId] ?? null) : null;
+  const currentThreadId = routeState.threadId ?? agentChatThreadId ?? lastActiveThreadId;
   // What the sidebar highlights: the open conversation, and nothing while a page of its own (Agents, Groups, Notifications…) is open.
   const selectedThreadId = routeState.view !== null || routeState.settingsTab !== null ? null : currentThreadId;
   // Mirrors currentThreadId so an in-flight loadMessages() fetch can tell,
@@ -338,8 +345,11 @@ function ChatPageContent() {
   const handleOpenAgents = useCallback(() => openView("agents"), [openView]);
   const handleOpenNotifications = useCallback(() => openView("notifications"), [openView]);
   const handleOpenGroup = useCallback((groupId: string | null) => openView("groups", groupId ?? undefined), [openView]);
-  const handleSelectChat = useCallback((kind: "agent" | "group", id: string | null) => openView(kind === "agent" ? "agents" : "groups", id ?? undefined), [openView]);
-  const chatSelection: ChatSelection = groupsPanelOpen ? { kind: "group", id: routeState.groupId } : agentsPanelOpen ? { kind: "agent", id: routeState.agentId } : null;
+  const handleSelectChat = useCallback(
+    (kind: "agent" | "group", id: string | null, tab?: "info") => openView(kind === "agent" ? "agents" : "groups", id ? (tab ? `${id}/${tab}` : id) : undefined),
+    [openView],
+  );
+  const chatSelection: ChatSelection = groupsPanelOpen ? { kind: "group", id: routeState.groupId } : agentsPanelOpen ? { kind: "agent", id: routeState.agentId, tab: routeState.agentTab } : null;
 
   /** Leave Scheduled/Notifications for the conversation they came from (or a given one). */
   const handleCloseView = useCallback(
@@ -365,7 +375,6 @@ function ChatPageContent() {
     autoSelectFirstThread: !settingsPanelOpen && routeState.view === null,
   });
   // Agents the user has made. Each has one conversation of its own, listed in the sidebar like a contact; its last activity is refreshed when a run ends.
-  const [agents, setAgents] = useState<Agent[]>([]);
   const refreshAgents = useCallback(() => {
     api.getAgents().then(setAgents).catch(() => setAgents([]));
   }, []);
@@ -384,6 +393,27 @@ function ChatPageContent() {
     refreshAgents();
     refreshGroups();
   }, [refreshAgents, refreshGroups]);
+  // The first time an agent's chat is opened its conversation does not exist yet: make it (the call is idempotent), then show it.
+  const agentChatKnown = agentChatId ? agents.find((a) => a.id === agentChatId) : undefined;
+  useEffect(() => {
+    if (!agentChatId || !agentChatKnown || agentChatKnown.thread_id || openedAgentThreads[agentChatId]) return;
+    let alive = true;
+    api
+      .openAgentThread(agentChatId)
+      .then((id) => {
+        if (!alive) return;
+        setOpenedAgentThreads((m) => ({ ...m, [agentChatId]: id }));
+        refreshAgents();
+      })
+      .catch((err) => reportError("Couldn't open the agent", err));
+    return () => {
+      alive = false;
+    };
+  }, [agentChatId, agentChatKnown, openedAgentThreads, refreshAgents]);
+  // Pins used to live in this browser only: move any to the account, once.
+  useEffect(() => {
+    void importLocalPins().then((found) => found && refreshChats());
+  }, [refreshChats]);
   // "typing…" and unread counts in the lists: look again every few seconds while the page is in front.
   useEffect(() => {
     const timer = setInterval(() => {
@@ -898,24 +928,17 @@ function ChatPageContent() {
     [currentThreadId, currentThread, agents],
   );
   const isAgentChat = !!threadAgent || !!currentThread?.agent_id;
+  // A conversation with an agent has one address, /agents/<id>: an old /<threadId> link to it is rewritten in place (no remount, no history entry).
+  useEffect(() => {
+    if (routeState.view === null && routeState.settingsTab === null && routeState.threadId && currentThread?.id === routeState.threadId && currentThread.agent_id) {
+      window.history.replaceState(null, "", buildViewPath("agents", currentThread.agent_id));
+    }
+  }, [routeState.view, routeState.settingsTab, routeState.threadId, currentThread]);
   const workspaceId = threadAgent ? threadAgent.workspace_id : currentThreadId;
 
-  // Talk to an agent directly: open its one conversation (made the first time), like opening a contact.
-  const openAgent = useCallback(
-    async (agentId: string) => {
-      try {
-        const threadId = await api.openAgentThread(agentId);
-        refreshAgents();
-        handleSelectThread(threadId);
-      } catch (err) {
-        reportError("Couldn't open the agent", err);
-      }
-    },
-    [refreshAgents, handleSelectThread],
-  );
   const editAgent = useCallback(() => {
     if (!threadAgent) return;
-    openView("agents", threadAgent.id);
+    openView("agents", `${threadAgent.id}/info`);
   }, [threadAgent, openView]);
 
   // Run details + ratings: ratings are per run (the unit an answer comes from), loaded with the conversation.
@@ -1907,146 +1930,24 @@ function ChatPageContent() {
     );
   }
 
-  return (
-    <div className="flex h-dvh min-h-dvh overflow-hidden bg-background text-foreground" suppressHydrationWarning>
-      {dropping && (
-        <div
-          className="pointer-events-none fixed inset-0 z-[9998] flex items-center justify-center bg-background/80 backdrop-blur-sm"
-          role="status"
-        >
-          <div className="rounded-2xl border-2 border-dashed border-accent px-10 py-8 text-center">
-            <p className="text-base font-semibold text-foreground">Drop files to attach</p>
-            <p className="mt-1 text-xs text-muted">Documents, images and text files</p>
-          </div>
-        </div>
-      )}
-      {/* Desktop Sidebar */}
-      <div
-        className={`hidden shrink-0 overflow-hidden transition-all duration-300 ease-in-out lg:block ${desktopSidebarOpen ? "lg:w-[20rem]" : "lg:w-0"
-          }`}
-      >
-        <Sidebar
-          threads={threads}
-          currentThreadId={selectedThreadId}
-          onNewChat={handleNewChat}
-          onSelectThread={handleSelectThread}
-          onDeleteThread={handleDeleteThread}
-          onRenameThread={handleRenameThread}
-          onPinThread={handlePinThread}
-          onArchiveThread={handleArchiveThread}
-          onLoadMore={loadMore}
-          onToggleArchived={setShowArchived}
-          hasMore={hasMore}
-          showArchived={showArchived}
-          onCollapse={() => setDesktopSidebarOpen(false)}
-          onOpenSettings={openSettingsPanel}
-          onOpenScheduled={handleOpenScheduled}
-          isScheduledOpen={scheduledPanelOpen}
-          scheduledCount={scheduledCount}
-          onOpenAgents={handleOpenAgents}
-          agents={agents}
-          onOpenAgent={(a) => void openAgent(a.id)}
-          groups={groups}
-          openGroupId={groupsPanelOpen ? routeState.groupId : null}
-          onOpenGroup={handleOpenGroup}
-          isAgentsOpen={agentsPanelOpen}
-          onOpenNotifications={handleOpenNotifications}
-          isNotificationsOpen={notificationsPanelOpen}
-          unreadCount={unreadCount + approvalsCount}
-          mode={settingsPanelOpen ? "settings" : "chat"}
-          settingsTab={settingsPanelTab}
-          onSelectSettingsTab={selectSettingsTab}
-          onBackToChat={closeSettingsPanel}
-        />
-      </div>
-
-      {!desktopSidebarOpen && (
-        <CollapsedRail
-          onExpand={() => setDesktopSidebarOpen(true)}
-          onNewChat={handleNewChat}
-          onSearch={() => {
-            setDesktopSidebarOpen(true);
-            setTimeout(() => document.querySelector<HTMLInputElement>("[data-thread-search]")?.focus(), 50);
-          }}
-          onOpenSettings={openSettingsPanel}
-          onOpenScheduled={handleOpenScheduled}
-          onOpenAgents={handleOpenAgents}
-          isAgentsOpen={agentsPanelOpen}
-          onOpenNotifications={handleOpenNotifications}
-          isScheduledOpen={scheduledPanelOpen}
-          isNotificationsOpen={notificationsPanelOpen}
-          unreadCount={unreadCount + approvalsCount}
-          agents={agents}
-          groups={groups}
-          openGroupId={groupsPanelOpen ? routeState.groupId : null}
-          currentThreadId={selectedThreadId}
-          onOpenAgent={(a) => void openAgent(a.id)}
-          onOpenGroup={handleOpenGroup}
-          mode={settingsPanelOpen ? "settings" : "chat"}
-          settingsTab={settingsPanelTab}
-          onSelectSettingsTab={selectSettingsTab}
-          onBackToChat={closeSettingsPanel}
-        />
-      )}
-
-      {/* Main Content */}
-      <div className="flex min-w-0 flex-1">
-        <div className="relative flex min-w-0 flex-1 flex-col">
-          {!settingsPanelOpen && !scheduledPanelOpen && !notificationsPanelOpen && !agentsPanelOpen && !groupsPanelOpen && (
+  const chatHeader = (
             <Header
-              onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
-              desktopSidebarOpen={desktopSidebarOpen}
-              threadName={threadAgent ? threadAgent.name : currentThread?.name}
-              agentName={threadAgent?.name ?? (isAgentChat ? currentThread?.name : undefined)}
-              onEditAgent={threadAgent ? editAgent : undefined}
-              branches={isAgentChat ? [] : branches}
-              activeBranchId={activeBranchId}
-              onSelectBranch={handleSelectBranch}
-              onRenameBranch={handleRenameBranch}
-              onToggleComputer={() => setComputerOpen((o) => !o)}
-              computerOpen={computerOpen}
-            />
-          )}
-          <div className="pointer-events-none absolute left-3 top-1.5 z-20 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setMobileSidebarOpen(true)}
-              className="btn-icon pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-card/95 text-muted shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:hidden"
-              aria-label="Open sidebar"
-            >
-              <SidebarToggleIcon direction="open" className="h-4 w-4" />
-            </button>
-          </div>
-
-          {settingsPanelOpen ? (
-            <div
-              className={`flex-1 min-h-0 flex flex-col ${
-                true
-                  ? "h-full overflow-hidden"
-                  : "overflow-y-auto"
-              }`}
-            >
-              <SettingsPanel
-                isOpen={settingsPanelOpen}
-                initialTab={settingsPanelTab}
-                onTabChange={selectSettingsTab}
-                threadId={currentThreadId}
-              />
-            </div>
-          ) : scheduledPanelOpen ? (
-            <ScheduledPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} />
-          ) : agentsPanelOpen || groupsPanelOpen ? (
-            <ChatsPanel
-              agents={agents}
-              groups={groups}
-              selection={chatSelection}
-              onSelect={handleSelectChat}
-              onChanged={refreshChats}
-              onMessageAgent={(agentId) => void openAgent(agentId)}
-            />
-          ) : notificationsPanelOpen ? (
-            <NotificationsPanel onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} groups={groups} onOpenGroup={handleOpenGroup} />
-          ) : (
+      onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+      desktopSidebarOpen={desktopSidebarOpen}
+      threadName={threadAgent ? threadAgent.name : currentThread?.name}
+      agentName={threadAgent?.name ?? (isAgentChat ? currentThread?.name : undefined)}
+      agentAvatar={threadAgent?.avatar}
+      onBack={agentChatId ? () => handleSelectChat("agent", null) : undefined}
+      onEditAgent={threadAgent ? editAgent : undefined}
+      branches={isAgentChat ? [] : branches}
+      activeBranchId={activeBranchId}
+      onSelectBranch={handleSelectBranch}
+      onRenameBranch={handleRenameBranch}
+      onToggleComputer={() => setComputerOpen((o) => !o)}
+      computerOpen={computerOpen}
+    />
+  );
+  const chatArea = (
             <>
               <div
                 ref={containerRef}
@@ -2060,6 +1961,9 @@ function ChatPageContent() {
                 className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"
               >
                 {messages.length === 0 ? (
+                  isAgentChat ? (
+                    <AgentIntro agent={threadAgent} onOpenInfo={editAgent} />
+                  ) : (
                   <HomeScreen
                     name={shownName}
                     agents={agents}
@@ -2068,6 +1972,7 @@ function ChatPageContent() {
                     onOpenNotifications={handleOpenNotifications}
                     onOpenFiles={() => openSettingsPanel("storage")}
                   />
+                  )
                 ) : (
                   <div className="mx-auto w-full space-y-8 py-8">
                     {messages.map((m) => {
@@ -2354,6 +2259,141 @@ function ChatPageContent() {
                 </div>
               </div>
             </>
+  );
+
+  return (
+    <div className="flex h-dvh min-h-dvh overflow-hidden bg-background text-foreground" suppressHydrationWarning>
+      {dropping && (
+        <div
+          className="pointer-events-none fixed inset-0 z-[9998] flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          role="status"
+        >
+          <div className="rounded-2xl border-2 border-dashed border-accent px-10 py-8 text-center">
+            <p className="text-base font-semibold text-foreground">Drop files to attach</p>
+            <p className="mt-1 text-xs text-muted">Documents, images and text files</p>
+          </div>
+        </div>
+      )}
+      {/* Desktop Sidebar */}
+      <div
+        className={`hidden shrink-0 overflow-hidden transition-all duration-300 ease-in-out lg:block ${desktopSidebarOpen ? "lg:w-[20rem]" : "lg:w-0"
+          }`}
+      >
+        <Sidebar
+          threads={threads}
+          currentThreadId={selectedThreadId}
+          onNewChat={handleNewChat}
+          onSelectThread={handleSelectThread}
+          onDeleteThread={handleDeleteThread}
+          onRenameThread={handleRenameThread}
+          onPinThread={handlePinThread}
+          onArchiveThread={handleArchiveThread}
+          onLoadMore={loadMore}
+          onToggleArchived={setShowArchived}
+          hasMore={hasMore}
+          showArchived={showArchived}
+          onCollapse={() => setDesktopSidebarOpen(false)}
+          onOpenSettings={openSettingsPanel}
+          onOpenScheduled={handleOpenScheduled}
+          isScheduledOpen={scheduledPanelOpen}
+          scheduledCount={scheduledCount}
+          onOpenAgents={handleOpenAgents}
+          agents={agents}
+          onOpenAgent={(a) => handleSelectChat("agent", a.id)}
+          groups={groups}
+          openGroupId={groupsPanelOpen ? routeState.groupId : null}
+          openAgentId={agentChatId}
+          onOpenGroup={handleOpenGroup}
+          isAgentsOpen={agentsPanelOpen}
+          onOpenNotifications={handleOpenNotifications}
+          isNotificationsOpen={notificationsPanelOpen}
+          unreadCount={unreadCount + approvalsCount}
+          mode={settingsPanelOpen ? "settings" : "chat"}
+          settingsTab={settingsPanelTab}
+          onSelectSettingsTab={selectSettingsTab}
+          onBackToChat={closeSettingsPanel}
+        />
+      </div>
+
+      {!desktopSidebarOpen && (
+        <CollapsedRail
+          onExpand={() => setDesktopSidebarOpen(true)}
+          onNewChat={handleNewChat}
+          onSearch={() => {
+            setDesktopSidebarOpen(true);
+            setTimeout(() => document.querySelector<HTMLInputElement>("[data-thread-search]")?.focus(), 50);
+          }}
+          onOpenSettings={openSettingsPanel}
+          onOpenScheduled={handleOpenScheduled}
+          onOpenAgents={handleOpenAgents}
+          isAgentsOpen={agentsPanelOpen}
+          onOpenNotifications={handleOpenNotifications}
+          isScheduledOpen={scheduledPanelOpen}
+          isNotificationsOpen={notificationsPanelOpen}
+          unreadCount={unreadCount + approvalsCount}
+          agents={agents}
+          groups={groups}
+          openGroupId={groupsPanelOpen ? routeState.groupId : null}
+          openAgentId={agentChatId}
+          onOpenAgent={(a) => handleSelectChat("agent", a.id)}
+          onOpenGroup={handleOpenGroup}
+          mode={settingsPanelOpen ? "settings" : "chat"}
+          settingsTab={settingsPanelTab}
+          onSelectSettingsTab={selectSettingsTab}
+          onBackToChat={closeSettingsPanel}
+        />
+      )}
+
+      {/* Main Content */}
+      <div className="flex min-w-0 flex-1">
+        <div className="relative flex min-w-0 flex-1 flex-col">
+          {!settingsPanelOpen && !scheduledPanelOpen && !notificationsPanelOpen && !agentsPanelOpen && !groupsPanelOpen && chatHeader}
+          <div className="pointer-events-none absolute left-3 top-1.5 z-20 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              className="btn-icon pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-card/95 text-muted shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:hidden"
+              aria-label="Open sidebar"
+            >
+              <SidebarToggleIcon direction="open" className="h-4 w-4" />
+            </button>
+          </div>
+
+          {settingsPanelOpen ? (
+            <div
+              className={`flex-1 min-h-0 flex flex-col ${
+                true
+                  ? "h-full overflow-hidden"
+                  : "overflow-y-auto"
+              }`}
+            >
+              <SettingsPanel
+                isOpen={settingsPanelOpen}
+                initialTab={settingsPanelTab}
+                onTabChange={selectSettingsTab}
+                threadId={currentThreadId}
+              />
+            </div>
+          ) : scheduledPanelOpen ? (
+            <ScheduledPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} />
+          ) : agentsPanelOpen || groupsPanelOpen ? (
+            <ChatsPanel
+              agents={agents}
+              groups={groups}
+              selection={chatSelection}
+              onSelect={handleSelectChat}
+              onChanged={refreshChats}
+              conversation={
+                <>
+                  {chatHeader}
+                  {chatArea}
+                </>
+              }
+            />
+          ) : notificationsPanelOpen ? (
+            <NotificationsPanel onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} groups={groups} onOpenGroup={handleOpenGroup} />
+          ) : (
+            chatArea
           )}
         </div>
 
@@ -2445,9 +2485,10 @@ function ChatPageContent() {
               scheduledCount={scheduledCount}
               onOpenAgents={handleOpenAgents}
               agents={agents}
-              onOpenAgent={(a) => void openAgent(a.id)}
+              onOpenAgent={(a) => handleSelectChat("agent", a.id)}
               groups={groups}
               openGroupId={groupsPanelOpen ? routeState.groupId : null}
+              openAgentId={agentChatId}
               onOpenGroup={handleOpenGroup}
               isAgentsOpen={agentsPanelOpen}
               onOpenNotifications={handleOpenNotifications}

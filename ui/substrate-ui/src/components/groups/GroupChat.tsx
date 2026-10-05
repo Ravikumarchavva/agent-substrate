@@ -36,6 +36,7 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
   const composer = useRef<ComposerHandle>(null);
   const dragDepth = useRef(0);
   const names = group.members.map((m) => m.name);
+  const avatars = Object.fromEntries(group.members.map((m) => [m.name, m.avatar]));
 
   useEffect(() => {
     let alive = true;
@@ -119,11 +120,15 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
           <Button variant="ghost" size="icon" aria-label="Back to chats" onClick={onBack} className="xl:hidden">
             <ArrowLeft />
           </Button>
-          <div className="flex -space-x-2" aria-hidden>
-            {group.members.slice(0, 3).map((m) => (
-              <Avatar key={m.agent_id} name={m.name} className="size-8 text-xs ring-2 ring-background" />
-            ))}
-          </div>
+          {group.avatar ? (
+            <Avatar name={group.name} src={group.avatar} className="size-10" />
+          ) : (
+            <div className="flex -space-x-2" aria-hidden>
+              {group.members.slice(0, 3).map((m) => (
+                <Avatar key={m.agent_id} name={m.name} src={m.avatar} className="size-8 text-xs ring-2 ring-background" />
+              ))}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold text-foreground">{group.name}</h1>
             <p className="truncate text-xs text-muted">{typing.length > 0 ? typingLine(typing) : ["You", ...names].join(", ")}</p>
@@ -132,8 +137,8 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
             <Info />
           </Button>
         </header>
-        <Messages entries={entries} names={names} typing={typing} readByAll={readByAll} onReply={setReplyTo} />
-        <Composer ref={composer} groupId={group.id} names={names} replyTo={replyTo} onClearReply={() => setReplyTo(null)} onSend={send} />
+        <Messages entries={entries} names={names} avatars={avatars} typing={typing} readByAll={readByAll} onReply={setReplyTo} />
+        <Composer ref={composer} groupId={group.id} names={names} avatars={avatars} replyTo={replyTo} onClearReply={() => setReplyTo(null)} onSend={send} />
       </section>
       {infoOpen && (
         <aside className="scroll-area h-full min-h-0 w-full border-l border-border @3xl:w-96 @3xl:shrink-0">

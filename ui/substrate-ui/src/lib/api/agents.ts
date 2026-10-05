@@ -17,6 +17,14 @@ export interface Agent {
   last_message: string | null;
   /** Working on a reply to you right now. */
   working: boolean;
+  /** The model it thinks with (`provider/name`), or null for the deployment's own. */
+  model: string | null;
+  /** Whether that model reads pictures; null while it uses the deployment's. */
+  sees: boolean | null;
+  /** Its picture (an object key; show it with `buildObjectUrl`), or null for initials. */
+  avatar: string | null;
+  /** When you pinned its chat to the top of your list, or null. */
+  pinned_at: string | null;
 }
 
 export interface AgentInput {
@@ -24,6 +32,7 @@ export interface AgentInput {
   role: string;
   instructions: string;
   allowed_tools: string[] | null;
+  model: string | null;
 }
 
 export interface ToolInfo {
@@ -45,16 +54,35 @@ export const agentsApi = {
   },
 
   async updateAgent(id: string, body: AgentInput): Promise<Agent> {
-    const { allowed_tools, ...rest } = body;
+    const { allowed_tools, model, ...rest } = body;
+    // `null` means "all tools" and "the deployment's model": for a patch, where null also means "leave it", they are flags.
     return requestJson<Agent>(`/agents/${id}`, {
       method: "PATCH",
-      body: JSON.stringify(allowed_tools === null ? { ...rest, all_tools: true } : { ...rest, allowed_tools }),
+      body: JSON.stringify({
+        ...rest,
+        ...(allowed_tools === null ? { all_tools: true } : { allowed_tools }),
+        ...(model === null ? { default_model: true } : { model }),
+      }),
     });
   },
 
   /** The agent's conversation (made the first time), to talk to it directly. */
   async openAgentThread(id: string): Promise<string> {
     return (await requestJson<{ id: string }>(`/agents/${id}/thread`, { method: "POST" })).id;
+  },
+
+  async setAgentAvatar(id: string, file: File): Promise<Agent> {
+    const form = new FormData();
+    form.append("file", file);
+    return requestJson<Agent>(`/agents/${id}/avatar`, { method: "PUT", body: form });
+  },
+
+  async clearAgentAvatar(id: string): Promise<Agent> {
+    return requestJson<Agent>(`/agents/${id}/avatar`, { method: "DELETE" });
+  },
+
+  async setAgentPinned(id: string, pinned: boolean): Promise<Agent> {
+    return requestJson<Agent>(`/agents/${id}/pin`, { method: pinned ? "PUT" : "DELETE" });
   },
 
   async deleteAgent(id: string): Promise<void> {

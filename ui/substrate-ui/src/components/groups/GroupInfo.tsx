@@ -7,14 +7,15 @@ import { api } from "@/lib/api";
 import type { Agent } from "@/lib/api/agents";
 import type { Group, GroupFile, MemberMode } from "@/lib/api/groups";
 import { reportError } from "@/lib/report-error";
-import { chatKey, usePinnedChats } from "@/lib/pins";
+import { MAX_PINS, setPinned } from "@/lib/pins";
+import { PictureEditor } from "@/components/PictureEditor";
 import { Attachment } from "./Attachments";
 import { Avatar } from "./Avatar";
 
 const MODES = [
-  { value: "all", label: "Every message" },
   { value: "mentions", label: "When addressed" },
-  { value: "muted", label: "Only when named" },
+  { value: "all", label: "Active" },
+  { value: "muted", label: "Muted" },
 ];
 
 type Props = {
@@ -27,10 +28,11 @@ type Props = {
 
 /** Who is in the group and how closely each follows it; rename it, add or remove agents, or delete it. */
 export function GroupInfo({ group, agents, onChanged, onDeleted }: Props) {
-  const { pinned, toggle } = usePinnedChats();
-  const isPinned = pinned.includes(chatKey("group", group.id));
+  const isPinned = !!group.pinned_at;
   const [name, setName] = useState(group.name);
   const [cap, setCap] = useState(String(group.token_cap));
+  const [dollars, setDollars] = useState(group.budget_usd ? String(group.budget_usd) : "");
+  const [pauseAfter, setPauseAfter] = useState(String(group.breaker));
   const [files, setFiles] = useState<GroupFile[] | null>(null);
   // Everything the group shares, including what its agents made: refreshed when the group's last message changes.
   useEffect(() => {
@@ -62,6 +64,16 @@ export function GroupInfo({ group, agents, onChanged, onDeleted }: Props) {
 
   return (
     <div className="space-y-6">
+      <Section title="Picture">
+        <PictureEditor
+          name={group.name}
+          src={group.avatar}
+          className="flex items-center gap-4"
+          save={async (file) => onChanged(await api.setGroupAvatar(group.id, file))}
+          clear={async () => onChanged(await api.clearGroupAvatar(group.id))}
+        />
+      </Section>
+
       <Section title="Name">
         <div className="flex gap-2">
           <Input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} aria-label="Group name" />
@@ -71,14 +83,19 @@ export function GroupInfo({ group, agents, onChanged, onDeleted }: Props) {
         </div>
       </Section>
 
-      <Section title="Members" description="Each agent sees every message and chooses whether to reply. Quieter settings only change when it considers one.">
+      <Section title="Members" description="Like people in a busy group: an agent answers when it is addressed and keeps up the conversation for a while. Active ones also chip in when they have something to add; muted ones only when named.">
         <ul className="space-y-3">
           {group.members.map((m) => (
             <li key={m.agent_id} className="flex items-center gap-3">
-              <Avatar name={m.name} />
+              <Avatar name={m.name} src={m.avatar} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">{m.name}</p>
                 <p className="truncate text-xs text-muted">{m.role || "No role set"}</p>
+                {m.tokens_used > 0 && (
+                  <p className="truncate text-2xs text-muted">
+                    {m.tokens_used.toLocaleString()} tokens{m.cost_usd > 0 ? ` · $${m.cost_usd.toFixed(m.cost_usd < 0.01 ? 4 : 2)}` : ""}
+                  </p>
+                )}
               </div>
               <Select
                 size="sm"
@@ -147,6 +164,32 @@ export function GroupInfo({ group, agents, onChanged, onDeleted }: Props) {
             Set limit
           </Button>
         </div>
+        <div className="mt-4 flex items-center gap-3 border-t border-border pt-4">
+          <p className="min-w-0 flex-1 text-sm text-foreground">
+            {group.budget_usd ? `$${group.cost_usd.toFixed(2)} of $${group.budget_usd.toFixed(2)} spent` : `$${group.cost_usd.toFixed(2)} spent, no dollar limit`}
+          </p>
+        </div>
+        <div className="mt-3 flex gap-2">
+          <Input type="number" inputMode="decimal" min={0} step={0.5} value={dollars} placeholder="No limit" onChange={(e) => setDollars(e.target.value)} aria-label="Dollar limit" />
+          <Button
+            disabled={dollars === "" ? !group.budget_usd : !(Number(dollars) >= 0) || Number(dollars) === (group.budget_usd ?? 0)}
+            onClick={() => void run(() => api.setGroupLimits(group.id, { budget_usd: Number(dollars || 0) }), "Couldn't change the limit")}
+          >
+            Set dollars
+          </Button>
+        </div>
+      </Section>
+
+      <Section title="Pause" description="If the agents keep talking to each other without you, the group pauses after this many messages in a row, until you write.">
+        <div className="flex gap-2">
+          <Input type="number" inputMode="numeric" min={4} max={200} value={pauseAfter} onChange={(e) => setPauseAfter(e.target.value)} aria-label="Pause after messages" />
+          <Button
+            disabled={!(Number(pauseAfter) >= 4 && Number(pauseAfter) <= 200) || Number(pauseAfter) === group.breaker}
+            onClick={() => void run(() => api.setGroupLimits(group.id, { breaker: Math.round(Number(pauseAfter)) }), "Couldn't change that")}
+          >
+            Set
+          </Button>
+        </div>
       </Section>
 
       {group.paused && (
@@ -158,9 +201,11 @@ export function GroupInfo({ group, agents, onChanged, onDeleted }: Props) {
       <Button
         variant="ghost"
         aria-pressed={isPinned}
-        onClick={() => {
-          if (toggle(chatKey("group", group.id)) === false) toast.error("You can pin up to 5 chats. Unpin one first.");
-        }}
+        onClick={() =>
+          void setPinned("group", group.id, !isPinned)
+            .then((ok) => (ok ? onChanged() : toast.error(`You can pin up to ${MAX_PINS} chats. Unpin one first.`)))
+            .catch((err) => reportError("Couldn't change the pin", err))
+        }
         className="w-full"
       >
         <Pin /> {isPinned ? "Unpin from sidebar" : "Pin to sidebar"}

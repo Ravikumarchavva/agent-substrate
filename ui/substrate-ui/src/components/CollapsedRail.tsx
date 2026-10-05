@@ -6,11 +6,10 @@ import { Button, cn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, Menu
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { SubstrateMark } from "@/components/SubstrateMark";
 import { Avatar } from "@/components/groups/Avatar";
-import { buildChatItems } from "@/components/chats/items";
+import { buildChatItems, isOpenChat } from "@/components/chats/items";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Agent } from "@/lib/api/agents";
 import type { Group } from "@/lib/api/groups";
-import { usePinnedChats } from "@/lib/pins";
 import { useTheme } from "@/contexts/ThemeContext";
 import { fetchDocQuotaStatus } from "@/lib/api/doc_quota";
 import { fetchRateLimitStatus } from "@/lib/api/rate_limit";
@@ -51,11 +50,11 @@ function RailButton({ icon: Icon, label, onClick, active, count, compact, highli
 }
 
 /** A chat you pinned, as its avatar: a ring when it is the one open, a count for what you have not read, a green dot while it is typing. */
-function RailChat({ name, active, unread, typing, onClick }: { name: string; active: boolean; unread: number; typing: boolean; onClick: () => void }) {
+function RailChat({ name, avatar, active, unread, typing, onClick }: { name: string; avatar: string | null; active: boolean; unread: number; typing: boolean; onClick: () => void }) {
   return (
     <Tooltip label={typing ? `${name} is typing…` : name} side="right">
       <Button variant="ghost" onClick={onClick} aria-label={name} aria-current={active ? "page" : undefined} className={cn("relative size-11 h-11! rounded-full p-0", active && "ring-2 ring-accent")}>
-        <Avatar name={name} className="size-9 text-sm" />
+        <Avatar name={name} src={avatar} className="size-9 text-sm" />
         {unread > 0 && !active && <Count n={unread} />}
         {typing && <span className="absolute bottom-0.5 right-0.5 size-2.5 rounded-full bg-success ring-2 ring-card" aria-hidden />}
       </Button>
@@ -100,7 +99,7 @@ export function CollapsedRail({
   agents = [],
   groups = [],
   openGroupId,
-  currentThreadId,
+  openAgentId = null,
   onOpenAgent,
   onOpenGroup,
   mode = "chat",
@@ -123,7 +122,8 @@ export function CollapsedRail({
   agents?: Agent[];
   groups?: Group[];
   openGroupId?: string | null;
-  currentThreadId?: string | null;
+  /** The agent whose conversation is open, to mark its row. */
+  openAgentId?: string | null;
   onOpenAgent?: (agent: Agent) => void;
   onOpenGroup?: (groupId: string) => void;
   /** In settings the rail lists the settings pages (as the open sidebar does), not the chat pages. */
@@ -154,8 +154,7 @@ export function CollapsedRail({
     };
   }, []);
 
-  const { pinned } = usePinnedChats();
-  const pinnedChats = useMemo(() => buildChatItems(agents, groups, pinned).filter((i) => i.pinned), [agents, groups, pinned]);
+  const pinnedChats = useMemo(() => buildChatItems(agents, groups).filter((i) => i.pinned), [agents, groups]);
   const chatUnread = groups.reduce((n, g) => n + g.unread, 0);
 
   const name = isAuthenticated && user ? (user.name ?? user.email ?? "My Account") : "My Account";
@@ -206,9 +205,10 @@ export function CollapsedRail({
                       <RailChat
                         key={chat.key}
                         name={chat.name}
+                        avatar={chat.avatar}
                         unread={chat.unread}
                         typing={chat.typing.length > 0}
-                        active={chat.kind === "group" ? chat.id === openGroupId : !!agent?.thread_id && agent.thread_id === currentThreadId}
+                        active={isOpenChat(chat, { agentId: openAgentId, groupId: openGroupId })}
                         onClick={() => (chat.kind === "group" ? onOpenGroup?.(chat.id) : agent && onOpenAgent?.(agent))}
                       />
                     );

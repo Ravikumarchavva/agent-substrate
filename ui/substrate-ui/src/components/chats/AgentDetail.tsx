@@ -2,23 +2,28 @@
 
 import { useState } from "react";
 import { ArrowLeft, MessageSquare, Pin, Trash2 } from "lucide-react";
-import { Button, Checkbox, Input, PageHeading, Pane, Section, Textarea, toast } from "@/design";
+import { Button, Checkbox, Input, PageHeading, Pane, Section, Select, Textarea, toast } from "@/design";
+import { CHAT_MODEL_OPTIONS } from "@/lib/model-preferences";
 import { api } from "@/lib/api";
 import type { Agent, AgentInput, ToolInfo } from "@/lib/api/agents";
 import type { Group } from "@/lib/api/groups";
 import { Avatar } from "@/components/groups/Avatar";
+import { PictureEditor } from "@/components/PictureEditor";
 import { ContactsSection } from "@/components/ContactsSection";
 import { reportError } from "@/lib/report-error";
 
-const BLANK: AgentInput = { name: "", role: "", instructions: "", allowed_tools: null };
+// The picker has no empty choice, so "the deployment's model" is a value of its own.
+const DEFAULT_MODEL = "default";
+
+const BLANK: AgentInput = { name: "", role: "", instructions: "", allowed_tools: null, model: null };
 
 const same = (a: AgentInput, b: AgentInput) =>
-  a.name === b.name && a.role === b.role && a.instructions === b.instructions && JSON.stringify(a.allowed_tools) === JSON.stringify(b.allowed_tools);
+  a.name === b.name && a.role === b.role && a.instructions === b.instructions && a.model === b.model && JSON.stringify(a.allowed_tools) === JSON.stringify(b.allowed_tools);
 
 
 /** One agent as a contact: who it is, what it can do, the groups it is in and who it may message. Also where a new one is made. */
-export function AgentDetail({ agent, others, groups, pinned, onTogglePin, onOpenGroup, tools, onBack, onSaved, onChat, onDelete }: { agent: Agent | null; others: Agent[]; groups: Group[]; pinned: boolean; onTogglePin: () => void; onOpenGroup: (groupId: string) => void; tools: ToolInfo[]; onBack: () => void; onSaved: (a: Agent) => void; onChat: () => void; onDelete: () => void }) {
-  const initial: AgentInput = agent ? { name: agent.name, role: agent.role, instructions: agent.instructions, allowed_tools: agent.allowed_tools } : BLANK;
+export function AgentDetail({ agent, others, groups, pinned, onTogglePin, onOpenGroup, tools, onBack, onSaved, onPictureChanged, onChat, onDelete }: { agent: Agent | null; others: Agent[]; groups: Group[]; pinned: boolean; onTogglePin: () => void; onOpenGroup: (groupId: string) => void; tools: ToolInfo[]; onBack: () => void; onSaved: (a: Agent) => void; onPictureChanged: () => void; onChat: () => void; onDelete: () => void }) {
+  const initial: AgentInput = agent ? { name: agent.name, role: agent.role, instructions: agent.instructions, allowed_tools: agent.allowed_tools, model: agent.model } : BLANK;
   const [value, setValue] = useState<AgentInput>(initial);
   const [busy, setBusy] = useState(false);
   const dirty = !same(value, initial);
@@ -51,7 +56,13 @@ export function AgentDetail({ agent, others, groups, pinned, onTogglePin, onOpen
               <ArrowLeft />
             </Button>
             <div className="flex min-w-0 flex-1 flex-col items-center gap-3 text-center @xl:flex-row @xl:text-left">
-              <Avatar name={agent.name} className="size-20 text-3xl" />
+              <PictureEditor
+                name={agent.name}
+                src={agent.avatar}
+                className="flex shrink-0 flex-col items-center gap-2"
+                save={async (file) => void (await api.setAgentAvatar(agent.id, file), onPictureChanged())}
+                clear={async () => void (await api.clearAgentAvatar(agent.id), onPictureChanged())}
+              />
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">{agent.name}</h1>
                 <p className="mt-0.5 text-sm text-muted">{agent.role || "No role set"}</p>
@@ -89,6 +100,24 @@ export function AgentDetail({ agent, others, groups, pinned, onTogglePin, onOpen
             <Textarea rows={6} value={value.instructions} onChange={(e) => setValue({ ...value, instructions: e.target.value })} placeholder="Always cite where a claim comes from. Keep answers under 200 words." />
           </label>
         </div>
+      </Section>
+      <Section
+        title="Model"
+        description={
+          agent?.model
+            ? agent.sees
+              ? "It can see pictures that are shared with it."
+              : "It reads text only: pictures shared with it are not seen."
+            : "Leave it on the default, or give this agent a model of its own, in a chat with you and in groups."
+        }
+      >
+        <Select
+          className="w-72 max-w-full"
+          aria-label="Model"
+          value={value.model ?? DEFAULT_MODEL}
+          onValueChange={(v) => setValue({ ...value, model: v === DEFAULT_MODEL ? null : v })}
+          options={[{ value: DEFAULT_MODEL, label: "Default model" }, ...CHAT_MODEL_OPTIONS.map((o) => ({ value: o.id, label: o.label }))]}
+        />
       </Section>
       <Section title="Tools it may use" description="Anything not ticked is off for this agent, whatever you ask it.">
         <div className="space-y-3">

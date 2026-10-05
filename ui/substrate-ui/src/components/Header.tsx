@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { GitBranch, Check, ChevronDown, Pencil, Monitor, Bot } from "lucide-react";
+import { ArrowLeft, GitBranch, Check, ChevronDown, Pencil, Monitor } from "lucide-react";
+import { Avatar } from "@/components/groups/Avatar";
 import { Button } from "@/design";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import type { Branch } from "@/types";
@@ -19,7 +20,11 @@ interface HeaderProps {
   computerOpen?: boolean;
   /** Set when the conversation is with an agent: its name replaces the branch picker (an agent chat is one continuing conversation) and Edit agent appears. */
   agentName?: string;
+  /** Its picture. */
+  agentAvatar?: string | null;
   onEditAgent?: () => void;
+  /** Set when the conversation sits beside a chat list: a way back to the list on a phone. */
+  onBack?: () => void;
 }
 
 export function Header({
@@ -33,7 +38,9 @@ export function Header({
   onToggleComputer,
   computerOpen = false,
   agentName,
+  agentAvatar,
   onEditAgent,
+  onBack,
 }: HeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
@@ -107,9 +114,15 @@ export function Header({
           </button>
         )}
 
+        {onBack && (
+          <Button variant="ghost" size="icon" aria-label="Back to chats" onClick={onBack} className="@4xl:hidden">
+            <ArrowLeft />
+          </Button>
+        )}
+
         {agentName && (
-          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Bot className="size-4 text-muted" aria-hidden />
+          <span className="flex items-center gap-2.5 text-sm font-semibold text-foreground">
+            <Avatar name={agentName} src={agentAvatar} className="size-7 text-xs" />
             {agentName}
           </span>
         )}

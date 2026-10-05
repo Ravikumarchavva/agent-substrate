@@ -8,16 +8,19 @@ import type { GroupEntry, GroupFile } from "@/lib/api/groups";
 import { reportError } from "@/lib/report-error";
 import { FileTypeIcon } from "@/components/FileTypeIcon";
 import { Avatar } from "./Avatar";
+import { buildObjectUrl } from "@/lib/api/_client";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { fileSize, mentionChoices, mentionQuery, previewOf } from "./text";
 
 /** Files are uploaded the moment they are chosen, like a chat app, and attached when the message is sent. */
-type Pending = { id: string; name: string; size: number; mime: string; status: "uploading" | "ready" | "failed"; file?: GroupFile };
+type Pending = { id: string; name: string; size: number; mime: string; status: "uploading" | "ready" | "failed"; file?: GroupFile; /** A local copy of a picture, shown at once and while it uploads. */ preview?: string };
 
 export type ComposerHandle = { addFiles: (files: File[]) => void };
 
 type Props = {
   groupId: string;
   names: string[];
+  avatars: Record<string, string | null>;
   replyTo: GroupEntry | null;
   onClearReply: () => void;
   onSend: (text: string, attachments: GroupFile[]) => Promise<void>;
@@ -26,7 +29,7 @@ type Props = {
 const MAX_FILES = 10;
 
 /** Where you write to the group. `@` offers the members; the paperclip, pasting or dropping adds files. Enter sends, Shift+Enter starts a new line. */
-export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ groupId, names, replyTo, onClearReply, onSend }, ref) {
+export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ groupId, names, avatars, replyTo, onClearReply, onSend }, ref) {
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -39,7 +42,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ gr
       if (files.length > room) toast.error(`Up to ${MAX_FILES} files go in one message.`);
       for (const file of files.slice(0, Math.max(room, 0))) {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        setPending((all) => [...all, { id, name: file.name, size: file.size, mime: file.type || "application/octet-stream", status: "uploading" }]);
+        const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+        setPending((all) => [...all, { id, name: file.name, size: file.size, mime: file.type || "application/octet-stream", status: "uploading", preview }]);
         api
           .uploadGroupFile(groupId, file)
           .then((saved) => setPending((all) => all.map((p) => (p.id === id ? { ...p, status: "ready", file: saved, name: saved.name } : p))))
@@ -53,6 +57,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ gr
     [groupId, pending.length],
   );
   useImperativeHandle(ref, () => ({ addFiles }), [addFiles]);
+
+  const removePending = (p: Pending) => {
+    if (p.preview) URL.revokeObjectURL(p.preview);
+    setPending((all) => all.filter((x) => x.id !== p.id));
+  };
 
   const query = mentionQuery(text.slice(0, caret));
   const choices = query === null ? [] : mentionChoices(query, names);
@@ -76,6 +85,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ gr
     try {
       await onSend(text.trim(), ready);
       setText("");
+      pending.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
       setPending([]);
     } finally {
       setBusy(false);
@@ -90,7 +100,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ gr
             {choices.map((name) => (
               <li key={name}>
                 <Button variant="ghost" onClick={() => pick(name)} className="h-auto! w-full justify-start gap-2 px-2.5 py-1.5 text-sm font-normal">
-                  <Avatar name={name} className="size-6 text-2xs" />@{name}
+                  <Avatar name={name} src={avatars[name]} className="size-6 text-2xs" />@{name}
                 </Button>
               </li>
             ))}
@@ -111,7 +121,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ gr
             <ul className="scroll-area flex gap-2 overflow-x-auto pb-3 pt-1">
               {pending.map((p) => (
                 <li key={p.id} className={cn("flex w-52 shrink-0 items-center gap-2 rounded-xl border bg-background/60 p-2", p.status === "failed" ? "border-danger/50" : "border-border")}>
-                  <FileTypeIcon name={p.name} mime={p.mime} size="sm" />
+                  {p.preview ? (
+                    <a
+                      href={p.file ? buildObjectUrl(p.file.key) : p.preview}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Open ${p.name}`}
+                      className="block size-10 shrink-0 overflow-hidden rounded-lg bg-badge"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- a local blob: preview, nothing to optimise */}
+                      <img src={p.preview} alt="" className="size-full object-cover" />
+                    </a>
+                  ) : (
+                    <FileTypeIcon name={p.name} mime={p.mime} size="sm" />
+                  )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-medium text-foreground">{p.name}</span>
                     <span className={cn("block text-2xs", p.status === "failed" ? "text-danger" : "text-muted")}>
@@ -121,7 +144,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ gr
                   {p.status === "uploading" ? (
                     <Loader2 className="size-4 shrink-0 animate-spin text-muted" aria-label="Uploading" />
                   ) : (
-                    <Button variant="ghost" size="icon-sm" aria-label={`Remove ${p.name}`} onClick={() => setPending((all) => all.filter((x) => x.id !== p.id))}>
+                    <Button variant="ghost" size="icon-sm" aria-label={`Remove ${p.name}`} onClick={() => removePending(p)}>
                       <X />
                     </Button>
                   )}
@@ -156,9 +179,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ gr
             className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-base outline-none placeholder:text-muted"
           />
           <div className="flex items-center justify-between pt-1">
-            <FilePicker variant="ghost" size="icon" aria-label="Attach files" onFiles={addFiles}>
-              <Plus />
-            </FilePicker>
+            <div className="flex items-center gap-1">
+              <FilePicker variant="ghost" size="icon" aria-label="Attach files" onFiles={addFiles}>
+                <Plus />
+              </FilePicker>
+              <VoiceRecorder disabled={busy} onTranscript={(spoken) => setText((current) => (current.trim() ? `${current.trimEnd()} ${spoken}` : spoken))} />
+            </div>
             <Button variant="primary" size="icon" aria-label="Send" disabled={!canSend} onClick={() => void send()} className="rounded-full">
               <Send />
             </Button>

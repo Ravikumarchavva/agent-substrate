@@ -3,19 +3,26 @@ import { buildViewPath, parseChatPath } from "./chat-routes";
 
 describe("parseChatPath", () => {
   it("reads a conversation, a settings tab, or a page of its own", () => {
-    expect(parseChatPath("/")).toEqual({ threadId: null, settingsTab: null, view: null, groupId: null, agentId: null });
-    expect(parseChatPath("/abc-123")).toEqual({ threadId: "abc-123", settingsTab: null, view: null, groupId: null, agentId: null });
+    expect(parseChatPath("/")).toEqual({ threadId: null, settingsTab: null, view: null, groupId: null, agentId: null, agentTab: null });
+    expect(parseChatPath("/abc-123")).toEqual({ threadId: "abc-123", settingsTab: null, view: null, groupId: null, agentId: null, agentTab: null });
     expect(parseChatPath("/settings/memory")).toMatchObject({ threadId: null, settingsTab: "memory" });
-    expect(parseChatPath("/scheduled")).toEqual({ threadId: null, settingsTab: null, view: "scheduled", groupId: null, agentId: null });
+    expect(parseChatPath("/scheduled")).toEqual({ threadId: null, settingsTab: null, view: "scheduled", groupId: null, agentId: null, agentTab: null });
     expect(parseChatPath("/notifications")).toMatchObject({ view: "notifications", threadId: null });
-    expect(parseChatPath("/agents")).toEqual({ threadId: null, settingsTab: null, view: "agents", groupId: null, agentId: null });
+    expect(parseChatPath("/agents")).toEqual({ threadId: null, settingsTab: null, view: "agents", groupId: null, agentId: null, agentTab: null });
   });
 
   it("reads the group open on the Groups page", () => {
     expect(parseChatPath("/groups")).toMatchObject({ view: "groups", groupId: null, threadId: null });
     expect(parseChatPath("/groups/g-1")).toMatchObject({ view: "groups", groupId: "g-1" });
     expect(buildViewPath("groups", "g-1")).toBe("/chat/groups/g-1");
-    expect(parseChatPath("/agents/a-1")).toMatchObject({ view: "agents", agentId: "a-1", groupId: null });
+  });
+
+  it("reads an agent's chat, its profile, and the form for a new one", () => {
+    expect(parseChatPath("/agents/a-1")).toMatchObject({ view: "agents", agentId: "a-1", agentTab: null, groupId: null });
+    expect(parseChatPath("/agents/a-1/info")).toMatchObject({ view: "agents", agentId: "a-1", agentTab: "info" });
+    expect(parseChatPath("/agents/new")).toMatchObject({ view: "agents", agentId: "new", agentTab: null });
+    expect(parseChatPath("/agents/a-1/nonsense")).toMatchObject({ agentId: "a-1", agentTab: null });
+    expect(buildViewPath("agents", "a-1/info")).toBe("/chat/agents/a-1/info");
   });
 
   it("never mistakes a page name for a conversation id", () => {

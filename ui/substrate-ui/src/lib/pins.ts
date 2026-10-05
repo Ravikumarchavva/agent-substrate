@@ -1,55 +1,40 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { api } from "@/lib/api";
+import { ApiError } from "@/lib/api/_client";
 
-/** A chat you keep in the sidebar: an agent or a group. Everything else is found under Agents and in Notifications. */
+/** A chat you keep at the top of your list and in the sidebar: an agent or a group. Which are pinned is kept on your account (`pinned_at`). */
 export type ChatKind = "agent" | "group";
 export const chatKey = (kind: ChatKind, id: string) => `${kind}:${id}`;
+export const MAX_PINS = 5;
 
-const KEY = "substrate.pinned-chats";
-const MAX_PINS = 5;
-const NONE: readonly string[] = [];
-let cache: { raw: string | null; value: readonly string[] } = { raw: null, value: NONE };
-const listeners = new Set<() => void>();
-
-function read(): readonly string[] {
+/** Pin or unpin. Returns false when five are pinned already (nothing changed). */
+export async function setPinned(kind: ChatKind, id: string, pinned: boolean): Promise<boolean> {
   try {
-    const raw = window.localStorage.getItem(KEY);
-    if (raw === cache.raw) return cache.value;
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    const value = Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string").slice(0, MAX_PINS) : NONE;
-    cache = { raw, value };
-    return value;
-  } catch {
-    return NONE;
-  }
-}
-
-function write(next: string[]) {
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    // Pins are a convenience; without storage they just do not stick.
-  }
-  listeners.forEach((l) => l());
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  window.addEventListener("storage", listener);
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", listener);
-  };
-}
-
-/** The pinned chats (at most five, in the order they were pinned) and a way to pin or unpin one. */
-export function usePinnedChats() {
-  const pinned = useSyncExternalStore(subscribe, read, () => NONE);
-  const toggle = useCallback((key: string) => {
-    const current = read();
-    if (current.includes(key)) write(current.filter((k) => k !== key));
-    else if (current.length < MAX_PINS) write([...current, key]);
-    else return false;
+    if (kind === "agent") await api.setAgentPinned(id, pinned);
+    else await api.setGroupPinned(id, pinned);
     return true;
-  }, []);
-  return { pinned, toggle, isFull: pinned.length >= MAX_PINS };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409) return false;
+    throw err;
+  }
+}
+
+const LEGACY_KEY = "substrate.pinned-chats";
+
+/** Pins used to be kept in this browser only. Move them to the account once, then forget them. Returns whether any were found. */
+export async function importLocalPins(): Promise<boolean> {
+  let keys: string[] = [];
+  try {
+    const raw = window.localStorage.getItem(LEGACY_KEY);
+    if (!raw) return false;
+    const parsed: unknown = JSON.parse(raw);
+    keys = Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string").slice(0, MAX_PINS) : [];
+    window.localStorage.removeItem(LEGACY_KEY);
+  } catch {
+    return false;
+  }
+  for (const key of keys) {
+    const [kind, id] = key.split(":");
+    if ((kind === "agent" || kind === "group") && id) await setPinned(kind, id, true).catch(() => false);
+  }
+  return keys.length > 0;
 }

@@ -64,7 +64,7 @@ export function ChatList({ items, selectedKey, onSelect, onTogglePin, onNew }: P
                 aria-current={open ? "page" : undefined}
                 className={cn("h-auto! min-h-0 w-full justify-start gap-3 whitespace-normal rounded-xl px-3 py-2.5 text-left font-normal", open ? "bg-accent/12" : "hover:bg-card-hover")}
               >
-                <Avatar name={item.name} className="size-12 text-base" />
+                <Avatar name={item.name} src={item.avatar} className="size-12 text-base" />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="truncate text-sm font-medium text-foreground">{item.name}</span>

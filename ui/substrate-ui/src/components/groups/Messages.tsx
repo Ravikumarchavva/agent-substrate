@@ -14,6 +14,8 @@ type Props = {
   entries: GroupEntry[];
   /** Names of the members, to highlight when someone is addressed. */
   names: string[];
+  /** Each member's picture by name. */
+  avatars: Record<string, string | null>;
   typing: string[];
   /** The latest entry every agent has read; your messages up to it show as seen. */
   readByAll: number;
@@ -21,7 +23,7 @@ type Props = {
 };
 
 /** What was said in the group, oldest first, in runs by the same person under day headings, kept at the end while you are at the end. */
-export function Messages({ entries, names, typing, readByAll, onReply }: Props) {
+export function Messages({ entries, names, avatars, typing, readByAll, onReply }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
   const [atEnd, setAtEnd] = useState(true);
@@ -90,7 +92,7 @@ export function Messages({ entries, names, typing, readByAll, onReply }: Props) 
               <div key={entry.seq} className="flex flex-col">
                 {heading}
                 <div className={cn("group flex items-end gap-2", entry.from_user && "flex-row-reverse", startsRun && "mt-2")}>
-                  {!entry.from_user && (startsRun ? <Avatar name={entry.sender} className="size-8 text-xs" /> : <span className="size-8 shrink-0" aria-hidden />)}
+                  {!entry.from_user && (startsRun ? <Avatar name={entry.sender} src={avatars[entry.sender]} className="size-8 text-xs" /> : <span className="size-8 shrink-0" aria-hidden />)}
                   <div
                     id={`m-${entry.seq}`}
                     className={cn(

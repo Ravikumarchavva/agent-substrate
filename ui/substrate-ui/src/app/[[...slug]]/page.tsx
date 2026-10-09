@@ -35,6 +35,8 @@ import { Button } from "@/design";
 import { Avatar } from "@/components/groups/Avatar";
 import { groupAfterEntry } from "@/components/groups/entries";
 import { groupFeed } from "@/lib/group-feed";
+import { ObservedAccount } from "@/components/observe/ObservedAccount";
+import { ViewAsPicker } from "@/components/observe/ViewAsPicker";
 import { ChatHeader } from "@/components/chats/ChatHeader";
 import { DayDivider } from "@/components/chats/DayDivider";
 import { sameDay } from "@/components/groups/text";
@@ -78,7 +80,7 @@ import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { reportError } from "@/lib/report-error";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { pullPreferences, watchPreferenceChanges } from "@/lib/preferences-sync";
-import { Send, Plus, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, Info, Monitor, type LucideIcon } from "lucide-react";
+import { Send, Plus, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, Info, Monitor, Eye, type LucideIcon } from "lucide-react";
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "substrate:last-active-thread";
 
@@ -157,6 +159,7 @@ function ChatPageContent() {
   const agentsPanelOpen = routeState.view === "agents";
   const groupsPanelOpen = routeState.view === "groups";
   const notificationsPanelOpen = routeState.view === "notifications";
+  const observePanelOpen = routeState.view === "view";
   const [unreadCount, setUnreadCount] = useState(0);
   const [scheduledCount, setScheduledCount] = useState(0);
   const [approvalsCount, setApprovalsCount] = useState(0);
@@ -167,17 +170,21 @@ function ChatPageContent() {
   }, []);
 
   const [agents, setAgents] = useState<Agent[]>([]);
+  const observeAgent = routeState.view === "view" ? (agents.find((a) => a.id === routeState.observeAgentId) ?? null) : null;
   // `/agents/<id>` is the conversation with that agent: its one thread, opened (made the first time) once the agent is known.
   const agentChatId = agentsPanelOpen && routeState.agentId && routeState.agentId !== "new" ? routeState.agentId : null;
   const [openedAgentThreads, setOpenedAgentThreads] = useState<Record<string, string>>({});
   const agentChatThreadId = agentChatId ? (agents.find((a) => a.id === agentChatId)?.thread_id ?? openedAgentThreads[agentChatId] ?? null) : null;
-  const currentThreadId = routeState.threadId ?? agentChatThreadId ?? lastActiveThreadId;
+  // An agent's chat never falls back to the last plain chat: until its own thread is known it shows nothing, not somebody else's messages.
+  const currentThreadId = routeState.threadId ?? (agentChatId ? agentChatThreadId : lastActiveThreadId);
   // What the sidebar highlights: the open conversation, and nothing while a page of its own (Agents, Groups, Notifications…) is open.
   const selectedThreadId = routeState.view !== null || routeState.settingsTab !== null ? null : currentThreadId;
   // Mirrors currentThreadId so an in-flight loadMessages() fetch can tell,
   // once it resolves, whether the user has already navigated to a different
   // thread — without this, a slow fetch for thread A resolving after the
   // user switched to thread B would overwrite B's view with A's messages.
+  // The conversation whose messages are on screen (or loading).
+  const shownThreadRef = useRef<string | null>(null);
   const currentThreadIdRef = useRef<string | null>(currentThreadId);
   currentThreadIdRef.current = currentThreadId;
 
@@ -356,8 +363,10 @@ function ChatPageContent() {
     (kind: "agent" | "group", id: string | null, tab?: "info") => openView(kind === "agent" ? "agents" : "groups", id ? (tab ? `${id}/${tab}` : id) : undefined),
     [openView],
   );
-  const handleOpenTalk = useCallback((agentId: string, otherId: string | null) => openView("agents", otherId ? `${agentId}/with/${otherId}` : agentId), [openView]);
-  const chatSelection: ChatSelection = groupsPanelOpen ? { kind: "group", id: routeState.groupId } : agentsPanelOpen ? { kind: "agent", id: routeState.agentId, tab: routeState.agentTab, with: routeState.agentWith } : null;
+  // Another agent's account, read only: picked from a list (any number of agents), and opened at /view/<id>[/<conversation>].
+  const [viewPickerOpen, setViewPickerOpen] = useState(false);
+  const handleViewAs = useCallback((agentId: string, chat?: string | null) => openView("view", chat ? `${agentId}/${chat}` : agentId), [openView]);
+  const chatSelection: ChatSelection = groupsPanelOpen ? { kind: "group", id: routeState.groupId } : agentsPanelOpen ? { kind: "agent", id: routeState.agentId, tab: routeState.agentTab } : null;
 
   /** Leave Scheduled/Notifications for the conversation they came from (or a given one). */
   const handleCloseView = useCallback(
@@ -762,6 +771,9 @@ function ChatPageContent() {
 
     clearAttachedFiles();
     if (currentThreadId && canLoadData) {
+      // Another conversation's messages must not stay on screen while this one loads.
+      if (shownThreadRef.current !== currentThreadId && !wsRef.current) setMessages([]);
+      shownThreadRef.current = currentThreadId;
       // loadMessages guards against overwriting optimistic / just-streamed messages.
       loadMessages(currentThreadId);
       // Only reset the panel when there is no active stream; this preserves
@@ -1972,6 +1984,11 @@ function ChatPageContent() {
         <Monitor />
       </Button>
       {threadAgent && (
+        <Button variant="ghost" size="icon" aria-label={`View ${threadAgent.name}'s account (read only)`} title={`View ${threadAgent.name}'s account (read only)`} onClick={() => handleViewAs(threadAgent.id)}>
+          <Eye />
+        </Button>
+      )}
+      {threadAgent && (
         <Button variant="ghost" size="icon" aria-label="Agent info" aria-pressed={routeState.agentTab === "info"} onClick={editAgent}>
           <Info />
         </Button>
@@ -2345,6 +2362,7 @@ function ChatPageContent() {
           </div>
         </div>
       )}
+      <ViewAsPicker agents={agents} open={viewPickerOpen} onOpenChange={setViewPickerOpen} onPick={(a) => handleViewAs(a.id)} />
       {/* Desktop Sidebar */}
       <div
         className={`hidden shrink-0 overflow-hidden transition-all duration-300 ease-in-out lg:block ${desktopSidebarOpen ? "lg:w-[20rem]" : "lg:w-0"
@@ -2377,6 +2395,7 @@ function ChatPageContent() {
           onOpenGroup={handleOpenGroup}
           isAgentsOpen={agentsPanelOpen}
           onOpenNotifications={handleOpenNotifications}
+          onViewAs={() => setViewPickerOpen(true)}
           isNotificationsOpen={notificationsPanelOpen}
           unreadCount={unreadCount + approvalsCount}
           mode={settingsPanelOpen ? "settings" : "chat"}
@@ -2447,15 +2466,38 @@ function ChatPageContent() {
             </div>
           ) : scheduledPanelOpen ? (
             <ScheduledPanel onBack={() => handleCloseView()} onOpenThread={(threadId) => handleCloseView(threadId)} />
+          ) : observePanelOpen ? (
+            observeAgent ? (
+              <ObservedAccount
+                key={observeAgent.id}
+                agent={observeAgent}
+                chatKey={routeState.observeChat}
+                onOpen={(key) => handleViewAs(observeAgent.id, key)}
+                onSwitch={() => setViewPickerOpen(true)}
+                onExit={() => handleSelectChat("agent", observeAgent.id)}
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+                <p className="text-base font-semibold text-foreground">{routeState.observeAgentId && agents.length > 0 ? "That agent is not here any more." : routeState.observeAgentId ? "Loading…" : "View an agent's account"}</p>
+                <Button variant="secondary" onClick={() => setViewPickerOpen(true)}>
+                  Choose an agent
+                </Button>
+              </div>
+            )
           ) : agentsPanelOpen || groupsPanelOpen ? (
             <ChatsPanel
               agents={agents}
               groups={groups}
               selection={chatSelection}
               onSelect={handleSelectChat}
-              onOpenTalk={handleOpenTalk}
+              onViewAs={handleViewAs}
               onChanged={refreshChats}
-              conversation={{ header: chatHeader, body: chatArea }}
+              conversation={
+                <>
+                  {chatHeader}
+                  {chatArea}
+                </>
+              }
             />
           ) : notificationsPanelOpen ? (
             <NotificationsPanel onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} groups={groups} onOpenGroup={handleOpenGroup} />
@@ -2559,6 +2601,7 @@ function ChatPageContent() {
               onOpenGroup={handleOpenGroup}
               isAgentsOpen={agentsPanelOpen}
               onOpenNotifications={handleOpenNotifications}
+              onViewAs={() => setViewPickerOpen(true)}
               isNotificationsOpen={notificationsPanelOpen}
               unreadCount={unreadCount + approvalsCount}
               mode={settingsPanelOpen ? "settings" : "chat"}

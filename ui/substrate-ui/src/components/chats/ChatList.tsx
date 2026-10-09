@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pin, Plus, Search } from "lucide-react";
 import { Button, Input, Menu, MenuContent, MenuItem, MenuTrigger, cn } from "@/design";
 import { Avatar } from "@/components/groups/Avatar";
@@ -15,19 +15,50 @@ const FILTERS: { value: ChatFilter; label: string }[] = [
   { value: "agents", label: "Agents" },
 ];
 
+/** A list the server searches, filters and pages (an agent's chat list, which can be long): the list shows what it is given and asks for more. */
+export type ServerList = {
+  query: string;
+  onQuery: (query: string) => void;
+  filter: ChatFilter;
+  onFilter: (filter: ChatFilter) => void;
+  hasMore: boolean;
+  loading: boolean;
+  onLoadMore: () => void;
+  /** Words for the empty list: it has none yet, or nothing matches. */
+  empty: string;
+};
+
 type Props = {
   items: ChatItem[];
   selectedKey: string | null;
   onSelect: (item: ChatItem) => void;
-  onTogglePin: (item: ChatItem) => void;
-  onNew: (kind: "agent" | "group") => void;
+  /** Without these the list is read only: no pinning and no new chat. */
+  onTogglePin?: (item: ChatItem) => void;
+  onNew?: (kind: "agent" | "group") => void;
+  title?: string;
+  server?: ServerList;
 };
 
 /** Your agents and groups as a chat list: search, filters, the pinned ones on top, and per row who said what last, who is typing and what you have not read. */
-export function ChatList({ items, selectedKey, onSelect, onTogglePin, onNew }: Props) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<ChatFilter>("all");
-  const shown = filterChatItems(items, filter, query);
+export function ChatList({ items, selectedKey, onSelect, onTogglePin, onNew, title = "Chats", server }: Props) {
+  const [ownQuery, setOwnQuery] = useState("");
+  const [ownFilter, setOwnFilter] = useState<ChatFilter>("all");
+  const query = server ? server.query : ownQuery;
+  const filter = server ? server.filter : ownFilter;
+  const setQuery = server ? server.onQuery : setOwnQuery;
+  const setFilter = server ? server.onFilter : setOwnFilter;
+  const shown = server ? items : filterChatItems(items, filter, query);
+  const filters = server ? FILTERS.filter((f) => f.value !== "unread") : FILTERS;
+  // Reaching the end of what is loaded asks for the next page.
+  const end = useRef<HTMLLIElement>(null);
+  const more = server?.hasMore && !server.loading ? server.onLoadMore : null;
+  useEffect(() => {
+    const node = end.current;
+    if (!node || !more) return;
+    const watcher = new IntersectionObserver((seen) => seen.some((s) => s.isIntersecting) && more(), { rootMargin: "200px" });
+    watcher.observe(node);
+    return () => watcher.disconnect();
+  }, [more, shown.length]);
 
   const hasPinned = shown.some((i) => i.pinned);
 
@@ -35,25 +66,27 @@ export function ChatList({ items, selectedKey, onSelect, onTogglePin, onNew }: P
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="space-y-3 px-4 pb-3 pt-16 sm:pt-5">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Chats</h1>
-          <Menu>
-            <MenuTrigger asChild>
-              <Button variant="primary" size="icon" aria-label="New chat" className="rounded-full">
-                <Plus />
-              </Button>
-            </MenuTrigger>
-            <MenuContent align="end">
-              <MenuItem onSelect={() => onNew("group")}>New group</MenuItem>
-              <MenuItem onSelect={() => onNew("agent")}>New agent</MenuItem>
-            </MenuContent>
-          </Menu>
+          <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+          {onNew && (
+            <Menu>
+              <MenuTrigger asChild>
+                <Button variant="primary" size="icon" aria-label="New chat" className="rounded-full">
+                  <Plus />
+                </Button>
+              </MenuTrigger>
+              <MenuContent align="end">
+                <MenuItem onSelect={() => onNew("group")}>New group</MenuItem>
+                <MenuItem onSelect={() => onNew("agent")}>New agent</MenuItem>
+              </MenuContent>
+            </Menu>
+          )}
         </div>
         <label className="flex h-control-lg items-center gap-2 rounded-full bg-card px-4 text-sm focus-within:ring-1 focus-within:ring-accent">
           <Search className="shrink-0 text-muted" aria-hidden />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search or start a new chat" aria-label="Search chats" className="h-auto border-0 bg-transparent p-0 focus:ring-0" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={onNew ? "Search or start a new chat" : "Search chats"} aria-label="Search chats" className="h-auto border-0 bg-transparent p-0 focus:ring-0" />
         </label>
         <div role="group" aria-label="Show" className="flex gap-2 overflow-x-auto">
-          {FILTERS.map((f) => (
+          {filters.map((f) => (
             <Button
               key={f.value}
               variant="ghost"
@@ -68,7 +101,11 @@ export function ChatList({ items, selectedKey, onSelect, onTogglePin, onNew }: P
         </div>
       </div>
       <ul className="scroll-area min-h-0 flex-1 px-2 pb-4">
-        {shown.length === 0 && <li className="px-4 py-10 text-center text-sm text-muted">{items.length === 0 ? "No chats yet. Make an agent to begin." : "Nothing matches."}</li>}
+        {shown.length === 0 && (
+          <li className="px-4 py-10 text-center text-sm text-muted">
+            {server?.loading ? "Loading…" : server && !query.trim() && filter === "all" ? server.empty : items.length === 0 && !server ? "No chats yet. Make an agent to begin." : "Nothing matches."}
+          </li>
+        )}
         {shown.map((item, index) => {
           const open = item.key === selectedKey;
           const unread = item.unread > 0 && !open;
@@ -105,18 +142,27 @@ export function ChatList({ items, selectedKey, onSelect, onTogglePin, onNew }: P
                   </span>
                 </span>
               </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={item.pinned ? `Unpin ${item.name}` : `Pin ${item.name}`}
-                onClick={() => onTogglePin(item)}
-                className="absolute bottom-2 right-3 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-              >
-                <Pin />
-              </Button>
+              {onTogglePin && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={item.pinned ? `Unpin ${item.name}` : `Pin ${item.name}`}
+                  onClick={() => onTogglePin(item)}
+                  className="absolute bottom-2 right-3 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                >
+                  <Pin />
+                </Button>
+              )}
             </li>
           );
         })}
+        {server?.hasMore && (
+          <li ref={end} className="p-2">
+            <Button variant="ghost" className="w-full" disabled={server.loading} onClick={server.onLoadMore}>
+              {server.loading ? "Loading…" : "Load more"}
+            </Button>
+          </li>
+        )}
       </ul>
     </div>
   );

@@ -184,12 +184,12 @@ export const groupsApi = {
     return requestJson<GroupEntry>(`/groups/${id}/messages/${seq}/reaction`, { method: "PUT", body: JSON.stringify({ emoji }) });
   },
 
-  /** The one stream with everything happening in your groups (see `lib/realtime.ts`): `since` is, per group, the last entry you hold. */
-  async openGroupFeed(since: Record<string, number>, signal: AbortSignal): Promise<Response> {
+  /** The one stream with everything happening in your groups (see `lib/realtime.ts`): `since` is, per group, the last entry you hold. `watch` also follows an agent's pairs (its account, viewed). */
+  async openGroupFeed(since: Record<string, number>, signal: AbortSignal, watch?: string): Promise<Response> {
     return fetch(`${API_BASE}/feed`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify({ since }),
+      body: JSON.stringify({ since, ...(watch ? { watch } : {}) }),
       signal,
     });
   },

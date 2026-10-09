@@ -40,6 +40,9 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply, 
   const [missed, setMissed] = useState(0);
   const [editing, setEditing] = useState<{ seq: number; text: string } | null>(null);
   const seen = useRef(entries.length);
+  const content = useRef<HTMLDivElement>(null);
+  const following = useRef(true);
+  following.current = atEnd;
   const bySeq = new Map(entries.map((e) => [e.seq, e]));
 
   useEffect(() => {
@@ -48,6 +51,15 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply, 
     if (atEnd) end.current?.scrollIntoView({ block: "end" });
     else if (added > 0 && !entries[entries.length - 1]?.from_user) setMissed((n) => n + added);
   }, [entries, atEnd, typing.length]);
+
+  // Pictures, previews and fonts finish loading after the messages are in place and make the page taller: while you are at the end you stay there.
+  useEffect(() => {
+    const node = content.current;
+    if (!node) return;
+    const watcher = new ResizeObserver(() => following.current && end.current?.scrollIntoView({ block: "end" }));
+    watcher.observe(node);
+    return () => watcher.disconnect();
+  }, []);
 
   const toEnd = useCallback(() => {
     end.current?.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -83,7 +95,7 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply, 
           if (near) setMissed(0);
         }}
       >
-        <div className="flex w-full flex-col gap-1 px-3 py-4 sm:px-5">
+        <div ref={content} className="flex w-full flex-col gap-1 px-3 py-4 sm:px-5">
           {entries.map((entry, i) => {
             const previous = entries[i - 1];
             const newDay = !previous || !sameDay(previous.at, entry.at);

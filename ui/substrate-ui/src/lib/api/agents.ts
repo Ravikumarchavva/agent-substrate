@@ -40,27 +40,7 @@ export interface ToolInfo {
   description: string;
 }
 
-/** One time an agent asked another to do something. */
-export interface Exchange {
-  thread_id: string;
-  asker_id: string | null;
-  asker: string;
-  target_id: string;
-  target: string;
-  request: string;
-  /** What came back; null while nothing has. */
-  answer: string | null;
-  /** `waiting` means it stopped to ask you something. */
-  status: "done" | "working" | "waiting" | "failed";
-  at: string;
-}
-
 export const agentsApi = {
-  /** When this agent asked another agent for something, or was asked, newest first. */
-  async getAgentExchanges(id: string): Promise<Exchange[]> {
-    return requestJson<Exchange[]>(`/agents/${id}/exchanges`);
-  },
-
   async getAgents(): Promise<Agent[]> {
     return requestJson<Agent[]>("/agents");
   },

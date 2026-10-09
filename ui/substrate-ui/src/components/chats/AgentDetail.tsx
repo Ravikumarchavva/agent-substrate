@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Pin, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, Pin, Trash2 } from "lucide-react";
 import { Button, Checkbox, Input, Page, Section, Select, Textarea, toast } from "@/design";
 import { CHAT_MODEL_OPTIONS } from "@/lib/model-preferences";
 import { api } from "@/lib/api";
@@ -25,7 +25,7 @@ const same = (a: AgentInput, b: AgentInput) =>
 
 
 /** One agent as a contact card beside its conversation: who it is, what it can do, the groups it is in and who it may message. With no agent, the page where a new one is made. */
-export function AgentDetail({ agent, others, groups, pinned, onTogglePin, onOpenGroup, tools, onBack, onSaved, onPictureChanged, onDelete }: { agent: Agent | null; others: Agent[]; groups: Group[]; pinned: boolean; onTogglePin: () => void; onOpenGroup: (groupId: string) => void; tools: ToolInfo[]; onBack: () => void; onSaved: (a: Agent) => void; onPictureChanged: () => void; onDelete: () => void }) {
+export function AgentDetail({ agent, others, groups, pinned, onTogglePin, onViewAs, onOpenGroup, tools, onBack, onSaved, onPictureChanged, onDelete }: { agent: Agent | null; others: Agent[]; groups: Group[]; pinned: boolean; onTogglePin: () => void; onViewAs: () => void; onOpenGroup: (groupId: string) => void; tools: ToolInfo[]; onBack: () => void; onSaved: (a: Agent) => void; onPictureChanged: () => void; onDelete: () => void }) {
   const initial: AgentInput = agent ? { name: agent.name, role: agent.role, instructions: agent.instructions, allowed_tools: agent.allowed_tools, model: agent.model } : BLANK;
   const [value, setValue] = useState<AgentInput>(initial);
   const [busy, setBusy] = useState(false);
@@ -150,6 +150,9 @@ export function AgentDetail({ agent, others, groups, pinned, onTogglePin, onOpen
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onTogglePin} aria-pressed={pinned} className={tile}>
               <Pin /> {pinned ? "Unpin" : "Pin"}
+            </Button>
+            <Button variant="ghost" onClick={onViewAs} className={tile}>
+              <Eye /> View as
             </Button>
             <Button variant="ghost" onClick={onDelete} className={`${tile} text-danger`}>
               <Trash2 /> Delete

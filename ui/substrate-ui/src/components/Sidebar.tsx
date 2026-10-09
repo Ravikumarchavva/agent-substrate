@@ -13,6 +13,7 @@ import {
   Pencil,
   Search,
   Settings2,
+  Eye,
   ShieldCheck,
   ShieldQuestion,
   Bot,
@@ -71,6 +72,8 @@ type Props = {
   openAgentId?: string | null;
   onOpenGroup?: (groupId: string | null) => void;
   onOpenNotifications?: () => void;
+  /** Open another agent's account, read only. */
+  onViewAs?: () => void;
   isNotificationsOpen?: boolean;
   unreadCount?: number;
   mode?: SidebarMode;
@@ -136,6 +139,7 @@ export function Sidebar({
   openAgentId = null,
   onOpenGroup,
   onOpenNotifications,
+  onViewAs,
   isNotificationsOpen,
   unreadCount,
   mode = "chat",
@@ -392,6 +396,22 @@ export function Sidebar({
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </button>
               </div>
+
+              {onViewAs && agents.length > 0 && (
+                <div className="py-1">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onViewAs();
+                    }}
+                    className="h-auto! w-full justify-start gap-3 rounded-none px-4 py-2.5 text-sm font-normal"
+                  >
+                    <Eye className="text-muted" />
+                    View an agent&apos;s account
+                  </Button>
+                </div>
+              )}
 
               <div className="py-1">
                 <button

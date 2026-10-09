@@ -289,7 +289,9 @@ async def test_private_dir_is_never_committed_into_the_shared_manifest(tmp_path)
     assert result.ok
 
 
-async def test_a_symlink_the_code_makes_is_not_followed_out_of_the_workspace(tmp_path, spec):
+async def test_a_symlink_the_code_makes_is_not_followed_out_of_the_workspace(
+    tmp_path, spec
+):
     """Code can make ``leak -> /some/host/file``. The host walks the tree after the run, so following it would read a file from outside the
     workspace and keep it in the user's storage."""
     secret = tmp_path / "host-secret.txt"
@@ -303,7 +305,9 @@ async def test_a_symlink_the_code_makes_is_not_followed_out_of_the_workspace(tmp
             (session / "kept.txt").write_bytes(b"ordinary")
             return ExecResult(stdout="ran", output_files=[])
 
-    runtime, _store, ws_store = await _runtime(tmp_path, LinkingInner(tmp_path / "scratch"))
+    runtime, _store, ws_store = await _runtime(
+        tmp_path, LinkingInner(tmp_path / "scratch")
+    )
 
     await runtime.execute(spec)
 
@@ -312,7 +316,9 @@ async def test_a_symlink_the_code_makes_is_not_followed_out_of_the_workspace(tmp
     assert set(head.manifest.files) == {"kept.txt"}
 
 
-async def test_a_file_the_code_edits_in_place_does_not_change_the_cached_original(tmp_path, spec):
+async def test_a_file_the_code_edits_in_place_does_not_change_the_cached_original(
+    tmp_path, spec
+):
     """Materialised files are copies: an in-place write must not reach the shared blob cache every later checkout reads from."""
     original = b"original bytes"
 
@@ -322,7 +328,9 @@ async def test_a_file_the_code_edits_in_place_does_not_change_the_cached_origina
                 f.write(b"EDITED!")
             return ExecResult(stdout="ran")
 
-    runtime, store, ws_store = await _runtime(tmp_path, EditingInner(tmp_path / "scratch"))
+    runtime, store, ws_store = await _runtime(
+        tmp_path, EditingInner(tmp_path / "scratch")
+    )
     await _seed_branch(store, ws_store, {"data.txt": original})
     cas = runtime._cas_for(_scope())
     ref = await cas.put(original)  # warms the cache with the original
@@ -353,9 +361,15 @@ def _tree_spec(home: str = HOME, mounts: tuple = (), code: str = "x=1") -> Sandb
 
 
 def _mount(label: str, workspace: str):
-    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import Mount
+    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
+        Mount,
+    )
 
-    return Mount(label=label, session_dir=f"{workspace}/main", scope=_scope(conversation_id=workspace))
+    return Mount(
+        label=label,
+        session_dir=f"{workspace}/main",
+        scope=_scope(conversation_id=workspace),
+    )
 
 
 def _key(workspace: str, rel: str) -> str:
@@ -377,7 +391,13 @@ class Writing(FakeInner):
         for session in [spec.session_dir, *(m.session_dir for m in spec.mounts)]:
             base = self.root / session
             self.seen[session] = (
-                {p.relative_to(base).as_posix(): p.read_bytes() for p in base.rglob("*") if p.is_file()} if base.is_dir() else {}
+                {
+                    p.relative_to(base).as_posix(): p.read_bytes()
+                    for p in base.rglob("*")
+                    if p.is_file()
+                }
+                if base.is_dir()
+                else {}
             )
             for rel, data in self.writes.get(session, {}).items():
                 (base / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -387,8 +407,12 @@ class Writing(FakeInner):
         return ExecResult(stdout="ran")
 
 
-async def test_a_file_in_the_agents_files_is_there_for_the_code_and_what_the_code_makes_is_in_the_files(tmp_path):
-    inner = Writing(tmp_path / "scratch", writes={f"{HOME}/main": {"out/chart.png": b"PNG"}})
+async def test_a_file_in_the_agents_files_is_there_for_the_code_and_what_the_code_makes_is_in_the_files(
+    tmp_path,
+):
+    inner = Writing(
+        tmp_path / "scratch", writes={f"{HOME}/main": {"out/chart.png": b"PNG"}}
+    )
     runtime, store, _ws = await _runtime(tmp_path, inner)
     await store.upload(_key(HOME, "uploads/in.txt"), b"hello")
 
@@ -400,14 +424,21 @@ async def test_a_file_in_the_agents_files_is_there_for_the_code_and_what_the_cod
 
 
 async def test_a_file_removed_on_either_side_is_removed_on_the_other(tmp_path):
-    inner = Writing(tmp_path / "scratch", writes={f"{HOME}/main": {"keep.txt": b"k", "gone.txt": b"g"}})
+    inner = Writing(
+        tmp_path / "scratch",
+        writes={f"{HOME}/main": {"keep.txt": b"k", "gone.txt": b"g"}},
+    )
     runtime, store, _ws = await _runtime(tmp_path, inner)
     await runtime.execute(_tree_spec())  # both files are saved
 
-    await store.delete(_key(HOME, "gone.txt"))  # the user deletes one from the Files list
+    await store.delete(
+        _key(HOME, "gone.txt")
+    )  # the user deletes one from the Files list
     inner.writes = {}
     await runtime.execute(_tree_spec())
-    assert inner.seen[f"{HOME}/main"] == {"keep.txt": b"k"}  # the code no longer finds it
+    assert inner.seen[f"{HOME}/main"] == {
+        "keep.txt": b"k"
+    }  # the code no longer finds it
 
     inner.removes = {f"{HOME}/main": ["keep.txt"]}  # the code deletes the other
     await runtime.execute(_tree_spec())
@@ -440,7 +471,9 @@ async def test_files_that_did_not_change_are_not_transferred_again(tmp_path):
 async def test_hidden_paths_stay_out_of_the_workspace(tmp_path):
     inner = Writing(tmp_path / "scratch")
     runtime, store, _ws = await _runtime(tmp_path, inner)
-    await store.upload(_key(HOME, ".previews/report.pdf.png"), b"thumb")  # kept beside the files for the UI, not part of them
+    await store.upload(
+        _key(HOME, ".previews/report.pdf.png"), b"thumb"
+    )  # kept beside the files for the UI, not part of them
     await store.upload(_key(HOME, "report.pdf"), b"pdf")
 
     await runtime.execute(_tree_spec())
@@ -448,9 +481,14 @@ async def test_hidden_paths_stay_out_of_the_workspace(tmp_path):
     assert inner.seen[f"{HOME}/main"] == {"report.pdf": b"pdf"}
 
 
-async def test_a_mounted_workspace_is_seen_by_the_code_and_saved_to_its_own_files(tmp_path):
+async def test_a_mounted_workspace_is_seen_by_the_code_and_saved_to_its_own_files(
+    tmp_path,
+):
     home, drive = f"{HOME}/main", f"{GROUP}/main"
-    inner = Writing(tmp_path / "scratch", writes={home: {"notes.md": b"mine"}, drive: {"plan.md": b"shared"}})
+    inner = Writing(
+        tmp_path / "scratch",
+        writes={home: {"notes.md": b"mine"}, drive: {"plan.md": b"shared"}},
+    )
     runtime, store, _ws = await _runtime(tmp_path, inner)
     await store.upload(_key(GROUP, "uploads/brief.pdf"), b"brief")
 
@@ -459,11 +497,15 @@ async def test_a_mounted_workspace_is_seen_by_the_code_and_saved_to_its_own_file
     assert inner.seen[drive] == {"uploads/brief.pdf": b"brief"}
     assert await store.download(_key(GROUP, "plan.md")) == b"shared"
     assert await store.download(_key(HOME, "notes.md")) == b"mine"
-    assert not await store.exists(_key(GROUP, "notes.md"))  # nothing crosses from one to the other
+    assert not await store.exists(
+        _key(GROUP, "notes.md")
+    )  # nothing crosses from one to the other
     assert not await store.exists(_key(HOME, "plan.md"))
 
 
-async def test_runs_that_share_a_workspace_wait_for_each_other_whichever_they_open_first(tmp_path):
+async def test_runs_that_share_a_workspace_wait_for_each_other_whichever_they_open_first(
+    tmp_path,
+):
     order: list[str] = []
 
     class Slow(FakeInner):
@@ -475,9 +517,13 @@ async def test_runs_that_share_a_workspace_wait_for_each_other_whichever_they_op
 
     runtime, _store, _ws = await _runtime(tmp_path, Slow(tmp_path / "scratch"))
     one = _tree_spec(HOME, mounts=(_mount("a", GROUP), _mount("b", GROUP_2)))
-    two = _tree_spec(HOME_2, mounts=(_mount("b", GROUP_2), _mount("a", GROUP)))  # the same two drives, the other way round
+    two = _tree_spec(
+        HOME_2, mounts=(_mount("b", GROUP_2), _mount("a", GROUP))
+    )  # the same two drives, the other way round
 
-    await asyncio.wait_for(asyncio.gather(runtime.execute(one), runtime.execute(two)), timeout=5)
+    await asyncio.wait_for(
+        asyncio.gather(runtime.execute(one), runtime.execute(two)), timeout=5
+    )
 
     assert order in (
         [f"start {HOME}", f"end {HOME}", f"start {HOME_2}", f"end {HOME_2}"],
@@ -486,7 +532,9 @@ async def test_runs_that_share_a_workspace_wait_for_each_other_whichever_they_op
 
 
 async def test_a_save_the_storage_quota_refuses_is_reported_to_the_agent(tmp_path):
-    inner = Writing(tmp_path / "scratch", writes={f"{HOME}/main": {"big.bin": b"x" * 100}})
+    inner = Writing(
+        tmp_path / "scratch", writes={f"{HOME}/main": {"big.bin": b"x" * 100}}
+    )
     store = Store.at(tmp_path / "objects", file_quota_bytes=10).files
     runtime = StagedSandboxRuntime(
         inner,
@@ -501,7 +549,9 @@ async def test_a_save_the_storage_quota_refuses_is_reported_to_the_agent(tmp_pat
     assert result.stdout == "ran"  # the run itself is not failed over it
 
 
-async def test_a_directory_the_code_swapped_for_a_symlink_cannot_redirect_what_is_written_next(tmp_path):
+async def test_a_directory_the_code_swapped_for_a_symlink_cannot_redirect_what_is_written_next(
+    tmp_path,
+):
     """Code can replace ``docs/`` with a link to a host directory. The next stage-in writes into the workspace from outside the sandbox: it must not
     land in that directory."""
     outside = tmp_path / "outside"

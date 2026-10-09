@@ -34,20 +34,34 @@ def ordered(a: uuid.UUID, b: uuid.UUID) -> tuple[uuid.UUID, uuid.UUID]:
 
 
 async def get_or_create_pair(
-    db: AsyncSession, store: Any, *, tenant_id: str, user_id: str, asker: uuid.UUID, target: uuid.UUID
+    db: AsyncSession,
+    store: Any,
+    *,
+    tenant_id: str,
+    user_id: str,
+    asker: uuid.UUID,
+    target: uuid.UUID,
 ) -> AgentPair:
     """The pair for these two agents, made (and its channel opened) the first time they talk."""
     low, high = ordered(asker, target)
     found = (
         await db.execute(
-            select(AgentPair).where(AgentPair.user_identifier == user_id, AgentPair.agent_a == low, AgentPair.agent_b == high)
+            select(AgentPair).where(
+                AgentPair.user_identifier == user_id,
+                AgentPair.agent_a == low,
+                AgentPair.agent_b == high,
+            )
         )
     ).scalar_one_or_none()
     if found is None:
-        found = AgentPair(tenant_id=tenant_id, user_identifier=user_id, agent_a=low, agent_b=high)
+        found = AgentPair(
+            tenant_id=tenant_id, user_identifier=user_id, agent_a=low, agent_b=high
+        )
         db.add(found)
         await db.flush()
-    await store.channel_open(found.channel, tenant=tenant_id, breaker=PAIR_BREAKER)  # idempotent
+    await store.channel_open(
+        found.channel, tenant=tenant_id, breaker=PAIR_BREAKER
+    )  # idempotent
     return found
 
 
@@ -124,10 +138,19 @@ async def pairs_of(
 
 def _other_id(agent_id: uuid.UUID):
     """SQL for 'the other agent of the pair', given this one."""
-    return case((AgentPair.agent_a == agent_id, AgentPair.agent_b), else_=AgentPair.agent_a)
+    return case(
+        (AgentPair.agent_a == agent_id, AgentPair.agent_b), else_=AgentPair.agent_a
+    )
 
 
-async def pair_for(db: AsyncSession, *, user_id: str, tenant_id: str, agent_id: uuid.UUID, pair_id: uuid.UUID) -> AgentPair | None:
+async def pair_for(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    tenant_id: str,
+    agent_id: uuid.UUID,
+    pair_id: uuid.UUID,
+) -> AgentPair | None:
     """A pair, if it is this user's and this agent is one of its two."""
     found = await db.get(AgentPair, pair_id)
     if (
@@ -142,11 +165,31 @@ async def pair_for(db: AsyncSession, *, user_id: str, tenant_id: str, agent_id: 
 
 async def delete_pairs_of(db: AsyncSession, store: Any, agent_id: uuid.UUID) -> None:
     """After an agent is deleted: every pair it was in goes, with what was said in it."""
-    rows = (await db.execute(select(AgentPair).where(or_(AgentPair.agent_a == agent_id, AgentPair.agent_b == agent_id)))).scalars().all()
+    rows = (
+        (
+            await db.execute(
+                select(AgentPair).where(
+                    or_(AgentPair.agent_a == agent_id, AgentPair.agent_b == agent_id)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     for pair in rows:
         await store.channel_delete(pair.channel)
     if rows:
-        await db.execute(delete(AgentPair).where(AgentPair.id.in_([p.id for p in rows])))
+        await db.execute(
+            delete(AgentPair).where(AgentPair.id.in_([p.id for p in rows]))
+        )
 
 
-__all__ = ["agent_actor", "delete_pairs_of", "get_or_create_pair", "ordered", "pair_for", "pairs_of", "record"]
+__all__ = [
+    "agent_actor",
+    "delete_pairs_of",
+    "get_or_create_pair",
+    "ordered",
+    "pair_for",
+    "pairs_of",
+    "record",
+]

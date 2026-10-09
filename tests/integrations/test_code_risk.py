@@ -99,15 +99,30 @@ def test_out_of_workspace_write_is_critical():
 
 def test_writes_to_the_agents_own_folders_are_not_gated():
     """/workspace is the agent's home and /groups/<name> a group's shared folder: the places it is told to save files."""
-    for path in ["/workspace/out.csv", "/workspace/sub/dir/out.csv", "/groups/trip/plan.md", "/tmp/scratch.txt"]:
+    for path in [
+        "/workspace/out.csv",
+        "/workspace/sub/dir/out.csv",
+        "/groups/trip/plan.md",
+        "/tmp/scratch.txt",
+    ]:
         risk, reasons = classify_code(f"open({path!r}, 'w').write('x')\n")
         assert risk == ToolRisk.SAFE and not reasons, path
 
 
 def test_a_path_that_only_starts_like_a_folder_or_climbs_out_of_one_is_still_gated():
-    for path in ["/workspace/../etc/passwd", "/groups/../etc/passwd", "/workspacefoo/x", "/groupsfoo/x", "/tmpfoo/x", "/groups"]:
+    for path in [
+        "/workspace/../etc/passwd",
+        "/groups/../etc/passwd",
+        "/workspacefoo/x",
+        "/groupsfoo/x",
+        "/tmpfoo/x",
+        "/groups",
+    ]:
         risk, reasons = classify_code(f"open({path!r}, 'w').write('x')\n")
-        assert risk == ToolRisk.CRITICAL and "writes files outside the workspace" in reasons, path
+        assert (
+            risk == ToolRisk.CRITICAL
+            and "writes files outside the workspace" in reasons
+        ), path
 
 
 def test_multiple_reasons_collected():

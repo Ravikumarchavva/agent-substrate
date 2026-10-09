@@ -251,7 +251,9 @@ async def get_thread_messages(
 
     # Each event carries when it was logged (`at`), so a reloaded conversation shows when things were said, not when the page was opened.
     events = await project_thread_timed(runtime.store, str(thread_id))
-    return [{**event.model_dump(mode="json"), "at": at.isoformat()} for event, at in events]
+    return [
+        {**event.model_dump(mode="json"), "at": at.isoformat()} for event, at in events
+    ]
 
 
 @router.get("/{thread_id}/export")

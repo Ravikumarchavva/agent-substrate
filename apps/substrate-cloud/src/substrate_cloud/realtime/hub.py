@@ -33,7 +33,9 @@ class Watcher:
 
     user: str
     channels: set[str]
-    queue: asyncio.Queue[Message] = field(default_factory=lambda: asyncio.Queue(maxsize=1000))
+    queue: asyncio.Queue[Message] = field(
+        default_factory=lambda: asyncio.Queue(maxsize=1000)
+    )
     overflowed: bool = False
     """It could not keep up and messages were dropped: it must catch up from the channels themselves."""
 
@@ -102,12 +104,21 @@ class Relay:
         try:
             await self._redis.publish(REDIS_CHANNEL, json.dumps(message))
         except Exception:  # noqa: BLE001 - Redis down must not make a committed message vanish for the people on this process
-            logger.warning("feed relay could not publish; delivering locally only", exc_info=True)
+            logger.warning(
+                "feed relay could not publish; delivering locally only", exc_info=True
+            )
             self._hub.dispatch(message)
 
     async def observe(self, change: ChannelChange) -> None:
         """The engine's observer: every entry that commits, from any run on this process."""
-        await self.publish({"t": "entry", "channel": change.channel, "seq": change.seq, "kind": change.kind.value})
+        await self.publish(
+            {
+                "t": "entry",
+                "channel": change.channel,
+                "seq": change.seq,
+                "kind": change.kind.value,
+            }
+        )
 
     async def run(self) -> None:
         """Hear what every process published, until cancelled. Reconnects with a pause if the connection drops."""
@@ -130,7 +141,9 @@ class Relay:
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001
-                logger.warning("feed relay lost its connection; retrying", exc_info=True)
+                logger.warning(
+                    "feed relay lost its connection; retrying", exc_info=True
+                )
             await asyncio.sleep(1.0)
 
 

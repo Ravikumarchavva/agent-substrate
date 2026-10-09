@@ -45,8 +45,14 @@ from substrate_cloud.monolith.file_versioning import (
 from substrate_cloud.monolith.models import FileMetadata, FileVersion, Thread
 from substrate_cloud.monolith.security.deps import get_current_user
 from substrate_cloud.monolith.services import get_owned_thread
-from substrate_cloud.monolith.services.agents.service import get_owned_agent, list_agents
-from substrate_cloud.monolith.services.groups.service import get_owned_group, list_groups
+from substrate_cloud.monolith.services.agents.service import (
+    get_owned_agent,
+    list_agents,
+)
+from substrate_cloud.monolith.services.groups.service import (
+    get_owned_group,
+    list_groups,
+)
 from substrate_cloud.shared.auth.claims import AuthClaims
 
 router = APIRouter(
@@ -244,7 +250,9 @@ async def list_files(
     # The caller's agents' homes and their groups' drives are listed too, under the agent's or the group's name.
     my_agents = await list_agents(db, claims)
     my_groups = await list_groups(db, claims)
-    owned_thread_ids |= {a.workspace_id for a in my_agents} | {g.workspace_id for g in my_groups}
+    owned_thread_ids |= {a.workspace_id for a in my_agents} | {
+        g.workspace_id for g in my_groups
+    }
 
     # One scan of the caller's whole prefix — not one call per thread plus
     # this, which used to list every conversation's shared files twice

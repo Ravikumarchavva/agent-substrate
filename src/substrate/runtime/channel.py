@@ -251,31 +251,43 @@ class ChannelStore(Protocol):
         A member whose budget is used up is not woken, and the channel says so once."""
         ...
 
-    async def channel_edit(self, channel: str, seq: int, sender: Actor, text: str) -> int | None:
+    async def channel_edit(
+        self, channel: str, seq: int, sender: Actor, text: str
+    ) -> int | None:
         """Replace the text of ``seq``, which only its sender may do, on a message not yet deleted. Appends an ``EDIT`` marker
         (keeping the text it replaced) and returns the marker's ``seq``; ``None`` if it is not allowed. Wakes no one."""
         ...
 
-    async def channel_tombstone(self, channel: str, seq: int, sender: Actor) -> int | None:
+    async def channel_tombstone(
+        self, channel: str, seq: int, sender: Actor
+    ) -> int | None:
         """Delete ``seq`` for good, which only its sender may do: its text and attachments are blanked, as is everything an edit
         kept of it. Appends a ``TOMBSTONE`` marker and returns its ``seq``; ``None`` if it is not allowed. Wakes no one."""
         ...
 
-    async def channel_react(self, channel: str, seq: int, participant: Actor, emoji: str) -> int | None:
+    async def channel_react(
+        self, channel: str, seq: int, participant: Actor, emoji: str
+    ) -> int | None:
         """Set ``participant``'s one reaction to ``seq`` (``""`` takes it back). Appends a ``REACTION`` marker and returns its
         ``seq``; a repeat of what is already set changes nothing and returns the earlier marker's. ``None`` if ``seq`` does not exist."""
         ...
 
-    async def channel_reactions(self, channel: str, seqs: Sequence[int]) -> dict[int, dict[str, str]]:
+    async def channel_reactions(
+        self, channel: str, seqs: Sequence[int]
+    ) -> dict[int, dict[str, str]]:
         """``{seq: {participant address: emoji}}`` for the entries that have reactions."""
         ...
 
-    async def channel_heads(self, channels: Sequence[str], participant: Actor) -> list[ChannelHead]:
+    async def channel_heads(
+        self, channels: Sequence[str], participant: Actor
+    ) -> list[ChannelHead]:
         """How each of ``channels`` looks in ``participant``'s list: latest message and unread count. Channels that do not exist, or that
         ``participant`` is not in, are left out. One query however many channels."""
         ...
 
-    async def channel_mark_delivered(self, channel: str, participant: Actor, upto: int) -> None:
+    async def channel_mark_delivered(
+        self, channel: str, participant: Actor, upto: int
+    ) -> None:
         """Move a member's delivered cursor forward to ``upto`` (never backward)."""
         ...
 

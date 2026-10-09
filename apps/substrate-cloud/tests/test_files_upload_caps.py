@@ -202,7 +202,9 @@ async def test_upload_rejects_when_upload_attempt_quota_exhausted(monkeypatch):
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
-        files_module, "get_owned_thread", AsyncMock(return_value=MagicMock(agent_id=None))
+        files_module,
+        "get_owned_thread",
+        AsyncMock(return_value=MagicMock(agent_id=None)),
     )
     monkeypatch.setattr(files_module.settings, "RAG_DAILY_UPLOAD_ATTEMPT_LIMIT", 1)
     monkeypatch.setattr(files_module.asyncio, "create_task", lambda coro: coro.close())
@@ -291,7 +293,9 @@ async def test_upload_triggers_eager_staging_into_the_conversations_documents(
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
-        files_module, "get_owned_thread", AsyncMock(return_value=MagicMock(agent_id=None))
+        files_module,
+        "get_owned_thread",
+        AsyncMock(return_value=MagicMock(agent_id=None)),
     )
     captured_coros = []
     monkeypatch.setattr(
@@ -333,7 +337,9 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
-        files_module, "get_owned_thread", AsyncMock(return_value=MagicMock(agent_id=None))
+        files_module,
+        "get_owned_thread",
+        AsyncMock(return_value=MagicMock(agent_id=None)),
     )
     captured_coros = []
     monkeypatch.setattr(
@@ -382,7 +388,9 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
     from substrate_cloud.monolith.routes import files as files_module
 
     monkeypatch.setattr(
-        files_module, "get_owned_thread", AsyncMock(return_value=MagicMock(agent_id=None))
+        files_module,
+        "get_owned_thread",
+        AsyncMock(return_value=MagicMock(agent_id=None)),
     )
     captured_coros = []
     monkeypatch.setattr(

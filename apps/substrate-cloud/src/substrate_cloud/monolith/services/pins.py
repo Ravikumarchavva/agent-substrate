@@ -22,7 +22,11 @@ async def pinned_count(db: AsyncSession, tenant_id: str, user_id: str) -> int:
     for model in (Agent, Group):
         total += (
             await db.execute(
-                select(func.count()).where(model.tenant_id == tenant_id, model.user_identifier == user_id, model.pinned_at.is_not(None))
+                select(func.count()).where(
+                    model.tenant_id == tenant_id,
+                    model.user_identifier == user_id,
+                    model.pinned_at.is_not(None),
+                )
             )
         ).scalar_one()
     return total

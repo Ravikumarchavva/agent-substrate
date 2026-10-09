@@ -742,7 +742,9 @@ async def test_a_post_from_a_replaying_run_lands_once_and_a_read_is_stable() -> 
     assert poster.seen == ["please do it"]
 
 
-async def test_a_forgotten_actor_is_rebuilt_by_its_factory_on_the_next_message() -> None:
+async def test_a_forgotten_actor_is_rebuilt_by_its_factory_on_the_next_message() -> (
+    None
+):
     built: list[int] = []
 
     def factory(actor: Actor) -> RecorderAgent:

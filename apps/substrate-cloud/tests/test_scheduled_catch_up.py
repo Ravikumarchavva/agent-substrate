@@ -84,23 +84,45 @@ async def test_ask_before_acting_is_on_by_default_and_can_be_turned_off():
         ).json()
         assert made["ask_before_acting"] is True
         task_id = made["id"]
-        off = (await c.patch(f"/scheduled/{task_id}", json={"ask_before_acting": False})).json()
+        off = (
+            await c.patch(f"/scheduled/{task_id}", json={"ask_before_acting": False})
+        ).json()
         assert off["ask_before_acting"] is False
-        assert (await c.get(f"/scheduled/{task_id}")).json()["ask_before_acting"] is False
+        assert (await c.get(f"/scheduled/{task_id}")).json()[
+            "ask_before_acting"
+        ] is False
         await c.delete(f"/scheduled/{task_id}")
 
 
 @pytest.mark.requires_postgres
 async def test_a_task_on_an_agents_conversation_runs_as_that_agent():
-    from substrate_cloud.monolith.services.scheduled_service import execute_scheduled_task
+    from substrate_cloud.monolith.services.scheduled_service import (
+        execute_scheduled_task,
+    )
 
     async with session() as c:
         app = c._transport.app
-        agent = (await c.post("/agents", json={"name": "Scout", "role": "Researcher", "instructions": "Cite sources."})).json()
+        agent = (
+            await c.post(
+                "/agents",
+                json={
+                    "name": "Scout",
+                    "role": "Researcher",
+                    "instructions": "Cite sources.",
+                },
+            )
+        ).json()
         thread = (await c.post(f"/agents/{agent['id']}/thread")).json()["id"]
         async with app.state.session_factory() as db:
             await db.execute(text("SELECT set_config('app.bypass_rls', 'on', false)"))
-            task = ScheduledTask(name="digest", prompt="Summarise the news", cron_expression="3600", kind="interval", thread_id=uuid.UUID(thread), status="active")
+            task = ScheduledTask(
+                name="digest",
+                prompt="Summarise the news",
+                cron_expression="3600",
+                kind="interval",
+                thread_id=uuid.UUID(thread),
+                status="active",
+            )
             db.add(task)
             await db.commit()
             task_id = task.id
@@ -118,10 +140,18 @@ async def test_a_task_on_an_agents_conversation_runs_as_that_agent():
         scheduled_service.assemble_agent = spy
         ctx = app.state.ctx
         try:
-            await execute_scheduled_task(task_id, session_factory=app.state.session_factory, app_state=ctx, manual=True)
+            await execute_scheduled_task(
+                task_id,
+                session_factory=app.state.session_factory,
+                app_state=ctx,
+                manual=True,
+            )
         finally:
             scheduled_service.assemble_agent = real_assemble
         profile = built["profile"]
         assert profile.name == "Scout" and profile.instructions == "Cite sources."
-        assert "scheduled task" in built["extra_instructions"] and "Summarise the news" in built["extra_instructions"]
+        assert (
+            "scheduled task" in built["extra_instructions"]
+            and "Summarise the news" in built["extra_instructions"]
+        )
         assert str(built["session_id"]) == thread

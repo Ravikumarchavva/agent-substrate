@@ -174,7 +174,9 @@ class Agent(Base):
     )
     # Its picture (an object key), and when the user pinned its chat to the top of their list.
     avatar_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    pinned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    pinned_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # The model it thinks with (``provider/name``), or ``None`` for the deployment's own.
     model: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
@@ -209,7 +211,9 @@ class Group(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     avatar_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    pinned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    pinned_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     @property
     def channel(self) -> str:
@@ -270,16 +274,28 @@ class AgentPair(Base):
         Index("ix_agent_pairs_b_last", "user_identifier", "agent_b", "last_at"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     user_identifier: Mapped[str] = mapped_column(String, nullable=False)
-    agent_a: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
-    agent_b: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    agent_a: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_b: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     # The latest line said between them, who said it (an agent id) and when; how many times they have asked each other.
-    last_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     last_text: Mapped[str] = mapped_column(String, nullable=False, default="")
-    last_sender: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    last_sender: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     exchanges: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     @property

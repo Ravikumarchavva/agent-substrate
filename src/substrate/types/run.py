@@ -119,7 +119,13 @@ class RunScope:
 
         raw_mounts = metadata.get("workspace_mounts")
         mounts = (
-            tuple(sorted((str(label), str(workspace)) for label, workspace in raw_mounts.items() if label and workspace))
+            tuple(
+                sorted(
+                    (str(label), str(workspace))
+                    for label, workspace in raw_mounts.items()
+                    if label and workspace
+                )
+            )
             if isinstance(raw_mounts, Mapping)
             else ()
         )

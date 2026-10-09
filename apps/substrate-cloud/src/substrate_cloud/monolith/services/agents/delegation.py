@@ -149,7 +149,11 @@ class AskAgentTool:
                 agent_id=target.id,
                 tags=[],
                 # Who asked, and what: the pair record is kept from these (see ``pairs``).
-                metadata_={"delegated_from": parent_thread, **({"asker_agent_id": str(asker)} if asker else {}), "request": request[:2000]},
+                metadata_={
+                    "delegated_from": parent_thread,
+                    **({"asker_agent_id": str(asker)} if asker else {}),
+                    "request": request[:2000],
+                },
                 archived_at=datetime.now(timezone.utc),
             )
             db.add(thread)
@@ -182,19 +186,43 @@ class AskAgentTool:
             },
         )
 
-        async def say(speaker: uuid.UUID, text: str, part: str, status: str, *, asked: bool = False) -> None:
+        async def say(
+            speaker: uuid.UUID,
+            text: str,
+            part: str,
+            status: str,
+            *,
+            asked: bool = False,
+        ) -> None:
             """Keep what was said in the pair's record (see ``pairs``). Recording must never be why an ask fails."""
             if asker is None:
                 return
             try:
                 async with system_session(ctx.session_factory) as db:
                     pair = await pairs.get_or_create_pair(
-                        db, ctx.runtime.store, tenant_id=tenant_id, user_id=user_id, asker=asker, target=agent_id
+                        db,
+                        ctx.runtime.store,
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        asker=asker,
+                        target=agent_id,
                     )
-                    await pairs.record(db, ctx.runtime.store, pair, speaker=speaker, text=text, thread_id=str(thread_id), part=part, status=status, asked=asked)
+                    await pairs.record(
+                        db,
+                        ctx.runtime.store,
+                        pair,
+                        speaker=speaker,
+                        text=text,
+                        thread_id=str(thread_id),
+                        part=part,
+                        status=status,
+                        asked=asked,
+                    )
                     await db.commit()
             except Exception:  # noqa: BLE001
-                logger.exception("could not record the exchange between %s and %s", asker, agent_id)
+                logger.exception(
+                    "could not record the exchange between %s and %s", asker, agent_id
+                )
 
         if asker is not None:
             await say(asker, request, "ask", "working", asked=True)
@@ -202,19 +230,36 @@ class AskAgentTool:
         run_id = await ctx.runtime.submit(delegate.id, msg, thread_id=str(thread_id))
 
         try:
-            outcome, answer, waiting = await asyncio.wait_for(_follow(ctx.runtime, run_id), timeout=WAIT_SECONDS)
+            outcome, answer, waiting = await asyncio.wait_for(
+                _follow(ctx.runtime, run_id), timeout=WAIT_SECONDS
+            )
         except asyncio.TimeoutError:
             outcome, answer, waiting = "running", "", ""
             if asker:
-                await say(agent_id, f"{profile.name} is still working on it.", "note", "working")
+                await say(
+                    agent_id,
+                    f"{profile.name} is still working on it.",
+                    "note",
+                    "working",
+                )
                 _later(_finish(ctx.runtime, run_id, say, agent_id))
 
         link = {"thread_id": str(thread_id), "agent": profile.name}
         if outcome == "done":
-            await say(agent_id, answer.strip() or "(it answered with nothing)", "answer", "done")
+            await say(
+                agent_id,
+                answer.strip() or "(it answered with nothing)",
+                "answer",
+                "done",
+            )
             return _text(answer.strip() or "(it answered with nothing)", **link)
         if outcome == "waiting":
-            await say(agent_id, f"Stopped to wait for {waiting}. {answer.strip()}".strip(), "answer", "waiting")
+            await say(
+                agent_id,
+                f"Stopped to wait for {waiting}. {answer.strip()}".strip(),
+                "answer",
+                "waiting",
+            )
             return _text(
                 f"{profile.name} stopped to wait for {waiting}. That needs you: open its conversation to answer. What it said so far: {answer.strip() or '(nothing)'}",
                 **link,
@@ -241,7 +286,13 @@ async def _follow(runtime: Any, run_id: Any) -> tuple[str, str, str]:
         elif entry.kind == RunLogKind.RUN_FAILED:
             return f"failed: {payload.get('error', 'the run failed')}", answer, ""
         elif entry.kind in (RunLogKind.APPROVAL_REQUESTED, RunLogKind.INPUT_REQUESTED):
-            return "waiting", answer, str(payload.get("tool_name") or payload.get("question") or "your input")
+            return (
+                "waiting",
+                answer,
+                str(
+                    payload.get("tool_name") or payload.get("question") or "your input"
+                ),
+            )
     return "done", answer, ""
 
 
@@ -259,13 +310,22 @@ def _later(coro: Any) -> None:
 async def _finish(runtime: Any, run_id: Any, say: Any, agent_id: uuid.UUID) -> None:
     """An answer that came after the asker stopped waiting still belongs in the pair's record: it is written when it arrives (for up to an hour)."""
     try:
-        outcome, answer, waiting = await asyncio.wait_for(_follow(runtime, run_id), timeout=LATE_SECONDS)
+        outcome, answer, waiting = await asyncio.wait_for(
+            _follow(runtime, run_id), timeout=LATE_SECONDS
+        )
     except (asyncio.TimeoutError, Exception):  # noqa: BLE001 - nothing to report to; the thread keeps the whole story
         return
     if outcome == "done":
-        await say(agent_id, answer.strip() or "(it answered with nothing)", "answer", "done")
+        await say(
+            agent_id, answer.strip() or "(it answered with nothing)", "answer", "done"
+        )
     elif outcome == "waiting":
-        await say(agent_id, f"Stopped to wait for {waiting}. {answer.strip()}".strip(), "answer", "waiting")
+        await say(
+            agent_id,
+            f"Stopped to wait for {waiting}. {answer.strip()}".strip(),
+            "answer",
+            "waiting",
+        )
     else:
         await say(agent_id, outcome, "answer", "failed")
 

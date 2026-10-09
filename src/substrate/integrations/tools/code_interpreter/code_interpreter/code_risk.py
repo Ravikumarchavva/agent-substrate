@@ -59,6 +59,7 @@ def _writes_outside_workspace(path: str) -> bool:
     resolved = posixpath.normpath(path)
     return not any(resolved.startswith(folder + "/") for folder in _WRITABLE_FOLDERS)
 
+
 # Attribute-call signatures (module.attr) that delete files.
 _DELETE_CALLS = {
     ("os", "remove"),

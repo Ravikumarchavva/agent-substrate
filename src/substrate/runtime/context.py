@@ -751,11 +751,22 @@ class RunContext:
         replay sees what the first attempt saw."""
 
         async def read() -> JsonObject:
-            entries = await self._store.channel_read(channel, after=max(-1, before - limit - 1), limit=limit)
-            return {"entries": [e.model_dump(mode="json") for e in entries if e.seq < before and e.kind in SPOKEN]}
+            entries = await self._store.channel_read(
+                channel, after=max(-1, before - limit - 1), limit=limit
+            )
+            return {
+                "entries": [
+                    e.model_dump(mode="json")
+                    for e in entries
+                    if e.seq < before and e.kind in SPOKEN
+                ]
+            }
 
         outcome = await self._journal.effect(
-            "channel.recall", {"channel": channel, "before": before}, read, idempotent=True
+            "channel.recall",
+            {"channel": channel, "before": before},
+            read,
+            idempotent=True,
         )
         return [ChannelEntry.model_validate(e) for e in outcome.value["entries"]]
 
@@ -777,8 +788,14 @@ class RunContext:
             )
             entries = await self._store.channel_read(channel, after=cursor, limit=limit)
             if entries:
-                await self._store.channel_mark_read(channel, me, entries[-1].seq)  # past the markers too: they are not for an agent to read
-            return {"entries": [e.model_dump(mode="json") for e in entries if e.kind in SPOKEN]}
+                await self._store.channel_mark_read(
+                    channel, me, entries[-1].seq
+                )  # past the markers too: they are not for an agent to read
+            return {
+                "entries": [
+                    e.model_dump(mode="json") for e in entries if e.kind in SPOKEN
+                ]
+            }
 
         outcome = await self._journal.effect(
             "channel.read", {"channel": channel}, read, idempotent=True

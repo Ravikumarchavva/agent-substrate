@@ -23,7 +23,10 @@ from substrate_cloud.monolith.routes.groups import EntryOut, entry_out, preview_
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.services.agents import pairs
-from substrate_cloud.monolith.services.agents.service import get_owned_agent, main_threads
+from substrate_cloud.monolith.services.agents.service import (
+    get_owned_agent,
+    main_threads,
+)
 from substrate_cloud.monolith.services.groups import service as groups
 from substrate_cloud.stream import project_thread_timed
 from substrate_cloud.stream.runs import last_message
@@ -103,24 +106,76 @@ async def view_chats(
 
     fetched = 0
     if kind in ("all", "agents"):
-        page = await pairs.pairs_of(db, user_id=user.sub, tenant_id=tenant, agent_id=agent.id, q=q, before=before, limit=limit)
+        page = await pairs.pairs_of(
+            db,
+            user_id=user.sub,
+            tenant_id=tenant,
+            agent_id=agent.id,
+            q=q,
+            before=before,
+            limit=limit,
+        )
         fetched = len(page)
         for pair, other in page:
-            sender = agent.name if pair.last_sender == agent.id else other.name if pair.last_sender else None
+            sender = (
+                agent.name
+                if pair.last_sender == agent.id
+                else other.name
+                if pair.last_sender
+                else None
+            )
             rows.append(
-                ViewChat(key=f"pair-{pair.id}", kind="agent", id=str(other.id), name=other.name, avatar=other.avatar_key, preview=pair.last_text, last_sender=sender, at=_aware(pair.last_at), count=pair.exchanges)
+                ViewChat(
+                    key=f"pair-{pair.id}",
+                    kind="agent",
+                    id=str(other.id),
+                    name=other.name,
+                    avatar=other.avatar_key,
+                    preview=pair.last_text,
+                    last_sender=sender,
+                    at=_aware(pair.last_at),
+                    count=pair.exchanges,
+                )
             )
 
     if kind in ("all", "groups"):
-        mine = [g for g in (await db.execute(select(Group).where(Group.id.in_(await groups.groups_of(db, agent.id)), Group.user_identifier == user.sub, Group.tenant_id == tenant))).scalars().all() if not needle or needle in g.name.casefold()]
-        heads = {h.channel: h for h in await store.channel_heads([g.channel for g in mine], groups.user_actor(user.sub))}
+        mine = [
+            g
+            for g in (
+                await db.execute(
+                    select(Group).where(
+                        Group.id.in_(await groups.groups_of(db, agent.id)),
+                        Group.user_identifier == user.sub,
+                        Group.tenant_id == tenant,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+            if not needle or needle in g.name.casefold()
+        ]
+        heads = {
+            h.channel: h
+            for h in await store.channel_heads(
+                [g.channel for g in mine], groups.user_actor(user.sub)
+            )
+        }
         for g in mine:
             latest = heads[g.channel].latest if g.channel in heads else None
             at = _aware(latest.at if latest else g.created_at)
             if before is not None and at is not None and at >= before:
                 continue
             rows.append(
-                ViewChat(key=f"group-{g.id}", kind="group", id=str(g.id), name=g.name, avatar=g.avatar_key, preview=preview_line(latest)[:140] if latest else "", at=at, count=len(await groups.group_members(db, g.id)))
+                ViewChat(
+                    key=f"group-{g.id}",
+                    kind="group",
+                    id=str(g.id),
+                    name=g.name,
+                    avatar=g.avatar_key,
+                    preview=preview_line(latest)[:140] if latest else "",
+                    at=at,
+                    count=len(await groups.group_members(db, g.id)),
+                )
             )
 
     if kind == "all":
@@ -130,24 +185,53 @@ async def view_chats(
             said = await last_message(store, str(thread.id), limit=140)
             at = _aware(said.at if said and said.at else thread.updated_at)
             # A chat nobody has said anything in is not worth a row.
-            if said is not None and (before is None or (at is not None and at < before)):
-                rows.append(ViewChat(key="you", kind="you", id=str(thread.id), name=owner, preview=said.text, at=at))
+            if said is not None and (
+                before is None or (at is not None and at < before)
+            ):
+                rows.append(
+                    ViewChat(
+                        key="you",
+                        kind="you",
+                        id=str(thread.id),
+                        name=owner,
+                        preview=said.text,
+                        at=at,
+                    )
+                )
 
-    rows.sort(key=lambda r: r.at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    rows.sort(
+        key=lambda r: r.at or datetime.min.replace(tzinfo=timezone.utc), reverse=True
+    )
     page_rows = rows[:limit]
     more = len(rows) > limit or fetched == limit
     # Who said the last line of a group, for the rows that are shown (not for every group the agent is in).
     for row in page_rows:
         if row.kind == "group":
             group = await db.get(Group, uuid.UUID(row.id))
-            head = (await store.channel_heads([group.channel], groups.user_actor(user.sub)))[0] if group else None
+            head = (
+                (
+                    await store.channel_heads(
+                        [group.channel], groups.user_actor(user.sub)
+                    )
+                )[0]
+                if group
+                else None
+            )
             if head and head.latest:
-                row.last_sender = (await groups.roster(db, group)).get(str(head.latest.sender), "Group")
-    return ViewChats(items=page_rows, next=page_rows[-1].at if more and page_rows else None)
+                row.last_sender = (await groups.roster(db, group)).get(
+                    str(head.latest.sender), "Group"
+                )
+    return ViewChats(
+        items=page_rows, next=page_rows[-1].at if more and page_rows else None
+    )
 
 
 async def _channel_page(store, channel: str, before: Optional[int], limit: int):
-    entries = await store.channel_last(channel, limit) if before is None else await store.channel_read_before(channel, before, limit)
+    entries = (
+        await store.channel_last(channel, limit)
+        if before is None
+        else await store.channel_read_before(channel, before, limit)
+    )
     return entries, bool(entries) and entries[0].seq > 0
 
 
@@ -172,7 +256,11 @@ async def view_messages(
         thread = (await main_threads(db, [agent.id])).get(agent.id)
         owner = await groups.display_name(db, tenant, user.sub)
         if thread is None:
-            return ViewMessages(chat=ViewChat(key="you", kind="you", id="", name=owner), entries=[], has_more=False)
+            return ViewMessages(
+                chat=ViewChat(key="you", kind="you", id="", name=owner),
+                entries=[],
+                has_more=False,
+            )
         said: list[EntryOut] = []
         for event, at in await project_thread_timed(store, str(thread.id)):
             text = str(getattr(event, "text", "") or "")
@@ -183,11 +271,25 @@ async def view_messages(
             else:
                 continue
             said.append(
-                EntryOut(seq=len(said), id=f"{thread.id}:{len(said)}", sender_id=who, sender=agent.name if own else owner, from_user=own, kind="message", text=text, mentions=[], at=at)
+                EntryOut(
+                    seq=len(said),
+                    id=f"{thread.id}:{len(said)}",
+                    sender_id=who,
+                    sender=agent.name if own else owner,
+                    from_user=own,
+                    kind="message",
+                    text=text,
+                    mentions=[],
+                    at=at,
+                )
             )
         end = len(said) if before is None else min(before, len(said))
         start = max(0, end - limit)
-        return ViewMessages(chat=ViewChat(key="you", kind="you", id=str(thread.id), name=owner), entries=said[start:end], has_more=start > 0)
+        return ViewMessages(
+            chat=ViewChat(key="you", kind="you", id=str(thread.id), name=owner),
+            entries=said[start:end],
+            has_more=start > 0,
+        )
 
     kind, _, raw = key.partition("-")
     try:
@@ -196,15 +298,31 @@ async def view_messages(
         raise HTTPException(404, "That conversation is not here.") from None
 
     if kind == "pair":
-        pair = await pairs.pair_for(db, user_id=user.sub, tenant_id=tenant, agent_id=agent.id, pair_id=target)
+        pair = await pairs.pair_for(
+            db, user_id=user.sub, tenant_id=tenant, agent_id=agent.id, pair_id=target
+        )
         if pair is None:
             raise HTTPException(404, "That conversation is not here.")
         other_id = pair.agent_b if pair.agent_a == agent.id else pair.agent_a
         other = await db.get(Agent, other_id)
-        names = {mine: agent.name, str(pairs.agent_actor(other_id)): other.name if other else "An agent"}
+        names = {
+            mine: agent.name,
+            str(pairs.agent_actor(other_id)): other.name if other else "An agent",
+        }
         entries, more = await _channel_page(store, pair.channel, before, limit)
-        row = ViewChat(key=key, kind="agent", id=str(other_id), name=other.name if other else "An agent", avatar=other.avatar_key if other else None, count=pair.exchanges)
-        return ViewMessages(chat=row, entries=[entry_out(e, names, mine) for e in entries], has_more=more)
+        row = ViewChat(
+            key=key,
+            kind="agent",
+            id=str(other_id),
+            name=other.name if other else "An agent",
+            avatar=other.avatar_key if other else None,
+            count=pair.exchanges,
+        )
+        return ViewMessages(
+            chat=row,
+            entries=[entry_out(e, names, mine) for e in entries],
+            has_more=more,
+        )
 
     if kind == "group":
         group = await groups.get_owned_group(db, target, user)
@@ -213,8 +331,20 @@ async def view_messages(
         names = await groups.roster(db, group)
         me = str(groups.member_actor(agent.id, group.id))
         entries, more = await _channel_page(store, group.channel, before, limit)
-        reactions = await store.channel_reactions(group.channel, [e.seq for e in entries if e.kind is EntryKind.MESSAGE])
-        row = ViewChat(key=key, kind="group", id=str(group.id), name=group.name, avatar=group.avatar_key)
-        return ViewMessages(chat=row, entries=[entry_out(e, names, me, reactions.get(e.seq)) for e in entries], has_more=more)
+        reactions = await store.channel_reactions(
+            group.channel, [e.seq for e in entries if e.kind is EntryKind.MESSAGE]
+        )
+        row = ViewChat(
+            key=key,
+            kind="group",
+            id=str(group.id),
+            name=group.name,
+            avatar=group.avatar_key,
+        )
+        return ViewMessages(
+            chat=row,
+            entries=[entry_out(e, names, me, reactions.get(e.seq)) for e in entries],
+            has_more=more,
+        )
 
     raise HTTPException(404, "That conversation is not here.")

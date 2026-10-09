@@ -22,7 +22,13 @@ from typing import TYPE_CHECKING, Any
 
 from substrate.agents.react import ReActAgent
 from substrate.agents.routed import handle
-from substrate.runtime.channel import EVERYONE, ChannelEntry, EntryKind, WakeReason, mentions_in
+from substrate.runtime.channel import (
+    EVERYONE,
+    ChannelEntry,
+    EntryKind,
+    WakeReason,
+    mentions_in,
+)
 from substrate.runtime.message import ChatPayload, DataPayload, Message
 from substrate.models import Modality
 from substrate.models.protocols import ChatModel, GenerationOptions
@@ -78,23 +84,41 @@ class AttachTool:
     )
     input_schema: dict[str, Any] = {
         "type": "object",
-        "properties": {"path": {"type": "string", "description": "The file's path in your sandbox."}},
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "The file's path in your sandbox.",
+            }
+        },
         "required": ["path"],
         "additionalProperties": False,
     }
     risk = ToolRisk.SAFE
     idempotent = True
 
-    def __init__(self, share: Callable[[Any, str], Awaitable[Mapping[str, Any]]]) -> None:
+    def __init__(
+        self, share: Callable[[Any, str], Awaitable[Mapping[str, Any]]]
+    ) -> None:
         self._share = share
 
-    async def execute(self, *, ctx: Any = None, path: str = "", **_: Any) -> ToolExecutionResult:
+    async def execute(
+        self, *, ctx: Any = None, path: str = "", **_: Any
+    ) -> ToolExecutionResult:
         try:
             attachment = await self._share(ctx, path)
         except ValueError as exc:
-            return ToolExecutionResult(name=self.name, content=[TextBlock(text=f"Could not share {path}: {exc}")], is_error=True)
+            return ToolExecutionResult(
+                name=self.name,
+                content=[TextBlock(text=f"Could not share {path}: {exc}")],
+                is_error=True,
+            )
         return ToolExecutionResult(
-            name=self.name, content=[TextBlock(text=f"{attachment.get('name', path)} will be attached to your reply.")]
+            name=self.name,
+            content=[
+                TextBlock(
+                    text=f"{attachment.get('name', path)} will be attached to your reply."
+                )
+            ],
         )
 
 
@@ -120,7 +144,12 @@ class ChannelMemberAgent(ReActAgent):
         return attachment
 
     async def _persist(  # type: ignore[override]
-        self, ctx: RunContext, session_id: str, messages: list[ChatMessage], n_loaded: int, branch_id: str
+        self,
+        ctx: RunContext,
+        session_id: str,
+        messages: list[ChatMessage],
+        n_loaded: int,
+        branch_id: str,
     ) -> None:
         """A turn is held as a draft until its answer is posted (``_keep``): a pass, or an answer that went stale, is not history. History keeps
         a note of each picture, not its bytes: every later turn loads history, and would pay for the picture again."""
@@ -148,9 +177,21 @@ class ChannelMemberAgent(ReActAgent):
             await ReActAgent._handle_message(self, ctx, msg)
             return
         for_me = msg.payload.data.get("reason", WakeReason.DIRECT) == WakeReason.DIRECT  # type: ignore[union-attr]
-        logger.info("%s: woken in %s, reason %s", self._name(str(self.id)), channel, msg.payload.data.get("reason"))  # type: ignore[union-attr]
-        if not for_me and self._config.availability is not None and not await self._config.availability():
-            logger.info("%s: busy elsewhere, leaving the channel unread", self._name(str(self.id)))
+        logger.info(
+            "%s: woken in %s, reason %s",
+            self._name(str(self.id)),
+            channel,
+            msg.payload.data.get("reason"),
+        )  # type: ignore[union-attr]
+        if (
+            not for_me
+            and self._config.availability is not None
+            and not await self._config.availability()
+        ):
+            logger.info(
+                "%s: busy elsewhere, leaving the channel unread",
+                self._name(str(self.id)),
+            )
             return  # busy elsewhere: what was said stays unread, and is there when it next looks
         if self._config.debounce_s:
             await asyncio.sleep(self._config.debounce_s)
@@ -164,15 +205,23 @@ class ChannelMemberAgent(ReActAgent):
                     return
                 if not context_loaded:
                     # What was said just before is part of what the new messages mean ("what is that place?" after a picture).
-                    earlier = await ctx.recall_channel(channel, before=entries[0].seq, limit=self._config.recall)
+                    earlier = await ctx.recall_channel(
+                        channel, before=entries[0].seq, limit=self._config.recall
+                    )
                     context_loaded = True
                 if not decided:
-                    if not await self._has_something_to_add(ctx, entries, earlier, str(msg.payload.data.get("reason"))):  # type: ignore[union-attr]
+                    if not await self._has_something_to_add(
+                        ctx, entries, earlier, str(msg.payload.data.get("reason"))
+                    ):  # type: ignore[union-attr]
                         return
                     decided = True
-                answer = (await self._think(ctx, msg, channel, entries, earlier)).strip()
+                answer = (
+                    await self._think(ctx, msg, channel, entries, earlier)
+                ).strip()
                 files = self._outbox.get(ctx.run_id, [])
-                logger.info("%s: full turn answered %r", self._name(str(self.id)), answer[:60])
+                logger.info(
+                    "%s: full turn answered %r", self._name(str(self.id)), answer[:60]
+                )
                 if (not answer or PASS in answer) and not files:
                     return
                 text = "" if PASS in answer else answer
@@ -191,26 +240,43 @@ class ChannelMemberAgent(ReActAgent):
             self._drafts.pop(ctx.run_id, None)
 
     def _line(self, e: ChannelEntry) -> str:
-        to = f" (to {', '.join('everyone' if a == EVERYONE else self._name(a) for a in e.mentions)})" if e.mentions else ""
-        shared = "".join(f" [shared {a.get('name')}]" for a in e.data.get("attachments", []))
+        to = (
+            f" (to {', '.join('everyone' if a == EVERYONE else self._name(a) for a in e.mentions)})"
+            if e.mentions
+            else ""
+        )
+        shared = "".join(
+            f" [shared {a.get('name')}]" for a in e.data.get("attachments", [])
+        )
         return f"#{e.seq} {self._name(str(e.sender))}{to}: {e.text}{shared}"
 
     async def _has_something_to_add(
-        self, ctx: RunContext, entries: list[ChannelEntry], earlier: list[ChannelEntry], reason: str
+        self,
+        ctx: RunContext,
+        entries: list[ChannelEntry],
+        earlier: list[ChannelEntry],
+        reason: str,
     ) -> bool:
         """The quick, cheap look: is there anything here this member should speak to? Only for what is not addressed to it."""
         assert self._config.triage is not None
         me = self._name(str(self.id))
         roster = ", ".join(
-            f"{name} ({self._config.roles[name]})" if self._config.roles.get(name) else name for name in self._config.names.values()
+            f"{name} ({self._config.roles[name]})"
+            if self._config.roles.get(name)
+            else name
+            for name in self._config.names.values()
         )
         following = (
             "You were part of this conversation a moment ago: continue it if what was just said follows on from it."
             if reason == WakeReason.ENGAGED
             else "Nobody addressed you by name."
         )
-        digest = "\n".join(self._line(e) for e in entries if e.kind is EntryKind.MESSAGE)
-        before = "\n".join(self._line(e) for e in earlier if e.kind is EntryKind.MESSAGE)
+        digest = "\n".join(
+            self._line(e) for e in entries if e.kind is EntryKind.MESSAGE
+        )
+        before = "\n".join(
+            self._line(e) for e in earlier if e.kind is EntryKind.MESSAGE
+        )
         prompt = (
             f"You are {me}, in a group chat with: {roster}.\n{following} Decide whether to reply to the NEW messages below.\n"
             "SPEAK if a new message asks a question or makes a request that nobody has answered since it was sent and that you are able to help "
@@ -221,15 +287,29 @@ class ChannelMemberAgent(ReActAgent):
         )
         response = await ctx.llm(
             [ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])],
-            options=GenerationOptions(system_instructions="You decide quickly whether to join a conversation."),
+            options=GenerationOptions(
+                system_instructions="You decide quickly whether to join a conversation."
+            ),
             client=self._config.triage,
         )
         verdict = response.text.strip()
-        logger.info("%s: quick look (%s) at #%s-#%s says %r", me, reason, entries[0].seq, entries[-1].seq, verdict[:40])
+        logger.info(
+            "%s: quick look (%s) at #%s-#%s says %r",
+            me,
+            reason,
+            entries[0].seq,
+            entries[-1].seq,
+            verdict[:40],
+        )
         return verdict.upper().startswith("SPEAK")
 
     async def _think(
-        self, ctx: RunContext, wake: Message, channel: str, entries: list[ChannelEntry], earlier: list[ChannelEntry]
+        self,
+        ctx: RunContext,
+        wake: Message,
+        channel: str,
+        entries: list[ChannelEntry],
+        earlier: list[ChannelEntry],
     ) -> str:
         turn = Message(
             target=self.id,
@@ -252,13 +332,16 @@ class ChannelMemberAgent(ReActAgent):
         capabilities = getattr(self.model, "capabilities", None)
         return capabilities is not None and modality in capabilities.input_modalities
 
-    async def _digest(self, entries: list[ChannelEntry], earlier: list[ChannelEntry] = ()) -> list[ContentBlock]:  # type: ignore[assignment]
+    async def _digest(
+        self, entries: list[ChannelEntry], earlier: list[ChannelEntry] = ()
+    ) -> list[ContentBlock]:  # type: ignore[assignment]
         """What is new, as the model is shown it: the lines of text, with each picture it can see in its place. ``earlier`` is what was said
         just before, already seen by the member's quick look but not by its full turn: shown first, as context, without its pictures."""
         me = str(self.id)
         blocks: list[ContentBlock] = []
         lines: list[str] = []
         shown = 0
+
         def flush() -> None:
             if lines:
                 blocks.append(TextBlock(text="\n".join(lines)))
@@ -273,13 +356,20 @@ class ChannelMemberAgent(ReActAgent):
                 for a in e.data.get("attachments", [])
                 if str(a.get("mime") or "").startswith("image/")
             ][-max(1, self._config.max_media // 2) :]
-            can_show = self._config.media is not None and self._hears_or_sees(Modality.IMAGE)
+            can_show = self._config.media is not None and self._hears_or_sees(
+                Modality.IMAGE
+            )
             for e in earlier:
                 if e.kind is not EntryKind.MESSAGE:
                     continue
                 lines.append(self._line(e))
                 for a in e.data.get("attachments", []):
-                    if can_show and id(a) in pictures and (block := await self._config.media(a)) is not None:
+                    if (
+                        can_show
+                        and self._config.media is not None
+                        and id(a) in pictures
+                        and (block := await self._config.media(a)) is not None
+                    ):
                         flush()
                         blocks.append(block)
                         shown += 1
@@ -300,13 +390,17 @@ class ChannelMemberAgent(ReActAgent):
             re_ = f" (replying to #{e.reply_to})" if e.reply_to is not None else ""
             lines.append(f"#{e.seq} {self._name(str(e.sender))}{re_}{to}: {e.text}")
             for a in e.data.get("attachments", []):
-                lines.append(f"    (attached: {a.get('name')}, {a.get('size', 0)} bytes)")
+                lines.append(
+                    f"    (attached: {a.get('name')}, {a.get('size', 0)} bytes)"
+                )
                 mime = str(a.get("mime") or "")
                 if mime.startswith("image/") and self._config.media is not None:
                     if not self._hears_or_sees(Modality.IMAGE):
                         lines.append("    (a picture: you cannot see it)")
                     elif shown >= self._config.max_media:
-                        lines.append("    (a picture: not shown, there are too many in this message)")
+                        lines.append(
+                            "    (a picture: not shown, there are too many in this message)"
+                        )
                     elif (block := await self._config.media(a)) is not None:
                         flush()
                         blocks.append(block)
@@ -320,7 +414,9 @@ class ChannelMemberAgent(ReActAgent):
                         lines.append("    (a voice note that could not be transcribed)")
                 elif a.get("excerpt"):
                     more = " [only the start is shown]" if a.get("truncated") else ""
-                    body = "\n".join("    | " + row for row in str(a["excerpt"]).splitlines())
+                    body = "\n".join(
+                        "    | " + row for row in str(a["excerpt"]).splitlines()
+                    )
                     lines.append(f"    contents of {a.get('name')}{more}:\n{body}")
                 else:
                     lines.append("    (no text could be read from it)")
@@ -337,10 +433,19 @@ def _without_media(message: ChatMessage) -> ChatMessage:
     if not any(isinstance(b, MediaBlock) for b in message.content):
         return message
     content = [
-        TextBlock(text=f"[{b.type} shared: {b.filename or 'unnamed'}]") if isinstance(b, MediaBlock) else b
+        TextBlock(text=f"[{b.type} shared: {b.filename or 'unnamed'}]")
+        if isinstance(b, MediaBlock)
+        else b
         for b in message.content
     ]
     return message.model_copy(update={"content": content})
 
 
-__all__ = ["AttachTool", "ChannelMemberAgent", "ChannelMemberConfig", "MediaLoader", "PASS", "Publisher"]
+__all__ = [
+    "AttachTool",
+    "ChannelMemberAgent",
+    "ChannelMemberConfig",
+    "MediaLoader",
+    "PASS",
+    "Publisher",
+]

@@ -69,14 +69,20 @@ def _is_main() -> Any:
 
 def is_agent_chat(thread: Thread) -> bool:
     """Whether this is the conversation an agent lives in (not a task it was asked to do for someone else): it is named after the agent."""
-    return thread.agent_id is not None and not (thread.metadata_ or {}).get("delegated_from")
+    return thread.agent_id is not None and not (thread.metadata_ or {}).get(
+        "delegated_from"
+    )
 
 
 async def rename_main_thread(db: AsyncSession, agent: Agent) -> None:
     """Name the agent's conversation after the agent. Its rename is the only writer of that title, and it does not move the chat in the list."""
     await db.execute(
         update(Thread)
-        .where(Thread.agent_id == agent.id, _is_main(), Thread.name.is_distinct_from(agent.name))
+        .where(
+            Thread.agent_id == agent.id,
+            _is_main(),
+            Thread.name.is_distinct_from(agent.name),
+        )
         .values(name=agent.name, updated_at=Thread.updated_at)
     )
 
@@ -108,7 +114,9 @@ async def ensure_main_thread(
     """The agent's conversation, made the first time it is opened: talking to an agent is one continuing chat, like a contact, not a pile of sessions."""
     existing = (await main_threads(db, [agent.id])).get(agent.id)
     if existing is not None:
-        if existing.name != agent.name:  # one that was titled by a client before the agent owned its name
+        if (
+            existing.name != agent.name
+        ):  # one that was titled by a client before the agent owned its name
             await rename_main_thread(db, agent)
             await db.refresh(existing)
         return existing
@@ -142,7 +150,9 @@ def workspace_id_for(thread: Thread, agent: Optional[Agent]) -> str:
     return agent.workspace_id if agent is not None else str(thread.id)
 
 
-def agent_instructions_block(agent: Agent | AgentProfile, drives: tuple[Drive, ...] = ()) -> str:
+def agent_instructions_block(
+    agent: Agent | AgentProfile, drives: tuple[Drive, ...] = ()
+) -> str:
     """What the model is told about the role it plays and where its files are, appended to the base instructions."""
     lines = [f"\n\n---\nYou are acting as **{agent.name}**."]
     if agent.role.strip():

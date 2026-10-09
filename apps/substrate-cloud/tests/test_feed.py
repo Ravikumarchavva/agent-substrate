@@ -17,15 +17,26 @@ CH = "group/g"
 
 
 def chat(names: dict[str, str] | None = None) -> Chat:
-    return Chat(group_id="g", names=names or {str(ME): "You", str(SCOUT): "Scout"}, agents=(SCOUT,))
+    return Chat(
+        group_id="g",
+        names=names or {str(ME): "You", str(SCOUT): "Scout"},
+        agents=(SCOUT,),
+    )
 
 
 async def open_channel(store: Any) -> None:
-    await store.channel_open(CH, members=[Member(agent=ME, kind=ParticipantKind.HUMAN), Member(agent=SCOUT)])
+    await store.channel_open(
+        CH, members=[Member(agent=ME, kind=ParticipantKind.HUMAN), Member(agent=SCOUT)]
+    )
 
 
 def render(entry: Any, chat: Chat) -> dict[str, Any]:
-    return {"seq": entry.seq, "text": entry.text, "sender": chat.names.get(str(entry.sender), "?"), "kind": entry.kind.value}
+    return {
+        "seq": entry.seq,
+        "text": entry.text,
+        "sender": chat.names.get(str(entry.sender), "?"),
+        "kind": entry.kind.value,
+    }
 
 
 async def never_gone() -> bool:
@@ -76,7 +87,11 @@ class Pump:
             left = end - asyncio.get_running_loop().time()
             if left <= 0:
                 break
-            got += [e for e in await self.take(1, timeout=left) if isinstance(e, dict) and e["type"] == "entry"]
+            got += [
+                e
+                for e in await self.take(1, timeout=left)
+                if isinstance(e, dict) and e["type"] == "entry"
+            ]
             if self.ended:
                 break
         return got
@@ -90,9 +105,24 @@ def start(**kwargs: Any) -> Pump:
     store = kwargs["store"]
 
     async def read_position(channel: str) -> int:
-        return min((m.cursor for m in await store.channel_members(channel) if m.kind is ParticipantKind.AGENT), default=-1)
+        return min(
+            (
+                m.cursor
+                for m in await store.channel_members(channel)
+                if m.kind is ParticipantKind.AGENT
+            ),
+            default=-1,
+        )
 
-    return Pump(feed_events(gone=never_gone, render=render, read_position=read_position, tick=0.05, **kwargs))
+    return Pump(
+        feed_events(
+            gone=never_gone,
+            render=render,
+            read_position=read_position,
+            tick=0.05,
+            **kwargs,
+        )
+    )
 
 
 # -- the hub ----------------------------------------------------------------------------------------------------------------------------
@@ -147,14 +177,18 @@ async def test_the_relay_delivers_locally_without_redis_and_over_it_when_there_i
 
     bus = Bus()
     await Relay(hub, bus).publish({"t": "entry", "channel": "g", "seq": 1})
-    assert len(bus.sent) == 1 and watcher.queue.qsize() == 1  # it went out to be heard back, not straight in
+    assert (
+        len(bus.sent) == 1 and watcher.queue.qsize() == 1
+    )  # it went out to be heard back, not straight in
 
     class Down:
         async def publish(self, channel: str, data: str) -> None:
             raise ConnectionError("redis is down")
 
     await Relay(hub, Down()).publish({"t": "entry", "channel": "g", "seq": 2})
-    assert watcher.queue.qsize() == 2  # a committed message is not lost to the people on this process
+    assert (
+        watcher.queue.qsize() == 2
+    )  # a committed message is not lost to the people on this process
 
 
 # -- the stream -------------------------------------------------------------------------------------------------------------------------
@@ -168,10 +202,15 @@ async def test_the_feed_catches_you_up_from_where_you_are_then_follows_what_is_s
         for i in range(3):
             await store.channel_append(CH, sender=SCOUT, text=f"old {i}", fresh=True)
 
-        events = start(me=ME, since={"g": 0}, store=store, hub=hub, load=lambda: _load(chat()))
+        events = start(
+            me=ME, since={"g": 0}, store=store, hub=hub, load=lambda: _load(chat())
+        )
         first = await events.take(4)
         assert [e["type"] for e in first] == ["ready", "entry", "entry", "read"]
-        assert [e["entry"]["text"] for e in first[1:3]] == ["old 1", "old 2"]  # what came after seq 0, not before
+        assert [e["entry"]["text"] for e in first[1:3]] == [
+            "old 1",
+            "old 2",
+        ]  # what came after seq 0, not before
 
         async def speak() -> None:
             await asyncio.sleep(0.1)
@@ -200,12 +239,21 @@ async def test_edits_and_reactions_arrive_as_entries_of_their_own():
         await open_channel(store)
         store.channel_observe(Relay(hub).observe)
         said = await store.channel_append(CH, sender=ME, text="lunch at 1")
-        events = start(me=ME, since={"g": said.seq}, store=store, hub=hub, load=lambda: _load(chat()))
+        events = start(
+            me=ME,
+            since={"g": said.seq},
+            store=store,
+            hub=hub,
+            load=lambda: _load(chat()),
+        )
         await events.take(2)  # ready, and how far the agents have read
         await store.channel_edit(CH, said.seq, ME, "lunch at 2")
         await store.channel_react(CH, said.seq, SCOUT, "👍")
         got = await events.entries(2)
-        assert [(e["entry"]["kind"], e["entry"]["text"]) for e in got] == [("edit", "lunch at 2"), ("reaction", "👍")]
+        assert [(e["entry"]["kind"], e["entry"]["text"]) for e in got] == [
+            ("edit", "lunch at 2"),
+            ("reaction", "👍"),
+        ]
         await events.close()
 
 
@@ -219,11 +267,15 @@ async def test_who_is_typing_is_sent_when_it_changes_and_not_while_it_stays_the_
             return [a for a in actors if a in working]
 
         store.working = fake_working  # type: ignore[method-assign]
-        events = start(me=ME, since={}, store=store, hub=hub, load=lambda: _load(chat()), ping=60)
+        events = start(
+            me=ME, since={}, store=store, hub=hub, load=lambda: _load(chat()), ping=60
+        )
         await events.take(2)  # ready, and how far the agents have read
         assert await events.take(1, timeout=0.4) == []  # nobody is, so nothing is said
         working.append(SCOUT)
-        assert await events.take(1) == [{"type": "working", "chat": "g", "names": ["Scout"]}]
+        assert await events.take(1) == [
+            {"type": "working", "chat": "g", "names": ["Scout"]}
+        ]
         assert await events.take(1, timeout=0.4) == []  # still the same: not repeated
         working.clear()
         assert await events.take(1) == [{"type": "working", "chat": "g", "names": []}]
@@ -266,11 +318,18 @@ async def test_a_change_to_your_conversations_is_announced_and_followed():
 
         events = start(me=ME, since={}, store=store, hub=hub, load=load)
         await events.take(2)
-        await store.channel_open("group/h", members=[Member(agent=ME, kind=ParticipantKind.HUMAN), Member(agent=SCOUT)])
-        theirs["group/h"] = Chat(group_id="h", names={str(ME): "You", str(SCOUT): "Scout"}, agents=(SCOUT,))
+        await store.channel_open(
+            "group/h",
+            members=[Member(agent=ME, kind=ParticipantKind.HUMAN), Member(agent=SCOUT)],
+        )
+        theirs["group/h"] = Chat(
+            group_id="h", names={str(ME): "You", str(SCOUT): "Scout"}, agents=(SCOUT,)
+        )
         hub.dispatch({"t": "chats", "user": ME.key})
         assert (await events.take(1))[0] == {"type": "chats", "chats": ["g", "h"]}
-        await store.channel_append("group/h", sender=SCOUT, text="in the new one", fresh=True)
+        await store.channel_append(
+            "group/h", sender=SCOUT, text="in the new one", fresh=True
+        )
         assert (await events.entries(1))[0]["chat"] == "h"
         await events.close()
 
@@ -279,7 +338,9 @@ async def test_a_watcher_that_fell_behind_is_told_to_resync_and_a_quiet_stream_s
     async with ephemeral_runtime() as rt:
         store, hub = rt.store, FeedHub()
         await open_channel(store)
-        events = start(me=ME, since={}, store=store, hub=hub, load=lambda: _load(chat()), ping=0.2)
+        events = start(
+            me=ME, since={}, store=store, hub=hub, load=lambda: _load(chat()), ping=0.2
+        )
         await events.take(2)
         (watcher,) = [w for ws in hub._by_user.values() for w in ws]
         watcher.overflowed = True
@@ -299,7 +360,19 @@ async def test_the_stream_ends_when_the_client_is_gone():
             checks += 1
             return checks > 2
 
-        events = Pump(feed_events(me=ME, since={}, store=store, hub=hub, load=lambda: _load(chat()), render=render, read_position=lambda c: _zero(), gone=gone, tick=0.05))
+        events = Pump(
+            feed_events(
+                me=ME,
+                since={},
+                store=store,
+                hub=hub,
+                load=lambda: _load(chat()),
+                render=render,
+                read_position=lambda c: _zero(),
+                gone=gone,
+                tick=0.05,
+            )
+        )
         got = await events.take(10, timeout=3)
         assert got[0]["type"] == "ready" and events.ended and hub.watchers() == 0
 
@@ -314,15 +387,31 @@ async def test_how_far_the_agents_have_read_is_sent_when_you_connect_and_again_o
             return []
 
         store.working = idle  # type: ignore[method-assign]
-        events = start(me=ME, since={"g": -1}, store=store, hub=hub, load=lambda: _load(chat()), ping=60)
-        assert await events.take(2) == [{"type": "ready", "chats": ["g"]}, {"type": "read", "chat": "g", "by_all": -1}]
+        events = start(
+            me=ME,
+            since={"g": -1},
+            store=store,
+            hub=hub,
+            load=lambda: _load(chat()),
+            ping=60,
+        )
+        assert await events.take(2) == [
+            {"type": "ready", "chats": ["g"]},
+            {"type": "read", "chat": "g", "by_all": -1},
+        ]
 
         said = await store.channel_append(CH, sender=ME, text="anyone?")
-        assert [e["type"] for e in await events.take(2, timeout=1)] == ["entry"]  # Scout has not read it, as before: not said again
+        assert [e["type"] for e in await events.take(2, timeout=1)] == [
+            "entry"
+        ]  # Scout has not read it, as before: not said again
 
         await store.channel_mark_read(CH, SCOUT, said.seq)
-        assert await events.take(1, timeout=0.4) == []  # nothing happened that tells the feed; it is said with the next thing
+        assert (
+            await events.take(1, timeout=0.4) == []
+        )  # nothing happened that tells the feed; it is said with the next thing
         await store.channel_append(CH, sender=SCOUT, text="here", fresh=True)
         got = await events.take(3)
-        assert [e["type"] for e in got] == ["entry", "read"] and got[1]["by_all"] >= said.seq
+        assert [e["type"] for e in got] == ["entry", "read"] and got[1][
+            "by_all"
+        ] >= said.seq
         await events.close()

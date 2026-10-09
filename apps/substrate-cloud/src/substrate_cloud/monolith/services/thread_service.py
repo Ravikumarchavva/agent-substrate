@@ -133,7 +133,10 @@ async def list_threads(
 
     # A conversation with an agent lives under that agent, not in Recents (the ones an agent was only asked to do, which sit in Archived, stay listed).
     query = query.where(
-        or_(Thread.agent_id.is_(None), Thread.metadata_["delegated_from"].astext.is_not(None))
+        or_(
+            Thread.agent_id.is_(None),
+            Thread.metadata_["delegated_from"].astext.is_not(None),
+        )
     )
 
     # Soft-deleted threads (see delete_thread) are gone for their owner but

@@ -24,7 +24,9 @@ from substrate.server.protocol.events import WireEvent
 from substrate.server.protocol.from_log import wire_from_log
 
 
-async def project_thread_timed(store: RuntimeStore, thread_id: str) -> list[tuple[WireEvent, datetime]]:
+async def project_thread_timed(
+    store: RuntimeStore, thread_id: str
+) -> list[tuple[WireEvent, datetime]]:
     """The full conversation for ``thread_id`` as an ordered wire-event list — the
     canonical history read, used by the history endpoint.
 

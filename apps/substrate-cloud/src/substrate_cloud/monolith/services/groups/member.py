@@ -35,7 +35,9 @@ from substrate_cloud.shared.settings import settings
 logger = logging.getLogger(__name__)
 
 
-def group_instructions(group_name: str, me: str, names: dict[str, str], drive: str) -> str:
+def group_instructions(
+    group_name: str, me: str, names: dict[str, str], drive: str
+) -> str:
     others = ", ".join(n for n in names.values() if n != me)
     return (
         f'\n\n---\nYou are {me}, taking part in a group chat called "{group_name}" with: {others}.\n'
@@ -61,7 +63,10 @@ def _attention(deps: Any, busy_elsewhere: list[Actor]) -> dict[str, Any]:
     async def available() -> bool:
         return not await store.working(busy_elsewhere)
 
-    return {"triage": client_for(deps, settings.GROUP_TRIAGE_MODEL or None), "availability": available}
+    return {
+        "triage": client_for(deps, settings.GROUP_TRIAGE_MODEL or None),
+        "availability": available,
+    }
 
 
 def _senses(deps: Any, sandbox: Sandbox) -> dict[str, Any]:
@@ -97,13 +102,25 @@ async def build_member(deps: Any, actor: Actor) -> Any:
         me = agent.name
         title = group.name
         drives = await drives_of(db, agent_id)
-        this_drive = next(d.label for d in drives if d.workspace_id == group.workspace_id)
+        this_drive = next(
+            d.label for d in drives if d.workspace_id == group.workspace_id
+        )
         # Its other selves: the same agent in its other groups, and in its chat with the user.
-        elsewhere = [member_actor(agent_id, d.workspace_id.removeprefix("group-")) for d in drives if d.workspace_id != group.workspace_id]
+        elsewhere = [
+            member_actor(agent_id, d.workspace_id.removeprefix("group-"))
+            for d in drives
+            if d.workspace_id != group.workspace_id
+        ]
         chat = (await main_threads(db, [agent_id])).get(agent_id)
         if chat is not None:
             elsewhere.append(Actor("assistant", str(chat.id)))
-        sandbox = Sandbox(tenant_id=profile.tenant_id, user_id=profile.user_id, home=profile.workspace_id, group=group.workspace_id, drives=drives)
+        sandbox = Sandbox(
+            tenant_id=profile.tenant_id,
+            user_id=profile.user_id,
+            home=profile.workspace_id,
+            group=group.workspace_id,
+            drives=drives,
+        )
     contacts = await contacts_for(deps, profile.tenant_id, profile.user_id, agent_id)
     permitted = profile.allowed_tools is None or TOOL_NAME in profile.allowed_tools
     return await assemble_agent(

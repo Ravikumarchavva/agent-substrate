@@ -24,7 +24,12 @@ def test_a_members_address_round_trips():
 
 
 def test_the_model_is_told_to_stay_silent_with_the_pass_token():
-    block = group_instructions("Trip", "Scout", {"user/u": "Ravi", "member/a@g": "Scout", "member/b@g": "Quill"}, "trip")
+    block = group_instructions(
+        "Trip",
+        "Scout",
+        {"user/u": "Ravi", "member/a@g": "Scout", "member/b@g": "Quill"},
+        "trip",
+    )
     assert "Ravi, Quill" in block and "[PASS]" in block and "Scout" in block
 
 
@@ -32,7 +37,9 @@ async def _wipe(tenant: str) -> None:
     async with app.state.session_factory() as db:
         await db.execute(text("SELECT set_config('app.bypass_rls', 'on', false)"))
         for table in ("groups", "agents"):
-            await db.execute(text(f"DELETE FROM {table} WHERE tenant_id = :t"), {"t": tenant})
+            await db.execute(
+                text(f"DELETE FROM {table} WHERE tenant_id = :t"), {"t": tenant}
+            )
         await db.commit()
 
 
@@ -42,18 +49,58 @@ async def test_groups_are_private_validated_and_hold_the_members_chosen():
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
             quill = (await c.post("/agents", json={"name": "Quill"})).json()
-            assert (await c.post("/groups", json={"name": "Trip", "members": []})).status_code == 422
-            assert (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": str(uuid.uuid4())}]})).status_code == 404
-            assert (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "loud"}]})).status_code == 422
+            assert (
+                await c.post("/groups", json={"name": "Trip", "members": []})
+            ).status_code == 422
+            assert (
+                await c.post(
+                    "/groups",
+                    json={"name": "Trip", "members": [{"agent_id": str(uuid.uuid4())}]},
+                )
+            ).status_code == 404
+            assert (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [{"agent_id": scout["id"], "mode": "loud"}],
+                    },
+                )
+            ).status_code == 422
 
-            made = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"]}, {"agent_id": quill["id"], "mode": "mentions"}]})).json()
-            assert {m["name"]: m["mode"] for m in made["members"]} == {"Scout": "mentions", "Quill": "mentions"}
+            made = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [
+                            {"agent_id": scout["id"]},
+                            {"agent_id": quill["id"], "mode": "mentions"},
+                        ],
+                    },
+                )
+            ).json()
+            assert {m["name"]: m["mode"] for m in made["members"]} == {
+                "Scout": "mentions",
+                "Quill": "mentions",
+            }
             assert [g["id"] for g in (await c.get("/groups")).json()] == [made["id"]]
 
-            changed = (await c.patch(f"/groups/{made['id']}/members/{quill['id']}", json={"mode": "muted"})).json()
-            assert {m["name"]: m["mode"] for m in changed["members"]}["Quill"] == "muted"
-            assert (await c.delete(f"/groups/{made['id']}/members/{quill['id']}")).status_code == 204
-            assert (await c.delete(f"/groups/{made['id']}/members/{scout['id']}")).status_code == 422  # the last one stays
+            changed = (
+                await c.patch(
+                    f"/groups/{made['id']}/members/{quill['id']}",
+                    json={"mode": "muted"},
+                )
+            ).json()
+            assert {m["name"]: m["mode"] for m in changed["members"]}[
+                "Quill"
+            ] == "muted"
+            assert (
+                await c.delete(f"/groups/{made['id']}/members/{quill['id']}")
+            ).status_code == 204
+            assert (
+                await c.delete(f"/groups/{made['id']}/members/{scout['id']}")
+            ).status_code == 422  # the last one stays
 
             assert (await c.delete(f"/groups/{made['id']}")).status_code == 204
             assert (await c.get(f"/groups/{made['id']}")).status_code == 404
@@ -69,16 +116,33 @@ async def test_contacts_are_the_callers_own_agents_and_never_the_agent_itself():
             quill = (await c.post("/agents", json={"name": "Quill"})).json()
             put = await c.put(
                 f"/agents/{scout['id']}/contacts",
-                json={"contacts": [{"agent_id": quill["id"], "note": "Edits my drafts"}, {"agent_id": scout["id"]}]},
+                json={
+                    "contacts": [
+                        {"agent_id": quill["id"], "note": "Edits my drafts"},
+                        {"agent_id": scout["id"]},
+                    ]
+                },
             )
-            assert [(x["name"], x["note"]) for x in put.json()] == [("Quill", "Edits my drafts")]
-            assert (await c.put(f"/agents/{scout['id']}/contacts", json={"contacts": [{"agent_id": str(uuid.uuid4())}]})).status_code == 404
+            assert [(x["name"], x["note"]) for x in put.json()] == [
+                ("Quill", "Edits my drafts")
+            ]
+            assert (
+                await c.put(
+                    f"/agents/{scout['id']}/contacts",
+                    json={"contacts": [{"agent_id": str(uuid.uuid4())}]},
+                )
+            ).status_code == 404
             assert len((await c.get(f"/agents/{scout['id']}/contacts")).json()) == 1
             # What it may message is its contacts and nothing else: Quill has none, and neither is the user's roster handed over.
             ctx = app.state.ctx
-            assert [a.name for a in await contacts_for(ctx, c.tenant, "u1", uuid.UUID(scout["id"]))] == ["Quill"]
+            assert [
+                a.name
+                for a in await contacts_for(ctx, c.tenant, "u1", uuid.UUID(scout["id"]))
+            ] == ["Quill"]
             assert await contacts_for(ctx, c.tenant, "u1", uuid.UUID(quill["id"])) == []
-            assert (await c.put(f"/agents/{scout['id']}/contacts", json={"contacts": []})).json() == []
+            assert (
+                await c.put(f"/agents/{scout['id']}/contacts", json={"contacts": []})
+            ).json() == []
         finally:
             await _wipe(c.tenant)
 
@@ -101,36 +165,71 @@ async def test_a_message_reaches_every_agent_and_only_one_of_two_answers():
             app.state.ctx.model_client = ScriptedModel(reply)
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
             quill = (await c.post("/agents", json={"name": "Quill"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "all"}, {"agent_id": quill["id"], "mode": "all"}]})).json()
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [
+                            {"agent_id": scout["id"], "mode": "all"},
+                            {"agent_id": quill["id"], "mode": "all"},
+                        ],
+                    },
+                )
+            ).json()
 
-            sent = (await c.post(f"/groups/{group['id']}/messages", json={"text": "Where should we go?"})).json()
+            sent = (
+                await c.post(
+                    f"/groups/{group['id']}/messages",
+                    json={"text": "Where should we go?"},
+                )
+            ).json()
             assert sent["from_user"] and sent["seq"] == 0
 
             entries = []
             for _ in range(80):
                 await asyncio.sleep(0.5)
-                entries = (await c.get(f"/groups/{group['id']}/messages")).json()["entries"]
+                entries = (await c.get(f"/groups/{group['id']}/messages")).json()[
+                    "entries"
+                ]
                 if len(entries) >= 2:
                     break
-            await asyncio.sleep(4)  # long enough for the other member to look, and to be wrong if it were going to speak
+            await asyncio.sleep(
+                4
+            )  # long enough for the other member to look, and to be wrong if it were going to speak
             entries = (await c.get(f"/groups/{group['id']}/messages")).json()["entries"]
 
             assert len(entries) == 2, entries
-            assert entries[1]["sender"] in {"Scout", "Quill"} and not entries[1]["from_user"]
+            assert (
+                entries[1]["sender"] in {"Scout", "Quill"}
+                and not entries[1]["from_user"]
+            )
             # (A server running against the same database may pick the run up first, with its own model: only who spoke is asserted.)
 
             listed = (await c.get("/groups")).json()[0]
-            assert listed["unread"] == 1 and listed["last_message"] == entries[1]["text"][:140]
-            await c.post(f"/groups/{group['id']}/read", json={"upto": entries[-1]["seq"]})
+            assert (
+                listed["unread"] == 1
+                and listed["last_message"] == entries[1]["text"][:140]
+            )
+            await c.post(
+                f"/groups/{group['id']}/read", json={"upto": entries[-1]["seq"]}
+            )
             assert (await c.get("/groups")).json()[0]["unread"] == 0
         finally:
             await _wipe(c.tenant)
 
 
 def test_the_contact_note_reaches_the_agent_that_may_ask():
-    from substrate_cloud.monolith.services.agents.delegation import AgentRef, AskAgentTool
+    from substrate_cloud.monolith.services.agents.delegation import (
+        AgentRef,
+        AskAgentTool,
+    )
 
-    tool = AskAgentTool(None, [AgentRef(uuid.uuid4(), "Quill", "Editor", "Ask before publishing")], lambda t: "")
+    tool = AskAgentTool(
+        None,
+        [AgentRef(uuid.uuid4(), "Quill", "Editor", "Ask before publishing")],
+        lambda t: "",
+    )
     assert "Quill (Editor: Ask before publishing)" in tool.description
 
 
@@ -140,15 +239,36 @@ async def test_an_agent_added_later_was_not_there_for_what_came_before():
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
             quill = (await c.post("/agents", json={"name": "Quill"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
-            await c.post(f"/groups/{group['id']}/messages", json={"text": "Secret plan: Tokyo"})
-            await c.post(f"/groups/{group['id']}/members", json={"agent_id": quill["id"], "mode": "muted"})
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [{"agent_id": scout["id"], "mode": "muted"}],
+                    },
+                )
+            ).json()
+            await c.post(
+                f"/groups/{group['id']}/messages", json={"text": "Secret plan: Tokyo"}
+            )
+            await c.post(
+                f"/groups/{group['id']}/members",
+                json={"agent_id": quill["id"], "mode": "muted"},
+            )
             store = app.state.ctx.runtime.store
-            members = {m.agent.key.split("@")[0]: m.cursor for m in await store.channel_members(f"group/{group['id']}")}
+            members = {
+                m.agent.key.split("@")[0]: m.cursor
+                for m in await store.channel_members(f"group/{group['id']}")
+            }
             assert members[quill["id"]] == 0 and members[scout["id"]] == -1
             # Changing a mode later does not skip anything it has not read.
-            await c.patch(f"/groups/{group['id']}/members/{scout['id']}", json={"mode": "all"})
-            members = {m.agent.key.split("@")[0]: m.cursor for m in await store.channel_members(f"group/{group['id']}")}
+            await c.patch(
+                f"/groups/{group['id']}/members/{scout['id']}", json={"mode": "all"}
+            )
+            members = {
+                m.agent.key.split("@")[0]: m.cursor
+                for m in await store.channel_members(f"group/{group['id']}")
+            }
             assert members[scout["id"]] == -1
         finally:
             await _wipe(c.tenant)
@@ -160,7 +280,18 @@ async def test_changes_to_a_group_or_an_agent_make_members_rebuild_and_a_deleted
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
             quill = (await c.post("/agents", json={"name": "Quill"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"]}, {"agent_id": quill["id"]}]})).json()
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [
+                            {"agent_id": scout["id"]},
+                            {"agent_id": quill["id"]},
+                        ],
+                    },
+                )
+            ).json()
             runtime = app.state.ctx.runtime
             forgotten: list[str] = []
             real = runtime.forget
@@ -168,7 +299,10 @@ async def test_changes_to_a_group_or_an_agent_make_members_rebuild_and_a_deleted
             try:
                 await c.patch(f"/agents/{quill['id']}", json={"name": "Quillian"})
                 # Scout must learn Quill's new name too, so both members are rebuilt.
-                assert {k.split("@")[0] for k in forgotten} == {scout["id"], quill["id"]}
+                assert {k.split("@")[0] for k in forgotten} == {
+                    scout["id"],
+                    quill["id"],
+                }
                 forgotten.clear()
                 await c.patch(f"/groups/{group['id']}", json={"name": "Trip 2"})
                 assert len(forgotten) == 2
@@ -176,7 +310,9 @@ async def test_changes_to_a_group_or_an_agent_make_members_rebuild_and_a_deleted
                 runtime.forget = real
             assert (await c.delete(f"/agents/{quill['id']}")).status_code == 204
             members = await runtime.store.channel_members(f"group/{group['id']}")
-            assert [m.agent.key.split("@")[0] for m in members if m.kind.value == "agent"] == [scout["id"]]
+            assert [
+                m.agent.key.split("@")[0] for m in members if m.kind.value == "agent"
+            ] == [scout["id"]]
         finally:
             await _wipe(c.tenant)
 
@@ -186,15 +322,31 @@ async def test_a_reader_waiting_for_messages_gets_one_the_moment_it_is_sent_and_
     async with session() as c:
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
-            waiting = asyncio.create_task(c.get(f"/groups/{group['id']}/messages", params={"after": -1, "wait": 3}))
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [{"agent_id": scout["id"], "mode": "muted"}],
+                    },
+                )
+            ).json()
+            waiting = asyncio.create_task(
+                c.get(
+                    f"/groups/{group['id']}/messages", params={"after": -1, "wait": 3}
+                )
+            )
             await asyncio.sleep(0.4)
             started = asyncio.get_event_loop().time()
             await c.post(f"/groups/{group['id']}/messages", json={"text": "hello"})
             body = (await asyncio.wait_for(waiting, 5)).json()
             assert [e["text"] for e in body["entries"]] == ["hello"]
             assert asyncio.get_event_loop().time() - started < 1.5
-            quiet = (await c.get(f"/groups/{group['id']}/messages", params={"after": 0, "wait": 0.2})).json()
+            quiet = (
+                await c.get(
+                    f"/groups/{group['id']}/messages", params={"after": 0, "wait": 0.2}
+                )
+            ).json()
             assert quiet["entries"] == [] and quiet["working"] == []
         finally:
             await _wipe(c.tenant)
@@ -205,14 +357,27 @@ async def test_the_groups_token_cap_is_set_validated_and_used_is_reported():
     async with session() as c:
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"]}]})).json()
+            group = (
+                await c.post(
+                    "/groups",
+                    json={"name": "Trip", "members": [{"agent_id": scout["id"]}]},
+                )
+            ).json()
             assert group["token_cap"] == 1_000_000 and group["tokens_used"] == 0
-            assert (await c.patch(f"/groups/{group['id']}", json={"token_cap": 5})).status_code == 422
-            changed = (await c.patch(f"/groups/{group['id']}", json={"token_cap": 250_000})).json()
+            assert (
+                await c.patch(f"/groups/{group['id']}", json={"token_cap": 5})
+            ).status_code == 422
+            changed = (
+                await c.patch(f"/groups/{group['id']}", json={"token_cap": 250_000})
+            ).json()
             assert changed["token_cap"] == 250_000
-            limit = await app.state.ctx.runtime.store.accounts_exhausted([f"channel:group/{group['id']}"])
+            limit = await app.state.ctx.runtime.store.accounts_exhausted(
+                [f"channel:group/{group['id']}"]
+            )
             assert limit is None
-            assert (await c.get(f"/groups/{group['id']}")).json()["token_cap"] == 250_000
+            assert (await c.get(f"/groups/{group['id']}")).json()[
+                "token_cap"
+            ] == 250_000
         finally:
             await _wipe(c.tenant)
 
@@ -222,30 +387,69 @@ async def test_files_are_uploaded_to_the_group_listed_and_attached_to_a_message_
     async with session() as c:
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
-            other = (await c.post("/groups", json={"name": "Other", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
-            up = await c.post(f"/groups/{group['id']}/files", files={"file": ("../../budget.csv", b"a,b\n1,2\n", "text/csv")})
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [{"agent_id": scout["id"], "mode": "muted"}],
+                    },
+                )
+            ).json()
+            other = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Other",
+                        "members": [{"agent_id": scout["id"], "mode": "muted"}],
+                    },
+                )
+            ).json()
+            up = await c.post(
+                f"/groups/{group['id']}/files",
+                files={"file": ("../../budget.csv", b"a,b\n1,2\n", "text/csv")},
+            )
             assert up.status_code == 201, up.text
             first = up.json()
             assert first["name"] == "budget.csv" and first["size"] == 8
             # The text of the file is read now, so the agents are shown it with the message.
             assert first["excerpt"] == "a,b\n1,2" and first["truncated"] is False
             # The same name again does not replace it.
-            second = (await c.post(f"/groups/{group['id']}/files", files={"file": ("budget.csv", b"x", "text/csv")})).json()
+            second = (
+                await c.post(
+                    f"/groups/{group['id']}/files",
+                    files={"file": ("budget.csv", b"x", "text/csv")},
+                )
+            ).json()
             assert second["name"] == "budget (2).csv"
-            assert {f["name"] for f in (await c.get(f"/groups/{group['id']}/files")).json()} == {"budget.csv", "budget (2).csv"}
+            assert {
+                f["name"] for f in (await c.get(f"/groups/{group['id']}/files")).json()
+            } == {"budget.csv", "budget (2).csv"}
             assert (await c.get(f"/groups/{other['id']}/files")).json() == []
 
-            sent = await c.post(f"/groups/{group['id']}/messages", json={"text": "", "attachments": [first]})
+            sent = await c.post(
+                f"/groups/{group['id']}/messages",
+                json={"text": "", "attachments": [first]},
+            )
             assert sent.status_code == 201, sent.text
             assert [a["name"] for a in sent.json()["attachments"]] == ["budget.csv"]
             # What the agents get to see travels in the entry itself.
-            stored = (await app.state.ctx.runtime.store.channel_read(f"group/{group['id']}"))[0]
+            stored = (
+                await app.state.ctx.runtime.store.channel_read(f"group/{group['id']}")
+            )[0]
             assert stored.data["attachments"][0]["excerpt"] == "a,b\n1,2"
             # A key from another group (or anywhere else) cannot be attached.
-            stolen = await c.post(f"/groups/{other['id']}/messages", json={"text": "hi", "attachments": [{"key": first["key"], "name": "budget.csv"}]})
+            stolen = await c.post(
+                f"/groups/{other['id']}/messages",
+                json={
+                    "text": "hi",
+                    "attachments": [{"key": first["key"], "name": "budget.csv"}],
+                },
+            )
             assert stolen.status_code == 422
-            assert (await c.post(f"/groups/{group['id']}/messages", json={"text": ""})).status_code == 422
+            assert (
+                await c.post(f"/groups/{group['id']}/messages", json={"text": ""})
+            ).status_code == 422
 
             messages = (await c.get(f"/groups/{group['id']}/messages")).json()
             assert messages["entries"][0]["attachments"][0]["key"] == first["key"]
@@ -261,9 +465,25 @@ async def test_a_list_previews_files_when_a_message_is_only_files():
     async with session() as c:
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
-            up = (await c.post(f"/groups/{group['id']}/files", files={"file": ("plan.pdf", b"%PDF-1", "application/pdf")})).json()
-            await c.post(f"/groups/{group['id']}/messages", json={"text": "", "attachments": [up]})
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [{"agent_id": scout["id"], "mode": "muted"}],
+                    },
+                )
+            ).json()
+            up = (
+                await c.post(
+                    f"/groups/{group['id']}/files",
+                    files={"file": ("plan.pdf", b"%PDF-1", "application/pdf")},
+                )
+            ).json()
+            await c.post(
+                f"/groups/{group['id']}/messages",
+                json={"text": "", "attachments": [up]},
+            )
             listed = (await c.get("/groups")).json()[0]
             assert listed["last_message"] == "📎 plan.pdf" and listed["working"] == []
         finally:
@@ -285,16 +505,46 @@ async def test_a_pdf_gets_a_first_page_preview_and_a_page_count_that_stay_out_of
     async with session() as c:
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
-            up = (await c.post(f"/groups/{group['id']}/files", files={"file": ("plan.pdf", raw.getvalue(), "application/pdf")})).json()
-            assert up["pages"] == 2 and up["preview_key"].endswith(".previews/plan.pdf.png")
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [{"agent_id": scout["id"], "mode": "muted"}],
+                    },
+                )
+            ).json()
+            up = (
+                await c.post(
+                    f"/groups/{group['id']}/files",
+                    files={"file": ("plan.pdf", raw.getvalue(), "application/pdf")},
+                )
+            ).json()
+            assert up["pages"] == 2 and up["preview_key"].endswith(
+                ".previews/plan.pdf.png"
+            )
             png = await c.get("/files/object", params={"key": up["preview_key"]})
             assert png.status_code == 200 and png.content[:4] == b"\x89PNG"
-            assert [f["name"] for f in (await c.get(f"/groups/{group['id']}/files")).json()] == ["plan.pdf"]
-            sent = (await c.post(f"/groups/{group['id']}/messages", json={"text": "", "attachments": [up]})).json()
-            assert sent["attachments"][0]["pages"] == 2 and sent["attachments"][0]["preview_key"] == up["preview_key"]
+            assert [
+                f["name"] for f in (await c.get(f"/groups/{group['id']}/files")).json()
+            ] == ["plan.pdf"]
+            sent = (
+                await c.post(
+                    f"/groups/{group['id']}/messages",
+                    json={"text": "", "attachments": [up]},
+                )
+            ).json()
+            assert (
+                sent["attachments"][0]["pages"] == 2
+                and sent["attachments"][0]["preview_key"] == up["preview_key"]
+            )
             # Text files have no picture; they show their first lines instead.
-            txt = (await c.post(f"/groups/{group['id']}/files", files={"file": ("a.txt", b"hello", "text/plain")})).json()
+            txt = (
+                await c.post(
+                    f"/groups/{group['id']}/files",
+                    files={"file": ("a.txt", b"hello", "text/plain")},
+                )
+            ).json()
             assert txt["preview_key"] is None and txt["excerpt"] == "hello"
         finally:
             await _wipe(c.tenant)
@@ -305,11 +555,27 @@ async def test_the_user_is_a_member_who_is_read_to_and_never_woken():
     async with session() as c:
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [{"agent_id": scout["id"], "mode": "muted"}],
+                    },
+                )
+            ).json()
             store = app.state.ctx.runtime.store
-            members = {m.agent.type: m for m in await store.channel_members(f"group/{group['id']}")}
-            assert members["user"].kind.value == "human" and members["user"].inbox is None
-            assert members["member"].kind.value == "agent" and members["member"].inbox is not None
+            members = {
+                m.agent.type: m
+                for m in await store.channel_members(f"group/{group['id']}")
+            }
+            assert (
+                members["user"].kind.value == "human" and members["user"].inbox is None
+            )
+            assert (
+                members["member"].kind.value == "agent"
+                and members["member"].inbox is not None
+            )
             assert await store.drain(members["user"].agent) == []
         finally:
             await _wipe(c.tenant)
@@ -320,15 +586,32 @@ async def test_unread_is_each_message_from_an_agent_after_the_users_own_read_pos
     async with session() as c:
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [{"agent_id": scout["id"], "mode": "muted"}],
+                    },
+                )
+            ).json()
             store = app.state.ctx.runtime.store
-            channel, agent = f"group/{group['id']}", member_actor(scout["id"], group["id"])
+            channel, agent = (
+                f"group/{group['id']}",
+                member_actor(scout["id"], group["id"]),
+            )
             for i in range(230):
-                await store.channel_append(channel, sender=agent, text=f"note {i}", fresh=True)
-            assert (await c.get("/groups")).json()[0]["unread"] == 230  # the old count stopped at 200
+                await store.channel_append(
+                    channel, sender=agent, text=f"note {i}", fresh=True
+                )
+            assert (await c.get("/groups")).json()[0][
+                "unread"
+            ] == 230  # the old count stopped at 200
             await c.post(f"/groups/{group['id']}/read", json={"upto": 99})
             assert (await c.get(f"/groups/{group['id']}")).json()["unread"] == 130
-            await c.post(f"/groups/{group['id']}/messages", json={"text": "back"})  # speaking is reading everything before it
+            await c.post(
+                f"/groups/{group['id']}/messages", json={"text": "back"}
+            )  # speaking is reading everything before it
             assert (await c.get(f"/groups/{group['id']}")).json()["unread"] == 0
         finally:
             await _wipe(c.tenant)
@@ -339,33 +622,72 @@ async def test_a_message_can_be_edited_reacted_to_and_deleted_by_its_sender_and_
     async with session() as c:
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [{"agent_id": scout["id"], "mode": "muted"}],
+                    },
+                )
+            ).json()
             gid = group["id"]
-            sent = (await c.post(f"/groups/{gid}/messages", json={"text": "lunch at 1"})).json()
+            sent = (
+                await c.post(f"/groups/{gid}/messages", json={"text": "lunch at 1"})
+            ).json()
             seen = sent["seq"]
 
-            edited = await c.patch(f"/groups/{gid}/messages/{sent['seq']}", json={"text": "lunch at 2"})
-            assert edited.status_code == 200 and edited.json()["kind"] == "edit" and edited.json()["reply_to"] == sent["seq"]
-            reacted = await c.put(f"/groups/{gid}/messages/{sent['seq']}/reaction", json={"emoji": "👍"})
-            assert reacted.json()["kind"] == "reaction" and reacted.json()["text"] == "👍"
+            edited = await c.patch(
+                f"/groups/{gid}/messages/{sent['seq']}", json={"text": "lunch at 2"}
+            )
+            assert (
+                edited.status_code == 200
+                and edited.json()["kind"] == "edit"
+                and edited.json()["reply_to"] == sent["seq"]
+            )
+            reacted = await c.put(
+                f"/groups/{gid}/messages/{sent['seq']}/reaction", json={"emoji": "👍"}
+            )
+            assert (
+                reacted.json()["kind"] == "reaction" and reacted.json()["text"] == "👍"
+            )
 
             # Someone who last read at the message hears about both by reading on; the message itself now says the new thing.
-            news = (await c.get(f"/groups/{gid}/messages", params={"after": seen})).json()["entries"]
+            news = (
+                await c.get(f"/groups/{gid}/messages", params={"after": seen})
+            ).json()["entries"]
             assert [e["kind"] for e in news] == ["edit", "reaction"]
-            whole = (await c.get(f"/groups/{gid}/messages", params={"after": -1})).json()["entries"]
+            whole = (
+                await c.get(f"/groups/{gid}/messages", params={"after": -1})
+            ).json()["entries"]
             first = whole[0]
             assert first["text"] == "lunch at 2" and first["edited_at"] is not None
-            assert [(r["emoji"], r["from_user"]) for r in first["reactions"]] == [("👍", True)]
+            assert [(r["emoji"], r["from_user"]) for r in first["reactions"]] == [
+                ("👍", True)
+            ]
 
-            assert (await c.put(f"/groups/{gid}/messages/{sent['seq']}/reaction", json={"emoji": ""})).status_code == 200
-            assert (await c.get(f"/groups/{gid}/messages")).json()["entries"][0]["reactions"] == []
+            assert (
+                await c.put(
+                    f"/groups/{gid}/messages/{sent['seq']}/reaction", json={"emoji": ""}
+                )
+            ).status_code == 200
+            assert (await c.get(f"/groups/{gid}/messages")).json()["entries"][0][
+                "reactions"
+            ] == []
 
             gone = await c.delete(f"/groups/{gid}/messages/{sent['seq']}")
             assert gone.json()["kind"] == "tombstone"
             first = (await c.get(f"/groups/{gid}/messages")).json()["entries"][0]
             assert first["text"] == "" and first["deleted_at"] is not None
-            assert all("lunch" not in e["text"] for e in (await c.get(f"/groups/{gid}/messages")).json()["entries"])
-            assert (await c.patch(f"/groups/{gid}/messages/{sent['seq']}", json={"text": "back"})).status_code == 404
+            assert all(
+                "lunch" not in e["text"]
+                for e in (await c.get(f"/groups/{gid}/messages")).json()["entries"]
+            )
+            assert (
+                await c.patch(
+                    f"/groups/{gid}/messages/{sent['seq']}", json={"text": "back"}
+                )
+            ).status_code == 404
         finally:
             await _wipe(c.tenant)
 
@@ -375,13 +697,38 @@ async def test_what_an_agent_said_is_not_the_users_to_edit_or_delete():
     async with session() as c:
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [{"agent_id": scout["id"], "mode": "muted"}],
+                    },
+                )
+            ).json()
             store = app.state.ctx.runtime.store
-            said = await store.channel_append(f"group/{group['id']}", sender=member_actor(scout["id"], group["id"]), text="hello", fresh=True)
-            assert (await c.patch(f"/groups/{group['id']}/messages/{said.seq}", json={"text": "hijack"})).status_code == 404
-            assert (await c.delete(f"/groups/{group['id']}/messages/{said.seq}")).status_code == 404
+            said = await store.channel_append(
+                f"group/{group['id']}",
+                sender=member_actor(scout["id"], group["id"]),
+                text="hello",
+                fresh=True,
+            )
+            assert (
+                await c.patch(
+                    f"/groups/{group['id']}/messages/{said.seq}",
+                    json={"text": "hijack"},
+                )
+            ).status_code == 404
+            assert (
+                await c.delete(f"/groups/{group['id']}/messages/{said.seq}")
+            ).status_code == 404
             # But anyone in the group may react to it.
-            assert (await c.put(f"/groups/{group['id']}/messages/{said.seq}/reaction", json={"emoji": "❤️"})).status_code == 200
+            assert (
+                await c.put(
+                    f"/groups/{group['id']}/messages/{said.seq}/reaction",
+                    json={"emoji": "❤️"},
+                )
+            ).status_code == 200
         finally:
             await _wipe(c.tenant)
 
@@ -392,8 +739,21 @@ async def test_the_double_tick_counts_only_agents_that_follow_everything_and_not
         try:
             scout = (await c.post("/agents", json={"name": "Scout"})).json()
             quiet = (await c.post("/agents", json={"name": "Quill"})).json()
-            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "all"}, {"agent_id": quiet["id"], "mode": "muted"}]})).json()
+            group = (
+                await c.post(
+                    "/groups",
+                    json={
+                        "name": "Trip",
+                        "members": [
+                            {"agent_id": scout["id"], "mode": "all"},
+                            {"agent_id": quiet["id"], "mode": "muted"},
+                        ],
+                    },
+                )
+            ).json()
             body = (await c.get(f"/groups/{group['id']}/messages")).json()
-            assert body["read_by_all"] == -1  # nothing read yet, and the person's own cursor is not counted
+            assert (
+                body["read_by_all"] == -1
+            )  # nothing read yet, and the person's own cursor is not counted
         finally:
             await _wipe(c.tenant)

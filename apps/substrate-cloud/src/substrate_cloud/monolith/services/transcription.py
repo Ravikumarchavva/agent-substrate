@@ -71,14 +71,24 @@ async def transcribe(
     prompt: str | None = None,
 ) -> str:
     """The text of a recording. Only OpenAI models transcribe; anything else raises ``TranscriptionUnavailable``."""
-    client, provider, effective_model = resolve_model_client(app_state, model, settings.STT_MODEL)
+    client, provider, effective_model = resolve_model_client(
+        app_state, model, settings.STT_MODEL
+    )
     if not isinstance(client, OpenAIClient):
-        raise TranscriptionUnavailable(f"Transcription is only supported for OpenAI models, not '{provider}'")
+        raise TranscriptionUnavailable(
+            f"Transcription is only supported for OpenAI models, not '{provider}'"
+        )
     if provider == "openrouter":
-        raise TranscriptionUnavailable("OpenRouter chat models are not supported for transcription")
+        raise TranscriptionUnavailable(
+            "OpenRouter chat models are not supported for transcription"
+        )
     try:
         return await client.transcribe(
-            audio_bytes=raw, filename=filename, model=effective_model, language=language or None, prompt=prompt or None
+            audio_bytes=raw,
+            filename=filename,
+            model=effective_model,
+            language=language or None,
+            prompt=prompt or None,
         )
     except NotImplementedError as exc:
         raise TranscriptionUnavailable(str(exc)) from exc

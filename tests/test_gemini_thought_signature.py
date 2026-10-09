@@ -14,18 +14,27 @@ SIGNATURE = b"\x00opaque-signature\xff"
 
 
 def call(**kw) -> ToolUseBlock:
-    return ToolUseBlock(call_id="c1", tool_name="calculator", arguments={"expression": "6*7"}, **kw)
+    return ToolUseBlock(
+        call_id="c1", tool_name="calculator", arguments={"expression": "6*7"}, **kw
+    )
 
 
 def test_the_signature_on_a_response_part_is_kept_under_geminis_own_key_as_text():
-    assert _extra_of(SimpleNamespace(thought_signature=SIGNATURE)) == {"gemini": {"thought_signature": base64.b64encode(SIGNATURE).decode()}}
+    assert _extra_of(SimpleNamespace(thought_signature=SIGNATURE)) == {
+        "gemini": {"thought_signature": base64.b64encode(SIGNATURE).decode()}
+    }
     assert _extra_of(SimpleNamespace(thought_signature=None)) == {}
-    assert _extra_of(SimpleNamespace()) == {}  # a part with no such field (older models)
+    assert (
+        _extra_of(SimpleNamespace()) == {}
+    )  # a part with no such field (older models)
 
 
 def test_a_replayed_call_carries_its_signature_back():
     kept = _extra_of(SimpleNamespace(thought_signature=SIGNATURE))
-    msg = ChatMessage(role=Role.ASSISTANT, content=[TextBlock(text="Let me work that out."), call(extra=kept)])
+    msg = ChatMessage(
+        role=Role.ASSISTANT,
+        content=[TextBlock(text="Let me work that out."), call(extra=kept)],
+    )
     content = _encode_assistant(msg)
     function_part = next(p for p in content.parts if p.function_call)
     assert function_part.function_call.name == "calculator"
@@ -45,5 +54,10 @@ def test_the_signature_survives_being_saved_and_loaded():
 
 def test_another_providers_extras_are_left_alone():
     # A call that came from (or was also marked by) another provider must not confuse Gemini's encoder.
-    content = _encode_assistant(ChatMessage(role=Role.ASSISTANT, content=[call(extra={"anthropic": {"signature": "abc"}})]))
+    content = _encode_assistant(
+        ChatMessage(
+            role=Role.ASSISTANT,
+            content=[call(extra={"anthropic": {"signature": "abc"}})],
+        )
+    )
     assert content.parts[0].thought_signature is None

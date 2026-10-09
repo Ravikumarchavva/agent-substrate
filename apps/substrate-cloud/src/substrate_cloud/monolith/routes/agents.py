@@ -141,7 +141,9 @@ def _known_tools(ctx: ServerDependencies) -> dict[str, str]:
 def _check_model(ctx: ServerDependencies, model: Optional[str]) -> None:
     """A model the deployment cannot call (no key for its provider) is refused when chosen, not discovered when the agent is first asked something."""
     if model and not has_credentials(ctx, model):
-        raise HTTPException(status_code=422, detail=f"This deployment has no credentials for {model}.")
+        raise HTTPException(
+            status_code=422, detail=f"This deployment has no credentials for {model}."
+        )
 
 
 def _check_tools(ctx: ServerDependencies, names: Optional[List[str]]) -> None:
@@ -309,7 +311,12 @@ async def set_avatar(
         raise HTTPException(503, "File storage is not configured.")
     try:
         agent.avatar_key = await avatar.replace(
-            store, user.tenant_id or "default", user.sub, agent.workspace_id, agent.avatar_key, await file.read(avatar.MAX_UPLOAD_BYTES + 1)
+            store,
+            user.tenant_id or "default",
+            user.sub,
+            agent.workspace_id,
+            agent.avatar_key,
+            await file.read(avatar.MAX_UPLOAD_BYTES + 1),
         )
     except avatar.AvatarError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -379,10 +386,14 @@ async def delete_agent(
         raise HTTPException(status_code=404, detail="Agent not found")
     files = ctx.files_for(user.tenant_id)
     if files is not None:
-        await delete_workspace_files(files, user.tenant_id or "default", user.sub, agent.workspace_id)
+        await delete_workspace_files(
+            files, user.tenant_id or "default", user.sub, agent.workspace_id
+        )
     group_ids = await groups_of(db, agent_id)
     if ctx.runtime is not None:
-        await pairs.delete_pairs_of(db, ctx.runtime.store, agent_id)  # what it said to other agents goes with it
+        await pairs.delete_pairs_of(
+            db, ctx.runtime.store, agent_id
+        )  # what it said to other agents goes with it
     await db.delete(agent)
     await db.commit()
     if ctx.runtime is not None:

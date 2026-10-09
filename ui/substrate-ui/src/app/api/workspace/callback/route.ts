@@ -11,7 +11,7 @@ import { getCredentialManager } from "@/lib/credentials";
 import { getSessionFromRequest } from "@/lib/session";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://127.0.0.1:8000";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(req.url);

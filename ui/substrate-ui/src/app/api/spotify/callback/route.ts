@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
   res.cookies.delete("spotify_oauth_state");
 
   // Push token to backend so it can use it for MCP tool calls and SDK
-  const backendUrl = process.env.BACKEND_API_URL ?? 'http://localhost:8000';
+  const backendUrl = process.env.BACKEND_API_URL ?? 'http://127.0.0.1:8000';
   fetch(`${backendUrl}/auth/spotify/set-token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

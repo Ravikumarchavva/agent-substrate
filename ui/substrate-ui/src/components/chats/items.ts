@@ -45,7 +45,7 @@ export function buildChatItems(agents: Agent[], groups: Group[]): ChatItem[] {
         id: a.id,
         name: a.name,
         avatar: a.avatar,
-        preview: a.last_message ?? (a.role || "No role set"),
+        preview: previewOf(a.last_message ?? "", []) || a.role || "No role set",
         typing: a.working ? [a.name] : [],
         time: a.last_active,
         unread: 0,

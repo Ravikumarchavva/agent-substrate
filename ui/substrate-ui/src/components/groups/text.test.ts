@@ -56,6 +56,7 @@ describe("group text helpers", () => {
 
   it("previews a message that is only files", () => {
     expect(previewOf("hello", [])).toBe("hello");
+    expect(previewOf("- **Sosakumenkobo** — [Michelin](https://x.test) ramen\n- Iruca", [])).toBe("Sosakumenkobo — Michelin ramen Iruca");
     expect(previewOf("", [{ name: "a.pdf" }])).toBe("📎 a.pdf");
     expect(previewOf("  ", [{ name: "a" }, { name: "b" }])).toBe("📎 2 files");
   });

@@ -1,4 +1,4 @@
-import { requestJson, requestVoid } from "./_client";
+import { API_BASE, requestJson, requestVoid } from "./_client";
 
 /** How closely a member follows the group: every message, only what is addressed to it, or only what names it. */
 export type MemberMode = "all" | "mentions" | "muted";
@@ -58,19 +58,36 @@ export interface GroupFile {
   transcript?: string | null;
 }
 
-export interface GroupEntry {
-  seq: number;
+/** One person's reaction to a message. */
+export interface Reaction {
+  emoji: string;
   sender_id: string;
   sender: string;
   from_user: boolean;
-  /** `system` is a note from the group itself (it paused), not something anyone said. */
-  kind: "message" | "system";
+}
+
+export interface GroupEntry {
+  seq: number;
+  /** The same however the entry is reached. */
+  id: string;
+  sender_id: string;
+  sender: string;
+  from_user: boolean;
+  /**
+   * `message` is something someone said and `system` a note from the group itself (it paused). `edit`, `reaction` and `tombstone` are not shown:
+   * they say what happened to the entry in `reply_to` (the new text, the emoji, a delete), and `foldEntries` applies them to it.
+   */
+  kind: "message" | "system" | "edit" | "reaction" | "tombstone";
   text: string;
   /** Names of who it addresses (`everyone` for all). */
   mentions: string[];
   reply_to: number | null;
   attachments: GroupFile[];
   at: string;
+  edited_at?: string | null;
+  /** Set when its sender took it back: the text and files are gone. */
+  deleted_at?: string | null;
+  reactions?: Reaction[];
 }
 
 export interface GroupMessages {
@@ -150,6 +167,31 @@ export const groupsApi = {
 
   async setGroupPinned(id: string, pinned: boolean): Promise<Group> {
     return requestJson<Group>(`/groups/${id}/pin`, { method: pinned ? "PUT" : "DELETE" });
+  },
+
+  /** Change what you said; the agents are not woken by it. Returns the entry that records the edit. */
+  async editGroupMessage(id: string, seq: number, text: string): Promise<GroupEntry> {
+    return requestJson<GroupEntry>(`/groups/${id}/messages/${seq}`, { method: "PATCH", body: JSON.stringify({ text }) });
+  },
+
+  /** Take back what you said, for everyone. */
+  async deleteGroupMessage(id: string, seq: number): Promise<GroupEntry> {
+    return requestJson<GroupEntry>(`/groups/${id}/messages/${seq}`, { method: "DELETE" });
+  },
+
+  /** Your one reaction to a message; an empty emoji takes it back. */
+  async reactToGroupMessage(id: string, seq: number, emoji: string): Promise<GroupEntry> {
+    return requestJson<GroupEntry>(`/groups/${id}/messages/${seq}/reaction`, { method: "PUT", body: JSON.stringify({ emoji }) });
+  },
+
+  /** The one stream with everything happening in your groups (see `lib/realtime.ts`): `since` is, per group, the last entry you hold. */
+  async openGroupFeed(since: Record<string, number>, signal: AbortSignal): Promise<Response> {
+    return fetch(`${API_BASE}/feed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ since }),
+      signal,
+    });
   },
 
   async markGroupRead(id: string, upto: number): Promise<void> {

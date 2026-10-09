@@ -126,6 +126,9 @@ select {
 .prose-chat h3 { font-size:1rem; }
 .prose-chat p  { margin-bottom:0.75em; }
 .prose-chat ul,.prose-chat ol { padding-left:1.5em; margin-bottom:0.75em; }
+.prose-chat ul { list-style: disc; }
+.prose-chat ol { list-style: decimal; }
+.prose-chat > :last-child { margin-bottom: 0; }
 .prose-chat li { margin-bottom:0.25em; }
 .prose-chat code:not(pre > code) {
   background: var(--badge-bg); border: 1px solid var(--border); border-radius:6px;
@@ -312,3 +315,10 @@ select {
   transition-duration: 0.01ms !important;
 }
 .reduce-motion .scroll-area { scroll-behavior: auto; }
+/* The faint dotted wallpaper behind every conversation, in the border colour so it follows the theme. */
+.chat-wallpaper {
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+/* A conversation with one agent fills the pane like a group chat, instead of keeping the reading column. */
+.chat-wide { --chat-width: none; }

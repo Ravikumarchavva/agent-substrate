@@ -229,101 +229,53 @@ export function AudioPlayer({ text: markdown }: AudioPlayerProps) {
     setCurrentTimeSeconds(nextTime);
   }, []);
 
-  if (hasAudio) {
-    return (
-      <div
-        className="flex min-w-0 items-center gap-2 rounded-full border border-border bg-card px-2 py-1"
-        title={`Saved speech clip at ${formatPlaybackRateLabel(playbackRate)} playback`}
-      >
-        <button
-          type="button"
-          onClick={handleClick}
-          disabled={playerState === "loading"}
-          aria-label={
-            playerState === "playing"
-              ? "Pause saved speech"
-              : playerState === "loading"
-              ? "Loading saved speech"
-              : "Play saved speech"
-          }
-          className="rounded-full p-1.5 transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-          style={{ color: playerState === "error" ? "#ef4444" : "var(--muted)" }}
-        >
-          {playerState === "loading" ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : playerState === "playing" ? (
-            <Pause className="h-3.5 w-3.5" />
-          ) : (
-            <Play className="h-3.5 w-3.5" />
-          )}
-        </button>
-
-        <input
-          type="range"
-          min={0}
-          max={durationSeconds || 0}
-          step={0.1}
-          value={Math.min(currentTimeSeconds, durationSeconds || 0)}
-          onChange={handleSeek}
-          aria-label="Seek saved speech"
-          className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-border sm:w-28"
-          style={{ accentColor: "var(--accent)" }}
-        />
-
-        <span className="min-w-[3rem] text-[10px] tabular-nums" style={{ color: "var(--muted)" }}>
-          {formatClock(currentTimeSeconds)}
-        </span>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => {
-            const rates = TTS_PLAYBACK_RATE_OPTIONS.map((o) => o.id);
-            const next = rates[(rates.indexOf(playbackRate) + 1) % rates.length];
-            writeStoredValue(TTS_PLAYBACK_RATE_STORAGE_KEY, String(next));
-          }}
-          aria-label={`Playback speed ${formatPlaybackRateLabel(playbackRate)}, change`}
-          title="Change playback speed"
-          className="w-auto px-1 text-2xs tabular-nums"
-        >
-          {formatPlaybackRateLabel(playbackRate)}
-        </Button>
-      </div>
-    );
-  }
+  // One icon in the row of message actions until it is playing; then it opens into the controls (progress, time, speed) and folds back when it ends.
+  const open = hasAudio && (playerState === "playing" || playerState === "paused" || playerState === "loading");
+  const failed = playerState === "error";
+  const label = playerState === "playing" ? "Pause" : playerState === "loading" ? "Loading audio…" : failed ? "Couldn't read that aloud: try again" : hasAudio ? "Play saved speech" : "Listen";
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={playerState === "loading"}
-      aria-label={
-        playerState === "playing"
-          ? "Pause speech"
-          : playerState === "loading"
-          ? "Loading audio…"
-          : "Play as speech"
-      }
-      title={
-        playerState === "error"
-          ? "TTS failed — click to retry"
-          : playerState === "playing"
-          ? "Pause"
-          : "Listen"
-      }
-      className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-card-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-      style={{
-        color: playerState === "error" ? "#ef4444" : "var(--muted)",
-      }}
-    >
-      {playerState === "loading" ? (
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-      ) : playerState === "playing" ? (
-        <Pause className="w-3.5 h-3.5" />
-      ) : playerState === "paused" ? (
-        <Play className="w-3.5 h-3.5" />
-      ) : (
-        <Volume2 className="w-3.5 h-3.5" />
+    <div className="flex items-center gap-1" title={hasAudio ? `Saved speech clip at ${formatPlaybackRateLabel(playbackRate)} playback` : undefined}>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={playerState === "loading"}
+        aria-label={label}
+        title={label}
+        className={`btn-icon flex h-6 w-6 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-40 ${failed ? "text-danger" : "text-muted"}`}
+      >
+        {playerState === "loading" ? <Loader2 className="animate-spin" /> : playerState === "playing" ? <Pause /> : hasAudio || playerState === "paused" ? <Play /> : <Volume2 />}
+      </button>
+      {open && (
+        <>
+          <input
+            type="range"
+            min={0}
+            max={durationSeconds || 0}
+            step={0.1}
+            value={Math.min(currentTimeSeconds, durationSeconds || 0)}
+            onChange={handleSeek}
+            aria-label="Seek saved speech"
+            className="h-1 w-20 cursor-pointer appearance-none rounded-full bg-border"
+            style={{ accentColor: "var(--accent)" }}
+          />
+          <span className="min-w-8 text-2xs tabular-nums text-muted">{formatClock(currentTimeSeconds)}</span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => {
+              const rates = TTS_PLAYBACK_RATE_OPTIONS.map((o) => o.id);
+              const next = rates[(rates.indexOf(playbackRate) + 1) % rates.length];
+              writeStoredValue(TTS_PLAYBACK_RATE_STORAGE_KEY, String(next));
+            }}
+            aria-label={`Playback speed ${formatPlaybackRateLabel(playbackRate)}, change`}
+            title="Change playback speed"
+            className="h-6 w-auto px-1 text-2xs tabular-nums"
+          >
+            {formatPlaybackRateLabel(playbackRate)}
+          </Button>
+        </>
       )}
-    </button>
+    </div>
   );
 }

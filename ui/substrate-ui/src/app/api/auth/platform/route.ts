@@ -22,7 +22,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME, createSession, deleteSessionByToken } from "@/lib/session";
 
-const PLATFORM_URL = process.env.PLATFORM_URL || "http://localhost:3000";
+const PLATFORM_URL = process.env.PLATFORM_URL || "http://127.0.0.1:3000";
 
 type PlatformSession = {
   user?: { email?: string; name?: string; image?: string };

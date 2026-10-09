@@ -106,7 +106,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ gr
             ))}
           </ul>
         )}
-        <div className="flex flex-col overflow-hidden rounded-3xl bg-card px-3.5 py-2.5 shadow-md">
+        <div className="flex flex-col overflow-hidden rounded-xl bg-card px-3 py-2 shadow-md">
           {replyTo && (
             <div className="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-accent bg-background/60 px-3 py-1.5 text-xs text-muted">
               <p className="min-w-0 flex-1 truncate">

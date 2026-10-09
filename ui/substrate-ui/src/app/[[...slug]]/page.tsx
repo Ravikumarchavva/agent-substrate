@@ -31,6 +31,13 @@ import { ModelPicker } from "@/components/ModelPicker";
 import { WaitingIndicator } from "@/components/WaitingIndicator";
 import type { SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { Button } from "@/design";
+import { Avatar } from "@/components/groups/Avatar";
+import { groupAfterEntry } from "@/components/groups/entries";
+import { groupFeed } from "@/lib/group-feed";
+import { ChatHeader } from "@/components/chats/ChatHeader";
+import { DayDivider } from "@/components/chats/DayDivider";
+import { sameDay } from "@/components/groups/text";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
 import { Message, UploadedFile, TaskList, CitationSource, Branch } from "@/types";
 import { api } from "@/lib/api";
@@ -71,7 +78,7 @@ import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { reportError } from "@/lib/report-error";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { pullPreferences, watchPreferenceChanges } from "@/lib/preferences-sync";
-import { Send, Plus, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, type LucideIcon } from "lucide-react";
+import { Send, Plus, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, SquarePen, Info, Monitor, type LucideIcon } from "lucide-react";
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "substrate:last-active-thread";
 
@@ -161,7 +168,7 @@ function ChatPageContent() {
 
   const [agents, setAgents] = useState<Agent[]>([]);
   // `/agents/<id>` is the conversation with that agent: its one thread, opened (made the first time) once the agent is known.
-  const agentChatId = agentsPanelOpen && routeState.agentId && routeState.agentId !== "new" && routeState.agentTab === null ? routeState.agentId : null;
+  const agentChatId = agentsPanelOpen && routeState.agentId && routeState.agentId !== "new" ? routeState.agentId : null;
   const [openedAgentThreads, setOpenedAgentThreads] = useState<Record<string, string>>({});
   const agentChatThreadId = agentChatId ? (agents.find((a) => a.id === agentChatId)?.thread_id ?? openedAgentThreads[agentChatId] ?? null) : null;
   const currentThreadId = routeState.threadId ?? agentChatThreadId ?? lastActiveThreadId;
@@ -349,7 +356,8 @@ function ChatPageContent() {
     (kind: "agent" | "group", id: string | null, tab?: "info") => openView(kind === "agent" ? "agents" : "groups", id ? (tab ? `${id}/${tab}` : id) : undefined),
     [openView],
   );
-  const chatSelection: ChatSelection = groupsPanelOpen ? { kind: "group", id: routeState.groupId } : agentsPanelOpen ? { kind: "agent", id: routeState.agentId, tab: routeState.agentTab } : null;
+  const handleOpenTalk = useCallback((agentId: string, otherId: string | null) => openView("agents", otherId ? `${agentId}/with/${otherId}` : agentId), [openView]);
+  const chatSelection: ChatSelection = groupsPanelOpen ? { kind: "group", id: routeState.groupId } : agentsPanelOpen ? { kind: "agent", id: routeState.agentId, tab: routeState.agentTab, with: routeState.agentWith } : null;
 
   /** Leave Scheduled/Notifications for the conversation they came from (or a given one). */
   const handleCloseView = useCallback(
@@ -414,14 +422,34 @@ function ChatPageContent() {
   useEffect(() => {
     void importLocalPins().then((found) => found && refreshChats());
   }, [refreshChats]);
-  // "typing…" and unread counts in the lists: look again every few seconds while the page is in front.
+  // Groups are told to us as they happen (the feed): a new message, who is typing, a group made or left. The list is read again when the feed
+  // (re)connects and, as a safety net, now and then; an agent's chat has no feed yet, so its "typing…" is looked for every few seconds.
+  const openGroupRef = useRef<string | null>(null);
+  openGroupRef.current = groupsPanelOpen ? routeState.groupId : null;
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (document.hidden) return;
-      refreshAgents();
-      refreshGroups();
+    if (!isAuthenticated || authLoading) return;
+    groupFeed.start();
+    const off = groupFeed.subscribe((event) => {
+      if (event.type === "ready" || event.type === "chats") refreshGroups();
+      else if (event.type === "entry") setGroups((all) => all.map((g) => (g.id === event.chat ? groupAfterEntry(g, event.entry, openGroupRef.current === g.id) : g)));
+      else if (event.type === "working") setGroups((all) => all.map((g) => (g.id === event.chat ? { ...g, working: event.names } : g)));
+    });
+    return () => {
+      off();
+      groupFeed.stop();
+    };
+  }, [isAuthenticated, authLoading, refreshGroups]);
+  useEffect(() => {
+    const agentsTimer = setInterval(() => {
+      if (!document.hidden) refreshAgents();
     }, 4000);
-    return () => clearInterval(timer);
+    const groupsTimer = setInterval(() => {
+      if (!document.hidden) refreshGroups();
+    }, 30_000);
+    return () => {
+      clearInterval(agentsTimer);
+      clearInterval(groupsTimer);
+    };
   }, [refreshAgents, refreshGroups]);
   const { attachedFiles, setAttachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleFilesPasted, handleRemoveFile, waitForAttachmentsReady } = useFileAttachments(currentThreadId, promoteThreadUrl, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
@@ -938,8 +966,9 @@ function ChatPageContent() {
 
   const editAgent = useCallback(() => {
     if (!threadAgent) return;
-    openView("agents", `${threadAgent.id}/info`);
-  }, [threadAgent, openView]);
+    // The profile opens beside the conversation, and the same button closes it.
+    openView("agents", routeState.agentTab === "info" ? threadAgent.id : `${threadAgent.id}/info`);
+  }, [threadAgent, openView, routeState.agentTab]);
 
   // Run details + ratings: ratings are per run (the unit an answer comes from), loaded with the conversation.
   const [inspectOpen, setInspectOpen] = useState(false);
@@ -1930,16 +1959,30 @@ function ChatPageContent() {
     );
   }
 
-  const chatHeader = (
+  const agentWorking = loading || !!threadAgent?.working;
+  const chatHeader = isAgentChat ? (
+    <ChatHeader
+      onBack={agentChatId ? () => handleSelectChat("agent", null) : undefined}
+      title={threadAgent?.name ?? currentThread?.name ?? ""}
+      subtitle={agentWorking ? "typing…" : (threadAgent?.role || "Agent")}
+      live={agentWorking}
+      avatar={<Avatar name={threadAgent?.name ?? currentThread?.name ?? ""} src={threadAgent?.avatar} className="size-10" />}
+    >
+      <Button variant="ghost" size="icon" aria-label="Computer: files and activity" aria-pressed={computerOpen} onClick={() => setComputerOpen((o) => !o)}>
+        <Monitor />
+      </Button>
+      {threadAgent && (
+        <Button variant="ghost" size="icon" aria-label="Agent info" aria-pressed={routeState.agentTab === "info"} onClick={editAgent}>
+          <Info />
+        </Button>
+      )}
+    </ChatHeader>
+  ) : (
             <Header
       onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
       desktopSidebarOpen={desktopSidebarOpen}
-      threadName={threadAgent ? threadAgent.name : currentThread?.name}
-      agentName={threadAgent?.name ?? (isAgentChat ? currentThread?.name : undefined)}
-      agentAvatar={threadAgent?.avatar}
-      onBack={agentChatId ? () => handleSelectChat("agent", null) : undefined}
-      onEditAgent={threadAgent ? editAgent : undefined}
-      branches={isAgentChat ? [] : branches}
+      threadName={currentThread?.name}
+      branches={branches}
       activeBranchId={activeBranchId}
       onSelectBranch={handleSelectBranch}
       onRenameBranch={handleRenameBranch}
@@ -1947,6 +1990,8 @@ function ChatPageContent() {
       computerOpen={computerOpen}
     />
   );
+  // A conversation with one agent fills the pane and has the same wallpaper as a group chat; a plain chat keeps its reading column and a plain background.
+  const agentWide = isAgentChat ? "chat-wide" : "";
   const chatArea = (
             <>
               <div
@@ -1958,7 +2003,7 @@ function ChatPageContent() {
                   // doesn't flip this back to true while the user is reading.
                   isNearBottomRef.current = distanceFromBottom < 150;
                 }}
-                className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"
+                className={`flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent ${isAgentChat ? "chat-wallpaper chat-wide" : ""}`}
               >
                 {messages.length === 0 ? (
                   isAgentChat ? (
@@ -1974,8 +2019,8 @@ function ChatPageContent() {
                   />
                   )
                 ) : (
-                  <div className="mx-auto w-full space-y-8 py-8">
-                    {messages.map((m) => {
+                  <div className={`mx-auto w-full py-8 ${isAgentChat ? "space-y-3" : "space-y-8"}`}>
+                    {messages.map((m, index) => {
                       if (m.role === "tool_approval" && m.metadata) {
                         return (
                           <div key={m.id} className="px-4 sm:px-6">
@@ -2043,8 +2088,11 @@ function ChatPageContent() {
 
                       if (m.role === "user" || m.role === "assistant") {
                         const anchoredBoards = boardsByAnchor.get(m.id);
+                        const before = messages.slice(0, index).reverse().find((x) => x.role === "user" || x.role === "assistant");
+                        const newDay = !before || !sameDay(before.timestamp.toISOString(), m.timestamp.toISOString());
                         return (
                           <React.Fragment key={m.id}>
+                            {isAgentChat && newDay && <DayDivider at={m.timestamp.toISOString()} />}
                             <MessageBubble
                               role={m.role}
                               content={m.content}
@@ -2074,6 +2122,7 @@ function ChatPageContent() {
                                 });
                               }}
                               messageId={m.id}
+                              speaker={threadAgent ? { name: threadAgent.name, avatar: threadAgent.avatar } : undefined}
                               onForkBranch={threadAgent ? undefined : handleForkFromMessage}
                               onInspect={m.role === "assistant" && currentThreadId ? () => setInspectOpen(true) : undefined}
                               onRate={
@@ -2113,7 +2162,16 @@ function ChatPageContent() {
                     {loading && !hitlPending && !messages.some((m) => m.role === "assistant" && m.id === messages[messages.length - 1]?.id) && (
                       <div className="px-4 py-2 sm:px-6">
                         <div className="mx-auto max-w-chat">
-                          <WaitingIndicator />
+                          {threadAgent ? (
+                            <div className="flex items-end gap-2">
+                              <Avatar name={threadAgent.name} src={threadAgent.avatar} className="size-8 text-xs" />
+                              <div className="rounded-xl rounded-tl-sm bg-card px-3 shadow-sm">
+                                <WaitingIndicator />
+                              </div>
+                            </div>
+                          ) : (
+                            <WaitingIndicator />
+                          )}
                         </div>
                       </div>
                     )}
@@ -2121,7 +2179,7 @@ function ChatPageContent() {
                 )}
               </div>
 
-              <div className="bg-background pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:pb-5">
+              <div className={`bg-background pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:pb-5 ${agentWide}`}>
                 <div className="mx-auto w-full max-w-chat px-3 sm:px-6">
                   {lockedReason && (
                     <div className="mb-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs text-amber-500">
@@ -2130,11 +2188,7 @@ function ChatPageContent() {
                   )}
                   <form
                     onSubmit={sendMessage}
-                    className="flex flex-col overflow-hidden rounded-[20px] px-3.5 py-2.5 sm:rounded-[24px]"
-                    style={{
-                      background: "var(--card)",
-                      boxShadow: "var(--shadow-md)",
-                    }}
+                    className="flex flex-col overflow-hidden rounded-xl bg-card px-3 py-2 shadow-md"
                   >
                     {attachedFiles.length > 0 && (
                       <div className="flex flex-wrap gap-2 pb-3 pt-1">
@@ -2175,7 +2229,7 @@ function ChatPageContent() {
                       }}
                       rows={1}
                       className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-[15px] outline-none placeholder:text-muted"
-                      placeholder={lockedReason ? "This conversation is locked" : "Ask anything"}
+                      placeholder={lockedReason ? "This conversation is locked" : threadAgent ? `Message ${threadAgent.name}` : "Ask anything"}
                       disabled={!!lockedReason}
                     />
 
@@ -2192,17 +2246,30 @@ function ChatPageContent() {
                       >
                         {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
                       </button>
+                      {/* In a messenger the microphone sits beside the paperclip, as in a group's composer. */}
+                      {isAgentChat && (
+                        <div className="rounded-full" style={{ background: "var(--card-hover)" }}>
+                          <VoiceRecorder
+                            onTranscript={(text) => setInput((prev) => (prev ? prev + " " + text : text))}
+                            disabled={loading}
+                            className="h-9 w-9"
+                          />
+                        </div>
+                      )}
 
                       {/* Right group */}
                       <div className="ml-auto flex items-center gap-1.5">
                         <ComposerLimit refreshOn={messages.length} />
-                        <ModelPicker
-                          models={CHAT_MODEL_OPTIONS}
-                          selectedModel={selectedModel}
-                          onSelectModel={(id) => { setSelectedModel(id); writeStoredValue(CHAT_MODEL_STORAGE_KEY, id); }}
-                          reasoning={effectiveReasoning(selectedModel, reasoning)}
-                          onSelectReasoning={(level) => { setReasoning(level); writeStoredValue(REASONING_STORAGE_KEY, level); }}
-                        />
+                        {/* An agent thinks with its own model (set in its profile), so there is nothing to pick here. */}
+                        {!isAgentChat && (
+                          <ModelPicker
+                            models={CHAT_MODEL_OPTIONS}
+                            selectedModel={selectedModel}
+                            onSelectModel={(id) => { setSelectedModel(id); writeStoredValue(CHAT_MODEL_STORAGE_KEY, id); }}
+                            reasoning={effectiveReasoning(selectedModel, reasoning)}
+                            onSelectReasoning={(level) => { setReasoning(level); writeStoredValue(REASONING_STORAGE_KEY, level); }}
+                          />
+                        )}
 
                         {input.trim() || (loading && !hitlPending) ? (
                           loading && !hitlPending ? (
@@ -2230,13 +2297,15 @@ function ChatPageContent() {
                           )
                         ) : (
                           <>
-                            <div className="rounded-full" style={{ background: "var(--card-hover)" }}>
-                              <VoiceRecorder
-                                onTranscript={(text) => setInput((prev) => (prev ? prev + " " + text : text))}
-                                disabled={loading}
-                                className="h-9 w-9"
-                              />
-                            </div>
+                            {!isAgentChat && (
+                              <div className="rounded-full" style={{ background: "var(--card-hover)" }}>
+                                <VoiceRecorder
+                                  onTranscript={(text) => setInput((prev) => (prev ? prev + " " + text : text))}
+                                  disabled={loading}
+                                  className="h-9 w-9"
+                                />
+                              </div>
+                            )}
                             <button
                               type="button"
                               onClick={() => setRealtimeOpen(true)}
@@ -2253,9 +2322,11 @@ function ChatPageContent() {
                   </form>
 
                   <RealtimeVoicePanel isOpen={realtimeOpen} onClose={() => setRealtimeOpen(false)} />
-                  <p className="mt-2 text-center text-xs text-muted">
-                    AI can make mistakes. Verify important information.
-                  </p>
+                  {!isAgentChat && (
+                    <p className="mt-2 text-center text-xs text-muted">
+                      AI can make mistakes. Verify important information.
+                    </p>
+                  )}
                 </div>
               </div>
             </>
@@ -2382,13 +2453,9 @@ function ChatPageContent() {
               groups={groups}
               selection={chatSelection}
               onSelect={handleSelectChat}
+              onOpenTalk={handleOpenTalk}
               onChanged={refreshChats}
-              conversation={
-                <>
-                  {chatHeader}
-                  {chatArea}
-                </>
-              }
+              conversation={{ header: chatHeader, body: chatArea }}
             />
           ) : notificationsPanelOpen ? (
             <NotificationsPanel onOpenThread={(threadId) => handleCloseView(threadId)} onChanged={() => void refreshUnread()} groups={groups} onOpenGroup={handleOpenGroup} />

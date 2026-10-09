@@ -4,7 +4,7 @@ import { streamingDispatcher } from "@/lib/streaming-dispatcher";
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   // Per-user identity from the DB-backed session (src/lib/session.ts) so the
   // agent (and the files it creates) are scoped to the same user the

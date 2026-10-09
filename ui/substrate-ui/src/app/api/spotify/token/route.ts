@@ -11,7 +11,7 @@ import { getCredentialManager } from '@/lib/credentials';
 import { prisma } from '@/lib/prisma';
 import { getSessionFromRequest } from '@/lib/session';
 
-const BACKEND_URL = process.env.BACKEND_API_URL ?? 'http://localhost:8000';
+const BACKEND_URL = process.env.BACKEND_API_URL ?? 'http://127.0.0.1:8000';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
 export async function GET(req: NextRequest) {

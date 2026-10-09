@@ -1,5 +1,7 @@
 "use client";
 
+import { Avatar } from "@/components/groups/Avatar";
+import { hueOf } from "@/components/groups/text";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -362,6 +364,8 @@ type Props = {
   rating?: -1 | 0 | 1;
   /** Open the run details for this conversation. */
   onInspect?: () => void;
+  /** Who is answering, shown above a reply in a conversation with one agent: its picture and name. */
+  speaker?: { name: string; avatar?: string | null };
 };
 
 export function MessageBubble({
@@ -384,6 +388,7 @@ export function MessageBubble({
   onRate,
   rating = 0,
   onInspect,
+  speaker,
 }: Props) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
@@ -755,6 +760,9 @@ export function MessageBubble({
   };
 
   /* ── User message: right-aligned speech bubble ── */
+  // A step that said nothing (it only called tools whose results are not worth keeping) is not a message to show in a conversation.
+  if (speaker && !isUser && !isStreaming && !safeContent && !safeReasoning && visibleToolCalls.length === 0 && imageAttachments.length === 0 && documentAttachments.length === 0) return null;
+
   if (isUser) {
     return (
       <>
@@ -775,14 +783,14 @@ export function MessageBubble({
               )}
               {safeContent && (
                 <div
-                  className="user-bubble-md overflow-hidden flex flex-col"
-                  style={{
+                  className={`user-bubble-md overflow-hidden flex flex-col ${speaker ? "rounded-xl rounded-tr-sm bg-accent/15" : ""}`}
+                  style={speaker ? undefined : {
                     background: "var(--user-bubble)",
                     borderRadius: "20px 20px 4px 20px",
                   }}
                 >
                   <div
-                    className={`px-4 pt-3 text-[15px] leading-relaxed relative ${isLongUserMessage && isCollapsed ? "max-h-[140px] overflow-hidden" : "pb-3"
+                    className={`${speaker ? "px-3 pt-2 text-sm" : "px-4 pt-3 text-[15px]"} leading-relaxed relative ${isLongUserMessage && isCollapsed ? "max-h-[140px] overflow-hidden" : speaker ? "pb-1" : "pb-3"
                       }`}
                   >
                     <ReactMarkdown
@@ -807,6 +815,7 @@ export function MessageBubble({
                       />
                     )}
                   </div>
+                  {speaker && timestamp && <p className="px-3 pb-2 text-right text-2xs text-muted">{formatTime(timestamp)}</p>}
                   {isLongUserMessage && (
                     <div className="px-4 pb-2.5 pt-1 flex justify-start">
                       <button
@@ -858,7 +867,7 @@ export function MessageBubble({
                       )}
                     </div>
                   )}
-                  {timestamp && (
+                  {timestamp && !speaker && (
                     <span className="text-[11px] text-muted select-none">
                       {formatTime(timestamp)}
                     </span>
@@ -879,7 +888,14 @@ export function MessageBubble({
       <div className="substrate-fade-up group relative px-4 sm:px-6">
         <div className="mx-auto max-w-chat">
           {/* Content column */}
-          <div className="space-y-3">
+          <div className={speaker ? "flex items-end gap-2" : undefined}>
+          {speaker && <Avatar name={speaker.name} src={speaker.avatar} className="size-8 text-xs" />}
+          <div className={speaker ? "min-w-0 max-w-[85%] space-y-2 rounded-xl rounded-tl-sm bg-card px-3 py-2 shadow-sm @3xl:max-w-[70%]" : "space-y-3"}>
+            {speaker && (
+              <p className="text-xs font-semibold" style={{ color: `hsl(${hueOf(speaker.name)} 55% 45%)` }}>
+                {speaker.name}
+              </p>
+            )}
             {/* Tool Calls — pill-style inline display */}
             {visibleToolCalls.length > 0 && (
               <div className="space-y-1.5">
@@ -1200,6 +1216,7 @@ export function MessageBubble({
 
             {/* Action buttons — fade in on hover */}
             {safeContent && (
+              <div className="flex items-center gap-0.5">
               <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                 <button
                   onClick={copyToClipboard}
@@ -1243,11 +1260,13 @@ export function MessageBubble({
                     <Activity />
                   </Button>
                 )}
-                {timestamp && (
+                {timestamp && !speaker && (
                   <span className="text-[11px] ml-1.5 text-muted">
                     {formatTime(timestamp)}
                   </span>
                 )}
+              </div>
+              {timestamp && speaker && <span className="ml-auto text-2xs text-muted">{formatTime(timestamp)}</span>}
               </div>
             )}
 
@@ -1255,6 +1274,7 @@ export function MessageBubble({
               of-completion placement as ChatGPT's. Gated on !isStreaming
               so it appears once the message stops writing, not mid-token. */}
             {role === "assistant" && safeContent && !isStreaming && <AdSlot />}
+          </div>
           </div>
         </div>
       </div>

@@ -38,8 +38,7 @@ export function NewGroup({ agents, onBack, onCreated }: Props) {
   };
 
   return (
-    <Page title="New group" subtitle="You and several of your agents in one conversation." onBack={onBack}>
-      <div className="mx-auto w-full max-w-xl space-y-6">
+    <Page title="New group" subtitle="You and several of your agents in one conversation." onBack={onBack} layout="columns">
         <Section title="Name">
           <Input value={name} maxLength={60} placeholder="Trip planning" onChange={(e) => setName(e.target.value)} aria-label="Group name" />
         </Section>
@@ -56,12 +55,11 @@ export function NewGroup({ agents, onBack, onCreated }: Props) {
             ))}
           </ul>
         </Section>
-        <div className="flex justify-end">
+        <div data-span="all" className="flex justify-end">
           <Button variant="primary" disabled={!name.trim() || chosen.length === 0 || busy} onClick={() => void create()}>
             {busy ? "Creating…" : "Create group"}
           </Button>
         </div>
-      </div>
     </Page>
   );
 }

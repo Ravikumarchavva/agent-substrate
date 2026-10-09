@@ -61,7 +61,7 @@ async function main() {
   }
 
   const port = await findAvailablePort(START_PORT);
-  const base = `http://localhost:${port}`;
+  const base = `http://127.0.0.1:${port}`;
   const nextCliPath = fileURLToPath(
     new URL("../node_modules/next/dist/bin/next", import.meta.url),
   );

@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const BACKEND_URL =
-  process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || BACKEND_URL;
 // Derive WS URL from the public HTTP backend URL
 const WS_BACKEND_URL = PUBLIC_BACKEND_URL.replace(/^http/, "ws");
@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   // without this would silently break asset loading.
   basePath: '/chat',
   // Add your own LAN IP or tunnel hostname (ngrok, etc.) here for local
-  // testing from another device — left to just localhost by default so
+  // testing from another device — left to just 127.0.0.1 by default so
   // this file doesn't ship anyone's personal dev environment.
   allowedDevOrigins: ['127.0.0.1'],
   // The page polls a few endpoints every few seconds (the lists, an open group's messages). Listing every one buries the requests that matter.
@@ -33,6 +33,13 @@ const nextConfig: NextConfig = {
   // Expose the WS backend URL to the browser
   env: {
     NEXT_PUBLIC_WS_URL: WS_BACKEND_URL,
+  },
+  // The app lives under /chat, so its own routes answer nowhere else. Send the bare addresses there (`/` and the views) instead of a 404.
+  async redirects() {
+    return [
+      { source: "/", destination: "/chat", basePath: false, permanent: false },
+      { source: "/:view(scheduled|notifications|agents|groups)/:rest*", destination: "/chat/:view/:rest*", basePath: false, permanent: false },
+    ];
   },
   async rewrites() {
     return [

@@ -1,3 +1,5 @@
+import { toSpeechText } from "@/lib/speech-text";
+
 /** A person's colour in a group, the same every time: a hue from their name, so the same agent is the same colour everywhere. */
 export function hueOf(name: string): number {
   let h = 0;
@@ -73,7 +75,8 @@ export function fileSize(bytes: number): string {
 
 /** What a chat list shows for a message: its text, or the files when there is none ("📎 budget.xlsx", "📎 3 files"). */
 export function previewOf(text: string, attachments: { name: string }[]): string {
-  if (text.trim()) return text;
+  const plain = toSpeechText(text).replace(/\s+/g, " ");
+  if (plain) return plain;
   if (attachments.length === 1) return `📎 ${attachments[0].name}`;
   return attachments.length > 1 ? `📎 ${attachments.length} files` : "";
 }

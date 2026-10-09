@@ -30,7 +30,7 @@ const WS_PROXY_URL =
     ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/chat/api/audio/realtime-ws`
     : (process.env.NEXT_PUBLIC_WS_URL
         ? `${process.env.NEXT_PUBLIC_WS_URL}/audio/realtime`
-        : "ws://localhost:8000/audio/realtime");
+        : "ws://127.0.0.1:8000/audio/realtime");
 
 export function RealtimeVoicePanel({ isOpen, onClose }: RealtimeVoicePanelProps) {
   const [sessionState, setSessionState] = useState<SessionState>("idle");

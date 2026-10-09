@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 const BACKEND_URL =
   process.env.BACKEND_API_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:8000";
+  "http://127.0.0.1:8000";
 
 async function proxyRequest(req: NextRequest, path: string[]): Promise<Response> {
   const auth = await requireUserAuthHeaderFromRequest(req);

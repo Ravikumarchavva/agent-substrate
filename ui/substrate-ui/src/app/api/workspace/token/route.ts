@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { userAuthHeader, type UserSession } from "@/lib/engine-auth";
 import { getSessionFromRequest } from "@/lib/session";
 
-const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://127.0.0.1:8000";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 interface WorkspaceTokenPayload {

@@ -1,14 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, CheckCheck, ChevronDown, Copy, PauseCircle, Reply } from "lucide-react";
-import { Button, cn, toast } from "@/design";
+import { Ban, Check, CheckCheck, ChevronDown, PauseCircle } from "lucide-react";
+import { Button, Textarea, cn, confirmAction } from "@/design";
 import type { GroupEntry } from "@/lib/api/groups";
 import { shortTime } from "@/lib/short-time";
+import { DayDivider } from "@/components/chats/DayDivider";
 import { Attachments } from "./Attachments";
 import { Avatar } from "./Avatar";
 import { Markdown } from "./Markdown";
-import { dayLabel, hueOf, previewOf, sameDay, splitMentions, typingLine } from "./text";
+import { MessageActions } from "./MessageActions";
+import { Reactions } from "./Reactions";
+import { hueOf, previewOf, sameDay, splitMentions, typingLine } from "./text";
 
 type Props = {
   entries: GroupEntry[];
@@ -20,14 +23,22 @@ type Props = {
   /** The latest entry every agent has read; your messages up to it show as seen. */
   readByAll: number;
   onReply: (entry: GroupEntry) => void;
+  onReact: (entry: GroupEntry, emoji: string) => void;
+  /** Change the text of your own message. */
+  onEdit: (entry: GroupEntry, text: string) => Promise<void>;
+  /** Take back your own message. */
+  onDelete: (entry: GroupEntry) => Promise<void>;
+  /** A conversation you may read but not take part in: no actions, no ticks. */
+  readOnly?: boolean;
 };
 
 /** What was said in the group, oldest first, in runs by the same person under day headings, kept at the end while you are at the end. */
-export function Messages({ entries, names, avatars, typing, readByAll, onReply }: Props) {
+export function Messages({ entries, names, avatars, typing, readByAll, onReply, onReact, onEdit, onDelete, readOnly = false }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
   const [atEnd, setAtEnd] = useState(true);
   const [missed, setMissed] = useState(0);
+  const [editing, setEditing] = useState<{ seq: number; text: string } | null>(null);
   const seen = useRef(entries.length);
   const bySeq = new Map(entries.map((e) => [e.seq, e]));
 
@@ -43,6 +54,15 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply }
     setMissed(0);
   }, []);
 
+  const remove = async (entry: GroupEntry) => {
+    if (!(await confirmAction({ title: "Delete this message?", description: "It is removed for everyone in the group, and cannot be brought back.", confirmLabel: "Delete", danger: true }))) return;
+    try {
+      await onDelete(entry);
+    } catch {
+      // already reported where it failed
+    }
+  };
+
   const jumpTo = (seq: number) => {
     const el = document.getElementById(`m-${seq}`);
     if (!el) return;
@@ -55,9 +75,7 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply }
     <div className="relative min-h-0 flex-1">
       <div
         ref={scroller}
-        className="scroll-area h-full"
-        // A faint dotted wallpaper, like a messenger's, in the border colour so it follows the theme.
-        style={{ backgroundImage: "radial-gradient(var(--border) 1px, transparent 1px)", backgroundSize: "22px 22px" }}
+        className="scroll-area chat-wallpaper h-full"
         onScroll={(e) => {
           const el = e.currentTarget;
           const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
@@ -70,9 +88,7 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply }
             const previous = entries[i - 1];
             const newDay = !previous || !sameDay(previous.at, entry.at);
             const heading = newDay && (
-              <p key={`d-${entry.seq}`} className="mx-auto my-3 rounded-lg bg-card px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted shadow-sm">
-                {dayLabel(entry.at)}
-              </p>
+              <DayDivider key={`d-${entry.seq}`} at={entry.at} />
             );
             if (entry.kind === "system") {
               return (
@@ -88,6 +104,9 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply }
             const startsRun = newDay || previous.kind === "system" || previous.sender_id !== entry.sender_id;
             const quoted = entry.reply_to === null ? undefined : bySeq.get(entry.reply_to);
             const seenByAll = entry.seq <= readByAll;
+            const deleted = entry.deleted_at != null;
+            const own = entry.from_user && !deleted && !readOnly;
+            const isEditing = editing?.seq === entry.seq;
             return (
               <div key={entry.seq} className="flex flex-col">
                 {heading}
@@ -96,9 +115,9 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply }
                   <div
                     id={`m-${entry.seq}`}
                     className={cn(
-                      "min-w-0 max-w-[85%] rounded-2xl px-3 py-2 transition-shadow @3xl:max-w-[70%]",
+                      "min-w-0 max-w-[85%] rounded-xl px-3 py-2 transition-shadow @3xl:max-w-[70%]",
                       entry.from_user ? "bg-accent/15 text-foreground" : "bg-card text-foreground shadow-sm",
-                      startsRun && (entry.from_user ? "rounded-tr-md" : "rounded-tl-md"),
+                      startsRun && (entry.from_user ? "rounded-tr-sm" : "rounded-tl-sm"),
                     )}
                   >
                     {!entry.from_user && startsRun && (
@@ -116,7 +135,38 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply }
                       </Button>
                     )}
                     <Attachments files={entry.attachments} />
-                    {entry.text &&
+                    {deleted && (
+                      <p className="flex items-center gap-1.5 text-sm italic text-muted">
+                        <Ban className="size-3.5" aria-hidden /> This message was deleted
+                      </p>
+                    )}
+                    {isEditing && (
+                      <div className="min-w-64 space-y-2">
+                        <Textarea
+                          autoFocus
+                          rows={2}
+                          value={editing.text}
+                          aria-label="Edit message"
+                          onChange={(e) => setEditing({ seq: entry.seq, text: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") setEditing(null);
+                            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && editing.text.trim()) {
+                              e.preventDefault();
+                              void onEdit(entry, editing.text.trim()).then(() => setEditing(null), () => undefined);
+                            }
+                          }}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+                            Cancel
+                          </Button>
+                          <Button size="sm" variant="primary" disabled={!editing.text.trim() || editing.text.trim() === entry.text} onClick={() => void onEdit(entry, editing.text.trim()).then(() => setEditing(null), () => undefined)}>
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {entry.text && !isEditing &&
                       (entry.from_user ? (
                         <p className="whitespace-pre-wrap text-sm wrap-break-word">
                           {splitMentions(entry.text, names).map((piece, k) =>
@@ -132,26 +182,22 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply }
                       ) : (
                         <Markdown>{entry.text}</Markdown>
                       ))}
+                    <Reactions reactions={entry.reactions ?? []} onReact={(emoji) => onReact(entry, emoji)} />
                     <p className="mt-0.5 flex items-center justify-end gap-1 text-2xs text-muted">
+                      {entry.edited_at && !deleted && <span>edited</span>}
                       {shortTime(entry.at)}
-                      {entry.from_user && (seenByAll ? <CheckCheck className="size-3.5 text-accent" aria-label="Seen by everyone" /> : <Check className="size-3.5" aria-label="Sent" />)}
+                      {entry.from_user && !readOnly && (seenByAll ? <CheckCheck className="size-3.5 text-accent" aria-label="Seen by everyone" /> : <Check className="size-3.5" aria-label="Sent" />)}
                     </p>
                   </div>
-                  <div className="flex shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">
-                    <Button variant="ghost" size="icon-sm" aria-label={`Reply to ${entry.sender}`} onClick={() => onReply(entry)}>
-                      <Reply />
-                    </Button>
-                    {entry.text && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Copy message"
-                        onClick={() => void navigator.clipboard.writeText(entry.text).then(() => toast.success("Copied"))}
-                      >
-                        <Copy />
-                      </Button>
-                    )}
-                  </div>
+                  {!deleted && !isEditing && !readOnly && (
+                    <MessageActions
+                      entry={entry}
+                      onReply={() => onReply(entry)}
+                      onReact={(emoji) => onReact(entry, emoji)}
+                      onEdit={own ? () => setEditing({ seq: entry.seq, text: entry.text }) : undefined}
+                      onDelete={own ? () => void remove(entry) : undefined}
+                    />
+                  )}
                 </div>
               </div>
             );

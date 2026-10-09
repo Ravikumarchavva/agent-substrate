@@ -105,13 +105,16 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
     state.sawToolResult = false;
   }
 
+  // When the event being folded was logged: what a message shows as its time, so a reloaded conversation says when things were said.
+  let when = new Date();
+
   function ensureActive(): Message {
     if (!state.active) {
       state.active = {
         id: nanoid(),
         role: "assistant",
         content: "",
-        timestamp: new Date(),
+        timestamp: when,
         sources: state.pendingSources.length ? [...state.pendingSources] : undefined,
       };
     }
@@ -119,6 +122,8 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
   }
 
   for (const event of events) {
+    const at = typeof event.at === "string" ? new Date(event.at) : null;
+    if (at && !Number.isNaN(at.getTime())) when = at;
     switch (event.type) {
       case "user.message": {
         flush();
@@ -127,7 +132,7 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
           id: nanoid(),
           role: "user",
           content: String(event.text ?? ""),
-          timestamp: new Date(),
+          timestamp: when,
           attachments: getMessageAttachments({ attachments: event.attachments }),
         });
         break;
@@ -137,6 +142,7 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
         if (state.sawToolResult) flush();
         const bubble = ensureActive();
         bubble.content += String(event.text ?? "");
+        bubble.timestamp = when; // a reply is stamped when it finished, as a messenger does
         break;
       }
 
@@ -164,7 +170,7 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
         if (event.tool_name === "manage_tasks") break;
         if (event.tool_name === "ask_human") {
           const output = typeof event.output === "string" ? event.output : "";
-          const card = rebuildHitlCard(output, new Date());
+          const card = rebuildHitlCard(output, when);
           if (card) {
             flush();
             messages.push(card);

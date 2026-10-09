@@ -14,6 +14,17 @@ describe("foldWireEventsToMessages", () => {
     expect(messages[1]).toMatchObject({ role: "assistant", content: "hi there" });
   });
 
+  it("stamps each message with when it was logged, not when it was loaded", () => {
+    const messages = foldWireEventsToMessages([
+      { type: "user.message", text: "hello", at: "2026-10-05T09:00:00Z" },
+      { type: "text.delta", text: "hi ", at: "2026-10-05T09:00:03Z" },
+      { type: "text.delta", text: "there", at: "2026-10-05T09:00:05Z" },
+    ]);
+
+    expect(messages[0].timestamp.toISOString()).toBe("2026-10-05T09:00:00.000Z");
+    expect(messages[1].timestamp.toISOString()).toBe("2026-10-05T09:00:05.000Z");
+  });
+
   it("attaches a tool call + result to its own bubble, ahead of the final answer", () => {
     // Matches live streaming exactly (see page.tsx: "Agent will continue
     // after tool execution — next text should go into a new bubble"): the

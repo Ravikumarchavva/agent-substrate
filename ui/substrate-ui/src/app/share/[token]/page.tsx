@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   referrer: "no-referrer",
 };
 
-const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export default async function SharedPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;

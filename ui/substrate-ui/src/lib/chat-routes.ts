@@ -33,6 +33,7 @@ export function isSettingsTab(value: string | null): value is SettingsTab {
  *   /settings             → { threadId: null, settingsTab: "general" }
  *   /settings/<tab>       → { threadId: null, settingsTab: <tab> }
  *   /agents/<id>          → the conversation with that agent; /agents/<id>/info is its profile
+ *   /agents/<id>/with/<other> → what that agent and another said to each other (read-only)
  */
 export type ChatView = "scheduled" | "notifications" | "agents" | "groups";
 
@@ -49,12 +50,14 @@ export function parseChatPath(pathname: string): {
   agentId: string | null;
   /** `info` when its profile is open (`/agents/<id>/info`) rather than the conversation with it. */
   agentTab: "info" | null;
+  /** The other agent whose conversation with this one is open, read-only (`/agents/<id>/with/<otherId>`). */
+  agentWith: string | null;
 } {
   const segments = pathname.split("/").filter(Boolean);
 
   // /scheduled or /notifications
   if (segments[0] && VIEWS.includes(segments[0])) {
-    return { threadId: null, settingsTab: null, view: segments[0] as ChatView, groupId: segments[0] === "groups" ? (segments[1] ?? null) : null, agentId: segments[0] === "agents" ? (segments[1] ?? null) : null, agentTab: segments[0] === "agents" && segments[2] === "info" ? "info" : null };
+    return { threadId: null, settingsTab: null, view: segments[0] as ChatView, groupId: segments[0] === "groups" ? (segments[1] ?? null) : null, agentId: segments[0] === "agents" ? (segments[1] ?? null) : null, agentTab: segments[0] === "agents" && segments[2] === "info" ? "info" : null, agentWith: segments[0] === "agents" && segments[2] === "with" ? (segments[3] ?? null) : null };
   }
 
   // /settings or /settings/<tab>
@@ -68,11 +71,12 @@ export function parseChatPath(pathname: string): {
       groupId: null,
       agentId: null,
       agentTab: null,
+      agentWith: null,
     };
   }
 
   // / or /<threadId>
-  return { threadId: segments[0] ?? null, settingsTab: null, view: null, groupId: null, agentId: null, agentTab: null };
+  return { threadId: segments[0] ?? null, settingsTab: null, view: null, groupId: null, agentId: null, agentTab: null, agentWith: null };
 }
 
 /**

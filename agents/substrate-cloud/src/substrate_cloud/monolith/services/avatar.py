@@ -35,7 +35,9 @@ def render(data: bytes) -> bytes:
             if image.width * image.height > _MAX_PIXELS:
                 raise AvatarError("That picture is too large.")
             upright = ImageOps.exif_transpose(image)
-            square = ImageOps.fit(upright.convert("RGBA"), (SIZE, SIZE), Image.Resampling.LANCZOS)
+            square = ImageOps.fit(
+                upright.convert("RGBA"), (SIZE, SIZE), Image.Resampling.LANCZOS
+            )
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
         raise AvatarError("That is not a picture we can read.") from exc
     out = io.BytesIO()
@@ -43,10 +45,19 @@ def render(data: bytes) -> bytes:
     return out.getvalue()
 
 
-async def replace(store: Any, tenant_id: str, user_id: str, workspace_id: str, previous: str | None, data: bytes) -> str:
+async def replace(
+    store: Any,
+    tenant_id: str,
+    user_id: str,
+    workspace_id: str,
+    previous: str | None,
+    data: bytes,
+) -> str:
     """Store the picture made from ``data`` for a workspace's owner and delete the one it replaces. Returns its key."""
     png = render(data)
-    key = workspace_avatar_key(tenant_id, user_id, workspace_id, hashlib.sha256(png).hexdigest()[:32], "png")
+    key = workspace_avatar_key(
+        tenant_id, user_id, workspace_id, hashlib.sha256(png).hexdigest()[:32], "png"
+    )
     await store.upload(key, png, content_type="image/png")
     if previous and previous != key:
         await store.delete(previous)

@@ -212,12 +212,21 @@ async def _owned(db: AsyncSession, group_id: uuid.UUID, user: AuthClaims) -> Gro
     return group
 
 
-async def _out(db: AsyncSession, store, group: Group, head: ChannelHead | None = None) -> GroupOut:
+async def _out(
+    db: AsyncSession, store, group: Group, head: ChannelHead | None = None
+) -> GroupOut:
     members = await groups.group_members(db, group.id)
     names = await groups.roster(db, group)
     mine = str(groups.user_actor(group.user_identifier))
     if head is None:
-        head = next(iter(await store.channel_heads([group.channel], groups.user_actor(group.user_identifier))), None)
+        head = next(
+            iter(
+                await store.channel_heads(
+                    [group.channel], groups.user_actor(group.user_identifier)
+                )
+            ),
+            None,
+        )
     last = head.latest if head else None
     return GroupOut(
         id=group.id,
@@ -236,7 +245,9 @@ async def _out(db: AsyncSession, store, group: Group, head: ChannelHead | None =
                 [Actor.from_str(x) for x in names if x != mine]
             )
         ],
-        tokens_used=(channel_spend := await groups.spent(store, f"channel:{group.channel}")).tokens,
+        tokens_used=(
+            channel_spend := await groups.spent(store, f"channel:{group.channel}")
+        ).tokens,
         token_cap=group.token_cap,
         budget_usd=group.budget_usd,
         cost_usd=channel_spend.cost_usd,
@@ -247,9 +258,17 @@ async def _out(db: AsyncSession, store, group: Group, head: ChannelHead | None =
 
 
 async def _member_out(store, group: Group, member, agent) -> MemberOut:
-    spend = await groups.spent(store, f"agent:{groups.member_actor(agent.id, group.id)}")
+    spend = await groups.spent(
+        store, f"agent:{groups.member_actor(agent.id, group.id)}"
+    )
     return MemberOut(
-        agent_id=agent.id, name=agent.name, role=agent.role, mode=member.mode, avatar=agent.avatar_key, tokens_used=spend.tokens, cost_usd=spend.cost_usd
+        agent_id=agent.id,
+        name=agent.name,
+        role=agent.role,
+        mode=member.mode,
+        avatar=agent.avatar_key,
+        tokens_used=spend.tokens,
+        cost_usd=spend.cost_usd,
     )
 
 
@@ -263,7 +282,9 @@ def preview_line(entry) -> str:
     return f"📎 {len(files)} files" if files else ""
 
 
-def entry_out(e, names: dict[str, str], mine: str, reactions: Optional[dict[str, str]] = None) -> EntryOut:
+def entry_out(
+    e, names: dict[str, str], mine: str, reactions: Optional[dict[str, str]] = None
+) -> EntryOut:
     return EntryOut(
         seq=e.seq,
         id=e.id,
@@ -279,7 +300,12 @@ def entry_out(e, names: dict[str, str], mine: str, reactions: Optional[dict[str,
         edited_at=e.edited_at,
         deleted_at=e.deleted_at,
         reactions=[
-            ReactionOut(emoji=emoji, sender_id=who, sender=names.get(who, "Group"), from_user=who == mine)
+            ReactionOut(
+                emoji=emoji,
+                sender_id=who,
+                sender=names.get(who, "Group"),
+                from_user=who == mine,
+            )
             for who, emoji in (reactions or {}).items()
         ],
     )
@@ -293,7 +319,12 @@ async def list_my_groups(
 ):
     store = _store(ctx)
     mine = await groups.list_groups(db, user)
-    heads = {h.channel: h for h in await store.channel_heads([g.channel for g in mine], groups.user_actor(user.sub))}
+    heads = {
+        h.channel: h
+        for h in await store.channel_heads(
+            [g.channel for g in mine], groups.user_actor(user.sub)
+        )
+    }
     return [await _out(db, store, g, heads.get(g.channel)) for g in mine]
 
 
@@ -372,7 +403,12 @@ async def set_group_avatar(
         raise HTTPException(503, "File storage is not configured.")
     try:
         group.avatar_key = await avatar.replace(
-            store, user.tenant_id or "default", user.sub, group.workspace_id, group.avatar_key, await file.read(avatar.MAX_UPLOAD_BYTES + 1)
+            store,
+            user.tenant_id or "default",
+            user.sub,
+            group.workspace_id,
+            group.avatar_key,
+            await file.read(avatar.MAX_UPLOAD_BYTES + 1),
         )
     except avatar.AvatarError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -443,14 +479,18 @@ async def delete_group(
     await _store(ctx).channel_delete(group.channel)
     files = ctx.files_for(user.tenant_id)
     if files is not None:
-        await delete_workspace_files(files, user.tenant_id or "default", user.sub, workspace_id)
+        await delete_workspace_files(
+            files, user.tenant_id or "default", user.sub, workspace_id
+        )
     await db.delete(group)
     await db.commit()
     await _chats_changed(request, user)
     if ctx.runtime is not None:
         for agent_id in members:
             ctx.runtime.forget(groups.member_actor(agent_id, group_id))
-            await groups.refresh_agent(db, ctx.runtime, agent_id)  # it has one folder fewer, and so do the others it shares groups with
+            await groups.refresh_agent(
+                db, ctx.runtime, agent_id
+            )  # it has one folder fewer, and so do the others it shares groups with
 
 
 @router.get("/groups/{group_id}/messages", response_model=MessagesOut)
@@ -477,11 +517,15 @@ async def read_messages(
         channel, after=after, limit=min(max(limit, 1), 500)
     )
     busy = await store.working([Actor.from_str(a) for a in names if a != mine])
-    reactions = await store.channel_reactions(channel, [e.seq for e in entries if e.kind is EntryKind.MESSAGE])
+    reactions = await store.channel_reactions(
+        channel, [e.seq for e in entries if e.kind is EntryKind.MESSAGE]
+    )
     # What the page has reached the user's device: the second tick for the others' side of a person-to-person chat, and the base for
     # "delivered" generally.
     if entries:
-        await store.channel_mark_delivered(channel, groups.user_actor(group.user_identifier), entries[-1].seq)
+        await store.channel_mark_delivered(
+            channel, groups.user_actor(group.user_identifier), entries[-1].seq
+        )
     return MessagesOut(
         entries=[entry_out(e, names, mine, reactions.get(e.seq)) for e in entries],
         latest=entries[-1].seq if entries else after,
@@ -526,7 +570,9 @@ async def upload_group_file(
     if (file.content_type or "").startswith("audio/"):
         # A recording is understood by what it says. If it cannot be transcribed it is shared all the same, as a file.
         try:
-            saved["transcript"] = (await transcription.transcribe(ctx, data, file.filename or "audio.webm")).strip() or None
+            saved["transcript"] = (
+                await transcription.transcribe(ctx, data, file.filename or "audio.webm")
+            ).strip() or None
         except transcription.TranscriptionUnavailable:
             saved["transcript"] = None
     return AttachmentOut(**saved)
@@ -605,15 +651,21 @@ async def mark_read(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     group = await _owned(db, group_id, user)
-    await _store(ctx).channel_mark_read(group.channel, groups.user_actor(user.sub), body.upto)
+    await _store(ctx).channel_mark_read(
+        group.channel, groups.user_actor(user.sub), body.upto
+    )
 
 
-async def _marker(store, group: Group, user: AuthClaims, db: AsyncSession, seq: int | None, what: str) -> EntryOut:
+async def _marker(
+    store, group: Group, user: AuthClaims, db: AsyncSession, seq: int | None, what: str
+) -> EntryOut:
     """The entry that records a change (an edit, a reaction, a delete), as the client folds it into what it shows."""
     if seq is None:
         raise HTTPException(404, f"{what} is not there, or is not yours to change.")
     (marker,) = await store.channel_read(group.channel, after=seq - 1, limit=1)
-    return entry_out(marker, await groups.roster(db, group), str(groups.user_actor(user.sub)))
+    return entry_out(
+        marker, await groups.roster(db, group), str(groups.user_actor(user.sub))
+    )
 
 
 @router.patch("/groups/{group_id}/messages/{seq}", response_model=EntryOut)
@@ -628,7 +680,9 @@ async def edit_message(
     """Change what you said. The old text is kept with the edit; the agents are not woken by it."""
     group = await _owned(db, group_id, user)
     store = _store(ctx)
-    done = await store.channel_edit(group.channel, seq, groups.user_actor(user.sub), body.text.strip())
+    done = await store.channel_edit(
+        group.channel, seq, groups.user_actor(user.sub), body.text.strip()
+    )
     return await _marker(store, group, user, db, done, "That message")
 
 
@@ -643,7 +697,9 @@ async def delete_message(
     """Take back what you said, for everyone: its text and attachments are blanked wherever they were kept."""
     group = await _owned(db, group_id, user)
     store = _store(ctx)
-    done = await store.channel_tombstone(group.channel, seq, groups.user_actor(user.sub))
+    done = await store.channel_tombstone(
+        group.channel, seq, groups.user_actor(user.sub)
+    )
     return await _marker(store, group, user, db, done, "That message")
 
 
@@ -659,7 +715,9 @@ async def react_to_message(
     """Your one reaction to a message (an empty emoji takes it back)."""
     group = await _owned(db, group_id, user)
     store = _store(ctx)
-    done = await store.channel_react(group.channel, seq, groups.user_actor(user.sub), body.emoji.strip())
+    done = await store.channel_react(
+        group.channel, seq, groups.user_actor(user.sub), body.emoji.strip()
+    )
     return await _marker(store, group, user, db, done, "That message")
 
 
@@ -725,7 +783,9 @@ async def remove_member(
     await db.commit()
     await _chats_changed(request, user)
     await groups.refresh_members(db, ctx.runtime, group.id)
-    await groups.refresh_agent(db, ctx.runtime, agent_id)  # it is not in this group's list now, but it still has its others
+    await groups.refresh_agent(
+        db, ctx.runtime, agent_id
+    )  # it is not in this group's list now, but it still has its others
 
 
 # -- contacts ------------------------------------------------------------------------------------------------------------------------

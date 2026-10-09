@@ -55,7 +55,9 @@ def _downscale(data: bytes, filename: str) -> tuple[bytes, str] | None:
     return (out.getvalue(), media_type) if len(out.getvalue()) <= _MAX_BYTES else None
 
 
-async def load_media(store: Any, sandbox: Sandbox, attachment: Mapping[str, Any]) -> MediaBlock | None:
+async def load_media(
+    store: Any, sandbox: Sandbox, attachment: Mapping[str, Any]
+) -> MediaBlock | None:
     """The picture an attachment of the group is, ready for the model, or ``None`` when it is not one of the group's own files or not a picture."""
     key = str(attachment.get("key", ""))
     prefix = group_files.prefix_of(sandbox.tenant_id, sandbox.user_id, sandbox.group)
@@ -69,13 +71,22 @@ async def load_media(store: Any, sandbox: Sandbox, attachment: Mapping[str, Any]
     if made is None:
         return None
     png, media_type = made
-    return MediaBlock(type="image", media_type=media_type, data=png, filename=str(attachment.get("name") or "picture"))
+    return MediaBlock(
+        type="image",
+        media_type=media_type,
+        data=png,
+        filename=str(attachment.get("name") or "picture"),
+    )
 
 
 def _locate(sandbox: Sandbox, path: str) -> tuple[str, str]:
     """``(workspace id, path inside it)`` for a path in the member's sandbox."""
     parts = path.split("/")
-    if not path.startswith("/") or ".." in parts or (parts[1:2] not in (["workspace"], ["groups"])):
+    if (
+        not path.startswith("/")
+        or ".." in parts
+        or (parts[1:2] not in (["workspace"], ["groups"]))
+    ):
         raise ValueError("only files under /workspace or /groups can be shared")
     if parts[1] == "workspace":
         return sandbox.home, "/".join(parts[2:])
@@ -86,7 +97,9 @@ def _locate(sandbox: Sandbox, path: str) -> tuple[str, str]:
     return drive.workspace_id, "/".join(parts[3:])
 
 
-async def publish(store: Any, reader: Any, sandbox: Sandbox, path: str) -> dict[str, Any]:
+async def publish(
+    store: Any, reader: Any, sandbox: Sandbox, path: str
+) -> dict[str, Any]:
     """Make the file at ``path`` in the member's sandbox an attachment of the group, and return its record.
 
     A file already in the group's drive is shared where it is. One from the member's own folder, or from another group it is in, is *copied* into
@@ -97,7 +110,9 @@ async def publish(store: Any, reader: Any, sandbox: Sandbox, path: str) -> dict[
         relative = safe_relative_path(relative)
     except ValueError:
         raise ValueError("there is no such file") from None
-    source = conversation_shared_key(sandbox.tenant_id, sandbox.user_id, workspace, relative)
+    source = conversation_shared_key(
+        sandbox.tenant_id, sandbox.user_id, workspace, relative
+    )
     if not await store.exists(source):
         raise ValueError("there is no such file")
     data = await store.download(source)
@@ -107,12 +122,18 @@ async def publish(store: Any, reader: Any, sandbox: Sandbox, path: str) -> dict[
     prefix = group_files.prefix_of(sandbox.tenant_id, sandbox.user_id, sandbox.group)
     mime = mimetypes.guess_type(relative)[0]
     if workspace != sandbox.group:
-        name = await group_files.unique_name(store, f"{prefix}shared/", posixpath.basename(relative))
+        name = await group_files.unique_name(
+            store, f"{prefix}shared/", posixpath.basename(relative)
+        )
         relative = f"shared/{name}"
-        await store.upload(prefix + relative, data, content_type=mime or "application/octet-stream")
+        await store.upload(
+            prefix + relative, data, content_type=mime or "application/octet-stream"
+        )
     return {
         **group_files.record(prefix, relative, len(data), mime),
-        **await group_files.read_excerpt(reader, data, posixpath.basename(relative), mime),
+        **await group_files.read_excerpt(
+            reader, data, posixpath.basename(relative), mime
+        ),
         **await group_files.make_preview(store, prefix, relative, data, mime),
     }
 

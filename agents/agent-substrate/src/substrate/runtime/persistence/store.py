@@ -220,7 +220,14 @@ class RuntimeStore(Channels, Accounts):
         await migrate(
             self._db,
             "runtime",
-            [_SCHEMA_V1, _SCHEMA_CHANNELS, _schema_dedup, _schema_entry_data, _schema_engagement, _schema_chat],
+            [
+                _SCHEMA_V1,
+                _SCHEMA_CHANNELS,
+                _schema_dedup,
+                _schema_entry_data,
+                _schema_engagement,
+                _schema_chat,
+            ],
         )
 
     async def aclose(self) -> None:

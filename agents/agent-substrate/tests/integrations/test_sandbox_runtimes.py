@@ -325,12 +325,20 @@ GROUP_DIR = "g/group-1/main"
 def _mount(label: str = "trip", session_dir: str = GROUP_DIR):
     from substrate.workspace import WorkspaceScope
 
-    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import Mount
+    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
+        Mount,
+    )
 
-    return Mount(label=label, session_dir=session_dir, scope=WorkspaceScope(tenant_id="t", user_id="alice", conversation_id="group-1"))
+    return Mount(
+        label=label,
+        session_dir=session_dir,
+        scope=WorkspaceScope(tenant_id="t", user_id="alice", conversation_id="group-1"),
+    )
 
 
-async def test_a_mounted_workspace_is_at_groups_label_read_write_and_reported_with_its_path(workspace: Path) -> None:
+async def test_a_mounted_workspace_is_at_groups_label_read_write_and_reported_with_its_path(
+    workspace: Path,
+) -> None:
     runtime = _nsjail_or_skip(workspace)
     (workspace / GROUP_DIR).mkdir(parents=True)
     (workspace / GROUP_DIR / "brief.txt").write_text("shared brief")
@@ -350,11 +358,18 @@ async def test_a_mounted_workspace_is_at_groups_label_read_write_and_reported_wi
     assert "shared brief" in result.stdout
     assert (workspace / GROUP_DIR / "plan.txt").read_text() == "the plan"
     assert (workspace / ALICE_DIR / "mine.txt").read_text() == "mine"
-    assert not (workspace / ALICE_DIR / "plan.txt").exists()  # each file lands in its own workspace
-    assert sorted(f["name"] for f in result.output_files) == ["groups/trip/plan.txt", "mine.txt"]  # the brief it only read is not reported
+    assert not (
+        workspace / ALICE_DIR / "plan.txt"
+    ).exists()  # each file lands in its own workspace
+    assert sorted(f["name"] for f in result.output_files) == [
+        "groups/trip/plan.txt",
+        "mine.txt",
+    ]  # the brief it only read is not reported
 
 
-async def test_a_mounted_workspace_is_the_only_extra_thing_the_code_can_reach(workspace: Path) -> None:
+async def test_a_mounted_workspace_is_the_only_extra_thing_the_code_can_reach(
+    workspace: Path,
+) -> None:
     runtime = _nsjail_or_skip(workspace)
     (workspace / GROUP_DIR).mkdir(parents=True)
 
@@ -370,14 +385,31 @@ async def test_a_mounted_workspace_is_the_only_extra_thing_the_code_can_reach(wo
 
 
 @pytest.mark.parametrize("runtime_name", ["nsjail", "inprocess"])
-async def test_a_mount_name_or_path_cannot_carry_a_mount_option_or_climb(workspace: Path, runtime_name: str) -> None:
-    runtime: SandboxRuntime = _nsjail_or_skip(workspace) if runtime_name == "nsjail" else InProcessRuntime(workspace)
-    for label, session_dir in [("a:b", GROUP_DIR), ("trip", "g:x/main"), ("trip", "../outside"), ("../trip", GROUP_DIR)]:
+async def test_a_mount_name_or_path_cannot_carry_a_mount_option_or_climb(
+    workspace: Path, runtime_name: str
+) -> None:
+    runtime: SandboxRuntime = (
+        _nsjail_or_skip(workspace)
+        if runtime_name == "nsjail"
+        else InProcessRuntime(workspace)
+    )
+    for label, session_dir in [
+        ("a:b", GROUP_DIR),
+        ("trip", "g:x/main"),
+        ("trip", "../outside"),
+        ("../trip", GROUP_DIR),
+    ]:
         with pytest.raises(ValueError):
-            await runtime.execute(spec(mounts=(_mount(label, session_dir),), code="print(1)"))
+            await runtime.execute(
+                spec(mounts=(_mount(label, session_dir),), code="print(1)")
+            )
 
 
-async def test_a_runtime_that_cannot_mount_says_so_rather_than_running_without(workspace: Path) -> None:
+async def test_a_runtime_that_cannot_mount_says_so_rather_than_running_without(
+    workspace: Path,
+) -> None:
     (workspace / GROUP_DIR).mkdir(parents=True)
     with pytest.raises(ValueError, match="mount"):
-        await InProcessRuntime(workspace).execute(spec(mounts=(_mount(),), code="print(1)"))
+        await InProcessRuntime(workspace).execute(
+            spec(mounts=(_mount(),), code="print(1)")
+        )

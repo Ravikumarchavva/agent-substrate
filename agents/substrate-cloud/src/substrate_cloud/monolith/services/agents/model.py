@@ -26,12 +26,18 @@ def client_for(deps: Any, model: str | None) -> Any:
         return deps.model_client
     keys = getattr(deps, "api_keys", {})
     resolved = resolve_model_for_available_credentials(
-        model, api_keys=keys, fallback_models=(getattr(deps, "chat_model", ""), *CHAT_MODEL_FALLBACKS)
+        model,
+        api_keys=keys,
+        fallback_models=(getattr(deps, "chat_model", ""), *CHAT_MODEL_FALLBACKS),
     )
     current = deps.model_client
-    if getattr(current, "provider", None) == detect_provider(resolved) and getattr(current, "model", None) == strip_provider_prefix(resolved):
+    if getattr(current, "provider", None) == detect_provider(resolved) and getattr(
+        current, "model", None
+    ) == strip_provider_prefix(resolved):
         return current
-    return create_model_client(resolved, api_keys=keys, **getattr(deps, "model_client_kwargs", {}))
+    return create_model_client(
+        resolved, api_keys=keys, **getattr(deps, "model_client_kwargs", {})
+    )
 
 
 def sees(model: str | None) -> bool | None:

@@ -64,8 +64,13 @@ async def feed_events(
         read_by_all[chat.group_id] = position
         return [{"type": "read", "chat": chat.group_id, "by_all": position}]
 
-    async def deliver(channel: str, chat: Chat, entries: list[ChannelEntry]) -> list[dict[str, Any]]:
-        out = [{"type": "entry", "chat": chat.group_id, "entry": render(e, chat)} for e in entries]
+    async def deliver(
+        channel: str, chat: Chat, entries: list[ChannelEntry]
+    ) -> list[dict[str, Any]]:
+        out = [
+            {"type": "entry", "chat": chat.group_id, "entry": render(e, chat)}
+            for e in entries
+        ]
         if entries:
             await store.channel_mark_delivered(channel, me, entries[-1].seq)
             out += await read_event(channel, chat)
@@ -103,12 +108,17 @@ async def feed_events(
                 if message["t"] == "chats":
                     chats = await load()
                     hub.set_channels(watcher, chats.keys())
-                    yield {"type": "chats", "chats": [c.group_id for c in chats.values()]}
+                    yield {
+                        "type": "chats",
+                        "chats": [c.group_id for c in chats.values()],
+                    }
                     continue
                 channel = str(message["channel"])
                 chat = chats.get(channel)
                 if chat is not None:
-                    found = await store.channel_read(channel, after=int(message["seq"]) - 1, limit=1)
+                    found = await store.channel_read(
+                        channel, after=int(message["seq"]) - 1, limit=1
+                    )
                     if found and str(found[0].sender) not in chat.names:
                         # Someone new spoke (an agent was added): learn who they are before showing it.
                         chats = await load()
@@ -122,13 +132,19 @@ async def feed_events(
                 everyone = [a for chat in chats.values() for a in chat.agents]
                 busy = set(await store.working(everyone)) if everyone else set()
                 for chat in chats.values():
-                    names = [chat.names[str(a)] for a in chat.agents if a in busy and str(a) in chat.names]
+                    names = [
+                        chat.names[str(a)]
+                        for a in chat.agents
+                        if a in busy and str(a) in chat.names
+                    ]
                     if names != typing.get(chat.group_id, []):
                         typing[chat.group_id] = names
                         last_sent = now
                         yield {"type": "working", "chat": chat.group_id, "names": names}
                         # An agent that has finished has read what it was woken for: the ticks may have moved.
-                        for event in await read_event(next(c for c, v in chats.items() if v is chat), chat):
+                        for event in await read_event(
+                            next(c for c, v in chats.items() if v is chat), chat
+                        ):
                             yield event
             if loop.time() - last_sent >= ping:
                 last_sent = loop.time()

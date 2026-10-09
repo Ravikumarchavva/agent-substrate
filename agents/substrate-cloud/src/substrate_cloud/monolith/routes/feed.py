@@ -58,11 +58,17 @@ async def open_feed(
             store=store,
             hub=request.app.state.feed,
             load=load,
-            render=lambda entry, chat: entry_out(entry, chat.names, mine).model_dump(mode="json"),
+            render=lambda entry, chat: entry_out(entry, chat.names, mine).model_dump(
+                mode="json"
+            ),
             read_position=lambda channel: groups.read_by_all(store, channel),
             gone=request.is_disconnected,
         ):
-            yield b": keepalive\n\n" if event is None else f"data: {json.dumps(event)}\n\n".encode()
+            yield (
+                b": keepalive\n\n"
+                if event is None
+                else f"data: {json.dumps(event)}\n\n".encode()
+            )
 
     return StreamingResponse(
         stream(),

@@ -28,7 +28,9 @@ def snapshot(root: Path) -> dict[str, tuple[int, int]]:
         for name in filenames:
             path = os.path.join(dirpath, name)
             try:
-                st = os.lstat(path)  # a symlink is not followed: it may point at a host file
+                st = os.lstat(
+                    path
+                )  # a symlink is not followed: it may point at a host file
             except OSError:
                 continue
             if stat.S_ISREG(st.st_mode):

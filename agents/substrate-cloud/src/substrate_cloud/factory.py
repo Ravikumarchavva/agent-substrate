@@ -858,7 +858,9 @@ def register_assistant_actor_factory(
     runtime.register_factory("assistant", _activate)
 
 
-def channel_member_config(names: dict[str, str], scope: dict[str, Any], **senses: Any) -> Any:
+def channel_member_config(
+    names: dict[str, str], scope: dict[str, Any], **senses: Any
+) -> Any:
     """What makes an agent one that lives in channels: who is in the channel by name, and whose run it is. ``senses`` are how it opens what
     is shared (``media``) and shares what it made (``publish``)."""
     from substrate.agents import ChannelMemberConfig

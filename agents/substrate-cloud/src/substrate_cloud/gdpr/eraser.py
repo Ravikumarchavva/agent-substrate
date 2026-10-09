@@ -17,7 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from substrate.stores import Erased, MemoryNamespace, Store
 from substrate.workspace.layout import tenant_prefix, user_prefix
 from substrate.types import Actor
-from substrate_cloud.monolith.models import Agent, FileMetadata, Group, GroupMember, Thread, User
+from substrate_cloud.monolith.models import (
+    Agent,
+    FileMetadata,
+    Group,
+    GroupMember,
+    Thread,
+    User,
+)
 from substrate_cloud.monolith.services.groups.service import member_actor
 
 
@@ -73,12 +80,25 @@ async def _redis_sweep(redis: Any, identifiers: set[str]) -> int:
 
 
 async def _erase_groups(
-    db: AsyncSession, *, groups: list[Group], runtime_store: Any, folder: Store | None, tenant_id: str
+    db: AsyncSession,
+    *,
+    groups: list[Group],
+    runtime_store: Any,
+    folder: Store | None,
+    tenant_id: str,
 ) -> int:
     """What the user's groups hold: what was said (the channel), what each member did about it (its runs, its conversation, its budget).
     Must run while the membership rows still exist, as they say who the members are."""
     for group in groups:
-        members = (await db.execute(select(GroupMember).where(GroupMember.group_id == group.id))).scalars().all()
+        members = (
+            (
+                await db.execute(
+                    select(GroupMember).where(GroupMember.group_id == group.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         actors: list[Actor] = [member_actor(m.agent_id, group.id) for m in members]
         if runtime_store is not None:
             await runtime_store.channel_delete(group.channel)
@@ -117,12 +137,18 @@ async def erase_user(
     groups = list(
         (
             await db.execute(
-                select(Group).where(Group.tenant_id == tenant_id, Group.user_identifier == user_id)
+                select(Group).where(
+                    Group.tenant_id == tenant_id, Group.user_identifier == user_id
+                )
             )
         ).scalars()
     )
     groups_deleted = await _erase_groups(
-        db, groups=groups, runtime_store=runtime_store, folder=folder, tenant_id=tenant_id
+        db,
+        groups=groups,
+        runtime_store=runtime_store,
+        folder=folder,
+        tenant_id=tenant_id,
     )
     # `user_id` is the caller's own sub (the same string threads.user_identifier
     # stores) — a `users` row only ever exists under its UUID primary key when
@@ -146,10 +172,16 @@ async def erase_user(
     # Thread deletion cascades elements, feedback and scheduled-task rows.
     if thread_ids:
         await db.execute(delete(Thread).where(Thread.id.in_(thread_ids)))
-    await db.execute(delete(Group).where(Group.tenant_id == tenant_id, Group.user_identifier == user_id))
+    await db.execute(
+        delete(Group).where(
+            Group.tenant_id == tenant_id, Group.user_identifier == user_id
+        )
+    )
     # The agents themselves: their instructions are the user's own writing. Members and contacts go with them.
     agents_result = await db.execute(
-        delete(Agent).where(Agent.tenant_id == tenant_id, Agent.user_identifier == user_id)
+        delete(Agent).where(
+            Agent.tenant_id == tenant_id, Agent.user_identifier == user_id
+        )
     )
     if user_uuid is not None:
         await db.execute(delete(User).where(User.id == user_uuid))

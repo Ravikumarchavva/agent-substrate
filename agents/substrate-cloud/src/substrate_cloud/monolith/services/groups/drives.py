@@ -35,7 +35,9 @@ class Drive:
 def drive_label(name: str) -> str:
     """A folder name from a group's name: lower-case ASCII letters and digits joined by dashes, so any name makes one the sandbox accepts."""
     folded = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
-    slug = re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")[:_LABEL_CHARS].strip("-")
+    slug = (
+        re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")[:_LABEL_CHARS].strip("-")
+    )
     return slug if slug and slug != "private" else "group"
 
 
@@ -56,18 +58,31 @@ async def drives_of(db: AsyncSession, agent_id: uuid.UUID) -> tuple[Drive, ...]:
         while label in taken:
             label, n = f"{base}-{n}", n + 1
         taken.add(label)
-        drives.append(Drive(label=label, group=group.name, workspace_id=group.workspace_id))
+        drives.append(
+            Drive(label=label, group=group.name, workspace_id=group.workspace_id)
+        )
     return tuple(drives)
 
 
-async def delete_workspace_files(store: Any, tenant_id: str, user_id: str, workspace_id: str) -> int:
+async def delete_workspace_files(
+    store: Any, tenant_id: str, user_id: str, workspace_id: str
+) -> int:
     """Delete everything a home or a drive holds in storage (its files, previews, picture): they go with the agent or the group."""
-    return await store.delete_prefix(conversation_prefix(tenant_id, user_id, workspace_id) + "/")
+    return await store.delete_prefix(
+        conversation_prefix(tenant_id, user_id, workspace_id) + "/"
+    )
 
 
 def run_metadata(home: str, drives: tuple[Drive, ...]) -> dict[str, Any]:
     """What goes on a run's message so its code opens ``home`` as ``/workspace`` and each drive at ``/groups/<label>``."""
-    return {"workspace_id": home, **({"workspace_mounts": {d.label: d.workspace_id for d in drives}} if drives else {})}
+    return {
+        "workspace_id": home,
+        **(
+            {"workspace_mounts": {d.label: d.workspace_id for d in drives}}
+            if drives
+            else {}
+        ),
+    }
 
 
 def files_instructions(drives: tuple[Drive, ...]) -> str:
@@ -80,8 +95,18 @@ def files_instructions(drives: tuple[Drive, ...]) -> str:
             "Each group you belong to has a shared folder that everyone in it can read and write: the same files for all of them."
         )
         lines += [f'  /groups/{d.label} - the group "{d.group}"' for d in drives]
-        lines.append("What the user shares in a group is saved in its uploads/ folder. Use the code tool to read, edit or make files in any of these.")
+        lines.append(
+            "What the user shares in a group is saved in its uploads/ folder. Use the code tool to read, edit or make files in any of these."
+        )
     return "\n".join(lines)
 
 
-__all__ = ["Drive", "MAX_DRIVES", "delete_workspace_files", "drive_label", "drives_of", "files_instructions", "run_metadata"]
+__all__ = [
+    "Drive",
+    "MAX_DRIVES",
+    "delete_workspace_files",
+    "drive_label",
+    "drives_of",
+    "files_instructions",
+    "run_metadata",
+]

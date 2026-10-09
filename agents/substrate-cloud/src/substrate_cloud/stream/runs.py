@@ -21,7 +21,9 @@ class ToolStep(BaseModel):
     call_id: str = ""
     name: str
     args: str = ""
-    ok: bool | None = None  # None: no result was journalled (the run stopped before it came back)
+    ok: bool | None = (
+        None  # None: no result was journalled (the run stopped before it came back)
+    )
     output: str = ""
     risk: str | None = None
 
@@ -109,7 +111,9 @@ class LastWord(BaseModel):
     at: datetime | None = None
 
 
-async def last_message(store: RuntimeStore, thread_id: str, *, limit: int = 140) -> LastWord | None:
+async def last_message(
+    store: RuntimeStore, thread_id: str, *, limit: int = 140
+) -> LastWord | None:
     """The last thing said in a conversation, as a one-line preview: the assistant's latest answer, else the user's latest message."""
     runs = await store.find_runs(thread_id=thread_id, active_only=False)
     for run in reversed(runs):
@@ -122,7 +126,10 @@ async def last_message(store: RuntimeStore, thread_id: str, *, limit: int = 140)
         text = said[RunLogKind.ASSISTANT_MESSAGE] or said[RunLogKind.USER_MESSAGE]
         if text:
             line = " ".join(text.split())
-            return LastWord(text=line if len(line) <= limit else line[:limit] + "…", at=run.terminated_at or run.started_at or run.enqueued_at)
+            return LastWord(
+                text=line if len(line) <= limit else line[:limit] + "…",
+                at=run.terminated_at or run.started_at or run.enqueued_at,
+            )
     return None
 
 

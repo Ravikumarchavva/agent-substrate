@@ -30,7 +30,9 @@ _TEXT_TYPES = (
 
 def prefix_of(tenant_id: str, user_id: str, workspace_id: str) -> str:
     """Where a workspace's files are in storage, with the trailing slash."""
-    return conversation_shared_key(tenant_id, user_id, workspace_id, "x").removesuffix("x")
+    return conversation_shared_key(tenant_id, user_id, workspace_id, "x").removesuffix(
+        "x"
+    )
 
 
 def shared_prefix(group: Group, claims: AuthClaims) -> str:
@@ -41,7 +43,9 @@ def safe_name(name: str) -> str:
     return posixpath.basename(name.replace("\\", "/")).strip() or "file"
 
 
-def record(prefix: str, relative: str, size: int, mime: str | None = None) -> dict[str, Any]:
+def record(
+    prefix: str, relative: str, size: int, mime: str | None = None
+) -> dict[str, Any]:
     """The record a message carries for one file under ``prefix``: enough to show it, fetch it, and tell an agent where it is."""
     return {
         "name": posixpath.basename(relative),
@@ -126,9 +130,13 @@ def _render_first_page(data: bytes) -> tuple[bytes, int] | None:
         return None
 
 
-async def make_preview(store: Any, prefix: str, candidate: str, data: bytes, mime: str | None) -> dict[str, Any]:
+async def make_preview(
+    store: Any, prefix: str, candidate: str, data: bytes, mime: str | None
+) -> dict[str, Any]:
     """A thumbnail for a file that has no picture of its own: the first page of a PDF (kept beside the files, out of their list), with its page count."""
-    if (mime != "application/pdf" and not candidate.lower().endswith(".pdf")) or len(data) > _MAX_PREVIEW_BYTES:
+    if (mime != "application/pdf" and not candidate.lower().endswith(".pdf")) or len(
+        data
+    ) > _MAX_PREVIEW_BYTES:
         return {}
     import asyncio
 
@@ -181,7 +189,11 @@ async def list_files(
     """Every file in the group, newest first."""
     prefix = shared_prefix(group, claims)
     rows = sorted(
-        (r for r in await store.list_prefix(prefix) if not r[0].removeprefix(prefix).startswith(f"{PREVIEWS}/")),
+        (
+            r
+            for r in await store.list_prefix(prefix)
+            if not r[0].removeprefix(prefix).startswith(f"{PREVIEWS}/")
+        ),
         key=lambda r: r[2],
         reverse=True,
     )

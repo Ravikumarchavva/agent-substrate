@@ -89,9 +89,7 @@ def conversation_shared_prefix(
     branch_id: str = "main",
 ) -> str:
     """Where the files of one workspace are, with the trailing slash: what ``conversation_shared_key`` puts a path under."""
-    return (
-        f"{conversation_workspace_prefix(tenant_id, user_id, conversation_id, branch_id)}/shared/"
-    )
+    return f"{conversation_workspace_prefix(tenant_id, user_id, conversation_id, branch_id)}/shared/"
 
 
 # The two workspaces that belong to someone rather than to a conversation: an agent's home and a group's shared drive.
@@ -120,7 +118,9 @@ def is_persistent_workspace(workspace_id: str) -> bool:
     return True
 
 
-def workspace_avatar_key(tenant_id: str, user_id: str, workspace_id: str, digest: str, ext: str) -> str:
+def workspace_avatar_key(
+    tenant_id: str, user_id: str, workspace_id: str, digest: str, ext: str
+) -> str:
     """Where the picture of an agent or a group is kept: beside its workspace, never inside ``workspace/shared`` (so it is not one of its files). The
     content hash is in the name because a stored object is served as immutable: a new picture is a new key."""
     return f"{conversation_prefix(tenant_id, user_id, workspace_id)}/avatar/{_id(digest, 'digest')}.{_id(ext, 'extension')}"

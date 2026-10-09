@@ -128,7 +128,9 @@ async def delete_cron_trigger(
     if not removed:
         raise HTTPException(status_code=404, detail=f"Trigger '{name}' not found")
     await trigger_store.forget(
-        getattr(request.app.state, "session_factory", None), trigger_store.CRON, _own(user.tenant_id, name)
+        getattr(request.app.state, "session_factory", None),
+        trigger_store.CRON,
+        _own(user.tenant_id, name),
     )
     return {"status": "deleted", "name": name}
 

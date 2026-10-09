@@ -484,8 +484,16 @@ async def test_erasure_reaches_groups_their_members_runs_and_the_agents(
 
     tenant_id = f"tenant-{uuid.uuid4()}"
     user_id = f"user-{uuid.uuid4()}"
-    agent = Agent(id=uuid.uuid4(), tenant_id=tenant_id, user_identifier=user_id, name="Scout", instructions="private notes")
-    group = Group(id=uuid.uuid4(), tenant_id=tenant_id, user_identifier=user_id, name="Trip")
+    agent = Agent(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        user_identifier=user_id,
+        name="Scout",
+        instructions="private notes",
+    )
+    group = Group(
+        id=uuid.uuid4(), tenant_id=tenant_id, user_identifier=user_id, name="Trip"
+    )
     db.add_all([agent, group])
     await db.flush()
     db.add(GroupMember(group_id=group.id, agent_id=agent.id))
@@ -495,17 +503,29 @@ async def test_erasure_reaches_groups_their_members_runs_and_the_agents(
     await runtime.start()
     try:
         actor = member_actor(agent.id, group.id)
-        await runtime.channel_open(group.channel, tenant=tenant_id, members=[Member(agent=actor)])
-        await runtime.channel_append(group.channel, sender=Actor("user", user_id), text="my secret plan")
+        await runtime.channel_open(
+            group.channel, tenant=tenant_id, members=[Member(agent=actor)]
+        )
+        await runtime.channel_append(
+            group.channel, sender=Actor("user", user_id), text="my secret plan"
+        )
         assert await runtime.stats() and (await runtime.stats()).pending == 1
 
         summary = await erase_user(
-            db, store=FakeStore(), redis=None, tenant_id=tenant_id, user_id=user_id, cfg=cfg, runtime_store=runtime
+            db,
+            store=FakeStore(),
+            redis=None,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            cfg=cfg,
+            runtime_store=runtime,
         )
 
         assert summary.groups_deleted == 1 and summary.agents_deleted == 1
         assert await runtime.channel_read(group.channel) == []
-        assert (await runtime.stats()).pending == 0  # the member's woken run is gone with it
+        assert (
+            await runtime.stats()
+        ).pending == 0  # the member's woken run is gone with it
         async with db_factory() as verify:
             assert await verify.get(Group, group.id) is None
             assert await verify.get(Agent, agent.id) is None

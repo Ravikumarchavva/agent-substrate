@@ -117,7 +117,11 @@ def _schema_chat(database: Database) -> str:
     Existing rows keep working: every member so far was an agent woken at its own address, and each entry gets an id."""
     pg = database.dialect == "postgresql"
     exists = "IF NOT EXISTS " if pg else ""
-    new_row_id = "replace(gen_random_uuid()::text, '-', '')" if pg else "lower(hex(randomblob(16)))"
+    new_row_id = (
+        "replace(gen_random_uuid()::text, '-', '')"
+        if pg
+        else "lower(hex(randomblob(16)))"
+    )
     return (
         f"ALTER TABLE rt_channel_entries ADD COLUMN {exists}id TEXT;\n"
         f"ALTER TABLE rt_channel_entries ADD COLUMN {exists}cause_seq INTEGER;\n"
@@ -199,7 +203,9 @@ class Channels:
                 try:
                     await observer(change)
                 except Exception:  # noqa: BLE001
-                    logger.exception("channel observer failed for %s #%s", change.channel, change.seq)
+                    logger.exception(
+                        "channel observer failed for %s #%s", change.channel, change.seq
+                    )
 
     # ------------------------------------------------------------------ channels and members
 
@@ -233,9 +239,17 @@ class Channels:
         async def do(tx: Tx) -> None:
             await tx.lock(f"channel:{channel}")
             if breaker is not None:
-                await tx.execute("UPDATE rt_channels SET breaker = ? WHERE channel = ?", breaker, channel)
+                await tx.execute(
+                    "UPDATE rt_channels SET breaker = ? WHERE channel = ?",
+                    breaker,
+                    channel,
+                )
             if engage_s is not None:
-                await tx.execute("UPDATE rt_channels SET engage_s = ? WHERE channel = ?", engage_s, channel)
+                await tx.execute(
+                    "UPDATE rt_channels SET engage_s = ? WHERE channel = ?",
+                    engage_s,
+                    channel,
+                )
 
         await self._tx(do)
 
@@ -243,7 +257,9 @@ class Channels:
     async def _set_member(tx: Tx, channel: str, member: Member) -> None:
         inbox = member.inbox
         if inbox is None and member.kind in _WITH_INBOX:
-            inbox = member.agent  # an agent is woken where it is addressed, unless it says otherwise
+            inbox = (
+                member.agent
+            )  # an agent is woken where it is addressed, unless it says otherwise
         await tx.execute(
             "INSERT INTO rt_channel_members (channel, member, mode, cursor, kind, inbox, joined_seq) "
             "VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT next_seq FROM rt_channels WHERE channel = ?), 0)) "
@@ -350,7 +366,9 @@ class Channels:
             except asyncio.TimeoutError:
                 pass
 
-    async def channel_heads(self, channels: Sequence[str], participant: Actor) -> list[ChannelHead]:
+    async def channel_heads(
+        self, channels: Sequence[str], participant: Actor
+    ) -> list[ChannelHead]:
         if not channels:
             return []
         me = str(participant)
@@ -389,7 +407,12 @@ class Channels:
                 )
             }
             return [
-                ChannelHead(channel=c, latest=latest.get(c), unread=unread.get(c, 0), cursor=cursors[c])
+                ChannelHead(
+                    channel=c,
+                    latest=latest.get(c),
+                    unread=unread.get(c, 0),
+                    cursor=cursors[c],
+                )
                 for c in channels
                 if c in cursors
             ]
@@ -399,7 +422,12 @@ class Channels:
     async def channel_delete(self, channel: str) -> None:
         async def do(tx: Tx) -> None:
             await tx.lock(f"channel:{channel}")
-            for table in ("rt_channel_reactions", "rt_channel_entries", "rt_channel_members", "rt_channels"):
+            for table in (
+                "rt_channel_reactions",
+                "rt_channel_entries",
+                "rt_channel_members",
+                "rt_channels",
+            ):
                 await tx.execute(f"DELETE FROM {table} WHERE channel = ?", channel)
             await tx.execute(
                 "DELETE FROM rt_accounts WHERE account = ?", f"channel:{channel}"
@@ -418,7 +446,9 @@ class Channels:
             )
         )
 
-    async def channel_mark_delivered(self, channel: str, participant: Actor, upto: int) -> None:
+    async def channel_mark_delivered(
+        self, channel: str, participant: Actor, upto: int
+    ) -> None:
         await self._tx(
             lambda tx: tx.execute(
                 "UPDATE rt_channel_members SET delivered = ? WHERE channel = ? AND member = ? AND delivered < ?",
@@ -463,7 +493,9 @@ class Channels:
                     dedup_key,
                 )
                 if done is not None:
-                    return AppendResult(seq=done["seq"], id=done["id"], latest=latest), changes
+                    return AppendResult(
+                        seq=done["seq"], id=done["id"], latest=latest
+                    ), changes
             member = await tx.fetchone(
                 "SELECT kind FROM rt_channel_members WHERE channel = ? AND member = ?",
                 channel,
@@ -476,7 +508,9 @@ class Channels:
                 else sender.type == "user"
             )
             by_agent = not person
-            chained = by_agent and not fresh  # a fresh start (a timer fired) is not an answer to anything
+            chained = (
+                by_agent and not fresh
+            )  # a fresh start (a timer fired) is not an answer to anything
             if chained and ch["paused"]:
                 return AppendResult(paused=True, latest=latest), changes
             if read_up_to is not None and await tx.fetchone(
@@ -501,7 +535,9 @@ class Channels:
                     None,
                 )
                 changes.append(notice)
-                await tx.execute("UPDATE rt_channels SET paused = 1 WHERE channel = ?", channel)
+                await tx.execute(
+                    "UPDATE rt_channels SET paused = 1 WHERE channel = ?", channel
+                )
                 return AppendResult(paused=True, latest=notice.seq), changes
             seq = ch["next_seq"]
             entry_id = new_id()
@@ -521,7 +557,11 @@ class Channels:
                 entry_id=entry_id,
                 cause_seq=cause_seq,
             )
-            changes.append(ChannelChange(channel=channel, seq=seq, id=entry_id, kind=kind, sender=sender))
+            changes.append(
+                ChannelChange(
+                    channel=channel, seq=seq, id=entry_id, kind=kind, sender=sender
+                )
+            )
             await tx.execute(
                 "UPDATE rt_channels SET next_seq = ?, paused = ? WHERE channel = ?",
                 seq + 1,
@@ -559,7 +599,9 @@ class Channels:
                 channel,
                 str(sender),
             )
-            unannounced: list[str] = []  # members whose budget has run out and who have not been told so yet
+            unannounced: list[
+                str
+            ] = []  # members whose budget has run out and who have not been told so yet
             for m in members:
                 if m["inbox"] is None:
                     continue  # a person: it reads this when it opens the channel, and is never woken
@@ -605,7 +647,11 @@ class Channels:
                             target=target,
                             sender=sender,
                             payload=DataPayload(
-                                data={"channel": channel, "seq": seq, "reason": reason.value}
+                                data={
+                                    "channel": channel,
+                                    "seq": seq,
+                                    "reason": reason.value,
+                                }
                             ),
                             correlation_id=f"chan:{channel}",
                         ),
@@ -638,7 +684,9 @@ class Channels:
                 )
                 changes.append(notice)
                 last = notice.seq
-            return AppendResult(seq=seq, id=entry_id, latest=last, woken=tuple(woken)), changes
+            return AppendResult(
+                seq=seq, id=entry_id, latest=last, woken=tuple(woken)
+            ), changes
 
         result, changes = await self._tx(do)
         await self._published(changes)
@@ -649,7 +697,9 @@ class Channels:
         """The depth of what a post answers: the entry named, else the latest message. 0 when there is nothing to answer."""
         if cause_seq is not None:
             row = await tx.fetchone(
-                "SELECT depth FROM rt_channel_entries WHERE channel = ? AND seq = ?", channel, cause_seq
+                "SELECT depth FROM rt_channel_entries WHERE channel = ? AND seq = ?",
+                channel,
+                cause_seq,
             )
         else:
             row = await tx.fetchone(
@@ -673,21 +723,51 @@ class Channels:
         """An entry that records something happened (an edit, a reaction, a notice): no wake, no cursor, no depth. ``seq`` must be the
         channel's next one; the channel's counter moves past it."""
         entry_id = new_id()
-        await self._write_entry(tx, channel, seq, sender, kind, text, (), reply_to, None, 0, None, data, entry_id=entry_id)
-        await tx.execute("UPDATE rt_channels SET next_seq = ? WHERE channel = ?", seq + 1, channel)
-        return ChannelChange(channel=channel, seq=seq, id=entry_id, kind=kind, sender=sender)
+        await self._write_entry(
+            tx,
+            channel,
+            seq,
+            sender,
+            kind,
+            text,
+            (),
+            reply_to,
+            None,
+            0,
+            None,
+            data,
+            entry_id=entry_id,
+        )
+        await tx.execute(
+            "UPDATE rt_channels SET next_seq = ? WHERE channel = ?", seq + 1, channel
+        )
+        return ChannelChange(
+            channel=channel, seq=seq, id=entry_id, kind=kind, sender=sender
+        )
 
-    async def _own_message(self, tx: Tx, channel: str, seq: int, sender: Actor) -> tuple[Row, Row] | None:
+    async def _own_message(
+        self, tx: Tx, channel: str, seq: int, sender: Actor
+    ) -> tuple[Row, Row] | None:
         """The channel and the message ``seq``, if ``sender`` wrote it and it is still there to change."""
         ch = await tx.fetchone("SELECT * FROM rt_channels WHERE channel = ?", channel)
-        row = await tx.fetchone("SELECT * FROM rt_channel_entries WHERE channel = ? AND seq = ?", channel, seq)
+        row = await tx.fetchone(
+            "SELECT * FROM rt_channel_entries WHERE channel = ? AND seq = ?",
+            channel,
+            seq,
+        )
         if ch is None or row is None:
             return None
-        if row["kind"] != EntryKind.MESSAGE.value or row["sender"] != str(sender) or row["deleted_at"] is not None:
+        if (
+            row["kind"] != EntryKind.MESSAGE.value
+            or row["sender"] != str(sender)
+            or row["deleted_at"] is not None
+        ):
             return None
         return ch, row
 
-    async def channel_edit(self, channel: str, seq: int, sender: Actor, text: str) -> int | None:
+    async def channel_edit(
+        self, channel: str, seq: int, sender: Actor, text: str
+    ) -> int | None:
         async def do(tx: Tx) -> tuple[int | None, list[ChannelChange]]:
             await tx.lock(f"channel:{channel}")
             found = await self._own_message(tx, channel, seq, sender)
@@ -702,7 +782,14 @@ class Channels:
                 seq,
             )
             marker = await self._write_marker(
-                tx, channel, ch["next_seq"], sender, EntryKind.EDIT, text, seq, data={"previous": row["text"]}
+                tx,
+                channel,
+                ch["next_seq"],
+                sender,
+                EntryKind.EDIT,
+                text,
+                seq,
+                data={"previous": row["text"]},
             )
             return marker.seq, [marker]
 
@@ -710,7 +797,9 @@ class Channels:
         await self._published(changes)
         return result
 
-    async def channel_tombstone(self, channel: str, seq: int, sender: Actor) -> int | None:
+    async def channel_tombstone(
+        self, channel: str, seq: int, sender: Actor
+    ) -> int | None:
         async def do(tx: Tx) -> tuple[int | None, list[ChannelChange]]:
             await tx.lock(f"channel:{channel}")
             found = await self._own_message(tx, channel, seq, sender)
@@ -730,21 +819,33 @@ class Channels:
                 channel,
                 seq,
             )
-            marker = await self._write_marker(tx, channel, ch["next_seq"], sender, EntryKind.TOMBSTONE, "", seq)
+            marker = await self._write_marker(
+                tx, channel, ch["next_seq"], sender, EntryKind.TOMBSTONE, "", seq
+            )
             return marker.seq, [marker]
 
         result, changes = await self._tx(do)
         await self._published(changes)
         return result
 
-    async def channel_react(self, channel: str, seq: int, participant: Actor, emoji: str) -> int | None:
+    async def channel_react(
+        self, channel: str, seq: int, participant: Actor, emoji: str
+    ) -> int | None:
         async def do(tx: Tx) -> tuple[int | None, list[ChannelChange]]:
             await tx.lock(f"channel:{channel}")
-            ch = await tx.fetchone("SELECT * FROM rt_channels WHERE channel = ?", channel)
-            target = await tx.fetchone(
-                "SELECT kind FROM rt_channel_entries WHERE channel = ? AND seq = ?", channel, seq
+            ch = await tx.fetchone(
+                "SELECT * FROM rt_channels WHERE channel = ?", channel
             )
-            if ch is None or target is None or target["kind"] != EntryKind.MESSAGE.value:
+            target = await tx.fetchone(
+                "SELECT kind FROM rt_channel_entries WHERE channel = ? AND seq = ?",
+                channel,
+                seq,
+            )
+            if (
+                ch is None
+                or target is None
+                or target["kind"] != EntryKind.MESSAGE.value
+            ):
                 return None, []
             me = str(participant)
             current = await tx.fetchone(
@@ -754,7 +855,9 @@ class Channels:
                 me,
             )
             if (current["emoji"] if current else "") == emoji:
-                return (current["marker_seq"] if current else seq), []  # nothing to change
+                return (
+                    current["marker_seq"] if current else seq
+                ), []  # nothing to change
             if emoji:
                 await tx.execute(
                     "INSERT INTO rt_channel_reactions (channel, seq, participant, emoji, marker_seq) VALUES (?, ?, ?, ?, ?) "
@@ -767,16 +870,23 @@ class Channels:
                 )
             else:
                 await tx.execute(
-                    "DELETE FROM rt_channel_reactions WHERE channel = ? AND seq = ? AND participant = ?", channel, seq, me
+                    "DELETE FROM rt_channel_reactions WHERE channel = ? AND seq = ? AND participant = ?",
+                    channel,
+                    seq,
+                    me,
                 )
-            marker = await self._write_marker(tx, channel, ch["next_seq"], participant, EntryKind.REACTION, emoji, seq)
+            marker = await self._write_marker(
+                tx, channel, ch["next_seq"], participant, EntryKind.REACTION, emoji, seq
+            )
             return marker.seq, [marker]
 
         result, changes = await self._tx(do)
         await self._published(changes)
         return result
 
-    async def channel_reactions(self, channel: str, seqs: Sequence[int]) -> dict[int, dict[str, str]]:
+    async def channel_reactions(
+        self, channel: str, seqs: Sequence[int]
+    ) -> dict[int, dict[str, str]]:
         if not seqs:
             return {}
         marks = ", ".join("?" for _ in seqs)

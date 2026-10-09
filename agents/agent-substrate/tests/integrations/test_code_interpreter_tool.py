@@ -134,22 +134,36 @@ async def test_an_agents_home_and_its_groups_are_the_workspaces_the_code_gets():
     runtime = _FakeRuntime(ExecResult(stdout="ok"))
     tool = CodeInterpreterTool(runtime, network=NetworkPolicy.DENY)
 
-    await tool.execute(ctx=_FakeCtx(_agent_scope((("trip", GROUP), ("kitchen", GROUP_2)))), code="print(1)")
+    await tool.execute(
+        ctx=_FakeCtx(_agent_scope((("trip", GROUP), ("kitchen", GROUP_2)))),
+        code="print(1)",
+    )
 
     spec = runtime.last_spec
-    assert spec.session_dir == f"{HOME}/main"  # a home is never branched, whatever branch the conversation asking is on
+    assert (
+        spec.session_dir == f"{HOME}/main"
+    )  # a home is never branched, whatever branch the conversation asking is on
     assert spec.extra["workspace_scope"].conversation_id == HOME
-    assert [(m.label, m.session_dir, m.scope.conversation_id, m.scope.branch_id) for m in spec.mounts] == [
+    assert [
+        (m.label, m.session_dir, m.scope.conversation_id, m.scope.branch_id)
+        for m in spec.mounts
+    ] == [
         ("trip", f"{GROUP}/main", GROUP, "main"),
         ("kitchen", f"{GROUP_2}/main", GROUP_2, "main"),
     ]
-    assert all(m.scope.user_id == "user-a" and m.scope.tenant_id == "tenant-a" for m in spec.mounts)
+    assert all(
+        m.scope.user_id == "user-a" and m.scope.tenant_id == "tenant-a"
+        for m in spec.mounts
+    )
 
 
 async def test_a_conversations_own_workspace_still_follows_its_branch_and_has_no_mounts():
     runtime = _FakeRuntime(ExecResult(stdout="ok"))
     await CodeInterpreterTool(runtime).execute(ctx=_FakeCtx(), code="print(1)")
-    assert runtime.last_spec.session_dir == "conv-1/exp-1" and runtime.last_spec.mounts == ()
+    assert (
+        runtime.last_spec.session_dir == "conv-1/exp-1"
+        and runtime.last_spec.mounts == ()
+    )
 
 
 async def test_a_mount_that_is_not_a_home_or_a_drive_is_refused_before_anything_runs():
@@ -160,10 +174,14 @@ async def test_a_mount_that_is_not_a_home_or_a_drive_is_refused_before_anything_
         (("a/b", GROUP),),
         (("private", GROUP),),  # /workspace/private is the agent's own
         (("", GROUP),),
-        tuple((f"g{i}", f"group-6f1c0a2e-0000-4000-8000-{i:012d}") for i in range(40)),  # too many to mount
+        tuple(
+            (f"g{i}", f"group-6f1c0a2e-0000-4000-8000-{i:012d}") for i in range(40)
+        ),  # too many to mount
     ]
     for mounts in bad:
         runtime = _FakeRuntime(ExecResult(stdout="ok"))
-        result = await CodeInterpreterTool(runtime).execute(ctx=_FakeCtx(_agent_scope(mounts)), code="print(1)")
+        result = await CodeInterpreterTool(runtime).execute(
+            ctx=_FakeCtx(_agent_scope(mounts)), code="print(1)"
+        )
         assert result.is_error, mounts
         assert runtime.last_spec is None, mounts

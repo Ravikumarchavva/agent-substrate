@@ -72,7 +72,9 @@ async def test_the_name_to_call_you_is_kept_on_one_line_and_can_be_cleared():
     async with session() as c:
         await c.put("/me/preferences", json={"display_name": "  Ravi \n Kumar  "})
         assert (await c.get("/me/preferences")).json()["display_name"] == "Ravi Kumar"
-        assert (await c.put("/me/preferences", json={"display_name": "x" * 61})).status_code == 422
+        assert (
+            await c.put("/me/preferences", json={"display_name": "x" * 61})
+        ).status_code == 422
         await c.put("/me/preferences", json={"display_name": ""})
         assert (await c.get("/me/preferences")).json()["display_name"] == ""
 

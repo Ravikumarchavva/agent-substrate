@@ -32,7 +32,13 @@ from substrate.tools import ToolExecutionResult
 from substrate.tools import ToolRisk
 
 from .code_risk import classify_and_summarize
-from .runtimes.base import Mount, NetworkPolicy, SandboxRuntime, SandboxSpec, valid_mount_label
+from .runtimes.base import (
+    Mount,
+    NetworkPolicy,
+    SandboxRuntime,
+    SandboxSpec,
+    valid_mount_label,
+)
 from .sandbox_response import (
     PRESENTATION_GUIDANCE,
     sandbox_error_result,
@@ -218,7 +224,9 @@ class CodeInterpreterTool:
         await self._runtime.stop()
 
 
-def _mounts(wanted: tuple[tuple[str, str], ...], scope: WorkspaceScope, own: str) -> tuple[Mount, ...] | str:
+def _mounts(
+    wanted: tuple[tuple[str, str], ...], scope: WorkspaceScope, own: str
+) -> tuple[Mount, ...] | str:
     """The workspaces to open beside the run's own, or a message saying why they cannot be. They come from the run's scope, set by whoever
     started it, and each must be an agent's home or a group's drive: nothing the model wrote reaches here, and nothing else can be mounted."""
     if len(wanted) > MAX_MOUNTS:
@@ -235,7 +243,12 @@ def _mounts(wanted: tuple[tuple[str, str], ...], scope: WorkspaceScope, own: str
             Mount(
                 label=label,
                 session_dir=f"{workspace}/main",
-                scope=WorkspaceScope(tenant_id=scope.tenant_id, user_id=scope.user_id, conversation_id=workspace, branch_id="main"),
+                scope=WorkspaceScope(
+                    tenant_id=scope.tenant_id,
+                    user_id=scope.user_id,
+                    conversation_id=workspace,
+                    branch_id="main",
+                ),
             )
         )
     return tuple(mounts)

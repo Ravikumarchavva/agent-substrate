@@ -93,7 +93,11 @@ async def read_by_all(store: Any, channel: str) -> int:
     """The latest entry every agent that follows everything has read: the person's messages up to here show as seen by all. A member that only
     listens for mentions never reads the rest, and the person's own position is not an agent's, so neither counts. ``-1`` before any has read."""
     return min(
-        (m.cursor for m in await store.channel_members(channel) if m.mode.value == "all" and m.kind is ParticipantKind.AGENT),
+        (
+            m.cursor
+            for m in await store.channel_members(channel)
+            if m.mode.value == "all" and m.kind is ParticipantKind.AGENT
+        ),
         default=-1,
     )
 
@@ -146,7 +150,10 @@ async def create_group(
         tenant=group.tenant_id,
         members=[
             user_member(claims.sub),
-            *(Member(agent=member_actor(a, group.id), mode=Mode(m)) for a, m in members),
+            *(
+                Member(agent=member_actor(a, group.id), mode=Mode(m))
+                for a, m in members
+            ),
         ],
         breaker=group.breaker,
     )

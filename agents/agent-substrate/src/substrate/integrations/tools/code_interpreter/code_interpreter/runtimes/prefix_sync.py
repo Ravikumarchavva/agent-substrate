@@ -36,7 +36,11 @@ def _relative(key: str, prefix: str) -> str | None:
     """The path of *key* inside the workspace, or ``None`` for one that is not a workspace file (a folder marker, a hidden path, a path that climbs)."""
     rel = key.removeprefix(prefix)
     parts = PurePosixPath(rel).parts
-    if not rel or rel.endswith("/") or any(p in ("..", ".") or p.startswith(".") for p in parts):
+    if (
+        not rel
+        or rel.endswith("/")
+        or any(p in ("..", ".") or p.startswith(".") for p in parts)
+    ):
         return None
     return rel
 
@@ -59,7 +63,9 @@ class PrefixSync:
 
     def _load(self, state_key: str) -> dict[str, dict[str, list]]:
         try:
-            return json.loads(self._record_path(state_key).read_text(encoding="utf-8"))["files"]
+            return json.loads(self._record_path(state_key).read_text(encoding="utf-8"))[
+                "files"
+            ]
         except (OSError, ValueError, KeyError):
             return {}  # no record (or a damaged one): everything is treated as new, which costs a download, not a file
 
@@ -95,17 +101,26 @@ class PrefixSync:
         for rel, (size, mtime) in remote.items():
             known = files.get(rel)
             path = scratch / rel
-            if known and tuple(known["remote"]) == (size, mtime) and os.path.lexists(path):
+            if (
+                known
+                and tuple(known["remote"]) == (size, mtime)
+                and os.path.lexists(path)
+            ):
                 continue  # what is there is what the store has (or the code's own unsaved change, which is kept and sent again)
             try:
                 _write_atomic(path, await self._store.download(prefix + rel))
                 st = os.lstat(path)
-                files[rel] = {"remote": [size, mtime], "local": [st.st_size, st.st_mtime_ns]}
+                files[rel] = {
+                    "remote": [size, mtime],
+                    "local": [st.st_size, st.st_mtime_ns],
+                }
             except Exception as exc:  # noqa: BLE001 - one file that cannot be brought in must not stop the run
                 logger.warning("workspace stage-in: %s: %s", prefix + rel, exc)
                 problems.append(f"{rel}: could not be brought in ({exc})")
 
-        for rel in [r for r in files if r not in remote]:  # removed from the store since the last sync
+        for rel in [
+            r for r in files if r not in remote
+        ]:  # removed from the store since the last sync
             (scratch / rel).unlink(missing_ok=True)
             del files[rel]
 
@@ -131,7 +146,9 @@ class PrefixSync:
             if rel in files and tuple(files[rel]["local"]) == (size, mtime_ns):
                 continue
             if size > MAX_FILE_BYTES:
-                problems.append(f"{rel}: not saved, larger than {MAX_FILE_BYTES // (1024 * 1024)} MB")
+                problems.append(
+                    f"{rel}: not saved, larger than {MAX_FILE_BYTES // (1024 * 1024)} MB"
+                )
                 continue
             if quota_hit:
                 problems.append(f"{rel}: not saved, storage quota exceeded")
@@ -140,7 +157,8 @@ class PrefixSync:
                 await self._store.upload(
                     prefix + rel,
                     (scratch / rel).read_bytes(),
-                    content_type=mimetypes.guess_type(rel)[0] or "application/octet-stream",
+                    content_type=mimetypes.guess_type(rel)[0]
+                    or "application/octet-stream",
                 )
                 sent.add(rel)
             except WorkspaceQuotaExceededError:

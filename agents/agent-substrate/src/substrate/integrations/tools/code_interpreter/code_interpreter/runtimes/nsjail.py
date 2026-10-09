@@ -381,7 +381,8 @@ class NsjailRuntime:
                 proc.kill()
                 await proc.wait()
                 return ExecResult(
-                    stderr=f"Execution timed out after {spec.timeout_s}s.", exit_code=124
+                    stderr=f"Execution timed out after {spec.timeout_s}s.",
+                    exit_code=124,
                 )
         finally:
             shutil.rmtree(chroot, ignore_errors=True)
@@ -460,7 +461,10 @@ class NsjailRuntime:
 
         # Other workspaces beside it (a group's drive), each read-write at its own folder.
         for mount in spec.mounts:
-            argv += ["-B", f"{self._resolve_session(mount.session_dir)}:/groups/{mount.label}"]
+            argv += [
+                "-B",
+                f"{self._resolve_session(mount.session_dir)}:/groups/{mount.label}",
+            ]
 
         private_dir = spec.extra.get("private_dir")
         if private_dir:

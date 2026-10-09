@@ -315,19 +315,29 @@ async def chat(
         if thread_agent is not None:
             # The agent's permissions are a ceiling a request can narrow further but never widen.
             deps["tools"] = narrow_tools(deps["tools"], thread_agent, _tool_name)
-            deps["system_instructions"] += agent_instructions_block(thread_agent, drives)
+            deps["system_instructions"] += agent_instructions_block(
+                thread_agent, drives
+            )
         # Other agents of the user's it may ask for help (unless its permissions leave that out or the request narrowed it away). A conversation
         # that is itself a delegate never gets this: asking is one level deep.
         delegated = bool((thread.metadata_ or {}).get("delegated_from"))
         if (
             not delegated
-            and (thread_agent is None or thread_agent.allowed_tools is None or TOOL_NAME in thread_agent.allowed_tools)
+            and (
+                thread_agent is None
+                or thread_agent.allowed_tools is None
+                or TOOL_NAME in thread_agent.allowed_tools
+            )
             and (body.allowed_tools is None or TOOL_NAME in body.allowed_tools)
         ):
             others = (
-                await contacts_for(ctx, user.tenant_id or "default", user.sub, thread_agent.id)
+                await contacts_for(
+                    ctx, user.tenant_id or "default", user.sub, thread_agent.id
+                )
                 if thread_agent
-                else await other_agents(ctx, user.tenant_id or "default", user.sub, None)
+                else await other_agents(
+                    ctx, user.tenant_id or "default", user.sub, None
+                )
             )
             if others:
                 deps["tools"] = [*deps["tools"], AskAgentTool(ctx, others, _tool_name)]

@@ -70,5 +70,46 @@ async def test_the_other_agent_answers_in_its_own_archived_conversation():
         # The delegate's conversation exists, belongs to the agent, and is tucked away in Archived, linked to the asker.
         shown = (await c.get(f"/threads/{delegate}")).json()
         assert shown["agent_id"] == made["id"] and shown["archived_at"] is not None
-        assert shown["metadata"] == {"delegated_from": parent}
+        assert shown["metadata"] == {"delegated_from": parent, "request": "What is 6 x 7?"}  # a plain chat asked: no agent is the asker
         assert (await c.get(f"/threads/{delegate}/runs")).json()[0]["status"] == "completed"
+
+
+@pytest.mark.requires_postgres
+async def test_what_one_agent_asks_another_is_kept_as_their_conversation_and_a_plain_chat_is_not_one():
+    async with session() as c:
+        app = c._transport.app
+        ctx = app.state.ctx
+        relay = (await c.post("/agents", json={"name": "Relay"})).json()
+        atlas = (await c.post("/agents", json={"name": "Atlas", "role": "Archivist"})).json()
+        relay_chat = (await c.post(f"/agents/{relay['id']}/thread")).json()["id"]
+        real_model = ctx.model_client
+        ctx.model_client = ScriptedModel("The vault is in Lisbon.")
+        try:
+            others = await other_agents(ctx, c.tenant, "u1", exclude=uuid.UUID(relay["id"]))
+            tool = AskAgentTool(ctx, others, lambda t: getattr(t, "name", ""))
+            result = await tool.execute(ctx=run_ctx(tenant=c.tenant, user="u1", thread=relay_chat), agent="atlas", request="Where is the vault?")
+            assert not result.is_error, result.text
+
+            for viewed, other in ((relay, "Atlas"), (atlas, "Relay")):
+                (row,) = (await c.get(f"/agents/{viewed['id']}/view/chats")).json()["items"]
+                assert row["kind"] == "agent" and row["name"] == other and row["count"] == 1 and row["preview"] == result.text.strip()
+            (row,) = (await c.get(f"/agents/{relay['id']}/view/chats", params={"kind": "agents"})).json()["items"]
+            said = (await c.get(f"/agents/{relay['id']}/view/chats/{row['key']}/messages")).json()["entries"]
+            assert [(e["sender"], e["text"], e["from_user"]) for e in said] == [("Relay", "Where is the vault?", True), ("Atlas", result.text.strip(), False)]
+
+            # A plain conversation asking is the person, not another agent: nothing new in anyone's list.
+            plain = (await c.post("/threads", json={"name": "plain"})).json()["id"]
+            await AskAgentTool(ctx, others, lambda t: getattr(t, "name", "")).execute(ctx=run_ctx(tenant=c.tenant, user="u1", thread=plain), agent="atlas", request="Hello?")
+            assert len((await c.get(f"/agents/{atlas['id']}/view/chats", params={"kind": "agents"})).json()["items"]) == 1
+        finally:
+            ctx.model_client = real_model
+            store = ctx.runtime.store
+            from sqlalchemy import text
+
+            async with app.state.session_factory() as db:
+                await db.execute(text("SELECT set_config('app.bypass_rls', 'on', false)"))
+                for (channel,) in (await db.execute(text("SELECT 'pair/' || id FROM agent_pairs WHERE tenant_id = :t"), {"t": c.tenant})).all():
+                    await store.channel_delete(channel)
+                for table in ("agents",):
+                    await db.execute(text(f"DELETE FROM {table} WHERE tenant_id = :t"), {"t": c.tenant})
+                await db.commit()

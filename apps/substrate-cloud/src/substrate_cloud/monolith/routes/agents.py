@@ -110,8 +110,8 @@ def _out(
         workspace_id=agent.workspace_id,
         created_at=agent.created_at,
         thread_id=thread.id if thread else None,
-        # When it last said or heard something: the thread's own time only moves when it is renamed.
-        last_active=(last.at if last and last.at else thread.updated_at if thread else None),
+        # When it last said or heard something. Never the thread's own time: opening a chat creates the thread, and opening is not a message.
+        last_active=last.at if last else None,
         last_message=last.text if last else None,
         working=working,
         avatar=agent.avatar_key,

@@ -57,6 +57,8 @@ class ViewChats(BaseModel):
 
 
 class ViewMessages(BaseModel):
+    # The conversation itself: its name and picture, so a link straight to it opens without the list.
+    chat: ViewChat
     entries: List[EntryOut]
     # There is more before the first of these.
     has_more: bool
@@ -127,8 +129,9 @@ async def view_chats(
         if thread is not None and (not needle or needle in owner.casefold()):
             said = await last_message(store, str(thread.id), limit=140)
             at = _aware(said.at if said and said.at else thread.updated_at)
-            if before is None or (at is not None and at < before):
-                rows.append(ViewChat(key="you", kind="you", id=str(thread.id), name=owner, preview=said.text if said else "", at=at))
+            # A chat nobody has said anything in is not worth a row.
+            if said is not None and (before is None or (at is not None and at < before)):
+                rows.append(ViewChat(key="you", kind="you", id=str(thread.id), name=owner, preview=said.text, at=at))
 
     rows.sort(key=lambda r: r.at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     page_rows = rows[:limit]
@@ -167,9 +170,9 @@ async def view_messages(
 
     if key == "you":
         thread = (await main_threads(db, [agent.id])).get(agent.id)
-        if thread is None:
-            return ViewMessages(entries=[], has_more=False)
         owner = await groups.display_name(db, tenant, user.sub)
+        if thread is None:
+            return ViewMessages(chat=ViewChat(key="you", kind="you", id="", name=owner), entries=[], has_more=False)
         said: list[EntryOut] = []
         for event, at in await project_thread_timed(store, str(thread.id)):
             text = str(getattr(event, "text", "") or "")
@@ -184,7 +187,7 @@ async def view_messages(
             )
         end = len(said) if before is None else min(before, len(said))
         start = max(0, end - limit)
-        return ViewMessages(entries=said[start:end], has_more=start > 0)
+        return ViewMessages(chat=ViewChat(key="you", kind="you", id=str(thread.id), name=owner), entries=said[start:end], has_more=start > 0)
 
     kind, _, raw = key.partition("-")
     try:
@@ -200,7 +203,8 @@ async def view_messages(
         other = await db.get(Agent, other_id)
         names = {mine: agent.name, str(pairs.agent_actor(other_id)): other.name if other else "An agent"}
         entries, more = await _channel_page(store, pair.channel, before, limit)
-        return ViewMessages(entries=[entry_out(e, names, mine) for e in entries], has_more=more)
+        row = ViewChat(key=key, kind="agent", id=str(other_id), name=other.name if other else "An agent", avatar=other.avatar_key if other else None, count=pair.exchanges)
+        return ViewMessages(chat=row, entries=[entry_out(e, names, mine) for e in entries], has_more=more)
 
     if kind == "group":
         group = await groups.get_owned_group(db, target, user)
@@ -210,6 +214,7 @@ async def view_messages(
         me = str(groups.member_actor(agent.id, group.id))
         entries, more = await _channel_page(store, group.channel, before, limit)
         reactions = await store.channel_reactions(group.channel, [e.seq for e in entries if e.kind is EntryKind.MESSAGE])
-        return ViewMessages(entries=[entry_out(e, names, me, reactions.get(e.seq)) for e in entries], has_more=more)
+        row = ViewChat(key=key, kind="group", id=str(group.id), name=group.name, avatar=group.avatar_key)
+        return ViewMessages(chat=row, entries=[entry_out(e, names, me, reactions.get(e.seq)) for e in entries], has_more=more)
 
     raise HTTPException(404, "That conversation is not here.")

@@ -145,6 +145,8 @@ async def test_groups_and_the_chat_with_you_are_rows_too_and_open_as_read_only_c
             def read(key: str, **params):
                 return c.get(f"/agents/{scout['id']}/view/chats/{key}/messages", params=params)
 
+            chat = (await read(by_kind["agent"]["key"])).json()["chat"]
+            assert (chat["kind"], chat["name"]) == ("agent", "Quill") and (await read(by_kind["group"]["key"])).json()["chat"]["name"] == "Trip"
             you = (await read("you")).json()["entries"]
             assert [(e["sender"], e["text"], e["from_user"]) for e in you] == [("You", "hello Scout", False), ("Scout", "hello!", True)]
             both = (await read(by_kind["agent"]["key"])).json()["entries"]

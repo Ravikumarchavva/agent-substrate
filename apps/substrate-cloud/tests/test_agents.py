@@ -72,7 +72,7 @@ async def test_agents_are_private_validated_and_start_conversations():
         first = (await c.post(f"/agents/{made['id']}/thread")).json()["id"]
         assert (await c.post(f"/agents/{made['id']}/thread")).json()["id"] == first  # the same chat every time
         listed = (await c.get("/agents")).json()[0]
-        assert listed["thread_id"] == first and listed["last_active"] is not None
+        assert listed["thread_id"] == first and listed["last_active"] is None  # opening a chat is not a message: it must not move the agent up the list
         assert first not in [t["id"] for t in (await c.get("/threads")).json()]
         assert (await c.post(f"/agents/{uuid.uuid4()}/thread")).status_code == 404
 

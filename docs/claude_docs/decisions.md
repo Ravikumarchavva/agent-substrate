@@ -1,5 +1,28 @@
 # Decisions — Check Here Before Re-litigating
 
+## An agent's account is viewable read only: pairs are record channels, lists are keyset-paged (2026-10-10)
+
+**Context.** The user wants to open any agent and see what it sees (its chats with you, with other agents, in groups), without being able to write in it,
+and an agent may have a hundred contacts. A chip strip or a pane per pair did not scale; the model is "open his account with read permission".
+
+* **Agent-to-agent conversations are record channels, one per pair** (`pair/<id>`, row in `agent_pairs` with `agent_a < agent_b`). Opened with no members,
+  so nothing in them is woken; entries are posted by the agents themselves with `fresh=True` (a request, then its answer, keyed `<thread>:ask|answer`, so
+  a repeat lands once). `ask_agent` writes them; an answer that arrives after the asker stopped waiting is followed in the background and written when
+  it comes. The hidden delegation thread stays as the full trace. Deleting an agent deletes its pairs and their channels.
+* **Lists are rows, not reads.** `agent_pairs` carries the latest line and time (denormalised), indexed `(user, agent, last_at)`, so an agent's list is a
+  keyset page on time (no OFFSET) with the name search done in SQL; groups come from one `channel_heads` call; the page is merged by time. The cost of a
+  page does not depend on how many contacts there are. (The API caps a user at 20 agents today; the tests insert agents directly to exercise 100.)
+* **One read-only API** (`/agents/{id}/view/chats`, `/view/chats/{key}/messages`, every route GET, checked by a test on the routes themselves). A
+  conversation is paged back with the engine's new `channel_read_before`. "You" is the agent's main thread projected to text only until DMs move onto
+  channels.
+* **Live:** `POST /feed` takes `watch: <agentId>` and also follows that agent's pairs (`pair-<id>`); the UI keeps a second feed while a viewed account is open.
+* **UI:** `/chat/view/<agentId>[/<chat>]`, a banner ("Viewing X's account, read only"), the same `ChatList` driven by the server (search, filter, load more),
+  entry points: header eye, profile "View as", account menu picker. `Messages` has a `readOnly` mode (no actions, no ticks).
+* **Found on the way (not fixed, not ours):** with OpenTelemetry's FastAPI instrumentation a request whose path matches a route but not its method (a
+  405) raises `'_IncludedRouter' object has no attribute 'path'` and surfaces as a 500.
+
+---
+
 ## Conversations are channels: people are members, every change is an entry, the feed is a convenience (2026-10-09)
 
 **Context.** Direct chats were threads (no message ids, no read state, a private branching history) and groups were channels, with the person

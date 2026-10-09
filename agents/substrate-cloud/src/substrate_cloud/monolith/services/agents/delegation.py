@@ -149,7 +149,7 @@ class AskAgentTool:
                 agent_id=target.id,
                 tags=[],
                 # Who asked, and what: the pair record is kept from these (see ``pairs``).
-                metadata_={"delegated_from": parent_thread, "asker_agent_id": str(asker) if asker else None, "request": request[:2000]},
+                metadata_={"delegated_from": parent_thread, **({"asker_agent_id": str(asker)} if asker else {}), "request": request[:2000]},
                 archived_at=datetime.now(timezone.utc),
             )
             db.add(thread)

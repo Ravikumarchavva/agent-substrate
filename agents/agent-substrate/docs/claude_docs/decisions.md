@@ -1,5 +1,38 @@
 # Decisions — Check Here Before Re-litigating
 
+## Conversations are channels: people are members, every change is an entry, the feed is a convenience (2026-10-09)
+
+**Context.** Direct chats were threads (no message ids, no read state, a private branching history) and groups were channels, with the person
+outside the channel. The approved plan (`messenger` in the session plans) makes the channel the one conversation primitive. This records the first
+step, which changed the engine's channel and the platform's groups.
+
+* **A member is a participant, not an actor.** `Member(agent=participant, kind, inbox, cursor, delivered, joined_seq)`. A person (`human`, or
+  `external` through a bridge) has no inbox: an append never wakes, queues or starts a run for one. An agent's inbox defaults to itself; a separate
+  inbox (the actor to wake) is how one agent will be present in many chats under one identity later. Budgets still charge the participant.
+* **Edits, reactions and deletes are entries of their own** (`EDIT`, `REACTION`, `TOMBSTONE`) with their own `seq`, `reply_to` the target. Reading
+  a channel `after` a position is therefore enough to hear about every change; there is no second sync mechanism and no global revision counter
+  (a counter would serialise every append of every tenant). An edit keeps the previous text in its marker; a delete (a person's right to erase)
+  blanks the text, attachments and every edit's kept text. Agents never read markers (`SPOKEN` filters them out of `read_channel` and
+  `recall_channel`); the cursor still moves past them.
+* **The breaker counts depth, not a streak.** An agent entry is one deeper than the entry it answers (`cause_seq`, by default the latest message);
+  a person's entry or an agent's `fresh` one (a timer woke it) starts at 0. A direct chat that receives a daily routine report never pauses; two
+  agents answering each other still do. A member whose budget is used up is told once (a system entry, `exhausted_noticed`), not silently skipped.
+* **Read state is a cursor in the channel.** `Group.user_read_seq` is gone (the column is dropped at startup, `_DROP_COLUMNS`). Unread is one
+  `GROUP BY` over the cursor (`channel_heads`), uncapped; it used to stop at 200.
+* **The feed.** Every committed entry reaches an observer after the commit (`channel_observe`), wherever the commit happened. The platform's
+  `Relay` publishes `{channel, seq, kind}` to Redis and each process's `FeedHub` hears every process's messages (without Redis, the local hub
+  directly), so a reply written by a worker reaches a person connected to another process. `POST /feed` is one SSE stream per person: it catches the
+  client up from its own `since` (per conversation) and then follows the hub, reading each entry from the store. Server-sent events rather than a
+  WebSocket: one direction is all it needs (sending is a POST), and it passes the existing authenticated proxy, load balancers and mobile
+  browsers unchanged. A watcher that falls behind is told to `resync`; nothing sent is the only copy. Because the stream stays open, uvicorn is
+  started with `--timeout-graceful-shutdown 10` so a restart is not held up by it.
+* **Each nsjail run has a chroot of its own.** Mount points nsjail creates for `/groups/<label>` lived in one shared root and showed every later
+  run (anyone's) the names of drives that were not theirs.
+* **Deferred, on purpose:** the chat types still live in `runtime/channel.py` (they move to `types/chat.py` when `context/` needs them);
+  `store.tenant(t)` does not yet cover channels (the platform authorises by ownership); the Redis relay is not yet run by a separate worker process.
+
+---
+
 ## The kernel is the engine, not a layer of contracts (2026-10-02)
 
 **Decision:** `substrate` does the work of running an agent — routed agents, the durable
@@ -385,9 +418,11 @@ need to notify" logic was needed on the reading side at all — see
 
 **Ruled out:** adding a cross-replica pub/sub channel (Redis, `pg_notify`)
 purely to propagate "someone cancelled this" faster. The EventLogProtocol's own
-LISTEN/NOTIFY-backed tail already delivers `run.cancelled` to every replica
-tailing that run — a second notification channel would be solving a
-problem that doesn't exist.
+tail already delivers `run.cancelled` to every replica tailing that run
+(2026-10-09 correction: that tail is not LISTEN/NOTIFY, it polls the database
+every second at most — `runtime/tail.py` — which is still what carries it) — a
+second notification channel would be solving a problem that doesn't exist for
+cancel. Conversations are different: see "Conversations are channels".
 
 ---
 

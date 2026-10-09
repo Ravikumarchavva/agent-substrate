@@ -15,6 +15,7 @@ the log.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from substrate.types import RunLogKind
@@ -23,7 +24,7 @@ from substrate.server.protocol.events import WireEvent
 from substrate.server.protocol.from_log import wire_from_log
 
 
-async def project_thread(store: RuntimeStore, thread_id: str) -> list[WireEvent]:
+async def project_thread_timed(store: RuntimeStore, thread_id: str) -> list[tuple[WireEvent, datetime]]:
     """The full conversation for ``thread_id`` as an ordered wire-event list — the
     canonical history read, used by the history endpoint.
 
@@ -31,13 +32,18 @@ async def project_thread(store: RuntimeStore, thread_id: str) -> list[WireEvent]
     its own seq order. Entries with no streaming meaning (``run.started``,
     ``effect.result``, ``llm.call`` …) are skipped, exactly as in a live view.
     """
-    events: list[WireEvent] = []
+    events: list[tuple[WireEvent, datetime]] = []
     for run in await store.find_runs(thread_id=thread_id, active_only=False):
         for entry in await store.read_events(run.run_id, durable_only=True):
             wire = wire_from_log(entry.kind, entry.payload or {}, history=True)
             if wire is not None:
-                events.append(wire)
+                events.append((wire, entry.ts))
     return events
+
+
+async def project_thread(store: RuntimeStore, thread_id: str) -> list[WireEvent]:
+    """``project_thread_timed`` without the times, for the readers that only want what was said."""
+    return [event for event, _ in await project_thread_timed(store, thread_id)]
 
 
 async def _annotate_thread(

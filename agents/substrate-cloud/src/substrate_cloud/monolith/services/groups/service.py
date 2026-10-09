@@ -12,7 +12,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.runtime import AppendResult, Member, Mode, mentions_in
+from substrate.runtime import AppendResult, Member, Mode, ParticipantKind, mentions_in
 from substrate.types import Actor, ExecutionBudget
 from substrate_cloud.monolith.models import (
     Agent,
@@ -45,6 +45,11 @@ def parse_member(actor: Actor) -> tuple[uuid.UUID, uuid.UUID]:
 
 def user_actor(user_id: str) -> Actor:
     return Actor("user", user_id)
+
+
+def user_member(user_id: str) -> Member:
+    """The person in the group, as a member of its channel: they have a read position like everyone else, and are never woken."""
+    return Member(agent=user_actor(user_id), kind=ParticipantKind.HUMAN)
 
 
 async def get_owned_group(
@@ -82,6 +87,15 @@ async def group_members(
         .order_by(Agent.created_at)
     )
     return [(m, a) for m, a in rows.all()]
+
+
+async def read_by_all(store: Any, channel: str) -> int:
+    """The latest entry every agent that follows everything has read: the person's messages up to here show as seen by all. A member that only
+    listens for mentions never reads the rest, and the person's own position is not an agent's, so neither counts. ``-1`` before any has read."""
+    return min(
+        (m.cursor for m in await store.channel_members(channel) if m.mode.value == "all" and m.kind is ParticipantKind.AGENT),
+        default=-1,
+    )
 
 
 async def display_name(db: AsyncSession, tenant_id: str, user_id: str) -> str:
@@ -131,7 +145,8 @@ async def create_group(
         group.channel,
         tenant=group.tenant_id,
         members=[
-            Member(agent=member_actor(a, group.id), mode=Mode(m)) for a, m in members
+            user_member(claims.sub),
+            *(Member(agent=member_actor(a, group.id), mode=Mode(m)) for a, m in members),
         ],
         breaker=group.breaker,
     )

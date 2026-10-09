@@ -47,7 +47,7 @@ from substrate_cloud.monolith.services.thread_service import (
     owned_thread_ids,
     thread_row,
 )
-from substrate_cloud.stream import project_thread
+from substrate_cloud.stream import project_thread, project_thread_timed
 from substrate_cloud.monolith.services.agents.service import (
     ensure_main_thread,
     get_owned_agent,
@@ -249,8 +249,9 @@ async def get_thread_messages(
     if runtime is None:
         raise HTTPException(status_code=503, detail="Runtime not configured")
 
-    events = await project_thread(runtime.store, str(thread_id))
-    return [event.model_dump(mode="json") for event in events]
+    # Each event carries when it was logged (`at`), so a reloaded conversation shows when things were said, not when the page was opened.
+    events = await project_thread_timed(runtime.store, str(thread_id))
+    return [{**event.model_dump(mode="json"), "at": at.isoformat()} for event, at in events]
 
 
 @router.get("/{thread_id}/export")

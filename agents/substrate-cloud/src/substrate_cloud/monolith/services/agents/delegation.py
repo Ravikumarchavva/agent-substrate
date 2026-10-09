@@ -25,6 +25,7 @@ from substrate.types import Role
 from substrate.types import TextBlock as KernelTextBlock
 from substrate_cloud.monolith.database import system_session
 from substrate_cloud.monolith.models import Agent, AgentContact, Thread
+from substrate_cloud.monolith.services.agents import pairs
 from substrate_cloud.monolith.services.agents.assembly import assemble_agent
 from substrate_cloud.monolith.services.agents.service import AgentProfile
 from substrate_cloud.monolith.services.groups.drives import drives_of, run_metadata
@@ -140,13 +141,15 @@ class AskAgentTool:
                 or target.tenant_id != tenant_id
             ):
                 return _text("That agent is no longer available.", error=True)
+            asker = await _asker_of(db, parent_thread)
             thread = Thread(
                 name=f"{target.name}: {request[:50]}",
                 user_identifier=user_id,
                 tenant_id=tenant_id,
                 agent_id=target.id,
                 tags=[],
-                metadata_={"delegated_from": parent_thread},
+                # Who asked, and what: the pair record is kept from these (see ``pairs``).
+                metadata_={"delegated_from": parent_thread, "asker_agent_id": str(asker) if asker else None, "request": request[:2000]},
                 archived_at=datetime.now(timezone.utc),
             )
             db.add(thread)
@@ -178,42 +181,40 @@ class AskAgentTool:
                 **run_metadata(profile.workspace_id, drives),
             },
         )
+
+        async def say(speaker: uuid.UUID, text: str, part: str, status: str, *, asked: bool = False) -> None:
+            """Keep what was said in the pair's record (see ``pairs``). Recording must never be why an ask fails."""
+            if asker is None:
+                return
+            try:
+                async with system_session(ctx.session_factory) as db:
+                    pair = await pairs.get_or_create_pair(
+                        db, ctx.runtime.store, tenant_id=tenant_id, user_id=user_id, asker=asker, target=agent_id
+                    )
+                    await pairs.record(db, ctx.runtime.store, pair, speaker=speaker, text=text, thread_id=str(thread_id), part=part, status=status, asked=asked)
+                    await db.commit()
+            except Exception:  # noqa: BLE001
+                logger.exception("could not record the exchange between %s and %s", asker, agent_id)
+
+        if asker is not None:
+            await say(asker, request, "ask", "working", asked=True)
         await ctx.runtime.register(delegate)
         run_id = await ctx.runtime.submit(delegate.id, msg, thread_id=str(thread_id))
 
-        answer, waiting = "", ""
-
-        async def collect() -> str:
-            nonlocal answer, waiting
-            async for entry in ctx.runtime.tail(run_id):
-                payload = entry.payload or {}
-                if entry.kind == RunLogKind.ASSISTANT_MESSAGE:
-                    answer += payload.get("text", "")
-                elif entry.kind == RunLogKind.RUN_COMPLETED:
-                    return "done"
-                elif entry.kind == RunLogKind.RUN_FAILED:
-                    return f"failed: {payload.get('error', 'the run failed')}"
-                elif entry.kind in (
-                    RunLogKind.APPROVAL_REQUESTED,
-                    RunLogKind.INPUT_REQUESTED,
-                ):
-                    waiting = str(
-                        payload.get("tool_name")
-                        or payload.get("question")
-                        or "your input"
-                    )
-                    return "waiting"
-            return "done"
-
         try:
-            outcome = await asyncio.wait_for(collect(), timeout=WAIT_SECONDS)
+            outcome, answer, waiting = await asyncio.wait_for(_follow(ctx.runtime, run_id), timeout=WAIT_SECONDS)
         except asyncio.TimeoutError:
-            outcome = "running"
+            outcome, answer, waiting = "running", "", ""
+            if asker:
+                await say(agent_id, f"{profile.name} is still working on it.", "note", "working")
+                _later(_finish(ctx.runtime, run_id, say, agent_id))
 
         link = {"thread_id": str(thread_id), "agent": profile.name}
         if outcome == "done":
+            await say(agent_id, answer.strip() or "(it answered with nothing)", "answer", "done")
             return _text(answer.strip() or "(it answered with nothing)", **link)
         if outcome == "waiting":
+            await say(agent_id, f"Stopped to wait for {waiting}. {answer.strip()}".strip(), "answer", "waiting")
             return _text(
                 f"{profile.name} stopped to wait for {waiting}. That needs you: open its conversation to answer. What it said so far: {answer.strip() or '(nothing)'}",
                 **link,
@@ -223,7 +224,63 @@ class AskAgentTool:
                 f"{profile.name} is still working. Its conversation is {thread_id}. Partial answer so far: {answer.strip() or '(none yet)'}",
                 **link,
             )
+        await say(agent_id, f"{profile.name} {outcome}", "answer", "failed")
         return _text(f"{profile.name} {outcome}", error=True, **link)
+
+
+async def _follow(runtime: Any, run_id: Any) -> tuple[str, str, str]:
+    """Watch a delegate's run until it ends or stops for a person: ``(outcome, what it said, what it is waiting for)``. The outcome is ``done``,
+    ``waiting`` or ``failed: why``."""
+    answer = ""
+    async for entry in runtime.tail(run_id):
+        payload = entry.payload or {}
+        if entry.kind == RunLogKind.ASSISTANT_MESSAGE:
+            answer += payload.get("text", "")
+        elif entry.kind == RunLogKind.RUN_COMPLETED:
+            return "done", answer, ""
+        elif entry.kind == RunLogKind.RUN_FAILED:
+            return f"failed: {payload.get('error', 'the run failed')}", answer, ""
+        elif entry.kind in (RunLogKind.APPROVAL_REQUESTED, RunLogKind.INPUT_REQUESTED):
+            return "waiting", answer, str(payload.get("tool_name") or payload.get("question") or "your input")
+    return "done", answer, ""
+
+
+LATE_SECONDS = 3600.0
+_background: set[asyncio.Task[None]] = set()
+
+
+def _later(coro: Any) -> None:
+    """Run something after the ask returned, keeping a reference so it is not collected half done."""
+    task = asyncio.ensure_future(coro)
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+
+
+async def _finish(runtime: Any, run_id: Any, say: Any, agent_id: uuid.UUID) -> None:
+    """An answer that came after the asker stopped waiting still belongs in the pair's record: it is written when it arrives (for up to an hour)."""
+    try:
+        outcome, answer, waiting = await asyncio.wait_for(_follow(runtime, run_id), timeout=LATE_SECONDS)
+    except (asyncio.TimeoutError, Exception):  # noqa: BLE001 - nothing to report to; the thread keeps the whole story
+        return
+    if outcome == "done":
+        await say(agent_id, answer.strip() or "(it answered with nothing)", "answer", "done")
+    elif outcome == "waiting":
+        await say(agent_id, f"Stopped to wait for {waiting}. {answer.strip()}".strip(), "answer", "waiting")
+    else:
+        await say(agent_id, outcome, "answer", "failed")
+
+
+async def _asker_of(db: Any, parent_thread: str) -> uuid.UUID | None:
+    """The agent that is asking, from the conversation it asks in: an agent's own chat names it, and so does a group member's address
+    (``<agent>@<group>``). A plain conversation with no agent has none."""
+    try:
+        parent = await db.get(Thread, uuid.UUID(parent_thread))
+        return parent.agent_id if parent is not None else None
+    except ValueError:
+        try:
+            return uuid.UUID(parent_thread.partition("@")[0])
+        except ValueError:
+            return None
 
 
 async def other_agents(

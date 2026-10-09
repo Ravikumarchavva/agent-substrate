@@ -176,7 +176,7 @@ async def test_changes_to_a_group_or_an_agent_make_members_rebuild_and_a_deleted
                 runtime.forget = real
             assert (await c.delete(f"/agents/{quill['id']}")).status_code == 204
             members = await runtime.store.channel_members(f"group/{group['id']}")
-            assert [m.agent.key.split("@")[0] for m in members] == [scout["id"]]
+            assert [m.agent.key.split("@")[0] for m in members if m.kind.value == "agent"] == [scout["id"]]
         finally:
             await _wipe(c.tenant)
 
@@ -296,5 +296,104 @@ async def test_a_pdf_gets_a_first_page_preview_and_a_page_count_that_stay_out_of
             # Text files have no picture; they show their first lines instead.
             txt = (await c.post(f"/groups/{group['id']}/files", files={"file": ("a.txt", b"hello", "text/plain")})).json()
             assert txt["preview_key"] is None and txt["excerpt"] == "hello"
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_the_user_is_a_member_who_is_read_to_and_never_woken():
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            store = app.state.ctx.runtime.store
+            members = {m.agent.type: m for m in await store.channel_members(f"group/{group['id']}")}
+            assert members["user"].kind.value == "human" and members["user"].inbox is None
+            assert members["member"].kind.value == "agent" and members["member"].inbox is not None
+            assert await store.drain(members["user"].agent) == []
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_unread_is_each_message_from_an_agent_after_the_users_own_read_position_with_no_cap():
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            store = app.state.ctx.runtime.store
+            channel, agent = f"group/{group['id']}", member_actor(scout["id"], group["id"])
+            for i in range(230):
+                await store.channel_append(channel, sender=agent, text=f"note {i}", fresh=True)
+            assert (await c.get("/groups")).json()[0]["unread"] == 230  # the old count stopped at 200
+            await c.post(f"/groups/{group['id']}/read", json={"upto": 99})
+            assert (await c.get(f"/groups/{group['id']}")).json()["unread"] == 130
+            await c.post(f"/groups/{group['id']}/messages", json={"text": "back"})  # speaking is reading everything before it
+            assert (await c.get(f"/groups/{group['id']}")).json()["unread"] == 0
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_a_message_can_be_edited_reacted_to_and_deleted_by_its_sender_and_each_change_is_an_entry_to_read():
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            gid = group["id"]
+            sent = (await c.post(f"/groups/{gid}/messages", json={"text": "lunch at 1"})).json()
+            seen = sent["seq"]
+
+            edited = await c.patch(f"/groups/{gid}/messages/{sent['seq']}", json={"text": "lunch at 2"})
+            assert edited.status_code == 200 and edited.json()["kind"] == "edit" and edited.json()["reply_to"] == sent["seq"]
+            reacted = await c.put(f"/groups/{gid}/messages/{sent['seq']}/reaction", json={"emoji": "👍"})
+            assert reacted.json()["kind"] == "reaction" and reacted.json()["text"] == "👍"
+
+            # Someone who last read at the message hears about both by reading on; the message itself now says the new thing.
+            news = (await c.get(f"/groups/{gid}/messages", params={"after": seen})).json()["entries"]
+            assert [e["kind"] for e in news] == ["edit", "reaction"]
+            whole = (await c.get(f"/groups/{gid}/messages", params={"after": -1})).json()["entries"]
+            first = whole[0]
+            assert first["text"] == "lunch at 2" and first["edited_at"] is not None
+            assert [(r["emoji"], r["from_user"]) for r in first["reactions"]] == [("👍", True)]
+
+            assert (await c.put(f"/groups/{gid}/messages/{sent['seq']}/reaction", json={"emoji": ""})).status_code == 200
+            assert (await c.get(f"/groups/{gid}/messages")).json()["entries"][0]["reactions"] == []
+
+            gone = await c.delete(f"/groups/{gid}/messages/{sent['seq']}")
+            assert gone.json()["kind"] == "tombstone"
+            first = (await c.get(f"/groups/{gid}/messages")).json()["entries"][0]
+            assert first["text"] == "" and first["deleted_at"] is not None
+            assert all("lunch" not in e["text"] for e in (await c.get(f"/groups/{gid}/messages")).json()["entries"])
+            assert (await c.patch(f"/groups/{gid}/messages/{sent['seq']}", json={"text": "back"})).status_code == 404
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_what_an_agent_said_is_not_the_users_to_edit_or_delete():
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "muted"}]})).json()
+            store = app.state.ctx.runtime.store
+            said = await store.channel_append(f"group/{group['id']}", sender=member_actor(scout["id"], group["id"]), text="hello", fresh=True)
+            assert (await c.patch(f"/groups/{group['id']}/messages/{said.seq}", json={"text": "hijack"})).status_code == 404
+            assert (await c.delete(f"/groups/{group['id']}/messages/{said.seq}")).status_code == 404
+            # But anyone in the group may react to it.
+            assert (await c.put(f"/groups/{group['id']}/messages/{said.seq}/reaction", json={"emoji": "❤️"})).status_code == 200
+        finally:
+            await _wipe(c.tenant)
+
+
+@pytest.mark.requires_postgres
+async def test_the_double_tick_counts_only_agents_that_follow_everything_and_not_the_person():
+    async with session() as c:
+        try:
+            scout = (await c.post("/agents", json={"name": "Scout"})).json()
+            quiet = (await c.post("/agents", json={"name": "Quill"})).json()
+            group = (await c.post("/groups", json={"name": "Trip", "members": [{"agent_id": scout["id"], "mode": "all"}, {"agent_id": quiet["id"], "mode": "muted"}]})).json()
+            body = (await c.get(f"/groups/{group['id']}/messages")).json()
+            assert body["read_by_all"] == -1  # nothing read yet, and the person's own cursor is not counted
         finally:
             await _wipe(c.tenant)

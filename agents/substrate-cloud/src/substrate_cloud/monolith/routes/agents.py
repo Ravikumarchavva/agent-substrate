@@ -19,9 +19,10 @@ from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
 from substrate_cloud.monolith.models import Agent, Thread
 from substrate_cloud.monolith.routes.chat_intents import _tool_name
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
-from substrate_cloud.stream.runs import last_message
+from substrate_cloud.stream.runs import LastWord, last_message
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.services import avatar, pins
+from substrate_cloud.monolith.services.agents import pairs
 from substrate_cloud.monolith.services.agents.delegation import TOOL_NAME
 from substrate_cloud.monolith.services.agents.model import has_credentials, sees
 from substrate_cloud.monolith.services.groups.drives import delete_workspace_files
@@ -97,7 +98,7 @@ class ThreadRef(BaseModel):
 def _out(
     agent: Agent,
     thread: Optional[Thread],
-    last_message: Optional[str] = None,
+    last: Optional[LastWord] = None,
     working: bool = False,
 ) -> AgentOut:
     return AgentOut(
@@ -109,8 +110,9 @@ def _out(
         workspace_id=agent.workspace_id,
         created_at=agent.created_at,
         thread_id=thread.id if thread else None,
-        last_active=thread.updated_at if thread else None,
-        last_message=last_message,
+        # When it last said or heard something: the thread's own time only moves when it is renamed.
+        last_active=(last.at if last and last.at else thread.updated_at if thread else None),
+        last_message=last.text if last else None,
         working=working,
         avatar=agent.avatar_key,
         pinned_at=agent.pinned_at,
@@ -379,6 +381,8 @@ async def delete_agent(
     if files is not None:
         await delete_workspace_files(files, user.tenant_id or "default", user.sub, agent.workspace_id)
     group_ids = await groups_of(db, agent_id)
+    if ctx.runtime is not None:
+        await pairs.delete_pairs_of(db, ctx.runtime.store, agent_id)  # what it said to other agents goes with it
     await db.delete(agent)
     await db.commit()
     if ctx.runtime is not None:

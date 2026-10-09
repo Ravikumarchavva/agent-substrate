@@ -10,10 +10,11 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from substrate.runtime import ChannelHead, EntryKind
 from substrate.types import Actor
 from substrate_cloud.document_reader import document_reader
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
@@ -111,17 +112,30 @@ class AttachmentIn(BaseModel):
     transcript: Optional[str] = None
 
 
-class EntryOut(BaseModel):
-    seq: int
+class ReactionOut(BaseModel):
+    emoji: str
     sender_id: str
     sender: str
     from_user: bool
+
+
+class EntryOut(BaseModel):
+    seq: int
+    id: str
+    sender_id: str
+    sender: str
+    from_user: bool
+    # ``message`` and ``system`` are what was said; ``edit``, ``reaction`` and ``tombstone`` say what happened to the entry in ``reply_to``
+    # (the new text, the emoji, a delete), so reading after a position is enough to hear about all of it.
     kind: str
     text: str
     mentions: List[str]
     reply_to: Optional[int] = None
     attachments: List[AttachmentOut] = []
     at: datetime
+    edited_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+    reactions: List[ReactionOut] = []
 
 
 class MessagesOut(BaseModel):
@@ -145,6 +159,15 @@ class ModeIn(BaseModel):
 
 class ReadIn(BaseModel):
     upto: int
+
+
+class EditIn(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
+
+
+class ReactionIn(BaseModel):
+    # One emoji, or empty to take the reaction back.
+    emoji: str = Field(max_length=16)
 
 
 class ContactIn(BaseModel):
@@ -171,6 +194,11 @@ def _check_mode(mode: str) -> str:
     return mode
 
 
+async def _chats_changed(request: Request, user: AuthClaims) -> None:
+    """Tell the person's open feeds (here, or on any other process) to reload their conversations: one was made, left or changed who is in it."""
+    await request.app.state.feed_relay.publish({"t": "chats", "user": user.sub})
+
+
 def _store(ctx: ServerDependencies):
     if ctx.runtime is None:
         raise HTTPException(503, "The runtime is not available.")
@@ -184,23 +212,23 @@ async def _owned(db: AsyncSession, group_id: uuid.UUID, user: AuthClaims) -> Gro
     return group
 
 
-async def _out(db: AsyncSession, store, group: Group) -> GroupOut:
+async def _out(db: AsyncSession, store, group: Group, head: ChannelHead | None = None) -> GroupOut:
     members = await groups.group_members(db, group.id)
     names = await groups.roster(db, group)
     mine = str(groups.user_actor(group.user_identifier))
-    (last,) = await store.channel_last(group.channel, 1) or [None]
-    unseen = await store.channel_read(
-        group.channel, after=group.user_read_seq, limit=200
-    )
+    if head is None:
+        head = next(iter(await store.channel_heads([group.channel], groups.user_actor(group.user_identifier))), None)
+    last = head.latest if head else None
     return GroupOut(
         id=group.id,
         name=group.name,
         created_at=group.created_at,
-        updated_at=group.updated_at,
+        # The list orders by when something last happened: a rename, or the latest thing said.
+        updated_at=max(group.updated_at, last.at) if last else group.updated_at,
         members=[await _member_out(store, group, m, a) for m, a in members],
-        last_message=_preview(last)[:140] if last else None,
+        last_message=preview_line(last)[:140] if last else None,
         last_sender=names.get(str(last.sender), "Group") if last else None,
-        unread=sum(1 for e in unseen if str(e.sender) != mine),
+        unread=head.unread if head else 0,
         paused=bool(last and last.kind.value == "system"),
         working=[
             names[str(a)]
@@ -225,7 +253,7 @@ async def _member_out(store, group: Group, member, agent) -> MemberOut:
     )
 
 
-def _preview(entry) -> str:
+def preview_line(entry) -> str:
     """One line for a list: what was said, or the files when that is all there was."""
     if entry.text.strip():
         return entry.text
@@ -235,9 +263,10 @@ def _preview(entry) -> str:
     return f"📎 {len(files)} files" if files else ""
 
 
-def _entry(e, names: dict[str, str], mine: str) -> EntryOut:
+def entry_out(e, names: dict[str, str], mine: str, reactions: Optional[dict[str, str]] = None) -> EntryOut:
     return EntryOut(
         seq=e.seq,
+        id=e.id,
         sender_id=str(e.sender),
         sender=names.get(str(e.sender), "Group"),
         from_user=str(e.sender) == mine,
@@ -247,6 +276,12 @@ def _entry(e, names: dict[str, str], mine: str) -> EntryOut:
         reply_to=e.reply_to,
         attachments=[AttachmentOut(**a) for a in e.data.get("attachments", [])],
         at=e.at,
+        edited_at=e.edited_at,
+        deleted_at=e.deleted_at,
+        reactions=[
+            ReactionOut(emoji=emoji, sender_id=who, sender=names.get(who, "Group"), from_user=who == mine)
+            for who, emoji in (reactions or {}).items()
+        ],
     )
 
 
@@ -257,12 +292,15 @@ async def list_my_groups(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     store = _store(ctx)
-    return [await _out(db, store, g) for g in await groups.list_groups(db, user)]
+    mine = await groups.list_groups(db, user)
+    heads = {h.channel: h for h in await store.channel_heads([g.channel for g in mine], groups.user_actor(user.sub))}
+    return [await _out(db, store, g, heads.get(g.channel)) for g in mine]
 
 
 @router.post("/groups", response_model=GroupOut, status_code=201)
 async def create_group(
     body: GroupIn,
+    request: Request,
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
     ctx: ServerDependencies = Depends(get_ctx),
@@ -282,6 +320,7 @@ async def create_group(
         raise HTTPException(422, str(exc)) from exc
     await db.commit()
     await groups.refresh_members(db, ctx.runtime, group.id)
+    await _chats_changed(request, user)
     return await _out(db, store, group)
 
 
@@ -393,6 +432,7 @@ async def unpin_group(
 @router.delete("/groups/{group_id}", status_code=204)
 async def delete_group(
     group_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
     ctx: ServerDependencies = Depends(get_ctx),
@@ -406,6 +446,7 @@ async def delete_group(
         await delete_workspace_files(files, user.tenant_id or "default", user.sub, workspace_id)
     await db.delete(group)
     await db.commit()
+    await _chats_changed(request, user)
     if ctx.runtime is not None:
         for agent_id in members:
             ctx.runtime.forget(groups.member_actor(agent_id, group_id))
@@ -436,19 +477,16 @@ async def read_messages(
         channel, after=after, limit=min(max(limit, 1), 500)
     )
     busy = await store.working([Actor.from_str(a) for a in names if a != mine])
+    reactions = await store.channel_reactions(channel, [e.seq for e in entries if e.kind is EntryKind.MESSAGE])
+    # What the page has reached the user's device: the second tick for the others' side of a person-to-person chat, and the base for
+    # "delivered" generally.
+    if entries:
+        await store.channel_mark_delivered(channel, groups.user_actor(group.user_identifier), entries[-1].seq)
     return MessagesOut(
-        entries=[_entry(e, names, mine) for e in entries],
+        entries=[entry_out(e, names, mine, reactions.get(e.seq)) for e in entries],
         latest=entries[-1].seq if entries else after,
         working=[names[str(a)] for a in busy],
-        # A member that only listens for mentions never reads the rest, so only those that follow everything count.
-        read_by_all=min(
-            (
-                m.cursor
-                for m in await store.channel_members(channel)
-                if m.mode.value == "all"
-            ),
-            default=-1,
-        ),
+        read_by_all=await groups.read_by_all(store, channel),
     )
 
 
@@ -552,11 +590,10 @@ async def send_message(
     )
     if result.seq is None:
         raise HTTPException(409, "The group could not take that message.")
-    group.user_read_seq = max(group.user_read_seq, result.seq)
     await db.commit()
     names = await groups.roster(db, group)
     (entry,) = await store.channel_read(group.channel, after=result.seq - 1, limit=1)
-    return _entry(entry, names, str(groups.user_actor(group.user_identifier)))
+    return entry_out(entry, names, str(groups.user_actor(group.user_identifier)))
 
 
 @router.post("/groups/{group_id}/read", status_code=204)
@@ -565,16 +602,72 @@ async def mark_read(
     body: ReadIn,
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
 ):
     group = await _owned(db, group_id, user)
-    group.user_read_seq = max(group.user_read_seq, body.upto)
-    await db.commit()
+    await _store(ctx).channel_mark_read(group.channel, groups.user_actor(user.sub), body.upto)
+
+
+async def _marker(store, group: Group, user: AuthClaims, db: AsyncSession, seq: int | None, what: str) -> EntryOut:
+    """The entry that records a change (an edit, a reaction, a delete), as the client folds it into what it shows."""
+    if seq is None:
+        raise HTTPException(404, f"{what} is not there, or is not yours to change.")
+    (marker,) = await store.channel_read(group.channel, after=seq - 1, limit=1)
+    return entry_out(marker, await groups.roster(db, group), str(groups.user_actor(user.sub)))
+
+
+@router.patch("/groups/{group_id}/messages/{seq}", response_model=EntryOut)
+async def edit_message(
+    group_id: uuid.UUID,
+    seq: int,
+    body: EditIn,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    """Change what you said. The old text is kept with the edit; the agents are not woken by it."""
+    group = await _owned(db, group_id, user)
+    store = _store(ctx)
+    done = await store.channel_edit(group.channel, seq, groups.user_actor(user.sub), body.text.strip())
+    return await _marker(store, group, user, db, done, "That message")
+
+
+@router.delete("/groups/{group_id}/messages/{seq}", response_model=EntryOut)
+async def delete_message(
+    group_id: uuid.UUID,
+    seq: int,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    """Take back what you said, for everyone: its text and attachments are blanked wherever they were kept."""
+    group = await _owned(db, group_id, user)
+    store = _store(ctx)
+    done = await store.channel_tombstone(group.channel, seq, groups.user_actor(user.sub))
+    return await _marker(store, group, user, db, done, "That message")
+
+
+@router.put("/groups/{group_id}/messages/{seq}/reaction", response_model=EntryOut)
+async def react_to_message(
+    group_id: uuid.UUID,
+    seq: int,
+    body: ReactionIn,
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
+):
+    """Your one reaction to a message (an empty emoji takes it back)."""
+    group = await _owned(db, group_id, user)
+    store = _store(ctx)
+    done = await store.channel_react(group.channel, seq, groups.user_actor(user.sub), body.emoji.strip())
+    return await _marker(store, group, user, db, done, "That message")
 
 
 @router.post("/groups/{group_id}/members", response_model=GroupOut, status_code=201)
 async def add_member(
     group_id: uuid.UUID,
     body: MemberIn,
+    request: Request,
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
     ctx: ServerDependencies = Depends(get_ctx),
@@ -591,6 +684,7 @@ async def add_member(
         raise HTTPException(422, str(exc)) from exc
     await db.commit()
     await groups.refresh_members(db, ctx.runtime, group.id)
+    await _chats_changed(request, user)
     return await _out(db, store, group)
 
 
@@ -617,6 +711,7 @@ async def set_member_mode(
 async def remove_member(
     group_id: uuid.UUID,
     agent_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_tenant_scoped_db),
     user: AuthClaims = Depends(get_current_user),
     ctx: ServerDependencies = Depends(get_ctx),
@@ -628,6 +723,7 @@ async def remove_member(
         )
     await groups.remove_member(db, _store(ctx), group, agent_id)
     await db.commit()
+    await _chats_changed(request, user)
     await groups.refresh_members(db, ctx.runtime, group.id)
     await groups.refresh_agent(db, ctx.runtime, agent_id)  # it is not in this group's list now, but it still has its others
 

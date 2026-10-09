@@ -102,7 +102,14 @@ async def inspect_thread(store: RuntimeStore, thread_id: str) -> list[RunDetail]
     return out
 
 
-async def last_message(store: RuntimeStore, thread_id: str, *, limit: int = 140) -> str | None:
+class LastWord(BaseModel):
+    """The last thing said in a conversation: a one-line preview, and when that run ended (or began, while it is still going)."""
+
+    text: str
+    at: datetime | None = None
+
+
+async def last_message(store: RuntimeStore, thread_id: str, *, limit: int = 140) -> LastWord | None:
     """The last thing said in a conversation, as a one-line preview: the assistant's latest answer, else the user's latest message."""
     runs = await store.find_runs(thread_id=thread_id, active_only=False)
     for run in reversed(runs):
@@ -115,8 +122,8 @@ async def last_message(store: RuntimeStore, thread_id: str, *, limit: int = 140)
         text = said[RunLogKind.ASSISTANT_MESSAGE] or said[RunLogKind.USER_MESSAGE]
         if text:
             line = " ".join(text.split())
-            return line if len(line) <= limit else line[:limit] + "…"
+            return LastWord(text=line if len(line) <= limit else line[:limit] + "…", at=run.terminated_at or run.started_at or run.enqueued_at)
     return None
 
 
-__all__ = ["RunDetail", "ToolStep", "inspect_thread", "last_message"]
+__all__ = ["LastWord", "RunDetail", "ToolStep", "inspect_thread", "last_message"]

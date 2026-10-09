@@ -202,8 +202,6 @@ class Group(Base):
     token_cap: Mapped[int] = mapped_column(Integer, nullable=False, default=1_000_000)
     # The most the agents may spend in this group in dollars, beside the token cap (which also bounds a model that has no price). ``None``: no dollar limit.
     budget_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    # The last channel entry the user has seen.
-    user_read_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=-1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -256,6 +254,37 @@ class AgentContact(Base):
         primary_key=True,
     )
     note: Mapped[str] = mapped_column(String, nullable=False, default="")
+
+
+class AgentPair(Base):
+    """Two of a user's agents that have talked to each other: one row per pair, however many times and whichever way they asked.
+
+    What was said is in the runtime's channel ``pair/<id>`` (a record: nobody in it is woken). This row is what lists them: whose pairs, and
+    the latest line, so an agent's conversations can be listed, searched and paged without reading any of them. ``agent_a`` is the smaller id,
+    so the same two agents are never two rows."""
+
+    __tablename__ = "agent_pairs"
+    __table_args__ = (
+        UniqueConstraint("user_identifier", "agent_a", "agent_b", name="uq_agent_pair"),
+        Index("ix_agent_pairs_a_last", "user_identifier", "agent_a", "last_at"),
+        Index("ix_agent_pairs_b_last", "user_identifier", "agent_b", "last_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    user_identifier: Mapped[str] = mapped_column(String, nullable=False)
+    agent_a: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    agent_b: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # The latest line said between them, who said it (an agent id) and when; how many times they have asked each other.
+    last_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_text: Mapped[str] = mapped_column(String, nullable=False, default="")
+    last_sender: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    exchanges: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    @property
+    def channel(self) -> str:
+        return f"pair/{self.id}"
 
 
 class ThreadShare(Base):

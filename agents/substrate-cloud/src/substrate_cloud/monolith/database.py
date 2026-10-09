@@ -23,6 +23,10 @@ from substrate_cloud.monolith.rls import enable_row_level_security, ensure_app_r
 # added to a model here never reaches an already-provisioned dev/staging DB
 # without this. Mirrors the same additive-migration pattern used for
 # run_queue in integrations/runtime/scheduler.py.
+# Columns a model no longer has. A leftover NOT NULL column with no database default would make every insert fail.
+_DROP_COLUMNS: list[tuple[str, str]] = [
+    ("groups", "user_read_seq"),  # the user's read position is their cursor in the group's channel now
+]
 _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("threads", "tenant_id", "VARCHAR"),
     ("threads", "deleted_at", "TIMESTAMPTZ"),
@@ -88,6 +92,8 @@ async def init_db(
             await conn.execute(
                 text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {defn}")
             )
+        for table, col in _DROP_COLUMNS:
+            await conn.execute(text(f"ALTER TABLE {table} DROP COLUMN IF EXISTS {col}"))
         # Enabling the policies is always safe (idempotent DDL, and inert
         # against a superuser connection — see rls.py's module docstring).
         # Only actually provision the dedicated low-privilege role when a

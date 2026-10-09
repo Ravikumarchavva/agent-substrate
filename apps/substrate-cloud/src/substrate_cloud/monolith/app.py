@@ -27,9 +27,12 @@ from substrate_cloud.monolith.database import init_db
 from substrate_cloud.monolith.dependencies import ServerDependencies
 from substrate_cloud.monolith.routes.admin import router as admin_router
 from substrate_cloud.monolith.routes.agents import router as agents_router
+from substrate_cloud.monolith.routes.agent_view import router as agent_view_router
+from substrate_cloud.monolith.routes.feed import router as feed_router
 from substrate_cloud.monolith.routes.groups import router as groups_router
 from substrate_cloud.monolith.access_log import quiet_polls
 from substrate_cloud.monolith.services.groups.member import register_member_factory
+from substrate_cloud.realtime.hub import FeedHub, Relay
 from substrate_cloud.monolith.routes.audio import router as audio_router
 from substrate_cloud.monolith.routes.workspace_oauth import (
     router as workspace_oauth_router,
@@ -225,6 +228,13 @@ async def lifespan(app: FastAPI):
 
     register_member_factory(infra.runtime, lambda: app.state.ctx)
 
+    # What is said in a conversation reaches the people watching it as it commits, from this process or a worker's: every process publishes
+    # what it sees and every process's hub hears it (Redis), so no one has to keep asking.
+    app.state.feed = FeedHub()
+    app.state.feed_relay = Relay(app.state.feed, infra.redis_client)
+    infra.runtime.store.channel_observe(app.state.feed_relay.observe)
+    app.state.feed_task = asyncio.create_task(app.state.feed_relay.run())
+
     app.state.mcp_servers = {}
 
     # Rate limiting — Redis sliding window, two-tier (authed by user_id, anon by IP)
@@ -363,6 +373,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    app.state.feed_task.cancel()
     if app.state.catch_up is not None:
         app.state.catch_up.cancel()
     runtime_stack = getattr(app.state, "runtime_stack", None)
@@ -427,6 +438,8 @@ def create_app() -> FastAPI:
     app.include_router(workspace_oauth_router)
     app.include_router(agents_router)
     app.include_router(groups_router)
+    app.include_router(feed_router)
+    app.include_router(agent_view_router)
     app.include_router(threads_router)
     app.include_router(branches_router)
     app.include_router(memory_router)

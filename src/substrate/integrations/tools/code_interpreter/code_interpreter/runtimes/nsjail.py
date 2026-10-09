@@ -101,6 +101,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import textwrap
 from pathlib import Path
 
@@ -352,31 +353,38 @@ class NsjailRuntime:
 
         before = snapshot(session_path)
         mounted_before = [snapshot(path) for _label, path in mounted]
-        cmd = self._nsjail_argv(spec) + argv
+        # Each run gets a root of its own: nsjail makes a folder there for every mount, and a folder left in a shared root would show the
+        # next run (anyone's) the name of a drive that is not theirs.
+        _CHROOT_BASE.mkdir(parents=True, exist_ok=True)
+        chroot = Path(tempfile.mkdtemp(prefix="run-", dir=_CHROOT_BASE))
+        cmd = self._nsjail_argv(spec, chroot) + argv
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=_sandbox_env(),
-            )
-        except FileNotFoundError as exc:
-            raise SandboxUnavailableError(f"Cannot start sandbox: {exc}") from exc
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=_sandbox_env(),
+                )
+            except FileNotFoundError as exc:
+                raise SandboxUnavailableError(f"Cannot start sandbox: {exc}") from exc
 
-        try:
-            raw_out, raw_err = await asyncio.wait_for(
-                proc.communicate(), timeout=spec.timeout_s + 5
-            )
-            exit_code = proc.returncode or 0
-        except asyncio.TimeoutError:
-            # Backstop only: nsjail's own `-t` below should already have
-            # killed the child well before this fires.
-            proc.kill()
-            await proc.wait()
-            return ExecResult(
-                stderr=f"Execution timed out after {spec.timeout_s}s.", exit_code=124
-            )
+            try:
+                raw_out, raw_err = await asyncio.wait_for(
+                    proc.communicate(), timeout=spec.timeout_s + 5
+                )
+                exit_code = proc.returncode or 0
+            except asyncio.TimeoutError:
+                # Backstop only: nsjail's own `-t` below should already have
+                # killed the child well before this fires.
+                proc.kill()
+                await proc.wait()
+                return ExecResult(
+                    stderr=f"Execution timed out after {spec.timeout_s}s.", exit_code=124
+                )
+        finally:
+            shutil.rmtree(chroot, ignore_errors=True)
 
         stdout = raw_out.decode("utf-8", errors="replace")
         stderr = raw_err.decode("utf-8", errors="replace")
@@ -413,9 +421,8 @@ class NsjailRuntime:
             ) from None
         return candidate
 
-    def _nsjail_argv(self, spec: SandboxSpec) -> list[str]:
+    def _nsjail_argv(self, spec: SandboxSpec, chroot: Path) -> list[str]:
         session_path = self._resolve_session(spec.session_dir)
-        _CHROOT_BASE.mkdir(parents=True, exist_ok=True)
         argv = [
             self._nsjail_bin,
             "-Mo",  # standalone, single execution
@@ -427,7 +434,7 @@ class NsjailRuntime:
             "-t",
             str(spec.timeout_s),
             "--chroot",
-            str(_CHROOT_BASE),
+            str(chroot),
             "--cwd",
             "/workspace",
         ]

@@ -6,6 +6,7 @@ from substrate_cloud.stream.history import (
     append_mcp_app_context,
     append_user_message,
     project_thread,
+    project_thread_timed,
 )
 from substrate_cloud.stream.session import (
     AgentStreamSession,
@@ -18,6 +19,7 @@ __all__ = [
     "sse_lines",
     "tail_wire_events",
     "project_thread",
+    "project_thread_timed",
     "append_mcp_app_context",
     "append_user_message",
 ]

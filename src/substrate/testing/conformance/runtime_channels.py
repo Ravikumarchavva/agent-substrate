@@ -15,6 +15,7 @@ from substrate.runtime.channel import (
     EntryKind,
     Member,
     Mode,
+    ParticipantKind,
     WakeReason,
 )
 from substrate.types.identity import Actor
@@ -234,6 +235,16 @@ class ChannelTests:
         assert [e.text for e in await store.channel_last(CH, 2)] == ["3", "4"]
         assert await store.channel_last("missing") == []
 
+    async def test_a_page_back_comes_oldest_first_and_stops_at_the_start(self, store):
+        await self.open(store)
+        for i in range(10):
+            await store.channel_append(CH, sender=HUMAN, text=str(i))
+        assert [e.text for e in await store.channel_read_before(CH, 10, 4)] == ["6", "7", "8", "9"]
+        assert [e.text for e in await store.channel_read_before(CH, 6, 4)] == ["2", "3", "4", "5"]
+        assert [e.text for e in await store.channel_read_before(CH, 2, 4)] == ["0", "1"]
+        assert await store.channel_read_before(CH, 0, 4) == []
+        assert await store.channel_read_before("missing", 5) == []
+
     async def test_a_deleted_channel_is_gone_with_its_entries_and_members(self, store):
         await self.open(store)
         await store.channel_append(CH, sender=HUMAN, text="x")
@@ -378,3 +389,208 @@ class ChannelTests:
         await store.channel_append(CH, sender=HUMAN, text="@Scout hi", mentions=[str(SCOUT)])
         r = await store.channel_append(CH, sender=HUMAN, text="and?")
         assert SCOUT not in r.woken
+
+    # -- people are members too: they read and are read to, but are never woken ----------------------------------------------------------
+
+    async def open_with_person(self, store, **kw) -> None:
+        await store.channel_open(
+            CH,
+            members=[
+                Member(agent=HUMAN, kind=ParticipantKind.HUMAN),
+                Member(agent=SCOUT),
+                Member(agent=QUILL),
+            ],
+            **kw,
+        )
+
+    async def test_a_person_in_a_channel_is_never_woken_and_never_gets_a_run(self, store):
+        await self.open_with_person(store)
+        r = await store.channel_append(CH, sender=SCOUT, text="hello")
+        assert HUMAN not in r.woken and set(r.woken) == {QUILL}
+        assert await store.drain(HUMAN) == []
+        r = await store.channel_append(CH, sender=HUMAN, text="hi")
+        assert set(r.woken) == {SCOUT, QUILL}
+        members = {m.agent: m for m in await store.channel_members(CH)}
+        assert members[HUMAN].kind == ParticipantKind.HUMAN and members[HUMAN].inbox is None
+        assert members[SCOUT].kind == ParticipantKind.AGENT and members[SCOUT].inbox == SCOUT
+
+    async def test_a_member_can_have_an_inbox_other_than_its_own_name(self, store):
+        inbox = Actor("chat", "scout@1")
+        await store.channel_open(CH, members=[Member(agent=Actor("agent", "scout"), inbox=inbox)])
+        r = await store.channel_append(CH, sender=HUMAN, text="hi")
+        assert r.woken == (inbox,)
+        assert await store.drain(inbox)
+
+    async def test_unread_counts_what_others_wrote_after_the_cursor(self, store):
+        await self.open_with_person(store)
+        await store.channel_append(CH, sender=SCOUT, text="a")  # 0
+        await store.channel_append(CH, sender=QUILL, text="b")  # 1
+        await store.channel_append(CH, sender=HUMAN, text="mine")  # 2: own entries are never unread
+        [head] = await store.channel_heads([CH], HUMAN)
+        assert head.unread == 0 and head.latest is not None and head.latest.text == "mine"
+        await store.channel_append(CH, sender=SCOUT, text="c")
+        await store.channel_append(CH, sender=SCOUT, text="d")
+        [head] = await store.channel_heads([CH], HUMAN)
+        assert head.unread == 2
+        await store.channel_mark_read(CH, HUMAN, 3)
+        [head] = await store.channel_heads([CH], HUMAN)
+        assert head.unread == 1
+        await store.channel_mark_read(CH, HUMAN, 4)
+        assert (await store.channel_heads([CH], HUMAN))[0].unread == 0
+
+    async def test_unread_is_not_capped_and_ignores_system_notices_edits_and_reactions(self, store):
+        await self.open_with_person(store)
+        for i in range(250):
+            await store.channel_append(CH, sender=SCOUT, text=str(i), fresh=True)
+        entry = (await store.channel_last(CH, 1))[0]
+        await store.channel_react(CH, entry.seq, QUILL, "👍")
+        await store.channel_edit(CH, entry.seq, SCOUT, "edited")
+        [head] = await store.channel_heads([CH], HUMAN)
+        assert head.unread == 250
+
+    async def test_heads_cover_many_channels_and_a_missing_one_is_empty(self, store):
+        await self.open_with_person(store)
+        await store.channel_open("group/2", members=[Member(agent=HUMAN, kind=ParticipantKind.HUMAN), Member(agent=SCOUT)])
+        await store.channel_append(CH, sender=SCOUT, text="one")
+        heads = {h.channel: h for h in await store.channel_heads([CH, "group/2", "nope"], HUMAN)}
+        assert heads[CH].unread == 1 and heads["group/2"].latest is None and heads["group/2"].unread == 0
+        assert "nope" not in heads
+
+    async def test_delivered_only_moves_forward_and_starts_unset(self, store):
+        await self.open_with_person(store)
+        for i in range(3):
+            await store.channel_append(CH, sender=SCOUT, text=str(i))
+        assert {m.agent: m.delivered for m in await store.channel_members(CH)}[HUMAN] == -1
+        await store.channel_mark_delivered(CH, HUMAN, 2)
+        await store.channel_mark_delivered(CH, HUMAN, 0)
+        assert {m.agent: m.delivered for m in await store.channel_members(CH)}[HUMAN] == 2
+
+    async def test_a_member_added_later_remembers_where_it_joined(self, store):
+        await self.open_with_person(store)
+        await store.channel_append(CH, sender=HUMAN, text="before")
+        await store.channel_append(CH, sender=HUMAN, text="before too")
+        await store.channel_set_member(CH, Member(agent=MAX))
+        await store.channel_set_member(CH, Member(agent=MAX, mode=Mode.MENTIONS))  # a mode change keeps it
+        members = {m.agent: m for m in await store.channel_members(CH)}
+        assert members[SCOUT].joined_seq == 0 and members[MAX].joined_seq == 2 and members[MAX].mode == Mode.MENTIONS
+
+    # -- every entry has an id; a person can edit, delete and react ----------------------------------------------------------------------
+
+    async def test_every_entry_has_a_unique_id_and_a_repeat_returns_the_same_one(self, store):
+        await self.open(store)
+        a = await store.channel_append(CH, sender=SCOUT, text="x", dedup_key="k")
+        b = await store.channel_append(CH, sender=SCOUT, text="x", dedup_key="k")
+        c = await store.channel_append(CH, sender=HUMAN, text="y")
+        assert a.id and a.id == b.id and c.id and c.id != a.id
+        assert [e.id for e in await store.channel_read(CH)] == [a.id, c.id]
+
+    async def test_an_edit_replaces_the_text_keeps_the_old_one_and_wakes_no_one(self, store):
+        await self.open_with_person(store)
+        sent = await store.channel_append(CH, sender=HUMAN, text="lunch at 1", mentions=[str(SCOUT)])
+        inboxes = (len(await store.drain(SCOUT)), len(await store.drain(QUILL)))
+        assert inboxes == (1, 1)
+        done = await store.channel_edit(CH, sent.seq, HUMAN, "lunch at 2")
+        assert done is not None and done > sent.seq
+        original, marker = await store.channel_read(CH)
+        assert original.text == "lunch at 2" and original.edited_at is not None and original.id == sent.id
+        assert marker.kind == EntryKind.EDIT and marker.reply_to == sent.seq and marker.text == "lunch at 2"
+        assert marker.data == {"previous": "lunch at 1"}  # nothing that was said is lost
+        assert (len(await store.drain(SCOUT)), len(await store.drain(QUILL))) == inboxes
+
+    async def test_only_the_sender_can_edit_or_delete_and_not_a_marker(self, store):
+        await self.open_with_person(store)
+        sent = await store.channel_append(CH, sender=HUMAN, text="mine")
+        assert await store.channel_edit(CH, sent.seq, SCOUT, "hijack") is None
+        assert await store.channel_tombstone(CH, sent.seq, SCOUT) is None
+        assert await store.channel_edit(CH, 99, HUMAN, "nothing there") is None
+        marker = await store.channel_edit(CH, sent.seq, HUMAN, "ok")
+        assert await store.channel_edit(CH, marker, HUMAN, "again") is None
+        assert (await store.channel_read(CH))[0].text == "ok"
+
+    async def test_a_deleted_entry_is_blanked_everywhere_including_its_edit_history(self, store):
+        await self.open_with_person(store)
+        sent = await store.channel_append(CH, sender=HUMAN, text="secret", data={"attachments": [{"name": "a.pdf"}]})
+        await store.channel_edit(CH, sent.seq, HUMAN, "secret v2")
+        gone = await store.channel_tombstone(CH, sent.seq, HUMAN)
+        assert gone is not None
+        entries = {e.seq: e for e in await store.channel_read(CH)}
+        assert entries[sent.seq].text == "" and entries[sent.seq].deleted_at is not None and entries[sent.seq].data == {}
+        assert all("secret" not in e.text and "secret" not in str(e.data) for e in entries.values())
+        assert entries[gone].kind == EntryKind.TOMBSTONE and entries[gone].reply_to == sent.seq
+        assert await store.channel_edit(CH, sent.seq, HUMAN, "revive") is None
+
+    async def test_a_reaction_is_one_per_person_replaceable_and_removable(self, store):
+        await self.open_with_person(store)
+        sent = await store.channel_append(CH, sender=SCOUT, text="answer")
+        await store.channel_react(CH, sent.seq, HUMAN, "👍")
+        await store.channel_react(CH, sent.seq, HUMAN, "❤️")  # replaces the first
+        await store.channel_react(CH, sent.seq, QUILL, "👍")
+        assert await store.channel_reactions(CH, [sent.seq]) == {sent.seq: {str(HUMAN): "❤️", str(QUILL): "👍"}}
+        await store.channel_react(CH, sent.seq, HUMAN, "")  # takes it back
+        assert await store.channel_reactions(CH, [sent.seq]) == {sent.seq: {str(QUILL): "👍"}}
+        assert await store.channel_reactions(CH, [123]) == {}
+        assert await store.channel_react(CH, 99, HUMAN, "👍") is None
+
+    # -- depth follows what caused an entry, so a routine or a person starts afresh ---------------------------------------------------------
+
+    async def test_a_fresh_entry_starts_a_new_chain_and_never_trips_the_breaker(self, store):
+        await self.open_with_person(store, breaker=3)
+        for i in range(10):  # ten routine reports with no person in between
+            r = await store.channel_append(CH, sender=SCOUT, text=f"report {i}", fresh=True)
+            assert r.seq is not None and not r.paused
+        assert [e.depth for e in await store.channel_read(CH)] == [0] * 10
+
+    async def test_a_reply_is_one_deeper_than_what_it_answers(self, store):
+        await self.open_with_person(store)
+        await store.channel_append(CH, sender=HUMAN, text="q")  # 0, depth 0
+        await store.channel_append(CH, sender=SCOUT, text="a")  # 1: by default it answers the latest entry, so depth 1
+        await store.channel_append(CH, sender=QUILL, text="b", cause_seq=0)  # answers the question, not Scout: depth 1 too
+        await store.channel_append(CH, sender=MAX, text="c")  # answers b
+        assert [e.depth for e in await store.channel_read(CH)] == [0, 1, 1, 2]
+
+    # -- running out of budget is said once, not silently ---------------------------------------------------------------------------------
+
+    async def test_a_member_out_of_budget_is_announced_once_and_not_woken(self, store):
+        from substrate.runtime.store import ExecutionBudget
+
+        await self.open_with_person(store)
+        await store.account_limit(f"agent:{SCOUT}", ExecutionBudget(max_tokens=0))
+        r1 = await store.channel_append(CH, sender=HUMAN, text="one")
+        r2 = await store.channel_append(CH, sender=HUMAN, text="two")
+        assert SCOUT not in r1.woken and SCOUT not in r2.woken and QUILL in r2.woken
+        notices = [e for e in await store.channel_read(CH) if e.kind == EntryKind.SYSTEM]
+        assert len(notices) == 1 and "scout" in notices[0].text.lower()
+        await store.account_limit(f"agent:{SCOUT}", ExecutionBudget(max_tokens=1_000))  # topped up
+        r3 = await store.channel_append(CH, sender=HUMAN, text="three")
+        assert SCOUT in r3.woken
+
+    # -- an observer hears about what was committed ----------------------------------------------------------------------------------------
+
+    async def test_an_observer_hears_every_committed_change_but_not_a_refused_post(self, store):
+        heard: list[tuple[str, int, EntryKind]] = []
+
+        async def observer(change) -> None:
+            heard.append((change.channel, change.seq, change.kind))
+
+        store.channel_observe(observer)
+        await self.open_with_person(store, breaker=1)
+        sent = await store.channel_append(CH, sender=HUMAN, text="x")
+        await store.channel_edit(CH, sent.seq, HUMAN, "y")
+        await store.channel_react(CH, sent.seq, SCOUT, "👍")
+        await store.channel_append(CH, sender=SCOUT, text="a")  # depth 1: fine
+        refused = await store.channel_append(CH, sender=QUILL, text="b")  # depth 2 > 1: pauses, writes a notice
+        assert refused.paused
+        await store.channel_append(CH, sender=HUMAN, text="x", dedup_key="d")
+        await store.channel_append(CH, sender=HUMAN, text="x", dedup_key="d")  # a repeat changes nothing
+        assert [k for _, _, k in heard] == [
+            EntryKind.MESSAGE, EntryKind.EDIT, EntryKind.REACTION, EntryKind.MESSAGE, EntryKind.SYSTEM, EntryKind.MESSAGE,
+        ]
+        assert [s for _, s, _ in heard] == sorted(s for _, s, _ in heard)
+
+    async def test_a_failing_observer_does_not_stop_the_append(self, store):
+        async def broken(change) -> None:
+            raise RuntimeError("down")
+
+        store.channel_observe(broken)
+        await self.open(store)
+        assert (await store.channel_append(CH, sender=HUMAN, text="x")).seq == 0

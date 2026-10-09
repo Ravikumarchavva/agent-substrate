@@ -172,6 +172,9 @@ def cmd_start(args: argparse.Namespace) -> None:
         host,
         "--port",
         str(port),
+        # Streams that stay open (the feed) would otherwise hold a stopping server up for as long as anyone is connected; clients reconnect on their own.
+        "--timeout-graceful-shutdown",
+        "10",
     ]
     if reload:
         cmd.append("--reload")

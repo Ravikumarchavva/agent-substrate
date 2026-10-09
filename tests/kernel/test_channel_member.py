@@ -536,3 +536,31 @@ async def test_a_member_asked_directly_about_a_picture_shared_earlier_is_shown_i
         await settle(rt.store)
     assert media_in(model.seen[0]) == ["temple.png"] and "(earlier, already seen)" in last_text(model.seen[0])
 
+
+
+async def test_what_happened_to_an_entry_is_not_something_a_member_reads() -> None:
+    """A reaction, an edit marker or a delete marker is for a person's screen: the member's digest has only what was said."""
+    scout = Actor("member", "scout@g")
+    names = roster(scout)
+    seen: list[str] = []
+
+    def reply(messages) -> str:
+        seen.append(last_text(messages))
+        return PASS
+
+    async with ephemeral_runtime() as rt:
+        await rt.register(member("scout", ScriptedModel(reply), names))
+        store = rt.store
+        await store.channel_open(G, members=[Member(agent=scout)])
+        sent = await store.channel_append(G, sender=HUMAN, text="the plan is x")
+        await settle(store)
+        await store.channel_react(G, sent.seq, HUMAN, "👍")
+        await store.channel_edit(G, sent.seq, HUMAN, "the plan is y")
+        await store.channel_append(G, sender=HUMAN, text="and then z")
+        await settle(store)
+        members = {m.agent: m for m in await store.channel_members(G)}
+        latest = (await store.channel_last(G, 1))[0].seq
+
+    digests = "\n".join(seen)
+    assert "👍" not in digests and "previous" not in digests and "and then z" in digests
+    assert members[scout].cursor == latest  # it has read past the markers, so they never wake it again

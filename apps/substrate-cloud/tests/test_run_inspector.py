@@ -9,6 +9,7 @@ import pytest
 from substrate.runtime import NewEntry, RunSpec
 from substrate.testing.runtime import runtime_store
 from substrate.types import Actor
+from substrate_cloud.stream.history import project_thread_timed
 from substrate_cloud.stream.runs import inspect_thread, last_message
 
 from test_scheduled_notifications import session
@@ -82,9 +83,21 @@ async def test_the_last_thing_said_is_a_one_line_preview(log):
         ("user.message", {"text": "What is\nthe plan?"}),
         ("assistant.message", {"text": "First  we ship.\nThen we rest."}),
     ]])  # fmt: skip
-    assert await last_message(log, "t9") == "First we ship. Then we rest."
+    said = await last_message(log, "t9")
+    assert said is not None and said.text == "First we ship. Then we rest." and said.at is not None
     assert await last_message(log, "nobody") is None
     only_user = await log.create_run(RunSpec(agent=Actor(type="agent", key="a"), tenant="acme", thread_id="t10"))
     await log.annotate(only_user.run_id, [NewEntry(kind="user.message", payload={"text": "hello" * 60})])
     preview = await last_message(log, "t10")
-    assert preview.endswith("…") and len(preview) <= 141
+    assert preview is not None and preview.text.endswith("…") and len(preview.text) <= 141
+
+
+async def test_history_says_when_each_thing_was_said(log):
+    run = await log.create_run(RunSpec(agent=Actor(type="agent", key="a"), tenant="acme", thread_id="t11"))
+    await log.annotate(run.run_id, [NewEntry(kind=k, payload=p) for k, p in [
+        ("user.message", {"text": "hello"}),
+        ("assistant.message", {"text": "hi"}),
+    ]])  # fmt: skip
+    events = await project_thread_timed(log, "t11")
+    assert [e.type for e, _ in events] == ["user.message", "text.delta"]
+    assert all(at.tzinfo is not None for _, at in events)

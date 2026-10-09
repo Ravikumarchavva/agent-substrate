@@ -26,10 +26,12 @@ from substrate.types.run_status import RunId, RunStatus
 from substrate.runtime.inbox import DeadLetterEntry, DeadLetterReason
 from substrate.types.run_log import RunLogEntry, RunLogKind
 from substrate.runtime.scheduler import RunRetryPolicy
+from substrate.runtime.channel import ChannelObserver
 from substrate.runtime.persistence.accounts import Accounts
 from substrate.runtime.persistence.channels import (
     _SCHEMA_CHANNELS,
     Channels,
+    _schema_chat,
     _schema_dedup,
     _schema_engagement,
     _schema_entry_data,
@@ -210,6 +212,7 @@ class RuntimeStore(Channels, Accounts):
         self._max_attempts = max_delivery_attempts
         self._appended: dict[str, asyncio.Event] = {}
         self._channel_events: dict[str, asyncio.Event] = {}
+        self._channel_observers: list[ChannelObserver] = []
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -217,7 +220,7 @@ class RuntimeStore(Channels, Accounts):
         await migrate(
             self._db,
             "runtime",
-            [_SCHEMA_V1, _SCHEMA_CHANNELS, _schema_dedup, _schema_entry_data, _schema_engagement],
+            [_SCHEMA_V1, _SCHEMA_CHANNELS, _schema_dedup, _schema_entry_data, _schema_engagement, _schema_chat],
         )
 
     async def aclose(self) -> None:
@@ -1345,6 +1348,7 @@ class RuntimeStore(Channels, Accounts):
                     "SELECT channel FROM rt_channels WHERE tenant = ?", tenant
                 ):
                     for table in (
+                        "rt_channel_reactions",
                         "rt_channel_entries",
                         "rt_channel_members",
                         "rt_channels",

@@ -69,7 +69,7 @@ from substrate.runtime.store import (
 from substrate.runtime.supervisor import RunHandle, RunResult
 from substrate.types.wakeup import Wakeup
 from substrate.tools.chain import InvocationResult
-from substrate.runtime.channel import AppendResult, ChannelEntry
+from substrate.runtime.channel import SPOKEN, AppendResult, ChannelEntry
 from substrate.runtime.journal import Journal, current_idempotency_key
 from substrate.telemetry.metrics import instruments
 from substrate.telemetry import semconv
@@ -712,11 +712,15 @@ class RunContext:
         reply_to: int | None = None,
         read_up_to: int | None = None,
         data: JsonObject | None = None,
+        cause_seq: int | None = None,
+        fresh: bool = False,
     ) -> AppendResult:
         """Speak in a channel as this agent, once across all replays. ``data`` rides with the entry (attachments, say).
 
         With ``read_up_to`` the post is refused (``stale``) when others have spoken since that
-        ``seq``: read again and reconsider. The run's id is the entry's ``caused_by``.
+        ``seq``: read again and reconsider. The run's id is the entry's ``caused_by``. ``cause_seq`` names the entry this
+        answers when it is not the latest message, and ``fresh`` says nothing led to it (a timer woke the agent): both
+        decide the entry's depth, which the channel's breaker counts.
         """
 
         async def append() -> JsonObject:
@@ -730,6 +734,8 @@ class RunContext:
                 read_up_to=read_up_to,
                 dedup_key=current_idempotency_key(),
                 data=data,
+                cause_seq=cause_seq,
+                fresh=fresh,
             )
             return result.model_dump(mode="json")
 
@@ -746,7 +752,7 @@ class RunContext:
 
         async def read() -> JsonObject:
             entries = await self._store.channel_read(channel, after=max(-1, before - limit - 1), limit=limit)
-            return {"entries": [e.model_dump(mode="json") for e in entries if e.seq < before]}
+            return {"entries": [e.model_dump(mode="json") for e in entries if e.seq < before and e.kind in SPOKEN]}
 
         outcome = await self._journal.effect(
             "channel.recall", {"channel": channel, "before": before}, read, idempotent=True
@@ -771,8 +777,8 @@ class RunContext:
             )
             entries = await self._store.channel_read(channel, after=cursor, limit=limit)
             if entries:
-                await self._store.channel_mark_read(channel, me, entries[-1].seq)
-            return {"entries": [e.model_dump(mode="json") for e in entries]}
+                await self._store.channel_mark_read(channel, me, entries[-1].seq)  # past the markers too: they are not for an agent to read
+            return {"entries": [e.model_dump(mode="json") for e in entries if e.kind in SPOKEN]}
 
         outcome = await self._journal.effect(
             "channel.read", {"channel": channel}, read, idempotent=True

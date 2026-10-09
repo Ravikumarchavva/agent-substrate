@@ -97,26 +97,18 @@ def test_any_text_at_all_is_accepted(text: str) -> None:
 # ------------------------------------------------------------------------------------------------------------ round trips
 
 _KEY = st.from_regex(r"[A-Za-z_][A-Za-z0-9_.-]{0,12}", fullmatch=True)
-_SAFE_TEXT = st.text(
-    alphabet=st.characters(
-        min_codepoint=32,
-        max_codepoint=0xD7FF,
-        blacklist_categories=("Cs", "Cc", "Zl", "Zp"),
-    ),
-    max_size=30,
-)
 _LEAF = st.one_of(
     st.none(),
     st.booleans(),
     st.integers(min_value=-(10**12), max_value=10**12),
     st.floats(allow_nan=False, allow_infinity=False, width=32),
-    _SAFE_TEXT,
+    st.text(max_size=40),
 )
 _VALUE = st.recursive(
     _LEAF,
     lambda inner: st.one_of(
         st.lists(inner, max_size=4),
-        st.dictionaries(_SAFE_TEXT, inner, max_size=3),
+        st.dictionaries(st.text(max_size=8), inner, max_size=3),
     ),
     max_leaves=8,
 )
@@ -129,6 +121,14 @@ def test_whatever_is_written_is_read_back_identically(data: dict) -> None:
     assert load_mapping(dump_mapping(data)) == data
 
 
+_SAFE_TEXT = st.text(
+    alphabet=st.characters(
+        min_codepoint=32,
+        max_codepoint=0xD7FF,
+        blacklist_categories=("Cs", "Cc", "Zl", "Zp"),
+    ),
+    max_size=30,
+)
 _YAML_LEAF = st.one_of(
     st.none(),
     st.booleans(),

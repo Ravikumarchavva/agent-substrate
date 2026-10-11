@@ -366,6 +366,7 @@ class ChannelMemberAgent(ReActAgent):
                 for a in e.data.get("attachments", []):
                     if (
                         can_show
+                        and self._config.media is not None
                         and id(a) in pictures
                         and (block := await self._config.media(a)) is not None
                     ):

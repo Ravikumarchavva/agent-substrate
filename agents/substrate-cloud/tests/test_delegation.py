@@ -15,6 +15,7 @@ from substrate_cloud.monolith.services.agents.delegation import (
     AskAgentTool,
     other_agents,
 )
+from substrate_cloud.monolith.services.agents.pairs import _line
 
 from test_scheduled_notifications import session
 
@@ -128,7 +129,7 @@ async def test_what_one_agent_asks_another_is_kept_as_their_conversation_and_a_p
                     row["kind"] == "agent"
                     and row["name"] == other
                     and row["count"] == 1
-                    and row["preview"] == result.text.strip()
+                    and row["preview"] == _line(result.text)
                 )
             (row,) = (
                 await c.get(

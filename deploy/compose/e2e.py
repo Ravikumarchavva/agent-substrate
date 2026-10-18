@@ -14,7 +14,7 @@ ENV = dict(
     for line in Path(sys.argv[1]).read_text().splitlines()
     if "=" in line and not line.startswith("#")
 )
-KC = "http://localhost:8081"
+KC = f"http://localhost:{ENV.get('PORT_KEYCLOAK', '8080')}"
 REALM = f"{KC}/realms/substrate"
 AGENT = "http://localhost:8000/api/v1"
 DATA = "http://localhost:8021/api/v1"

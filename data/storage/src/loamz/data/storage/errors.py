@@ -7,9 +7,12 @@
     │   └── ServiceUnavailableError   a service reached by URL is down, timed out or answered 5xx
     └── PermanentError         trying again cannot help
         ├── InvalidRequestError       the input breaks a rule
+        │   ├── ContextLengthError    longer than a model takes
+        │   └── UnsupportedContentError   content a component cannot take
         ├── NotFoundError             nothing there (also what another tenant's or user's object looks like)
         ├── ForbiddenError            known caller, not allowed
         ├── UnauthenticatedError      no or bad credentials
+        ├── PreconditionFailedError   a conditional write whose condition did not hold
         ├── ScopeViolationError       a write tried to take over a record of another scope
         ├── QuotaExceededError        a size or count limit
         ├── VectorSpaceError          vectors from two embedders mixed in one collection
@@ -89,9 +92,37 @@ class RateLimitedError(TransientError):
 class ServiceUnavailableError(TransientError):
     code: ClassVar[str] = "unavailable"
 
+    def __init__(
+        self,
+        message: str = "service unavailable",
+        *,
+        url: str | None = None,
+        retry_after: float | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.url = url  # for logs only: an internal address is never shown to a caller
+        self.retry_after = retry_after
+
+    def extensions(self) -> dict[str, Any]:
+        return {} if self.retry_after is None else {"retry_after": self.retry_after}
+
 
 class InvalidRequestError(PermanentError):
     pass
+
+
+class ContextLengthError(InvalidRequestError):
+    """An input longer than a model takes (an embedder's or a chat model's context window)."""
+
+    def __init__(
+        self, message: str = "context length exceeded", *, limit: int | None = None
+    ) -> None:
+        super().__init__(message)
+        self.limit = limit
+
+
+class UnsupportedContentError(InvalidRequestError):
+    """Content a component cannot take (an image for a text-only embedder): refused, never silently dropped."""
 
 
 class NotFoundError(PermanentError):
@@ -104,6 +135,10 @@ class ForbiddenError(PermanentError):
 
 class UnauthenticatedError(PermanentError):
     pass
+
+
+class PreconditionFailedError(PermanentError):
+    """A conditional write (`If-Match`, `If-None-Match`) whose condition did not hold: reload and decide again."""
 
 
 class ScopeViolationError(PermanentError):
@@ -139,6 +174,7 @@ HTTP_STATUS: dict[type[LoamzError], int] = {
     ForbiddenError: 403,
     NotFoundError: 404,
     ConflictError: 409,
+    PreconditionFailedError: 412,
     ScopeViolationError: 409,
     QuotaExceededError: 413,
     VectorSpaceError: 422,
@@ -158,11 +194,13 @@ def http_status(error: BaseException) -> int:
 __all__ = [
     "HTTP_STATUS",
     "ConflictError",
+    "ContextLengthError",
     "ForbiddenError",
     "InvalidRequestError",
     "LoamzError",
     "NotFoundError",
     "PermanentError",
+    "PreconditionFailedError",
     "QuotaExceededError",
     "RateLimitedError",
     "SchemaVersionError",
@@ -170,6 +208,7 @@ __all__ = [
     "ServiceUnavailableError",
     "TransientError",
     "UnauthenticatedError",
+    "UnsupportedContentError",
     "VectorSpaceError",
     "http_status",
 ]

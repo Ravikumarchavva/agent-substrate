@@ -17,6 +17,7 @@ from loamz.data.storage.sql.database import (
     Tx,
     migrate,
     under,
+    version,
 )
 from loamz.data.storage.sql.sqlite import SqliteDatabase
 
@@ -48,4 +49,5 @@ __all__ = [
     "postgres",
     "sqlite",
     "under",
+    "version",
 ]

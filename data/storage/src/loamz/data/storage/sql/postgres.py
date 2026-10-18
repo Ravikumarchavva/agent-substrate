@@ -47,7 +47,7 @@ class _PgTx:
         # asyncpg returns e.g. "UPDATE 3"
         try:
             return int(status.split()[-1])
-        except ValueError, IndexError:
+        except (ValueError, IndexError):
             return 0
 
     async def fetchone(self, sql: str, *params: Any) -> Mapping[str, Any] | None:

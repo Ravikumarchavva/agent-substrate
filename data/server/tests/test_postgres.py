@@ -77,6 +77,12 @@ def test_only_one_replica_publishes_and_another_takes_over_when_it_dies(server):
         assert a.acquire() is True and a.acquire() is True  # holding it is stable
         assert b.acquire() is False
         a.conn.close()  # the leader's connection dies, as when its process is killed
+        import time
+
+        for _ in range(50):
+            if b.acquire():
+                break
+            time.sleep(0.05)
         assert b.acquire() is True  # the server freed the lock, so the other replica leads
         assert a.acquire() is False  # the first notices, reconnects, and cannot take it back
     finally:

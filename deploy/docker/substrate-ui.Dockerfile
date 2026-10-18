@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # substrate-ui (the agents console): Next.js standalone output, non-root.
 # Node 22 (LTS): pnpm 11.x imports node:sqlite, which requires Node >=22.13.
-FROM node:22-alpine AS base
+FROM node:26-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps

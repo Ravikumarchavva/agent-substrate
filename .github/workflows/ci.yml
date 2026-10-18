@@ -271,7 +271,7 @@ jobs:
         package: ${{ fromJSON(needs.changes.outputs.js) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4 # pnpm version comes from "packageManager" in the root package.json
+      - uses: pnpm/action-setup@v6 # pnpm version comes from "packageManager" in the root package.json
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}

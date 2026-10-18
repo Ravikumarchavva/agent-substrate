@@ -18,11 +18,11 @@ from urllib.parse import quote
 from loamz.agents.kernel.errors import DAGIntegrityError
 from loamz.agents.kernel.ports.files import FileStore
 from loamz.agents.kernel.ports.graph import Entity, GraphStore, Relationship, SubGraph
-from loamz.agents.kernel.ports.memory import ShortTermMemory
 from loamz.agents.kernel.ports.tasks import Task, TaskList, TaskStatus, TaskStore
 from loamz.agents.kernel.ports.threads import Branch, HistoryCheckpoint, MessageNode, ThreadStore
 from loamz.agents.kernel.types.scope import Scope
 from loamz.data.storage.errors import InvalidRequestError
+from loamz.data.storage.memory import ShortTermMemory
 
 
 def _tenant(scope: Scope) -> str:

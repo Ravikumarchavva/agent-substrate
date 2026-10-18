@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from loamz.agents.kernel.ports.memory import ShortTermMemory
+from loamz.data.storage.memory import ShortTermMemory
 
 logger = logging.getLogger(__name__)
 

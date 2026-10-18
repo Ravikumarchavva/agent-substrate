@@ -12,7 +12,8 @@ Verifies:
 
 from __future__ import annotations
 
-from loamz.agents.kernel.ports.memory import (
+from loamz.agents.kernel.types.identity import Actor
+from loamz.data.storage.memory import (
     ContextMemoryInjection,
     MemoryCategory,
     MemoryMatch,
@@ -22,8 +23,7 @@ from loamz.agents.kernel.ports.memory import (
     MemoryRecord,
     MemoryStatus,
 )
-from loamz.agents.kernel.types.content import DataBlock, MediaBlock, TextBlock
-from loamz.agents.kernel.types.identity import Actor
+from loamz.data.storage.types import DataBlock, MediaBlock, TextBlock
 
 
 def test_memory_record_content_normalization():
@@ -87,16 +87,16 @@ def test_memory_provenance_supersedes_lineage():
     assert new_mem.provenance.extraction_method == "user_correction"
 
 
-def test_memory_namespace_from_actor():
+def test_memory_namespace_scoping():
     user = Actor(type="user", key="user-42")
-    ns_user = MemoryNamespace.from_actor(user, tenant_id="acme", session_id="sess-1")
+    ns_user = MemoryNamespace(tenant_id="acme", user_id=user.key, session_id="sess-1")
     assert ns_user.tenant_id == "acme"
     assert ns_user.user_id == "user-42"
     assert ns_user.agent_id is None
     assert ns_user.session_id == "sess-1"
 
     agent = Actor(type="agent", key="code-assistant")
-    ns_agent = MemoryNamespace.from_actor(agent, tenant_id="acme")
+    ns_agent = MemoryNamespace(tenant_id="acme", agent_id=agent.key)
     assert ns_agent.tenant_id == "acme"
     assert ns_agent.agent_id == "code-assistant"
     assert ns_agent.user_id is None

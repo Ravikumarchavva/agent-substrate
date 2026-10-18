@@ -230,6 +230,7 @@ async def test_a_turn_killed_between_two_appends_leaves_a_thread_that_is_whole(
         [sys.executable, "-c", script, str(tmp_path / "state")],
         capture_output=True,
         text=True,
+        cwd=str(Path(__file__).resolve().parents[2]),
     )
     assert result.returncode == 7, result.stderr
 
@@ -265,6 +266,7 @@ def test_a_store_nobody_closed_exits_cleanly_and_keeps_what_was_committed(
         [sys.executable, "-c", script, str(tmp_path / "state")],
         capture_output=True,
         text=True,
+        cwd=str(Path(__file__).resolve().parents[2]),
     )
     assert result.returncode == 0 and result.stderr == "", result.stderr
 

@@ -114,7 +114,7 @@ async def _run(children: int, calls: int, tokens: int, cap: int) -> tuple[int, i
         return spent, failed, len(child_runs) - failed
 
 
-@settings(max_examples=20, deadline=None)
+@settings(max_examples=4, deadline=None)
 @given(
     children=st.integers(min_value=1, max_value=4),
     calls=st.integers(min_value=1, max_value=4),

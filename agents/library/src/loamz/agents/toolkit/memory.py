@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import logging
 
-from loamz.agents.kernel.ports.memory import (
+from loamz.agents.kernel.tools import ToolExecutionResult, ToolRisk
+from loamz.agents.kernel.types.content import TextBlock
+from loamz.agents.kernel.types.run import scope_of
+from loamz.data.storage.memory import (
     MemoryCategory,
     MemoryNamespace,
     MemoryQuery,
@@ -22,9 +25,6 @@ from loamz.agents.kernel.ports.memory import (
     MemoryStore,
     ShortTermMemory,
 )
-from loamz.agents.kernel.tools import ToolExecutionResult, ToolRisk
-from loamz.agents.kernel.types.content import TextBlock
-from loamz.agents.kernel.types.run import scope_of
 
 logger = logging.getLogger(__name__)
 

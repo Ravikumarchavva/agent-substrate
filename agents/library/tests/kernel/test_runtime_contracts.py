@@ -18,7 +18,6 @@ from uuid import uuid4
 import pytest
 
 from loamz.agents.kernel.errors import ConcurrentAppendError
-from loamz.agents.kernel.ports.memory import MemoryProvenance
 from loamz.agents.kernel.runtime import (
     AgentRunContext,
     CancellationToken,
@@ -33,6 +32,7 @@ from loamz.agents.kernel.types.run import RunMeta
 from loamz.agents.kernel.types.run_log import RunLogEntry
 from loamz.agents.kernel.types.run_status import new_run_id
 from loamz.agents.kernel.types.supervision import Supervision
+from loamz.data.storage.memory import MemoryProvenance
 
 # ---------------------------------------------------------------------------
 # Helpers

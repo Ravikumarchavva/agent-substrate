@@ -69,9 +69,63 @@ class MediaBlock(KernelModel):
             type="image", url=url, data=data, file_id=file_id, media_type=media_type, **kwargs
         )
 
+    @classmethod
+    def audio(
+        cls,
+        *,
+        url: str | None = None,
+        data: bytes | None = None,
+        file_id: str | None = None,
+        media_type: str = "audio/wav",
+        **kwargs: Any,
+    ) -> MediaBlock:
+        return cls(
+            type="audio", url=url, data=data, file_id=file_id, media_type=media_type, **kwargs
+        )
+
+    @classmethod
+    def video(
+        cls,
+        *,
+        url: str | None = None,
+        data: bytes | None = None,
+        file_id: str | None = None,
+        media_type: str = "video/mp4",
+        **kwargs: Any,
+    ) -> MediaBlock:
+        return cls(
+            type="video", url=url, data=data, file_id=file_id, media_type=media_type, **kwargs
+        )
+
+    @classmethod
+    def document(
+        cls,
+        *,
+        url: str | None = None,
+        data: bytes | None = None,
+        file_id: str | None = None,
+        media_type: str = "application/pdf",
+        **kwargs: Any,
+    ) -> MediaBlock:
+        return cls(
+            type="document", url=url, data=data, file_id=file_id, media_type=media_type, **kwargs
+        )
+
     @property
     def is_image(self) -> bool:
         return self.type == "image"
+
+    @property
+    def is_audio(self) -> bool:
+        return self.type == "audio"
+
+    @property
+    def is_video(self) -> bool:
+        return self.type == "video"
+
+    @property
+    def is_document(self) -> bool:
+        return self.type == "document"
 
     def __str__(self) -> str:
         if self.transcript:
@@ -84,7 +138,20 @@ class MediaBlock(KernelModel):
         return f"[{self.type.capitalize()}: {ref}]"
 
 
-ContentBlock = Annotated[TextBlock | MediaBlock, Field(discriminator="type")]
+class DataBlock(KernelModel):
+    """Structured JSON payload for rich tool results or artifacts."""
+
+    type: Literal["data"] = "data"
+    data: JsonObject
+    schema_id: str | None = None
+
+    def __str__(self) -> str:
+        import json
+
+        return json.dumps(self.data)
+
+
+ContentBlock = Annotated[TextBlock | MediaBlock | DataBlock, Field(discriminator="type")]
 
 
 def _coerce_blocks(value: Any) -> Any:
@@ -99,7 +166,7 @@ BlockList = Annotated[tuple[ContentBlock, ...], BeforeValidator(_coerce_blocks)]
 """Blocks as a tuple; a bare string becomes one text block."""
 
 
-def content_blocks_to_str(blocks: Sequence[TextBlock | MediaBlock]) -> str:
+def content_blocks_to_str(blocks: Sequence[ContentBlock]) -> str:
     return "\n".join(str(b) for b in blocks)
 
 
@@ -135,6 +202,7 @@ def new_id() -> str:
 __all__ = [
     "BlockList",
     "ContentBlock",
+    "DataBlock",
     "JsonObject",
     "KernelModel",
     "MediaBlock",

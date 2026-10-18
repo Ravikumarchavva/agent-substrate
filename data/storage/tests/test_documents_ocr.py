@@ -8,6 +8,8 @@ from fixtures.pdfs import Line, Page, build
 from loamz.data.storage.documents.reading.ocr import RapidOcr, TesseractOcr, resolve_ocr
 from loamz.data.storage.testing.conformance.ocr import OcrConformance
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(scope="module")
 def invoice_png() -> bytes:

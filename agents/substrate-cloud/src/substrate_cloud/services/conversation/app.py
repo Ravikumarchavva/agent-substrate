@@ -11,7 +11,11 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
-from substrate_cloud.services.base import create_service_app, init_service_db
+from substrate_cloud.services.base import (
+    AUTHENTICATED,
+    create_service_app,
+    init_service_db,
+)
 from substrate_cloud.services.conversation.models import ServiceBase
 from substrate_cloud.services.conversation.routes import memory_router, thread_router
 from substrate_cloud.shared.events.factory import get_event_bus
@@ -54,5 +58,5 @@ app = create_service_app(
     title="Conversation Service",
     lifespan=lifespan,
 )
-app.include_router(thread_router)
-app.include_router(memory_router)
+app.include_router(thread_router, dependencies=AUTHENTICATED)
+app.include_router(memory_router, dependencies=AUTHENTICATED)

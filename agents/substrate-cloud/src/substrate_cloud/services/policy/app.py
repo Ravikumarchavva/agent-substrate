@@ -11,7 +11,11 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
-from substrate_cloud.services.base import create_service_app, init_service_db
+from substrate_cloud.services.base import (
+    AUTHENTICATED,
+    create_service_app,
+    init_service_db,
+)
 from substrate_cloud.services.policy.routes import router
 from substrate_cloud.shared.database.base import ServiceBase
 
@@ -36,11 +40,6 @@ async def lifespan(app):
     await redis_connector.connect()
     app.state.redis_client = redis_connector.client
 
-    app.state.jwt_secret = os.environ.get(
-        "JWT_SECRET",
-        "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET",
-    )
-
     # Seed default policies on startup
     async with session_factory() as db:
         from substrate_cloud.services.policy.service import seed_default_policies
@@ -58,4 +57,4 @@ async def lifespan(app):
 
 
 app = create_service_app(title="Policy Authorization Service", lifespan=lifespan)
-app.include_router(router)
+app.include_router(router, dependencies=AUTHENTICATED)

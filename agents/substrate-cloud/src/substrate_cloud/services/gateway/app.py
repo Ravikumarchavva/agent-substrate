@@ -14,7 +14,7 @@ import os
 import json as _json
 from contextlib import asynccontextmanager
 
-from substrate_cloud.services.base import create_service_app
+from substrate_cloud.services.base import AUTHENTICATED, create_service_app
 from substrate_cloud.services.gateway.clients import (
     ArtifactClient,
     ConversationClient,
@@ -25,7 +25,7 @@ from substrate_cloud.services.gateway.clients import (
     WorkflowClient,
 )
 from substrate_cloud.services.gateway.routes import (
-    auth_router,
+    users_router,
     chat_router,
     file_router,
     router,
@@ -63,11 +63,6 @@ async def lifespan(app):
         await client.start()
         setattr(app.state, name, client)
 
-    app.state.jwt_secret = os.environ.get(
-        "JWT_SECRET",
-        "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET",
-    )
-
     logger.info("Gateway BFF started — routing to %d downstream services", len(clients))
     yield
 
@@ -88,8 +83,8 @@ app = create_service_app(
     lifespan=lifespan,
     cors_origins=_cors_origins,
 )
-app.include_router(auth_router)
-app.include_router(thread_router)
-app.include_router(chat_router)
-app.include_router(file_router)
-app.include_router(router)
+app.include_router(users_router, dependencies=AUTHENTICATED)
+app.include_router(thread_router, dependencies=AUTHENTICATED)
+app.include_router(chat_router, dependencies=AUTHENTICATED)
+app.include_router(file_router, dependencies=AUTHENTICATED)
+app.include_router(router, dependencies=AUTHENTICATED)

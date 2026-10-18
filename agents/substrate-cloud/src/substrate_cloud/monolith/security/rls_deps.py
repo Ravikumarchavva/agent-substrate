@@ -59,7 +59,7 @@ async def get_tenant_scoped_db(
     # be explicitly reset in `finally` before the underlying connection
     # goes back to the pool, or it would leak into whatever unrelated
     # request borrows that connection next.
-    if claims.role == "platform_admin" or claims.token_type == "service":
+    if claims.role == "platform_admin" or claims.is_service:
         # Cross-tenant DB bypass is reserved for the platform-wide role (or
         # a genuine service token) — e.g. the admin storage API, GDPR
         # erasure. `tenant_admin` is deliberately excluded: it's an

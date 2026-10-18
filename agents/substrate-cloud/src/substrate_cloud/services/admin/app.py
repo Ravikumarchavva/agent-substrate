@@ -13,7 +13,10 @@ from contextlib import asynccontextmanager
 from substrate.integrations.cache.redis import RedisConnector
 from substrate_cloud.services.admin.models import ServiceBase
 from substrate_cloud.services.admin.routes import router
+from fastapi import Depends
+
 from substrate_cloud.services.base import create_service_app, init_service_db
+from substrate_cloud.shared.auth.middleware import require_role
 from substrate_cloud.shared.events.factory import get_event_bus
 
 logger = logging.getLogger(__name__)
@@ -51,4 +54,5 @@ app = create_service_app(
     title="Admin Control Plane",
     lifespan=lifespan,
 )
-app.include_router(router)
+# the control-plane view across tenants: platform administrators only
+app.include_router(router, dependencies=[Depends(require_role("platform_admin"))])

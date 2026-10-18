@@ -1,104 +1,76 @@
-"""FastAPI auth middleware and dependencies shared by all services."""
+"""FastAPI auth dependencies shared by the monolith and every microservice.
+
+``get_current_user`` is the single entry point: it verifies the bearer token with ``substrate-identity`` (RS256 only, audience and
+``typ`` checked, one organization) and returns the caller as :class:`AuthClaims`. Failures are typed ``IdentityError`` (401, 403
+or 503) rendered as problem+json by ``install_problem_handlers``.
+"""
 
 from __future__ import annotations
 
-import logging
-
-from typing import Optional
-
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, Request
+from substrate_identity import Forbidden, IdentityError, InsufficientScope
 
 from substrate_cloud.shared.auth.claims import AuthClaims
-from substrate_cloud.shared.auth import jwt as jwt_utils
-
-logger = logging.getLogger(__name__)
-
-_bearer = HTTPBearer(auto_error=False)
+from substrate_cloud.shared.auth.verifier import get_verifier
 
 
-def _get_jwt_secret(request: Request) -> str:
-    """Read JWT_SECRET from the app's service settings."""
-    secret = getattr(request.app.state, "jwt_secret", None)
-    if not secret:
-        raise RuntimeError(
-            "jwt_secret not configured on app.state. "
-            "Set app.state.jwt_secret = settings.JWT_SECRET in your service lifespan."
-        )
-    return secret
-
-
-def get_current_user(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> AuthClaims:
-    """Extract and validate the Bearer JWT. Raises HTTP 401 on failure."""
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    secret = _get_jwt_secret(request)
-    claims = jwt_utils.verify_token(
-        credentials.credentials,
-        secret=secret,
-        expected_type="access",
-    )
-    if claims is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired access token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+async def get_current_user(request: Request) -> AuthClaims:
+    """Verify the bearer token. Raises 401 (missing or bad token), 403 (organization), 503 (no signing key)."""
+    who = await get_verifier(request).averify(request.headers.get("authorization"))
+    request.state.identity = who
+    claims = AuthClaims.from_identity(who)
+    if not claims.tenant_id and not claims.is_service:
+        raise Forbidden("The token names no organization")
     return claims
 
 
-def optional_current_user(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> Optional[AuthClaims]:
-    """Same as get_current_user but returns None for anonymous requests."""
-    if credentials is None:
+async def optional_current_user(request: Request) -> AuthClaims | None:
+    """The caller when a valid token is presented, else None (anonymous tier). A bad token is anonymous, not an error."""
+    if not request.headers.get("authorization"):
         return None
-    secret = _get_jwt_secret(request)
-    return jwt_utils.verify_token(credentials.credentials, secret=secret)
+    try:
+        return await get_current_user(request)
+    except IdentityError:
+        return None
 
 
 def require_role(*allowed_roles: str):
-    """FastAPI dependency that restricts access to specific platform roles."""
+    """A dependency restricting a route to platform roles (``platform_admin``, ``tenant_admin``, ...)."""
 
     def checker(user: AuthClaims = Depends(get_current_user)) -> AuthClaims:
         if user.role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Role '{user.role}' is not authorized for this action",
-            )
+            raise Forbidden(f"Role '{user.role}' is not authorized for this action")
         return user
 
     return checker
 
 
-def require_service_identity(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> AuthClaims:
-    """Require a valid service-to-service runtime token."""
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing service authorization",
-        )
-    secret = _get_jwt_secret(request)
-    claims = jwt_utils.verify_token(
-        credentials.credentials,
-        secret=secret,
-        expected_type="service",
-    )
-    if claims is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid service token",
-        )
-    return claims
+def require_scopes(*needed: str):
+    """A dependency: an ordinary user token passes; a delegated token must hold at least one of ``needed``."""
+
+    def checker(user: AuthClaims = Depends(get_current_user)) -> AuthClaims:
+        if not user.allows_scope(*needed):
+            raise InsufficientScope(f"This token needs the scope {' or '.join(needed)}")
+        return user
+
+    return checker
+
+
+def require_service_identity(*roles: str):
+    """A dependency: the caller must be a service account of the realm (client credentials), holding any of ``roles`` if given.
+
+    Replaces the shared-secret service token: a platform service (cell-admin, the erasure job) signs in to Keycloak.
+    """
+
+    def checker(
+        request: Request, user: AuthClaims = Depends(get_current_user)
+    ) -> AuthClaims:
+        if not user.is_service:
+            raise Forbidden("This endpoint is for service accounts")
+        if roles:
+            held = request.state.identity.roles
+            if not held & set(roles):
+                raise Forbidden(f"This endpoint needs the role {' or '.join(roles)}")
+        return user
+
+    return checker

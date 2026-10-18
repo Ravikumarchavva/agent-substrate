@@ -23,8 +23,9 @@ import os
 # key from .env — gets the fake value, so a slip elsewhere fails loudly
 # (401) instead of succeeding and billing.
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-a-real-key-see-conftest")
-# ServerSettings refuses the placeholder secret; tests run from this directory, which has no .env to supply one.
-os.environ.setdefault("JWT_SECRET", "test-secret-" + "x" * 32)
+# Tests never reach a real Keycloak: the verifier is built from these and tests install their own keys (tests/_oidc.py).
+os.environ.setdefault("OIDC_ISSUER", "http://keycloak.test/realms/substrate")
+os.environ.setdefault("OIDC_INSECURE_HTTP", "true")
 # The local dev infrastructure (`substrate-cloud up`, deployment/docker/docker-compose.yml): Postgres and Redis on localhost.
 # A .env in the working directory still wins, so a developer with their own settings is unaffected.
 os.environ.setdefault(

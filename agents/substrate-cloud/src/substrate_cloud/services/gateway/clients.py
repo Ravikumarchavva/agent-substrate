@@ -94,18 +94,8 @@ class IdentityClient(ServiceClient):
     def __init__(self, base_url: str = "http://localhost:8010", **kw):
         super().__init__(base_url, "identity", **kw)
 
-    async def exchange_token(self, frontend_token: str) -> dict:
-        resp = await self.post("/auth/token", json={"frontend_token": frontend_token})
-        resp.raise_for_status()
-        return resp.json()
-
-    async def refresh_token(self, refresh_token: str) -> dict:
-        resp = await self.post("/auth/refresh", json={"refresh_token": refresh_token})
-        resp.raise_for_status()
-        return resp.json()
-
     async def get_me(self, auth_token: str) -> dict:
-        resp = await self.get("/auth/me", auth_token=auth_token)
+        resp = await self.get("/users/me", auth_token=auth_token)
         resp.raise_for_status()
         return resp.json()
 

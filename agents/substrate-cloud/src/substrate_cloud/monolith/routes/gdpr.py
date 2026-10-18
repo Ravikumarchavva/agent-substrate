@@ -1,6 +1,6 @@
 """Internal GDPR erasure API.
 
-This route is intentionally service-token-only.  The SaaS control plane owns
+This route is for the platform's service account only (client role ``erase-tenant``, ADR 0007).  The SaaS control plane owns
 the user confirmation flow; agent-substrate owns the cross-store deletion.
 """
 
@@ -43,7 +43,7 @@ def _require_store(ctx: ServerDependencies, tenant_id: str):
 async def erase_user_data(
     body: EraseUserRequest,
     request: Request,
-    _: object = Depends(require_service_identity),
+    _: object = Depends(require_service_identity("erase-tenant")),
     db: AsyncSession = Depends(get_service_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> dict:
@@ -66,7 +66,7 @@ async def erase_user_data(
 async def erase_tenant_data(
     body: EraseTenantRequest,
     request: Request,
-    _: object = Depends(require_service_identity),
+    _: object = Depends(require_service_identity("erase-tenant")),
     db: AsyncSession = Depends(get_service_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> dict:

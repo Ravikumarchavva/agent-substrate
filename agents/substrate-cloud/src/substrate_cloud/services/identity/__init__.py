@@ -1,3 +1,1 @@
-"""substrate_cloud.services.identity — JWT authentication and identity microservice."""
-
-from __future__ import annotations
+"""substrate_cloud.services.identity: user profile lookups (Keycloak does authentication)."""

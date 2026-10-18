@@ -10,7 +10,7 @@ Routes mirror the public API surface:
   POST /chat/{id}/cancel  → Workflow Orchestrator
   CRUD /threads           → Conversation service
   CRUD /threads/{id}/files → Artifact service
-  POST /auth/*            → Identity Auth service
+  GET  /users/me          → Identity service (profile of the token's user)
   POST /api/execute       → Code Interpreter service (direct execution)
   GET  /api/execute/health   → Code Interpreter health
   GET  /api/execute/sessions → Code Interpreter sessions
@@ -47,32 +47,12 @@ def _get_auth_token(request: Request) -> str:
     return ""
 
 
-# ── Auth routes (proxy to Identity service) ──────────────────────────────────
+# ── Users (proxy to the Identity service: profile lookups; sign-in is Keycloak) ──────────────────────
 
-auth_router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-@auth_router.post("/token")
-async def exchange_token(request: Request):
-    body = await request.json()
-    client = request.app.state.identity_client
-    try:
-        return await client.exchange_token(body.get("frontend_token", ""))
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
+users_router = APIRouter(prefix="/users", tags=["users"])
 
 
-@auth_router.post("/refresh")
-async def refresh_token(request: Request):
-    body = await request.json()
-    client = request.app.state.identity_client
-    try:
-        return await client.refresh_token(body.get("refresh_token", ""))
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
-
-
-@auth_router.get("/me")
+@users_router.get("/me")
 async def get_me(request: Request):
     token = _get_auth_token(request)
     client = request.app.state.identity_client

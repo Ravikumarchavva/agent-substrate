@@ -21,7 +21,7 @@ from substrate_cloud.factory import (
 )
 from substrate.integrations.llm.factory import create_model_client
 from substrate_cloud.services.agent_runtime.routes import router
-from substrate_cloud.services.base import create_service_app
+from substrate_cloud.services.base import AUTHENTICATED, create_service_app
 from substrate_cloud.shared.events.factory import get_event_bus
 from substrate_cloud.shared.settings import settings
 
@@ -120,4 +120,4 @@ app = create_service_app(
     title="Agent Runtime",
     lifespan=lifespan,
 )
-app.include_router(router)
+app.include_router(router, dependencies=AUTHENTICATED)

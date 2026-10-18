@@ -1,40 +1,41 @@
-"""Auth claims model shared by all services.
+"""The caller of a request, as every route of the platform sees it.
 
-Every API and event must carry tenant_id, workspace_id, actor_id, and role claims
-(per docs/microservices/02-role-and-responsibility-matrix.md).
+Built from a verified Keycloak access token (``substrate_identity.Identity``) by :meth:`AuthClaims.from_identity`; nothing else
+creates one in production. ``tenant_id`` is the immutable Keycloak organization id of the one organization active in the token.
 """
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel
+from substrate_identity import Identity
+
+# Platform roles in decreasing order of power; the first one a token holds is its ``role``.
+ROLES = ("platform_admin", "tenant_admin", "workspace_admin", "end_user")
 
 
 class AuthClaims(BaseModel):
-    """Decoded identity claims available to every service handler.
-
-    Populated from JWT access token or service-runtime token. All services
-    must propagate these claims on every outgoing request or event.
-    """
-
-    sub: str  # stable user/service identity
+    sub: str  # the Keycloak user (or service account) id
     email: str = ""
-    role: str = "end_user"  # platform role
-    # A tenant is mandatory for every user access token.  Service tokens are
-    # deliberately handled separately by ``verify_token``.
+    role: str = "end_user"
+    # Empty only for a platform service account, which acts across tenants and names the tenant in the request.
     tenant_id: str = ""
-    workspace_id: str = "default"
+    kind: str = "user"  # user | service
+    # None: an ordinary user token. A set: a delegated token that may use only what these scopes allow.
+    scopes: frozenset[str] | None = None
     jti: str = ""
-    token_type: str = "access"  # access | refresh | agent | service
-    # Agent context fields (optional)
-    thread_id: Optional[str] = None
-    permissions: Optional[list[str]] = None
-    # Plan-derived daily message cap (ravi's createEngineToken embeds this
-    # from Project.plan — see src/lib/plan-limits.ts on that side). None ⇒
-    # no limit enforced — the default for any caller not yet passing one
-    # (direct substrate-ui dev usage, service tokens, …).
-    daily_message_limit: Optional[int] = None
+
+    @classmethod
+    def from_identity(cls, who: Identity) -> AuthClaims:
+        role = next((r for r in ROLES if who.has_role(r)), "end_user")
+        return cls(
+            sub=who.subject,
+            email=who.email or "",
+            role=role,
+            tenant_id=who.tenant_id or "",
+            kind=who.kind,
+            scopes=who.scopes,
+            jti=who.token_id or "",
+        )
 
     @property
     def is_admin(self) -> bool:
@@ -42,4 +43,7 @@ class AuthClaims(BaseModel):
 
     @property
     def is_service(self) -> bool:
-        return self.token_type == "service"
+        return self.kind == "service"
+
+    def allows_scope(self, *needed: str) -> bool:
+        return self.scopes is None or bool(self.scopes & set(needed))

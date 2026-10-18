@@ -12,10 +12,17 @@ import logging
 
 from typing import Any, Callable, Optional
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from substrate_cloud.shared.auth.middleware import get_current_user
+from substrate_cloud.shared.problem import install_problem_handlers
+
 logger = logging.getLogger(__name__)
+
+# Every router of every service is included with this: the same Keycloak token verification as the monolith.
+# /health and /ready (below) are the only open endpoints.
+AUTHENTICATED = [Depends(get_current_user)]
 
 
 def create_service_app(
@@ -37,6 +44,7 @@ def create_service_app(
         service_name=title.lower().replace(" ", "-")
     )  # the application, not the library, configures logging
     app = FastAPI(title=title, version=version, lifespan=lifespan)
+    install_problem_handlers(app)
 
     # CORS
     app.add_middleware(

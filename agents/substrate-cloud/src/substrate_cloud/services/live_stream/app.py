@@ -12,7 +12,7 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
-from substrate_cloud.services.base import create_service_app
+from substrate_cloud.services.base import AUTHENTICATED, create_service_app
 from substrate_cloud.services.live_stream.projector import StreamProjector
 from substrate_cloud.services.live_stream.routes import router
 from substrate_cloud.shared.events.factory import get_event_bus
@@ -58,4 +58,4 @@ app = create_service_app(
     title="Live Stream Service",
     lifespan=lifespan,
 )
-app.include_router(router)
+app.include_router(router, dependencies=AUTHENTICATED)

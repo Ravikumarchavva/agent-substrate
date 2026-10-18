@@ -157,7 +157,10 @@ def _check_tools(ctx: ServerDependencies, names: Optional[List[str]]) -> None:
 
 
 @router.get("/tools", response_model=List[ToolInfo])
-async def available_tools(ctx: ServerDependencies = Depends(get_ctx)):
+async def available_tools(
+    ctx: ServerDependencies = Depends(get_ctx),
+    _: AuthClaims = Depends(get_current_user),
+):
     """The tools an agent can be given, for the permissions picker."""
     return [
         ToolInfo(name=n, description=d) for n, d in sorted(_known_tools(ctx).items())

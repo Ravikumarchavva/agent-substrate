@@ -11,7 +11,11 @@ import os
 from contextlib import asynccontextmanager
 
 from substrate.integrations.cache.redis import RedisConnector
-from substrate_cloud.services.base import create_service_app, init_service_db
+from substrate_cloud.services.base import (
+    AUTHENTICATED,
+    create_service_app,
+    init_service_db,
+)
 from substrate_cloud.services.human_gate.models import ServiceBase
 from substrate_cloud.services.human_gate.routes import router
 from substrate_cloud.shared.events.factory import get_event_bus
@@ -65,4 +69,4 @@ app = create_service_app(
     title="Human Gate Service",
     lifespan=lifespan,
 )
-app.include_router(router)
+app.include_router(router, dependencies=AUTHENTICATED)

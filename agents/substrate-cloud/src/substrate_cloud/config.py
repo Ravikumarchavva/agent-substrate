@@ -134,6 +134,23 @@ class SubstrateConfig(BaseSettings):
     SANDBOX_PYTHON: str = ""
     CI_WORKSPACE_PVC_CLAIM: str = ""
 
+    # ── Identity (Keycloak, ADR 0007) ───────────────────────────────────────────
+    # Every entry point verifies RS256 access tokens of this realm with substrate-identity. The tenant is the
+    # Keycloak organization id in the token. There is no shared secret and this process mints no user tokens.
+    OIDC_ISSUER: str = (
+        ""  # e.g. https://id.example.com/realms/substrate; empty refuses every request
+    )
+    OIDC_AUDIENCE: str = "agent-substrate"
+    OIDC_JWKS_URL: str = ""  # found by discovery when empty
+    OIDC_CA_FILE: str = ""
+    OIDC_INSECURE_HTTP: bool = (
+        False  # plain-http issuer: loopback development and tests only
+    )
+    # Organization membership, checked (and cached for 60 s) before the per-run data token is signed. A
+    # service-account client of the realm with the realm-management `view-users` role.
+    OIDC_ADMIN_CLIENT_ID: str = ""
+    OIDC_ADMIN_CLIENT_SECRET: str = ""
+
     # ── Governed data for the code interpreter (Substrate Data) ──────────────
     # The data service runs on its own machine. Its API address must be https:// (plain http only to localhost).
     # Empty turns sandbox data access off.

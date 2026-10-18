@@ -1,7 +1,7 @@
 """Server-layer configuration.
 
 ``ServerSettings`` extends ``SubstrateConfig`` with fields that only the FastAPI
-server needs: JWT auth, CORS, rate limiting, observability, and feature flags.
+server needs: OIDC identity, CORS, rate limiting, observability, and feature flags.
 
 It auto-loads ``.env`` from the current working directory (where you run
 ``uv run start``).  For library use, import ``SubstrateConfig`` from
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import List
 
-from pydantic import field_validator, model_validator
+from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 from substrate_cloud.config import SubstrateConfig
@@ -54,23 +54,6 @@ class ServerSettings(SubstrateConfig):
     RAG_DAILY_UPLOAD_ATTEMPT_LIMIT: int = 100
 
     FRONTEND_URL: str = "http://127.0.0.1:3000"
-
-    # ── JWT authentication ───────────────────────────────────────────────────
-    JWT_SECRET: str = "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET"
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
-    JWT_AGENT_TOKEN_EXPIRE_MINUTES: int = 5
-
-    @field_validator("JWT_SECRET")
-    @classmethod
-    def validate_jwt_secret(cls, v: str) -> str:
-        if v == "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET" or len(v) < 32:
-            raise ValueError(
-                "JWT_SECRET must be set to a strong random secret (min 32 chars). "
-                "Generate one with: openssl rand -hex 32"
-            )
-        return v
 
     # ── CORS ─────────────────────────────────────────────────────────────────
     CORS_ALLOWED_ORIGINS: List[str] = [

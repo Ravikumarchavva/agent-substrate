@@ -9,7 +9,8 @@ from loamz.agents.features.people.memory.model import (
 )
 from loamz.agents.features.people.memory.store import SqlMemoryStore
 from loamz.agents.kernel.caller import Caller
-from loamz.agents.kernel.ports.memory import (
+from loamz.data.storage.errors import ConflictError, InvalidRequestError, NotFoundError
+from loamz.data.storage.memory import (
     MemoryCategory,
     MemoryNamespace,
     MemoryQuery,
@@ -17,7 +18,6 @@ from loamz.agents.kernel.ports.memory import (
     MemoryStore,
     ShortTermMemory,
 )
-from loamz.data.storage.errors import ConflictError, InvalidRequestError, NotFoundError
 
 __all__ = ["MemoryService", "memory", "memory_tool"]
 

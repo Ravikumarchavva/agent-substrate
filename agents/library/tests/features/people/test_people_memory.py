@@ -4,10 +4,10 @@ from loamz.agents.features.people.memory.model import MemoryIn
 from loamz.agents.features.people.memory.service import MemoryService, memory_tool
 from loamz.agents.features.people.memory.store import SqlMemoryStore
 from loamz.agents.kernel.caller import Caller
-from loamz.agents.kernel.ports.memory import MemoryNamespace, MemoryQuery, MemoryRecord
 from loamz.agents.kernel.types.run import RunScope
 from loamz.agents.testing.app import serving
 from loamz.data.storage.errors import ConflictError, NotFoundError, ScopeViolationError
+from loamz.data.storage.memory import MemoryNamespace, MemoryQuery, MemoryRecord
 
 U1 = Caller(tenant_id="acme", user_id="u1")
 U2 = Caller(tenant_id="acme", user_id="u2")

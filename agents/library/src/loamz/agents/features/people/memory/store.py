@@ -11,7 +11,8 @@ import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from loamz.agents.kernel.ports.memory import (
+from loamz.data.storage.errors import ScopeViolationError
+from loamz.data.storage.memory import (
     MemoryCategory,
     MemoryMatch,
     MemoryNamespace,
@@ -20,7 +21,6 @@ from loamz.agents.kernel.ports.memory import (
     MemoryRecord,
     MemoryStatus,
 )
-from loamz.data.storage.errors import ScopeViolationError
 from loamz.data.storage.sql import Database, Row, Tx, migrate
 
 COMPONENT = "people.memory"

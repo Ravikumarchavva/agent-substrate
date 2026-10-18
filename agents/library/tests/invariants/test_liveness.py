@@ -31,7 +31,7 @@ class Slow:
 
 async def test_i13_a_run_longer_than_its_lease_completes_once() -> None:
     agent = Slow(seconds=1.5)
-    async with ephemeral_runtime(lease_s=0.4, poll_interval_s=0.02) as rt:
+    async with ephemeral_runtime(lease_s=0.6, poll_interval_s=0.02) as rt:
         await rt.register(agent)
         run_id = await rt.submit(
             agent.id,

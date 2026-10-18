@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 from substrate.testing.conformance.document_library import prose
 from substrate_data_client import Forbidden, InsufficientScope, NotFound
-
 from test_documents import extraction
 
 A, B = "acme", "globex"

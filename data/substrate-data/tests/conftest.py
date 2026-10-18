@@ -674,15 +674,31 @@ class WordReranker:
 
 
 def serve_documents(
-    identity: Identity, ticket_keys: tuple[Path, Path], root: Path, **engine: Any
+    identity: Identity,
+    ticket_keys: tuple[Path, Path],
+    root: Path,
+    *,
+    seaweed: Any = None,
+    **engine: Any,
 ) -> DocsService:
+    """With `seaweed`, bundles live in the tenants' volumes (the production path); without, in local files."""
     from substrate_data.api.app import build_services, create_app
     from substrate_data.api.routes.documents import Documents
     from substrate_data.api.routes.files import files_service_for
     from substrate_data.documents.engine import DocumentEngine
 
+    storage = (
+        dict(
+            s3_endpoint_url=seaweed.s3,
+            s3_access_key_id=SecretStr(seaweed.access_key),
+            s3_secret_access_key=SecretStr(seaweed.secret_key),
+        )
+        if seaweed
+        else {}
+    )
     settings = Settings(
         _env_file=None,
+        **storage,
         oidc_issuer=ISSUER,
         metadata=root / "catalog.sqlite",
         retrieval_dir=root / "retrieval",
@@ -704,9 +720,10 @@ def serve_documents(
         settings, verifier=TokenVerifier(settings, jwks=identity.jwks), tables=SimpleNamespace()
     )
     app = create_app(settings, services)
-    app.state.documents = Documents(
-        DocumentEngine(settings, **engine), files_service_for(app), grants=False
-    )
+    if not seaweed:
+        app.state.documents = Documents(
+            DocumentEngine(settings, **engine), files_service_for(app), grants=False
+        )
     served = Served(app)
     return DocsService(served.url, app, settings, identity, served)
 

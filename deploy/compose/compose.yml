@@ -61,12 +61,8 @@ x-agent-env: &agent-env
   ASYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/agentdb?sslmode=require
   REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
   STORE_BACKEND: postgres
-  FILE_STORE_BACKEND: s3
-  FILE_STORE_BUCKET: ${AGENTS_BUCKET:-agent-files}
-  FILE_STORE_ENDPOINT: http://seaweedfs:8333
-  FILE_STORE_REGION: us-east-1
-  FILE_STORE_ACCESS_KEY: ${AGENTS_S3_ACCESS_KEY_ID:?}
-  FILE_STORE_SECRET_KEY: ${AGENTS_S3_SECRET_ACCESS_KEY:?}
+  # Files, documents and memory live in substrate-data; the agent server holds no object-store credentials.
+  DATA_SERVICE_URL: http://data-api:8020
   # Keycloak resource-server settings (the verifier in the agent server reads these).
   OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
   OIDC_AUDIENCE: agent-substrate

@@ -38,14 +38,7 @@ updates:
 
   # One entry per directory that holds a Dockerfile.
   - package-ecosystem: docker
-    directory: /agents/substrate-ui
-    schedule:
-      interval: weekly
-    groups:
-      docker-minor-patch:
-        update-types: [minor, patch]
-  - package-ecosystem: docker
-    directory: /data/substrate-data/deployment
+    directory: /deploy/docker
     schedule:
       interval: weekly
     groups:
@@ -67,20 +60,6 @@ updates:
         update-types: [minor, patch]
   - package-ecosystem: docker
     directory: /agents/substrate-cloud/src/substrate_cloud/deployment/docker/mcp_server
-    schedule:
-      interval: weekly
-    groups:
-      docker-minor-patch:
-        update-types: [minor, patch]
-  - package-ecosystem: docker
-    directory: /deploy/legacy-agents/docker
-    schedule:
-      interval: weekly
-    groups:
-      docker-minor-patch:
-        update-types: [minor, patch]
-  - package-ecosystem: docker
-    directory: /deploy/legacy-agents/docker/mcp_server
     schedule:
       interval: weekly
     groups:

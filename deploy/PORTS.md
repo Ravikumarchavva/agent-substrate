@@ -42,3 +42,7 @@ on the cell's private network.
 
 Not part of the cell: the developer infrastructure of `data/substrate-data` (`make up`) uses 18080 (Keycloak), 18333 (S3) and
 18181 (Iceberg) on purpose, so it can run next to this bundle.
+
+In microservices mode the services find each other by `SERVICE_URL_TEMPLATE` (`{name}` is the service in dashes, `{port}` its port from the
+table); compose sets `http://agent-{name}:{port}` and the chart `http://<release>-agent-{name}:{port}`. `<NAME>_SERVICE_URL`
+(for example `AGENT_RUNTIME_SERVICE_URL`) overrides one peer.

@@ -1,16 +1,17 @@
 # Root entry points. Each package keeps its own Makefile for its own concerns; these run the common checks
 # across the workspace. Python: uv workspace (uv.lock). JavaScript: pnpm workspace (pnpm-lock.yaml).
-.PHONY: sync lint format test test-slow test-agents test-data test-services imports check js-install js-check clean-venv help
+.PHONY: sync lint format test test-slow test-agents test-data test-services imports smoke check js-install js-check clean-venv help
 
 PY_PACKAGES := agents/agent-substrate agents/substrate-cloud data/substrate-data data/substrate-data-client data/embedding-reranker data/inference-pool
 
 help:
 	@echo "make sync          install every Python package (uv) and the JS workspace (pnpm)"
 	@echo "make lint          ruff check + format --check over all Python packages"
-	@echo "make imports       import-linter contracts of the agent library"
+	@echo "make imports       import-linter contracts of the agent library and the platform"
 	@echo "make test-agents   agent-substrate + substrate-cloud (substrate-cloud needs Postgres 'agentdb')"
 	@echo "make test-data     substrate-data unit tests + client (integration: make -C data/substrate-data test)"
 	@echo "make test-services embedding-reranker + inference-pool"
+	@echo "make smoke         the Agent API in both modes, in process (no Docker)"
 	@echo "make check         lint + imports + the tests that need no infrastructure"
 
 sync:
@@ -23,6 +24,10 @@ lint:
 
 format:
 	uv run ruff format $(PY_PACKAGES)
+
+# Both deployment modes of the agent server, in process, no Docker (the monolith part needs the local PostgreSQL 'agentdb').
+smoke:
+	cd agents/substrate-cloud && uv run --package substrate-cloud python scripts/smoke.py both
 
 imports:
 	cd agents/agent-substrate && uv run --package agent-substrate lint-imports

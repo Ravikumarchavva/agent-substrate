@@ -75,11 +75,11 @@ class FilesService:
     async def download(self, caller: Caller, file_id: str) -> tuple[bytes, str]:
         # Search in caller's uploads prefix
         prefix = f"{user_prefix(caller.tenant_id, caller.user_id)}/uploads/{file_id}/"
-        files = await self._files.list(prefix)
+        files = await self._files.list_prefix(prefix)
         if not files:
             raise NotFoundError(f"File '{file_id}' not found")
-        data = await self._files.download(files[0].key)
-        name = files[0].key.rsplit("/", 1)[-1]
+        data = await self._files.download(files[0][0])
+        name = files[0][0].rsplit("/", 1)[-1]
         return data, name
 
     async def url(self, caller: Caller, file_id: str) -> FileUrlResponse:
@@ -87,16 +87,14 @@ class FilesService:
 
     async def status(self, caller: Caller, file_id: str) -> FileStatusResponse:
         prefix = f"{user_prefix(caller.tenant_id, caller.user_id)}/uploads/{file_id}/"
-        files = await self._files.list(prefix)
+        files = await self._files.list_prefix(prefix)
         if not files:
             raise NotFoundError(f"File '{file_id}' not found")
-        return FileStatusResponse(file_id=file_id, status="ready", size_bytes=files[0].size)
+        return FileStatusResponse(file_id=file_id, status="ready", size_bytes=files[0][1])
 
     async def delete(self, caller: Caller, file_id: str) -> None:
         prefix = f"{user_prefix(caller.tenant_id, caller.user_id)}/uploads/{file_id}/"
-        files = await self._files.list(prefix)
-        for f in files:
-            await self._files.delete(f.key)
+        await self._files.delete_prefix(prefix)
 
     async def quota_status(self, caller: Caller) -> DocQuotaStatus:
         return DocQuotaStatus(allowed=True, used=0, limit=1000, resets_in=0)

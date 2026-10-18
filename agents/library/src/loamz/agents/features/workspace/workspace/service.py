@@ -34,9 +34,9 @@ class WorkspaceService:
 
     async def usage(self, caller: Caller) -> WorkspaceUsageResponse:
         prefix = user_prefix(caller.tenant_id, caller.user_id)
-        files = await self._files.list(prefix)
-        used = sum(f.size for f in files)
-        quota = self._c.settings.files.max_bytes_per_tenant
+        files = await self._files.list_prefix(prefix)
+        used = sum(size for _, size, _ in files)
+        quota = self._c.settings.files.user_quota_bytes
         return WorkspaceUsageResponse(used_bytes=used, quota_bytes=quota)
 
     async def list_files(
@@ -47,18 +47,18 @@ class WorkspaceService:
             if session_id
             else user_prefix(caller.tenant_id, caller.user_id)
         )
-        files = await self._files.list(prefix)
+        files = await self._files.list_prefix(prefix)
         items: list[WorkspaceFileEntry] = []
-        for f in files:
-            name = f.key.rsplit("/", 1)[-1]
+        for key, size, mtime in files:
+            name = key.rsplit("/", 1)[-1]
             if name.startswith("."):
                 continue
             items.append(
                 WorkspaceFileEntry(
-                    path=f.key,
+                    path=key,
                     name=name,
-                    size_bytes=f.size,
-                    modified_at=f.last_modified or 0.0,
+                    size_bytes=size,
+                    modified_at=mtime or 0.0,
                     session_id=session_id,
                 )
             )
@@ -82,7 +82,8 @@ class WorkspaceService:
         self, caller: Caller, path: str, session_id: str, branch_id: str = "main"
     ) -> bool:
         key = conversation_shared_key(caller.tenant_id, caller.user_id, session_id, path, branch_id)
-        return await self._files.delete(key)
+        await self._files.delete(key)
+        return True
 
     async def list_versions(
         self, caller: Caller, path: str, session_id: str, branch_id: str = "main"

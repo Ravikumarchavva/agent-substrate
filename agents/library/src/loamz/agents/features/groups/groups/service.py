@@ -140,10 +140,10 @@ class GroupsService:
         items = [
             MessageOut(
                 seq=e.seq,
-                sender_id=str(e.sender.id if e.sender else ""),
+                sender_id=str(e.sender.key if e.sender else ""),
                 sender_name=str(e.sender.type if e.sender else ""),
                 text=e.text or "",
-                created_at=e.created_at,
+                created_at=e.at,
             )
             for e in entries
         ]

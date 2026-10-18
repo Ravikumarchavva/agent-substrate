@@ -48,10 +48,10 @@ from loamz.agents.features.directory.delegation.service import (
 )
 from loamz.agents.features.directory.pairs.service import PairsService, channels, pairs
 from loamz.agents.features.directory.pins.service import PinsService, pins
-from loamz.agents.kernel.agents.agent import Agent
+from loamz.agents.kernel.agents.react import ReActAgent
 from loamz.agents.kernel.caller import Caller
 from loamz.agents.kernel.ports.files import FileStore
-from loamz.agents.kernel.tools.tool import Tool
+from loamz.agents.kernel.tools.protocols import Tool
 from loamz.agents.kernel.types.ids import new_id
 from loamz.agents.providers.llm.factory import (
     detect_provider,
@@ -508,7 +508,7 @@ class AgentsService:
         channel: object = None,
         drop_tools: tuple[str, ...] = (),
         **options: object,
-    ) -> Agent:
+    ) -> ReActAgent:
         """The agent for `profile` (unregistered): its role, permitted tools plus `extra_tools`, its own model, keeping
         its conversation under `session_id`. With a `ChannelMemberConfig` as `channel` it is an agent that lives in
         channels. `options` go to `create_assistant_agent` (middleware, approval_required_risk…)."""

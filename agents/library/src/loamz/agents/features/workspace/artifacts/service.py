@@ -54,13 +54,13 @@ class ArtifactsService:
         tag: str | None = None,
     ) -> ArtifactList:
         prefix = _artifact_prefix(caller.tenant_id, caller.user_id, scope, thread_id)
-        files = await self._files.list(prefix)
+        files = await self._files.list_prefix(prefix)
         items: list[ArtifactOut] = []
-        for f in files:
-            if not f.key.endswith(".json"):
+        for key, _, _ in files:
+            if not key.endswith(".json"):
                 continue
             try:
-                data = await self._files.download(f.key)
+                data = await self._files.download(key)
                 art = ArtifactOut(**json.loads(data))
                 if type and art.type != type:
                     continue

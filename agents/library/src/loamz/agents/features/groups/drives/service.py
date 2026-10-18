@@ -24,15 +24,15 @@ class DrivesService:
     async def list_files(self, caller: Caller, group_id: str) -> GroupFileList:
         await self._groups.get(caller, group_id)
         prefix = self._prefix(caller.tenant_id, group_id)
-        files = await self._files.list(prefix)
+        files = await self._files.list_prefix(prefix)
         items = [
             GroupFileOut(
-                path=f.key,
-                name=f.key.rsplit("/", 1)[-1],
-                size_bytes=f.size,
-                modified_at=f.last_modified or 0.0,
+                path=key,
+                name=key.rsplit("/", 1)[-1],
+                size_bytes=size,
+                modified_at=mtime,
             )
-            for f in files
+            for key, size, mtime in files
         ]
         return GroupFileList(files=items)
 

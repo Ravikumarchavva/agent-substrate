@@ -1,0 +1,47 @@
+{{- define "cell.agentEnv" -}}
+- name: POSTGRES_PASSWORD
+  valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "postgres-password") }} }
+- name: REDIS_PASSWORD
+  valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "redis-password") }} }
+- { name: DATABASE_URL, value: "postgresql+asyncpg://{{ include "cell.pgUser" . }}:$(POSTGRES_PASSWORD)@{{ include "cell.pgHost" . }}:{{ include "cell.pgPort" . }}/{{ .Values.postgres.databases.agent }}?ssl={{ include "cell.pgSslmode" . }}" }
+- { name: ASYNC_DATABASE_URL, value: "postgresql://{{ include "cell.pgUser" . }}:$(POSTGRES_PASSWORD)@{{ include "cell.pgHost" . }}:{{ include "cell.pgPort" . }}/{{ .Values.postgres.databases.agent }}?sslmode={{ include "cell.pgSslmode" . }}" }
+- { name: REDIS_URL, value: "redis://:$(REDIS_PASSWORD)@{{ include "cell.redisHost" . }}:{{ if .Values.redis.bundled.enabled }}6379{{ else }}{{ .Values.redis.external.port }}{{ end }}/0" }
+- { name: STORE_BACKEND, value: postgres }
+- { name: FILE_STORE_BACKEND, value: s3 }
+- { name: FILE_STORE_BUCKET, value: {{ .Values.s3.buckets.agents | quote }} }
+- { name: FILE_STORE_ENDPOINT, value: {{ include "cell.s3Endpoint" . | quote }} }
+- { name: FILE_STORE_REGION, value: {{ if .Values.s3.bundled.enabled }}us-east-1{{ else }}{{ .Values.s3.external.region }}{{ end }} }
+- name: FILE_STORE_ACCESS_KEY
+  valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "agents-s3-access-key-id") }} }
+- name: FILE_STORE_SECRET_KEY
+  valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "agents-s3-secret-access-key") }} }
+- name: JWT_SECRET
+  valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "jwt-secret") }} }
+- { name: OIDC_ISSUER, value: {{ include "cell.issuer" . | quote }} }
+- { name: OIDC_AUDIENCE, value: agent-substrate }
+- { name: FRONTEND_URL, value: {{ .Values.publicUrls.ui | quote }} }
+- { name: CHAT_MODEL, value: {{ .Values.agent.model | quote }} }
+- { name: SANDBOX_RUNTIME, value: {{ .Values.agent.sandbox.runtime | quote }} }
+{{- with .Values.agent.sandbox.runtimeClassName }}
+- { name: SANDBOX_RUNTIME_CLASS, value: {{ . | quote }} }
+{{- end }}
+{{- range $env, $key := dict "OPENAI_API_KEY" "openai-api-key" "ANTHROPIC_API_KEY" "anthropic-api-key" "GEMINI_API_KEY" "gemini-api-key" "OPENROUTER_API_KEY" "openrouter-api-key" }}
+- name: {{ $env }}
+  valueFrom: { secretKeyRef: { name: {{ include "cell.secretName" $ }}, key: {{ $key }}, optional: true } }
+{{- end }}
+{{- with .Values.agent.extraEnv }}
+{{ toYaml . }}
+{{- end }}
+{{- end }}
+{{- $env := include "cell.agentEnv" . }}
+{{- $img := .Values.agent.image }}
+{{- if eq .Values.mode "monolith" }}
+{{- include "cell.workload" (dict "root" . "component" "agent-server" "repo" "substrate-agent-server" "override" $img "port" 8000 "probePath" "/health" "cfg" .Values.agent "env" (printf "%s\n- { name: SUBSTRATE_MODE, value: monolith }" $env) "writable" (list (dict "name" "data" "path" "/data")) "automountToken" (and (eq .Values.agent.sandbox.runtime "k8s") .Values.agent.sandbox.rbac)) }}
+{{- else if eq .Values.mode "microservices" }}
+{{- range $svc, $cfg := .Values.agent.microservices }}
+{{- $component := printf "agent-%s" ($svc | replace "_" "-") }}
+{{- include "cell.workload" (dict "root" $ "component" $component "repo" "substrate-agent-server" "override" $img "port" $cfg.port "probePath" "/health" "cfg" $cfg "env" (printf "%s\n- { name: SUBSTRATE_MODE, value: microservices }\n- { name: SUBSTRATE_SERVICE, value: %s }" $env $svc) "writable" (list (dict "name" "data" "path" "/data")) "automountToken" (and (eq $svc "tool_executor") (eq $.Values.agent.sandbox.runtime "k8s") $.Values.agent.sandbox.rbac)) }}
+{{- end }}
+{{- else }}
+{{- fail "mode must be monolith or microservices" }}
+{{- end }}

@@ -2,9 +2,6 @@ name: Image / document-intelligence
 
 # Runnable service images (CPU + GPU) for the heavy PaddleOCR runtime; never `pip install`-ed by consumers.
 # Ported from the agent-substrate repo. Runs on changes to its inputs on main, or manually.
-# NOTE: the Dockerfiles still live in deploy/legacy-agents/docker and COPY from the old single-repo layout
-# (src/, packages/inference-pool, apps/document-intelligence); they must be updated to the monorepo layout
-# before this build succeeds.
 on:
   push:
     branches: [main]
@@ -12,7 +9,7 @@ on:
       - data/document-intelligence/**
       - data/inference-pool/**
       - agents/agent-substrate/src/**
-      - deploy/legacy-agents/docker/document-intelligence*.Dockerfile
+      - deploy/docker/document-intelligence*.Dockerfile
       - .github/workflows/docker-document-intelligence.yml
   workflow_dispatch:
 
@@ -35,9 +32,9 @@ jobs:
       matrix:
         include:
           - variant: cpu
-            dockerfile: deploy/legacy-agents/docker/document-intelligence.Dockerfile
+            dockerfile: deploy/docker/document-intelligence.Dockerfile
           - variant: gpu
-            dockerfile: deploy/legacy-agents/docker/document-intelligence.gpu.Dockerfile
+            dockerfile: deploy/docker/document-intelligence.gpu.Dockerfile
     steps:
       - uses: actions/checkout@v4
       - name: Lowercase image path
@@ -50,7 +47,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: data
+          context: .
           file: ${{ matrix.dockerfile }}
           push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
           tags: |

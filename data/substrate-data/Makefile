@@ -56,4 +56,4 @@ check:
 
 # Worker image for operators to run wherever they host compute; the application never launches it.
 compute-image:
-	docker build -f deployment/compute.Dockerfile -t substrate-data-worker:local .
+	docker build -f ../../deploy/docker/substrate-data.Dockerfile -t substrate-data:local ../..

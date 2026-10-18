@@ -1,0 +1,191 @@
+{{- $dataEnv := include "cell.dataEnv" . }}
+{{- $img := .Values.data.image }}
+{{- $kc := include "cell.fullname" . }}
+{{- $tkName := default (printf "%s-ticket" $kc) .Values.data.ticketKeys.existingSecret }}
+{{- $worker := list }}
+{{- /* control plane API */}}
+{{- $apiEnv := printf `%s
+- name: SUBSTRATE_DATA_METADATA_URL
+  value: "postgresql://%s:$(POSTGRES_PASSWORD)@%s:%s/%s?sslmode=%s"
+- name: SUBSTRATE_DATA_CONTROLLER_TOKEN
+  valueFrom: { %s }
+- name: SUBSTRATE_DATA_S3_ACCESS_KEY_ID
+  valueFrom: { %s }
+- name: SUBSTRATE_DATA_S3_SECRET_ACCESS_KEY
+  valueFrom: { %s }
+- name: SUBSTRATE_DATA_MASK_SALT
+  valueFrom: { %s }
+- { name: SUBSTRATE_DATA_TICKET_PRIVATE_KEY_FILE, value: /keys/ticket.pem }
+- { name: SUBSTRATE_DATA_VOLUMES_PUBLIC_ENDPOINT_URL, value: %s }
+- { name: SUBSTRATE_DATA_SCRATCH, value: /var/lib/substrate-data/tmp }` $dataEnv (include "cell.pgUser" .) (include "cell.pgHost" .) (include "cell.pgPort" .) .Values.postgres.databases.data (include "cell.pgSslmode" .) (include "cell.secretRef" (dict "root" . "key" "controller-token")) (include "cell.secretRef" (dict "root" . "key" "control-s3-access-key-id")) (include "cell.secretRef" (dict "root" . "key" "control-s3-secret-access-key")) (include "cell.secretRef" (dict "root" . "key" "mask-salt")) (.Values.publicUrls.s3 | quote) }}
+{{- include "cell.workload" (dict "root" . "component" "data-api" "repo" "substrate-data" "override" $img "port" 8020 "probePath" "/readyz" "args" (list "serve" "--host" "0.0.0.0" "--port" "8020") "cfg" .Values.data.api "env" $apiEnv "writable" (list (dict "name" "state" "path" "/var/lib/substrate-data") (dict "name" "home" "path" "/opt/substrate/home-rw")) "scheme" "HTTP" "volumes" (list (dict "name" "ticket" "secret" (dict "secretName" $tkName "items" (list (dict "key" "ticket.pem" "path" "ticket.pem")))) (dict "name" "tls" "secret" (dict "secretName" (printf "%s-internal-tls" $kc)))) "volumeMounts" (list (dict "name" "ticket" "mountPath" "/keys" "readOnly" true) (dict "name" "tls" "mountPath" "/tls" "readOnly" true))) }}
+
+{{- /* controller: one active, its queue in a PVC */}}
+{{- $ctrlEnv := printf `%s
+- name: SUBSTRATE_DATA_CONTROLLER_TOKEN
+  valueFrom: { %s }
+- { name: SUBSTRATE_DATA_TLS_CERT_FILE, value: /tls/tls.crt }
+- { name: SUBSTRATE_DATA_TLS_KEY_FILE, value: /tls/tls.key }` $dataEnv (include "cell.secretRef" (dict "root" . "key" "controller-token")) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $kc }}-data-controller
+  labels: {{- include "cell.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.data.controller.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources: { requests: { storage: {{ .Values.data.controller.storage }} } }
+{{ "\n" }}{{- include "cell.workload" (dict "root" . "component" "data-controller" "repo" "substrate-data" "override" $img "port" 8040 "probePath" "/readyz" "args" (list "controller" "--host" "0.0.0.0" "--port" "8040") "cfg" .Values.data.controller "env" $ctrlEnv "scheme" "HTTPS" "volumes" (list (dict "name" "state" "persistentVolumeClaim" (dict "claimName" (printf "%s-data-controller" $kc))) (dict "name" "tls" "secret" (dict "secretName" (printf "%s-internal-tls" $kc)))) "volumeMounts" (list (dict "name" "state" "mountPath" "/var/lib/substrate-data") (dict "name" "tls" "mountPath" "/tls" "readOnly" true))) }}
+
+{{- /* workers: SQL, jobs, RAG */}}
+{{- $ports := dict "sql" 8041 "jobs" 8042 "rag" 8043 }}
+{{- $workerEnv := printf `%s
+- name: SUBSTRATE_DATA_WORKER_TOKEN
+  valueFrom: { %s }
+- name: SUBSTRATE_DATA_S3_ACCESS_KEY_ID
+  valueFrom: { %s }
+- name: SUBSTRATE_DATA_S3_SECRET_ACCESS_KEY
+  valueFrom: { %s }
+- { name: SUBSTRATE_DATA_WORKER_BIND_HOST, value: 0.0.0.0 }
+- { name: SUBSTRATE_DATA_WORKER_MEMORY_LIMIT, value: %s }
+- { name: SUBSTRATE_DATA_TICKET_PUBLIC_KEY_FILE, value: /keys/ticket.pub.pem }
+- { name: SUBSTRATE_DATA_TLS_CERT_FILE, value: /tls/tls.crt }
+- { name: SUBSTRATE_DATA_TLS_KEY_FILE, value: /tls/tls.key }` $dataEnv (include "cell.secretRef" (dict "root" . "key" "worker-token")) (include "cell.secretRef" (dict "root" . "key" "worker-s3-access-key-id")) (include "cell.secretRef" (dict "root" . "key" "worker-s3-secret-access-key")) (.Values.data.workers.memoryLimit | quote) }}
+{{- range $role, $port := $ports }}
+{{- include "cell.workload" (dict "root" $ "component" (printf "data-worker-%s" $role) "repo" "substrate-data" "override" $img "port" $port "probePath" "/readyz" "args" (list "worker" "--role" $role "--port" ($port | toString)) "cfg" (index $.Values.data.workers $role) "env" $workerEnv "writable" (list (dict "name" "state" "path" "/var/lib/substrate-data")) "scheme" "HTTPS" "volumes" (list (dict "name" "ticket" "secret" (dict "secretName" $tkName "items" (list (dict "key" "ticket.pub.pem" "path" "ticket.pub.pem")))) (dict "name" "tls" "secret" (dict "secretName" (printf "%s-internal-tls" $kc)))) "volumeMounts" (list (dict "name" "ticket" "mountPath" "/keys" "readOnly" true) (dict "name" "tls" "mountPath" "/tls" "readOnly" true))) }}
+{{- end }}
+
+{{- /* Ticket key pair: Helm cannot make Ed25519 keys, so a pre-install Job does (unless you bring data.ticketKeys.existingSecret). */}}
+{{- if not .Values.data.ticketKeys.existingSecret }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $kc }}-keygen
+  labels: {{- include "cell.labels" . | nindent 4 }}
+  annotations: { "helm.sh/hook": "pre-install", "helm.sh/hook-weight": "-10", "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded" }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $kc }}-keygen
+  labels: {{- include "cell.labels" . | nindent 4 }}
+  annotations: { "helm.sh/hook": "pre-install", "helm.sh/hook-weight": "-10", "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded" }
+rules:
+  - { apiGroups: [""], resources: [secrets], verbs: [create] }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $kc }}-keygen
+  labels: {{- include "cell.labels" . | nindent 4 }}
+  annotations: { "helm.sh/hook": "pre-install", "helm.sh/hook-weight": "-10", "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded" }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $kc }}-keygen }
+subjects: [ { kind: ServiceAccount, name: {{ $kc }}-keygen, namespace: {{ .Release.Namespace }} } ]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $kc }}-keygen
+  labels: {{- include "cell.labels" . | nindent 4 }}
+  annotations: { "helm.sh/hook": "pre-install", "helm.sh/hook-weight": "-5", "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded" }
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ $kc }}-keygen
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: keygen
+          image: {{ include "cell.image" (dict "root" . "repo" "substrate-data" "override" $img) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: [python, -c]
+          args:
+            - |
+              import base64, json, os, ssl, urllib.request, urllib.error
+              from cryptography.hazmat.primitives import serialization
+              from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+              k = Ed25519PrivateKey.generate()
+              priv = k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+              pub = k.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+              b = lambda x: base64.b64encode(x).decode()
+              sa = "/var/run/secrets/kubernetes.io/serviceaccount/"
+              body = {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "{{ $tkName }}", "labels": {"app.kubernetes.io/instance": "{{ .Release.Name }}"}},
+                      "data": {"ticket.pem": b(priv), "ticket.pub.pem": b(pub)}}
+              req = urllib.request.Request(
+                  "https://%s:%s/api/v1/namespaces/{{ .Release.Namespace }}/secrets" % (os.environ["KUBERNETES_SERVICE_HOST"], os.environ["KUBERNETES_SERVICE_PORT"]),
+                  data=json.dumps(body).encode(), method="POST",
+                  headers={"Authorization": "Bearer " + open(sa + "token").read(), "Content-Type": "application/json"})
+              try:
+                  urllib.request.urlopen(req, context=ssl.create_default_context(cafile=sa + "ca.crt"))
+              except urllib.error.HTTPError as e:
+                  if e.code != 409:
+                      raise
+              print("ticket keys ready")
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+{{- end }}
+
+{{- /* Registers the workers with the controller (idempotent by name). */}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $kc }}-data-attach
+  labels: {{- include "cell.labels" . | nindent 4 }}
+  annotations: { "helm.sh/hook": "post-install,post-upgrade", "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded" }
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: attach
+          image: {{ include "cell.image" (dict "root" . "repo" "substrate-data" "override" $img) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: [sh, -ec]
+          args:
+            - |
+              for role in sql jobs rag; do
+                case $role in sql) port=8041;; jobs) port=8042;; rag) port=8043;; esac
+                substrate-data attach --name "$role" --role "$role" --url "https://{{ $kc }}-data-worker-$role:$port" --token-env SUBSTRATE_DATA_WORKER_TOKEN
+              done
+          env:
+            {{- $dataEnv | nindent 12 }}
+            - name: SUBSTRATE_DATA_CONTROLLER_TOKEN
+              valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "controller-token") }} }
+            - name: SUBSTRATE_DATA_WORKER_TOKEN
+              valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "worker-token") }} }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts: [ { name: tmp, mountPath: /tmp }, { name: tls, mountPath: /tls, readOnly: true } ]
+      volumes: [ { name: tmp, emptyDir: {} }, { name: tls, secret: { secretName: {{ $kc }}-internal-tls } } ]
+
+---
+{{- /* Private CA + one certificate for the controller and workers (substrate-data refuses plain HTTP between them). Kept across upgrades. */}}
+{{- $tlsName := printf "%s-internal-tls" $kc }}
+{{- $oldTls := lookup "v1" "Secret" .Release.Namespace $tlsName }}
+{{- $hosts := list "localhost" }}
+{{- range $c := list "data-controller" "data-worker-sql" "data-worker-jobs" "data-worker-rag" }}{{ $hosts = append $hosts (printf "%s-%s" $kc $c) }}{{ end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $tlsName }}
+  labels: {{- include "cell.labels" . | nindent 4 }}
+type: Opaque
+data:
+  {{- if $oldTls }}
+  ca.crt: {{ index $oldTls.data "ca.crt" }}
+  tls.crt: {{ index $oldTls.data "tls.crt" }}
+  tls.key: {{ index $oldTls.data "tls.key" }}
+  {{- else }}
+  {{- $ca := genCA "substrate cell internal CA" 3650 }}
+  {{- $cert := genSignedCert "substrate-data internal" nil $hosts 825 $ca }}
+  ca.crt: {{ $ca.Cert | b64enc }}
+  tls.crt: {{ $cert.Cert | b64enc }}
+  tls.key: {{ $cert.Key | b64enc }}
+  {{- end }}

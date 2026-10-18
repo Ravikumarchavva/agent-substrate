@@ -1,0 +1,474 @@
+# Substrate cell: the self-host bundle (ADR 0006). One identical stack for every hosting model's smallest form.
+#
+#   ./gen-env.sh                                   # secrets
+#   docker compose --profile monolith up -d --build        # agent server as one process (default choice)
+#   docker compose --profile microservices up -d --build   # agent server as ten services behind a gateway
+#   add --profile ml for embedding-reranker and its llama.cpp sidecars (large model downloads)
+#
+# Exactly one of the monolith / microservices profiles. Ports are in ../PORTS.md; nothing but the UIs, the agent
+# API, Keycloak and the S3 endpoint is published, and only on BIND_ADDR.
+name: ${COMPOSE_PROJECT_NAME:-substrate-cell}
+
+x-data-env: &data-env
+  # The services are on one private Docker network behind (optionally) a TLS-terminating proxy; plain HTTP to these
+  # named hosts is an explicit opt-in in substrate-data, and the proxy flag lets it listen beyond loopback.
+  SUBSTRATE_DATA_INSECURE_HTTP_HOSTS: '["seaweedfs","keycloak"]'
+  # Controller and workers serve HTTPS with the cell's private CA (cell-init); the API trusts it.
+  SUBSTRATE_DATA_INTERNAL_CA_FILE: /tls/ca.crt
+  SUBSTRATE_DATA_BEHIND_TLS_PROXY: "true"
+  SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
+  SUBSTRATE_DATA_OIDC_AUDIENCE: substrate-data
+  SUBSTRATE_DATA_S3_ENDPOINT_URL: http://seaweedfs:8333
+  SUBSTRATE_DATA_ICEBERG_CATALOG_URL: http://seaweedfs:8181
+  SUBSTRATE_DATA_WAREHOUSE: ${WAREHOUSE_BUCKET:-warehouse}
+  SUBSTRATE_DATA_STAGING_BUCKET: ${STAGING_BUCKET:-substrate-staging}
+  SUBSTRATE_DATA_VOLUMES_BUCKET: ${VOLUMES_BUCKET:-substrate-volumes}
+  SUBSTRATE_DATA_STORAGE_ID: cell-warehouse
+  SUBSTRATE_DATA_CONTROLLER_URL: https://data-controller:8040
+
+x-data-image: &data-image
+  image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/substrate-data:${IMAGE_TAG:-local}
+  build: { context: ../.., dockerfile: deploy/docker/substrate-data.Dockerfile }
+
+x-data-tls: &data-tls
+  SUBSTRATE_DATA_TLS_CERT_FILE: /tls/server.crt
+  SUBSTRATE_DATA_TLS_KEY_FILE: /tls/server.key
+
+# The controller and workers speak HTTPS, so the image's plain-HTTP probe does not apply.
+x-https-health: &https-health
+  test: ["CMD", "python", "-c", "import os, ssl, urllib.request as u; c = ssl.create_default_context(cafile='/tls/ca.crt'); u.urlopen('https://localhost:%s/readyz' % os.environ['PORT'], timeout=4, context=c)"]
+  interval: 15s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
+x-worker-env: &worker-env
+  <<: [*data-env, *data-tls]
+  SUBSTRATE_DATA_WORKER_BIND_HOST: 0.0.0.0
+  SUBSTRATE_DATA_WORKER_TOKEN: ${WORKER_TOKEN:?run ./gen-env.sh}
+  SUBSTRATE_DATA_S3_ACCESS_KEY_ID: ${WORKER_S3_ACCESS_KEY_ID:?}
+  SUBSTRATE_DATA_S3_SECRET_ACCESS_KEY: ${WORKER_S3_SECRET_ACCESS_KEY:?}
+  SUBSTRATE_DATA_TICKET_PUBLIC_KEY_FILE: /keys/ticket.pub.pem
+  SUBSTRATE_DATA_WORKER_MEMORY_LIMIT: ${SUBSTRATE_DATA_WORKER_MEMORY_LIMIT:-2GB}
+
+x-agent-image: &agent-image
+  image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/substrate-agent-server:${IMAGE_TAG:-local}
+  build: { context: ../.., dockerfile: deploy/docker/agent-server.Dockerfile }
+
+x-agent-env: &agent-env
+  # SQLAlchemy (asyncpg dialect) wants ssl=, the library's own asyncpg connection wants sslmode=.
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD:?run ./gen-env.sh}@postgres:5432/agentdb?ssl=require
+  ASYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/agentdb?sslmode=require
+  REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
+  STORE_BACKEND: postgres
+  FILE_STORE_BACKEND: s3
+  FILE_STORE_BUCKET: ${AGENTS_BUCKET:-agent-files}
+  FILE_STORE_ENDPOINT: http://seaweedfs:8333
+  FILE_STORE_REGION: us-east-1
+  FILE_STORE_ACCESS_KEY: ${AGENTS_S3_ACCESS_KEY_ID:?}
+  FILE_STORE_SECRET_KEY: ${AGENTS_S3_SECRET_ACCESS_KEY:?}
+  JWT_SECRET: ${JWT_SECRET:?}
+  # Keycloak resource-server settings (the verifier in the agent server reads these).
+  OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
+  OIDC_AUDIENCE: agent-substrate
+  FRONTEND_URL: ${SUBSTRATE_UI_URL:-http://localhost:3000}
+  SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-nsjail}
+  CHAT_MODEL: ${CHAT_MODEL:-google/gemini-3.1-flash-lite}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+
+# Capabilities the nsjail code-interpreter runtime needs. Remove them (and set SANDBOX_RUNTIME) if you provide
+# sandboxing another way; without them the server refuses to start with nsjail selected.
+x-nsjail: &nsjail
+  user: "0:0"
+  cgroup: host
+  cap_add: [SYS_ADMIN]
+  security_opt: ["seccomp=unconfined"]
+
+x-microservice: &microservice
+  <<: *agent-image
+  profiles: [microservices]
+  environment: &microservice-env
+    <<: *agent-env
+    SUBSTRATE_MODE: microservices
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    seaweed-init: { condition: service_completed_successfully }
+  restart: unless-stopped
+
+services:
+  # ── State ───────────────────────────────────────────────────────────────────
+  cell-init:
+    <<: *data-image
+    user: "0:0"
+    entrypoint: ["python", "/init/cell-init.py"]
+    healthcheck: { disable: true }
+    command: []
+    environment:
+      WAREHOUSE_BUCKET: ${WAREHOUSE_BUCKET:-warehouse}
+      STAGING_BUCKET: ${STAGING_BUCKET:-substrate-staging}
+      VOLUMES_BUCKET: ${VOLUMES_BUCKET:-substrate-volumes}
+      AGENTS_BUCKET: ${AGENTS_BUCKET:-agent-files}
+      CONTROL_S3_ACCESS_KEY_ID: ${CONTROL_S3_ACCESS_KEY_ID:?run ./gen-env.sh}
+      CONTROL_S3_SECRET_ACCESS_KEY: ${CONTROL_S3_SECRET_ACCESS_KEY:?}
+      WORKER_S3_ACCESS_KEY_ID: ${WORKER_S3_ACCESS_KEY_ID:?}
+      WORKER_S3_SECRET_ACCESS_KEY: ${WORKER_S3_SECRET_ACCESS_KEY:?}
+      AGENTS_S3_ACCESS_KEY_ID: ${AGENTS_S3_ACCESS_KEY_ID:?}
+      AGENTS_S3_SECRET_ACCESS_KEY: ${AGENTS_S3_SECRET_ACCESS_KEY:?}
+    volumes:
+      - ./init:/init:ro
+      - seaweed-config:/out/seaweed
+      - ticket-private:/out/ticket-private
+      - ticket-public:/out/ticket-public
+      - postgres-tls:/out/postgres-tls
+      - internal-tls:/out/internal-tls
+    restart: "no"
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/tls/server.crt
+      - -c
+      - ssl_key_file=/tls/server.key
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-substrate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run ./gen-env.sh}
+      POSTGRES_DB: agentdb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-tls:/tls:ro
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d agentdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      cell-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?run ./gen-env.sh}", "--appendonly", "yes"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    restart: unless-stopped
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    command:
+      - server
+      - -dir=/data
+      - -ip=seaweedfs
+      - -ip.bind=0.0.0.0
+      - -filer
+      - -s3
+      - -s3.config=/config/s3.json
+      - -s3.port.iceberg=8181
+      - -s3.allowDeleteBucketNotEmpty=false
+      # Browsers upload straight to presigned URLs; only the workspace UI origin may.
+      - -s3.allowedOrigins=${SUBSTRATE_DATA_WEB_URL:-http://localhost:3011}
+      - -master.volumeSizeLimitMB=1024
+      - -volume.max=0
+      - -master.telemetry=false
+    volumes:
+      - seaweed-data:/data
+      - seaweed-config:/config:ro
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${PORT_S3:-8333}:8333"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/status || wget -q -O /dev/null --server-response http://127.0.0.1:8333/ 2>&1 | grep -q 'HTTP/'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      cell-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  seaweed-init:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for i in $$(seq 1 60); do
+          out=$$(printf 's3.bucket.create -name %s\ns3.bucket.create -name %s\ns3.bucket.create -name %s\ns3tables.bucket -create -name %s -account 000000000000\nexit\n' "$$STAGING_BUCKET" "$$VOLUMES_BUCKET" "$$AGENTS_BUCKET" "$$WAREHOUSE_BUCKET" | weed shell -master=seaweedfs:9333 2>&1) && break
+          sleep 2
+        done
+        echo "$$out" | tail -5
+        if echo "$$out" | grep -qi error && ! echo "$$out" | grep -qi exist; then exit 1; fi
+    environment:
+      STAGING_BUCKET: ${STAGING_BUCKET:-substrate-staging}
+      VOLUMES_BUCKET: ${VOLUMES_BUCKET:-substrate-volumes}
+      AGENTS_BUCKET: ${AGENTS_BUCKET:-agent-files}
+      WAREHOUSE_BUCKET: ${WAREHOUSE_BUCKET:-warehouse}
+    depends_on:
+      seaweedfs: { condition: service_healthy }
+    restart: "no"
+
+  # ── Identity ────────────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    command: ["start", "--import-realm", "--http-enabled=true", "--hostname=${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}", "--hostname-strict=true", "--health-enabled=true", "--proxy-headers=xforwarded"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?run ./gen-env.sh}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak?sslmode=require
+      KC_DB_USERNAME: ${POSTGRES_USER:-substrate}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Substituted into the realm file at import. All three are required: an unset one becomes the literal text.
+      SUBSTRATE_UI_CLIENT_SECRET: ${SUBSTRATE_UI_CLIENT_SECRET:?run ./gen-env.sh}
+      SUBSTRATE_DATA_WEB_CLIENT_SECRET: ${SUBSTRATE_DATA_WEB_CLIENT_SECRET:?}
+      CELL_ADMIN_CLIENT_SECRET: ${CELL_ADMIN_CLIENT_SECRET:?}
+      SUBSTRATE_UI_URL: ${SUBSTRATE_UI_URL:-http://localhost:3000}
+      SUBSTRATE_DATA_WEB_URL: ${SUBSTRATE_DATA_WEB_URL:-http://localhost:3011}
+    volumes:
+      - ../keycloak/realm-substrate.json:/opt/keycloak/data/import/realm-substrate.json:ro
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${PORT_KEYCLOAK:-8080}:8080"
+    healthcheck:
+      # The image has no curl; the management port (9000) answers /health/ready.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q '\"status\": \"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+
+  # ── substrate-data ──────────────────────────────────────────────────────────
+  data-api:
+    <<: *data-image
+    command: ["serve", "--host", "0.0.0.0", "--port", "8020"]
+    environment:
+      <<: *data-env
+      PORT: "8020"
+      SUBSTRATE_DATA_METADATA_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/substrate_data?sslmode=require
+      SUBSTRATE_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?run ./gen-env.sh}
+      SUBSTRATE_DATA_S3_ACCESS_KEY_ID: ${CONTROL_S3_ACCESS_KEY_ID}
+      SUBSTRATE_DATA_S3_SECRET_ACCESS_KEY: ${CONTROL_S3_SECRET_ACCESS_KEY}
+      SUBSTRATE_DATA_TICKET_PRIVATE_KEY_FILE: /keys/ticket.pem
+      SUBSTRATE_DATA_VOLUMES_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_URL:-http://localhost:8333}
+      SUBSTRATE_DATA_MASK_SALT: ${MASK_SALT:-}
+    volumes:
+      - ticket-private:/keys:ro
+      - internal-tls:/tls:ro
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${PORT_DATA_API:-8020}:8020"
+    depends_on:
+      postgres: { condition: service_healthy }
+      seaweed-init: { condition: service_completed_successfully }
+      keycloak: { condition: service_healthy }
+    restart: unless-stopped
+
+  data-controller:
+    <<: *data-image
+    command: ["controller", "--host", "0.0.0.0", "--port", "8040"]
+    environment:
+      <<: [*data-env, *data-tls]
+      PORT: "8040"
+      SUBSTRATE_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?}
+    healthcheck: *https-health
+    volumes:
+      - controller-state:/var/lib/substrate-data
+      - internal-tls:/tls:ro
+    restart: unless-stopped
+
+  data-worker-sql:
+    <<: *data-image
+    command: ["worker", "--role", "sql", "--port", "8041"]
+    environment: { <<: *worker-env, PORT: "8041" }
+    healthcheck: *https-health
+    volumes: [ "ticket-public:/keys:ro", "internal-tls:/tls:ro" ]
+    depends_on:
+      seaweed-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  data-worker-jobs:
+    <<: *data-image
+    command: ["worker", "--role", "jobs", "--port", "8042"]
+    environment: { <<: *worker-env, PORT: "8042" }
+    healthcheck: *https-health
+    volumes: [ "ticket-public:/keys:ro", "internal-tls:/tls:ro" ]
+    depends_on:
+      seaweed-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  data-worker-rag:
+    <<: *data-image
+    command: ["worker", "--role", "rag", "--port", "8043"]
+    environment: { <<: *worker-env, PORT: "8043" }
+    healthcheck: *https-health
+    volumes: [ "ticket-public:/keys:ro", "internal-tls:/tls:ro" ]
+    restart: unless-stopped
+
+  # Registers the workers with the controller (idempotent by name), then exits.
+  data-attach:
+    <<: *data-image
+    entrypoint: ["/bin/sh", "-ec"]
+    healthcheck: { disable: true }
+    command:
+      - |
+        for spec in sql:8041 jobs:8042 rag:8043; do
+          role=$${spec%%:*}; port=$${spec##*:}
+          for i in $$(seq 1 30); do
+            substrate-data attach --name "$$role" --role "$$role" --url "https://data-worker-$$role:$$port" --token-env SUBSTRATE_DATA_WORKER_TOKEN && break
+            sleep 2
+          done
+        done
+    environment:
+      <<: *data-env
+      SUBSTRATE_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?}
+      SUBSTRATE_DATA_WORKER_TOKEN: ${WORKER_TOKEN:?}
+    volumes:
+      - internal-tls:/tls:ro
+    depends_on: [data-controller, data-worker-sql, data-worker-jobs, data-worker-rag]
+    restart: "no"
+
+  # ── Agent server: monolith ──────────────────────────────────────────────────
+  agent-server:
+    <<: [*agent-image, *nsjail]
+    profiles: [monolith]
+    environment:
+      <<: *agent-env
+      SUBSTRATE_MODE: monolith
+    volumes:
+      - agent-data:/data
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${PORT_AGENT:-8000}:8000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      seaweed-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  # ── Agent server: microservices (the gateway is the only published one) ─────
+  agent-gateway:
+    <<: *microservice
+    environment:
+      <<: *microservice-env
+      SUBSTRATE_SERVICE: gateway
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${PORT_AGENT:-8000}:8001"
+  agent-identity:
+    <<: *microservice
+    environment: { <<: *microservice-env, SUBSTRATE_SERVICE: identity }
+  agent-policy:
+    <<: *microservice
+    environment: { <<: *microservice-env, SUBSTRATE_SERVICE: policy }
+  agent-conversation:
+    <<: *microservice
+    environment: { <<: *microservice-env, SUBSTRATE_SERVICE: conversation }
+  agent-job-controller:
+    <<: *microservice
+    environment: { <<: *microservice-env, SUBSTRATE_SERVICE: job_controller }
+  agent-runtime:
+    <<: *microservice
+    environment: { <<: *microservice-env, SUBSTRATE_SERVICE: agent_runtime }
+  agent-tool-executor:
+    <<: *microservice
+    environment: { <<: *microservice-env, SUBSTRATE_SERVICE: tool_executor }
+  agent-human-gate:
+    <<: *microservice
+    environment: { <<: *microservice-env, SUBSTRATE_SERVICE: human_gate }
+  agent-live-stream:
+    <<: *microservice
+    environment: { <<: *microservice-env, SUBSTRATE_SERVICE: live_stream }
+  agent-admin:
+    <<: *microservice
+    environment: { <<: *microservice-env, SUBSTRATE_SERVICE: admin }
+
+  # ── Web ─────────────────────────────────────────────────────────────────────
+  substrate-ui:
+    image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/substrate-ui:${IMAGE_TAG:-local}
+    build: { context: ../.., dockerfile: deploy/docker/substrate-ui.Dockerfile }
+    environment:
+      BACKEND_API_URL: http://${AGENT_UPSTREAM:-agent-server:8000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/substrate_ui?sslmode=require
+      ENGINE_JWT_SECRET: ${JWT_SECRET:?}
+      OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
+      OIDC_CLIENT_ID: substrate-ui
+      OIDC_CLIENT_SECRET: ${SUBSTRATE_UI_CLIENT_SECRET:?}
+      SESSION_SECRET: ${UI_SESSION_SECRET:?}
+      PUBLIC_URL: ${SUBSTRATE_UI_URL:-http://localhost:3000}
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${PORT_UI:-3000}:3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+
+  substrate-data-web:
+    image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/substrate-data-web:${IMAGE_TAG:-local}
+    build: { context: ../.., dockerfile: deploy/docker/substrate-data-web.Dockerfile }
+    environment:
+      DATA_API_URL: http://data-api:8020
+      SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
+      WEB_CLIENT_ID: substrate-data-web
+      WEB_CLIENT_SECRET: ${SUBSTRATE_DATA_WEB_CLIENT_SECRET:?}
+      WEB_SESSION_SECRET: ${WEB_SESSION_SECRET:?}
+      WEB_PUBLIC_URL: ${SUBSTRATE_DATA_WEB_URL:-http://localhost:3011}
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${PORT_DATA_WEB:-3011}:3011"
+    depends_on: [data-api]
+    restart: unless-stopped
+
+  # ── Retrieval models (profile "ml"): large downloads, CPU by default ────────
+  llama-embed:
+    image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/llama-server:${IMAGE_TAG:-local}
+    build: { context: ../docker, dockerfile: llama-server.Dockerfile }
+    profiles: [ml]
+    command: ["--host", "0.0.0.0", "--port", "8031", "-hf", "Rizwan313/Qwen3-VL-Embedding-2B-GGUF:Q4_K_M", "--embedding", "--pooling", "last"]
+    environment: { LLAMA_CACHE: /cache, PORT: "8031" }
+    volumes: [ "llama-cache:/cache" ]
+    restart: unless-stopped
+  llama-rerank:
+    image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/llama-server:${IMAGE_TAG:-local}
+    build: { context: ../docker, dockerfile: llama-server.Dockerfile }
+    profiles: [ml]
+    command: ["--host", "0.0.0.0", "--port", "8032", "-hf", "staralt/Qwen3-VL-Reranker-2B-Q4_K_M-GGUF", "--reranking"]
+    environment: { LLAMA_CACHE: /cache, PORT: "8032" }
+    volumes: [ "llama-cache:/cache" ]
+    restart: unless-stopped
+  embedding-reranker:
+    image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/embedding-reranker:${IMAGE_TAG:-local}
+    build: { context: ../.., dockerfile: deploy/docker/embedding-reranker.Dockerfile }
+    profiles: [ml]
+    command: ["--host", "0.0.0.0", "--port", "8050"]
+    environment:
+      EMBEDDING_RERANKER_PORT: "8050"
+      EMBEDDING_RERANKER_EMBED_SERVER_URL: http://llama-embed:8031
+      EMBEDDING_RERANKER_RERANK_SERVER_URL: http://llama-rerank:8032
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8050/v1/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on: [llama-embed, llama-rerank]
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  postgres-tls:
+  internal-tls:
+  redis-data:
+  seaweed-data:
+  seaweed-config:
+  ticket-private:
+  ticket-public:
+  controller-state:
+  agent-data:
+  llama-cache:

@@ -1,0 +1,218 @@
+# Substrate cell. Everything here has a working default for a laptop (kind) install; production overrides are
+# marked "production:". The chart never holds a real secret: see secrets.* and docs in deploy/README.md.
+
+nameOverride: ""
+fullnameOverride: ""
+
+global:
+  imageRegistry: ghcr.io/agent-substrate
+  # Empty = the chart's appVersion.
+  imageTag: ""
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  # Extra env for every Substrate container (list of Kubernetes env entries).
+  extraEnv: []
+  # Pod /etc/hosts entries, for clusters where the public hostnames do not resolve from inside (kind with *.localtest.me:
+  # map them to the ingress controller's ClusterIP). Applies to the workloads this chart creates.
+  hostAliases: []
+
+# monolith | microservices - how the agent server runs (ADR 0009). The cell is otherwise identical.
+mode: monolith
+
+# Where the cell is reachable. Browsers and services must see the same Keycloak address: it is the token issuer.
+publicUrls:
+  keycloak: "http://keycloak.localtest.me"
+  ui: "http://ui.localtest.me"
+  dataWeb: "http://data.localtest.me"
+  agentApi: "http://api.localtest.me"
+  dataApi: "http://data-api.localtest.me"
+  # Where browsers reach object storage (presigned URLs).
+  s3: "http://s3.localtest.me"
+
+# ── Secrets, by reference ────────────────────────────────────────────────────
+secrets:
+  # production: name of a Secret you manage (External Secrets, Sealed Secrets, Vault CSI...). Required keys:
+  #   postgres-password redis-password keycloak-admin-password
+  #   ui-client-secret data-web-client-secret cell-admin-client-secret
+  #   control-s3-access-key-id control-s3-secret-access-key worker-s3-access-key-id worker-s3-secret-access-key
+  #   agents-s3-access-key-id agents-s3-secret-access-key
+  #   controller-token worker-token web-session-secret ui-session-secret jwt-secret mask-salt
+  # Optional: openai-api-key anthropic-api-key gemini-api-key openrouter-api-key accounts-broker-client-secret
+  existingSecret: ""
+  # With no existingSecret, create a Secret of random values (kept across upgrades through `lookup`).
+  # Rotating them later is your job; prefer existingSecret outside of evaluation.
+  generate: true
+
+# ── PostgreSQL ────────────────────────────────────────────────────────────────
+postgres:
+  bundled:
+    enabled: true            # production: false, use a managed database
+    image: pgvector/pgvector:pg16
+    storage: 20Gi
+    storageClassName: ""
+    resources: { requests: { cpu: 250m, memory: 512Mi } }
+  external:
+    host: ""
+    port: 5432
+    user: substrate
+    # sslmode require | verify-ca | verify-full. substrate-data refuses anything weaker off-machine.
+    sslmode: require
+    # The databases must exist: agentdb (with pgvector and uuid-ossp), keycloak, substrate_data, substrate_ui.
+  databases: { agent: agentdb, keycloak: keycloak, data: substrate_data, ui: substrate_ui }
+
+redis:
+  bundled:
+    enabled: true
+    image: redis:7-alpine
+    storage: 2Gi
+    resources: { requests: { cpu: 50m, memory: 64Mi } }
+  external:
+    host: ""
+    port: 6379
+
+# ── Object storage ────────────────────────────────────────────────────────────
+s3:
+  bundled:
+    enabled: true            # SeaweedFS: S3 API and the Iceberg REST catalog. production: use your cloud's, see external
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    storage: 50Gi
+    storageClassName: ""
+    resources: { requests: { cpu: 250m, memory: 512Mi } }
+    # With secrets.existingSecret: a Secret you manage with key s3.json (SeaweedFS identities). Otherwise generated.
+    identitiesSecret: ""
+  external:
+    endpoint: ""
+    region: us-east-1
+    # Table data needs an Iceberg REST catalog next to the buckets (for example AWS Glue/S3 Tables through its REST endpoint).
+    icebergCatalogUrl: ""
+  buckets:
+    warehouse: warehouse
+    staging: substrate-staging
+    volumes: substrate-volumes
+    agents: agent-files
+  # Names the warehouse independently of how each process reaches it. Same on every component.
+  storageId: ""
+  # STS role the control plane assumes per statement (credential vending). With it, SQL workers hold no storage key.
+  stsRoleArn: ""
+
+# ── Keycloak ──────────────────────────────────────────────────────────────────
+keycloak:
+  enabled: true              # false = use an existing Keycloak (then import the realm yourself, deploy/keycloak)
+  image: quay.io/keycloak/keycloak:26.8.1
+  resources: { requests: { cpu: 250m, memory: 768Mi }, limits: { memory: 1536Mi } }
+  # Service-to-service JWKS fetch over the cluster network instead of the public issuer URL.
+  internalJwks: false
+  realm:
+    name: substrate
+    import: true             # seeds a NEW cell with deploy/keycloak/realm-substrate.json; it never reconciles a live one
+  brokering:
+    # Identity providers added to the realm at import (Keycloak IdentityProviderRepresentation). Use `${ENV}` for
+    # secrets; env vars are read from the cell Secret (accounts-broker-client-secret) or keycloak.extraEnv.
+    # Example - the commercial platform's `accounts` realm as a broker:
+    #   - alias: accounts
+    #     providerId: oidc
+    #     enabled: true
+    #     config:
+    #       clientId: substrate-cell
+    #       clientSecret: "${ACCOUNTS_BROKER_CLIENT_SECRET}"
+    #       authorizationUrl: https://accounts.example.com/realms/accounts/protocol/openid-connect/auth
+    #       tokenUrl: https://accounts.example.com/realms/accounts/protocol/openid-connect/token
+    #       jwksUrl: https://accounts.example.com/realms/accounts/protocol/openid-connect/certs
+    #       syncMode: IMPORT
+    identityProviders: []
+    identityProviderMappers: []
+  extraEnv: []
+
+# ── Agent server ──────────────────────────────────────────────────────────────
+agent:
+  image: { repository: "", tag: "" }
+  # Monolith deployment (mode=monolith)
+  replicas: 1
+  resources: { requests: { cpu: 500m, memory: 1Gi }, limits: { memory: 4Gi } }
+  autoscaling: { enabled: false, minReplicas: 1, maxReplicas: 5, targetCPUUtilizationPercentage: 70 }
+  model: google/gemini-3.1-flash-lite
+  # Code interpreter. "k8s" runs sandboxes as isolated pods (add a gVisor runtimeClassName for stronger isolation);
+  # "nsjail" needs privileged containers and is for single-box installs only.
+  sandbox:
+    runtime: k8s
+    runtimeClassName: ""
+    rbac: true
+  extraEnv: []
+  # Microservices (mode=microservices): name -> port. Each is its own Deployment from the same image.
+  # Only the gateway is exposed; ports match deploy/PORTS.md.
+  microservices:
+    gateway: { port: 8001, replicas: 2, resources: { requests: { cpu: 250m, memory: 256Mi } }, autoscaling: { enabled: false, minReplicas: 2, maxReplicas: 10, targetCPUUtilizationPercentage: 70 } }
+    identity: { port: 8010, replicas: 1, resources: { requests: { cpu: 100m, memory: 256Mi } } }
+    policy: { port: 8011, replicas: 1, resources: { requests: { cpu: 100m, memory: 256Mi } } }
+    conversation: { port: 8012, replicas: 2, resources: { requests: { cpu: 250m, memory: 512Mi } }, autoscaling: { enabled: false, minReplicas: 2, maxReplicas: 10, targetCPUUtilizationPercentage: 70 } }
+    job_controller: { port: 8013, replicas: 1, resources: { requests: { cpu: 100m, memory: 256Mi } } }
+    agent_runtime: { port: 8014, replicas: 2, resources: { requests: { cpu: 500m, memory: 1Gi } }, autoscaling: { enabled: false, minReplicas: 2, maxReplicas: 20, targetCPUUtilizationPercentage: 70 } }
+    tool_executor: { port: 8015, replicas: 2, resources: { requests: { cpu: 250m, memory: 512Mi } }, autoscaling: { enabled: false, minReplicas: 2, maxReplicas: 20, targetCPUUtilizationPercentage: 70 } }
+    human_gate: { port: 8016, replicas: 1, resources: { requests: { cpu: 100m, memory: 256Mi } } }
+    live_stream: { port: 8017, replicas: 1, resources: { requests: { cpu: 100m, memory: 256Mi } } }
+    admin: { port: 8019, replicas: 1, resources: { requests: { cpu: 100m, memory: 256Mi } } }
+
+# ── substrate-data ────────────────────────────────────────────────────────────
+data:
+  image: { repository: "", tag: "" }
+  # The services sit on the cluster network behind the ingress that terminates TLS. Plain HTTP between them is an
+  # explicit opt-in in substrate-data; NetworkPolicy keeps other namespaces out. production: terminate TLS in a mesh.
+  behindTlsProxy: true
+  # Ed25519 ticket signing keys. Empty = a pre-install Job generates them; or name a Secret with ticket.pem and ticket.pub.pem.
+  ticketKeys:
+    existingSecret: ""
+  insecureHttpHosts: []
+  api:
+    replicas: 2
+    resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { memory: 2Gi } }
+    autoscaling: { enabled: false, minReplicas: 2, maxReplicas: 8, targetCPUUtilizationPercentage: 70 }
+  controller:
+    # One active controller; more replicas are standbys only with a PostgreSQL controller state (not wired here).
+    replicas: 1
+    storage: 1Gi
+    storageClassName: ""
+    resources: { requests: { cpu: 100m, memory: 256Mi } }
+  # Attached compute. Each role is a Deployment attached to the controller by a post-install Job.
+  workers:
+    memoryLimit: 2GB
+    sql:
+      replicas: 2
+      resources: { requests: { cpu: "1", memory: 2Gi }, limits: { memory: 3Gi } }
+      autoscaling: { enabled: true, minReplicas: 2, maxReplicas: 20, targetCPUUtilizationPercentage: 65, targetMemoryUtilizationPercentage: 80 }
+    jobs:
+      replicas: 1
+      resources: { requests: { cpu: "1", memory: 2Gi }, limits: { memory: 3Gi } }
+      autoscaling: { enabled: true, minReplicas: 1, maxReplicas: 10, targetCPUUtilizationPercentage: 65, targetMemoryUtilizationPercentage: 80 }
+    rag:
+      replicas: 1
+      resources: { requests: { cpu: 250m, memory: 512Mi } }
+      autoscaling: { enabled: false, minReplicas: 1, maxReplicas: 4, targetCPUUtilizationPercentage: 70 }
+
+# ── Web ───────────────────────────────────────────────────────────────────────
+ui:
+  image: { repository: "", tag: "" }
+  replicas: 1
+  resources: { requests: { cpu: 100m, memory: 256Mi } }
+dataWeb:
+  image: { repository: "", tag: "" }
+  replicas: 1
+  resources: { requests: { cpu: 100m, memory: 256Mi } }
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: ""              # e.g. nginx
+  annotations: {}            # e.g. cert-manager.io/cluster-issuer: letsencrypt
+  tls: { enabled: false, secretName: "" }   # one secret covering all hosts; cert-manager can create it
+
+# ── Network policy ───────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+  # Namespace labels of the ingress controller allowed to reach the public components.
+  ingressNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+  # Egress is left open (model providers, IdPs); restrict it in your cluster policy if you need to.
+
+serviceAccount:
+  annotations: {}            # e.g. eks.amazonaws.com/role-arn for IRSA, iam.gke.io/gcp-service-account for Workload Identity

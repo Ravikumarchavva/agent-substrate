@@ -30,6 +30,7 @@ jobs:
       js: ${{ steps.plan.outputs.js }}
       document-intelligence: ${{ steps.plan.outputs.document-intelligence }}
       substrate-data: ${{ steps.plan.outputs.substrate-data }}
+      deploy: ${{ steps.plan.outputs.deploy }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -86,6 +87,11 @@ jobs:
               - 'agents/agent-substrate/**'
               - 'data/inference-pool/**'
               - 'data/document-intelligence/**'
+            deploy:
+              - 'deploy/**'
+              - '.dockerignore'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/release-images.yml'
             substrate-ui:
               - *shared
               - *js-shared
@@ -110,6 +116,7 @@ jobs:
           echo "js=$(jq -c --argjson s "$JS" '[.[] | select(. as $x | $s | index($x))]' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
           echo "document-intelligence=$(jq -r 'index("document-intelligence") != null' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
           echo "substrate-data=$(jq -r 'index("substrate-data") != null' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
+          echo "deploy=$(jq -r 'index("deploy") != null' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
 
   # ── Python packages in the uv workspace (one lock, Python 3.14) ───────────
   python:
@@ -292,11 +299,73 @@ jobs:
           NEXT_PUBLIC_API_URL: ""
         run: pnpm --filter "$PKG" build
 
+  # ── Deployment artifacts: Dockerfiles, compose, Helm chart, Terraform ───────
+  deploy:
+    name: Deploy / ${{ matrix.check }}
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [hadolint, compose, helm, terraform, realm-drift]
+    steps:
+      - uses: actions/checkout@v4
+      - name: hadolint
+        if: matrix.check == 'hadolint'
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          recursive: true
+          dockerfile: "deploy/docker/*.Dockerfile"
+          failure-threshold: error
+      - name: docker compose config
+        if: matrix.check == 'compose'
+        working-directory: deploy/compose
+        run: |
+          ./gen-env.sh
+          docker compose --profile monolith config -q
+          docker compose --profile microservices config -q
+          docker compose --profile monolith --profile ml config -q
+      - uses: azure/setup-helm@v4
+        if: matrix.check == 'helm'
+      - name: helm lint and template
+        if: matrix.check == 'helm'
+        run: |
+          for mode in monolith microservices; do
+            helm lint deploy/helm/substrate-cell --set mode=$mode
+            helm template cell deploy/helm/substrate-cell --set mode=$mode > /tmp/$mode.yaml
+          done
+          helm template cell deploy/helm/substrate-cell \
+            --set postgres.bundled.enabled=false,postgres.external.host=db.example.com \
+            --set s3.bundled.enabled=false,s3.external.endpoint=https://s3.example.com,s3.external.icebergCatalogUrl=https://iceberg.example.com \
+            --set secrets.existingSecret=mine,data.ticketKeys.existingSecret=tk > /tmp/external.yaml
+      - name: kubeconform
+        if: matrix.check == 'helm'
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          ./kubeconform -strict -summary /tmp/monolith.yaml /tmp/microservices.yaml /tmp/external.yaml
+      - uses: hashicorp/setup-terraform@v3
+        if: matrix.check == 'terraform'
+        with:
+          terraform_version: "1.9.8"
+      - name: terraform fmt and validate
+        if: matrix.check == 'terraform'
+        run: |
+          terraform fmt -check -recursive deploy/terraform deploy/keycloak/terraform
+          for d in deploy/terraform/aws deploy/terraform/gcp deploy/terraform/azure deploy/keycloak/terraform; do
+            terraform -chdir=$d init -backend=false -input=false
+            terraform -chdir=$d validate
+          done
+      - name: the chart's realm copy equals deploy/keycloak
+        if: matrix.check == 'realm-drift'
+        run: diff deploy/keycloak/realm-substrate.json deploy/helm/substrate-cell/files/realm-substrate.json
+
   # ── The only required status check ─────────────────────────────────────────
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [changes, python, integration, document-intelligence, js]
+    needs: [changes, python, integration, document-intelligence, js, deploy]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any needed job failed or was cancelled (skipped is fine)

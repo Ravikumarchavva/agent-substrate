@@ -2,9 +2,6 @@ name: Image / embedding-reranker
 
 # Thin httpx proxy to the llama-embed/llama-rerank sidecars; single variant (no local inference to split on).
 # Ported from the agent-substrate repo. Runs on changes to its inputs on main, or manually.
-# NOTE: the Dockerfile still lives in deploy/legacy-agents/docker and COPYs from the old single-repo layout
-# (src/, packages/inference-pool, apps/embedding-reranker); update it to the monorepo layout before this
-# build succeeds.
 on:
   push:
     branches: [main]
@@ -12,7 +9,7 @@ on:
       - data/embedding-reranker/**
       - data/inference-pool/**
       - agents/agent-substrate/src/**
-      - deploy/legacy-agents/docker/embedding-reranker.Dockerfile
+      - deploy/docker/embedding-reranker.Dockerfile
       - .github/workflows/docker-embedding-reranker.yml
   workflow_dispatch:
 
@@ -42,8 +39,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: data
-          file: deploy/legacy-agents/docker/embedding-reranker.Dockerfile
+          context: .
+          file: deploy/docker/embedding-reranker.Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE }}:latest

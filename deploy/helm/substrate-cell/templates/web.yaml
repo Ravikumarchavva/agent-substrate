@@ -1,0 +1,24 @@
+{{- $agentUpstream := ternary (printf "http://%s-agent-server:8000" (include "cell.fullname" .)) (printf "http://%s-agent-gateway:8001" (include "cell.fullname" .)) (eq .Values.mode "monolith") }}
+{{- $uiEnv := printf `- name: POSTGRES_PASSWORD
+  valueFrom: { %s }
+- { name: DATABASE_URL, value: "postgresql://%s:$(POSTGRES_PASSWORD)@%s:%s/%s?sslmode=%s" }
+- { name: BACKEND_API_URL, value: %s }
+- name: ENGINE_JWT_SECRET
+  valueFrom: { %s }
+- { name: OIDC_ISSUER, value: %s }
+- { name: OIDC_CLIENT_ID, value: substrate-ui }
+- name: OIDC_CLIENT_SECRET
+  valueFrom: { %s }
+- name: SESSION_SECRET
+  valueFrom: { %s }
+- { name: PUBLIC_URL, value: %s }` (include "cell.secretRef" (dict "root" . "key" "postgres-password")) (include "cell.pgUser" .) (include "cell.pgHost" .) (include "cell.pgPort" .) .Values.postgres.databases.ui (include "cell.pgSslmode" .) ($agentUpstream | quote) (include "cell.secretRef" (dict "root" . "key" "jwt-secret")) (include "cell.issuer" . | quote) (include "cell.secretRef" (dict "root" . "key" "ui-client-secret")) (include "cell.secretRef" (dict "root" . "key" "ui-session-secret")) (.Values.publicUrls.ui | quote) }}
+{{- include "cell.workload" (dict "root" . "component" "ui" "repo" "substrate-ui" "override" .Values.ui.image "port" 3000 "probePath" "/chat" "cfg" .Values.ui "env" $uiEnv "writable" (list (dict "name" "next-cache" "path" "/app/agents/substrate-ui/.next/cache"))) }}
+{{- $webEnv := printf `- { name: DATA_API_URL, value: "http://%s-data-api:8020" }
+- { name: SUBSTRATE_DATA_OIDC_ISSUER, value: %s }
+- { name: WEB_CLIENT_ID, value: substrate-data-web }
+- name: WEB_CLIENT_SECRET
+  valueFrom: { %s }
+- name: WEB_SESSION_SECRET
+  valueFrom: { %s }
+- { name: WEB_PUBLIC_URL, value: %s }` (include "cell.fullname" .) (include "cell.issuer" . | quote) (include "cell.secretRef" (dict "root" . "key" "data-web-client-secret")) (include "cell.secretRef" (dict "root" . "key" "web-session-secret")) (.Values.publicUrls.dataWeb | quote) }}
+{{- include "cell.workload" (dict "root" . "component" "data-web" "repo" "substrate-data-web" "override" .Values.dataWeb.image "port" 3011 "probeTcp" true "probePath" "/" "cfg" .Values.dataWeb "env" $webEnv "writable" (list (dict "name" "next-cache" "path" "/app/.next/cache"))) }}

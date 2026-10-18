@@ -1,4 +1,4 @@
-"""Shared API contracts for conversation service."""
+"""The thread and feedback documents of the Agent API (identical in the monolith and through the gateway)."""
 
 from __future__ import annotations
 
@@ -11,44 +11,30 @@ from pydantic import BaseModel, Field
 
 class ThreadCreate(BaseModel):
     name: Optional[str] = "New Chat"
-    tenant_id: str = "default"
-    workspace_id: str = "default"
 
 
 class ThreadUpdate(BaseModel):
     name: Optional[str] = None
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
+    pinned: Optional[bool] = None
+    archived: Optional[bool] = None
 
 
 class ThreadOut(BaseModel):
     id: uuid.UUID
     name: Optional[str]
     user_id: Optional[uuid.UUID] = None
-    tenant_id: str = "default"
-    workspace_id: str = "default"
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
-    model_config = {"from_attributes": True}
-
-
-class StepOut(BaseModel):
-    id: uuid.UUID
-    type: str
-    name: str
-    thread_id: uuid.UUID
-    parent_id: Optional[uuid.UUID] = None
-    input: Optional[str] = None
-    output: Optional[str] = None
-    is_error: Optional[bool] = None
-    metadata: Optional[Dict[str, Any]] = None
-    generation: Optional[Dict[str, Any]] = None
-    created_at: datetime
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    locked_at: Optional[datetime] = None
+    locked_reason: Optional[str] = None
+    pinned_at: Optional[datetime] = None
+    archived_at: Optional[datetime] = None
+    agent_id: Optional[uuid.UUID] = None
     model_config = {"from_attributes": True}
 
 
@@ -67,7 +53,7 @@ class ChatRequest(BaseModel):
 class FeedbackCreate(BaseModel):
     for_id: uuid.UUID
     thread_id: uuid.UUID
-    value: int = Field(..., ge=-1, le=1)
+    value: int = Field(..., ge=-1, le=1)  # -1 bad, 0 takes the rating back, 1 good
     comment: Optional[str] = None
 
 

@@ -1,5 +1,5 @@
 {
-  "agents/agent-substrate": "0.3.0",
+  "agents/agent-substrate": "0.4.0",
   "agents/substrate-cloud": "0.1.0",
   "agents/substrate-ui": "0.1.0",
   "data/substrate-data": "0.1.0",

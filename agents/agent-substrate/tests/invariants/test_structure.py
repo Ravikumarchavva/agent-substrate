@@ -353,7 +353,7 @@ def test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports
 ):
     """The engine instruments itself through ``opentelemetry-api``, which does nothing until a
     host configures an SDK. The SDK, the exporter and the web-framework instrumentation are the
-    host's choice — the platform (apps/substrate-cloud) installs them — so a plain install of the
+    host's choice — the platform (agents/substrate-cloud) installs them — so a plain install of the
     engine does not pull them in."""
     import tomllib
 
@@ -370,7 +370,7 @@ def test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports
         f"core dependencies that belong to the host, not the engine: {exporting}"
     )
     cloud = tomllib.loads(
-        (REPO_ROOT / "apps" / "substrate-cloud" / "pyproject.toml").read_text()
+        (REPO_ROOT.parent / "substrate-cloud" / "pyproject.toml").read_text()
     )["project"]
     assert "opentelemetry-sdk" in " ".join(cloud["dependencies"]), (
         "the platform lost the SDK it configures"

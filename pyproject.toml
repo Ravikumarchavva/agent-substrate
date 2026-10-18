@@ -1,0 +1,27 @@
+# Virtual workspace root: no package of its own. One lockfile (uv.lock) pins every Python package here
+# so they are always tested together. `uv sync --all-packages` installs them; `uv run --package X ...` runs one.
+#
+# document-intelligence is NOT a member: PaddlePaddle publishes no Python 3.14 wheel, so that service stays on
+# 3.13 with its own lock (data/document-intelligence/uv.lock) and image.
+[tool.uv.workspace]
+members = [
+    "agents/agent-substrate",
+    "agents/substrate-cloud",
+    "data/substrate-data",
+    "data/substrate-data-client",
+    "data/embedding-reranker",
+    "data/inference-pool",
+]
+exclude = ["data/document-intelligence"]
+
+# Indexes are read from the workspace root only. The PaddleOCR indexes live with document-intelligence.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+agent-substrate = { workspace = true }
+inference-pool = { workspace = true }
+substrate-data-client = { workspace = true }

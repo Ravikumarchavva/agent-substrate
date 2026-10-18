@@ -23,6 +23,8 @@ COPY data/inference-pool/pyproject.toml data/inference-pool/
 COPY identity/substrate-identity/pyproject.toml identity/substrate-identity/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-workspace --package substrate-data
+# substrate-data runs the agent library's document and memory engines (documents/ in substrate-data), so it ships that source too.
+COPY agents/agent-substrate agents/agent-substrate
 COPY data/substrate-data data/substrate-data
 COPY data/substrate-data-client data/substrate-data-client
 COPY identity/substrate-identity identity/substrate-identity

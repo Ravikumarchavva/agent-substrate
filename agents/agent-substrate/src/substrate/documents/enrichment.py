@@ -25,10 +25,22 @@ import logging
 import re
 import time
 import weakref
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Sequence
 from decimal import ROUND_HALF_UP, Decimal
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any
+
+from substrate.documents.types import (
+    Described,
+    DocumentBrief,
+    Enriched,
+    Enricher,
+    EnrichmentUsage,
+    FiledDocument,
+    Organised,
+    Organiser,
+    Reorganised,
+    SectionBrief,
+)
 
 if TYPE_CHECKING:
     from substrate.documents.protocols import DocumentLibrary
@@ -48,125 +60,6 @@ TOPIC_SEGMENT_CHARS = 40
 MAX_TOPIC_CHILDREN = 12
 """Past this many subtopics under one topic (or twice as many documents filed straight into one) the tree is hard to browse; a whole-tree
 reorganisation is due."""
-
-
-@dataclass(frozen=True)
-class SectionBrief:
-    """One section as an ``Enricher`` sees it."""
-
-    position: int
-    title: str
-    heading_path: tuple[str, ...]
-    first_page: int
-    last_page: int
-    tokens: int
-    text: str
-
-
-@dataclass(frozen=True)
-class DocumentBrief:
-    """A document as an ``Enricher`` sees it: its facts and its sections' text. Untrusted: it is whatever the uploader wrote."""
-
-    document: str
-    title: str
-    filename: str
-    pages: int
-    sections: tuple[SectionBrief, ...]
-
-
-@dataclass(frozen=True)
-class EnrichmentUsage:
-    """What an enrichment cost, for the tenant's ledger and for telemetry."""
-
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cost_usd: float = 0.0
-    calls: int = 0
-
-
-@dataclass(frozen=True)
-class Described:
-    """What an ``Enricher`` returns: a description per section position, a card for the document, and up to two topic paths."""
-
-    sections: Mapping[int, str]
-    card: str
-    topics: tuple[str, ...] = ()
-    usage: EnrichmentUsage = field(default_factory=EnrichmentUsage)
-
-
-@runtime_checkable
-class Enricher(Protocol):
-    """Contract for whatever writes descriptions: a language model, a rule, a person's script.
-
-    ``name`` and ``version`` identify the author in ``generated.by``; change ``version`` whenever the prompt or logic changes, so documents
-    written by the old one are re-enriched. ``topics`` is the filing tree so far (slash-separated paths, bounded): prefer an existing one.
-    May raise; the library records the failure and moves on.
-    """
-
-    name: str
-    version: str
-
-    async def enrich(
-        self, brief: DocumentBrief, *, topics: Sequence[str]
-    ) -> Described: ...
-
-
-@dataclass(frozen=True)
-class Enriched:
-    """The outcome of ``Library.enrich``."""
-
-    document: str
-    state: str
-    """``done``, ``skipped`` (too short, or nothing to do), ``failed``, or ``missing`` (no such document)."""
-    card: str = ""
-    sections: int = 0
-    topics: tuple[str, ...] = ()
-    usage: EnrichmentUsage = field(default_factory=EnrichmentUsage)
-    warnings: tuple[str, ...] = ()
-    error: str | None = None
-
-
-@dataclass(frozen=True)
-class FiledDocument:
-    """A document as an ``Organiser`` sees it: its card, and the topics it is filed under now. Untrusted, like all model-read text."""
-
-    document: str
-    title: str
-    card: str
-    topics: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class Organised:
-    """What an ``Organiser`` returns: the topics each document should be filed under (documents it leaves out keep theirs)."""
-
-    topics: Mapping[str, tuple[str, ...]]
-    usage: EnrichmentUsage = field(default_factory=EnrichmentUsage)
-
-
-@runtime_checkable
-class Organiser(Protocol):
-    """Contract for whatever redraws the filing tree. Filing one document at a time drifts (near-duplicate names, one branch that keeps
-    growing); seeing every card at once yields a more coherent tree. May raise; the library records the failure and keeps the tree it has."""
-
-    name: str
-    version: str
-
-    async def organise(self, documents: Sequence[FiledDocument]) -> Organised: ...
-
-
-@dataclass(frozen=True)
-class Reorganised:
-    """The outcome of ``Library.reorganise``."""
-
-    state: str
-    """``done``, ``skipped`` (too few described documents, or topic filing is off) or ``failed``."""
-    moved: int = 0
-    """Documents whose topics changed."""
-    topics: int = 0
-    """Topics in the tree afterwards."""
-    usage: EnrichmentUsage = field(default_factory=EnrichmentUsage)
-    error: str | None = None
 
 
 # ----------------------------------------------------------------------------------------------------------------------- cleaning

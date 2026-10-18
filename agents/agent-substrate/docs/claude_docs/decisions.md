@@ -16,7 +16,7 @@ lived inside `Library`, so an adapter over a governed service could not reuse it
 * **`Library.add` is composed of steps:** `prepare` (pure, a `Bundle`), vectors, `file`, catalog; `index` rebuilds a filed bundle's catalog and is what
   `reindex` runs. The order (vectors before files, so a collection of another embedder is refused before anything is written) is unchanged.
 * **`sqlalchemy` left the base dependencies** for a `pipeline` extra (I31); only `integrations/pipeline/store.py` imports it.
-* `documents.enrichment` joined the contract modules (`tests/_layout.py`): it holds the `Enricher`/`Organiser` protocols and imports nothing of the engine.
+* `the `Enricher`/`Organiser` protocols and their value types moved into `documents/types.py` (a contract module) so `DocumentLibrary` can name them without importing the engine; `documents/enrichment.py` re-exports them.
 * **Not done:** renaming `postgres_store` to `postgres_runtime_store` (ADR 0004 names it) touches `integrations/`, the cloud factory, tests and docs and
   belongs with the change that stops that store creating the content parts; `EnrichmentQueue` still takes a `Library`, because it relies on the library's own enricher.
 

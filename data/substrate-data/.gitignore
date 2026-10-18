@@ -14,8 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -218,3 +218,39 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local data workspace and independent frontend
+.workspace/
+web/public/monaco/
+
+# JavaScript / TypeScript dependencies and package-manager caches (any app)
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/install-state.gz
+.yarn/build-state.yml
+.pnp.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend build, generated types, tests and tooling
+.next/
+out/
+coverage/
+.turbo/
+.vercel/
+.vite/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Local environment overrides; commit documented examples and lockfiles
+.env.*
+!.env.example
+!.env.*.example
+.DS_Store
+next-env.d.ts

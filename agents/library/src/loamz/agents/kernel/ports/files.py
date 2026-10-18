@@ -2,7 +2,7 @@
 
 The generic key/value object-storage shape every workspace/file-store
 backend already informally implements (``Files``,
-``DataFileStore`` in ``integrations/data/``) — made an explicit kernel
+``DataFileStore`` in ``loamz.agents.data (the data extra)``) — made an explicit kernel
 Protocol so callers can depend on the shape instead of duck-typing it with
 ``hasattr(store, "copy_prefix")`` at each call site.
 

@@ -15,12 +15,14 @@ from typing import TYPE_CHECKING
 
 from loamz.agents.kernel.ports.files import FileStore
 from loamz.agents.kernel.ports.graph import GraphStore
+from loamz.agents.kernel.ports.memory import ShortTermMemory
 from loamz.agents.kernel.ports.tasks import TaskStore
 from loamz.agents.kernel.ports.threads import ThreadStore
 from loamz.agents.kernel.types.scope import Scope
 from loamz.agents.stores.scoped import (
     _tenant,
     bind_graph,
+    bind_session_state,
     bind_tasks,
     bind_threads,
     fence_objects,
@@ -49,7 +51,7 @@ class Erased:
 
 
 class Tenant:
-    """``store.tenant(t)``: threads, tasks, graph and files confined to one tenant."""
+    """``store.tenant(t)``: threads, tasks, session state, graph and files confined to one tenant."""
 
     def __init__(self, store: AgentStore, scope: Scope) -> None:
         self._store = store
@@ -62,6 +64,10 @@ class Tenant:
     @property
     def tasks(self) -> TaskStore:
         return bind_tasks(self._store.tasks, self.scope)
+
+    @property
+    def session_state(self) -> ShortTermMemory:
+        return bind_session_state(self._store.session_state, self.scope)
 
     @property
     def graph(self) -> GraphStore:

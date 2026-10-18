@@ -218,7 +218,7 @@ async def test_run_unknown_tool_returns_error_and_continues():
         tool_use = ToolUseBlock(call_id="c1", tool_name="ghost", arguments={})
         agent = make_agent([[tool_use], [TextBlock(text="ok")]])
         result = await run_agent(rt, agent, "use ghost tool")
-        assert result["status"] in {"success", "budget_exhausted"}
+        assert result["status"] in {"success", "budget-exhausted"}
 
 
 async def test_multi_turn_history():

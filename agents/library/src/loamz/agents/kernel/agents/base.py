@@ -48,7 +48,7 @@ def message_to_chat(msg: Message) -> ChatMessage:
 async def log_user_message(ctx: RunContext, msg: Message, user_turn: ChatMessage) -> int:
     """Journal the turn that started this run as a ``user.message`` EventLogProtocol
     entry, so the log is a self-complete record of the conversation (history
-    is projected from it — see the agent server (``loamz.agents.features``)).
+    is projected from it — see the agent server).
 
     ``msg.metadata["display_text"]``/``["attachments"]`` (set by the serving
     layer when it augments the LLM-input content with file context) win when

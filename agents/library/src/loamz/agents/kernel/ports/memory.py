@@ -33,7 +33,7 @@ Lifecycle signal (not enforced here):
     recency/frequency/importance signal a future capabilities-layer memory
     consolidator needs to exist at all. Kernel only carries the fields —
     no decay or consolidation algorithm lives here (that belongs in
-    ``integrations/memory/``, same boundary as everything else memory-related).
+    ``providers/redis/``, same boundary as everything else memory-related).
     Nothing reads them yet; this is a deliberate, flagged trade-off, not an
     oversight — see the plan that introduced them.
 """

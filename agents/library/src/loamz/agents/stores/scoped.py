@@ -18,6 +18,7 @@ from urllib.parse import quote
 from loamz.agents.kernel.errors import DAGIntegrityError
 from loamz.agents.kernel.ports.files import FileStore
 from loamz.agents.kernel.ports.graph import Entity, GraphStore, Relationship, SubGraph
+from loamz.agents.kernel.ports.memory import ShortTermMemory
 from loamz.agents.kernel.ports.tasks import Task, TaskList, TaskStatus, TaskStore
 from loamz.agents.kernel.ports.threads import Branch, HistoryCheckpoint, MessageNode, ThreadStore
 from loamz.agents.kernel.types.scope import Scope
@@ -408,6 +409,33 @@ class _ScopedTaskStore:
         )
 
 
+# ===================================================================== session state
+
+
+class _ScopedSessionState:
+    """A ``ShortTermMemory`` whose sessions all live inside its tenant."""
+
+    def __init__(self, inner: ShortTermMemory, scope: Scope) -> None:
+        self._inner = inner
+        self._p = _Prefixer(scope)
+
+    async def get_state(self, session_id: str) -> dict[str, Any]:
+        return await self._inner.get_state(self._p.add(session_id))
+
+    async def set_state(self, session_id: str, state: dict[str, Any]) -> None:
+        await self._inner.set_state(self._p.add(session_id), state)
+
+    async def update_state(self, session_id: str, patch: dict[str, Any]) -> None:
+        await self._inner.update_state(self._p.add(session_id), patch)
+
+    async def clear(self, session_id: str) -> None:
+        await self._inner.clear(self._p.add(session_id))
+
+
+def bind_session_state(store: ShortTermMemory, scope: Scope) -> ShortTermMemory:
+    return _ScopedSessionState(store, scope)
+
+
 def bind_threads(store: ThreadStore, scope: Scope) -> ThreadStore:
     return _ScopedThreadStore(store, scope)
 
@@ -424,4 +452,4 @@ def bind_tasks(store: TaskStore, scope: Scope) -> TaskStore:
     return _ScopedTaskStore(store, scope)
 
 
-__all__ = ["bind_graph", "bind_tasks", "bind_threads", "fence_objects"]
+__all__ = ["bind_graph", "bind_session_state", "bind_tasks", "bind_threads", "fence_objects"]

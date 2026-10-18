@@ -1,7 +1,7 @@
 """RunLogEntry and EventLogProtocol — the append-only durable spine of every run.
 
 Named ``RunLogEntry`` (not ``RunEvent``) to avoid collision with
-``integrations/events/envelope.py::EventEnvelope`` (the generic pub/sub
+``kernel/events/envelope.py::EventEnvelope`` (the generic pub/sub
 envelope — a different thing).
 
 Truth model

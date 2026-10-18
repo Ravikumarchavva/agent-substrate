@@ -1,7 +1,7 @@
 """Toolbox — concrete in-memory tool registry.
 
 A mutable name-keyed collection of AnyTool instances. Use this when you need
-to share a tool collection across components (e.g. the monolith lifespan
+to share a tool collection across components (e.g. the composition root
 wires tools once and passes them to multiple agents). For simple cases just
 pass a plain list[AnyTool] to the agent constructor.
 """

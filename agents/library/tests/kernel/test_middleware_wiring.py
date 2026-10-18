@@ -51,14 +51,14 @@ class CountingTool:
 
 async def test_turn_stage_middleware_blocks_via_content_filter():
     """A ContentFilterMiddleware (TURN stage) halts the turn before any LLM
-    call happens — the run ends 'guardrail_tripped', not 'success'."""
+    call happens — the run ends 'guardrail-tripped', not 'success'."""
     async with ephemeral_runtime() as rt:
         agent = make_agent([[TextBlock(text="should never be reached")]])
         agent.middleware = MiddlewarePipeline(
             [ContentFilterMiddleware(blocked_keywords=["badword"])]
         )
         result = await run_agent(rt, agent, "this has a BADWORD in it")
-        assert result["status"] == "guardrail_tripped"
+        assert result["status"] == "guardrail-tripped"
 
 
 async def test_turn_stage_middleware_passes_clean_input():
@@ -81,7 +81,7 @@ async def test_chat_stage_middleware_blocks_via_max_token():
             [MaxTokenMiddleware(max_tokens=1, chars_per_token=1.0)]
         )
         result = await run_agent(rt, agent, "a" * 100)
-        assert result["status"] == "guardrail_tripped"
+        assert result["status"] == "guardrail-tripped"
 
 
 async def test_tool_stage_middleware_blocks_via_pii_detection():
@@ -97,7 +97,7 @@ async def test_tool_stage_middleware_blocks_via_pii_detection():
         agent = make_agent([[tool_use]], tools=[tool])
         agent.middleware = MiddlewarePipeline([PIIDetectionMiddleware()])
         result = await run_agent(rt, agent, "please use the tool")
-        assert result["status"] == "guardrail_tripped"
+        assert result["status"] == "guardrail-tripped"
         assert tool.call_count == 0
 
 

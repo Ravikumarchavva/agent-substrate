@@ -1,15 +1,15 @@
 """Input-safety contracts: what a text/image classifier returns, and the
 Protocol shape agents-layer guardrails depend on.
 
-Lives in kernel (not agents/integrations) because both a TURN-stage
+Lives in kernel (not providers) because both a TURN-stage
 middleware (agents, L1) and its concrete model-backed implementation
-(integrations, L2) need the exact same shape — the classic reason kernel
+(providers) need the exact same shape — the classic reason kernel
 holds a Protocol: multiple layers need it, and it has zero I/O/deps of its
 own. The middleware never imports a concrete classifier; it only ever sees
-these two Protocols, injected from the agent server (``loamz.agents.features``).
+these two Protocols, injected from the agent server.
 
 Deliberately NOT here: any actual model, tokenizer, or inference code — all
-of that lives in ``integrations/safety/``.
+of that lives in ``providers/safety/``.
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ class SafetyVerdict:
 
 @runtime_checkable
 class TextSafetyClassifier(Protocol):
-    """Implemented by integrations/safety/text_classifier.py concrete
+    """Implemented by providers/safety/text_classifier.py concrete
     classes. Sync, not async — CPU-bound ONNX inference, not I/O; callers
     run it via ``asyncio.to_thread``."""
 
@@ -93,7 +93,7 @@ class TextSafetyClassifier(Protocol):
 
 @runtime_checkable
 class ImageSafetyClassifier(Protocol):
-    """Implemented by integrations/safety/image_classifier.py."""
+    """Implemented by providers/safety/image_classifier.py."""
 
     def classify(self, image_bytes: bytes) -> SafetyVerdict: ...
 

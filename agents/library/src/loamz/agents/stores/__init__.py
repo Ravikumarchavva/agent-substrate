@@ -8,7 +8,13 @@ contracts (``ThreadStore``, ``TaskStore``, ``GraphStore``, ``WorkspaceStore``…
 from __future__ import annotations
 
 from loamz.agents.stores.headers import ThreadHeader, ThreadHeaders, ThreadPage
-from loamz.agents.stores.scoped import bind_graph, bind_tasks, bind_threads, fence_objects
+from loamz.agents.stores.scoped import (
+    bind_graph,
+    bind_session_state,
+    bind_tasks,
+    bind_threads,
+    fence_objects,
+)
 from loamz.agents.stores.store import AgentStore
 from loamz.agents.stores.tenant import Erased, Tenant
 
@@ -20,6 +26,7 @@ __all__ = [
     "ThreadHeaders",
     "ThreadPage",
     "bind_graph",
+    "bind_session_state",
     "bind_tasks",
     "bind_threads",
     "fence_objects",

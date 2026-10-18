@@ -353,7 +353,7 @@ class Journal:
         info = (
             ErrorInfo.of(exc)
             if isinstance(exc, LoamzError)
-            else ErrorInfo(code="effect_failed", message=str(exc)[:500])
+            else ErrorInfo(code="effect-failed", message=str(exc)[:500])
         )
         try:
             await self._record(

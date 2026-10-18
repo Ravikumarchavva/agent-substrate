@@ -139,8 +139,8 @@ async def test_pipeline_skips_middleware_for_undeclared_stage():
 
 @pytest.mark.asyncio
 async def test_audit_logger_logs_run(caplog):
-    substrate_logger = logging.getLogger("loamz.agents")
-    substrate_logger.addHandler(caplog.handler)
+    loamz_logger = logging.getLogger("loamz.agents")
+    loamz_logger.addHandler(caplog.handler)
 
     mw = AuditLoggerMiddleware(log_level=logging.INFO)
     ctx = _ctx("audit test")
@@ -158,4 +158,4 @@ async def test_audit_logger_logs_run(caplog):
     assert "RUN END" in caplog.text
     assert result_holder
 
-    substrate_logger.removeHandler(caplog.handler)
+    loamz_logger.removeHandler(caplog.handler)

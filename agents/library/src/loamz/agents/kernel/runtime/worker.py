@@ -89,16 +89,16 @@ def classify_failure(exc: BaseException, *, run_id: str, agent_id: Any) -> tuple
     """
     if isinstance(exc, MiddlewareTermination):
         return ErrorInfo(
-            code="guardrail_tripped", message=f"Request blocked: {exc.message or exc}"
+            code="guardrail-tripped", message=f"Request blocked: {exc.message or exc}"
         ), False
     if isinstance(exc, BudgetExhaustedError):
-        return ErrorInfo(code="budget_exhausted", message=str(exc)), False
+        return ErrorInfo(code="budget-exhausted", message=str(exc)), False
     if isinstance(exc, LoamzError):
         # Keeps the error's own stable code (``context_length``, ``auth``, ``rate_limited``…),
         # so what failed is readable from the record without knowing a Python class name.
         return ErrorInfo.of(exc), exc.retryable
     crash = AgentCrashError(str(exc), run_id=run_id, agent_id=agent_id)
-    return ErrorInfo(code="agent_crashed", message=str(crash), retryable=True), True
+    return ErrorInfo(code="agent-crashed", message=str(crash), retryable=True), True
 
 
 def backoff(policy: RunRetryPolicy, retry_count: int) -> float:
@@ -452,7 +452,7 @@ class Worker:
             raise stop
         if reason == "deadline" or "deadline" in str(stop):
             error = ErrorInfo(
-                code="deadline_exceeded",
+                code="deadline-exceeded",
                 message="the run's deadline passed",
                 retryable=False,
             )

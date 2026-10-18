@@ -1,4 +1,4 @@
-"""Shared agent factory for monolith and distributed execution paths."""
+"""How the server builds its assistant agents, the same way in every role."""
 
 from __future__ import annotations
 

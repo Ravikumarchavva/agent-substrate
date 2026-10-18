@@ -246,7 +246,7 @@ async def test_cost_budget_stops_the_run():
         kind, payload, _ = await run_to_end(rt, agent)
 
     assert kind == "run.failed"
-    assert payload["status"] == "budget_exhausted"
+    assert payload["status"] == "budget-exhausted"
     assert llm.calls == 2
 
 
@@ -393,7 +393,7 @@ async def test_a_budget_stop_keeps_the_turn_in_history():
         kind, payload, _ = await run_to_end(rt, agent)
         saved = await project_messages(history, "s1")
 
-    assert kind == "run.failed" and payload["status"] == "budget_exhausted"
+    assert kind == "run.failed" and payload["status"] == "budget-exhausted"
     roles = [m.role for m in saved]
     assert roles == [Role.USER, Role.ASSISTANT, Role.TOOL, Role.ASSISTANT]
     assert "Stopped before finishing" in saved[-1].text

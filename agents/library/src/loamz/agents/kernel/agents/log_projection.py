@@ -37,7 +37,7 @@ async def rebuild_messages_from_steps(
     ``step_rows`` doesn't have to come from an actual ``steps`` database row —
     it's a plain schema (``type``/``input``/``output``/``generation``/
     ``metadata``/``name``) that any cold-store source can project into. The
-    monolith projects it from the EventLogProtocol (see ``step_rows_from_log``); the
+    server projects it from the EventLogProtocol (see ``step_rows_from_log``); the
     microservices ``agent_runtime`` service projects it from the
     ``conversation`` service's own independent store via HTTP — both funnel
     through this one conversion so there's a single place that knows how a
@@ -140,9 +140,9 @@ async def rebuild_messages_from_steps(
 
 async def step_rows_from_log(store: RuntimeStore, thread_id: str) -> list[dict]:
     """Project a thread's EventLogProtocol into ``rebuild_messages_from_steps``'s
-    step-row schema — the monolith's cold-store source, now that the EventLogProtocol
+    step-row schema — the server's cold-store source, now that the EventLogProtocol
     (not a separate ``steps`` table) is the single source of truth for
-    conversation history (see the agent server (``loamz.agents.features``),
+    conversation history (see the agent server,
     the sibling projection for UI display).
 
     Turn-boundary rule matches ``project_thread``'s UI-facing counterpart
@@ -158,7 +158,7 @@ async def step_rows_from_log(store: RuntimeStore, thread_id: str) -> list[dict]:
     placeholder before this function returns. This is what makes
     "persist-but-exclude" real for *future* turns: the flagged message stays
     visible via the EventLogProtocol/wire-event history a client reads
-    directly (the agent server (``loamz.agents.features``), untouched by
+    directly (the agent server, untouched by
     this function), but never re-enters the ``messages`` list an LLM call
     actually sees on any turn after the one it was flagged on. The marker
     always appears after its target within the same run (the guardrail logs

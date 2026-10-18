@@ -56,7 +56,7 @@ async def test_crash_records_agent_crashed_status() -> None:
         async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                 assert entry.kind == "run.failed"
-                assert entry.payload.get("status") == "agent_crashed"
+                assert entry.payload.get("status") == "agent-crashed"
                 assert "boom!" in entry.payload.get("error", "")
                 break
 
@@ -79,7 +79,7 @@ async def test_guardrail_trip_records_guardrail_tripped_status() -> None:
         async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                 assert entry.kind == "run.failed"
-                assert entry.payload.get("status") == "guardrail_tripped"
+                assert entry.payload.get("status") == "guardrail-tripped"
                 break
 
 
@@ -101,7 +101,7 @@ async def test_budget_exhausted_records_budget_exhausted_status() -> None:
         async for entry in rt.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
                 assert entry.kind == "run.failed"
-                assert entry.payload.get("status") == "budget_exhausted"
+                assert entry.payload.get("status") == "budget-exhausted"
                 break
 
 

@@ -674,7 +674,7 @@ class RuntimeStore(Channels, Accounts):
                     row,
                     Fail(
                         error=ErrorInfo(
-                            code="deadline_exceeded",
+                            code="deadline-exceeded",
                             message="the run's deadline passed",
                             retryable=False,
                         )

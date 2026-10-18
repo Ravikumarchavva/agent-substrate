@@ -98,6 +98,7 @@ class TokenVerifier:
                 is_admin=False,  # a trusted issuer can never mint an administrator
                 read_only=config.read_only or who.token_scopes == {"data:read"},
                 scopes=who.scopes,
+                tenant_id=who.tenant_id or None,
                 context=who.context,
             )
         return Principal(
@@ -110,5 +111,6 @@ class TokenVerifier:
             is_admin=self.settings.admin_group in who.groups,
             read_only=who.token_scopes == {"data:read"},
             scopes=who.scopes,
+            tenant_id=who.tenant_id or None,
             context=who.context,
         )

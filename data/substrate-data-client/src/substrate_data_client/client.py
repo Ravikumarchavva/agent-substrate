@@ -27,8 +27,11 @@ import httpx
 from substrate_data_client._http import STORAGE_RETRY, AsyncCore, RetryPolicy, SyncCore
 from substrate_data_client.auth import TokenSource
 from substrate_data_client.catalog import AsyncCatalog, AsyncTenants, Catalog, Tenants
+from substrate_data_client.documents import AsyncDocuments, Documents
 from substrate_data_client.errors import DataError, NotFound
 from substrate_data_client.files import AsyncFiles, Files, _part_etag, _storage_failure
+from substrate_data_client.memory import AsyncMemory, Memory
+from substrate_data_client.privacy import AsyncErasure, AsyncExports, Erasure, Exports
 from substrate_data_client.sql import DEFAULT_MAX_BYTES, AsyncSql, Sql
 
 API_VERSION = "v1"
@@ -88,6 +91,10 @@ class DataClient:
         self.sql = Sql(self._core)
         self.files = Files(self._core, self._storage)
         self.tenants = Tenants(self._core)
+        self.documents = Documents(self._core)
+        self.memory = Memory(self._core)
+        self.erasure = Erasure(self._core)
+        self.exports = Exports(self._core)
 
     def __enter__(self) -> Self:
         return self
@@ -263,6 +270,10 @@ class AsyncDataClient:
         self.sql = AsyncSql(self._core)
         self.files = AsyncFiles(self._core, self._storage)
         self.tenants = AsyncTenants(self._core)
+        self.documents = AsyncDocuments(self._core)
+        self.memory = AsyncMemory(self._core)
+        self.erasure = AsyncErasure(self._core)
+        self.exports = AsyncExports(self._core)
 
     async def __aenter__(self) -> Self:
         return self

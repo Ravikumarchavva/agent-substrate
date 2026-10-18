@@ -20,6 +20,7 @@ import time
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -122,7 +123,7 @@ class Identity:
         `scopes` defaults to `data:read`. A token holding a files:* scope is minted by the writable issuer
         (the read-only issuer's tokens can never change anything, whatever they claim)."""
         if issuer is None:
-            writable = scopes and any(s.startswith("files:") for s in scopes)
+            writable = scopes and any(s.startswith(("files:", "documents:", "memory:")) for s in scopes)
             issuer = AGENT_ISSUER_WRITABLE if writable else AGENT_ISSUER
         if scopes is not None:
             extra.setdefault("scope", " ".join(scopes))
@@ -593,6 +594,85 @@ def stack(seaweed, identity, ticket_keys, tmp_path_factory, postgres) -> Stack:
 
 
 ADMIN = ("data-admins",)
+
+
+# ------------------------------------------------------------------ documents and memory (no object storage)
+@dataclass
+class DocsService:
+    """The API with the document and memory engines on local files: fast, needs no Docker."""
+
+    url: str
+    app: Any
+    settings: Settings
+    identity: Identity
+    served: Served
+
+    def agent_token(self, user: str, tenant: str = "acme", *scopes: str, **claims: Any) -> str:
+        scopes = scopes or ("documents:write", "memory:write")
+        return self.identity.agent_token(user, tenant, scopes=scopes, **claims)
+
+    def client(self, user: str, tenant: str = "acme", *scopes: str, **claims: Any):
+        from substrate_data_client import DataClient
+
+        return DataClient(self.url, token=lambda: self.agent_token(user, tenant, *scopes, **claims))
+
+    def admin(self, tenant: str = "acme"):
+        from substrate_data_client import DataClient
+
+        return DataClient(
+            self.url, token=lambda: self.identity.token("alice", ("data-admins",), tenant_id=tenant)
+        )
+
+    def http(self, user: str, tenant: str = "acme", *scopes: str, **claims: Any) -> httpx.Client:
+        token = self.agent_token(user, tenant, *scopes, **claims)
+        return httpx.Client(
+            base_url=self.url + "/api/v1", headers={"Authorization": "Bearer " + token}, timeout=60
+        )
+
+
+def serve_documents(
+    identity: Identity, ticket_keys: tuple[Path, Path], root: Path, **engine: Any
+) -> DocsService:
+    from substrate_data.api.app import build_services, create_app
+    from substrate_data.api.routes.documents import Documents
+    from substrate_data.api.routes.files import files_service_for
+    from substrate_data.documents.engine import DocumentEngine
+
+    settings = Settings(
+        _env_file=None,
+        oidc_issuer=ISSUER,
+        metadata=root / "catalog.sqlite",
+        retrieval_dir=root / "retrieval",
+        scratch=root / "tmp",
+        controller_state=root / "compute",
+        mask_salt=SecretStr("test-salt-docs"),
+        rate_limit_per_minute=0,
+        documents_parse_inline=True,
+        ticket_private_key_file=ticket_keys[0],
+        trusted_issuers=[
+            TrustedIssuer(
+                issuer=AGENT_ISSUER_WRITABLE, jwks_uri=identity.agent_keys.uri, read_only=False
+            ),
+            TrustedIssuer(issuer=AGENT_ISSUER, jwks_uri=identity.agent_keys.uri),
+        ],
+    )
+    # No table service: the documents tests never touch Iceberg (it would dial the REST catalog at once).
+    services = build_services(
+        settings, verifier=TokenVerifier(settings, jwks=identity.jwks), tables=SimpleNamespace()
+    )
+    app = create_app(settings, services)
+    app.state.documents = Documents(
+        DocumentEngine(settings, **engine), files_service_for(app), grants=False
+    )
+    served = Served(app)
+    return DocsService(served.url, app, settings, identity, served)
+
+
+@pytest.fixture(scope="module")
+def docs(identity, ticket_keys, tmp_path_factory):
+    service = serve_documents(identity, ticket_keys, tmp_path_factory.mktemp("docs"))
+    yield service
+    service.served.stop()
 
 
 # ------------------------------------------------------------------ separate OS processes (opt-in)

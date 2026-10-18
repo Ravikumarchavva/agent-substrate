@@ -21,6 +21,8 @@ dependencies = [
     "substrate-data-client[arrow]",
     "substrate-identity",
     "psycopg[binary,pool]>=3.2,<4",
+    # The document and memory engines it runs behind its own authorization, audit and tenancy (ADR 0004).
+    "agent-substrate[postgres]",
 ]
 [project.optional-dependencies]
 sdk = ["httpx>=0.28,<1"]
@@ -43,4 +45,4 @@ select = ["E4", "E7", "E9", "F", "I"]
 known-first-party = ["substrate_data", "conftest", "pki", "hog"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["integration: needs Docker (throwaway SeaweedFS)"]
+markers = ["integration: needs Docker (throwaway SeaweedFS)", "slow: needs Docker PostgreSQL with pgvector"]

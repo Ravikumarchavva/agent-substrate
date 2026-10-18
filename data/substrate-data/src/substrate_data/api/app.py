@@ -20,10 +20,13 @@ from substrate_data.api.publications import Publisher
 from substrate_data.api.routes import (
     assets,
     catalog,
+    documents,
+    erasure,
     files,
     imports,
     maintenance,
     materialized,
+    memory,
     policies,
     statements,
     tenants,
@@ -125,6 +128,9 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
                 background.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await background
+            domain = getattr(app.state, "documents", None)
+            if domain is not None:
+                await domain.engine.aclose()
             await svc.controller.close()
             await svc.workers.aclose()
             if publisher.leader is not None:
@@ -155,6 +161,9 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         workloads,
         assets,
         files,
+        documents,
+        memory,
+        erasure,
         tenants,
     ):
         app.include_router(module.router)

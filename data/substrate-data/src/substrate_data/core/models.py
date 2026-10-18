@@ -167,6 +167,24 @@ class Settings(BaseSettings):
     embedding_model: str = ""
     embedding_token: SecretStr = SecretStr("")
 
+    # Documents and memory (docs/DOCUMENTS.md): the Library and Memory engines keep their derived index in the
+    # `data_retrieval` database. A PostgreSQL URL (with pgvector for the vectors) is the production setting; empty
+    # uses a SQLite file in `retrieval_dir` (development, single node).
+    retrieval_url: SecretStr = SecretStr("")
+    retrieval_schema: str = Field(default="retrieval", pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    retrieval_dir: Path = Path(".workspace/retrieval")
+    # The control plane never parses an upload: it asks this document server (document-intelligence), a worker
+    # role. `documents_parse_inline` reads with the built-in reader in this process instead (development and tests).
+    document_reader_url: str = ""
+    document_reader_token: SecretStr = SecretStr("")
+    documents_parse_inline: bool = False
+    # Embedding and reranking service (data/embedding-reranker). Without it documents are searched by words only; a
+    # service that is down degrades search to words and never fails an upload.
+    document_embedding_url: str = ""
+    document_embedding_token: SecretStr = SecretStr("")
+    document_embedding_timeout_seconds: float = Field(default=30, gt=0, le=600)
+    documents_max_upload_bytes: int = Field(default=100 * 1024 * 1024, ge=1024)
+
     # Credential vending (docs/OPERATIONS.md): when a role ARN is set, the control plane asks the object
     # store's STS for credentials limited to the tables each statement reads, and workers need no storage
     # key to run queries. Empty keeps the single worker key.
@@ -211,6 +229,10 @@ class Settings(BaseSettings):
             )
         if self.embedding_url:
             self.embedding_url = validate_service_url(self.embedding_url, allowed)
+        if self.document_reader_url:
+            self.document_reader_url = validate_service_url(self.document_reader_url, allowed)
+        if self.document_embedding_url:
+            self.document_embedding_url = validate_service_url(self.document_embedding_url, allowed)
         if bool(self.tls_cert_file) != bool(self.tls_key_file):
             raise ValueError("tls_cert_file and tls_key_file must be set together")
         if bool(self.internal_cert_file) != bool(self.internal_key_file):

@@ -556,3 +556,50 @@ class FileCatalog:
             db.execute("DELETE FROM volume_file_versions WHERE volume_id=?", (volume_id,))
             db.execute("DELETE FROM volume_files WHERE volume_id=?", (volume_id,))
             db.execute("DELETE FROM volume_quotas WHERE volume_id=?", (volume_id,))
+
+
+    # ------------------------------------------------------------------ erasure
+    def erase_prefix(self, volume_id: str, prefix: str) -> dict[str, Any]:
+        """Hard-delete every file under `prefix` with all its versions (live, deleted or purged), for erasure.
+
+        Returns the counts and the object keys nothing references any more; the caller removes those from
+        storage. Unlike a soft delete, nothing is kept for the purge window."""
+        clause, params = prefix_clause("path", prefix)
+        with self.store.connection() as db:
+            files = db.execute(
+                "SELECT id FROM volume_files WHERE volume_id=?" + clause, [volume_id, *params]
+            ).fetchall()
+            ids = [r["id"] for r in files]
+            versions = keys = 0
+            candidates: set[str] = set()
+            for file_id in ids:
+                for row in db.execute(
+                    "SELECT object_key, purged_at FROM volume_file_versions WHERE file_id=?",
+                    (file_id,),
+                ).fetchall():
+                    versions += 1
+                    candidates.add(row["object_key"])
+                db.execute("DELETE FROM volume_file_versions WHERE file_id=?", (file_id,))
+                db.execute("DELETE FROM volume_files WHERE id=?", (file_id,))
+            garbage = []
+            for key in candidates:
+                if not db.execute(
+                    "SELECT 1 FROM volume_file_versions WHERE object_key=? LIMIT 1", (key,)
+                ).fetchone():
+                    garbage.append(key)
+            keys = len(garbage)
+        return {"files": len(ids), "versions": versions, "objects": keys, "garbage": garbage}
+
+    def erase_uploads(self, *, created_by: str | None = None, volume_id: str | None = None) -> list[dict]:
+        """Forget unfinished uploads of one principal (upload sessions included) or of one volume; returns them
+        so the caller can abort multipart uploads and delete their objects."""
+        if (created_by is None) == (volume_id is None):
+            raise ValueError("name a principal or a volume")
+        column, value = ("created_by", created_by) if created_by else ("volume_id", volume_id)
+        with self.store.connection() as db:
+            rows = [
+                dict(r)
+                for r in db.execute(f"SELECT * FROM volume_uploads WHERE {column}=?", (value,))
+            ]
+            db.execute(f"DELETE FROM volume_uploads WHERE {column}=?", (value,))
+        return rows

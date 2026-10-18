@@ -4879,6 +4879,7 @@ name = "substrate-data"
 version = "0.1.0"
 source = { editable = "data/substrate-data" }
 dependencies = [
+    { name = "agent-substrate", extra = ["postgres"] },
     { name = "boto3" },
     { name = "duckdb" },
     { name = "fastapi" },
@@ -4913,6 +4914,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agent-substrate", extras = ["postgres"], editable = "agents/agent-substrate" },
     { name = "boto3", specifier = ">=1.40" },
     { name = "duckdb", specifier = ">=1.4,<2" },
     { name = "fastapi", specifier = ">=0.115,<1" },

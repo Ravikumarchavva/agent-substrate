@@ -210,6 +210,33 @@ class VolumeStorage:
         except BotoCoreError:
             raise storage_unavailable() from None
 
+    def put_bytes(self, key: str, data: bytes, content_type: str) -> str:
+        """Store small bytes written by this process itself (the document bundles); returns their SHA-256."""
+        import hashlib
+
+        digest = hashlib.sha256(data).hexdigest()
+        try:
+            self.s3.put_object(
+                Bucket=self.bucket,
+                Key=key,
+                Body=data,
+                ContentType=content_type,
+                ChecksumSHA256=sha256_b64(digest),
+            )
+        except BotoCoreError, ClientError:
+            raise storage_unavailable() from None
+        return digest
+
+    def get_bytes(self, key: str) -> bytes:
+        try:
+            return self.s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code", "") in {"404", "NoSuchKey", "NotFound"}:
+                raise Problem(404, "not-found", "The stored object is missing") from None
+            raise storage_unavailable() from None
+        except BotoCoreError:
+            raise storage_unavailable() from None
+
     def delete_prefix(self, prefix: str) -> int:
         """Remove every object under a storage prefix (a whole volume); returns the count."""
         removed = 0

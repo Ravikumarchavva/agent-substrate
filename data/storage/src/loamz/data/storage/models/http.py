@@ -139,4 +139,14 @@ async def request_json(
         raise PermanentError(f"{url} did not answer with JSON") from exc
 
 
-__all__ = ["check_url", "join_url", "request_json"]
+async def answers(url: str, *, timeout: float = 5.0) -> bool:
+    """Whether ``url`` answers ``GET`` with a 2xx (a health probe: the body is not read as JSON)."""
+    check_url(url)
+    try:
+        await asyncio.to_thread(_call, "GET", url, None, {}, timeout)
+    except ServiceUnavailableError, PermanentError, RateLimitedError:
+        return False
+    return True
+
+
+__all__ = ["answers", "check_url", "join_url", "request_json"]

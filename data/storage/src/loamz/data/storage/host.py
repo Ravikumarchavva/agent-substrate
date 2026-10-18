@@ -20,7 +20,7 @@ from types import TracebackType
 from typing import TYPE_CHECKING
 
 from loamz.data.storage.errors import InvalidRequestError
-from loamz.data.storage.sql import Database, Script, SqliteDatabase, Tx, migrate
+from loamz.data.storage.sql import Database, Script, SqliteDatabase, Tx, migrate, version
 
 if TYPE_CHECKING:
     from loamz.data.storage.files.tables import Files
@@ -103,6 +103,11 @@ class Storage:
         await self.start()
         await migrate(self.database, component, scripts)
         self._ensured.add(component)
+
+    async def has(self, component: str) -> bool:
+        """Whether ``component``'s tables exist here, created by this process or an earlier one (asking creates
+        none of them)."""
+        return component in self._ensured or await version(self.database, component) > 0
 
     async def run[T](self, fn: Callable[[Tx], Awaitable[T]]) -> T:
         """Run ``fn`` in one transaction, again if the database aborts it for a reason a retry fixes (a deadlock)."""

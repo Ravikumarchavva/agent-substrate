@@ -52,3 +52,12 @@ layers =
     loamz.agents.stores
     loamz.agents.kernel
 
+
+[importlinter:contract:data-server-layers]
+name = loamz.data.server layers point downward (the kernel knows no feature)
+type = layers
+layers =
+    loamz.data.server.cli
+    loamz.data.server.app
+    loamz.data.server.features
+    loamz.data.server.kernel

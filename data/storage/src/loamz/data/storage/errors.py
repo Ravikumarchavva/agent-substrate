@@ -92,9 +92,19 @@ class RateLimitedError(TransientError):
 class ServiceUnavailableError(TransientError):
     code: ClassVar[str] = "unavailable"
 
-    def __init__(self, message: str = "service unavailable", *, url: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str = "service unavailable",
+        *,
+        url: str | None = None,
+        retry_after: float | None = None,
+    ) -> None:
         super().__init__(message)
         self.url = url  # for logs only: an internal address is never shown to a caller
+        self.retry_after = retry_after
+
+    def extensions(self) -> dict[str, Any]:
+        return {} if self.retry_after is None else {"retry_after": self.retry_after}
 
 
 class InvalidRequestError(PermanentError):

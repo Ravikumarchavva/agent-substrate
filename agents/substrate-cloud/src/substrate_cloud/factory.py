@@ -24,6 +24,7 @@ import asyncio
 import os
 import sys
 import uuid
+from collections.abc import Callable
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import Any, List, Optional, cast
@@ -34,7 +35,8 @@ from substrate_cloud.config import SubstrateConfig
 from substrate_cloud.data_access import PlatformDataAccess, build_data_access
 from substrate.types import Actor
 from substrate.models import ChatModel
-from substrate.stores import ThreadStore
+from substrate.stores import FileStore, ThreadStore
+from substrate.types.run import RunScope
 from substrate.agents import PASS as _PASS
 from substrate.tools import Tool, ToolRisk, is_hosted_tool, is_provider_defined_tool
 
@@ -45,6 +47,19 @@ CHANNEL_PASS = _PASS
 
 
 # ── Return containers ─────────────────────────────────────────────────────────
+
+FileStoreProvider = Callable[[RunScope], FileStore]
+"""The object store one run reads and writes. Locally it is always the one shared store (callers fence it by key prefix); the seam lets a
+deployment hand each run a store of its own — bound to the run's scope — without a caller changing."""
+
+
+def shared_file_store(file_store: FileStore) -> FileStoreProvider:
+    """The local ``FileStoreProvider``: every run gets ``file_store`` itself."""
+
+    def provide(scope: RunScope) -> FileStore:
+        return file_store
+
+    return provide
 
 
 @dataclass
@@ -66,6 +81,8 @@ class Infrastructure:
     skill_manager: Any
     file_store: Any
     pending_file_store: Any = None
+    file_store_provider: FileStoreProvider | None = None
+    """Which object store a run uses (``shared_file_store`` locally)."""
     artifact_store: Any = None
     workspace_store: Any = None
     short_term_memory: Any = None
@@ -302,6 +319,7 @@ async def init_infrastructure(
         skill_manager=skill_manager,
         file_store=file_store,
         pending_file_store=pending_file_store,
+        file_store_provider=shared_file_store(file_store),
         artifact_store=artifact_store,
         workspace_store=workspace_store,
         short_term_memory=short_term_memory,

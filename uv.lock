@@ -35,7 +35,6 @@ dependencies = [
     { name = "opentelemetry-api" },
     { name = "pydantic" },
     { name = "pypdfium2" },
-    { name = "sqlalchemy" },
 ]
 
 [package.optional-dependencies]
@@ -71,6 +70,9 @@ openai = [
     { name = "openai" },
     { name = "pillow" },
     { name = "tiktoken" },
+]
+pipeline = [
+    { name = "sqlalchemy" },
 ]
 postgres = [
     { name = "asyncpg" },
@@ -203,12 +205,12 @@ requires-dist = [
     { name = "seaborn", marker = "extra == 'sandbox'", specifier = ">=0.13.0" },
     { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3.0.0" },
     { name = "soundfile", marker = "extra == 'tts'", specifier = ">=0.12.1" },
-    { name = "sqlalchemy", specifier = ">=2.1.3" },
+    { name = "sqlalchemy", marker = "extra == 'pipeline'", specifier = ">=2.1.3" },
     { name = "tavily-python", marker = "extra == 'web'", specifier = ">=0.7.26" },
     { name = "tiktoken", marker = "extra == 'openai'", specifier = ">=0.12.0" },
     { name = "tokenizers", marker = "extra == 'safety'", specifier = ">=0.20.0" },
 ]
-provides-extras = ["openai", "logging", "postgres", "redis", "scheduler", "mcp", "tts", "tools", "console", "serve", "server", "testing", "web", "code", "sandbox", "ocr", "anthropic", "gemini", "s3", "safety", "sentence-transformers"]
+provides-extras = ["openai", "logging", "postgres", "pipeline", "redis", "scheduler", "mcp", "tts", "tools", "console", "serve", "server", "testing", "web", "code", "sandbox", "ocr", "anthropic", "gemini", "s3", "safety", "sentence-transformers"]
 
 [package.metadata.requires-dev]
 dev = [

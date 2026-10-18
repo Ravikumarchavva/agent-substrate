@@ -129,6 +129,9 @@ class Memory:
         return self._store
 
     async def _run(self, fn: Callable[[Tx], Awaitable[T]]) -> T:
+        await self._store.ensure(
+            "memory", MEMORY_SCHEMA
+        )  # this part's tables are created the first time it is used
         return await self._store.run(fn)
 
     async def save(self, record: MemoryRecord) -> str:
@@ -334,6 +337,10 @@ class SessionState:
     def __init__(self, store: Store) -> None:
         self._store = store
 
+    async def _run(self, fn: Callable[[Tx], Awaitable[T]]) -> T:
+        await self._store.ensure("memory", MEMORY_SCHEMA)
+        return await self._store.run(fn)
+
     @property
     def store(self) -> Store:
         return self._store
@@ -345,13 +352,13 @@ class SessionState:
             )
             return json.loads(row["state_json"]) if row else {}
 
-        return await self._store.run(op)
+        return await self._run(op)
 
     async def set_state(self, session_id: str, state: dict[str, Any]) -> None:
         async def op(tx: Tx) -> None:
             await _write(tx, session_id, state)
 
-        await self._store.run(op)
+        await self._run(op)
 
     async def update_state(self, session_id: str, patch: dict[str, Any]) -> None:
         async def op(tx: Tx) -> None:
@@ -363,7 +370,7 @@ class SessionState:
             state.update(patch)
             await _write(tx, session_id, state)
 
-        await self._store.run(op)
+        await self._run(op)
 
     async def clear(self, session_id: str) -> None:
         async def op(tx: Tx) -> None:
@@ -371,7 +378,7 @@ class SessionState:
                 "DELETE FROM session_state WHERE session_id = ?", session_id
             )
 
-        await self._store.run(op)
+        await self._run(op)
 
 
 async def _write(tx: Tx, session_id: str, state: dict[str, Any]) -> None:

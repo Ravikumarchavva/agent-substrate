@@ -13,8 +13,8 @@ types        content blocks, messages, ids, usage, errors, run scope, supervisio
 telemetry    spans and metrics at every chokepoint (opentelemetry-api only)
 tools        Tool contracts, approval, chaining policy, skills, Toolbox
 models       ChatModel/EmbeddingModel, capability registry, modality fitting, error classification
-stores       History/Memory/Vector/Graph/Object/Task contracts; local/ = the folder implementations; scoped.py = tenant binding
-documents    DocumentExtractor/Chunker contracts, local document store
+stores       Thread/Memory/Vector/Graph/File/Task contracts; `store.py` + `*_tables.py` = the folder implementations (one `Store`, each part's tables created on first use); scoped.py = tenant binding
+documents    DocumentExtractor/Ocr/DocumentLibrary contracts (protocols.py), value types (types.py), Reader, the folder Library, enrichment over the port
 workspace    branching, snapshots, content-addressed files
 safety       classifier contracts, text normalisation
 context      the context window, compaction, history (the linear view of a thread)
@@ -56,7 +56,7 @@ runtime = Runtime(store)                            # Runtime.open(folder) opens
 `substrate.db` is a relational database (`stores/database.py`: `Database`, `Tx`, `migrate`) opened with a write-ahead
 log and `synchronous=FULL`, so a transaction that returned survives a kill (row: the store's `test_a_committed_transaction_survives…`).
 Each part of the engine owns its tables and ships them as ordered migrations recorded in the database; a folder from a
-newer build is refused (`StoreVersionError`). Every part lives in the same database, so a later step can make one turn commit as one transaction — today each part commits on its own. Workers on one host share the folder. For workers on several machines the same engine runs over PostgreSQL —
+newer build is refused (`StoreVersionError`). `Store.start()` creates only the layout and `substrate_info`; threads, memory, tasks, graph, vectors and files each create their tables the first time that part is used (`Store.ensure`), and `Store.has(component)` says whether a part exists, so a store that only runs agents and keeps threads holds no `vector_docs`, `graph_*`, `memory_records` or `files` (row: `test_a_runtime_only_store_creates_no_…`; ADR 0004). Every part lives in the same database, so a later step can make one turn commit as one transaction — today each part commits on its own. Workers on one host share the folder. For workers on several machines the same engine runs over PostgreSQL —
 `integrations.database.postgres_store(dsn)` (a `Database` adapter; its own schema, `substrate` by default) — with the rows in Postgres
 and file contents in the `files` folder (or an `S3FileStore`). The few things SQL spells differently live in one place
 (`stores/textsearch.py`: FTS5 + triggers on SQLite, a generated `tsvector` + GIN on Postgres; the vector column: packed bytes

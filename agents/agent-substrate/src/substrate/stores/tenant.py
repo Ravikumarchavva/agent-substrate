@@ -82,22 +82,40 @@ class Tenant:
     async def erase_conversation(self, conversation_id: str) -> Erased:
         """Remove one conversation's history and task boards (not its files: those are under the user's prefix)."""
         name = f"{_tenant(self.scope)}/{conversation_id}"
+        store = self._store
         return Erased(
-            thread_nodes=await self._store.threads.erase_under(name),
-            task_boards=await self._store.tasks.erase_under(name),
+            thread_nodes=await store.threads.erase_under(name)
+            if await store.has("threads")
+            else 0,
+            task_boards=await store.tasks.erase_under(name)
+            if await store.has("tasks")
+            else 0,
         )
 
     async def erase(self) -> Erased:
         """Remove everything this tenant has stored — threads, tasks, vectors, graph, files, memory — and leave every
-        other tenant's data untouched. The words of what was erased leave the search indexes and the database file."""
+        other tenant's data untouched. The words of what was erased leave the search indexes and the database file.
+
+        A part that was never used has no tables and nothing to erase; it is skipped rather than created."""
         name = _tenant(self.scope)
+        store = self._store
         return Erased(
-            thread_nodes=await self._store.threads.erase_under(name),
-            task_boards=await self._store.tasks.erase_under(name),
-            vectors=await self._store.vectors.erase_under(name),
-            graph_entities=await self._store.graph.erase_under(name),
-            files=await self.files.erase(),
-            memories=await self._store.memory.erase(
+            thread_nodes=await store.threads.erase_under(name)
+            if await store.has("threads")
+            else 0,
+            task_boards=await store.tasks.erase_under(name)
+            if await store.has("tasks")
+            else 0,
+            vectors=await store.vectors.erase_under(name)
+            if await store.has("vectors")
+            else 0,
+            graph_entities=await store.graph.erase_under(name)
+            if await store.has("graph")
+            else 0,
+            files=await self.files.erase() if await store.has("files") else 0,
+            memories=await store.memory.erase(
                 MemoryNamespace(tenant_id=self.scope.tenant_id)
-            ),
+            )
+            if await store.has("memory")
+            else 0,
         )

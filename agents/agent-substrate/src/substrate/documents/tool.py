@@ -1,4 +1,4 @@
-"""``DocumentsTool`` — the one tool a model uses to work through a ``Library``: list, outline, read, find, view.
+"""``DocumentsTool`` — the one tool a model uses to work through a ``DocumentLibrary``: list, outline, read, find, view.
 
 The collection comes from the run's scope (``scope_of(ctx)``) through the callable you give it — never from an argument, because the
 model can be steered by the documents it reads and a collection it names would be an authorization hole. There is no action that
@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from substrate.documents.citations import Citation, CitationLedger
-from substrate.documents.library import Library
+from substrate.documents.protocols import DocumentLibrary
 from substrate.tools.protocols import ToolExecutionResult, ToolRisk
 from substrate.types import MediaBlock, TextBlock, scope_of
 from substrate.types.errors import VectorSpaceError
@@ -97,7 +97,7 @@ class DocumentsTool:
 
     def __init__(
         self,
-        library: Library,
+        library: DocumentLibrary,
         *,
         collection: Callable[[RunScope], str | None],
         name: str | None = None,

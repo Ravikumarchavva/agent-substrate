@@ -94,8 +94,23 @@ def _split_key(content: str) -> tuple[str | None, str]:
 def _strip_comment(rest: str) -> str:
     if rest[:1] in ('"', "'"):
         return rest
-    cut = re.search(r"\s#", rest)
-    return rest[: cut.start()].rstrip() if cut else rest
+    # a comment starts at the first " #" that is not inside a quoted string of a flow value (``{" #": null}``)
+    quote = ""
+    i = 0
+    while i < len(rest):
+        c = rest[i]
+        if quote:
+            if c == "\\" and quote == '"':
+                i += 2
+                continue
+            if c == quote:
+                quote = ""
+        elif c in ('"', "'") and (i == 0 or rest[i - 1] in " \t[{,:"):
+            quote = c
+        elif c == "#" and i > 0 and rest[i - 1] in " \t":
+            return rest[: i - 1].rstrip()
+        i += 1
+    return rest
 
 
 def _value(lines: list[str], i: int, indent: int, rest: str) -> tuple[Any, int]:

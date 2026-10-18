@@ -6,7 +6,6 @@ export type { ToolCallMeta, ToolCall, Message, Thread, ThreadSearchHit, Uploaded
 export type { CitationSource } from "./citations";
 export type {
   AdminThread,
-  AdminUser,
   AdminStats,
   AdminStep,
   AdminStorageUser,

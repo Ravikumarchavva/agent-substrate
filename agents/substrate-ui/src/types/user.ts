@@ -8,8 +8,9 @@ export type User = {
 export interface AuthUser {
   email?: string;
   name?: string;
-  picture?: string;
   isAdmin?: boolean;
+  /** The Keycloak organization (project) this session is for. */
+  tenantId?: string;
 }
 
 export type Element = {

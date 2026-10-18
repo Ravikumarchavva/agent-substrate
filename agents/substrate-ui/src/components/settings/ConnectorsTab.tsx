@@ -6,15 +6,13 @@ import { Badge, Button, Page, SettingGroup } from "@/design";
 import { GitHubIcon, GoogleIcon, SpotifyIcon } from "./icons";
 
 interface ConnectorsTabProps {
-  googleAuth: boolean;
   spotifyAuth: boolean;
   workspaceAuth: boolean;
-  loginWithGoogle: () => void;
   loginWithSpotify: () => void;
   loginWithWorkspace: () => void;
   handleDisconnectSpotify: () => void;
   handleDisconnectWorkspace: () => void;
-  disconnectingApp: "google" | "spotify" | "workspace" | null;
+  disconnectingApp: "spotify" | "workspace" | null;
 }
 
 /** One account the assistant can use: what it is, what it gives, whether it is connected, and the one thing you can do about it. */
@@ -35,10 +33,8 @@ function ConnectorRow({ icon, name, description, status, action }: { icon: React
 }
 
 export function ConnectorsTab({
-  googleAuth,
   spotifyAuth,
   workspaceAuth,
-  loginWithGoogle,
   handleDisconnectSpotify,
   loginWithWorkspace,
   handleDisconnectWorkspace,
@@ -56,13 +52,6 @@ export function ConnectorsTab({
     <Page title="Connectors" subtitle="Accounts the assistant can use for you. It only reaches what you connect here, and you can disconnect at any time.">
       <div className="w-full max-w-3xl space-y-6">
         <SettingGroup title="Your accounts">
-          <ConnectorRow
-            icon={<GoogleIcon className="size-5" />}
-            name="Google sign-in"
-            description="The Google account you use to sign in. Google Workspace needs it."
-            status={googleAuth ? connected : <Badge>Not signed in</Badge>}
-            action={!googleAuth && <Button variant="primary" onClick={loginWithGoogle}>Sign in with Google</Button>}
-          />
           <ConnectorRow
             icon={<GoogleIcon className="size-5" />}
             name="Google Workspace"

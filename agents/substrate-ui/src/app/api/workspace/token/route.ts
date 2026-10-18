@@ -8,10 +8,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCredentialManager } from "@/lib/credentials";
 import { prisma } from "@/lib/prisma";
-import { userAuthHeader, type UserSession } from "@/lib/engine-auth";
-import { getSessionFromRequest } from "@/lib/session";
-
-const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://127.0.0.1:8000";
+import { BACKEND_API } from "@/lib/backend";
+import { requireAuth, withAuthCookies, type Auth } from "@/lib/session";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 interface WorkspaceTokenPayload {
@@ -20,15 +18,19 @@ interface WorkspaceTokenPayload {
   expires_in: number;
 }
 
-export async function GET(req: NextRequest): Promise<NextResponse> {
-  try {
-    const session = await resolveUserSession(req);
+export async function GET(req: NextRequest): Promise<Response> {
+  const auth = await requireAuth(req);
+  const res = await getToken(auth);
+  return auth ? withAuthCookies(res, auth) : res;
+}
 
+async function getToken(session: Auth | null): Promise<NextResponse> {
+  try {
     // ── 1. Try backend first (only meaningful with a real session — the
     // route is scoped by caller identity) ──────────────────────────────────
     if (session) {
-      const backendRes = await fetch(`${BACKEND_URL}/auth/workspace/token`, {
-        headers: { Accept: "application/json", ...userAuthHeader(session) },
+      const backendRes = await fetch(`${BACKEND_API}/auth/workspace/token`, {
+        headers: { Accept: "application/json", ...session.headers },
       });
       if (backendRes.ok) {
         const data = (await backendRes.json()) as { access_token: string };
@@ -40,7 +42,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (!session) {
       return NextResponse.json({ connected: false }, { status: 401 });
     }
-    const userId = session.id;
+    const userId = session.user.id;
 
     const cm = getCredentialManager();
     const cred = await prisma.userCredential.findUnique({
@@ -97,15 +99,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-export async function DELETE(req: NextRequest): Promise<NextResponse> {
-  const session = await resolveUserSession(req);
+export async function DELETE(req: NextRequest): Promise<Response> {
+  const session = await requireAuth(req);
+  const res = await clearToken(session);
+  return session ? withAuthCookies(res, session) : res;
+}
 
+async function clearToken(session: Auth | null): Promise<NextResponse> {
   // Clear from backend (Redis)
   if (session) {
     try {
-      await fetch(`${BACKEND_URL}/auth/workspace/token`, {
+      await fetch(`${BACKEND_API}/auth/workspace/token`, {
         method: "DELETE",
-        headers: userAuthHeader(session),
+        headers: session.headers,
       });
     } catch (err) {
       console.error("[Workspace Token] Failed to clear backend token:", err);
@@ -116,7 +122,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   try {
     if (session) {
       await prisma.userCredential.deleteMany({
-        where: { userId: session.id, provider: "google_workspace" },
+        where: { userId: session.user.id, provider: "google_workspace" },
       });
     }
   } catch (err) {
@@ -124,14 +130,6 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   }
 
   return NextResponse.json({ success: true });
-}
-
-// The DB-backed session (src/lib/session.ts) is the only thing that
-// determines identity here — no cookie-derived fallback.
-async function resolveUserSession(req: NextRequest): Promise<UserSession | null> {
-  const session = await getSessionFromRequest(req);
-  if (!session) return null;
-  return { id: session.id, email: session.email, isAdmin: session.isAdmin };
 }
 
 async function refreshGoogleToken(
@@ -157,13 +155,13 @@ async function refreshGoogleToken(
 }
 
 async function mirrorWorkspaceTokenToBackend(
-  session: UserSession,
+  session: Auth,
   payload: WorkspaceTokenPayload,
 ): Promise<boolean> {
   try {
-    const res = await fetch(`${BACKEND_URL}/auth/workspace/set-token`, {
+    const res = await fetch(`${BACKEND_API}/auth/workspace/set-token`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...userAuthHeader(session) },
+      headers: { "Content-Type": "application/json", ...session.headers },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {

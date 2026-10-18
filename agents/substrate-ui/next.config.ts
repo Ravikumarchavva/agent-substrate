@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
   // include the /chat prefix automatically — a plain reverse-proxy rewrite
   // without this would silently break asset loading.
   basePath: '/chat',
+  // The shared sign-in library ships TypeScript source.
+  transpilePackages: ['@substrate/oidc-bff'],
   // Add your own LAN IP or tunnel hostname (ngrok, etc.) here for local
   // testing from another device — left to just 127.0.0.1 by default so
   // this file doesn't ship anyone's personal dev environment.
@@ -47,10 +49,10 @@ const nextConfig: NextConfig = {
         // WebSocket proxy: browser connects to /api/audio/realtime-ws
         // and Next.js rewrites it to the FastAPI WS endpoint.
         source: "/api/audio/realtime-ws",
-        destination: `${BACKEND_URL}/audio/realtime`,
+        destination: `${BACKEND_URL}/api/v1/audio/realtime`,
       },
       // /api/backend/* is handled by the catch-all route handler at
-      // src/app/api/backend/[...path]/route.ts which adds the engine JWT.
+      // src/app/api/backend/[...path]/route.ts which calls the Agent API with the user's Keycloak token.
     ];
   },
 };

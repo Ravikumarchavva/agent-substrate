@@ -1,33 +1,25 @@
-import { NextRequest, NextResponse } from "next/server";
-import { requireUserAuthHeaderFromRequest } from "@/lib/engine-auth";
+import { BACKEND_API } from "@/lib/backend";
+import { authed } from "@/lib/session";
 
-const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
-export async function POST(req: NextRequest) {
-  const auth = await requireUserAuthHeaderFromRequest(req);
-  if (!auth) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
+export const POST = authed(async (req, auth) => {
   const body = await req.json();
 
-  const res = await fetch(`${BACKEND_URL}/audio/tts`, {
+  const res = await fetch(`${BACKEND_API}/audio/tts`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...auth.headers },
     body: JSON.stringify(body),
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    return NextResponse.json({ error: text }, { status: res.status });
+    return Response.json({ error: await res.text() }, { status: res.status });
   }
 
   // Stream the audio bytes straight to the browser
-  return new NextResponse(res.body, {
+  return new Response(res.body, {
     status: 200,
     headers: {
       "Content-Type": res.headers.get("Content-Type") || "audio/mpeg",
       "Cache-Control": "no-store",
     },
   });
-}
+});

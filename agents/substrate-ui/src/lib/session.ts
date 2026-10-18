@@ -1,143 +1,190 @@
-import { cookies } from 'next/headers';
-import type { NextRequest } from 'next/server';
-import prisma from './prisma';
-
-export const SESSION_COOKIE_NAME = 'session_token';
-const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-
-export interface SessionUser {
-  id: string;
-  email: string;
-  name?: string;
-  avatarUrl?: string;
-  isAdmin: boolean;
-}
-
 /**
- * Create a DB-backed session (Prisma `Session` row) and set the opaque
- * `session_token` cookie on `res`. This is the ONLY thing that establishes
- * identity — the cookie carries nothing but a random token; the server
- * looks up who it belongs to on every request (see `getSession`/
- * `getSessionFromRequest`). Replaces the old `user_session` cookie, which
- * was plain unsigned JSON an attacker could edit in devtools to become any
- * user (including an admin).
+ * Sign-in and session, for every route handler of this app.
+ *
+ * The browser session is the shared backend-for-frontend library (`@substrate/oidc-bff`, ADR 0007): Keycloak authorization code + PKCE,
+ * tokens in an encrypted httpOnly cookie, refresh rotation. The browser never holds an access token. The Agent API is called with the
+ * user's own Keycloak access token; tenant and roles come from that token (one organization per token).
+ *
+ *   const auth = await requireAuth(req);                 // null -> respond 401
+ *   fetch(url, { headers: auth.headers })                // Authorization: Bearer <access token>
+ *   return withAuthCookies(response, auth);              // carries a rotated session cookie, if any
+ *
+ * Most handlers just wrap themselves in `authed(...)`, which does all three.
  */
-export async function createSession(
-  res: { cookies: { set: (name: string, value: string, opts: Record<string, unknown>) => void } },
-  user: { id: string; email: string },
-): Promise<string> {
-  const token = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+import { createBff, type Bff } from "@substrate/oidc-bff";
 
-  await prisma.session.create({
-    data: { userId: user.id, token, expiresAt },
-  });
+export const SESSION_COOKIE = "substrate_ui_session";
+export const LOGIN_COOKIE = "substrate_ui_login";
 
-  res.cookies.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    expires: expiresAt,
-  });
+/** The app is mounted under this path (next.config.ts basePath). */
+const MOUNT = "/chat";
 
-  return token;
-}
-
-function toSessionUser(user: {
-  id: string;
-  email: string;
-  name: string | null;
-  avatarUrl: string | null;
-  isAdmin: boolean;
-}): SessionUser {
+export function oidcConfig() {
+  const issuer = process.env.OIDC_ISSUER;
+  const clientSecret = process.env.OIDC_CLIENT_SECRET;
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!issuer || !clientSecret || !sessionSecret || sessionSecret.length < 32) {
+    throw new Error("Set OIDC_ISSUER, OIDC_CLIENT_SECRET and SESSION_SECRET (32+ characters)");
+  }
   return {
-    id: user.id,
-    email: user.email,
-    name: user.name ?? undefined,
-    avatarUrl: user.avatarUrl ?? undefined,
-    isAdmin: user.isAdmin,
+    issuer,
+    clientSecret,
+    sessionSecret,
+    clientId: process.env.OIDC_CLIENT_ID || "substrate-ui",
+    // The address users reach the app at (origin only). Redirect URIs and cookies must agree on it.
+    publicUrl: (process.env.PUBLIC_URL || "http://127.0.0.1:3000").replace(/\/$/, ""),
+    // Pins the organization (tenant) of the session; unset lets Keycloak pick the user's only organization.
+    organization: process.env.OIDC_ORGANIZATION || "",
   };
 }
 
-async function resolveToken(token: string | undefined | null): Promise<SessionUser | null> {
-  if (!token) return null;
-  const session = await prisma.session.findUnique({
-    where: { token },
-    include: { user: true },
+const ORGANIZATION = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
+
+function create(organization: string): Bff {
+  return createBff(() => {
+    const c = oidcConfig();
+    return {
+      issuer: c.issuer,
+      clientId: c.clientId,
+      clientSecret: c.clientSecret,
+      sessionSecret: c.sessionSecret,
+      publicUrl: c.publicUrl,
+      sessionCookie: SESSION_COOKIE,
+      loginCookie: LOGIN_COOKIE,
+      callbackPath: `${MOUNT}/auth/callback`,
+      postLogoutPath: MOUNT,
+      scope: `openid profile email${organization ? ` organization:${organization}` : " organization"}`,
+    };
   });
-  if (!session) return null;
-  if (session.expiresAt < new Date()) {
-    await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
-    return null;
+}
+
+const sessions = new Map<string, Bff>();
+
+/**
+ * The session handler for one organization. Switching organization (project) is signing in again with `?org=<alias>`:
+ * Keycloak issues a token for that single organization and the session cookie is replaced.
+ */
+export function bffFor(organization?: string | null): Bff {
+  const alias = organization && ORGANIZATION.test(organization) ? organization : process.env.OIDC_ORGANIZATION || "";
+  let found = sessions.get(alias);
+  if (!found) {
+    found = create(alias);
+    sessions.set(alias, found);
   }
-  return toSessionUser(session.user);
+  return found;
 }
 
-/** For Server Components / Route Handlers reading cookies via `next/headers`. */
-export async function getSession(): Promise<SessionUser | null> {
-  const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
-  return resolveToken(token);
+/** The handler for reading the session and finishing a sign-in (the organization only matters when starting one). */
+export const bff: Bff = bffFor();
+
+export interface SessionUser {
+  /** The Keycloak user id (`sub`). */
+  id: string;
+  email: string;
+  name: string;
+  isAdmin: boolean;
+  /** The Keycloak organization id the session is for. */
+  tenantId: string;
+  roles: string[];
 }
 
-/** For Route Handlers that received a `NextRequest` directly. */
-export async function getSessionFromRequest(req: NextRequest): Promise<SessionUser | null> {
-  return resolveToken(req.cookies.get(SESSION_COOKIE_NAME)?.value);
+export interface Auth {
+  user: SessionUser;
+  /** `{ Authorization: "Bearer <access token>" }` for the Agent API. */
+  headers: Record<string, string>;
+  /** Set-Cookie values to append to the response (the session was refreshed). */
+  setCookies: string[];
 }
 
-/** For code that only has a raw `Cookie` header string (e.g. a request
- *  forwarded from elsewhere) rather than a `NextRequest`. */
-export async function getSessionFromCookieHeader(
-  cookieHeader: string | null,
-): Promise<SessionUser | null> {
-  if (!cookieHeader) return null;
-  const entry = cookieHeader
-    .split(/;\s*/)
-    .find((c) => c.startsWith(`${SESSION_COOKIE_NAME}=`));
-  if (!entry) return null;
-  return resolveToken(decodeURIComponent(entry.slice(SESSION_COOKIE_NAME.length + 1)));
+function claimsOf(token: string): Record<string, unknown> {
+  try {
+    const payload = token.split(".")[1] ?? "";
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
-export async function deleteSessionByToken(token: string | undefined | null): Promise<void> {
-  if (!token) return;
-  await prisma.session.deleteMany({ where: { token } }).catch(() => {});
+/**
+ * Who a token is for. The token came out of our own sealed cookie (it was verified by Keycloak on the way in
+ * and is verified again by every service that receives it), so this only reads it for display and for routing UI.
+ */
+export function userFromAccessToken(token: string, fallbackName = "user"): SessionUser {
+  const claims = claimsOf(token);
+  const realm = claims.realm_access as { roles?: string[] } | undefined;
+  const roles = Array.isArray(realm?.roles) ? realm.roles.map(String) : [];
+  const organization = claims.organization;
+  let tenantId = "";
+  if (Array.isArray(organization)) tenantId = String(organization[0] ?? "");
+  else if (organization && typeof organization === "object") {
+    const first = Object.entries(organization as Record<string, { id?: string }>)[0];
+    tenantId = first ? String(first[1]?.id ?? first[0]) : "";
+  }
+  return {
+    id: String(claims.sub ?? ""),
+    email: String(claims.email ?? ""),
+    name: String(claims.name ?? claims.preferred_username ?? fallbackName),
+    isAdmin: roles.includes("tenant_admin") || roles.includes("platform_admin"),
+    tenantId,
+    roles,
+  };
 }
 
-/** Delete every session for a user — used when isAdmin or other identity
- *  fields change, so a stale session can't keep an old isAdmin value. */
-export async function deleteAllSessionsForUser(userId: string): Promise<void> {
-  await prisma.session.deleteMany({ where: { userId } }).catch(() => {});
+/** The signed-in caller of a request, or null (answer 401). */
+export async function requireAuth(req: Request): Promise<Auth | null> {
+  const result = await bff.getSession(req);
+  if (!result) return null;
+  const { session } = result;
+  return {
+    user: userFromAccessToken(session.access_token, session.name),
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    setCookies: result.setCookies,
+  };
 }
 
-export async function getOrCreateUser(
-  email: string,
-  googleId?: string,
-  name?: string,
-  avatarUrl?: string,
-  isAdmin?: boolean,
-): Promise<SessionUser> {
-  const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
-  const resolvedIsAdmin = isAdmin ?? (!!adminEmail && adminEmail === email.toLowerCase().trim());
+/** Append a refreshed session cookie, if there is one, to a response. Streams pass through untouched. */
+export function withAuthCookies(res: Response, auth: Auth): Response {
+  if (auth.setCookies.length === 0) return res;
+  const out = new Response(res.body, { status: res.status, statusText: res.statusText, headers: new Headers(res.headers) });
+  return bff.withCookies(out, auth.setCookies);
+}
 
-  let user = await prisma.user.findFirst({
-    where: { OR: [{ email }, ...(googleId ? [{ googleId }] : [])] },
+/**
+ * Wrap a route handler: no session answers 401 problem+json (clearing the cookie); otherwise the handler gets the caller and
+ * its response carries any refreshed session cookie.
+ */
+export function authed<C = unknown>(
+  handler: (req: Request, auth: Auth, context: C) => Promise<Response>,
+) {
+  return async (req: Request, context: C): Promise<Response> => {
+    const auth = await requireAuth(req);
+    if (!auth) return bff.unauthorized(req);
+    return withAuthCookies(await handler(req, auth, context), auth);
+  };
+}
+
+/** The same, for handlers that need the caller to be an administrator of the organization. */
+export function adminOnly<C = unknown>(
+  handler: (req: Request, auth: Auth, context: C) => Promise<Response>,
+) {
+  return authed<C>(async (req, auth, context) => {
+    if (!auth.user.isAdmin) {
+      return new Response(
+        JSON.stringify({
+          type: "https://substrate.dev/problems/forbidden",
+          title: "Forbidden",
+          status: 403,
+          detail: "This needs the tenant_admin role",
+        }),
+        { status: 403, headers: { "Content-Type": "application/problem+json" } },
+      );
+    }
+    return handler(req, auth, context);
   });
+}
 
-  if (!user) {
-    user = await prisma.user.create({
-      data: { email, googleId, name, avatarUrl, isAdmin: resolvedIsAdmin },
-    });
-  } else {
-    user = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        googleId: googleId || user.googleId,
-        name: name || user.name,
-        avatarUrl: avatarUrl || user.avatarUrl,
-        isAdmin: resolvedIsAdmin,
-      },
-    });
-  }
-
-  return toSessionUser(user);
+/** The signed-in user of a request (read-only, for handlers that do not call the Agent API), or null. */
+export async function currentUser(req: Request): Promise<SessionUser | null> {
+  const result = await bff.getSession(req);
+  return result ? userFromAccessToken(result.session.access_token, result.session.name) : null;
 }

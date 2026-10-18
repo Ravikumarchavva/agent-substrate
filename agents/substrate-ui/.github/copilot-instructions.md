@@ -44,7 +44,7 @@ src/
 │       ├── SettingsPanel.tsx  ← Shell: state, handlers, tab bar, layout
 │       ├── GeneralTab.tsx     ← Custom instructions + Model & Voice preferences
 │       ├── ProfileTab.tsx     ← User profile card
-│       ├── AppsTab.tsx        ← Google + Spotify connect/disconnect
+│       ├── AppsTab.tsx        ← Google Workspace + Spotify connect/disconnect
 │       ├── AdminTab.tsx       ← Admin stats, users, threads
 │       └── icons.tsx          ← GoogleIcon, SpotifyIcon SVG components
 ├── hooks/
@@ -193,11 +193,12 @@ Shared fetch helpers live in `_client.ts`. Add new endpoints to the appropriate 
 ```
 NEXT_PUBLIC_API_URL=http://localhost:8000
 BACKEND_API_URL=http://localhost:8000     # server-side only (Next.js API routes)
-GOOGLE_CLIENT_ID=...       # optional, for Google OAuth
-GOOGLE_CLIENT_SECRET=...   # optional
+OIDC_ISSUER=...            # the Keycloak realm
+OIDC_CLIENT_SECRET=...     # the substrate-ui client
+SESSION_SECRET=...         # 32+ characters
 SPOTIFY_CLIENT_ID=...      # optional
 SPOTIFY_CLIENT_SECRET=...  # optional
-DATABASE_URL=...            # Prisma (for session / OAuth)
+DATABASE_URL=...            # Prisma (connector credentials)
 ```
 
 ### Docker / K8s Build Rules

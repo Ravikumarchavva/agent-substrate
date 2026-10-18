@@ -1,27 +1,15 @@
 /**
  * DELETE /api/admin/threads/[threadId]
- * Hard-deletes a thread via backend admin API (admin only).
+ * Hard-deletes a thread via the Agent API's admin routes (administrators of the organization only).
  */
-import { NextRequest, NextResponse } from "next/server";
-import { requireUserAuthHeaderFromRequest } from "@/lib/engine-auth";
+import { BACKEND_API } from "@/lib/backend";
+import { adminOnly } from "@/lib/session";
 
-const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ threadId: string }> }
-) {
-  const auth = await requireUserAuthHeaderFromRequest(req);
-  if (!auth || !auth.user.isAdmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
+export const DELETE = adminOnly<{ params: Promise<{ threadId: string }> }>(async (_req, auth, { params }) => {
   const { threadId } = await params;
-  const res = await fetch(`${BACKEND_URL}/admin/threads/${threadId}`, {
+  const res = await fetch(`${BACKEND_API}/admin/threads/${encodeURIComponent(threadId)}`, {
     method: "DELETE",
     headers: auth.headers,
   });
-
-  const data = await res.json();
-  return NextResponse.json(data, { status: res.status });
-}
+  return Response.json(await res.json(), { status: res.status });
+});

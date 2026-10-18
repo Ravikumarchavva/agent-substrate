@@ -1,36 +1,24 @@
 /**
- * Catch-all proxy: /api/backend/* → agent-substrate
+ * Catch-all proxy: /api/backend/* -> the Agent API (/api/v1/*)
  *
- * Adds an engine-scoped JWT so the engine's auth middleware is satisfied.
- * The JWT is signed with ENGINE_JWT_SECRET (same value as agent-substrate JWT_SECRET).
- * A new token is generated per request (short-lived), minted from the
- * caller's DB-backed session (src/lib/session.ts) — never from a
- * client-editable cookie. No session → 401; there is no anonymous or
- * service-account fallback for user-data routes anymore (see the beta
- * security audit this replaces: the previous unsigned `user_session`
- * cookie let anyone become any user, including an admin, just by editing
- * it in devtools).
+ * Calls the API with the signed-in user's own Keycloak access token, read from the encrypted session cookie
+ * (@substrate/oidc-bff, refreshed here when it is about to expire). The API verifies the token itself and takes the
+ * tenant and roles from it. No session -> 401 problem+json; there is no anonymous or service-account fallback.
  */
 import { NextRequest } from "next/server";
-import { requireUserAuthHeaderFromRequest } from "@/lib/engine-auth";
+import { BACKEND_API } from "@/lib/backend";
+import { bff, requireAuth, withAuthCookies } from "@/lib/session";
 import { streamingDispatcher } from "@/lib/streaming-dispatcher";
 
 // Stream responses (SSE) must not be buffered or statically optimized.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const BACKEND_URL =
-  process.env.BACKEND_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://127.0.0.1:8000";
-
 async function proxyRequest(req: NextRequest, path: string[]): Promise<Response> {
-  const auth = await requireUserAuthHeaderFromRequest(req);
-  if (!auth) {
-    return Response.json({ error: "Not authenticated" }, { status: 401 });
-  }
+  const auth = await requireAuth(req);
+  if (!auth) return bff.unauthorized(req);
 
-  const targetUrl = `${BACKEND_URL}/${path.join("/")}${req.nextUrl.search}`;
+  const targetUrl = `${BACKEND_API}/${path.map(encodeURIComponent).join("/")}${req.nextUrl.search}`;
 
   const headers = new Headers();
   // Forward safe request headers — deliberately NOT "cookie": this app's
@@ -74,11 +62,14 @@ async function proxyRequest(req: NextRequest, path: string[]): Promise<Response>
     responseHeaders["cache-control"] = "no-cache, no-transform";
     responseHeaders["x-accel-buffering"] = "no";
   }
-  return new Response(upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: responseHeaders,
-  });
+  return withAuthCookies(
+    new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: responseHeaders,
+    }),
+    auth,
+  );
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {

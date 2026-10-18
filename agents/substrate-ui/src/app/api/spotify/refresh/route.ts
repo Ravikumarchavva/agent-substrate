@@ -6,12 +6,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCredentialManager } from "@/lib/credentials";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/session";
+import { currentUser } from "@/lib/session";
 
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
 
 async function resolveUserId(req: NextRequest): Promise<string | null> {
-  const session = await getSessionFromRequest(req);
+  const session = await currentUser(req);
   return session?.id ?? null;
 }
 

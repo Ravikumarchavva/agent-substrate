@@ -9,9 +9,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCredentialManager } from '@/lib/credentials';
 import { prisma } from '@/lib/prisma';
-import { getSessionFromRequest } from '@/lib/session';
+import { currentUser } from "@/lib/session";
 
-const BACKEND_URL = process.env.BACKEND_API_URL ?? 'http://127.0.0.1:8000';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
 export async function GET(req: NextRequest) {
@@ -20,7 +19,6 @@ export async function GET(req: NextRequest) {
     const cookieToken = req.cookies.get('spotify_access_token')?.value;
     if (cookieToken) {
       // Silently push to engine so MCP app playlists/liked-songs work
-      pushToEngine(cookieToken, req.cookies.get('spotify_refresh_token')?.value ?? null, 3600);
       return NextResponse.json({ access_token: cookieToken, authenticated: true });
     }
 
@@ -74,7 +72,6 @@ export async function GET(req: NextRequest) {
     }
 
     // Push to engine so MCP app calls work
-    pushToEngine(accessToken, refreshToken, expiresIn);
 
     return NextResponse.json({ access_token: accessToken, authenticated: true });
   } catch (error) {
@@ -93,16 +90,8 @@ export async function DELETE() {
   return res;
 }
 
-function pushToEngine(accessToken: string, refreshToken: string | null, expiresIn: number): void {
-  fetch(`${BACKEND_URL}/auth/spotify/set-token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn }),
-  }).catch(() => { /* non-fatal — engine may not be running */ });
-}
-
 async function resolveUserId(req: NextRequest): Promise<string | null> {
-  const session = await getSessionFromRequest(req);
+  const session = await currentUser(req);
   return session?.id ?? null;
 }
 

@@ -133,7 +133,7 @@ export function CollapsedRail({
   onBackToChat?: () => void;
 }) {
   const { theme, toggleTheme } = useTheme();
-  const { user, isAuthenticated, isAdmin, loginWithGoogle, logout } = useAuth();
+  const { user, isAuthenticated, isAdmin, login, logout } = useAuth();
   const [hoverLogo, setHoverLogo] = useState(false);
   const [messages, setMessages] = useState<{ used: number; limit: number } | null>(null);
   const [documents, setDocuments] = useState<{ used: number; limit: number } | null>(null);
@@ -231,10 +231,7 @@ export function CollapsedRail({
               <MenuTrigger asChild>
                 <Button variant="ghost" size="icon" aria-label="Account menu" className={BUTTON}>
                   <span className="flex size-7 items-center justify-center overflow-hidden rounded-full bg-badge text-sm font-bold text-foreground">
-                    {isAuthenticated && user?.picture ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={user.picture} alt="" className="size-full object-cover" />
-                    ) : isAuthenticated && user ? (
+                    {isAuthenticated && user ? (
                       name[0].toUpperCase()
                     ) : (
                       <User className="size-4" />
@@ -268,8 +265,8 @@ export function CollapsedRail({
                   <LogOut /> Sign out
                 </MenuItem>
               ) : (
-                <MenuItem onSelect={loginWithGoogle}>
-                  <User /> Sign in with Google
+                <MenuItem onSelect={() => login()}>
+                  <User /> Sign in
                 </MenuItem>
               )}
             </MenuContent>

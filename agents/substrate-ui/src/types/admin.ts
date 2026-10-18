@@ -9,16 +9,6 @@ export interface AdminThread {
   step_count: number;
 }
 
-/** Admin user summary shown in the settings panel. */
-export interface AdminUser {
-  id: string;
-  email: string;
-  name: string | null;
-  avatarUrl: string | null;
-  isAdmin: boolean;
-  createdAt: string;
-}
-
 /** Aggregate admin stats surfaced in the settings panel. */
 export interface AdminStats {
   total_threads: number;

@@ -65,13 +65,13 @@ no separate document server.
 
 ## Quick start
 
-You need Node 22+, pnpm, and a running [`agent-substrate`](../agent-substrate) backend (which needs PostgreSQL and Redis; see its [tech stack](../agent-substrate/README.md#-tech-stack-required-vs-opt-in)). This app needs only a database for its own sign-in tables.
+You need Node 22+, pnpm, and a running [`agent-substrate`](../agent-substrate) backend (which needs PostgreSQL and Redis; see its [tech stack](../agent-substrate/README.md#-tech-stack-required-vs-opt-in)). Sign-in is Keycloak (the cell's realm, see [`deploy/keycloak`](../../deploy/keycloak)); this app needs a database only for its connector credentials.
 
 ```bash
 pnpm install --frozen-lockfile
 cp .env.local.example .env.local     # fill in the values below
 pnpm prisma generate                 # runs on install too
-pnpm db:push                         # provision auth/session tables
+pnpm db:push                         # provision the connector-credentials table
 pnpm dev                             # http://localhost:3000
 ```
 
@@ -100,26 +100,28 @@ Copy `.env.local.example` → `.env.local`:
 |---|---|
 | `BACKEND_API_URL` | Engine URL for server-side routes / the `/api/backend/*` proxy (default `http://localhost:8000`). |
 | `NEXT_PUBLIC_API_URL` | Engine URL baked into the browser bundle. Leave empty on Kubernetes so the browser uses ingress-relative paths. |
-| `ENGINE_JWT_SECRET` | Must equal the engine's `JWT_SECRET`. The proxy signs a per-request JWT identifying the caller (per-user when logged in, else a service account). |
-| `DATABASE_URL` | Prisma database for this app's own `User`/`UserCredential` tables. Auth here is hand-rolled Google OAuth + httpOnly cookies, not Auth.js/NextAuth — no `NEXTAUTH_*` vars are read anywhere. |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | Google OAuth login. |
+| `OIDC_ISSUER` | The realm URL, e.g. `https://id.example.com/realms/substrate`. |
+| `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | The confidential `substrate-ui` client of the realm (default id `substrate-ui`). |
+| `OIDC_ORGANIZATION` | Optional: the organization alias to pin sessions to (scope `organization:<alias>`). `/chat/auth/login?org=<alias>` signs in to another organization (project) and switches the tenant. |
+| `SESSION_SECRET` | 32+ characters; derives the keys that encrypt the session cookie (`openssl rand -hex 32`). |
+| `PUBLIC_URL` | Where users reach this app (origin only, default `http://127.0.0.1:3000`); redirect URIs and cookies agree on it. |
+| `DATABASE_URL` | Prisma database for the connector credentials (`UserCredential`) only; accounts and sessions are Keycloak's. |
 | `ENCRYPTION_KEY` | Encrypts stored Spotify/Workspace OAuth tokens (`openssl rand -hex 32`). Must be this exact name. |
-| `ADMIN_EMAIL` | Grants access to `/api/admin/*`. |
 | `NEXT_PUBLIC_BRAND_LOGO_URL` | Optional: your own logo (an image URL) in place of the default two-square mark. Replace `public/favicon.svg` for the browser tab. |
-| `BYPASS_OAUTH` | Dev-only: skip real Google OAuth and sign in as a placeholder account. Only takes effect when `NODE_ENV !== "production"` — never a live risk in a real deployment. |
 
-> **Identity note:** `/api/chat` and the `/api/backend/*` proxy sign tokens from
-> the same `user_session` cookie, so agent-written files and browser reads share
-> one identity. Logged out, everything runs under the `substrate-ui` service
-> account — files created then aren't visible once you log in as a real user.
+> **Identity note:** sign-in is the shared backend-for-frontend library
+> ([`@substrate/oidc-bff`](../../identity/oidc-bff)): authorization code + PKCE, tokens in an encrypted httpOnly cookie, never in the browser.
+> `/api/chat` and the `/api/backend/*` proxy call the Agent API (`/api/v1`) with the user's own access token, so agent-written files and
+> browser reads share one identity. The tenant is the Keycloak organization in that token, and administrators are users with the
+> `tenant_admin` realm role. There is no anonymous mode: no session means 401.
 
 ## Architecture notes
 
 - All backend calls go through the `api` object in `src/lib/api/` — never
   `fetch` directly in components.
 - Server → engine calls flow through the `/api/backend/*` catch-all proxy
-  ([`route.ts`](src/app/api/backend/%5B...path%5D/route.ts)), which injects the
-  signed engine JWT.
+  ([`route.ts`](src/app/api/backend/%5B...path%5D/route.ts)), which calls the
+  Agent API (`/api/v1`) with the user's Keycloak access token.
 - The chat page, SSE loop, and panel wiring live in
   [`src/app/[[...slug]]/page.tsx`](src/app/%5B%5B...slug%5D%5D/page.tsx); the artifact surfaces are
   [`FileArtifactViewer`](src/components/FileArtifactViewer.tsx),

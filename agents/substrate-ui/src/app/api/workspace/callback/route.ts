@@ -8,10 +8,10 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getCredentialManager } from "@/lib/credentials";
-import { getSessionFromRequest } from "@/lib/session";
+import { BACKEND_API } from "@/lib/backend";
+import { requireAuth } from "@/lib/session";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://127.0.0.1:8000";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(req.url);
@@ -47,7 +47,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // with the Google account that authorized," which is a distinct (and
   // spoofable-in-principle) identity. Requiring the app's own verified
   // session closes that gap.
-  const session = await getSessionFromRequest(req);
+  const auth = await requireAuth(req);
+  const session = auth?.user ?? null;
   if (!session) {
     return new NextResponse(buildHTML(false, "You must be signed in to connect Google Workspace."), {
       status: 401,
@@ -59,8 +60,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
   const redirectUri =
     process.env.WORKSPACE_REDIRECT_URI ??
-    process.env.GOOGLE_REDIRECT_URI?.replace("/api/auth/google/callback", "/api/workspace/callback") ??
-    "http://127.0.0.1:3000/api/workspace/callback";
+    `${process.env.PUBLIC_URL ?? "http://127.0.0.1:3000"}/chat/api/workspace/callback`;
 
   try {
     // Exchange code for tokens
@@ -93,9 +93,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const expiresIn = tokens.expires_in ?? 3600;
 
     try {
-      const backendRes = await fetch(`${BACKEND_URL}/auth/workspace/set-token`, {
+      const backendRes = await fetch(`${BACKEND_API}/auth/workspace/set-token`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(auth?.headers ?? {}) },
         body: JSON.stringify({
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token ?? null,

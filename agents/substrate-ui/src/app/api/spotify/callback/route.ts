@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { signState } from "../login/route";
 import { getCredentialManager } from "@/lib/credentials";
-import { getSessionFromRequest } from "@/lib/session";
+import { currentUser } from "@/lib/session";
 
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
 
@@ -119,21 +119,9 @@ export async function GET(req: NextRequest) {
   // Clear the state cookie (legacy, no-op if not present)
   res.cookies.delete("spotify_oauth_state");
 
-  // Push token to backend so it can use it for MCP tool calls and SDK
-  const backendUrl = process.env.BACKEND_API_URL ?? 'http://127.0.0.1:8000';
-  fetch(`${backendUrl}/auth/spotify/set-token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token ?? null,
-      expires_in: expiresIn,
-    }),
-  }).catch((err) => console.error('[Spotify OAuth] Failed to push token to backend:', err));
-
   // Persist tokens in DB (encrypted) for the signed-in session's own user.
   try {
-    const session = await getSessionFromRequest(req);
+    const session = await currentUser(req);
     if (session) {
       const cm = getCredentialManager();
       await cm.storeCredential(

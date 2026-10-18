@@ -16,6 +16,7 @@ RUN corepack enable && corepack prepare pnpm@11.1.1 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY agents/substrate-ui/package.json ./agents/substrate-ui/
 COPY agents/substrate-ui/prisma ./agents/substrate-ui/prisma/
+COPY identity/oidc-bff/package.json ./identity/oidc-bff/
 COPY data/substrate-data-web/package.json ./data/substrate-data-web/
 COPY data/substrate-data-web/scripts ./data/substrate-data-web/scripts/
 
@@ -35,6 +36,7 @@ RUN corepack enable && corepack prepare pnpm@11.1.1 --activate
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/agents/substrate-ui/node_modules ./agents/substrate-ui/node_modules
 COPY package.json pnpm-workspace.yaml ./
+COPY identity/oidc-bff ./identity/oidc-bff
 COPY agents/substrate-ui ./agents/substrate-ui
 WORKDIR /app/agents/substrate-ui
 

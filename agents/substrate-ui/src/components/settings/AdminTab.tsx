@@ -9,18 +9,15 @@ import type {
   AdminStorageSession,
   AdminStorageUser,
   AdminThread,
-  AdminUser,
 } from "@/types";
 
 interface AdminTabProps {
   adminStats: AdminStats | null;
-  adminUsers: AdminUser[];
   adminThreads: AdminThread[];
   adminLoading: boolean;
   adminLoadNotice: string | null;
-  adminUsersError: string | null;
-  adminTab: "users" | "threads" | "storage";
-  setAdminTab: (tab: "users" | "threads" | "storage") => void;
+  adminTab: "threads" | "storage";
+  setAdminTab: (tab: "threads" | "storage") => void;
   expandedThreadId: string | null;
   threadSteps: Record<string, AdminStep[]>;
   deletingThreadId: string | null;
@@ -38,7 +35,7 @@ interface AdminTabProps {
   handleSaveQuota: (userId: string, quotaBytes: number | null) => void;
 }
 
-const tabOptions = ["users", "threads", "storage"] as const;
+const tabOptions = ["threads", "storage"] as const;
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -128,11 +125,9 @@ function StepTypeBadge({ type }: { type: string }) {
 
 export function AdminTab({
   adminStats,
-  adminUsers,
   adminThreads,
   adminLoading,
   adminLoadNotice,
-  adminUsersError,
   adminTab,
   setAdminTab,
   expandedThreadId,
@@ -150,7 +145,7 @@ export function AdminTab({
   handleSaveQuota,
 }: AdminTabProps) {
   return (
-    <Page title="Admin" subtitle="Conversations and users across the workspace.">
+    <Page title="Admin" subtitle="Conversations and storage across the workspace. Accounts are managed in the identity provider.">
       {adminLoadNotice && (
         <p className="rounded-[18px] bg-badge px-4 py-3 text-sm text-muted">
           {adminLoadNotice}
@@ -172,13 +167,13 @@ export function AdminTab({
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Segmented<"users" | "threads" | "storage">
+        <Segmented<"threads" | "storage">
           label="Admin section"
           value={adminTab}
           onChange={setAdminTab}
           options={tabOptions.map((tab) => ({
             value: tab,
-            label: `${tab[0].toUpperCase()}${tab.slice(1)} (${tab === "users" ? adminUsers.length : tab === "threads" ? adminThreads.length : adminStorageUsers.length})`,
+            label: `${tab[0].toUpperCase()}${tab.slice(1)} (${tab === "threads" ? adminThreads.length : adminStorageUsers.length})`,
           }))}
         />
         <Button variant="secondary" onClick={loadAdminData} disabled={adminLoading} aria-label="Refresh admin data">
@@ -190,52 +185,6 @@ export function AdminTab({
       {(adminTab === "storage" ? adminStorageLoading : adminLoading) ? (
         <div className="flex items-center justify-center py-10">
           <Loader2 className="h-5 w-5 animate-spin text-muted" />
-        </div>
-      ) : adminTab === "users" ? (
-        <div className="space-y-2">
-          {adminUsersError && (
-            <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted">
-              {adminUsersError}
-            </p>
-          )}
-
-          {adminUsers.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted">
-              {adminUsersError ? "User accounts could not be loaded." : "No registered users yet"}
-            </p>
-          ) : (
-            adminUsers.map((user) => (
-              <div key={user.id} className="flex items-center gap-3 rounded-[22px] px-4 py-4" style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}>
-                {user.avatarUrl ? (
-                  <img
-                    src={user.avatarUrl}
-                    className="h-9 w-9 shrink-0 rounded-full object-cover"
-                    alt=""
-                  />
-                ) : (
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-foreground">
-                    {(user.email || "U")[0].toUpperCase()}
-                  </div>
-                )}
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{user.name ?? user.email}</p>
-                  <p className="truncate text-xs text-muted">{user.email}</p>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2">
-                  {user.isAdmin && (
-                    <span className="rounded-full bg-badge px-2.5 py-1 text-xs font-medium text-badge-foreground">
-                      Admin
-                    </span>
-                  )}
-                  <span className="rounded-full bg-badge px-2.5 py-1 text-xs text-muted">
-                    {new Date(user.createdAt).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
         </div>
       ) : adminTab === "threads" ? (
         <div className="space-y-2">

@@ -20,7 +20,6 @@ import type {
   AdminStorageSession,
   AdminStorageUser,
   AdminThread,
-  AdminUser,
   OpenAITTSVoice,
   TTSPlaybackRate,
   TTSVoice,
@@ -143,12 +142,6 @@ interface SettingsPanelProps {
   threadId?: string | null;
 }
 
-function getAsyncErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim()) return error.message;
-  if (typeof error === "string" && error.trim()) return error;
-  return fallback;
-}
-
 export function SettingsPanel({
   isOpen,
   initialTab = "general",
@@ -157,10 +150,8 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   const {
     isAdmin,
-    googleAuth,
     spotifyAuth,
     workspaceAuth,
-    loginWithGoogle,
     loginWithSpotify,
     loginWithWorkspace,
     checkAuth,
@@ -168,7 +159,7 @@ export function SettingsPanel({
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [modelPreferencesNotice, setModelPreferencesNotice] = useState<SettingsNotice | null>(null);
-  const [disconnectingApp, setDisconnectingApp] = useState<"google" | "spotify" | "workspace" | null>(null);
+  const [disconnectingApp, setDisconnectingApp] = useState<"spotify" | "workspace" | null>(null);
 
   const [chatModel, setChatModel] = useState(DEFAULT_CHAT_MODEL);
   const [sttModel, setSttModel] = useState(DEFAULT_STT_MODEL);
@@ -180,13 +171,11 @@ export function SettingsPanel({
 
 
   const [adminThreads, setAdminThreads] = useState<AdminThread[]>([]);
-  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminLoaded, setAdminLoaded] = useState(false);
   const [adminLoadNotice, setAdminLoadNotice] = useState<string | null>(null);
-  const [adminUsersError, setAdminUsersError] = useState<string | null>(null);
-  const [adminTab, setAdminTab] = useState<"users" | "threads" | "storage">("users");
+  const [adminTab, setAdminTab] = useState<"threads" | "storage">("threads");
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
   const [threadSteps, setThreadSteps] = useState<Record<string, AdminStep[]>>({});
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
@@ -231,12 +220,10 @@ export function SettingsPanel({
   const loadAdminData = useCallback(async () => {
     setAdminLoading(true);
     setAdminLoadNotice(null);
-    setAdminUsersError(null);
 
     try {
-      const [threadsResult, usersResult, statsResult] = await Promise.allSettled([
+      const [threadsResult, statsResult] = await Promise.allSettled([
         api.getAdminThreads(),
-        api.getAdminUsers(),
         api.getAdminStats(),
       ]);
 
@@ -247,14 +234,6 @@ export function SettingsPanel({
       } else {
         unavailableSections.push("threads");
         console.warn("Failed to load admin threads.", threadsResult.reason);
-      }
-
-      if (usersResult.status === "fulfilled") {
-        setAdminUsers(usersResult.value);
-      } else {
-        unavailableSections.push("users");
-        setAdminUsersError(getAsyncErrorMessage(usersResult.reason, "User accounts are temporarily unavailable."));
-        console.warn("Failed to load admin users.", usersResult.reason);
       }
 
       if (statsResult.status === "fulfilled") {
@@ -490,10 +469,8 @@ export function SettingsPanel({
 
         {activeTab === "apps" && (
           <ConnectorsTab
-            googleAuth={googleAuth}
             spotifyAuth={spotifyAuth}
             workspaceAuth={workspaceAuth}
-            loginWithGoogle={loginWithGoogle}
             loginWithSpotify={loginWithSpotify}
             loginWithWorkspace={loginWithWorkspace}
             handleDisconnectSpotify={handleDisconnectSpotify}
@@ -550,11 +527,9 @@ export function SettingsPanel({
         {activeTab === "admin" && isAdmin && (
           <AdminTab
             adminStats={adminStats}
-            adminUsers={adminUsers}
             adminThreads={adminThreads}
             adminLoading={adminLoading}
             adminLoadNotice={adminLoadNotice}
-            adminUsersError={adminUsersError}
             adminTab={adminTab}
             setAdminTab={setAdminTab}
             expandedThreadId={expandedThreadId}

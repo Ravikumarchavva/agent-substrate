@@ -23,13 +23,13 @@ type SessionState =
 // Auto-close the session after this many ms of inactivity (no speech detected).
 const IDLE_CLOSE_MS = 90_000;
 
-// Backend WS proxy URL — Next.js rewrites /api/audio/realtime-ws → FastAPI ws://.../audio/realtime
+// Backend WS proxy URL — Next.js rewrites /api/audio/realtime-ws → FastAPI ws://.../api/v1/audio/realtime
 // Falls back to using the env var WS URL directly (e.g. in Docker with SSE proxy disabled).
 const WS_PROXY_URL =
   typeof window !== "undefined"
     ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/chat/api/audio/realtime-ws`
     : (process.env.NEXT_PUBLIC_WS_URL
-        ? `${process.env.NEXT_PUBLIC_WS_URL}/audio/realtime`
+        ? `${process.env.NEXT_PUBLIC_WS_URL}/api/v1/audio/realtime`
         : "ws://127.0.0.1:8000/audio/realtime");
 
 export function RealtimeVoicePanel({ isOpen, onClose }: RealtimeVoicePanelProps) {

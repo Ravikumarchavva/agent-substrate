@@ -23,8 +23,7 @@ export async function GET(): Promise<NextResponse> {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const redirectUri =
     process.env.WORKSPACE_REDIRECT_URI ??
-    process.env.GOOGLE_REDIRECT_URI?.replace("/api/auth/google/callback", "/api/workspace/callback") ??
-    "http://127.0.0.1:3000/api/workspace/callback";
+    `${process.env.PUBLIC_URL ?? "http://127.0.0.1:3000"}/chat/api/workspace/callback`;
 
   if (!clientId) {
     return NextResponse.json(

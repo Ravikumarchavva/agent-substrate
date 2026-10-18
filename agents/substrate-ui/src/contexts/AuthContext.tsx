@@ -8,10 +8,9 @@ type AuthContextType = {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isLoading: boolean;
-  googleAuth: boolean;
   spotifyAuth: boolean;
   workspaceAuth: boolean;
-  loginWithGoogle: () => void;
+  login: (organization?: string) => void;
   loginWithSpotify: () => void;
   loginWithWorkspace: () => void;
   logout: () => Promise<void>;
@@ -22,7 +21,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface SessionResponse {
   authenticated: boolean;
-  user: { id: string; email: string; name: string | null; avatarUrl: string | null; isAdmin: boolean } | null;
+  user: { id: string; email: string; name: string | null; isAdmin: boolean; tenantId: string } | null;
 }
 
 async function fetchSession(): Promise<SessionResponse> {
@@ -37,7 +36,7 @@ async function fetchSession(): Promise<SessionResponse> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [googleAuth, setGoogleAuth] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
   const [spotifyAuth, setSpotifyAuth] = useState(false);
   const [workspaceAuth, setWorkspaceAuth] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,43 +51,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
 
       let nextUser: AuthUser | null = null;
-      let nextGoogleAuth = false;
+      let nextAuthenticated = false;
       let nextSpotifyAuth = false;
       let nextWorkspaceAuth = false;
 
       try {
         // The server-verified session is the only source of truth for who is
         // logged in — never trust a client-readable cookie for identity.
-        let sessionData = await fetchSession();
-
-        // No local session yet — check whether the platform
-        // (agent-substrate-platform) already has one. Same origin means its
-        // Auth.js session cookie is already on this request; /api/auth/platform
-        // asks the platform to confirm it and, if valid, creates the local
-        // DB-backed session, so re-checking /api/auth/session picks it up.
-        if (!sessionData.authenticated) {
-          const platformRes = await fetch("/chat/api/auth/platform", {
-            credentials: "include",
-          });
-          if (platformRes.ok) {
-            const platformData = (await platformRes.json()) as { authenticated?: boolean };
-            if (platformData.authenticated) {
-              sessionData = await fetchSession();
-            }
-          }
-        }
+        const sessionData = await fetchSession();
 
         if (sessionData.authenticated && sessionData.user) {
-          nextGoogleAuth = true;
+          nextAuthenticated = true;
           nextUser = {
             email: sessionData.user.email,
             name: sessionData.user.name ?? undefined,
-            picture: sessionData.user.avatarUrl ?? undefined,
             isAdmin: sessionData.user.isAdmin,
+            tenantId: sessionData.user.tenantId,
           };
         }
 
-        if (nextGoogleAuth) {
+        if (nextAuthenticated) {
           const [spotifyRes, workspaceRes] = await Promise.all([
             fetch("/chat/api/spotify/token", { credentials: "include" }),
             fetch("/chat/api/workspace/token", { credentials: "include" }),
@@ -112,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error("Auth check failed:", err);
       } finally {
         setUser(nextUser);
-        setGoogleAuth(nextGoogleAuth);
+        setAuthenticated(nextAuthenticated);
         setSpotifyAuth(nextSpotifyAuth);
         setWorkspaceAuth(nextWorkspaceAuth);
         setIsLoading(false);
@@ -125,38 +107,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return promise;
   }, []);
 
-  const loginWithGoogle = () => {
-    const width = 500;
-    const height = 700;
-    const left = window.screen.width / 2 - width / 2;
-    const top = window.screen.height / 2 - height / 2;
-
-    const popup = window.open(
-      "/chat/api/auth/google/login",
-      "google-auth",
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
-
-    // Listen for postMessage from callback page (faster than polling)
-    const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === "google_auth_success" || event.data?.type === "google_auth_error") {
-        window.removeEventListener("message", onMessage);
-        clearInterval(pollTimer);
-        popup?.close();
-        void checkAuth();
-      }
-    };
-    window.addEventListener("message", onMessage);
-
-    // Fallback: poll for popup close
-    const pollTimer = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(pollTimer);
-        window.removeEventListener("message", onMessage);
-        void checkAuth();
-      }
-    }, 500);
+  // Sign-in is a full-page trip to Keycloak (authorization code + PKCE, handled by the server) and back to where the user was.
+  // `organization` signs in to that project's organization; the tenant of every request follows it.
+  const login = (organization?: string) => {
+    const params = new URLSearchParams({ next: window.location.pathname + window.location.search });
+    if (organization) params.set("org", organization);
+    window.location.assign(`/chat/auth/login?${params.toString()}`);
   };
 
   const loginWithWorkspace = () => {
@@ -227,11 +183,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch("/chat/api/auth/google/logout", {
-        method: "POST",
-        credentials: "include",
-      });
-
       if (spotifyAuth) {
         await fetch("/chat/api/spotify/token", {
           method: "DELETE",
@@ -245,14 +196,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           credentials: "include",
         });
       }
-
-      setUser(null);
-      setGoogleAuth(false);
-      setSpotifyAuth(false);
-      setWorkspaceAuth(false);
     } catch (err) {
-      console.error("Logout failed:", err);
+      console.error("Disconnecting connectors failed:", err);
     }
+    // Ends the Keycloak single sign-on session too, so one sign-out covers every Substrate app.
+    window.location.assign("/chat/auth/logout");
   };
 
   useEffect(() => {
@@ -263,13 +211,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated: googleAuth,
+        isAuthenticated: authenticated,
         isAdmin: !!user?.isAdmin,
         isLoading,
-        googleAuth,
         spotifyAuth,
         workspaceAuth,
-        loginWithGoogle,
+        login,
         loginWithSpotify,
         loginWithWorkspace,
         logout,

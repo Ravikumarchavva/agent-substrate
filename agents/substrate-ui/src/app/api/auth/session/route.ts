@@ -1,28 +1,24 @@
 /**
  * GET /api/auth/session
  *
- * The single server-verified source of truth for "who is logged in" —
- * looks up the DB-backed session (src/lib/session.ts) rather than trusting
- * any client-readable cookie. AuthContext uses only this to decide
- * isAuthenticated/isAdmin/user; nothing else in the frontend should read
- * an auth cookie directly.
+ * The one server-verified answer to "who is signed in" for the browser: read from the encrypted session cookie
+ * (refreshed when needed). AuthContext uses only this; nothing in the browser reads an auth cookie.
  */
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { bff, userFromAccessToken, withAuthCookies } from "@/lib/session";
 
-export async function GET() {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ authenticated: false, user: null });
+export async function GET(req: Request) {
+  const result = await bff.getSession(req);
+  if (!result) {
+    const res = Response.json({ authenticated: false, user: null });
+    for (const cookie of bff.clearSession(req)) res.headers.append("Set-Cookie", cookie);
+    return res;
   }
-  return NextResponse.json({
-    authenticated: true,
-    user: {
-      id: session.id,
-      email: session.email,
-      name: session.name ?? null,
-      avatarUrl: session.avatarUrl ?? null,
-      isAdmin: session.isAdmin,
-    },
-  });
+  const user = userFromAccessToken(result.session.access_token, result.session.name);
+  return withAuthCookies(
+    Response.json({
+      authenticated: true,
+      user: { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin, tenantId: user.tenantId },
+    }),
+    { user, headers: {}, setCookies: result.setCookies },
+  );
 }

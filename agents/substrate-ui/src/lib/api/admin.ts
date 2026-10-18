@@ -4,7 +4,6 @@ import {
   AdminStorageSession,
   AdminStorageUser,
   AdminThread,
-  AdminUser,
   InstructionValidationResult,
 } from "@/types";
 import { API_BASE, appApiUrl, requestJsonFromUrl, requestVoidFromUrl } from "./_client";
@@ -24,10 +23,6 @@ export const adminApi = {
 
   async getAdminThreads(): Promise<AdminThread[]> {
     return requestJsonFromUrl<AdminThread[]>(appApiUrl("/admin/threads"));
-  },
-
-  async getAdminUsers(): Promise<AdminUser[]> {
-    return requestJsonFromUrl<AdminUser[]>(appApiUrl("/admin/users"));
   },
 
   async getAdminStats(): Promise<AdminStats> {
@@ -66,13 +61,6 @@ export const adminApi = {
   async deleteAdminThread(threadId: string): Promise<void> {
     await requestVoidFromUrl(appApiUrl(`/admin/threads/${threadId}`), {
       method: "DELETE",
-    });
-  },
-
-  async disconnectGoogle(): Promise<void> {
-    await requestVoidFromUrl("/chat/api/auth/google/logout", {
-      method: "POST",
-      credentials: "include",
     });
   },
 

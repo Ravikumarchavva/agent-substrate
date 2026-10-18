@@ -1,29 +1,16 @@
-import { requireUserAuthHeader } from "@/lib/engine-auth";
+import { BACKEND_API } from "@/lib/backend";
+import { authed } from "@/lib/session";
 import { streamingDispatcher } from "@/lib/streaming-dispatcher";
 
-export async function POST(req: Request) {
+export const POST = authed(async (req, auth) => {
   const body = await req.json();
-
-  const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
-  // Per-user identity from the DB-backed session (src/lib/session.ts) so the
-  // agent (and the files it creates) are scoped to the same user the
-  // /api/backend proxy serves files as — otherwise generated files 404 when
-  // opened. No session → 401, not a silent anonymous/service fallback.
-  const auth = await requireUserAuthHeader(req.headers.get("cookie"));
-  if (!auth) {
-    return new Response(JSON.stringify({ error: "Not authenticated" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...auth.headers,
   };
 
-  const res = await fetch(`${BACKEND_URL}/chat`, {
+  const res = await fetch(`${BACKEND_API}/chat`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -70,4 +57,4 @@ export async function POST(req: Request) {
       "X-Accel-Buffering": "no",
     },
   });
-}
+});

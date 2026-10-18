@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from loamz.agents.bootstrap.container import Container
-from loamz.agents.features import FEATURES
+from loamz.agents.features import FEATURES, Feature
 from loamz.agents.server import problems
 from loamz.identity import PrimaryIssuer, TokenVerifier
 
@@ -23,8 +23,13 @@ def _verifier(container: Container) -> TokenVerifier | None:
     )
 
 
-def create_app(container: Container, *, roles: set[str] | None = None) -> FastAPI:
-    """`roles` defaults to the settings' roles; `{"all"}` mounts every feature."""
+def create_app(
+    container: Container,
+    *,
+    roles: set[str] | None = None,
+    features: Sequence[Feature] = FEATURES,
+) -> FastAPI:
+    """`roles` defaults to the settings' roles; `{"all"}` mounts every feature. `features` is the catalog served."""
     wanted = roles or set(container.settings.roles)
 
     @asynccontextmanager
@@ -52,7 +57,7 @@ def create_app(container: Container, *, roles: set[str] | None = None) -> FastAP
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    for feature in FEATURES:
+    for feature in features:
         if "all" in wanted or feature.roles & wanted:
             app.include_router(feature.router())
     return app

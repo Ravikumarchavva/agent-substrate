@@ -22,6 +22,7 @@ from fastapi import FastAPI, Request
 from loamz.agents.bootstrap import Container, Settings
 from loamz.agents.bootstrap.http import caller as caller_dependency
 from loamz.agents.bootstrap.http import optional_caller as optional_dependency
+from loamz.agents.features import FEATURES
 from loamz.agents.kernel.caller import Caller
 from loamz.agents.server import create_app
 from loamz.data.storage.errors import UnauthenticatedError
@@ -78,11 +79,16 @@ async def serving(
     *,
     roles: set[str] | None = None,
     container: Container | None = None,
+    only: tuple[str, ...] | None = None,
     **sections: Any,
 ) -> AsyncIterator[Served]:
-    """Start the app (its lifespan included) with header-named callers."""
+    """Start the app (its lifespan included) with header-named callers.
+
+    `only` serves just the features whose name starts with one of the prefixes (`only=("workspace.",)`).
+    """
     container = container or Container(settings_for(folder, **sections))
-    app = create_app(container, roles=roles or {"all"})
+    served = FEATURES if only is None else tuple(f for f in FEATURES if f.name.startswith(only))
+    app = create_app(container, roles=roles or {"all"}, features=served)
     app.dependency_overrides[caller_dependency] = header_caller
     app.dependency_overrides[optional_dependency] = optional_header_caller
     async with app.router.lifespan_context(app):

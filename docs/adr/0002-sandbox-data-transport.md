@@ -54,4 +54,4 @@ per-run token is the file mounted beside the socket. Flight (and Flight SQL for 
 behind the same planner; nothing in the client's public API (`sd.sql`, `sd.stream`) would change.
 
 Trust between the machines is by fetched public keys (`jwks_uri`) rather than by shared files; see
-[AGENTS.md](../AGENTS.md).
+[AGENTS.md](../../data/substrate-data/docs/AGENTS.md).

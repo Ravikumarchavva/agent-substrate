@@ -1,0 +1,21 @@
+# Workspace-wide. Each package also has its own .gitignore.
+.venv/
+node_modules/
+.pnpm-store/
+.next/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.import_linter_cache/
+.hypothesis/
+.env
+.env.*
+!.env.example
+*.pem
+!**/tests/**/*.pem
+.workspace/
+.DS_Store
+
+# Agent worktrees (local only)
+.claude/worktrees/

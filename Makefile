@@ -1,0 +1,45 @@
+# Root entry points. Each package keeps its own Makefile for its own concerns; these run the common checks
+# across the workspace. Python: uv workspace (uv.lock). JavaScript: pnpm workspace (pnpm-lock.yaml).
+.PHONY: sync lint format test test-agents test-data test-services imports check js-install js-check clean-venv help
+
+PY_PACKAGES := agents/agent-substrate agents/substrate-cloud data/substrate-data data/substrate-data-client data/embedding-reranker data/inference-pool
+
+help:
+	@echo "make sync          install every Python package (uv) and the JS workspace (pnpm)"
+	@echo "make lint          ruff check + format --check over all Python packages"
+	@echo "make imports       import-linter contracts of the agent library"
+	@echo "make test-agents   agent-substrate + substrate-cloud (substrate-cloud needs Postgres 'agentdb')"
+	@echo "make test-data     substrate-data unit tests + client (integration: make -C data/substrate-data test)"
+	@echo "make test-services embedding-reranker + inference-pool"
+	@echo "make check         lint + imports + the tests that need no infrastructure"
+
+sync:
+	uv sync --all-packages --frozen
+	pnpm install --frozen-lockfile
+
+lint:
+	uv run ruff check $(PY_PACKAGES)
+	uv run ruff format --check $(PY_PACKAGES)
+
+format:
+	uv run ruff format $(PY_PACKAGES)
+
+imports:
+	cd agents/agent-substrate && uv run --package agent-substrate lint-imports
+
+test-agents:
+	cd agents/agent-substrate && uv run --package agent-substrate pytest tests -q
+	cd agents/substrate-cloud && OTEL_SDK_DISABLED=true uv run --package substrate-cloud pytest -q
+
+test-data:
+	cd data/substrate-data && SUBSTRATE_DATA_SKIP_INTEGRATION=1 uv run --package substrate-data pytest tests -q -m "not integration"
+
+test-services:
+	cd data/inference-pool && uv run --package inference-pool pytest -q
+	cd data/embedding-reranker && uv run --package embedding-reranker pytest -q
+
+js-check:
+	pnpm -r typecheck
+	pnpm -r test
+
+check: lint imports test-data test-services

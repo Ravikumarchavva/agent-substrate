@@ -88,7 +88,7 @@ See [examples/agent_data.py](examples/agent_data.py).
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) · [Attached compute](docs/COMPUTE.md) · [Security](docs/SECURITY.md) · [Agent access](docs/AGENTS.md) · [European controls](docs/COMPLIANCE.md) · [Operations](docs/OPERATIONS.md)
-- [Decision: table format](docs/decisions/0001-table-format.md) · [Decision: sandbox transport](docs/decisions/0002-sandbox-data-transport.md)
+- [Decision: table format](../../docs/adr/0001-table-format.md) · [Decision: sandbox transport](../../docs/adr/0002-sandbox-data-transport.md)
 - [OpenAPI contract](docs/openapi.json) (a test fails on any undeclared change)
 
 ## Testing

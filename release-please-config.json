@@ -30,7 +30,8 @@
     "data/substrate-data-client": {
       "release-type": "python",
       "package-name": "substrate-data-client",
-      "component": "substrate-data-client"
+      "component": "substrate-data-client",
+      "release-as": "0.2.0"
     },
     "data/substrate-data-web": {
       "release-type": "node",

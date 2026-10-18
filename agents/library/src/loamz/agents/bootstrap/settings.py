@@ -37,6 +37,47 @@ class OidcSettings(BaseModel):
     )
 
 
+class LlmSettings(BaseModel):
+    model: str = Field(
+        default="gpt-4o-mini",
+        description="Default chat model, `provider/model` or a bare name the provider is detected from.",
+    )
+    embedding_model: str = Field(default="text-embedding-3-small")
+    openai_api_key: str = Field(default="", description="Also used by OpenAI-compatible servers.")
+    openai_base_url: str = Field(
+        default="", description="An OpenAI-compatible endpoint (vLLM, Ollama…)."
+    )
+    anthropic_api_key: str = ""
+    gemini_api_key: str = ""
+    groq_api_key: str = ""
+    openrouter_api_key: str = ""
+    nvidia_api_key: str = ""
+
+    def api_keys(self) -> dict[str, str]:
+        """Provider name -> key, as `providers.llm.create_model_client(..., api_keys=…)` takes them."""
+        return {
+            "openai": self.openai_api_key,
+            "anthropic": self.anthropic_api_key,
+            "google": self.gemini_api_key,
+            "groq": self.groq_api_key,
+            "openrouter": self.openrouter_api_key,
+            "nvidia": self.nvidia_api_key,
+        }
+
+
+class RedisSettings(BaseModel):
+    url: str = Field(
+        default="", description="Redis for the event bus between roles; empty: an in-process bus."
+    )
+
+
+class TelemetrySettings(BaseModel):
+    capture_content: bool = Field(
+        default=False,
+        description="Put prompt, response and tool text on spans (telemetry is not erased with a tenant).",
+    )
+
+
 class HttpSettings(BaseModel):
     cors_origins: list[str] = Field(default_factory=list)
 
@@ -49,6 +90,9 @@ class Settings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     oidc: OidcSettings = Field(default_factory=OidcSettings)
     http: HttpSettings = Field(default_factory=HttpSettings)
+    llm: LlmSettings = Field(default_factory=LlmSettings)
+    redis: RedisSettings = Field(default_factory=RedisSettings)
+    telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
     roles: list[str] = Field(
         default_factory=lambda: ["all"],
         description="Which feature roles this process serves (`all`, or a subset: microservices mode).",

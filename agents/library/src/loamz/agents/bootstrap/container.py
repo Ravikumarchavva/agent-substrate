@@ -12,6 +12,10 @@ from functools import cached_property
 from typing import Any
 
 from loamz.agents.bootstrap.settings import Settings
+from loamz.agents.kernel.events import EventBus, InMemoryEventBus
+from loamz.agents.kernel.models import ChatModel
+from loamz.agents.kernel.telemetry import set_capture_content
+from loamz.agents.stores import AgentStore
 from loamz.data.storage.sql import Database, postgres, sqlite
 
 type Provider[T] = Callable[["Container"], T]
@@ -20,6 +24,7 @@ type Provider[T] = Callable[["Container"], T]
 class Container:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        set_capture_content(settings.telemetry.capture_content)
         self._built: dict[Callable[..., Any], Any] = {}
         self._closers: list[Callable[[], Awaitable[None]]] = []
 
@@ -46,9 +51,37 @@ class Container:
         self.on_close(database.aclose)
         return database
 
+    @cached_property
+    def agent_store(self) -> AgentStore:
+        """The agent's own state (threads and their headers, tasks, session state, graph, runs) in `database`."""
+        return AgentStore(self.database)
+
+    @cached_property
+    def event_bus(self) -> EventBus:
+        """Redis when `redis.url` is set (role-split deployments), otherwise one process's in-memory bus."""
+        if not self.settings.redis.url:
+            return InMemoryEventBus()
+        from loamz.agents.providers.redis.bus import RedisEventBus
+
+        bus = RedisEventBus(self.settings.redis.url)
+        self.on_close(bus.disconnect)
+        return bus
+
+    def chat_model(self, model: str | None = None) -> ChatModel:
+        """A client for `model` (the configured default when omitted), with the configured provider keys."""
+        from loamz.agents.providers.llm import create_model_client
+
+        llm = self.settings.llm
+        return create_model_client(
+            model or llm.model,
+            api_keys=llm.api_keys(),
+            openai_base_url=llm.openai_base_url or None,
+        )
+
     # ── lifecycle ───────────────────────────────────────────────────────────
     async def start(self) -> None:
         await self.database.start()
+        await self.event_bus.connect()
 
     async def aclose(self) -> None:
         while self._closers:

@@ -11,6 +11,7 @@ members = [
     "data/substrate-data-client",
     "data/embedding-reranker",
     "data/inference-pool",
+    "identity/substrate-identity",
 ]
 exclude = ["data/document-intelligence"]
 
@@ -25,3 +26,4 @@ torch = { index = "pytorch-cpu" }
 agent-substrate = { workspace = true }
 inference-pool = { workspace = true }
 substrate-data-client = { workspace = true }
+substrate-identity = { workspace = true }

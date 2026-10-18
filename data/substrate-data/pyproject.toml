@@ -19,6 +19,7 @@ dependencies = [
     "orjson>=3.10",
     "boto3>=1.40",
     "substrate-data-client",
+    "substrate-identity",
     "psycopg[binary,pool]>=3.2,<4",
 ]
 [project.optional-dependencies]

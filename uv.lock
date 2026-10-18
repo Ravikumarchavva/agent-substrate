@@ -15,6 +15,7 @@ members = [
     "substrate-cloud",
     "substrate-data",
     "substrate-data-client",
+    "substrate-identity",
 ]
 
 [[package]]
@@ -4875,6 +4876,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "sqlglot" },
     { name = "substrate-data-client" },
+    { name = "substrate-identity" },
     { name = "uvicorn" },
 ]
 
@@ -4907,6 +4909,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "sqlglot", specifier = ">=27,<29" },
     { name = "substrate-data-client", editable = "data/substrate-data-client" },
+    { name = "substrate-identity", editable = "identity/substrate-identity" },
     { name = "uvicorn", specifier = ">=0.34,<1" },
 ]
 provides-extras = ["sdk"]
@@ -4933,6 +4936,42 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "polars", specifier = ">=1.44.2,<2" },
     { name = "pyarrow", specifier = ">=22,<27" },
+]
+
+[[package]]
+name = "substrate-identity"
+version = "0.1.0"
+source = { editable = "identity/substrate-identity" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pyjwt", extra = ["crypto"] },
+]
+
+[package.optional-dependencies]
+fastapi = [
+    { name = "fastapi" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "fastapi" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.115,<1" },
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10" },
+]
+provides-extras = ["fastapi"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.11" },
 ]
 
 [[package]]

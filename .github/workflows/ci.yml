@@ -250,7 +250,7 @@ jobs:
           cache-dependency-glob: data/document-intelligence/uv.lock
           python-version: "3.13"
       - name: Install
-        run: uv sync --frozen
+        run: uv sync --frozen --extra test
       - name: Ruff check
         run: uvx ruff@0.15.15 check .
       - name: Ruff format

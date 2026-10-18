@@ -17,7 +17,7 @@ from document_intelligence import convert
 from document_intelligence.engines.native import NativeEngine
 from document_intelligence.routes import router
 
-FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 DOCUMENTS = FIXTURES / "documents"
 
 

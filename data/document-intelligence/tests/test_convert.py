@@ -9,7 +9,7 @@ import pytest
 
 from document_intelligence import convert
 
-DOCUMENTS = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "documents"
+DOCUMENTS = Path(__file__).resolve().parent / "fixtures" / "documents"
 
 
 def test_legacy_is_decided_from_the_bytes():

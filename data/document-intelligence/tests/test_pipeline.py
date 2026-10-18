@@ -17,7 +17,7 @@ from document_intelligence.engines.paddle_classic import (
 
 pytestmark = pytest.mark.heavy
 
-_CHART_FIXTURE = Path(__file__).parent.parent / "fixtures" / "chart_page.pdf"
+_CHART_FIXTURE = Path(__file__).parent / "fixtures" / "chart_page.pdf"
 
 
 class _FakeLayoutDetRes(dict):

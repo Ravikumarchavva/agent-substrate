@@ -1,0 +1,21 @@
+[project]
+name = "loamz"
+version = "0.1.0"
+description = "Loamz: a governed data platform and durable agents built on it. Install the parts you use."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = []
+
+[project.optional-dependencies]
+agents = ["loamz-agents"]
+data = ["loamz-data-client"]
+server = ["loamz-data-server", "loamz-agents[server,data]"]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# A meta distribution ships no code of its own.
+module-name = "loamz_meta"

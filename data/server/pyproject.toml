@@ -1,0 +1,24 @@
+[project]
+name = "loamz-data-server"
+version = "0.1.0"
+description = "Loamz Data: governed tables, SQL, files, documents, memory and databases for people and agents."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = ["loamz-data-storage[postgres]", "loamz-data-client", "loamz-identity[fastapi]"]
+
+[dependency-groups]
+dev = ["pytest>=9", "pytest-asyncio>=1.4", "pytest-xdist>=3.6", "pytest-timeout>=2.3"]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "loamz.data.server"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["-m", "not slow and not integration"]
+markers = ["slow: needs Docker or minutes of runtime", "integration: needs Docker services"]

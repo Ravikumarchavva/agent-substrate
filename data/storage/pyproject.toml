@@ -1,0 +1,28 @@
+[project]
+name = "loamz-data-storage"
+version = "0.1.0"
+description = "Loamz Data's embeddable engine: SQL on SQLite or Postgres, files, vectors, text search, memory and documents."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = ["pydantic>=2.12"]
+
+[project.optional-dependencies]
+postgres = ["asyncpg>=0.31.0"]
+pdf = ["pypdfium2>=4.30"]
+
+[dependency-groups]
+dev = ["pytest>=9", "pytest-asyncio>=1.4", "pytest-xdist>=3.6", "pytest-timeout>=2.3"]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "loamz.data.storage"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["-m", "not slow and not integration"]
+markers = ["slow: needs Docker or minutes of runtime", "integration: needs Docker services"]

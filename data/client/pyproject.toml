@@ -1,0 +1,27 @@
+[project]
+name = "loamz-data-client"
+version = "0.1.0"
+description = "Typed Python client for the Loamz Data API (sync and async)."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = ["httpx>=0.28,<1", "loamz-identity"]
+
+[project.optional-dependencies]
+arrow = ["pyarrow>=18"]
+
+[dependency-groups]
+dev = ["pytest>=9", "pytest-asyncio>=1.4", "pytest-xdist>=3.6", "pytest-timeout>=2.3"]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "loamz.data.client"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["-m", "not slow and not integration"]
+markers = ["slow: needs Docker or minutes of runtime", "integration: needs Docker services"]

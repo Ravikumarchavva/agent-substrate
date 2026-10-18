@@ -1,0 +1,318 @@
+# Loamz rewrite: parity checklist
+
+Generated from the pre-loamz tree (tag `pre-loamz`). Every line must map to a test or an e2e step in the new tree,
+or be marked deleted with a reason. Tick as ported: `[x]`, deleted: `[-] reason`.
+
+## Agents API (161 operations)
+
+- [ ] `GET    /api/v1/admin/stats` Admin Stats
+- [ ] `GET    /api/v1/admin/storage` List Storage Tenants
+- [ ] `GET    /api/v1/admin/storage/{tenant_id}/conversations` List Storage Conversations
+- [ ] `PUT    /api/v1/admin/storage/{tenant_id}/quota` Set Storage Quota
+- [ ] `GET    /api/v1/admin/threads` List All Threads
+- [ ] `DELETE /api/v1/admin/threads/{thread_id}` Delete Thread
+- [ ] `GET    /api/v1/admin/threads/{thread_id}/steps` Get Thread Steps
+- [ ] `GET    /api/v1/agents` List My Agents
+- [ ] `POST   /api/v1/agents` Create Agent
+- [ ] `GET    /api/v1/agents/tools` Available Tools
+- [ ] `DELETE /api/v1/agents/{agent_id}` Delete Agent
+- [ ] `GET    /api/v1/agents/{agent_id}` Get Agent
+- [ ] `PATCH  /api/v1/agents/{agent_id}` Update Agent
+- [ ] `DELETE /api/v1/agents/{agent_id}/avatar` Clear Avatar
+- [ ] `PUT    /api/v1/agents/{agent_id}/avatar` Set Avatar
+- [ ] `GET    /api/v1/agents/{agent_id}/contacts` Get Contacts
+- [ ] `PUT    /api/v1/agents/{agent_id}/contacts` Put Contacts
+- [ ] `DELETE /api/v1/agents/{agent_id}/pin` Unpin Agent
+- [ ] `PUT    /api/v1/agents/{agent_id}/pin` Pin Agent
+- [ ] `POST   /api/v1/agents/{agent_id}/thread` Open Agent Thread
+- [ ] `GET    /api/v1/agents/{agent_id}/view/chats` View Chats
+- [ ] `GET    /api/v1/agents/{agent_id}/view/chats/{key}/messages` View Messages
+- [ ] `GET    /api/v1/approvals` List Approvals
+- [ ] `GET    /api/v1/artifacts` List Artifacts
+- [ ] `POST   /api/v1/artifacts` Create Artifact
+- [ ] `DELETE /api/v1/artifacts/{slug}` Delete Artifact
+- [ ] `GET    /api/v1/artifacts/{slug}` Get Artifact
+- [ ] `PATCH  /api/v1/artifacts/{slug}` Update Artifact
+- [ ] `POST   /api/v1/artifacts/{slug}/promote` Promote Artifact
+- [ ] `GET    /api/v1/audio/realtime-token` Get Realtime Token
+- [ ] `POST   /api/v1/audio/transcribe` Transcribe Audio
+- [ ] `POST   /api/v1/audio/tts` Text To Speech
+- [ ] `POST   /api/v1/auth/workspace/set-token` Set Workspace Token
+- [ ] `DELETE /api/v1/auth/workspace/token` Clear Workspace Token
+- [ ] `GET    /api/v1/auth/workspace/token` Get Workspace Token
+- [ ] `POST   /api/v1/chat` Chat
+- [ ] `POST   /api/v1/chat/respond/{request_id}` Respond To Hitl
+- [ ] `POST   /api/v1/chat/{thread_id}/cancel` Cancel Chat
+- [ ] `GET    /api/v1/entitlements` My Entitlements
+- [ ] `POST   /api/v1/feed` Open Feed
+- [ ] `POST   /api/v1/feedbacks` Submit Feedback
+- [ ] `GET    /api/v1/files/documents` List Thread Documents
+- [ ] `GET    /api/v1/files/object` Serve Object
+- [ ] `GET    /api/v1/files/quota/status` Get Doc Quota Status
+- [ ] `POST   /api/v1/files/upload` Upload File
+- [ ] `POST   /api/v1/files/uploads` Start Direct Upload
+- [ ] `POST   /api/v1/files/uploads/{file_id}/complete` Complete Direct Upload
+- [ ] `DELETE /api/v1/files/{file_id}` Delete File
+- [ ] `GET    /api/v1/files/{file_id}/document` Get File Document
+- [ ] `POST   /api/v1/files/{file_id}/document/describe` Describe File Document
+- [ ] `GET    /api/v1/files/{file_id}/download` Download File
+- [ ] `GET    /api/v1/files/{file_id}/status` Get File Status
+- [ ] `GET    /api/v1/files/{file_id}/url` Get File Url
+- [ ] `GET    /api/v1/groups` List My Groups
+- [ ] `POST   /api/v1/groups` Create Group
+- [ ] `DELETE /api/v1/groups/{group_id}` Delete Group
+- [ ] `GET    /api/v1/groups/{group_id}` Get Group
+- [ ] `PATCH  /api/v1/groups/{group_id}` Rename Group
+- [ ] `DELETE /api/v1/groups/{group_id}/avatar` Clear Group Avatar
+- [ ] `PUT    /api/v1/groups/{group_id}/avatar` Set Group Avatar
+- [ ] `GET    /api/v1/groups/{group_id}/files` List Group Files
+- [ ] `POST   /api/v1/groups/{group_id}/files` Upload Group File
+- [ ] `POST   /api/v1/groups/{group_id}/members` Add Member
+- [ ] `DELETE /api/v1/groups/{group_id}/members/{agent_id}` Remove Member
+- [ ] `PATCH  /api/v1/groups/{group_id}/members/{agent_id}` Set Member Mode
+- [ ] `GET    /api/v1/groups/{group_id}/messages` Read Messages
+- [ ] `POST   /api/v1/groups/{group_id}/messages` Send Message
+- [ ] `DELETE /api/v1/groups/{group_id}/messages/{seq}` Delete Message
+- [ ] `PATCH  /api/v1/groups/{group_id}/messages/{seq}` Edit Message
+- [ ] `PUT    /api/v1/groups/{group_id}/messages/{seq}/reaction` React To Message
+- [ ] `DELETE /api/v1/groups/{group_id}/pin` Unpin Group
+- [ ] `PUT    /api/v1/groups/{group_id}/pin` Pin Group
+- [ ] `POST   /api/v1/groups/{group_id}/read` Mark Read
+- [ ] `GET    /api/v1/hitl/status/{thread_id}` Hitl Status
+- [ ] `DELETE /api/v1/internal/connector/{connector_type}/token` Delete Connector Token
+- [ ] `POST   /api/v1/internal/connector/{connector_type}/token` Push Connector Token
+- [ ] `POST   /api/v1/internal/gdpr/erase-tenant` Erase Tenant Data
+- [ ] `POST   /api/v1/internal/gdpr/erase-user` Erase User Data
+- [ ] `POST   /api/v1/internal/knowledge/{knowledge_base_id}/documents` Upload Document
+- [ ] `GET    /api/v1/mcp-apps/manifest` Get Manifest
+- [ ] `GET    /api/v1/me/export` Export My Data
+- [ ] `GET    /api/v1/me/memories` List Memories
+- [ ] `POST   /api/v1/me/memories` Add Memory
+- [ ] `DELETE /api/v1/me/memories/{memory_id}` Delete Memory
+- [ ] `PATCH  /api/v1/me/memories/{memory_id}` Update Memory
+- [ ] `GET    /api/v1/me/preferences` Get Preferences
+- [ ] `PUT    /api/v1/me/preferences` Put Preferences
+- [ ] `GET    /api/v1/me/usage` Get Usage
+- [ ] `GET    /api/v1/notifications` List Notifications
+- [ ] `POST   /api/v1/notifications/read-all` Mark All Read
+- [ ] `POST   /api/v1/notifications/{notification_id}/read` Mark Read
+- [ ] `GET    /api/v1/pipelines/` List Pipelines
+- [ ] `POST   /api/v1/pipelines/` Save Pipeline
+- [ ] `DELETE /api/v1/pipelines/{name}` Delete Pipeline
+- [ ] `GET    /api/v1/pipelines/{name}` Get Pipeline
+- [ ] `POST   /api/v1/pipelines/{name}/run` Run Pipeline
+- [ ] `POST   /api/v1/pipelines/{name}/validate` Validate Pipeline
+- [ ] `GET    /api/v1/rag/collections` List Collections
+- [ ] `DELETE /api/v1/rag/collections/{name}` Delete Collection
+- [ ] `POST   /api/v1/rag/ingest` Ingest
+- [ ] `POST   /api/v1/rag/query` Query
+- [ ] `GET    /api/v1/rate-limit/status` Rate Limit Status
+- [ ] `GET    /api/v1/scheduled` List Scheduled Tasks
+- [ ] `POST   /api/v1/scheduled` Create Scheduled Task Endpoint
+- [ ] `POST   /api/v1/scheduled/parse` Parse Schedule Endpoint
+- [ ] `DELETE /api/v1/scheduled/{task_id}` Delete Scheduled Task Endpoint
+- [ ] `GET    /api/v1/scheduled/{task_id}` Get Scheduled Task
+- [ ] `PATCH  /api/v1/scheduled/{task_id}` Update Scheduled Task Endpoint
+- [ ] `POST   /api/v1/scheduled/{task_id}/feedback` Add Scheduled Task Feedback
+- [ ] `POST   /api/v1/scheduled/{task_id}/run` Trigger Scheduled Task Now
+- [ ] `GET    /api/v1/scheduled/{task_id}/runs` List Scheduled Task Runs
+- [ ] `GET    /api/v1/shared/{token}` Get Shared Conversation
+- [ ] `GET    /api/v1/stream/{thread_id}` Stream Thread
+- [ ] `GET    /api/v1/tasks/{conversation_id}` Get Tasks
+- [ ] `POST   /api/v1/tasks/{task_list_id}/tasks` Add Tasks
+- [ ] `DELETE /api/v1/tasks/{task_list_id}/{task_id}` Delete Task
+- [ ] `PATCH  /api/v1/tasks/{task_list_id}/{task_id}` Update Task
+- [ ] `POST   /api/v1/tasks/{task_list_id}/{task_id}/retry` Force Retry Task
+- [ ] `PUT    /api/v1/tenants/{tenant_id}/entitlements` Put Entitlements
+- [ ] `GET    /api/v1/threads` List Threads Endpoint
+- [ ] `POST   /api/v1/threads` Create Thread Endpoint
+- [ ] `GET    /api/v1/threads/search` Search Threads Endpoint
+- [ ] `DELETE /api/v1/threads/{thread_id}` Delete Thread Endpoint
+- [ ] `GET    /api/v1/threads/{thread_id}` Get Thread Endpoint
+- [ ] `PATCH  /api/v1/threads/{thread_id}` Update Thread Endpoint
+- [ ] `GET    /api/v1/threads/{thread_id}/branches` List Branches Endpoint
+- [ ] `POST   /api/v1/threads/{thread_id}/branches/fork` Fork Branch Endpoint
+- [ ] `DELETE /api/v1/threads/{thread_id}/branches/{branch_id}` Delete Branch Endpoint
+- [ ] `GET    /api/v1/threads/{thread_id}/branches/{branch_id}` Get Branch Endpoint
+- [ ] `PATCH  /api/v1/threads/{thread_id}/branches/{branch_id}` Rename Branch Endpoint
+- [ ] `GET    /api/v1/threads/{thread_id}/branches/{branch_id}/checkpoints` List Checkpoints Endpoint
+- [ ] `POST   /api/v1/threads/{thread_id}/branches/{branch_id}/checkpoints` Create Checkpoint Endpoint
+- [ ] `GET    /api/v1/threads/{thread_id}/branches/{branch_id}/messages` Get Branch Messages Endpoint
+- [ ] `GET    /api/v1/threads/{thread_id}/export` Export Thread Endpoint
+- [ ] `GET    /api/v1/threads/{thread_id}/feedback` Thread Feedback
+- [ ] `POST   /api/v1/threads/{thread_id}/mcp-context` Update Mcp Context
+- [ ] `GET    /api/v1/threads/{thread_id}/messages` Get Thread Messages
+- [ ] `GET    /api/v1/threads/{thread_id}/runs` Get Thread Runs
+- [ ] `DELETE /api/v1/threads/{thread_id}/share` Delete Share Endpoint
+- [ ] `GET    /api/v1/threads/{thread_id}/share` Get Share Endpoint
+- [ ] `POST   /api/v1/threads/{thread_id}/share` Create Share Endpoint
+- [ ] `GET    /api/v1/triggers/conditions` List Conditions
+- [ ] `POST   /api/v1/triggers/conditions` Create Condition
+- [ ] `DELETE /api/v1/triggers/conditions/{name}` Delete Condition
+- [ ] `GET    /api/v1/triggers/cron` List Cron Triggers
+- [ ] `POST   /api/v1/triggers/cron` Create Cron Trigger
+- [ ] `DELETE /api/v1/triggers/cron/{name}` Delete Cron Trigger
+- [ ] `GET    /api/v1/triggers/webhooks` List Webhooks
+- [ ] `POST   /api/v1/triggers/webhooks` Create Webhook
+- [ ] `DELETE /api/v1/triggers/webhooks/{path}` Delete Webhook
+- [ ] `POST   /api/v1/triggers/webhooks/{path}/incoming` Handle Webhook
+- [ ] `GET    /api/v1/ui/{resource_name}` Serve Ui Resource
+- [ ] `GET    /api/v1/workspace/file` Serve File
+- [ ] `PUT    /api/v1/workspace/file` Save File
+- [ ] `DELETE /api/v1/workspace/files` Delete File
+- [ ] `GET    /api/v1/workspace/files` List Files
+- [ ] `GET    /api/v1/workspace/usage` Get Usage
+- [ ] `GET    /api/v1/workspace/versions` Get Versions
+- [ ] `POST   /api/v1/workspace/versions/restore` Restore Version
+- [ ] `GET    /health` Health
+- [ ] `GET    /health/ready` Ready
+
+## Data API (113 operations)
+
+- [ ] `GET    /api/v1/audit-events` Audit Events
+- [ ] `GET    /api/v1/audit-events:export` Export Audit Events
+- [ ] `GET    /api/v1/audit-events:verify` Verify Audit Events
+- [ ] `GET    /api/v1/catalogs` List Catalogs
+- [ ] `POST   /api/v1/catalogs` Create Catalog
+- [ ] `DELETE /api/v1/catalogs/{catalog}` Delete Catalog
+- [ ] `GET    /api/v1/catalogs/{catalog}` Get Catalog
+- [ ] `PATCH  /api/v1/catalogs/{catalog}` Update Catalog
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas` List Schemas
+- [ ] `POST   /api/v1/catalogs/{catalog}/schemas` Create Schema
+- [ ] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}` Delete Schema
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}` Get Schema
+- [ ] `PATCH  /api/v1/catalogs/{catalog}/schemas/{schema}` Update Schema
+- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/materialized-views` Create Materialized View
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables` List Tables
+- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables` Create Table
+- [ ] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}` Delete Table
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}` Get Table
+- [ ] `PATCH  /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}` Update Table
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/maintenance-runs` List Runs
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/maintenance-runs/{run_id}` Get Run
+- [ ] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/policy` Delete Policy
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/policy` Get Policy
+- [ ] `PUT    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/policy` Put Policy
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/preview` Preview
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/profile` Profile
+- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}:expire` Expire
+- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}:optimize` Optimize
+- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}:refresh` Refresh Materialized View
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/views` List Views
+- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/views` Create View
+- [ ] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/views/{view}` Delete View
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/views/{view}` Get View
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/views/{view}/preview` Preview View
+- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/volumes/{name}/access` Object Access
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/volumes/{name}/files` Files
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}` Listing
+- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}` Create
+- [ ] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}/{name}` Unregister
+- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}/{name}` Get Asset
+- [ ] `GET    /api/v1/collections` List Collections
+- [ ] `DELETE /api/v1/collections/{cid}` Delete Collection
+- [ ] `GET    /api/v1/collections/{cid}/documents` List Documents
+- [ ] `POST   /api/v1/collections/{cid}/documents` Add Document
+- [ ] `DELETE /api/v1/collections/{cid}/documents/{document}` Delete Document
+- [ ] `GET    /api/v1/collections/{cid}/documents/{document}` Get Document
+- [ ] `GET    /api/v1/collections/{cid}/documents/{document}/brief` Brief
+- [ ] `GET    /api/v1/collections/{cid}/documents/{document}/enrichment` Enrichment State
+- [ ] `POST   /api/v1/collections/{cid}/documents/{document}/enrichment:annotate` Annotate
+- [ ] `POST   /api/v1/collections/{cid}/documents/{document}/enrichment:claim` Claim
+- [ ] `POST   /api/v1/collections/{cid}/documents/{document}/enrichment:fail` Fail
+- [ ] `GET    /api/v1/collections/{cid}/documents/{document}/outline` Outline
+- [ ] `GET    /api/v1/collections/{cid}/documents/{document}/read` Read Document
+- [ ] `GET    /api/v1/collections/{cid}/documents/{document}/sections/{section}` Read Section
+- [ ] `POST   /api/v1/collections/{cid}/documents:embed-missing` Embed Missing
+- [ ] `POST   /api/v1/collections/{cid}/documents:reindex` Reindex
+- [ ] `POST   /api/v1/collections/{cid}/enrichment:pending` Pending
+- [ ] `GET    /api/v1/collections/{cid}/images` Images
+- [ ] `GET    /api/v1/collections/{cid}/needs-reorganising` Needs Reorganising
+- [ ] `GET    /api/v1/collections/{cid}/topic-tree` Topic Tree
+- [ ] `GET    /api/v1/collections/{cid}/topics` Browse
+- [ ] `PUT    /api/v1/collections/{cid}/topics` Set Topics
+- [ ] `POST   /api/v1/collections/{cid}:search` Search
+- [ ] `POST   /api/v1/collections:ensure` Ensure Collection
+- [ ] `GET    /api/v1/compute/resources` Resources
+- [ ] `POST   /api/v1/compute/resources` Attach
+- [ ] `PUT    /api/v1/compute/resources/{resource_id}` Update Resource
+- [ ] `GET    /api/v1/compute/resources/{resource_id}/events` Resource Events
+- [ ] `POST   /api/v1/compute/resources/{resource_id}:{action}` Resource Action
+- [ ] `POST   /api/v1/enrichment:pending` Pending All
+- [ ] `POST   /api/v1/erasure-requests` Erase
+- [ ] `POST   /api/v1/exports` Export
+- [ ] `GET    /api/v1/grants/{securable_type}/{full_name}` Get Grants
+- [ ] `PATCH  /api/v1/grants/{securable_type}/{full_name}` Update Grants
+- [ ] `GET    /api/v1/imports` List Imports
+- [ ] `POST   /api/v1/imports` Create Import
+- [ ] `GET    /api/v1/imports/{import_id}` Get Import
+- [ ] `POST   /api/v1/imports/{import_id}:complete` Complete Import
+- [ ] `GET    /api/v1/jobs` Jobs
+- [ ] `GET    /api/v1/jobs/{job_id}` Job
+- [ ] `POST   /api/v1/jobs/{job_id}:cancel` Cancel Job
+- [ ] `GET    /api/v1/me` Me
+- [ ] `POST   /api/v1/memory/records:delete` Delete
+- [ ] `POST   /api/v1/memory/records:erase` Erase
+- [ ] `POST   /api/v1/memory/records:get` Get
+- [ ] `POST   /api/v1/memory/records:query` Query
+- [ ] `POST   /api/v1/memory/records:save` Save
+- [ ] `POST   /api/v1/memory/records:touch` Touch
+- [ ] `GET    /api/v1/overview` Overview
+- [ ] `GET    /api/v1/pipelines` List Pipelines
+- [ ] `POST   /api/v1/pipelines` Create Pipeline
+- [ ] `POST   /api/v1/pipelines/{pipeline_id}:run` Run Pipeline
+- [ ] `GET    /api/v1/search` Search
+- [ ] `GET    /api/v1/statements` List Statements
+- [ ] `POST   /api/v1/statements` Execute
+- [ ] `GET    /api/v1/statements/{statement_id}` Get Statement
+- [ ] `POST   /api/v1/statements/{statement_id}:cancel` Cancel
+- [ ] `POST   /api/v1/tenants` Ensure Tenant
+- [ ] `POST   /api/v1/upload-sessions` Create Session
+- [ ] `POST   /api/v1/upload-sessions/{session_id}:promote` Promote Session
+- [ ] `GET    /api/v1/volumes/{volume}/files` List Files
+- [ ] `DELETE /api/v1/volumes/{volume}/files/{path}` Delete File
+- [ ] `GET    /api/v1/volumes/{volume}/files/{path}` File Metadata
+- [ ] `GET    /api/v1/volumes/{volume}/files/{path}/versions` List Versions
+- [ ] `GET    /api/v1/volumes/{volume}/files/{path}:download-url` Download Url
+- [ ] `POST   /api/v1/volumes/{volume}/files/{path}:restore` Restore File
+- [ ] `POST   /api/v1/volumes/{volume}/files:complete-upload` Complete Upload
+- [ ] `POST   /api/v1/volumes/{volume}/files:copy-prefix` Copy Prefix
+- [ ] `POST   /api/v1/volumes/{volume}/files:delete-prefix` Delete Prefix
+- [ ] `POST   /api/v1/volumes/{volume}/files:initiate-upload` Initiate Upload
+- [ ] `POST   /api/v1/volumes/{volume}/files:sign` Sign
+- [ ] `PUT    /api/v1/volumes/{volume}/quotas` Set Quota
+- [ ] `GET    /api/v1/volumes/{volume}/usage` Usage
+
+## Library public API (agent-substrate)
+
+- [ ] **substrate.types**: `Actor`, `AgentCrashError`, `AgentProgress`, `AgentStep`, `AuthError`, `BlockValidationError`, `BranchAlreadyExistsError`, `BranchHeadConflictError`, `BranchId`, `BranchNotFoundError`, `BudgetExhaustedError`, `CancellationError`, `CancellationTokenProtocol`, `ChatMessage`, `CompletionEvent`, `ConcurrentAppendError`, `ContentBlock`, `ContentBlockAdapter`, `ContentFilterError`, `ContextLengthError`, `ControlSignal`, `DAGIntegrityError`, `DataBlock`, `ErrorBlock`, `ErrorInfo`, `ExecutionBudget`, `HistoryRetention`, `JsonObject`, `KernelError`, `KernelModel`, `LeaseLostError`, `MediaBlock`, `MessageId`, `MiddlewareTermination`, `NonDeterminismError`, `ObjectNotFoundError`, `OrphanedEffectError`, `PermanentError`, `PolicyTermination`, `Priority`, `RateLimitedError`, `ReasoningBlock`, `ReasoningDelta`, `Role`, `RunId`, `RunLogEntry`, `RunLogKind`, `RunMeta`, `RunScope`, `RunStatus`, `Scope`, `ServiceUnavailableError`, `SnapshotConflictError`, `SpawnBudget`, `StreamDone`, `Supervision`, `SuspendInterrupt`, `TenantId`, `TextBlock`, `TextDelta`, `ThreadBusyError`, `ThreadId`, `ToolResultBlock`, `ToolUseBlock`, `Topic`, `TraceContext`, `TransientError`, `UnknownBlock`, `UnsupportedContentError`, `Usage`, `UserId`, `VectorSpaceError`, `Wakeup`, `content_blocks_to_str`, `new_id`, `new_run_id`, `parse_content_block`, `scope_of`
+- [ ] **substrate.telemetry**: `Instruments`, `SpanHandle`, `capture_content`, `current_trace_context`, `instruments`, `span`
+- [ ] **substrate.tools**: `AnyTool`, `ApprovalDecision`, `ApprovalHandler`, `ApprovalRequest`, `ApprovalResult`, `AutoApprove`, `ChainCallRecord`, `ChainFile`, `ChainPolicy`, `ChainRunResult`, `DurableApproval`, `FunctionTool`, `HostedTool`, `InvocationResult`, `PayloadBase`, `ProviderDefinedTool`, `Skill`, `Tool`, `ToolCallRequest`, `ToolExecutionResult`, `ToolRegistry`, `ToolRisk`, `ToolType`, `ToolUI`, `Toolbox`, `approval_signal`, `is_concurrency_safe`, `is_hosted_tool`, `is_provider_defined_tool`, `tool`
+- [ ] **substrate.models**: `ChatModel`, `EmbeddingModel`, `EmbeddingResult`, `FinishReason`, `GenerationOptions`, `LLMResponse`, `MODEL_REGISTRY`, `Modality`, `ModelCapabilities`, `ModelProfile`, `ReasoningEffort`, `Reranker`, `estimate_cost`, `get_model_profile`, `list_models`
+- [ ] **substrate.stores**: `BlobStore`, `Branch`, `ContextMemoryInjection`, `CypherCapable`, `Database`, `Document`, `Entity`, `EntityFinder`, `Erased`, `ExtractionMethod`, `FileStore`, `GraphStore`, `HistoryCheckpoint`, `MemoryCategory`, `MemoryMatch`, `MemoryNamespace`, `MemoryProvenance`, `MemoryQuery`, `MemoryRecord`, `MemoryStatus`, `MemoryStore`, `MessageNode`, `Relationship`, `SearchResult`, `SearchableVectorStore`, `ShortTermMemory`, `Store`, `StoreVersionError`, `SubGraph`, `Task`, `TaskList`, `TaskStatus`, `TaskStore`, `Tenant`, `TenantWide`, `ThreadStore`, `Tx`, `VectorStore`, `WorkspacePathError`, `WorkspaceQuotaExceededError`, `bind_graph`, `bind_tasks`, `bind_threads`, `bind_vector`, `connect`, `fence_objects`, `migrate`
+- [ ] **substrate.documents**: `Added`, `Bundle`, `Described`, `DocumentBrief`, `DocumentError`, `DocumentExtractor`, `DocumentInfo`, `DocumentLibrary`, `DocumentsTool`, `Enriched`, `Enricher`, `EnrichmentState`, `EnrichmentUsage`, `ExtractedImage`, `ExtractedImageLabel`, `ExtractedPage`, `ExtractionResult`, `FiledDocument`, `FirstSentenceEnricher`, `Hit`, `Hits`, `LLMEnricher`, `LLMOrganiser`, `Library`, `Listing`, `Ocr`, `OcrResult`, `Organised`, `Organiser`, `Outline`, `PageMethod`, `Passage`, `Picture`, `ReadLimits`, `Reader`, `Reorganised`, `SectionBrief`, `SectionInfo`, `Strategy`, `Topic`
+- [ ] **substrate.workspace**: `BlobCAS`, `ContentRef`, `WorkspaceFileEntry`, `WorkspaceManifest`, `WorkspaceScope`, `WorkspaceSnapshot`, `WorkspaceStore`, `Workspaces`, `checkout_branch`, `commit_turn`, `delete_branch_workspace`, `fork_branch`, `resolve_workspace_snapshot_id`, `workspace_scope`
+- [ ] **substrate.safety**: `ImageSafetyClassifier`, `NormalizedText`, `SafetyVerdict`, `Severity`, `TextSafetyClassifier`, `max_severity`, `normalize`
+- [ ] **substrate.context**: `AgentContext`, `AncestryCheckpointResolver`, `CompactionContext`, `CompactionCoordinator`, `CompactionPhase`, `CompactionPipeline`, `CompactionResult`, `CompactionStrategy`, `ContextBuilder`, `ContextConfig`, `ContextWindow`, `DefaultCompactionCoordinator`, `DefaultContextBuilder`, `DefaultHistoryResolver`, `SelectiveToolCallCompactionStrategy`, `SlidingWindowCompaction`, `SummarizationCompaction`, `ThreadStore`, `ThresholdCheckpointStrategy`, `TokenBudgetComposedStrategy`, `ToolResultCompactionStrategy`, `TruncationStrategy`, `build_token_budget_pipeline`, `project_messages`
+- [ ] **substrate.middleware**: `AgentRunResult`, `AuditLoggerMiddleware`, `CacheMiddleware`, `ContentFilterMiddleware`, `ContentTruncatorMiddleware`, `FileValidatorMiddleware`, `HistoryTruncatorMiddleware`, `LLMJudgeMiddleware`, `MaxTokenMiddleware`, `Middleware`, `MiddlewareContext`, `MiddlewarePipeline`, `MiddlewareStage`, `MultimodalSafetyMiddleware`, `PIIDetectionMiddleware`, `PromptInjectionMiddleware`, `RateLimiterMiddleware`, `RetryMiddleware`, `SchemaValidatorMiddleware`, `ToolCallRecord`, `ToolCallValidationMiddleware`
+- [ ] **substrate.runtime**: `ActorFactory`, `ActorResolver`, `Agent`, `AgentRunContext`, `AppendResult`, `AskOutcome`, `Cancel`, `CancellationToken`, `ChannelChange`, `ChannelEntry`, `ChannelHead`, `ChannelObserver`, `ChannelStore`, `ChatPayload`, `Commit`, `CommitResult`, `Complete`, `DataPayload`, `DeadLetterEntry`, `DeadLetterReason`, `DeliverResult`, `Delivery`, `EVERYONE`, `Effect`, `EffectResult`, `EntryKind`, `Fail`, `HeartbeatResult`, `Journal`, `Lease`, `Member`, `Message`, `Mode`, `Nack`, `NewEntry`, `ParticipantKind`, `Payload`, `PendingApproval`, `Retry`, `RunContext`, `RunHandle`, `RunOutcome`, `RunRecord`, `RunResult`, `RunRetryPolicy`, `RunSpec`, `RunStatusSummary`, `Runtime`, `RuntimeStore`, `SPOKEN`, `SignalSpec`, `SpawnSpec`, `Spend`, `StoreStats`, `Subscription`, `Suspend`, `WakeReason`, `Worker`, `mentions_in`
+- [ ] **substrate.agents**: `BaseAgent`, `ChannelMemberAgent`, `ChannelMemberConfig`, `ConditionalFlow`, `OrchestratorAgent`, `PASS`, `ParallelFlow`, `ReActAgent`, `SequentialFlow`, `SpawnTracker`, `SubAgentConfig`, `UserProxyAgent`
+
+## CLI commands
+
+- [ ] `substrate chat`
+- [ ] `substrate serve module:attr`
+- [ ] `substrate-cloud up` / serve
+- [ ] `substrate-data serve|controller|worker --role|attach`
+
+## End-to-end flows (deploy/compose/e2e.py)
+
+- [ ] create organization
+- [ ] create user
+- [ ] add member
+- [ ] cell-admin token
+- [ ] provision tenant
+- [ ] agent: list threads
+- [ ] chat: start a run
+- [ ] chat: the answer streams back
+- [ ] chat: it read the file

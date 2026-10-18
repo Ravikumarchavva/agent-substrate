@@ -6,9 +6,9 @@ import subprocess
 
 import pytest
 from substrate.testing.conformance.document_library import prose
+from test_documents import extraction
 
 from conftest import WordEmbedder, WordReranker, serve_documents, start_postgres
-from test_documents import extraction
 
 pytestmark = pytest.mark.slow
 
@@ -42,13 +42,27 @@ def test_documents_search_by_words_and_meaning_and_erase_on_postgres(pg_docs):
         assert found["note"] is None and "refund" in found["hits"][0]["snippet"].lower()
         assert alice.documents.reindex(cid) == 1
         assert alice.documents.search(cid, "shipping committee")["hits"]
-    with psycopg.connect(url) as db:  # the derived index lives in its own schema, with pgvector columns
-        tables = {r[0] for r in db.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='retrieval'")}
-        assert {"library_documents", "library_sections", "vector_docs", "data_collections"} <= tables
+    with psycopg.connect(
+        url
+    ) as db:  # the derived index lives in its own schema, with pgvector columns
+        tables = {
+            r[0]
+            for r in db.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='retrieval'"
+            )
+        }
+        assert {
+            "library_documents",
+            "library_sections",
+            "vector_docs",
+            "data_collections",
+        } <= tables
         assert db.execute("SELECT count(*) FROM retrieval.vector_docs").fetchone()[0] > 0
     with service.admin("pg") as admin:
         receipt = admin.erasure.request("alice", tenant_id="pg")
-        assert receipt["removed"]["libraries"]["documents"] == 1 and receipt["removed"]["vectors"] > 0
+        assert (
+            receipt["removed"]["libraries"]["documents"] == 1 and receipt["removed"]["vectors"] > 0
+        )
     with psycopg.connect(url) as db:
         assert db.execute("SELECT count(*) FROM retrieval.vector_docs").fetchone()[0] == 0
         assert db.execute("SELECT count(*) FROM retrieval.library_sections").fetchone()[0] == 0

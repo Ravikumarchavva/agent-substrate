@@ -3,8 +3,7 @@
 Provides a centralized tool execution service that:
 1. Maintains a registry of available tools
 2. Executes tool calls with timeout and sandboxing
-3. Publishes tool results as events
-4. Handles MCP tool discovery and schema management
+3. Reports every outcome as a result document (a failing tool is a result, not an exception)
 """
 
 from __future__ import annotations
@@ -15,8 +14,6 @@ import asyncio
 from typing import Any, Dict, List, Optional
 
 from substrate.tools import Tool, ToolExecutionResult
-from substrate.integrations.events import EventBus
-from substrate.integrations.events.envelope import EventEnvelope
 
 logger = logging.getLogger(__name__)
 
@@ -116,38 +113,3 @@ async def execute_tool(
             "is_error": True,
             "metadata": {},
         }
-
-
-async def execute_and_publish(
-    *,
-    registry: ToolRegistry,
-    tool_name: str,
-    arguments: Dict[str, Any],
-    tool_call_id: str,
-    run_id: str,
-    thread_id: str,
-    event_bus: EventBus,
-    timeout: float = 120.0,
-) -> Dict[str, Any]:
-    """Execute a tool and publish the result as an event."""
-    result = await execute_tool(
-        registry=registry,
-        tool_name=tool_name,
-        arguments=arguments,
-        tool_call_id=tool_call_id,
-        timeout=timeout,
-    )
-
-    await event_bus.publish(
-        EventEnvelope(
-            event_type="tool.execution_completed",
-            payload={
-                "type": "tool.execution_completed",
-                "run_id": run_id,
-                "thread_id": thread_id,
-                **result,
-            },
-        )
-    )
-
-    return result

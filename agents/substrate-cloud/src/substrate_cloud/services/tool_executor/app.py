@@ -10,11 +10,12 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from substrate.integrations.cache.redis import RedisConnector
 from substrate_cloud.services.base import AUTHENTICATED, create_service_app
 from substrate_cloud.services.tool_executor.executor import ToolRegistry
 from substrate_cloud.services.tool_executor.routes import router
-from substrate_cloud.shared.events.factory import get_event_bus
+from substrate_cloud.shared.service_client import ServiceClient
+from substrate_cloud.shared.service_urls import service_url
+from substrate_cloud.shared.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -41,30 +42,18 @@ def _load_default_tools(code_interpreter_tool=None, task_store=None) -> list:
     if code_interpreter_tool is not None:
         tools.append(code_interpreter_tool)
 
-    try:
-        # FileManagerTool requires file_store + session_factory from server context.
-        # In microservices the Artifact service owns storage; skip for now — agent
-        # uses the Artifact service directly via API.
-        pass
-    except Exception:
-        pass
-
     return tools
 
 
 @asynccontextmanager
 async def lifespan(app):
-    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    artifact_url = os.environ.get("ARTIFACT_SERVICE_URL", "http://localhost:8018")
+    from substrate_cloud.factory import init_file_access, open_store
 
-    # Redis + EventBus
-    redis_connector = RedisConnector(redis_url)
-    await redis_connector.connect()
-    app.state.redis = redis_connector.client
-
-    event_bus = get_event_bus(redis_url)
-    await event_bus.connect()
-    app.state.event_bus = event_bus
+    store = open_store(settings)
+    app.state.file_access, _ = init_file_access(settings, store)
+    app.state.conversation_client = ServiceClient(
+        service_url("conversation"), "conversation"
+    )
 
     # Code interpreter — explicit, fail-closed runtime selection (same switch as
     # the monolith's substrate_cloud/factory.py wiring). Defaults to k8s
@@ -95,13 +84,8 @@ async def lifespan(app):
         logger.warning("Code interpreter disabled: sandbox unavailable (%s)", exc)
 
     app.state.ci_client = code_interpreter_tool
-    app.state.artifact_url = artifact_url.rstrip("/")
 
     # Tool Registry
-    from substrate_cloud.factory import open_store
-    from substrate_cloud.shared.settings import settings
-
-    store = open_store(settings)
     task_store = store.tasks
     registry = ToolRegistry()
     registry.register_many(
@@ -121,13 +105,13 @@ async def lifespan(app):
     close = getattr(code_interpreter_tool, "close", None)
     if close is not None:
         await close()
+    await app.state.file_access.aclose()
+    await app.state.conversation_client.aclose()
     await store.aclose()
-    await app.state.event_bus.disconnect()
-    await redis_connector.disconnect()
 
 
 app = create_service_app(
     title="Tool Executor",
     lifespan=lifespan,
 )
-app.include_router(router, dependencies=AUTHENTICATED)
+app.include_router(router, prefix="/api/v1", dependencies=AUTHENTICATED)

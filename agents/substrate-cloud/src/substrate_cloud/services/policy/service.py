@@ -87,7 +87,7 @@ async def check_permission(
         .where(
             and_(
                 PolicyRule.is_active.is_(True),
-                PolicyRule.tenant_id.in_([claims.tenant_id, "*"]),
+                PolicyRule.tenant_id.in_([claims.tenant_id, "default"]),
                 PolicyRule.role == claims.role,
                 PolicyRule.action == action,
                 PolicyRule.resource_type.in_([resource_type, "*"]),

@@ -7,10 +7,8 @@ from __future__ import annotations
 
 import logging
 
-import os
 from contextlib import asynccontextmanager
 
-from substrate.integrations.cache.redis import RedisConnector
 from substrate_cloud.services.base import (
     AUTHENTICATED,
     create_service_app,
@@ -18,6 +16,7 @@ from substrate_cloud.services.base import (
 )
 from substrate_cloud.services.policy.routes import router
 from substrate_cloud.shared.database.base import ServiceBase
+from substrate_cloud.shared.settings import settings
 
 import substrate_cloud.services.policy.models  # noqa: F401 — register ORM models before create_all
 
@@ -26,19 +25,9 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app):
-    database_url = os.environ.get(
-        "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
-    )
-    engine, session_factory = await init_service_db(database_url, ServiceBase)
+    engine, session_factory = await init_service_db(settings.DATABASE_URL, ServiceBase)
     app.state.engine = engine
     app.state.session_factory = session_factory
-
-    # Redis cache for policy decisions
-    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    redis_connector = RedisConnector(redis_url)
-    await redis_connector.connect()
-    app.state.redis_client = redis_connector.client
 
     # Seed default policies on startup
     async with session_factory() as db:
@@ -52,9 +41,8 @@ async def lifespan(app):
     logger.info("Policy Authorization Service started")
     yield
 
-    await redis_connector.disconnect()
     await engine.dispose()
 
 
 app = create_service_app(title="Policy Authorization Service", lifespan=lifespan)
-app.include_router(router, dependencies=AUTHENTICATED)
+app.include_router(router, prefix="/api/v1", dependencies=AUTHENTICATED)

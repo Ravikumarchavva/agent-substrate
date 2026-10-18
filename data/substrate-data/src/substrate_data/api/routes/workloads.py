@@ -1,8 +1,7 @@
-"""/api/v1 pipelines, collections (retrieval), compute resources, jobs, audit and identity."""
+"""/api/v1 pipelines, compute resources, jobs, audit and identity."""
 
 from __future__ import annotations
 
-import re
 from typing import Annotated, Literal
 from uuid import uuid4
 
@@ -287,79 +286,6 @@ async def run_pipeline(pipeline_id: str, svc: Svc, caller: Caller, request: Requ
         caller, "pipeline.run", row["name"], "success", request.state.request_id, job_id=job_id
     )
     return svc.store.get("pipeline_runs", run["id"])
-
-
-# ------------------------------------------------------------------ collections (retrieval)
-class CollectionCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    name: str = Field(min_length=1, max_length=100)
-
-
-class DocumentCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    title: str = Field(min_length=1, max_length=200)
-    text: str = Field(min_length=1, max_length=2_000_000)
-
-
-def collection(svc: Services, caller: Principal, collection_id: str) -> dict:
-    row = svc.store.get("collections", collection_id)
-    if row["owner"] != caller.id and not caller.is_admin:
-        raise not_found("Collection")
-    return row
-
-
-@router.post("/collections", status_code=201, tags=["retrieval"])
-def create_collection(body: CollectionCreate, svc: Svc, caller: Caller):
-    return svc.store.record("collections", {"name": body.name, "owner": caller.id})
-
-
-@router.get("/collections", tags=["retrieval"])
-def list_collections(
-    svc: Svc,
-    caller: Caller,
-    page_token: str | None = None,
-    page_size: int = Query(100, ge=1, le=500),
-):
-    where, params = ("1=1", []) if caller.is_admin else ("owner=?", [caller.id])
-    rows = svc.store.page("collections", where, params, page_token, page_size + 1)
-    more = len(rows) > page_size
-    rows = rows[:page_size]
-    return {
-        "collections": rows,
-        "next_page_token": f"{rows[-1]['created_at']}|{rows[-1]['id']}" if more else None,
-    }
-
-
-@router.post("/collections/{collection_id}/documents", status_code=202, tags=["retrieval"])
-async def add_document(
-    collection_id: str, body: DocumentCreate, svc: Svc, caller: Caller, request: Request
-):
-    collection(svc, caller, collection_id)
-    document_id = uuid4().hex
-    job_id = await request.app.state.publisher.submit(
-        "document.chunk",
-        "chunk",
-        {"text": body.text},
-        {"collection_id": collection_id, "document_id": document_id, "title": body.title},
-    )
-    return {"document_id": document_id, "job_id": job_id, "status": "queued"}
-
-
-@router.get("/collections/{collection_id}/chunks", tags=["retrieval"])
-def chunks(collection_id: str, svc: Svc, caller: Caller):
-    collection(svc, caller, collection_id)
-    return {"chunks": svc.store.list_chunks(collection_id, 200)}
-
-
-@router.get("/collections/{collection_id}/search", tags=["retrieval"])
-def search(
-    collection_id: str, svc: Svc, caller: Caller, q: str = Query(min_length=1, max_length=500)
-):
-    collection(svc, caller, collection_id)
-    tokens = re.findall(r"\w+", q)[:30]
-    if not tokens:
-        return {"results": []}
-    return {"results": svc.store.search_chunks(collection_id, tokens, 20)}
 
 
 # ------------------------------------------------------------------ compute (attach only)

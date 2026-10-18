@@ -68,16 +68,6 @@ def postgres_schema(sqlite_schema: str) -> list[str]:
         statement = raw.strip()
         if not statement or statement.startswith("PRAGMA"):
             continue
-        if "VIRTUAL TABLE" in statement:  # fts5 chunks
-            statements += [
-                "CREATE TABLE IF NOT EXISTS chunks (collection_id TEXT NOT NULL, "
-                "document_id TEXT NOT NULL, title TEXT NOT NULL, text TEXT NOT NULL, "
-                "tsv tsvector GENERATED ALWAYS AS "
-                "(to_tsvector('simple', coalesce(title,'') || ' ' || text)) STORED)",
-                "CREATE INDEX IF NOT EXISTS chunks_tsv ON chunks USING gin(tsv)",
-                "CREATE INDEX IF NOT EXISTS chunks_collection ON chunks(collection_id)",
-            ]
-            continue
         statement = statement.replace(
             "INTEGER PRIMARY KEY AUTOINCREMENT", "BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY"
         )
@@ -150,20 +140,6 @@ class SQLiteBackend:
 
     def close(self) -> None:
         pass
-
-    # Full-text search over document chunks (FTS5).
-    def add_chunks(self, db: Any, rows: list[tuple[str, str, str, str]]) -> None:
-        db.executemany(
-            "INSERT INTO chunks (collection_id, document_id, title, text) VALUES (?,?,?,?)", rows
-        )
-
-    def search_chunks(self, db: Any, collection_id: str, tokens: list[str], limit: int) -> list:
-        expression = " OR ".join('"' + t.replace('"', "") + '"' for t in tokens)
-        return db.execute(
-            "SELECT document_id, title, text, -bm25(chunks) AS score FROM chunks "
-            "WHERE chunks MATCH ? AND collection_id=? ORDER BY score DESC LIMIT ?",
-            (expression, collection_id, limit),
-        ).fetchall()
 
 
 # ------------------------------------------------------------------ PostgreSQL
@@ -269,17 +245,3 @@ class PostgresBackend:
 
     def close(self) -> None:
         self.pool.close()
-
-    def add_chunks(self, db: Any, rows: list[tuple[str, str, str, str]]) -> None:
-        db.executemany(
-            "INSERT INTO chunks (collection_id, document_id, title, text) VALUES (?,?,?,?)", rows
-        )
-
-    def search_chunks(self, db: Any, collection_id: str, tokens: list[str], limit: int) -> list:
-        query = " | ".join(re.sub(r"[^\w]", "", t) for t in tokens if re.sub(r"[^\w]", "", t))
-        return db.execute(
-            "SELECT document_id, title, text, ts_rank(tsv, q) AS score FROM chunks, "
-            "to_tsquery('simple', ?) AS q WHERE tsv @@ q AND collection_id=? "
-            "ORDER BY score DESC LIMIT ?",
-            (query, collection_id, limit),
-        ).fetchall()

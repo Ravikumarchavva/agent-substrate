@@ -148,8 +148,6 @@ class Publisher:
             await run_in_threadpool(self.refreshed, context, result)
         elif kind == "table.expire":
             await run_in_threadpool(self.expired, context, result)
-        elif kind == "document.chunk":
-            await run_in_threadpool(self.chunked, context, result)
 
     # ------------------------------------------------------------------ handlers
     async def inferred(self, context: dict[str, Any], result: dict[str, Any]) -> None:
@@ -319,11 +317,6 @@ class Publisher:
             run_id=context["run_id"],
             rows=result["rows"],
             requested_by=context["principal"],
-        )
-
-    def chunked(self, context: dict[str, Any], result: dict[str, Any]) -> None:
-        self.svc.store.add_chunks(
-            context["collection_id"], context["document_id"], context["title"], result["chunks"]
         )
 
     def refresh(self, table: dict[str, Any], committed: Any) -> None:

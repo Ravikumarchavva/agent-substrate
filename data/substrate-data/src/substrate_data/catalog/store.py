@@ -125,10 +125,6 @@ CREATE TABLE IF NOT EXISTS maintenance_runs (
     files_in INTEGER, files_out INTEGER, rows INTEGER, bytes_before INTEGER, bytes_after INTEGER,
     error TEXT, created_at TEXT NOT NULL, finished_at TEXT);
 CREATE INDEX IF NOT EXISTS maintenance_table ON maintenance_runs(table_id, created_at);
-CREATE TABLE IF NOT EXISTS collections (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, created_at TEXT NOT NULL);
-CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
-    collection_id UNINDEXED, document_id UNINDEXED, title, text);
 CREATE TABLE IF NOT EXISTS publications (
     job_id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL,
     error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -844,34 +840,6 @@ class CatalogStore:
             return bool(
                 db.execute("DELETE FROM table_policies WHERE table_id=?", (table_id,)).rowcount
             )
-
-    # ------------------------------------------------------------------ document chunks
-    def add_chunks(
-        self, collection_id: str, document_id: str, title: str, chunks: list[str]
-    ) -> None:
-        with self.connection() as db:
-            db.execute(
-                "DELETE FROM chunks WHERE collection_id=? AND document_id=?",
-                (collection_id, document_id),
-            )
-            self.backend.add_chunks(db, [(collection_id, document_id, title, c) for c in chunks])
-
-    def list_chunks(self, collection_id: str, limit: int) -> list[dict[str, Any]]:
-        with self.connection() as db:
-            return [
-                dict(r)
-                for r in db.execute(
-                    "SELECT document_id, title, text FROM chunks WHERE collection_id=? LIMIT ?",
-                    (collection_id, limit),
-                )
-            ]
-
-    def search_chunks(self, collection_id: str, tokens: list[str], limit: int) -> list[dict]:
-        """Best matches first; `score` is relevance (higher is better)."""
-        if not tokens:
-            return []
-        with self.connection() as db:
-            return [dict(r) for r in self.backend.search_chunks(db, collection_id, tokens, limit)]
 
     # ------------------------------------------------------------------ workload records
     def record(self, table: str, values: dict[str, Any]) -> dict[str, Any]:

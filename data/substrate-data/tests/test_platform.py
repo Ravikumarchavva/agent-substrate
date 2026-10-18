@@ -248,28 +248,6 @@ def test_api_contract(stack):
         assert fresh.status_code == 200 and fresh.json()["comment"] == "Default schema"
 
 
-def test_documents_are_chunked_on_compute_and_searchable(stack):
-    with stack.http("alice", *ADMIN) as http:
-        collection = http.post("/collections", json={"name": "handbook"}).json()
-        http.post(
-            f"/collections/{collection['id']}/documents",
-            json={"title": "Storage", "text": "Iceberg tables live in SeaweedFS object storage."},
-        )
-        deadline = time.monotonic() + 60
-        results = []
-        while not results and time.monotonic() < deadline:
-            time.sleep(0.3)
-            results = http.get(
-                f"/collections/{collection['id']}/search", params={"q": "iceberg"}
-            ).json()["results"]
-        assert results and results[0]["title"] == "Storage"
-    with stack.http("bob", "analysts") as other:
-        assert (
-            other.get(f"/collections/{collection['id']}/search", params={"q": "x"}).status_code
-            == 404
-        )
-
-
 # ------------------------------------------------------------------ views
 @pytest.fixture(scope="module")
 def sales(stack, tmp_path_factory):

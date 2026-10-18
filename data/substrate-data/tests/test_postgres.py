@@ -46,20 +46,6 @@ def test_search_ignores_case_like_sqlite(store):
     assert store.search("100%_literal", 10) == []  # wildcards in the search text are literal
 
 
-def test_full_text_search_ranks_and_survives_hostile_input(store):
-    store.add_chunks("c1", "d1", "Doc one", ["the quick brown fox", "lazy dogs sleep"])
-    store.add_chunks("c1", "d2", "Doc two", ["fox fox fox hunting in the forest"])
-    store.add_chunks("c2", "d3", "Other", ["fox in another collection"])
-    hits = store.search_chunks("c1", ["fox"], 10)
-    assert {h["document_id"] for h in hits} == {"d1", "d2"}  # collections stay separate
-    assert hits[0]["document_id"] == "d2"  # more occurrences rank first (higher is better)
-    assert store.search_chunks("c1", ['"); DROP TABLE chunks; --', "&|!:*"], 5) == []
-    store.add_chunks("c1", "d1", "Doc one", ["replaced"])  # re-adding replaces the document
-    assert [h["text"] for h in store.list_chunks("c1", 10) if h["document_id"] == "d1"] == [
-        "replaced"
-    ]
-
-
 def test_replicas_starting_together_create_one_default_namespace(server):
     url = server.database()
     errors, stores = [], []
@@ -120,11 +106,12 @@ def test_conflicts_and_if_match_work_like_sqlite(store):
 def test_a_failed_transaction_leaves_nothing_behind(store):
     with pytest.raises(RuntimeError), store.connection() as db:
         db.execute(
-            "INSERT INTO collections (id, name, owner, created_at) VALUES ('c', 'n', 'o', 'now')"
+            "INSERT INTO publications (job_id, kind, payload, state, created_at, updated_at) "
+            "VALUES ('j', 'k', '{}', 'new', 'now', 'now')"
         )
         raise RuntimeError("boom")
     with store.connection() as db:
-        assert db.execute("SELECT count(*) AS n FROM collections").fetchone()["n"] == 0
+        assert db.execute("SELECT count(*) AS n FROM publications").fetchone()["n"] == 0
 
 
 def test_schema_setup_is_idempotent_and_safe_to_run_concurrently(server):

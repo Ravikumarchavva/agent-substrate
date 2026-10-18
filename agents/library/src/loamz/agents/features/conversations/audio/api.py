@@ -51,7 +51,9 @@ async def transcribe_audio(
 
 
 @router.post("/tts")
-async def text_to_speech(body: TTSRequest, caller: CallerDep, service: Service) -> StreamingResponse:
+async def text_to_speech(
+    body: TTSRequest, caller: CallerDep, service: Service
+) -> StreamingResponse:
     """Text to speech, streamed back as audio."""
     speech = await service.speak(body)
     return StreamingResponse(

@@ -93,7 +93,9 @@ class ThreadJournal:
             runs = await self._rt.find_runs(thread_id=thread_id, active_only=False)
         if not runs:
             return False
-        target = runs[0] if runs[0].status.value in ("pending", "running", "suspended") else runs[-1]
+        target = (
+            runs[0] if runs[0].status.value in ("pending", "running", "suspended") else runs[-1]
+        )
         await self._rt.annotate(target.run_id, [NewEntry(kind=kind, payload=payload)])
         return True
 
@@ -108,7 +110,9 @@ class ThreadJournal:
                 started_at=run.started_at or run.enqueued_at,
             )
             if run.started_at and run.terminated_at:
-                detail.duration_ms = int((run.terminated_at - run.started_at).total_seconds() * 1000)
+                detail.duration_ms = int(
+                    (run.terminated_at - run.started_at).total_seconds() * 1000
+                )
             by_call: dict[str, ToolStep] = {}
             for entry in await self._rt.read_events(run.run_id):
                 p = entry.payload or {}

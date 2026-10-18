@@ -175,9 +175,7 @@ class AgentsStore:
             )
         return [(_profile(r), r["note"]) for r in rows]
 
-    async def set_contacts(
-        self, tenant_id: str, agent_id: str, contacts: dict[str, str]
-    ) -> None:
+    async def set_contacts(self, tenant_id: str, agent_id: str, contacts: dict[str, str]) -> None:
         """Replace the whole allow-list in one transaction."""
         async with await self._tx() as tx:
             await self._replace_contacts(tx, tenant_id, agent_id, contacts)

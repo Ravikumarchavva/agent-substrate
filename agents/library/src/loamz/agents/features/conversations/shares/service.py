@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from loamz.agents.bootstrap.container import Container
 from loamz.agents.features.conversations.shares.model import (
-    ShareOut,
     SharedConversation,
     SharedMessage,
+    ShareOut,
 )
 from loamz.agents.features.conversations.shares.store import SharesStore
 from loamz.agents.features.conversations.threads.export import messages_of
@@ -44,9 +44,7 @@ class SharesService:
             raise NotFoundError("This link is not available.")
         events = await self._threads.journal.project(share.thread_id)
         messages = messages_of([e.model_dump(mode="json") for e, _ in events])
-        return SharedConversation(
-            title=share.name, messages=[SharedMessage(**m) for m in messages]
-        )
+        return SharedConversation(title=share.name, messages=[SharedMessage(**m) for m in messages])
 
     async def forget_thread(self, tenant_id: str, thread_id: str) -> int:
         """A deleted conversation is no longer public (the thread-deleted event consumer calls this)."""

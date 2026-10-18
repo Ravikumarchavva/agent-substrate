@@ -1,4 +1,5 @@
 """Entitlements: read by the tenant, configured by the platform (cell-admin)."""
+
 from __future__ import annotations
 
 from typing import Annotated

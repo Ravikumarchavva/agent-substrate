@@ -77,7 +77,6 @@ class AgentOut(BaseModel):
 
 class AgentList(BaseModel):
     items: list[AgentOut]
-    next_page_token: str | None = None
 
 
 class ThreadRef(BaseModel):

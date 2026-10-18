@@ -1,4 +1,5 @@
 """The caller's cached Google Workspace token."""
+
 from __future__ import annotations
 
 from typing import Annotated

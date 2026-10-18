@@ -56,7 +56,7 @@ async def usage_by_day(
             try:
                 entry = json.loads(row["entry"])
                 when = datetime.fromisoformat(str(entry["ts"]).replace("Z", "+00:00"))
-            except (ValueError, KeyError, TypeError):
+            except ValueError, KeyError, TypeError:
                 continue
             if when < since:
                 continue
@@ -70,7 +70,7 @@ async def usage_by_day(
             try:
                 bucket.tokens += int(payload.get("tokens") or 0)
                 bucket.cost_usd += float(payload.get("cost_usd") or 0.0)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue  # a call whose numbers cannot be read still counts as a call, with no cost
     start = since.astimezone(UTC).date()
     today = datetime.now(UTC).date()

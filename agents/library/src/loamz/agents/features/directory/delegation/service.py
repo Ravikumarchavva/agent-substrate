@@ -31,8 +31,8 @@ LATE_SECONDS = 3600.0
 
 RunDelegate = Callable[[Caller, AgentProfile, str], Awaitable[str]]
 Resolve = Callable[[str], Awaitable[AgentProfile | None]]
-Record = Callable[[str, str, str, str, str, bool], Awaitable[None]]
-"""`(speaker agent id, text, part, status, delegation id, asked)`: keeps what was said in the pair's record."""
+Record = Callable[[str, str, str, str, str, str, bool], Awaitable[None]]
+"""`(target agent id, speaker agent id, text, part, status, delegation id, asked)`: keeps what was said in the pair's record."""
 
 
 @dataclass(frozen=True)
@@ -126,13 +126,20 @@ class AskAgentTool:
             return _text(f"{agent} could not do that: {exc}", error=True)
 
     async def _say(
-        self, delegation: str, speaker: str, text: str, part: str, status: str, asked: bool = False
+        self,
+        delegation: str,
+        target: str,
+        speaker: str,
+        text: str,
+        part: str,
+        status: str,
+        asked: bool = False,
     ) -> None:
         """Recording must never be why an ask fails."""
         if self._record is None or self._asker is None:
             return
         try:
-            await self._record(speaker, text, part, status, delegation, asked)
+            await self._record(target, speaker, text, part, status, delegation, asked)
         except Exception:  # noqa: BLE001
             logger.exception("could not record the exchange with %s", speaker)
 
@@ -141,24 +148,32 @@ class AskAgentTool:
         if target is None:
             return _text("That agent is no longer available.", error=True)
         delegation = new_id()
-        await self._say(delegation, self._asker or "", request, "ask", "working", True)
+        await self._say(delegation, agent_id, self._asker or "", request, "ask", "working", True)
         job = asyncio.ensure_future(self._run_delegate(self._caller, target, request))
         done, _ = await asyncio.wait({job}, timeout=WAIT_SECONDS)
         link = {"agent": target.name}
         if not done:
             await self._say(
-                delegation, agent_id, f"{target.name} is still working on it.", "note", "working"
+                delegation,
+                agent_id,
+                agent_id,
+                f"{target.name} is still working on it.",
+                "note",
+                "working",
             )
             self._later(job, delegation, agent_id)
             return _text(
-                f"{target.name} is still working. Ask again later; it will finish on its own.", **link
+                f"{target.name} is still working. Ask again later; it will finish on its own.",
+                **link,
             )
         try:
             answer = job.result().strip() or "(it answered with nothing)"
         except Exception as exc:  # noqa: BLE001
-            await self._say(delegation, agent_id, f"{target.name} failed: {exc}", "answer", "failed")
+            await self._say(
+                delegation, agent_id, agent_id, f"{target.name} failed: {exc}", "answer", "failed"
+            )
             return _text(f"{target.name} failed: {exc}", error=True, **link)
-        await self._say(delegation, agent_id, answer, "answer", "done")
+        await self._say(delegation, agent_id, agent_id, answer, "answer", "done")
         return _text(answer, **link)
 
     def _later(self, job: asyncio.Future[str], delegation: str, agent_id: str) -> None:
@@ -169,7 +184,14 @@ class AskAgentTool:
                 answer = (await asyncio.wait_for(job, timeout=LATE_SECONDS)).strip()
             except Exception:  # noqa: BLE001 - nothing to report to
                 return
-            await self._say(delegation, agent_id, answer or "(it answered with nothing)", "answer", "done")
+            await self._say(
+                delegation,
+                agent_id,
+                agent_id,
+                answer or "(it answered with nothing)",
+                "answer",
+                "done",
+            )
 
         task = asyncio.ensure_future(finish())
         self._background.add(task)

@@ -8,7 +8,7 @@ with a hundred contacts is a page of rows, not a hundred journals.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from typing import Any
 
 from loamz.agents.bootstrap.container import Container

@@ -24,10 +24,7 @@ __all__ = ["MemoryService", "memory", "memory_tool"]
 
 def _xml_escape(text: str) -> str:
     return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 
@@ -119,7 +116,9 @@ class MemoryService:
         if not user_id:
             return ""
         found = await self.store.query(
-            MemoryQuery(namespace=MemoryNamespace(tenant_id=tenant_id, user_id=user_id), limit=limit)
+            MemoryQuery(
+                namespace=MemoryNamespace(tenant_id=tenant_id, user_id=user_id), limit=limit
+            )
         )
         if not found:
             return ""

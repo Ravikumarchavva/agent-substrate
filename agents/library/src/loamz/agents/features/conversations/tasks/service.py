@@ -55,7 +55,9 @@ class TasksService:
         tasks = self._tasks(caller)
         result = None
         if body.status:
-            result = await tasks.update_status(task_list_id, task_id, body.status, note=body.note or "")
+            result = await tasks.update_status(
+                task_list_id, task_id, body.status, note=body.note or ""
+            )
         if body.title:
             result = await tasks.update_task_title(task_list_id, task_id, body.title)
         if result is None:

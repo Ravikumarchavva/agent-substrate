@@ -96,7 +96,10 @@ async def export_thread(
     return Response(
         content=body,
         media_type=media,
-        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 

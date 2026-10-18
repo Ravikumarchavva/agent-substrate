@@ -37,10 +37,8 @@ def render(data: bytes) -> bytes:
             if image.width * image.height > _MAX_PIXELS:
                 raise InvalidRequestError("That picture is too large.")
             upright = ImageOps.exif_transpose(image)
-            square = ImageOps.fit(
-                upright.convert("RGBA"), (SIZE, SIZE), Image.Resampling.LANCZOS
-            )
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+            square = ImageOps.fit(upright.convert("RGBA"), (SIZE, SIZE), Image.Resampling.LANCZOS)
+    except UnidentifiedImageError, OSError, Image.DecompressionBombError:
         raise InvalidRequestError("That is not a picture we can read.") from None
     out = io.BytesIO()
     square.save(out, "PNG", optimize=True)

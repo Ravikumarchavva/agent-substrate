@@ -33,7 +33,9 @@ CONTENT_SECURITY_POLICY = (
 class McpAppsService:
     """The interactive tool UIs: the bundled app pages, which tools use them, and the context they send back."""
 
-    def __init__(self, threads_: ThreadsService, chat_: ChatService, apps_dir: Path = APPS_DIR) -> None:
+    def __init__(
+        self, threads_: ThreadsService, chat_: ChatService, apps_dir: Path = APPS_DIR
+    ) -> None:
         self._threads = threads_
         self._chat = chat_
         self._apps = {p.stem: p for p in apps_dir.glob("*.html")} if apps_dir.exists() else {}

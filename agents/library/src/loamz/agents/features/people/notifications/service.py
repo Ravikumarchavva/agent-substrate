@@ -63,7 +63,7 @@ class NotificationService:
         try:
             import httpx
 
-            async with (client or httpx.AsyncClient(timeout=EMAIL_TIMEOUT_S)) as http:  # type: ignore[attr-defined]
+            async with client or httpx.AsyncClient(timeout=EMAIL_TIMEOUT_S) as http:  # type: ignore[attr-defined]
                 response = await http.post(
                     RESEND_URL,
                     headers={"Authorization": f"Bearer {key}"},
@@ -111,4 +111,6 @@ class NotificationService:
 
 def notifications(container: Container) -> NotificationService:
     """Provider: how the container builds this feature's service."""
-    return NotificationService(NotificationStore(container.database), container.settings.notifications)
+    return NotificationService(
+        NotificationStore(container.database), container.settings.notifications
+    )

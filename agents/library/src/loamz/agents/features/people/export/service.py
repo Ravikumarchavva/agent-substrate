@@ -38,8 +38,12 @@ class ExportService:
     async def _conversations(self, caller: Caller) -> list[dict[str, Any]]:
         store = self._c.agent_store
         threads = store.tenant(caller.tenant_id).threads
-        ids = await store.thread_headers.owned_ids(caller.tenant_id, caller.user_id, limit=MAX_THREADS)
-        headers = [await store.thread_headers.get_owned(caller.tenant_id, caller.user_id, i) for i in ids]
+        ids = await store.thread_headers.owned_ids(
+            caller.tenant_id, caller.user_id, limit=MAX_THREADS
+        )
+        headers = [
+            await store.thread_headers.get_owned(caller.tenant_id, caller.user_id, i) for i in ids
+        ]
         out = []
         for header in sorted(filter(None, headers), key=lambda h: h.created_at):
             messages = [

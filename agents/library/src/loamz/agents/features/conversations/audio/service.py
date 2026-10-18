@@ -39,7 +39,9 @@ def tts_error(exc: Exception) -> str:
     """A provider failure in words a user can act on."""
     text = str(exc)
     if "429" in text or "RESOURCE_EXHAUSTED" in text:
-        return "The speech model's quota is used up. Try again later or choose another speech model."
+        return (
+            "The speech model's quota is used up. Try again later or choose another speech model."
+        )
     if "404" in text or "NOT_FOUND" in text:
         return "That speech model is not available. Choose another in Settings."
     return "The speech model could not produce audio."
@@ -158,7 +160,9 @@ class AudioService:
                 "Realtime speech is currently available only with OpenAI realtime models"
             )
         if not client.supports_s2s:
-            raise AudioUnavailable("Speech-to-speech not supported by the configured audio provider")
+            raise AudioUnavailable(
+                "Speech-to-speech not supported by the configured audio provider"
+            )
         try:
             session = await client.create_s2s_session(
                 model=effective, voice=voice.strip() or self._cfg.realtime_voice, instructions=None
@@ -172,7 +176,9 @@ class AudioService:
         if isinstance(secret, dict):
             secret = secret.get("value", "")
         return RealtimeTokenResponse(
-            client_secret=secret, expires_at=session.get("expires_at", 0), session_id=session.get("id", "")
+            client_secret=secret,
+            expires_at=session.get("expires_at", 0),
+            session_id=session.get("id", ""),
         )
 
     def realtime_url(self, requested_model: str | None) -> str | None:

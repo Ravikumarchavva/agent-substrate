@@ -1,4 +1,5 @@
 """Connector token cache, pushed by the platform after an OAuth callback."""
+
 from __future__ import annotations
 
 from typing import Annotated

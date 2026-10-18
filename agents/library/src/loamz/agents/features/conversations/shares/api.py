@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import Response
 
 from loamz.agents.bootstrap.http import CallerDep, RateLimit, use
-from loamz.agents.features.conversations.shares.model import ShareOut, SharedConversation
+from loamz.agents.features.conversations.shares.model import SharedConversation, ShareOut
 from loamz.agents.features.conversations.shares.service import SharesService, shares
 
 Service = Annotated[SharesService, Depends(use(shares))]

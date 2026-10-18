@@ -1,4 +1,5 @@
 """`GET /health/ready`, public. Liveness (`GET /health`) is served by `server/app.py`."""
+
 from __future__ import annotations
 
 from typing import Annotated, Any

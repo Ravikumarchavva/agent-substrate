@@ -140,7 +140,6 @@ _MCP_APP_THEME_SCRIPT = """
 """
 
 
-
 def inject_theme_bridge(html: str) -> str:
     if "loamz-mcp-theme-bridge" in html:
         return html

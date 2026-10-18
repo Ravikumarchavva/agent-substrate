@@ -52,9 +52,7 @@ class PinsStore:
             )
         return None if row is None else row["pinned_at"]
 
-    async def add(
-        self, tenant_id: str, user_id: str, kind: str, item_id: str, at: float
-    ) -> None:
+    async def add(self, tenant_id: str, user_id: str, kind: str, item_id: str, at: float) -> None:
         await self._ensure()
         async with self._db.transaction() as tx:
             await tx.execute(

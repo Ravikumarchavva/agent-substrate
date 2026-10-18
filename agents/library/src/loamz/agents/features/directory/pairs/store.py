@@ -96,9 +96,7 @@ class PairsStore:
         assert row is not None
         return _pair(row)
 
-    async def touch(
-        self, pair: Pair, *, text: str, sender: str, asked: bool
-    ) -> None:
+    async def touch(self, pair: Pair, *, text: str, sender: str, asked: bool) -> None:
         await self._ensure()
         async with self._db.transaction() as tx:
             await tx.execute(

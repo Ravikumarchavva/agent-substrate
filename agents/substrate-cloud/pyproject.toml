@@ -19,6 +19,8 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi<0.60b1",
     "uvicorn[standard]>=0.34.0",
     "python-multipart>=0.0.9",
+    # one verifier for every entry point (Keycloak access tokens); the per-run data token is signed with pyjwt + cryptography
+    "substrate-identity[fastapi]",
     "pyjwt>=2.12.0",
     "cryptography>=46.0.6",
     # the upload route counts a PDF's pages before accepting it

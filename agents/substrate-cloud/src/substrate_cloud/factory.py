@@ -90,6 +90,8 @@ class Infrastructure:
     """``file_access.FileAccess``: which store a request or run gets, and as whom."""
     data_minter: Any = None
     """The ``DataTokenMinter`` when a data service is configured (its public keys are served for the service to fetch)."""
+    data_documents: Any = None
+    """``DataDocumentAccess`` when a data service is configured: the connection and token providers documents and memory go through."""
     file_store_provider: FileStoreProvider | None = None
     """Which object store a run uses (``shared_file_store`` locally)."""
     artifact_store: Any = None
@@ -256,6 +258,22 @@ def _init_file_access(cfg: SubstrateConfig, store: Any) -> tuple[FileAccess, Any
     return FileAccess(connection=connection, admin=admin), minter
 
 
+def _init_document_access(cfg: SubstrateConfig, minter: Any) -> Any:
+    """Documents and memory through the data service when ``DATA_SERVICE_URL`` is set (ADR 0004), else ``None``: the engine's own
+    folder store keeps them."""
+    if not cfg.DATA_SERVICE_URL or minter is None:
+        return None
+    from substrate_cloud.data_access import build_document_access
+
+    return build_document_access(
+        service_url=cfg.DATA_SERVICE_URL,
+        minter=minter,
+        ca_file=cfg.DATA_SERVICE_CA_FILE,
+        client_cert_file=cfg.DATA_CLIENT_CERT_FILE,
+        client_key_file=cfg.DATA_CLIENT_KEY_FILE,
+    )
+
+
 async def init_infrastructure(
     cfg: SubstrateConfig,
     *,
@@ -284,7 +302,9 @@ async def init_infrastructure(
     # User-scoped standing facts/preferences ("always answer in French") —
     # separate from short_term_memory's per-session scratch state. See
     # build_memory_tool() below for how this gets keyed by user, not thread.
-    long_term_memory = store.memory
+    # With a data service the agent database holds no memory records: they are the data service's (ADR 0004).
+    # (`file_access` is built below; the memory adapter only needs the minter, so it is wired after it.)
+    long_term_memory: Any = None
 
     # Blocking I/O (HF Hub model download on first run + onnxruntime
     # session construction) — off the event loop via to_thread, same as
@@ -299,6 +319,15 @@ async def init_infrastructure(
 
     file_access, data_minter = _init_file_access(cfg, store)
     file_store = file_access.shared
+    data_documents = _init_document_access(cfg, data_minter)
+    if data_documents is not None:
+        from substrate.integrations.data import DataMemoryStore
+
+        long_term_memory = DataMemoryStore(
+            data_documents.connection, data_documents.memory_token
+        )
+    else:
+        long_term_memory = store.memory
     # Curated OKF bundles ride on the same object store as files (one
     # bucket, one erasure path, one quota) but under their own key prefix,
     # which the sandbox never mounts — see integrations/artifacts/store.py.
@@ -325,6 +354,7 @@ async def init_infrastructure(
         file_store=file_store,
         file_access=file_access,
         data_minter=data_minter,
+        data_documents=data_documents,
         file_store_provider=file_access.for_run
         if file_access.data_backed
         else shared_file_store(file_store),

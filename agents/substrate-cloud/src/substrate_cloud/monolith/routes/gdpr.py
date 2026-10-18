@@ -28,6 +28,19 @@ class EraseTenantRequest(BaseModel):
     tenant_id: str
 
 
+def _data_admin(ctx: ServerDependencies):
+    """The administrator client of the data service, or None when files and documents are local."""
+    access = ctx.file_access
+    if access is None or not access.data_backed:
+        return None
+    if access.admin is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Erasure needs the data service administrator client (DATA_ADMIN_CLIENT_ID / DATA_ADMIN_CLIENT_SECRET)",
+        )
+    return access.admin
+
+
 def _require_store(ctx: ServerDependencies, tenant_id: str, user_id: str = "platform"):
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File storage is not configured")
@@ -58,6 +71,7 @@ async def erase_user_data(
         memory_store=ctx.long_term_memory,
         runtime_store=ctx.runtime.store if ctx.runtime is not None else None,
         folder=request.app.state.store,
+        data_admin=_data_admin(ctx),
     )
     return summary.as_dict()
 
@@ -84,5 +98,6 @@ async def erase_tenant_data(
         memory_store=ctx.long_term_memory,
         runtime_store=ctx.runtime.store if ctx.runtime is not None else None,
         folder=request.app.state.store,
+        data_admin=_data_admin(ctx),
     )
     return summary.as_dict()

@@ -39,7 +39,7 @@ from substrate.stores.memory import (
     MemoryQuery,
     MemoryRecord,
 )
-from substrate.types.errors import ScopeViolationError
+from substrate.types.errors import AuthError, ScopeViolationError
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,9 @@ class DataMemoryStore:
             return value
         try:
             found = await self._call(caller, "get", record_id, **_owner(caller))
+        except AuthError as exc:
+            logger.warning("memory read skipped: %s", exc)  # context, not a dependency
+            return None
         except DataError as exc:
             if isinstance(exc, (NotFound, Forbidden)) and not isinstance(
                 exc, InsufficientScope
@@ -194,6 +197,9 @@ class DataMemoryStore:
             found = await self._call(
                 spec.namespace, "query", **_owner(spec.namespace), **body
             )
+        except AuthError as exc:
+            logger.warning("memory read skipped: %s", exc)
+            return []
         except DataError as exc:
             if _soft(exc):
                 logger.warning(

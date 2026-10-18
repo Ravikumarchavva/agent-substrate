@@ -127,6 +127,7 @@ async def lifespan(app: FastAPI):
 
     app.state.file_access = infra.file_access
     app.state.data_minter = infra.data_minter
+    app.state.data_documents = infra.data_documents
     app.state.artifact_store = infra.artifact_store
     app.state.workspace_store = infra.workspace_store
 
@@ -144,9 +145,16 @@ async def lifespan(app: FastAPI):
     enricher = build_enricher(
         settings, app.state.api_keys, **app.state.model_client_kwargs
     )
-    library = build_library(infra.store, infra.file_store, settings, enricher)
+    library = build_library(
+        infra.store, infra.file_store, settings, enricher, data=infra.data_documents
+    )
     knowledge = build_knowledge_library(
-        infra.store, infra.file_store, settings, enricher, build_organiser(enricher)
+        infra.store,
+        infra.file_store,
+        settings,
+        enricher,
+        build_organiser(enricher),
+        data=infra.data_documents,
     )
     app.state.library = library
     app.state.knowledge = knowledge
@@ -296,7 +304,10 @@ async def lifespan(app: FastAPI):
             (app.state.library, "%", "%/knowledge/%"),
             (app.state.knowledge, "%/knowledge/%", None),
         ):
-            if describer is not None:
+            # A data-service library is confined to one tenant per token: it has no process-wide sweep (see DataLibrary).
+            if describer is not None and getattr(
+                describer, "supports_global_sweep", True
+            ):
                 queued = await app.state.enrichment.sweep(
                     describer, matching=matching, excluding=excluding
                 )
@@ -388,6 +399,8 @@ async def lifespan(app: FastAPI):
         await app.state.redis_client.aclose()
     if getattr(app.state, "file_access", None) is not None:
         await app.state.file_access.aclose()  # the pooled data-service connection; the store's own files close with the store
+        if app.state.data_documents is not None:
+            await app.state.data_documents.aclose()
     for tool in app.state.tools.all():
         if hasattr(tool, "stop"):
             try:

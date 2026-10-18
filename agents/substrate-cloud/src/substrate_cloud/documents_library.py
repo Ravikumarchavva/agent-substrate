@@ -107,9 +107,24 @@ def build_organiser(enricher: Enricher | None) -> Organiser | None:
 
 
 def build_library(
-    store: Any, file_store: Any, cfg: Any, enricher: Enricher | None = None
-) -> Library | None:
-    """The conversation documents' library; ``None`` when there is no store to keep the catalog in or no object store to keep the bundle in."""
+    store: Any,
+    file_store: Any,
+    cfg: Any,
+    enricher: Enricher | None = None,
+    *,
+    data: Any = None,
+) -> Library | Any | None:
+    """The conversation documents' library: the data service's Documents domain when ``data`` (``DataDocumentAccess``) is given, else the
+    folder ``Library``; ``None`` when there is no store to keep the catalog in or no object store to keep the bundle in."""
+    if data is not None:
+        from substrate.integrations.data import DataLibrary
+
+        return DataLibrary(
+            data.connection,
+            data.document_token,
+            enricher=enricher,
+            enrich_timeout=float(cfg.DOCUMENT_SUMMARY_TIMEOUT_S),
+        )
     if store is None or file_store is None:
         return None
     return Library(
@@ -166,9 +181,24 @@ def build_knowledge_library(
     cfg: Any,
     enricher: Enricher | None = None,
     organiser: Organiser | None = None,
-) -> Library | None:
+    *,
+    data: Any = None,
+) -> Library | Any | None:
     """The knowledge bases' library: the same store and object store, with the configured embedder and reranker, and its documents filed
-    under topics (a conversation's handful of documents are not)."""
+    under topics (a conversation's handful of documents are not). With the data service (``data``) the collections are semantic there:
+    it embeds and reranks on its side (``DOCUMENT_EMBEDDING_URL``), so this process needs no embedder."""
+    if data is not None:
+        from substrate.integrations.data import DataLibrary
+
+        return DataLibrary(
+            data.connection,
+            data.document_token,
+            semantic=True,
+            file_topics=True,
+            enricher=enricher,
+            organiser=organiser,
+            enrich_timeout=float(cfg.DOCUMENT_SUMMARY_TIMEOUT_S),
+        )
     if store is None or file_store is None:
         return None
     return Library(

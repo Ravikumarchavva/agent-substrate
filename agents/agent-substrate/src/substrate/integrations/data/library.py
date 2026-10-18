@@ -19,11 +19,15 @@ from typing import Any
 from substrate_data_client import DataError, Forbidden, InsufficientScope, NotFound
 from substrate_data_client.documents import collection_id
 
+from substrate.documents.bundle import document_id
+from substrate.documents.enrichment import enrich as enrich_document
+from substrate.documents.enrichment import reorganise as reorganise_collection
 from substrate.documents.types import (
     Added,
     DocumentBrief,
     DocumentError,
     DocumentInfo,
+    Enriched,
     Enricher,
     EnrichmentState,
     EnrichmentUsage,
@@ -32,8 +36,10 @@ from substrate.documents.types import (
     Hits,
     Listing,
     Outline,
+    Organiser,
     Passage,
     Picture,
+    Reorganised,
     Topic,
 )
 from substrate.integrations.data._connection import (
@@ -73,7 +79,13 @@ class DataLibrary:
         *,
         semantic: bool = False,
         file_topics: bool = False,
+        enricher: Enricher | None = None,
+        organiser: Organiser | None = None,
+        enrich_timeout: float = 180.0,
     ) -> None:
+        self._enricher = enricher
+        self._organiser = organiser
+        self._enrich_timeout = enrich_timeout
         self._connection = connection
         self._tokens = tokens
         self._semantic = semantic
@@ -83,6 +95,44 @@ class DataLibrary:
     @property
     def file_topics(self) -> bool:
         return self._file_topics
+
+    supports_global_sweep = False
+    """``pending_all`` is confined to one tenant here (a token is a tenant's), so a process-wide startup sweep over every tenant's
+    documents is not possible; ``enrich`` after each ``add`` still is."""
+
+    @staticmethod
+    def document_id(filename: str, sha256: str) -> str:
+        """The id ``add`` gives a file (the same derivation as ``Library.document_id``)."""
+        return document_id(filename, sha256)
+
+    async def enrich(
+        self,
+        *,
+        collection: str,
+        document: str,
+        enricher: Enricher | None = None,
+        force: bool = False,
+    ) -> Enriched:
+        """Have ``enricher`` (default: the library's) describe ``document``; the model call is made here and its result written back
+        through ``claim``/``annotate`` (ADR 0004). The logic is ``substrate.documents.enrichment.enrich``."""
+        return await enrich_document(
+            self,
+            collection=collection,
+            document=document,
+            enricher=enricher or self._enricher,
+            force=force,
+            timeout=self._enrich_timeout,
+        )
+
+    async def reorganise(
+        self, *, collection: str, organiser: Organiser | None = None
+    ) -> Reorganised:
+        return await reorganise_collection(
+            self,
+            collection=collection,
+            organiser=organiser or self._organiser,
+            timeout=self._enrich_timeout,
+        )
 
     # ------------------------------------------------------------------ plumbing
     async def _call(

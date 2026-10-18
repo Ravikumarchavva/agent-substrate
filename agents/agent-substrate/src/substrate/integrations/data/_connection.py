@@ -14,6 +14,8 @@ from collections.abc import Awaitable, Callable, Iterator
 import httpx
 from substrate_data_client import AsyncDataClient
 
+from substrate.types.errors import AuthError
+
 TENANT_PREFIX = "tenants/"
 USER_SEGMENT = "users"
 
@@ -60,8 +62,12 @@ class DataServiceConnection:
 
 
 async def mint(tokens: DocumentTokens, tenant: str, user: str | None) -> str:
-    token = tokens(tenant, user)
-    return await token if inspect.isawaitable(token) else token
+    """The token for one identity. A provider that refuses (the user is no longer a member of the organization) is an ``AuthError``."""
+    try:
+        token = tokens(tenant, user)
+        return await token if inspect.isawaitable(token) else token
+    except ValueError as exc:
+        raise AuthError(f"no data-service token for this identity: {exc}") from exc
 
 
 def identity_of(collection: str) -> tuple[str, str | None]:

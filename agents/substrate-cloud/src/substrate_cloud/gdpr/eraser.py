@@ -49,6 +49,17 @@ class ErasureSummary:
         return asdict(self)
 
 
+async def _erase_in_data_service(
+    admin: Any, tenant_id: str, user_id: str | None
+) -> dict[str, Any]:
+    """Everything the data service holds for the user (or tenant): files and their versions, unfinished uploads, document libraries,
+    vectors and long-term memory. Returns its receipt's ``removed`` counts. The administrator acts for the tenant it names."""
+    receipt = await admin.erasure.request(
+        user_id, tenant_id=tenant_id, everything=user_id is None
+    )
+    return receipt["removed"]
+
+
 async def _delete_prefix(store: Any, prefix: str) -> int:
     method = getattr(store, "delete_prefix", None)
     if method is None:
@@ -120,7 +131,11 @@ async def erase_user(
     memory_store: Any = None,
     runtime_store: Any = None,
     folder: Store | None = None,
+    data_admin: Any = None,
 ) -> ErasureSummary:
+    """Erase one user. Order: the data service (files, documents, vectors, memory), then the runtime (runs, conversations, task boards),
+    then Redis (caches that could otherwise repopulate from what was just removed). ``data_admin`` is an ``AsyncDataClient`` signed in
+    as the platform's administrator; without it the folder store holds all of that locally."""
     threads = list(
         (
             await db.execute(
@@ -178,14 +193,25 @@ async def erase_user(
     # along with it — no separate per-conversation sweep needed, and
     # nothing to miss if a thread's ownership record were ever wrong.
     # The user's file records and the upload tickets are in that folder too, so one delete leaves nothing of them.
-    objects = await _delete_prefix(store, user_prefix(tenant_id, user_id))
-    redis_deleted = await _redis_sweep(redis, {user_id, *thread_ids})
-    documents = await _erase_documents(folder, store, user_prefix(tenant_id, user_id))
-    memories = (
-        await memory_store.erase(MemoryNamespace(tenant_id=tenant_id, user_id=user_id))
-        if memory_store
-        else 0
-    )
+    vectors = 0
+    if data_admin is not None:
+        removed = await _erase_in_data_service(data_admin, tenant_id, user_id)
+        objects = removed["files"]["files"]
+        documents = removed["libraries"]["documents"]
+        memories = removed["memory"]
+        vectors = removed["vectors"]
+    else:
+        objects = await _delete_prefix(store, user_prefix(tenant_id, user_id))
+        documents = await _erase_documents(
+            folder, store, user_prefix(tenant_id, user_id)
+        )
+        memories = (
+            await memory_store.erase(
+                MemoryNamespace(tenant_id=tenant_id, user_id=user_id)
+            )
+            if memory_store
+            else 0
+        )
     runs = 0
     if runtime_store is not None:
         for thread_id in thread_ids:
@@ -199,6 +225,8 @@ async def erase_user(
                 thread_nodes=erased.thread_nodes + gone.thread_nodes,
                 task_boards=erased.task_boards + gone.task_boards,
             )
+    # Last: caches and session indexes name ids that the steps above have just removed.
+    redis_deleted = await _redis_sweep(redis, {user_id, *thread_ids})
     return ErasureSummary(
         tenant_id,
         user_id,
@@ -210,6 +238,7 @@ async def erase_user(
         runs,
         erased.thread_nodes,
         erased.task_boards,
+        vectors,
         groups_deleted=groups_deleted,
         agents_deleted=agents_result.rowcount or 0,
     )
@@ -226,8 +255,9 @@ async def erase_tenant(
     memory_store: Any = None,
     runtime_store: Any = None,
     folder: Store | None = None,
+    data_admin: Any = None,
 ) -> ErasureSummary:
-    """Erase a tenant. ``store`` is the tenant's store. With a data service (``user_store`` given) a user's folder can only be
+    """Erase a tenant. Order: the data service, then the runtime, then Redis (see ``erase_user``). ``store`` is the tenant's store. With a data service (``user_store`` given) a user's folder can only be
     deleted as that user, so each user the tenant had is erased through ``user_store(user)``, then the tenant's shared folders
     through ``store``; the volume itself is the data service's to unregister (the platform's deprovisioning)."""
     threads = list(
@@ -241,30 +271,46 @@ async def erase_tenant(
     groups_result = await db.execute(delete(Group).where(Group.tenant_id == tenant_id))
     agents_result = await db.execute(delete(Agent).where(Agent.tenant_id == tenant_id))
     await db.commit()
-    # Everything the folder store holds for the tenant — conversation DAG, tasks, vectors, graph, files, memory.
-    erased = await folder.tenant(tenant_id).erase() if folder is not None else Erased()
-    objects = erased.files
-    if user_store is None:
-        objects += await _delete_prefix(store, tenant_prefix(tenant_id))
-    else:
-        for user in sorted(users):
-            objects += await _delete_prefix(
-                user_store(user), user_prefix(tenant_id, user)
-            )
-        for shared in ("knowledge", "groups"):
-            objects += await _delete_prefix(
-                store, f"{tenant_prefix(tenant_id)}/{shared}/"
-            )
-    redis_deleted = await _redis_sweep(redis, thread_ids | users)
-    documents = await _erase_documents(folder, store, tenant_prefix(tenant_id))
-    memories = erased.memories + (
-        await memory_store.erase(MemoryNamespace(tenant_id=tenant_id))
-        if memory_store
-        else 0
+    # 1. The data service: files and versions, uploads, libraries, vectors, memory.
+    removed = (
+        await _erase_in_data_service(data_admin, tenant_id, None)
+        if data_admin is not None
+        else None
     )
+    # Everything the folder store holds for the tenant — conversation DAG, tasks (and, without a data service, vectors, graph, files,
+    # memory).
+    erased = await folder.tenant(tenant_id).erase() if folder is not None else Erased()
+    if removed is not None:
+        objects = removed["files"]["files"]
+        documents = removed["libraries"]["documents"]
+        memories = removed["memory"]
+        vectors = removed["vectors"]
+    else:
+        objects = erased.files
+        if user_store is None:
+            objects += await _delete_prefix(store, tenant_prefix(tenant_id))
+        else:
+            for user in sorted(users):
+                objects += await _delete_prefix(
+                    user_store(user), user_prefix(tenant_id, user)
+                )
+            for shared in ("knowledge", "groups"):
+                objects += await _delete_prefix(
+                    store, f"{tenant_prefix(tenant_id)}/{shared}/"
+                )
+        documents = await _erase_documents(folder, store, tenant_prefix(tenant_id))
+        memories = erased.memories + (
+            await memory_store.erase(MemoryNamespace(tenant_id=tenant_id))
+            if memory_store
+            else 0
+        )
+        vectors = erased.vectors
+    # 2. The runtime: runs and their journals.
     runs = (
         await runtime_store.erase(tenant=tenant_id) if runtime_store is not None else 0
     )
+    # 3. Redis last.
+    redis_deleted = await _redis_sweep(redis, thread_ids | users)
     return ErasureSummary(
         tenant_id,
         None,
@@ -276,7 +322,7 @@ async def erase_tenant(
         runs,
         erased.thread_nodes,
         erased.task_boards,
-        erased.vectors,
+        vectors,
         erased.graph_entities,
         groups_deleted=groups_result.rowcount or 0,
         agents_deleted=agents_result.rowcount or 0,

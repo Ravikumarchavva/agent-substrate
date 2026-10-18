@@ -136,3 +136,16 @@ async def test_taking_over_another_users_id_is_a_scope_violation(
                 namespace=MemoryNamespace(tenant_id="t1", user_id="bob"),
             )
         )
+
+
+async def test_a_refused_token_is_soft_for_reads_and_an_auth_error_for_writes(
+    connection,
+):
+    def refuse(tenant: str, user: str | None) -> str:
+        raise ValueError("the user is not a member of the organization")
+
+    store = DataMemoryStore(connection, refuse)
+    assert await store.get(alice(), "x") is None
+    assert await store.query(MemoryQuery(namespace=alice())) == []
+    with pytest.raises(AuthError):
+        await store.save(MemoryRecord.from_text("x", namespace=alice()))

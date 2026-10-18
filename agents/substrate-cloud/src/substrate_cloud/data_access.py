@@ -44,7 +44,7 @@ import jwt
 import uvicorn
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from substrate.integrations.data import DataFilesConnection
+from substrate.integrations.data import DataFilesConnection, DataServiceConnection
 from substrate_data_client import AsyncDataClient, ClientCredentials
 from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
     DataMount,
@@ -287,6 +287,50 @@ class DataTokenMinter:
             "tenant_id": scope.tenant_id,
             "thread_id": scope.thread_id,
             "agent_id": agent,
+        }
+        return jwt.encode(
+            claims, self.key, algorithm="EdDSA", headers={"kid": self.kid}
+        )
+
+    async def mint_for(
+        self,
+        tenant_id: str,
+        user_id: str | None,
+        scopes: Iterable[str],
+        ttl_seconds: int = 300,
+    ) -> str:
+        """A delegated token for documents and memory: the user's own (membership checked) or, with no user, the platform
+        acting for the organisation (a knowledge base has no owner among its members).
+
+        Signed under ``files_issuer``, the name the data service trusts to change data. The token asserts no groups, so even the
+        platform's own token is never a tenant administrator: tenant-level memory is not written this way."""
+        if user_id:
+            token = await self.mint(
+                RunScope(tenant_id=tenant_id, user_id=user_id),
+                ttl_seconds,
+                scopes=scopes,
+                issuer=self.files_issuer,
+            )
+            if token is None:
+                raise ValueError("a data token needs a member of the organization")
+            return token
+        asked = frozenset(scopes)
+        if not asked or not asked <= self.allowed_scopes:
+            raise ValueError(
+                f"scopes {sorted(asked)} are outside this issuer's allowed scopes"
+            )
+        now = int(time.time())
+        claims = {
+            "iss": self.files_issuer,
+            "aud": self.audience,
+            "sub": "service:platform",
+            "iat": now,
+            "nbf": now,
+            "exp": now + max(MIN_TOKEN_SECONDS, min(ttl_seconds, MAX_TOKEN_SECONDS)),
+            "jti": uuid.uuid4().hex,
+            "scope": " ".join(sorted(asked)),
+            "act": {"sub": "agent-substrate:platform"},
+            "tenant_id": tenant_id,
         }
         return jwt.encode(
             claims, self.key, algorithm="EdDSA", headers={"kid": self.kid}
@@ -705,6 +749,88 @@ def build_data_access(
     )
 
 
+def service_transport(
+    service_url: str,
+    *,
+    ca_file: str = "",
+    client_cert_file: str = "",
+    client_key_file: str = "",
+):
+    """The pooled transport factory every call to the data service uses: https:// unless the service is on this machine, a private
+    CA and a client certificate when configured, no ambient proxy, no redirects."""
+    parts = urlsplit(service_url)
+    if (
+        parts.scheme not in {"http", "https"}
+        or not parts.hostname
+        or parts.username
+        or parts.query
+        or parts.fragment
+    ):
+        raise ValueError("The data service URL must be http(s)://host[:port]")
+    if parts.scheme == "http" and parts.hostname not in LOOPBACK:
+        raise ValueError(
+            "The data service is on another machine: its URL must be https:// "
+            "(plain http is only allowed to localhost)."
+        )
+    if bool(client_cert_file) != bool(client_key_file):
+        raise ValueError("DATA_CLIENT_CERT_FILE and DATA_CLIENT_KEY_FILE go together")
+    context: ssl.SSLContext | bool = True
+    if parts.scheme == "https":
+        context = ssl.create_default_context(cafile=ca_file or None)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        if client_cert_file and client_key_file:
+            context.load_cert_chain(client_cert_file, client_key_file)
+
+    def transport() -> httpx.AsyncHTTPTransport:
+        return httpx.AsyncHTTPTransport(
+            verify=context,
+            limits=httpx.Limits(
+                max_connections=64, max_keepalive_connections=16, keepalive_expiry=30
+            ),
+            trust_env=False,
+        )
+
+    return transport
+
+
+class DataDocumentAccess:
+    """Documents and memory through the data service: one pooled connection and the token providers the adapters call."""
+
+    def __init__(
+        self, connection: DataServiceConnection, minter: DataTokenMinter
+    ) -> None:
+        self.connection = connection
+        self.minter = minter
+
+    async def document_token(self, tenant_id: str, user_id: str | None) -> str:
+        return await self.minter.mint_for(tenant_id, user_id, ("documents:write",))
+
+    async def memory_token(self, tenant_id: str, user_id: str | None) -> str:
+        return await self.minter.mint_for(tenant_id, user_id, ("memory:write",))
+
+    async def aclose(self) -> None:
+        await self.connection.aclose()
+
+
+def build_document_access(
+    *,
+    service_url: str,
+    minter: DataTokenMinter,
+    ca_file: str = "",
+    client_cert_file: str = "",
+    client_key_file: str = "",
+) -> DataDocumentAccess:
+    transport = service_transport(
+        service_url,
+        ca_file=ca_file,
+        client_cert_file=client_cert_file,
+        client_key_file=client_key_file,
+    )
+    return DataDocumentAccess(
+        DataServiceConnection(service_url, transport=transport()), minter
+    )
+
+
 def build_file_connection(
     *,
     service_url: str,
@@ -731,28 +857,12 @@ def build_file_connection(
             "DATA_SERVICE_URL is set but no organization-membership check is configured "
             "(OIDC_ISSUER, OIDC_ADMIN_CLIENT_ID, OIDC_ADMIN_CLIENT_SECRET): files tokens cannot be signed safely."
         )
-    parts = urlsplit(service_url)
-    if (
-        parts.scheme not in {"http", "https"}
-        or not parts.hostname
-        or parts.username
-        or parts.query
-        or parts.fragment
-    ):
-        raise ValueError("The data service URL must be http(s)://host[:port]")
-    if parts.scheme == "http" and parts.hostname not in LOOPBACK:
-        raise ValueError(
-            "The data service is on another machine: its URL must be https:// "
-            "(plain http is only allowed to localhost)."
-        )
-    if bool(client_cert_file) != bool(client_key_file):
-        raise ValueError("DATA_CLIENT_CERT_FILE and DATA_CLIENT_KEY_FILE go together")
-    context: ssl.SSLContext | bool = True
-    if parts.scheme == "https":
-        context = ssl.create_default_context(cafile=ca_file or None)
-        context.minimum_version = ssl.TLSVersion.TLSv1_2
-        if client_cert_file and client_key_file:
-            context.load_cert_chain(client_cert_file, client_key_file)
+    transport = service_transport(
+        service_url,
+        ca_file=ca_file,
+        client_cert_file=client_cert_file,
+        client_key_file=client_key_file,
+    )
     key_path = Path(key_file or f"{data_dir.rstrip('/')}/keys/data-token.pem").resolve()
     current, previous = load_keys(key_path)
     minter = DataTokenMinter(
@@ -763,15 +873,6 @@ def build_file_connection(
         files_issuer=files_issuer,
         membership=membership,
     )
-
-    def transport() -> httpx.AsyncHTTPTransport:
-        return httpx.AsyncHTTPTransport(
-            verify=context,
-            limits=httpx.Limits(
-                max_connections=64, max_keepalive_connections=16, keepalive_expiry=30
-            ),
-            trust_env=False,
-        )
 
     connection = DataFilesConnection(
         service_url, tokens=minter.mint_files, transport=transport()

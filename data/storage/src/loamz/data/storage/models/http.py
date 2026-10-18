@@ -144,7 +144,7 @@ async def answers(url: str, *, timeout: float = 5.0) -> bool:
     check_url(url)
     try:
         await asyncio.to_thread(_call, "GET", url, None, {}, timeout)
-    except ServiceUnavailableError, PermanentError, RateLimitedError:
+    except (ServiceUnavailableError, PermanentError, RateLimitedError):
         return False
     return True
 

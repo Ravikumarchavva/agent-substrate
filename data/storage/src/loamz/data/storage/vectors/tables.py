@@ -429,7 +429,7 @@ class Vectors:
                 else:
                     out.append(
                         (
-                            sum(map(mul, q, _unpack(row["embedding"]), strict=False))
+                            sum(map(mul, q, _unpack(row["embedding"])))
                             / (q_norm * row["norm"]),
                             -position,
                             row,

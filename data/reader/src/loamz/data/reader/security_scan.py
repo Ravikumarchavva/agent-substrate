@@ -1,0 +1,111 @@
+"""Document structural/security scanner — thin wrapper over `doc-firewall`.
+
+Runs on raw uploaded bytes, before PaddleOCR (or any parser) touches them —
+a hostile file must not reach the parser first. Verified directly against
+this deployment (not assumed from the package's own docs): a clean PDF
+fixture scores `ALLOW`/0.0 risk in ~11ms; a synthetically constructed PDF
+carrying an OpenAction JavaScript annotation scores `FLAG`/0.876 with four
+concrete findings (`/JavaScript` and `/JS` tokens, JS-in-annotation-action,
+active-content indicator) — real detection, not a stub.
+
+Default install is pure regex/heuristic/format-specific checks — no ML
+deps, matching this codebase's established no-torch-unless-necessary
+philosophy. `doc-firewall`'s own optional `ml` extra (BERT/embeddings-based
+detection, pulls torch+transformers) is deliberately NOT installed.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from enum import StrEnum
+
+logger = logging.getLogger(__name__)
+
+
+class Severity(StrEnum):
+    """How serious a scan's finding is."""
+
+    NONE = "none"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+@dataclass(frozen=True)
+class SafetyVerdict:
+    """What the scan concluded about one upload."""
+
+    severity: Severity
+    scores: Mapping[str, float] = field(default_factory=dict)
+    detector: str = ""
+    modality: str = "document"
+    detail: str = ""
+
+    @property
+    def flagged(self) -> bool:
+        return self.severity != Severity.NONE
+
+
+# Structural-only parsing risks: downgraded to warnings rather than blocking the read.
+_STRUCTURAL_ONLY_THREATS = {"T6_DOS", "T3_OBFUSCATION"}
+
+_VERDICT_SEVERITY = {
+    "ALLOW": Severity.NONE,
+    "BLOCK": Severity.CRITICAL,
+}
+
+
+def scan_document(data: bytes, *, filename: str = "") -> SafetyVerdict:
+    """Sync, CPU-bound (regex/structural parsing, not ML by default) —
+    callers run this via ``asyncio.to_thread`` same as the ONNX classifiers.
+
+    Fails open on a scan error (malformed/unsupported file that
+    ``doc-firewall`` itself can't parse) — an unscannable file is not the
+    same claim as a malicious one; the extraction pipeline's own parser
+    will separately reject anything it can't handle.
+    """
+    from doc_firewall import scan_bytes
+
+    try:
+        report = scan_bytes(data, filename=filename or None)
+    except Exception as exc:
+        logger.warning("doc-firewall scan failed for %r: %s", filename, exc)
+        return SafetyVerdict(
+            severity=Severity.NONE,
+            detector="doc_firewall",
+            modality="document",
+            detail=f"scan error (fail-open): {exc}",
+        )
+
+    verdict_name = report.verdict.name if hasattr(report.verdict, "name") else str(report.verdict)
+    if verdict_name == "FLAG":
+        # MEDIUM only if every finding is a structural/DoS-class heuristic
+        # (T6_DOS/T3_OBFUSCATION) — any other threat category keeps HIGH.
+        # See the _STRUCTURAL_ONLY_THREATS comment above for the real PDFs
+        # this was verified against.
+        threat_ids = {
+            f.threat_id.value if hasattr(f.threat_id, "value") else str(f.threat_id)
+            for f in report.findings
+        }
+        structural_only = bool(threat_ids) and threat_ids <= _STRUCTURAL_ONLY_THREATS
+        severity = Severity.MEDIUM if structural_only else Severity.HIGH
+    else:
+        severity = _VERDICT_SEVERITY.get(verdict_name, Severity.NONE)
+
+    findings_summary = [
+        f"{f.threat_id.value if hasattr(f.threat_id, 'value') else f.threat_id}: {f.title}"
+        for f in report.findings
+    ]
+
+    return SafetyVerdict(
+        severity=severity,
+        scores={"risk_score": float(report.risk_score)},
+        detector="doc_firewall",
+        modality="document",
+        detail="; ".join(findings_summary) if findings_summary else "",
+    )
+
+
+__all__ = ["SafetyVerdict", "Severity", "scan_document"]

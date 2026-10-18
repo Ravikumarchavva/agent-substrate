@@ -46,7 +46,7 @@ class _Worker:
                 )  # the worker and anything it started (tesseract)
             else:
                 self.proc.kill()
-        except ProcessLookupError, PermissionError, OSError:
+        except (ProcessLookupError, PermissionError, OSError):
             pass
         try:
             self.proc.wait(timeout=5)

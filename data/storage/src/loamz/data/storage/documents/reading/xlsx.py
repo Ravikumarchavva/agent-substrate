@@ -77,7 +77,7 @@ def _date(text: str) -> str:
     try:
         serial = float(text)
         moment = _EPOCH + dt.timedelta(days=serial)
-    except ValueError, OverflowError:
+    except (ValueError, OverflowError):
         return text
     if serial < 1:
         return moment.strftime("%H:%M")
@@ -97,7 +97,7 @@ def _cell_value(cell: ET.Element, strings: list[str], dates: set[int]) -> str:
     if kind == "s":
         try:
             return strings[int(text)]
-        except ValueError, IndexError:
+        except (ValueError, IndexError):
             return ""
     if kind == "b":
         return "TRUE" if text == "1" else "FALSE"

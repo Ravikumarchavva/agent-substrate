@@ -355,12 +355,12 @@ class LocalLlamaServerPool:
                 if state.supervisor_task is not None:
                     try:
                         await state.supervisor_task
-                    except asyncio.CancelledError, Exception:  # noqa: BLE001
+                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
                         pass
                 for task in state.drain_tasks:
                     try:
                         await task
-                    except asyncio.CancelledError, Exception:  # noqa: BLE001
+                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
                         pass
 
             for state in self._states.values():

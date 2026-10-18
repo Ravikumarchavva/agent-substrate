@@ -101,7 +101,7 @@ def _zip_format(data: bytes) -> Format:
                 if "xl/workbook.xml" in names:
                     return Format.XLSX
             return Format.OTHER_ARCHIVE
-    except zipfile.BadZipFile, OSError, ValueError, NotImplementedError:
+    except (zipfile.BadZipFile, OSError, ValueError, NotImplementedError):
         return Format.UNKNOWN
 
 

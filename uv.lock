@@ -2480,6 +2480,7 @@ postgres = [
 dev = [
     { name = "asyncpg" },
     { name = "httpx" },
+    { name = "hypothesis" },
     { name = "pypdfium2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -2501,6 +2502,7 @@ provides-extras = ["postgres", "pdf", "ocr"]
 dev = [
     { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "hypothesis", specifier = ">=6.100" },
     { name = "pypdfium2", specifier = ">=5.0.0" },
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-asyncio", specifier = ">=1.4" },

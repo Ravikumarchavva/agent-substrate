@@ -27,7 +27,7 @@ async def _handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) ->
         )
         writer.write(response)
         await writer.drain()
-    except ConnectionError, OSError:
+    except (ConnectionError, OSError):
         pass
     finally:
         writer.close()

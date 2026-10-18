@@ -54,7 +54,7 @@ class TesseractOcr:
                     _LANGS[self.binary] = frozenset(
                         line.strip() for line in out.stdout.splitlines()[1:] if line.strip()
                     )
-                except OSError, subprocess.SubprocessError:
+                except (OSError, subprocess.SubprocessError):
                     _LANGS[self.binary] = frozenset()
             return _LANGS[self.binary]
 

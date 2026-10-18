@@ -39,7 +39,7 @@ def _limit(memory_bytes: int) -> None:
     try:
         with open("/proc/self/statm") as handle:
             baseline = int(handle.read().split()[0]) * os.sysconf("SC_PAGE_SIZE")
-    except OSError, ValueError:
+    except (OSError, ValueError):
         baseline = 0
     for name, soft in (
         ("RLIMIT_AS", baseline + memory_bytes),
@@ -53,7 +53,7 @@ def _limit(memory_bytes: int) -> None:
             continue
         try:
             resource.setrlimit(limit, (soft, soft))
-        except ValueError, OSError:
+        except (ValueError, OSError):
             pass
 
 
@@ -89,7 +89,7 @@ def main() -> None:
                 warm = getattr(ocr_cache[spec], "warm", None)
                 if warm:
                     warm()  # before the cap: a model runtime maps far more address space than it uses
-            except RuntimeError, ValueError:
+            except (RuntimeError, ValueError):
                 ocr_cache[spec] = None
         if not limited:
             _limit(limits.memory_bytes)

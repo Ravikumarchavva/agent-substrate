@@ -1,0 +1,232 @@
+"""EvalRunner — execute evaluation suites against kernel-native agents.
+
+Accepts any real ``Agent`` (``id: Actor``, ``run(ctx: RunContext, inbox) ->
+None``) — drives it through a real in-memory ``Runtime``, so it needs the
+concrete ``RunContext``-typed agent, not just kernel's minimal ``Agent``
+bound. Collects the reply via the signal bus and returns a structured
+EvalReport.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import tempfile
+import time
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from loamz.agents.evals.judge import LLMJudge
+from loamz.agents.evals.models import EvalCase, EvalCaseResult, EvalDataset, EvalReport
+from loamz.agents.kernel.runtime import ChatPayload, Message, Runtime
+from loamz.agents.kernel.types.content import ChatMessage, Role, TextBlock
+from loamz.agents.kernel.types.identity import Actor
+from loamz.agents.kernel.types.run_log import RunLogKind
+from loamz.agents.kernel.types.run_status import RunId, new_run_id
+from loamz.agents.stores import AgentStore
+
+if TYPE_CHECKING:
+    from loamz.agents.kernel.runtime import Agent
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _scratch_runtime() -> AsyncGenerator[Runtime]:
+    """A runtime on an agent store in a temporary folder: an eval run leaves nothing behind."""
+    with tempfile.TemporaryDirectory(prefix="loamz-eval-") as folder:
+        store = AgentStore.at(Path(folder) / "agents.db")
+        async with Runtime(store, owns_store=True) as runtime:
+            yield runtime
+
+
+@dataclass
+class _Trace:
+    """Execution-trace aggregates read back from a run's event log.
+
+    Captures the agent-under-test's own run only. For an orchestrator, a
+    sub-agent's LLM/tool calls live in its child run and are not included.
+    """
+
+    steps: int = 0
+    tokens: int = 0
+    tool_total: int = 0
+    tool_by_name: dict[str, int] = field(default_factory=dict)
+    tool_order: list[str] = field(default_factory=list)
+
+
+class EvalRunner:
+    """Execute an eval dataset against an agent and return a structured report.
+
+    Parameters
+    ----------
+    agent:       Agent (``id: Actor``, ``run(ctx: RunContext, inbox) -> None``).
+    judge:       Optional LLMJudge for scoring outputs.
+    concurrency: Number of cases to run in parallel (default 1 = sequential).
+    timeout:     Per-case timeout in seconds.  ``None`` = no timeout.
+    """
+
+    def __init__(
+        self,
+        agent: Agent,
+        judge: LLMJudge | None = None,
+        *,
+        concurrency: int = 1,
+        timeout: float | None = None,
+    ) -> None:
+        self._agent = agent
+        self._judge = judge
+        self._concurrency = max(1, concurrency)
+        self._timeout = timeout
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    async def run(self, dataset: EvalDataset) -> EvalReport:
+        """Run all cases in the dataset and return an aggregated EvalReport."""
+        wall_start = time.monotonic()
+        async with _scratch_runtime() as rt:
+            await rt.register(self._agent)
+
+            if self._concurrency == 1:
+                results = [await self._run_case(case, rt=rt) for case in dataset.cases]
+            else:
+                sem = asyncio.Semaphore(self._concurrency)
+
+                async def _guarded(case: EvalCase) -> EvalCaseResult:
+                    async with sem:
+                        return await self._run_case(case, rt=rt)
+
+                results = list(await asyncio.gather(*[_guarded(c) for c in dataset.cases]))
+
+        total_duration = time.monotonic() - wall_start
+        criteria_names = [c.name for c in self._judge.criteria] if self._judge else []
+        return EvalReport(
+            dataset_name=dataset.name,
+            results=results,
+            criteria_names=criteria_names,
+            total_duration_seconds=total_duration,
+        )
+
+    async def run_case(self, case: EvalCase) -> EvalCaseResult:
+        """Run a single case with its own ephemeral Runtime."""
+        async with _scratch_runtime() as rt:
+            await rt.register(self._agent)
+            return await self._run_case(case, rt=rt)
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    async def _run_case(self, case: EvalCase, *, rt: Runtime) -> EvalCaseResult:
+        sentinel_run_id = new_run_id()
+        msg = Message(
+            target=self._agent.id,
+            sender=Actor(type="eval_runner", key=case.case_id),
+            payload=ChatPayload(
+                message=ChatMessage(role=Role.USER, content=[TextBlock(text=case.input)])
+            ),
+            reply_to=sentinel_run_id,
+        )
+        cid = msg.correlation_id
+        start = time.monotonic()
+        run_id: RunId = ""
+        trace = _Trace()
+        try:
+            run_id = await rt.submit(self._agent.id, msg)
+            # Poll consume() rather than block: signals are consume-based, as a durable
+            # backend has no way to "block" on a row. sentinel_run_id is a synthetic mailbox key for this
+            # external harness, not a real tracked run, so a fixed effect_id
+            # is fine — this call site never replays.
+            deadline = time.monotonic() + self._timeout if self._timeout is not None else None
+            payload: dict | None = None
+            while deadline is None or time.monotonic() < deadline:
+                payload = await rt.store.consume(
+                    sentinel_run_id,
+                    f"reply:{cid}",
+                    f"eval-wait:{sentinel_run_id}:{cid}",
+                )
+                if payload is not None:
+                    break
+                record = await rt.get_run(run_id)
+                if record is not None and record.status.is_terminal:
+                    # The run is over and left no reply: waiting longer cannot produce one.
+                    payload = await rt.store.consume(
+                        sentinel_run_id,
+                        f"reply:{cid}",
+                        f"eval-wait:{sentinel_run_id}:{cid}",
+                    )
+                    if payload is None:
+                        raise RuntimeError(f"agent run {record.status} without replying")
+                    break
+                await asyncio.sleep(0.05)
+            if payload is None:
+                raise TimeoutError(f"Timed out after {self._timeout}s waiting for a reply")
+            output = str(payload.get("text", ""))
+            duration = time.monotonic() - start
+            trace = await self._collect_trace(rt, run_id)
+            case_result = EvalCaseResult(
+                case_id=case.case_id,
+                input=case.input,
+                expected_output=case.expected_output,
+                actual_output=output,
+                status="completed",
+                duration_seconds=duration,
+                tags=list(case.tags),
+                run_id=run_id,
+                steps_used=trace.steps,
+                tokens_used=trace.tokens,
+                tool_calls_total=trace.tool_total,
+                tool_calls_by_name=trace.tool_by_name,
+            )
+        except Exception as exc:
+            duration = time.monotonic() - start
+            logger.warning("[EvalRunner] case %s failed: %s", case.case_id, exc)
+            case_result = EvalCaseResult(
+                case_id=case.case_id,
+                input=case.input,
+                expected_output=case.expected_output,
+                actual_output="",
+                status="error",
+                error=str(exc),
+                duration_seconds=duration,
+                tags=list(case.tags),
+                run_id=run_id,
+            )
+
+        if self._judge and case_result.status != "error":
+            scores = await self._judge.score(
+                input_text=case.input,
+                actual_output=case_result.actual_output,
+                expected_output=case.expected_output,
+                context=case.context,
+                expected_tool_calls=case.expected_tool_calls,
+                actual_tool_calls=trace.tool_order,
+            )
+            case_result.scores = list(scores)
+
+        return case_result
+
+    @staticmethod
+    async def _collect_trace(rt: Runtime, run_id: RunId) -> _Trace:
+        """Aggregate steps / tokens / tool calls from the run's record.
+
+        Read once the reply has arrived: every ``llm.call`` and ``tool.call``
+        entry is journaled during the agent loop, before it replies.
+        """
+        trace = _Trace()
+        for entry in await rt.read(run_id):
+            payload = entry.payload or {}
+            if entry.kind == RunLogKind.LLM_CALL:
+                trace.steps += 1
+                trace.tokens += int(payload.get("tokens", 0) or 0)
+            elif entry.kind == RunLogKind.TOOL_CALL:
+                name = str(payload.get("tool_name", "tool"))
+                trace.tool_total += 1
+                trace.tool_by_name[name] = trace.tool_by_name.get(name, 0) + 1
+                trace.tool_order.append(name)
+        return trace

@@ -1,6 +1,6 @@
 [project]
 name = "agent-substrate"
-version = "0.3.0"
+version = "0.4.0"
 description = "Durable Agents for Agent Swarms, LLMs, and Autonomous Systems"
 readme = "README.md"
 license = { text = "MIT" }

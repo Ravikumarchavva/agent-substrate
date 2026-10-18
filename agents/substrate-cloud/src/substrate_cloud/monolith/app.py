@@ -327,7 +327,7 @@ async def lifespan(app: FastAPI):
         app.state.session_factory,
     )
     # Crons, webhooks and conditions people made before the last restart.
-    from substrate_cloud.monolith.services import trigger_store
+    from substrate_cloud import trigger_store
 
     restored = await trigger_store.restore(
         app.state.session_factory,

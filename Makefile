@@ -26,6 +26,7 @@ format:
 
 imports:
 	cd agents/agent-substrate && uv run --package agent-substrate lint-imports
+	cd agents/substrate-cloud && uv run --package substrate-cloud lint-imports
 
 # `make test` is the fast tier (a few minutes, no infrastructure): lint, import contracts and the default test selection of
 # every package. Postgres-backed and model-loading tests are marked `slow`/`heavy`/`integration` and run in CI or `make test-slow`.

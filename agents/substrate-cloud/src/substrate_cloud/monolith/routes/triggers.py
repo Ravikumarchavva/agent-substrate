@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from substrate_cloud.monolith.security.deps import get_current_user
-from substrate_cloud.monolith.services import trigger_store
+from substrate_cloud import trigger_store
 from substrate_cloud.shared.auth.claims import AuthClaims
 
 router = APIRouter(prefix="/triggers", tags=["triggers"])

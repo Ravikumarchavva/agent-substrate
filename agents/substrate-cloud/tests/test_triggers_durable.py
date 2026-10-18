@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from substrate.integrations.triggers.conditions import ConditionMonitor
 from substrate.integrations.triggers.webhooks import WebhookRegistry
-from substrate_cloud.monolith.services import trigger_store
+from substrate_cloud import trigger_store
 
 from test_scheduled_notifications import session
 from test_triggers_tenancy import _Scheduler

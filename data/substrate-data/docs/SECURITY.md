@@ -18,7 +18,8 @@
   for an hour then fail closed). Their principals are never metastore admins and, by default, tokens must carry
   `scope: data:read`, which limits them to `SELECT` statements and catalog browsing (`403 token-read-only`
   otherwise). Context claims (`tenant_id`, `thread_id`, `agent_id`) and `jti` (as `token_id`) are stored with each
-  statement. This is how agent-substrate's per-run token is accepted across machines; see [AGENTS.md](AGENTS.md).
+  statement. A trusted issuer may also set `allowed_scopes`: scopes outside it are dropped from its tokens. Tokens are
+  verified by the shared `substrate-identity` library (RS256, ES256 or EdDSA only). This is how agent-substrate's per-run token is accepted across machines; see [AGENTS.md](AGENTS.md).
 
 ## Transport
 

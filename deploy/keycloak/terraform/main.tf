@@ -174,18 +174,18 @@ resource "keycloak_openid_client_scope" "delegated" {
 
 # ---------------------------------------------------------------- human-facing clients
 resource "keycloak_openid_client" "substrate_ui" {
-  realm_id                     = keycloak_realm.substrate.id
-  client_id                    = "substrate-ui"
-  name                         = "Substrate agents console"
-  enabled                      = true
-  access_type                  = "CONFIDENTIAL"
-  client_secret                = var.ui_client_secret
-  standard_flow_enabled        = true
-  direct_access_grants_enabled = false
-  pkce_code_challenge_method   = "S256"
-  root_url                     = var.ui_url
-  valid_redirect_uris          = ["${var.ui_url}/auth/callback"]
-  web_origins                  = [var.ui_url]
+  realm_id                        = keycloak_realm.substrate.id
+  client_id                       = "substrate-ui"
+  name                            = "Substrate agents console"
+  enabled                         = true
+  access_type                     = "CONFIDENTIAL"
+  client_secret                   = var.ui_client_secret
+  standard_flow_enabled           = true
+  direct_access_grants_enabled    = false
+  pkce_code_challenge_method      = "S256"
+  root_url                        = var.ui_url
+  valid_redirect_uris             = ["${var.ui_url}/auth/callback"]
+  web_origins                     = [var.ui_url]
   valid_post_logout_redirect_uris = ["${var.ui_url}/*"]
 }
 
@@ -205,18 +205,18 @@ resource "keycloak_openid_client_optional_scopes" "substrate_ui" {
 }
 
 resource "keycloak_openid_client" "substrate_data_web" {
-  realm_id                     = keycloak_realm.substrate.id
-  client_id                    = "substrate-data-web"
-  name                         = "Substrate Data workspace"
-  enabled                      = true
-  access_type                  = "CONFIDENTIAL"
-  client_secret                = var.data_web_client_secret
-  standard_flow_enabled        = true
-  direct_access_grants_enabled = false
-  pkce_code_challenge_method   = "S256"
-  root_url                     = var.data_web_url
-  valid_redirect_uris          = ["${var.data_web_url}/auth/callback"]
-  web_origins                  = [var.data_web_url]
+  realm_id                        = keycloak_realm.substrate.id
+  client_id                       = "substrate-data-web"
+  name                            = "Substrate Data workspace"
+  enabled                         = true
+  access_type                     = "CONFIDENTIAL"
+  client_secret                   = var.data_web_client_secret
+  standard_flow_enabled           = true
+  direct_access_grants_enabled    = false
+  pkce_code_challenge_method      = "S256"
+  root_url                        = var.data_web_url
+  valid_redirect_uris             = ["${var.data_web_url}/auth/callback"]
+  web_origins                     = [var.data_web_url]
   valid_post_logout_redirect_uris = ["${var.data_web_url}/*"]
 }
 
@@ -233,13 +233,13 @@ resource "keycloak_openid_client_optional_scopes" "substrate_data_web" {
 }
 
 resource "keycloak_openid_client" "substrate_cli" {
-  realm_id                     = keycloak_realm.substrate.id
-  client_id                    = "substrate-cli"
-  name                         = "Substrate CLI and SDK"
-  enabled                      = true
-  access_type                  = "PUBLIC"
-  standard_flow_enabled        = false
-  direct_access_grants_enabled = false
+  realm_id                                  = keycloak_realm.substrate.id
+  client_id                                 = "substrate-cli"
+  name                                      = "Substrate CLI and SDK"
+  enabled                                   = true
+  access_type                               = "PUBLIC"
+  standard_flow_enabled                     = false
+  direct_access_grants_enabled              = false
   oauth2_device_authorization_grant_enabled = true
 }
 

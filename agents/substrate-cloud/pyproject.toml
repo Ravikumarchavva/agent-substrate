@@ -38,9 +38,6 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "substrate_cloud"
 
-[tool.uv.sources]
-agent-substrate = { path = "../..", editable = true }
-
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

@@ -31,8 +31,6 @@ substrate-data = "substrate_data.cli:main"
 [build-system]
 requires = ["uv_build>=0.10.11,<0.11.0"]
 build-backend = "uv_build"
-[tool.uv.sources]
-substrate-data-client = { path = "client", editable = true }
 
 [tool.ruff]
 target-version = "py314"

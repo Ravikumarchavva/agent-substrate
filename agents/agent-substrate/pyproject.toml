@@ -120,15 +120,7 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "substrate"
 
-# The PyTorch CPU wheel index for the sentence-transformers extra (local embeddings). The PaddleOCR indexes moved with
-# the service that needs them: apps/document-intelligence/pyproject.toml.
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
-
-[tool.uv.sources]
-torch = { index = "pytorch-cpu" }
+# The PyTorch CPU wheel index (sentence-transformers extra) is declared once, in the workspace root pyproject.toml.
 
 [dependency-groups]
 dev = [

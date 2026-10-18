@@ -49,8 +49,8 @@ explicit = true
 [tool.uv.sources]
 paddlepaddle = { index = "paddle-cpu" }
 paddlepaddle-gpu = { index = "paddle-cu130" }
-agent-substrate = { path = "../..", editable = true }
-inference-pool = { path = "../../packages/inference-pool", editable = true }
+agent-substrate = { path = "../../agents/agent-substrate", editable = true }
+inference-pool = { path = "../inference-pool", editable = true }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

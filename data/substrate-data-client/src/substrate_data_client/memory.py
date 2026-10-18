@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import quote
 
 from substrate_data_client._http import AsyncCore, SyncCore
 
@@ -28,9 +27,9 @@ class _MemoryCalls:
     def _do(self, method: str, path: str, post: Callable | None = None, **kwargs: Any):
         raise NotImplementedError
 
-    def save(self, record_id: str, record: dict[str, Any]):
-        """Upsert by id within the tenant. 403 `scope-violation` when the id belongs to another owner."""
-        return self._do("PUT", f"/memory/records/{quote(record_id, safe='')}", json=record)
+    def save(self, record: dict[str, Any]):
+        """Upsert by the record's `id` within the tenant. 403 `scope-violation` when the id belongs to another owner."""
+        return self._do("POST", "/memory/records:save", json=record)
 
     def get(
         self,
@@ -41,9 +40,9 @@ class _MemoryCalls:
         session_id: str | None = None,
     ):
         return self._do(
-            "GET",
-            f"/memory/records/{quote(record_id, safe='')}",
-            params=_owner(user_id, agent_id, session_id),
+            "POST",
+            "/memory/records:get",
+            json={"namespace": _owner(user_id, agent_id, session_id), "id": record_id},
         )
 
     def delete(
@@ -55,9 +54,9 @@ class _MemoryCalls:
         session_id: str | None = None,
     ):
         return self._do(
-            "DELETE",
-            f"/memory/records/{quote(record_id, safe='')}",
-            params=_owner(user_id, agent_id, session_id),
+            "POST",
+            "/memory/records:delete",
+            json={"namespace": _owner(user_id, agent_id, session_id), "id": record_id},
         )
 
     def query(
@@ -75,6 +74,21 @@ class _MemoryCalls:
         if tenant_wide_reason:
             body["tenant_wide_reason"] = tenant_wide_reason
         return self._do("POST", "/memory/records:query", lambda b: b["matches"], json=body)
+
+    def erase(
+        self,
+        *,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        session_id: str | None = None,
+    ):
+        """Remove every record under the namespace (no user: the whole tenant). Returns the count."""
+        return self._do(
+            "POST",
+            "/memory/records:erase",
+            lambda b: b["erased"],
+            json={"namespace": _owner(user_id, agent_id, session_id)},
+        )
 
     def touch(
         self,

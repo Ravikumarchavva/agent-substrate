@@ -14,6 +14,7 @@ are written once: on `AsyncDataClient` the same calls are awaited.
 from __future__ import annotations
 
 import base64
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -47,6 +48,12 @@ def _image(response: Any) -> Image:
         label=headers.get("x-picture-label", ""),
         caption=caption,
     )
+
+
+def collection_id(name: str) -> str:
+    """The id the service gives a collection name: the first 24 hex digits of its SHA-256 (a contract, so an adapter can address
+    a collection without a round trip; `ensure` returns the same value)."""
+    return hashlib.sha256(name.encode()).hexdigest()[:24]
 
 
 def _q(value: str) -> str:

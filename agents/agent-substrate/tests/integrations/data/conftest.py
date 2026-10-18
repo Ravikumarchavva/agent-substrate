@@ -109,3 +109,46 @@ def data_service(
             admin.tenants.ensure(tenant, tenant)
     yield service
     served.stop()
+
+
+class DocsService:
+    """A substrate-data API with the document and memory engines on local files (no object storage, so no Docker)."""
+
+    def __init__(self, served: Any, identity: Any) -> None:
+        self.served, self.url, self.identity = served, served.url, identity
+        self.app = served.app
+
+    def tokens(self, scopes: tuple[str, ...] = ("documents:write", "memory:write")):
+        """What the platform would mint: a delegated token for one user of one tenant; with no user, a tenant administrator's."""
+
+        def mint(tenant: str, user: str | None) -> str:
+            groups = [f"tenant-{tenant}", f"org:{tenant}"]
+            if user is None:
+                groups.append("tenant-admins")
+            return self.identity.agent_token(
+                user or "system", tenant, scopes=scopes, groups=groups
+            )
+
+        return mint
+
+
+@pytest.fixture(scope="session")
+def docs_service(identity, ticket_keys, tmp_path_factory) -> Iterator[DocsService]:
+    served = harness.serve_documents(
+        identity,
+        ticket_keys,
+        tmp_path_factory.mktemp("docs-service"),
+        embedder=harness.WordEmbedder(),
+        reranker=harness.WordReranker(),
+    )
+    yield DocsService(served, identity)
+    served.served.stop()
+
+
+def dead_url() -> str:
+    """The address of nothing: a port that was just free, so a connection is refused at once."""
+    import socket
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return f"http://127.0.0.1:{sock.getsockname()[1]}"

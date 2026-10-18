@@ -142,13 +142,16 @@ def test_memory_routes_and_owner_parameters():
     assert len(both(rec, lambda c: c.memory.query(user_id="u1", text_query="tea", limit=3))) == 1
     assert rec.calls[0][3] == {"namespace": {"user_id": "u1"}, "text_query": "tea", "limit": 3}
     rec = Recorder({"id": "r"})
-    both(rec, lambda c: c.memory.save("r/1", {"content": []}))
-    assert rec.calls[0][:2] == ("PUT", "/api/v1/memory/records/r%2F1")
+    both(rec, lambda c: c.memory.save({"id": "../r/1", "content": []}))
+    assert rec.calls[0][:2] == (
+        "POST",
+        "/api/v1/memory/records:save",
+    )  # ids travel in bodies, never in paths
     rec = Recorder(status=404)
     sync, _ = clients(rec)
     with pytest.raises(NotFound):
-        sync.memory.get("r", user_id="u1")
-    assert rec.calls[0][2] == {"user_id": "u1"}
+        sync.memory.get("a/../b", user_id="u1")
+    assert rec.calls[0][3] == {"namespace": {"user_id": "u1"}, "id": "a/../b"}
 
 
 def test_erasure_and_export_name_a_subject_or_the_whole_tenant():

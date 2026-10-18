@@ -412,6 +412,16 @@
         "title": "Ensure",
         "type": "object"
       },
+      "EraseIn": {
+        "additionalProperties": false,
+        "properties": {
+          "namespace": {
+            "$ref": "#/components/schemas/NamespaceIn"
+          }
+        },
+        "title": "EraseIn",
+        "type": "object"
+      },
       "ExpireRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1355,6 +1365,25 @@
           "max_bytes"
         ],
         "title": "QuotaSet",
+        "type": "object"
+      },
+      "RecordRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "namespace": {
+            "$ref": "#/components/schemas/NamespaceIn"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "RecordRef",
         "type": "object"
       },
       "Reindex": {
@@ -6735,211 +6764,14 @@
         ]
       }
     },
-    "/api/v1/memory/records/{record_id}": {
-      "delete": {
-        "operationId": "delete_api_v1_memory_records__record_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "record_id",
-            "required": true,
-            "schema": {
-              "title": "Record Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "user_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "User Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "agent_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Agent Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "session_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Session Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete",
-        "tags": [
-          "memory"
-        ]
-      },
-      "get": {
-        "operationId": "get_api_v1_memory_records__record_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "record_id",
-            "required": true,
-            "schema": {
-              "title": "Record Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "user_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "User Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "agent_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Agent Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "session_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Session Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get",
-        "tags": [
-          "memory"
-        ]
-      },
-      "put": {
-        "operationId": "save_api_v1_memory_records__record_id__put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "record_id",
-            "required": true,
-            "schema": {
-              "title": "Record Id",
-              "type": "string"
-            }
-          }
-        ],
+    "/api/v1/memory/records:delete": {
+      "post": {
+        "operationId": "delete_api_v1_memory_records_delete_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Body",
-                "type": "object"
+                "$ref": "#/components/schemas/RecordRef"
               }
             }
           },
@@ -6965,7 +6797,86 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Save",
+        "summary": "Delete",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/records:erase": {
+      "post": {
+        "description": "Remove every record under a user, agent or session (or, with no user, the whole tenant). The all-domains\nversion, with a receipt, is `POST /erasure-requests`.",
+        "operationId": "erase_api_v1_memory_records_erase_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EraseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Erase",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/records:get": {
+      "post": {
+        "operationId": "get_api_v1_memory_records_get_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get",
         "tags": [
           "memory"
         ]
@@ -7005,6 +6916,48 @@
           }
         },
         "summary": "Query",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/records:save": {
+      "post": {
+        "description": "Upsert a record by the `id` in its body. (Ids are caller-supplied text, so they travel in bodies, never in paths.)",
+        "operationId": "save_api_v1_memory_records_save_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save",
         "tags": [
           "memory"
         ]

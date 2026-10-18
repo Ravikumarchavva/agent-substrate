@@ -250,3 +250,10 @@ def test_semantic_collections_find_by_meaning_and_reindex_rebuilds_the_vectors(a
     assert alice.documents.reindex(cid) == 1
     assert alice.documents.search(cid, "Rotterdam warehouse")["hits"]
     assert alice.documents.embed_missing(cid) == 0
+
+
+def test_collection_ids_are_the_published_contract(alice):
+    from substrate_data_client.documents import collection_id
+
+    name = mine("alice", "ids")
+    assert alice.documents.ensure(name)["id"] == collection_id(name)

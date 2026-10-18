@@ -8,9 +8,9 @@ tokens need `memory:read` / `memory:write`. The audit log records record ids' di
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from substrate.stores.memory import (
     MemoryCategory,
@@ -33,7 +33,6 @@ router = APIRouter(prefix="/api/v1", tags=["memory"])
 READ = require_scope("memory:read", "memory:write")
 WRITE = require_scope("memory:write")
 MAX_QUERY = 100
-OwnerId = Annotated[str | None, Query(min_length=1, max_length=200)]
 
 
 class NamespaceIn(BaseModel):
@@ -95,18 +94,15 @@ def audit(svc, request: Request, caller: Principal, action: str, record_id: str,
     )  # fmt: skip
 
 
-@router.put("/memory/records/{record_id}", dependencies=[WRITE])
-async def save(
-    record_id: str, body: dict[str, Any], svc: Svc, caller: Caller, domain: Domain, request: Request
-):
+@router.post("/memory/records:save", dependencies=[WRITE])
+async def save(body: dict[str, Any], svc: Svc, caller: Caller, domain: Domain, request: Request):
+    """Upsert a record by the `id` in its body. (Ids are caller-supplied text, so they travel in bodies, never in paths.)"""
     owner = NamespaceIn.model_validate(
         {k: v for k, v in (body.get("namespace") or {}).items() if k != "tenant_id"}
     )
     namespace = namespace_of(caller, owner, write=True)
     try:
-        record = MemoryRecord.model_validate(
-            {**body, "id": record_id, "namespace": namespace.model_dump()}
-        )
+        record = MemoryRecord.model_validate({**body, "namespace": namespace.model_dump()})
     except ValueError as exc:
         raise Problem(400, "invalid-request", f"Not a memory record: {str(exc)[:300]}") from None
     try:
@@ -115,35 +111,30 @@ async def save(
         raise Problem(
             403, "scope-violation", "That record id belongs to another owner in this tenant"
         ) from None
-    audit(svc, request, caller, "memory.save", record_id, category=record.category.value)
-    return {"id": record_id}
+    audit(svc, request, caller, "memory.save", record.id, category=record.category.value)
+    return {"id": record.id}
 
 
-@router.get("/memory/records/{record_id}", dependencies=[READ])
-async def get(
-    record_id: str, caller: Caller, domain: Domain,
-    user_id: OwnerId = None, agent_id: OwnerId = None, session_id: OwnerId = None,
-):  # fmt: skip
-    namespace = namespace_of(
-        caller, NamespaceIn(user_id=user_id, agent_id=agent_id, session_id=session_id)
-    )
-    record = await domain.engine.store.memory.get(namespace, record_id)
+class RecordRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    namespace: NamespaceIn = Field(default_factory=NamespaceIn)
+    id: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/memory/records:get", dependencies=[READ])
+async def get(body: RecordRef, caller: Caller, domain: Domain):
+    record = await domain.engine.store.memory.get(namespace_of(caller, body.namespace), body.id)
     if record is None:
         raise not_found("Memory record")
     return public(record)
 
 
-@router.delete("/memory/records/{record_id}", dependencies=[WRITE])
-async def delete(
-    record_id: str, svc: Svc, caller: Caller, domain: Domain, request: Request,
-    user_id: OwnerId = None, agent_id: OwnerId = None, session_id: OwnerId = None,
-):  # fmt: skip
-    namespace = namespace_of(
-        caller, NamespaceIn(user_id=user_id, agent_id=agent_id, session_id=session_id), write=True
-    )
-    if not await domain.engine.store.memory.delete(namespace, record_id):
+@router.post("/memory/records:delete", dependencies=[WRITE])
+async def delete(body: RecordRef, svc: Svc, caller: Caller, domain: Domain, request: Request):
+    namespace = namespace_of(caller, body.namespace, write=True)
+    if not await domain.engine.store.memory.delete(namespace, body.id):
         raise not_found("Memory record")
-    audit(svc, request, caller, "memory.delete", record_id)
+    audit(svc, request, caller, "memory.delete", body.id)
     return Response(status_code=204)
 
 
@@ -176,3 +167,22 @@ async def touch(body: TouchIn, caller: Caller, domain: Domain):
     namespace = namespace_of(caller, body.namespace)
     await domain.engine.store.memory.touch(namespace, body.ids)
     return Response(status_code=204)
+
+
+class EraseIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    namespace: NamespaceIn = Field(default_factory=NamespaceIn)
+
+
+@router.post("/memory/records:erase", dependencies=[WRITE])
+async def erase(body: EraseIn, svc: Svc, caller: Caller, domain: Domain, request: Request):
+    """Remove every record under a user, agent or session (or, with no user, the whole tenant). The all-domains
+    version, with a receipt, is `POST /erasure-requests`."""
+    namespace = namespace_of(caller, body.namespace, write=True)
+    store = domain.engine.store
+    erased = await store.memory.erase(namespace) if await store.has("memory") else 0
+    svc.store.audit(
+        caller, "memory.erase", "memory", "success", request.state.request_id,
+        scope="user" if namespace.user_id else "tenant", records=erased,
+    )  # fmt: skip
+    return {"erased": erased}

@@ -10,8 +10,9 @@ from test_documents import extraction
 A, B = "acme", "globex"
 
 
-def record(text: str, **namespace) -> dict:
+def record(text: str, id: str = "", **namespace) -> dict:
     return {
+        "id": id,
         "content": [{"type": "text", "text": text}],
         "namespace": namespace,
         "category": "semantic",
@@ -28,7 +29,7 @@ def test_records_belong_to_their_user_and_tenant(docs):
         docs.client("bob", A) as bob,
         docs.client("eve", B) as eve,
     ):
-        alice.memory.save("m-tea", record("alice likes tea", user_id="alice"))
+        alice.memory.save(record("alice likes tea", "m-tea", user_id="alice"))
         assert alice.memory.get("m-tea", user_id="alice")["content"][0]["text"] == "alice likes tea"
         assert texts(alice.memory.query(user_id="alice", text_query="tea")) == ["alice likes tea"]
         # another user of the tenant, and another tenant, see nothing and cannot overwrite
@@ -37,16 +38,16 @@ def test_records_belong_to_their_user_and_tenant(docs):
         assert bob.memory.query(user_id="bob", text_query="tea") == []
         with pytest.raises(NotFound):
             eve.memory.get("m-tea", user_id="eve")
-        eve.memory.save("m-tea", record("eve's own record with the same id", user_id="eve"))
+        eve.memory.save(record("eve's own record with the same id", "m-tea", user_id="eve"))
         assert alice.memory.get("m-tea", user_id="alice")["content"][0]["text"] == "alice likes tea"
         # a token speaks only as its own user
         with pytest.raises(Forbidden):
             bob.memory.get("m-tea", user_id="alice")
         with pytest.raises(Forbidden):
-            bob.memory.save("m-x", record("forged", user_id="alice"))
+            bob.memory.save(record("forged", "m-x", user_id="alice"))
         # taking over a record of another owner in the same tenant is refused
         with pytest.raises(Forbidden):
-            bob.memory.save("m-tea", record("takeover", user_id="bob"))
+            bob.memory.save(record("takeover", "m-tea", user_id="bob"))
         alice.memory.touch(["m-tea"], user_id="alice")
         assert alice.memory.get("m-tea", user_id="alice")["access_count"] == 1
         alice.memory.delete("m-tea", user_id="alice")
@@ -60,8 +61,8 @@ def test_tenant_level_memory_is_written_by_administrators_only(docs):
         docs.client("root", A, groups=["tenant-acme", "tenant-admins"]) as admin,
     ):
         with pytest.raises(Forbidden):
-            alice.memory.save("org-1", record("closing time is five"))
-        admin.memory.save("org-1", record("closing time is five"))
+            alice.memory.save(record("closing time is five", "org-1"))
+        admin.memory.save(record("closing time is five", "org-1"))
         assert texts(alice.memory.query(user_id="alice", text_query="closing")) == [
             "closing time is five"
         ]
@@ -76,7 +77,7 @@ def test_memory_scopes_gate_the_routes(docs):
     with docs.client("alice", A, "memory:read") as reader:
         assert reader.memory.query(user_id="alice") is not None
         with pytest.raises(InsufficientScope):
-            reader.memory.save("m", record("x", user_id="alice"))
+            reader.memory.save(record("x", "m", user_id="alice"))
     with docs.client("alice", A, "documents:write") as other:
         with pytest.raises(InsufficientScope):
             other.memory.query(user_id="alice")
@@ -94,7 +95,7 @@ def populated(docs):
                 "document"
             ]
             c.memory.save(
-                f"mem-{tenant}-{user}", record(f"{user} remembers {tenant}", user_id=user)
+                record(f"{user} remembers {tenant}", f"mem-{tenant}-{user}", user_id=user)
             )
             made[tenant, user] = (cid, doc)
     return made

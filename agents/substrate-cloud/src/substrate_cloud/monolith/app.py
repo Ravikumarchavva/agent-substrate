@@ -54,6 +54,7 @@ from substrate_cloud.monolith.routes.threads import router as threads_router
 from substrate_cloud.monolith.routes.artifacts import router as artifacts_router
 from substrate_cloud.monolith.routes.memory import router as memory_router
 from substrate_cloud.monolith.routes.export import router as export_router
+from substrate_cloud.monolith.routes.data_keys import router as data_keys_router
 from substrate_cloud.monolith.routes.health import router as health_router
 from substrate_cloud.monolith.routes.usage import router as usage_router
 from substrate_cloud.monolith.routes.notifications import router as notifications_router
@@ -185,6 +186,7 @@ async def lifespan(app: FastAPI):
     app.state.tools = tools.registry
     app.state.task_tool = tools.task_tool
     app.state.ci_client = tools.ci_client
+    app.state.data_access = tools.data_access
     app.state.tools_requiring_approval = tools.tools_requiring_approval
     app.state.tool_timeout = 300.0
 
@@ -458,6 +460,7 @@ def create_app() -> FastAPI:
     app.include_router(preferences_router)
     app.include_router(notifications_router)
     app.include_router(health_router)
+    app.include_router(data_keys_router)
     app.include_router(usage_router)
     app.include_router(export_router)
     app.include_router(scheduled_router)

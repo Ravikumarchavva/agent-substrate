@@ -22,6 +22,7 @@ import logging
 
 import asyncio
 import os
+import sys
 import uuid
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ from typing import Any, List, Optional, cast
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from substrate_cloud.config import SubstrateConfig
+from substrate_cloud.data_access import PlatformDataAccess, build_data_access
 from substrate.types import Actor
 from substrate.models import ChatModel
 from substrate.stores import ThreadStore
@@ -82,6 +84,7 @@ class ToolboxResult:
     ci_client: Optional[Any]
     code_interpreter_tool: Optional[Tool]
     tools_requiring_approval: list[str]
+    data_access: Optional[Any] = None
 
 
 @dataclass
@@ -378,6 +381,7 @@ async def init_tool_registry(
 
     code_interpreter_tool: Tool | None = None
     ci_client: Any | None = None
+    data_access: PlatformDataAccess | None = None
 
     # Explicit, fail-closed runtime selection: an unusable sandbox raises here
     # (at startup) rather than silently degrading to running untrusted code with
@@ -430,12 +434,33 @@ async def init_tool_registry(
                 "(file_store or workspace_store not configured) — branches "
                 "will not be isolated from each other."
             )
+        # Governed warehouse data: only where the sandbox can keep it inside (nsjail), only when the data
+        # service is configured and the interpreter has its client installed.
+        if getattr(sandbox_runtime, "supports_data", False):
+            data_access = build_data_access(
+                service_url=cfg.DATA_SERVICE_URL,
+                data_dir=cfg.DATA_DIR,
+                key_file=cfg.DATA_TOKEN_KEY_FILE,
+                relay_dir=cfg.DATA_RELAY_DIR,
+                issuer=cfg.DATA_TOKEN_ISSUER,
+                audience=cfg.DATA_TOKEN_AUDIENCE,
+                python_bin=cfg.SANDBOX_PYTHON or sys.executable,
+                ca_file=cfg.DATA_SERVICE_CA_FILE,
+                client_cert_file=cfg.DATA_CLIENT_CERT_FILE,
+                client_key_file=cfg.DATA_CLIENT_KEY_FILE,
+            )
+        elif cfg.DATA_SERVICE_URL:
+            logger.warning(
+                "DATA_SERVICE_URL is set but the %s sandbox cannot keep data access inside; it is off.",
+                cfg.SANDBOX_RUNTIME,
+            )
         code_interpreter_tool = CodeInterpreterTool(
             sandbox_runtime,
             network=network_policy(cfg.SANDBOX_NETWORK_POLICY),
             default_timeout_s=cfg.SANDBOX_TIMEOUT_SECONDS,
             memory_bytes=cfg.SANDBOX_MEMORY_BYTES,
             model_client=model_client,
+            data=data_access,
         )
         logger.info("Code interpreter registered (runtime=%s)", cfg.SANDBOX_RUNTIME)
     except Exception as exc:  # noqa: BLE001 - degrade to "no CI", never to "no isolation"
@@ -475,6 +500,10 @@ async def init_tool_registry(
     registry.add(CurrentTimeTool())
     if code_interpreter_tool:
         registry.add(code_interpreter_tool)
+    if data_access is not None:
+        from substrate.integrations.tools.data_catalog import DataCatalogTool
+
+        registry.add(DataCatalogTool(data_access))
     if library is not None:
         from substrate.documents import DocumentsTool
         from substrate_cloud.documents_library import (
@@ -529,6 +558,7 @@ async def init_tool_registry(
         ci_client=ci_client,
         code_interpreter_tool=code_interpreter_tool,
         tools_requiring_approval=tools_requiring_approval,
+        data_access=data_access,
     )
 
 

@@ -134,6 +134,24 @@ class SubstrateConfig(BaseSettings):
     SANDBOX_PYTHON: str = ""
     CI_WORKSPACE_PVC_CLAIM: str = ""
 
+    # ── Governed data for the code interpreter (Substrate Data) ──────────────
+    # The data service runs on its own machine. Its API address must be https:// (plain http only to localhost).
+    # Empty turns sandbox data access off.
+    DATA_SERVICE_URL: str = ""
+    # CA bundle that signed the data service's certificate (the system store when empty), and an optional
+    # client certificate + key when the service requires mutual TLS. Files, never inline secrets.
+    DATA_SERVICE_CA_FILE: str = ""
+    DATA_CLIENT_CERT_FILE: str = ""
+    DATA_CLIENT_KEY_FILE: str = ""
+    # The issuer name and audience the data service trusts. The signing key is generated under
+    # DATA_DIR/keys when no file is given; its public half is served at /.well-known/data-token-jwks.json
+    # for the data service to fetch (to rotate, rename the key to <name>.previous.pem and restart).
+    DATA_TOKEN_ISSUER: str = "agent-substrate"
+    DATA_TOKEN_AUDIENCE: str = "substrate-data"
+    DATA_TOKEN_KEY_FILE: str = ""
+    # Where the gateway socket shown to sandboxes lives, on this host only (a short absolute path).
+    DATA_RELAY_DIR: str = ""
+
     # ── Document-intelligence service ────────────────────────────────────────
     DOCUMENT_INTELLIGENCE_SERVICE_URL: str = ""
     DOCUMENT_INTELLIGENCE_AUTH_TOKEN: str = ""

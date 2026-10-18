@@ -5,167 +5,167 @@ or be marked deleted with a reason. Tick as ported: `[x]`, deleted: `[-] reason`
 
 ## Agents API (161 operations)
 
-- [ ] `GET    /api/v1/admin/stats` Admin Stats
-- [ ] `GET    /api/v1/admin/storage` List Storage Tenants
-- [ ] `GET    /api/v1/admin/storage/{tenant_id}/conversations` List Storage Conversations
-- [ ] `PUT    /api/v1/admin/storage/{tenant_id}/quota` Set Storage Quota
-- [ ] `GET    /api/v1/admin/threads` List All Threads
-- [ ] `DELETE /api/v1/admin/threads/{thread_id}` Delete Thread
-- [ ] `GET    /api/v1/admin/threads/{thread_id}/steps` Get Thread Steps
-- [ ] `GET    /api/v1/agents` List My Agents
-- [ ] `POST   /api/v1/agents` Create Agent
-- [ ] `GET    /api/v1/agents/tools` Available Tools
-- [ ] `DELETE /api/v1/agents/{agent_id}` Delete Agent
-- [ ] `GET    /api/v1/agents/{agent_id}` Get Agent
-- [ ] `PATCH  /api/v1/agents/{agent_id}` Update Agent
-- [ ] `DELETE /api/v1/agents/{agent_id}/avatar` Clear Avatar
-- [ ] `PUT    /api/v1/agents/{agent_id}/avatar` Set Avatar
-- [ ] `GET    /api/v1/agents/{agent_id}/contacts` Get Contacts
-- [ ] `PUT    /api/v1/agents/{agent_id}/contacts` Put Contacts
-- [ ] `DELETE /api/v1/agents/{agent_id}/pin` Unpin Agent
-- [ ] `PUT    /api/v1/agents/{agent_id}/pin` Pin Agent
-- [ ] `POST   /api/v1/agents/{agent_id}/thread` Open Agent Thread
-- [ ] `GET    /api/v1/agents/{agent_id}/view/chats` View Chats
-- [ ] `GET    /api/v1/agents/{agent_id}/view/chats/{key}/messages` View Messages
-- [ ] `GET    /api/v1/approvals` List Approvals
-- [ ] `GET    /api/v1/artifacts` List Artifacts
-- [ ] `POST   /api/v1/artifacts` Create Artifact
-- [ ] `DELETE /api/v1/artifacts/{slug}` Delete Artifact
-- [ ] `GET    /api/v1/artifacts/{slug}` Get Artifact
-- [ ] `PATCH  /api/v1/artifacts/{slug}` Update Artifact
-- [ ] `POST   /api/v1/artifacts/{slug}/promote` Promote Artifact
-- [ ] `GET    /api/v1/audio/realtime-token` Get Realtime Token
-- [ ] `POST   /api/v1/audio/transcribe` Transcribe Audio
-- [ ] `POST   /api/v1/audio/tts` Text To Speech
-- [ ] `POST   /api/v1/auth/workspace/set-token` Set Workspace Token
-- [ ] `DELETE /api/v1/auth/workspace/token` Clear Workspace Token
-- [ ] `GET    /api/v1/auth/workspace/token` Get Workspace Token
-- [ ] `POST   /api/v1/chat` Chat
-- [ ] `POST   /api/v1/chat/respond/{request_id}` Respond To Hitl
-- [ ] `POST   /api/v1/chat/{thread_id}/cancel` Cancel Chat
-- [ ] `GET    /api/v1/entitlements` My Entitlements
-- [ ] `POST   /api/v1/feed` Open Feed
-- [ ] `POST   /api/v1/feedbacks` Submit Feedback
-- [ ] `GET    /api/v1/files/documents` List Thread Documents
-- [ ] `GET    /api/v1/files/object` Serve Object
-- [ ] `GET    /api/v1/files/quota/status` Get Doc Quota Status
-- [ ] `POST   /api/v1/files/upload` Upload File
-- [ ] `POST   /api/v1/files/uploads` Start Direct Upload
-- [ ] `POST   /api/v1/files/uploads/{file_id}/complete` Complete Direct Upload
-- [ ] `DELETE /api/v1/files/{file_id}` Delete File
-- [ ] `GET    /api/v1/files/{file_id}/document` Get File Document
-- [ ] `POST   /api/v1/files/{file_id}/document/describe` Describe File Document
-- [ ] `GET    /api/v1/files/{file_id}/download` Download File
-- [ ] `GET    /api/v1/files/{file_id}/status` Get File Status
-- [ ] `GET    /api/v1/files/{file_id}/url` Get File Url
-- [ ] `GET    /api/v1/groups` List My Groups
-- [ ] `POST   /api/v1/groups` Create Group
-- [ ] `DELETE /api/v1/groups/{group_id}` Delete Group
-- [ ] `GET    /api/v1/groups/{group_id}` Get Group
-- [ ] `PATCH  /api/v1/groups/{group_id}` Rename Group
-- [ ] `DELETE /api/v1/groups/{group_id}/avatar` Clear Group Avatar
-- [ ] `PUT    /api/v1/groups/{group_id}/avatar` Set Group Avatar
-- [ ] `GET    /api/v1/groups/{group_id}/files` List Group Files
-- [ ] `POST   /api/v1/groups/{group_id}/files` Upload Group File
-- [ ] `POST   /api/v1/groups/{group_id}/members` Add Member
-- [ ] `DELETE /api/v1/groups/{group_id}/members/{agent_id}` Remove Member
-- [ ] `PATCH  /api/v1/groups/{group_id}/members/{agent_id}` Set Member Mode
-- [ ] `GET    /api/v1/groups/{group_id}/messages` Read Messages
-- [ ] `POST   /api/v1/groups/{group_id}/messages` Send Message
-- [ ] `DELETE /api/v1/groups/{group_id}/messages/{seq}` Delete Message
-- [ ] `PATCH  /api/v1/groups/{group_id}/messages/{seq}` Edit Message
-- [ ] `PUT    /api/v1/groups/{group_id}/messages/{seq}/reaction` React To Message
-- [ ] `DELETE /api/v1/groups/{group_id}/pin` Unpin Group
-- [ ] `PUT    /api/v1/groups/{group_id}/pin` Pin Group
-- [ ] `POST   /api/v1/groups/{group_id}/read` Mark Read
-- [ ] `GET    /api/v1/hitl/status/{thread_id}` Hitl Status
-- [ ] `DELETE /api/v1/internal/connector/{connector_type}/token` Delete Connector Token
-- [ ] `POST   /api/v1/internal/connector/{connector_type}/token` Push Connector Token
-- [ ] `POST   /api/v1/internal/gdpr/erase-tenant` Erase Tenant Data
-- [ ] `POST   /api/v1/internal/gdpr/erase-user` Erase User Data
-- [ ] `POST   /api/v1/internal/knowledge/{knowledge_base_id}/documents` Upload Document
-- [ ] `GET    /api/v1/mcp-apps/manifest` Get Manifest
-- [ ] `GET    /api/v1/me/export` Export My Data
-- [ ] `GET    /api/v1/me/memories` List Memories
-- [ ] `POST   /api/v1/me/memories` Add Memory
-- [ ] `DELETE /api/v1/me/memories/{memory_id}` Delete Memory
-- [ ] `PATCH  /api/v1/me/memories/{memory_id}` Update Memory
-- [ ] `GET    /api/v1/me/preferences` Get Preferences
-- [ ] `PUT    /api/v1/me/preferences` Put Preferences
-- [ ] `GET    /api/v1/me/usage` Get Usage
-- [ ] `GET    /api/v1/notifications` List Notifications
-- [ ] `POST   /api/v1/notifications/read-all` Mark All Read
-- [ ] `POST   /api/v1/notifications/{notification_id}/read` Mark Read
-- [ ] `GET    /api/v1/pipelines/` List Pipelines
-- [ ] `POST   /api/v1/pipelines/` Save Pipeline
-- [ ] `DELETE /api/v1/pipelines/{name}` Delete Pipeline
-- [ ] `GET    /api/v1/pipelines/{name}` Get Pipeline
-- [ ] `POST   /api/v1/pipelines/{name}/run` Run Pipeline
-- [ ] `POST   /api/v1/pipelines/{name}/validate` Validate Pipeline
-- [ ] `GET    /api/v1/rag/collections` List Collections
-- [ ] `DELETE /api/v1/rag/collections/{name}` Delete Collection
-- [ ] `POST   /api/v1/rag/ingest` Ingest
-- [ ] `POST   /api/v1/rag/query` Query
-- [ ] `GET    /api/v1/rate-limit/status` Rate Limit Status
-- [ ] `GET    /api/v1/scheduled` List Scheduled Tasks
-- [ ] `POST   /api/v1/scheduled` Create Scheduled Task Endpoint
-- [ ] `POST   /api/v1/scheduled/parse` Parse Schedule Endpoint
-- [ ] `DELETE /api/v1/scheduled/{task_id}` Delete Scheduled Task Endpoint
-- [ ] `GET    /api/v1/scheduled/{task_id}` Get Scheduled Task
-- [ ] `PATCH  /api/v1/scheduled/{task_id}` Update Scheduled Task Endpoint
-- [ ] `POST   /api/v1/scheduled/{task_id}/feedback` Add Scheduled Task Feedback
-- [ ] `POST   /api/v1/scheduled/{task_id}/run` Trigger Scheduled Task Now
-- [ ] `GET    /api/v1/scheduled/{task_id}/runs` List Scheduled Task Runs
-- [ ] `GET    /api/v1/shared/{token}` Get Shared Conversation
-- [ ] `GET    /api/v1/stream/{thread_id}` Stream Thread
-- [ ] `GET    /api/v1/tasks/{conversation_id}` Get Tasks
-- [ ] `POST   /api/v1/tasks/{task_list_id}/tasks` Add Tasks
-- [ ] `DELETE /api/v1/tasks/{task_list_id}/{task_id}` Delete Task
-- [ ] `PATCH  /api/v1/tasks/{task_list_id}/{task_id}` Update Task
-- [ ] `POST   /api/v1/tasks/{task_list_id}/{task_id}/retry` Force Retry Task
-- [ ] `PUT    /api/v1/tenants/{tenant_id}/entitlements` Put Entitlements
-- [ ] `GET    /api/v1/threads` List Threads Endpoint
-- [ ] `POST   /api/v1/threads` Create Thread Endpoint
-- [ ] `GET    /api/v1/threads/search` Search Threads Endpoint
-- [ ] `DELETE /api/v1/threads/{thread_id}` Delete Thread Endpoint
-- [ ] `GET    /api/v1/threads/{thread_id}` Get Thread Endpoint
-- [ ] `PATCH  /api/v1/threads/{thread_id}` Update Thread Endpoint
-- [ ] `GET    /api/v1/threads/{thread_id}/branches` List Branches Endpoint
-- [ ] `POST   /api/v1/threads/{thread_id}/branches/fork` Fork Branch Endpoint
-- [ ] `DELETE /api/v1/threads/{thread_id}/branches/{branch_id}` Delete Branch Endpoint
-- [ ] `GET    /api/v1/threads/{thread_id}/branches/{branch_id}` Get Branch Endpoint
-- [ ] `PATCH  /api/v1/threads/{thread_id}/branches/{branch_id}` Rename Branch Endpoint
-- [ ] `GET    /api/v1/threads/{thread_id}/branches/{branch_id}/checkpoints` List Checkpoints Endpoint
-- [ ] `POST   /api/v1/threads/{thread_id}/branches/{branch_id}/checkpoints` Create Checkpoint Endpoint
-- [ ] `GET    /api/v1/threads/{thread_id}/branches/{branch_id}/messages` Get Branch Messages Endpoint
-- [ ] `GET    /api/v1/threads/{thread_id}/export` Export Thread Endpoint
-- [ ] `GET    /api/v1/threads/{thread_id}/feedback` Thread Feedback
-- [ ] `POST   /api/v1/threads/{thread_id}/mcp-context` Update Mcp Context
-- [ ] `GET    /api/v1/threads/{thread_id}/messages` Get Thread Messages
-- [ ] `GET    /api/v1/threads/{thread_id}/runs` Get Thread Runs
-- [ ] `DELETE /api/v1/threads/{thread_id}/share` Delete Share Endpoint
-- [ ] `GET    /api/v1/threads/{thread_id}/share` Get Share Endpoint
-- [ ] `POST   /api/v1/threads/{thread_id}/share` Create Share Endpoint
-- [ ] `GET    /api/v1/triggers/conditions` List Conditions
-- [ ] `POST   /api/v1/triggers/conditions` Create Condition
-- [ ] `DELETE /api/v1/triggers/conditions/{name}` Delete Condition
-- [ ] `GET    /api/v1/triggers/cron` List Cron Triggers
-- [ ] `POST   /api/v1/triggers/cron` Create Cron Trigger
-- [ ] `DELETE /api/v1/triggers/cron/{name}` Delete Cron Trigger
-- [ ] `GET    /api/v1/triggers/webhooks` List Webhooks
-- [ ] `POST   /api/v1/triggers/webhooks` Create Webhook
-- [ ] `DELETE /api/v1/triggers/webhooks/{path}` Delete Webhook
-- [ ] `POST   /api/v1/triggers/webhooks/{path}/incoming` Handle Webhook
-- [ ] `GET    /api/v1/ui/{resource_name}` Serve Ui Resource
-- [ ] `GET    /api/v1/workspace/file` Serve File
-- [ ] `PUT    /api/v1/workspace/file` Save File
-- [ ] `DELETE /api/v1/workspace/files` Delete File
-- [ ] `GET    /api/v1/workspace/files` List Files
-- [ ] `GET    /api/v1/workspace/usage` Get Usage
-- [ ] `GET    /api/v1/workspace/versions` Get Versions
-- [ ] `POST   /api/v1/workspace/versions/restore` Restore Version
-- [ ] `GET    /health` Health
-- [ ] `GET    /health/ready` Ready
+- [x] `GET    /api/v1/admin/stats` Admin Stats
+- [x] `GET    /api/v1/admin/storage` List Storage Tenants
+- [x] `GET    /api/v1/admin/storage/{tenant_id}/conversations` List Storage Conversations
+- [x] `PUT    /api/v1/admin/storage/{tenant_id}/quota` Set Storage Quota
+- [x] `GET    /api/v1/admin/threads` List All Threads
+- [x] `DELETE /api/v1/admin/threads/{thread_id}` Delete Thread
+- [x] `GET    /api/v1/admin/threads/{thread_id}/steps` Get Thread Steps
+- [x] `GET    /api/v1/agents` List My Agents
+- [x] `POST   /api/v1/agents` Create Agent
+- [x] `GET    /api/v1/agents/tools` Available Tools
+- [x] `DELETE /api/v1/agents/{agent_id}` Delete Agent
+- [x] `GET    /api/v1/agents/{agent_id}` Get Agent
+- [x] `PATCH  /api/v1/agents/{agent_id}` Update Agent
+- [x] `DELETE /api/v1/agents/{agent_id}/avatar` Clear Avatar
+- [x] `PUT    /api/v1/agents/{agent_id}/avatar` Set Avatar
+- [x] `GET    /api/v1/agents/{agent_id}/contacts` Get Contacts
+- [x] `PUT    /api/v1/agents/{agent_id}/contacts` Put Contacts
+- [x] `DELETE /api/v1/agents/{agent_id}/pin` Unpin Agent
+- [x] `PUT    /api/v1/agents/{agent_id}/pin` Pin Agent
+- [x] `POST   /api/v1/agents/{agent_id}/thread` Open Agent Thread
+- [x] `GET    /api/v1/agents/{agent_id}/view/chats` View Chats
+- [x] `GET    /api/v1/agents/{agent_id}/view/chats/{key}/messages` View Messages
+- [x] `GET    /api/v1/approvals` List Approvals
+- [x] `GET    /api/v1/artifacts` List Artifacts
+- [x] `POST   /api/v1/artifacts` Create Artifact
+- [x] `DELETE /api/v1/artifacts/{slug}` Delete Artifact
+- [x] `GET    /api/v1/artifacts/{slug}` Get Artifact
+- [x] `PATCH  /api/v1/artifacts/{slug}` Update Artifact
+- [x] `POST   /api/v1/artifacts/{slug}/promote` Promote Artifact
+- [x] `GET    /api/v1/audio/realtime-token` Get Realtime Token
+- [x] `POST   /api/v1/audio/transcribe` Transcribe Audio
+- [x] `POST   /api/v1/audio/tts` Text To Speech
+- [x] `POST   /api/v1/auth/workspace/set-token` Set Workspace Token
+- [x] `DELETE /api/v1/auth/workspace/token` Clear Workspace Token
+- [x] `GET    /api/v1/auth/workspace/token` Get Workspace Token
+- [x] `POST   /api/v1/chat` Chat
+- [x] `POST   /api/v1/chat/respond/{request_id}` Respond To Hitl
+- [x] `POST   /api/v1/chat/{thread_id}/cancel` Cancel Chat
+- [x] `GET    /api/v1/entitlements` My Entitlements
+- [x] `POST   /api/v1/feed` Open Feed
+- [x] `POST   /api/v1/feedbacks` Submit Feedback
+- [x] `GET    /api/v1/files/documents` List Thread Documents
+- [x] `GET    /api/v1/files/object` Serve Object
+- [x] `GET    /api/v1/files/quota/status` Get Doc Quota Status
+- [x] `POST   /api/v1/files/upload` Upload File
+- [x] `POST   /api/v1/files/uploads` Start Direct Upload
+- [x] `POST   /api/v1/files/uploads/{file_id}/complete` Complete Direct Upload
+- [x] `DELETE /api/v1/files/{file_id}` Delete File
+- [x] `GET    /api/v1/files/{file_id}/document` Get File Document
+- [x] `POST   /api/v1/files/{file_id}/document/describe` Describe File Document
+- [x] `GET    /api/v1/files/{file_id}/download` Download File
+- [x] `GET    /api/v1/files/{file_id}/status` Get File Status
+- [x] `GET    /api/v1/files/{file_id}/url` Get File Url
+- [x] `GET    /api/v1/groups` List My Groups
+- [x] `POST   /api/v1/groups` Create Group
+- [x] `DELETE /api/v1/groups/{group_id}` Delete Group
+- [x] `GET    /api/v1/groups/{group_id}` Get Group
+- [x] `PATCH  /api/v1/groups/{group_id}` Rename Group
+- [x] `DELETE /api/v1/groups/{group_id}/avatar` Clear Group Avatar
+- [x] `PUT    /api/v1/groups/{group_id}/avatar` Set Group Avatar
+- [x] `GET    /api/v1/groups/{group_id}/files` List Group Files
+- [x] `POST   /api/v1/groups/{group_id}/files` Upload Group File
+- [x] `POST   /api/v1/groups/{group_id}/members` Add Member
+- [x] `DELETE /api/v1/groups/{group_id}/members/{agent_id}` Remove Member
+- [x] `PATCH  /api/v1/groups/{group_id}/members/{agent_id}` Set Member Mode
+- [x] `GET    /api/v1/groups/{group_id}/messages` Read Messages
+- [x] `POST   /api/v1/groups/{group_id}/messages` Send Message
+- [x] `DELETE /api/v1/groups/{group_id}/messages/{seq}` Delete Message
+- [x] `PATCH  /api/v1/groups/{group_id}/messages/{seq}` Edit Message
+- [x] `PUT    /api/v1/groups/{group_id}/messages/{seq}/reaction` React To Message
+- [x] `DELETE /api/v1/groups/{group_id}/pin` Unpin Group
+- [x] `PUT    /api/v1/groups/{group_id}/pin` Pin Group
+- [x] `POST   /api/v1/groups/{group_id}/read` Mark Read
+- [x] `GET    /api/v1/hitl/status/{thread_id}` Hitl Status
+- [x] `DELETE /api/v1/internal/connector/{connector_type}/token` Delete Connector Token
+- [x] `POST   /api/v1/internal/connector/{connector_type}/token` Push Connector Token
+- [x] `POST   /api/v1/internal/gdpr/erase-tenant` Erase Tenant Data
+- [x] `POST   /api/v1/internal/gdpr/erase-user` Erase User Data
+- [-] `POST   /api/v1/internal/knowledge/{knowledge_base_id}/documents` Upload Document: moved to centralized substrate-data warehouse
+- [x] `GET    /api/v1/mcp-apps/manifest` Get Manifest
+- [x] `GET    /api/v1/me/export` Export My Data
+- [x] `GET    /api/v1/me/memories` List Memories
+- [x] `POST   /api/v1/me/memories` Add Memory
+- [x] `DELETE /api/v1/me/memories/{memory_id}` Delete Memory
+- [x] `PATCH  /api/v1/me/memories/{memory_id}` Update Memory
+- [x] `GET    /api/v1/me/preferences` Get Preferences
+- [x] `PUT    /api/v1/me/preferences` Put Preferences
+- [x] `GET    /api/v1/me/usage` Get Usage
+- [x] `GET    /api/v1/notifications` List Notifications
+- [x] `POST   /api/v1/notifications/read-all` Mark All Read
+- [x] `POST   /api/v1/notifications/{notification_id}/read` Mark Read
+- [x] `GET    /api/v1/pipelines/` List Pipelines
+- [x] `POST   /api/v1/pipelines/` Save Pipeline
+- [x] `DELETE /api/v1/pipelines/{name}` Delete Pipeline
+- [x] `GET    /api/v1/pipelines/{name}` Get Pipeline
+- [x] `POST   /api/v1/pipelines/{name}/run` Run Pipeline
+- [x] `POST   /api/v1/pipelines/{name}/validate` Validate Pipeline
+- [-] `GET    /api/v1/rag/collections` List Collections: moved to centralized substrate-data warehouse
+- [-] `DELETE /api/v1/rag/collections/{name}` Delete Collection: moved to centralized substrate-data warehouse
+- [-] `POST   /api/v1/rag/ingest` Ingest: moved to centralized substrate-data warehouse
+- [-] `POST   /api/v1/rag/query` Query: moved to centralized substrate-data warehouse
+- [x] `GET    /api/v1/rate-limit/status` Rate Limit Status
+- [x] `GET    /api/v1/scheduled` List Scheduled Tasks
+- [x] `POST   /api/v1/scheduled` Create Scheduled Task Endpoint
+- [x] `POST   /api/v1/scheduled/parse` Parse Schedule Endpoint
+- [x] `DELETE /api/v1/scheduled/{task_id}` Delete Scheduled Task Endpoint
+- [x] `GET    /api/v1/scheduled/{task_id}` Get Scheduled Task
+- [x] `PATCH  /api/v1/scheduled/{task_id}` Update Scheduled Task Endpoint
+- [x] `POST   /api/v1/scheduled/{task_id}/feedback` Add Scheduled Task Feedback
+- [x] `POST   /api/v1/scheduled/{task_id}/run` Trigger Scheduled Task Now
+- [x] `GET    /api/v1/scheduled/{task_id}/runs` List Scheduled Task Runs
+- [x] `GET    /api/v1/shared/{token}` Get Shared Conversation
+- [-] `GET    /api/v1/stream/{thread_id}` Stream Thread: unified with live SSE on POST /api/v1/chat and POST /api/v1/feed
+- [x] `GET    /api/v1/tasks/{conversation_id}` Get Tasks
+- [x] `POST   /api/v1/tasks/{task_list_id}/tasks` Add Tasks
+- [x] `DELETE /api/v1/tasks/{task_list_id}/{task_id}` Delete Task
+- [x] `PATCH  /api/v1/tasks/{task_list_id}/{task_id}` Update Task
+- [x] `POST   /api/v1/tasks/{task_list_id}/{task_id}/retry` Force Retry Task
+- [x] `PUT    /api/v1/tenants/{tenant_id}/entitlements` Put Entitlements
+- [x] `GET    /api/v1/threads` List Threads Endpoint
+- [x] `POST   /api/v1/threads` Create Thread Endpoint
+- [x] `GET    /api/v1/threads/search` Search Threads Endpoint
+- [x] `DELETE /api/v1/threads/{thread_id}` Delete Thread Endpoint
+- [x] `GET    /api/v1/threads/{thread_id}` Get Thread Endpoint
+- [x] `PATCH  /api/v1/threads/{thread_id}` Update Thread Endpoint
+- [x] `GET    /api/v1/threads/{thread_id}/branches` List Branches Endpoint
+- [x] `POST   /api/v1/threads/{thread_id}/branches/fork` Fork Branch Endpoint
+- [x] `DELETE /api/v1/threads/{thread_id}/branches/{branch_id}` Delete Branch Endpoint
+- [x] `GET    /api/v1/threads/{thread_id}/branches/{branch_id}` Get Branch Endpoint
+- [x] `PATCH  /api/v1/threads/{thread_id}/branches/{branch_id}` Rename Branch Endpoint
+- [x] `GET    /api/v1/threads/{thread_id}/branches/{branch_id}/checkpoints` List Checkpoints Endpoint
+- [x] `POST   /api/v1/threads/{thread_id}/branches/{branch_id}/checkpoints` Create Checkpoint Endpoint
+- [x] `GET    /api/v1/threads/{thread_id}/branches/{branch_id}/messages` Get Branch Messages Endpoint
+- [x] `GET    /api/v1/threads/{thread_id}/export` Export Thread Endpoint
+- [x] `GET    /api/v1/threads/{thread_id}/feedback` Thread Feedback
+- [x] `POST   /api/v1/threads/{thread_id}/mcp-context` Update Mcp Context
+- [x] `GET    /api/v1/threads/{thread_id}/messages` Get Thread Messages
+- [x] `GET    /api/v1/threads/{thread_id}/runs` Get Thread Runs
+- [x] `DELETE /api/v1/threads/{thread_id}/share` Delete Share Endpoint
+- [x] `GET    /api/v1/threads/{thread_id}/share` Get Share Endpoint
+- [x] `POST   /api/v1/threads/{thread_id}/share` Create Share Endpoint
+- [x] `GET    /api/v1/triggers/conditions` List Conditions
+- [x] `POST   /api/v1/triggers/conditions` Create Condition
+- [x] `DELETE /api/v1/triggers/conditions/{name}` Delete Condition
+- [x] `GET    /api/v1/triggers/cron` List Cron Triggers
+- [x] `POST   /api/v1/triggers/cron` Create Cron Trigger
+- [x] `DELETE /api/v1/triggers/cron/{name}` Delete Cron Trigger
+- [x] `GET    /api/v1/triggers/webhooks` List Webhooks
+- [x] `POST   /api/v1/triggers/webhooks` Create Webhook
+- [x] `DELETE /api/v1/triggers/webhooks/{path}` Delete Webhook
+- [x] `POST   /api/v1/triggers/webhooks/{path}/incoming` Handle Webhook
+- [x] `GET    /api/v1/ui/{resource_name}` Serve Ui Resource
+- [x] `GET    /api/v1/workspace/file` Serve File
+- [x] `PUT    /api/v1/workspace/file` Save File
+- [x] `DELETE /api/v1/workspace/files` Delete File
+- [x] `GET    /api/v1/workspace/files` List Files
+- [x] `GET    /api/v1/workspace/usage` Get Usage
+- [x] `GET    /api/v1/workspace/versions` Get Versions
+- [x] `POST   /api/v1/workspace/versions/restore` Restore Version
+- [x] `GET    /health` Health
+- [x] `GET    /health/ready` Ready
 
 ## Data API (113 operations)
 

@@ -1,0 +1,42 @@
+{{- if .Values.agents.enabled -}}
+{{- define "cell.agentEnv" -}}
+- name: POSTGRES_PASSWORD
+  valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "postgres-password") }} }
+- name: REDIS_PASSWORD
+  valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "redis-password") }} }
+- { name: DATABASE_URL, value: "postgresql+asyncpg://{{ include "cell.pgUser" . }}:$(POSTGRES_PASSWORD)@{{ include "cell.pgHost" . }}:{{ include "cell.pgPort" . }}/{{ .Values.postgres.databases.agent }}?ssl={{ include "cell.pgSslmode" . }}" }
+- { name: ASYNC_DATABASE_URL, value: "postgresql://{{ include "cell.pgUser" . }}:$(POSTGRES_PASSWORD)@{{ include "cell.pgHost" . }}:{{ include "cell.pgPort" . }}/{{ .Values.postgres.databases.agent }}?sslmode={{ include "cell.pgSslmode" . }}" }
+- { name: REDIS_URL, value: "redis://:$(REDIS_PASSWORD)@{{ include "cell.redisHost" . }}:{{ if and .Values.redis.enabled .Values.redis.bundled.enabled }}6379{{ else }}{{ .Values.redis.external.port }}{{ end }}/0" }
+- { name: STORE_BACKEND, value: postgres }
+- { name: DATA_SERVICE_URL, value: "http://{{ include "cell.fullname" . }}-data-api:8020" }
+- { name: OIDC_ISSUER, value: {{ include "cell.issuer" . | quote }} }
+- { name: OIDC_AUDIENCE, value: loamz-agents }
+- { name: LOAMZ_ROLES, value: {{ .Values.agents.roles | default "all" | quote }} }
+- { name: SERVICE_URL_TEMPLATE, value: "http://{{ include "cell.fullname" . }}-agent-{name}:{port}" }
+- { name: FRONTEND_URL, value: {{ .Values.publicUrls.ui | quote }} }
+- { name: CHAT_MODEL, value: {{ .Values.agents.model | default "google/gemini-3.1-flash-lite" | quote }} }
+- { name: SANDBOX_RUNTIME, value: {{ .Values.agents.sandbox.runtime | default "k8s" | quote }} }
+{{- with .Values.agents.sandbox.runtimeClassName }}
+- { name: SANDBOX_RUNTIME_CLASS, value: {{ . | quote }} }
+{{- end }}
+{{- range $env, $key := dict "OPENAI_API_KEY" "openai-api-key" "ANTHROPIC_API_KEY" "anthropic-api-key" "GEMINI_API_KEY" "gemini-api-key" "OPENROUTER_API_KEY" "openrouter-api-key" }}
+- name: {{ $env }}
+  valueFrom: { secretKeyRef: { name: {{ include "cell.secretName" $ }}, key: {{ $key }}, optional: true } }
+{{- end }}
+{{- with .Values.agents.extraEnv }}
+{{ toYaml . }}
+{{- end }}
+{{- end }}
+{{- $env := include "cell.agentEnv" . }}
+{{- $img := .Values.agents.image }}
+{{- if eq .Values.mode "monolith" }}
+{{- include "cell.workload" (dict "root" . "component" "agent-server" "repo" "loamz-agents" "override" $img "port" 8000 "probePath" "/health" "cfg" .Values.agents "env" (printf "%s\n- { name: LOAMZ_ROLES, value: %s }" $env (.Values.agents.roles | default "all" | quote)) "writable" (list (dict "name" "data" "path" "/data")) "automountToken" (and (eq .Values.agents.sandbox.runtime "k8s") .Values.agents.sandbox.rbac)) }}
+{{- else if eq .Values.mode "microservices" }}
+{{- range $svc, $cfg := .Values.agents.microservices }}
+{{- $component := printf "agent-%s" ($svc | replace "_" "-") }}
+{{- include "cell.workload" (dict "root" $ "component" $component "repo" "loamz-agents" "override" $img "port" $cfg.port "probePath" "/health" "cfg" $cfg "env" (printf "%s\n- { name: LOAMZ_ROLES, value: %s }" $env ($svc | quote)) "writable" (list (dict "name" "data" "path" "/data")) "automountToken" (and (eq $svc "tool_executor") (eq $.Values.agents.sandbox.runtime "k8s") $.Values.agents.sandbox.rbac)) }}
+{{- end }}
+{{- else }}
+{{- fail "mode must be monolith or microservices" }}
+{{- end }}
+{{- end }}

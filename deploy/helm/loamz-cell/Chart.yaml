@@ -1,0 +1,9 @@
+apiVersion: v2
+name: loamz-cell
+description: One Loamz cell - Keycloak, Loamz Agents, Loamz Data, web UIs, PostgreSQL, Redis and S3-compatible storage.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.27.0-0"
+keywords: [loamz, agents, data, keycloak]
+home: https://github.com/Ravikumarchavva/agent-substrate

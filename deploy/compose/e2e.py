@@ -1,6 +1,6 @@
 """End-to-end check of a local compose cell: Keycloak org + user, tenant provisioning, agent API, data API.
 
-Run after `docker compose --profile monolith up -d`:  uv run --package substrate-cloud python deploy/compose/e2e.py deploy/compose/.env
+Run after `docker compose --profile monolith up -d`:  uv run --package loamz-agents python deploy/compose/e2e.py deploy/compose/.env
 """
 
 import sys
@@ -9,17 +9,21 @@ from pathlib import Path
 
 import httpx
 
+from loamz.identity.tenancy import tenant_alias
+
 ENV = dict(
     line.split("=", 1)
     for line in Path(sys.argv[1]).read_text().splitlines()
     if "=" in line and not line.startswith("#")
 )
 KC = f"http://localhost:{ENV.get('PORT_KEYCLOAK', '8080')}"
-REALM = f"{KC}/realms/substrate"
+REALM = f"{KC}/realms/loamz"
 AGENT = "http://localhost:8000/api/v1"
-DATA = "http://localhost:8021/api/v1"
+DATA = f"http://localhost:{ENV.get('PORT_DATA_API', '8020')}/api/v1"
 # Keycloak only answers for its configured hostname; browsers and containers know it as keycloak:8080.
-KC_HOST = {"Host": ENV.get("KEYCLOAK_PUBLIC_URL", "http://keycloak.localhost:8080").split("://", 1)[1]}
+KC_HOST = {
+    "Host": ENV.get("KEYCLOAK_PUBLIC_URL", "http://keycloak.localhost:8080").split("://", 1)[1]
+}
 http = httpx.Client(timeout=60)
 
 
@@ -45,7 +49,7 @@ def admin_token():
 
 
 admin = admin_token()
-api = f"{KC}/admin/realms/substrate"
+api = f"{KC}/admin/realms/loamz"
 
 # 1. organization + user + membership
 alias = f"e2e{int(time.time())}"
@@ -66,9 +70,7 @@ r = http.post(
         "enabled": True,
         "firstName": "Alice",
         "lastName": "E2E",
-        "credentials": [
-            {"type": "password", "value": "e2e-Passw0rd!", "temporary": False}
-        ],
+        "credentials": [{"type": "password", "value": "e2e-Passw0rd!", "temporary": False}],
     },
 )
 step("create user", r.status_code == 201, str(r.status_code) + r.text[:200])
@@ -90,9 +92,7 @@ r = (
 step("add member", r.status_code in (201, 204), str(r.status_code) + r.text[:200])
 
 # test-only: let the CLI client use the password grant so a script can sign in (the realm file is unchanged)
-clients = http.get(
-    f"{api}/clients", headers=admin, params={"clientId": "substrate-cli"}
-).json()
+clients = http.get(f"{api}/clients", headers=admin, params={"clientId": "loamz-cli"}).json()
 cli = clients[0]
 http.put(
     f"{api}/clients/{cli['id']}",
@@ -107,7 +107,7 @@ def user_token(scope):
         headers=KC_HOST,
         data={
             "grant_type": "password",
-            "client_id": "substrate-cli",
+            "client_id": "loamz-cli",
             "username": f"alice-{alias}",
             "password": "e2e-Passw0rd!",
             "scope": scope,
@@ -121,7 +121,7 @@ def user_token(scope):
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
-# 2. provision the tenant in substrate-data (as the platform would, with cell-admin)
+# 2. provision the tenant in loamz-data (as the platform would, with cell-admin)
 r = http.post(
     f"{REALM}/protocol/openid-connect/token",
     headers=KC_HOST,
@@ -133,9 +133,6 @@ r = http.post(
 )
 step("cell-admin token", r.status_code == 200, r.text[:200])
 cell = {"Authorization": f"Bearer {r.json()['access_token']}"}
-from substrate.integrations.data._keys import (
-    tenant_alias,
-)  # the alias contract the agent adapter resolves volumes by
 
 r = http.post(
     f"{DATA}/tenants",
@@ -156,13 +153,13 @@ r = http.post(
     files={
         "file": (
             "notes.txt",
-            b"Substrate cells keep data in the customer's cloud.\n",
+            b"Loamz cells keep data in the customer's cloud.\n",
             "text/plain",
         )
     },
 )
 step(
-    "agent: upload a file (stored in substrate-data)",
+    "agent: upload a file (stored in loamz-data)",
     r.status_code in (200, 201),
     str(r.status_code) + r.text[:300],
 )
@@ -176,9 +173,7 @@ step(
 
 # 4. data API directly as the same user: the file is in the tenant's governed volume
 r = http.get(f"{DATA}/search", headers=user, params={"q": "tenant_"})
-step(
-    "data: search the catalog", r.status_code == 200, str(r.status_code) + r.text[:300]
-)
+step("data: search the catalog", r.status_code == 200, str(r.status_code) + r.text[:300])
 
 # 5. negative: a token for another organization's user cannot read alice's file
 r = http.post(
@@ -191,9 +186,7 @@ r = http.post(
         "email": f"m@{alias}.org",
         "firstName": "M",
         "lastName": "X",
-        "credentials": [
-            {"type": "password", "value": "e2e-Passw0rd!", "temporary": False}
-        ],
+        "credentials": [{"type": "password", "value": "e2e-Passw0rd!", "temporary": False}],
     },
 )
 r = http.post(
@@ -201,7 +194,7 @@ r = http.post(
     headers=KC_HOST,
     data={
         "grant_type": "password",
-        "client_id": "substrate-cli",
+        "client_id": "loamz-cli",
         "username": f"mallory-{alias}",
         "password": "e2e-Passw0rd!",
         "scope": "openid",
@@ -243,9 +236,7 @@ if (
     }
     answer, failed, events = "", False, []
     # The chat endpoint answers with the run's event stream (SSE).
-    with http.stream(
-        "POST", f"{AGENT}/chat", headers=user, json=body, timeout=180
-    ) as r:
+    with http.stream("POST", f"{AGENT}/chat", headers=user, json=body, timeout=180) as r:
         step("chat: start a run", r.status_code == 200, str(r.status_code))
         for line in r.iter_lines():
             if not line.startswith("data:") or line.strip() == "data: [DONE]":

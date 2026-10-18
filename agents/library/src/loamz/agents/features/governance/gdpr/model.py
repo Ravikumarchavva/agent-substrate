@@ -19,3 +19,4 @@ class ErasureSummary(BaseModel):
     objects_deleted: int = 0
     memories_deleted: int = 0
     status: str = "completed"
+

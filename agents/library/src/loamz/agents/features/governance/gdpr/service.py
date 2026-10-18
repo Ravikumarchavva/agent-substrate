@@ -55,3 +55,4 @@ def gdpr(c: Container) -> GdprService:
 
 
 GdprServiceDep = Annotated[GdprService, None]
+

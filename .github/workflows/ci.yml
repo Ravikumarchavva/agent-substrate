@@ -87,19 +87,36 @@ jobs:
               - 'agents/agent-substrate/**'
               - 'data/inference-pool/**'
               - 'data/document-intelligence/**'
+            loamz-data-storage:
+              - *shared
+              - 'data/storage/**'
+            loamz-identity:
+              - *shared
+              - 'identity/python/**'
+            loamz-data-client:
+              - *shared
+              - 'data/client/**'
+              - 'identity/python/**'
+            loamz-data-server:
+              - *shared
+              - 'data/server/**'
+              - 'data/storage/**'
+              - 'data/client/**'
+              - 'identity/python/**'
+            loamz-agents:
+              - *shared
+              - 'agents/library/**'
+              - 'data/storage/**'
+              - 'data/client/**'
+              - 'identity/python/**'
+            loamz:
+              - *shared
+              - 'meta/loamz/**'
             deploy:
               - 'deploy/**'
               - '.dockerignore'
               - '.github/workflows/ci.yml'
               - '.github/workflows/release-images.yml'
-            substrate-ui:
-              - *shared
-              - *js-shared
-              - 'agents/substrate-ui/**'
-            substrate-data-web:
-              - *shared
-              - *js-shared
-              - 'data/substrate-data-web/**'
       # Pushes to main and merge-queue runs always test everything.
       - name: Build job plan
         id: plan
@@ -107,15 +124,15 @@ jobs:
           EVENT: ${{ github.event_name }}
           FILTERED: ${{ steps.filter.outputs.changes }}
         run: |
-          ALL='["agent-substrate","substrate-data-client","inference-pool","embedding-reranker","substrate-cloud","substrate-data","document-intelligence","substrate-ui","substrate-data-web"]'
+          ALL='["loamz-data-storage","loamz-identity","loamz-data-client","loamz-data-server","loamz-agents","loamz"]'
           CHANGED="${FILTERED:-[]}"
           if [ "$EVENT" != "pull_request" ]; then CHANGED="$ALL"; fi
-          PY='["agent-substrate","substrate-data-client","inference-pool","embedding-reranker","substrate-cloud","substrate-data"]'
-          JS='["substrate-ui","substrate-data-web"]'
+          PY='["loamz-data-storage","loamz-identity","loamz-data-client","loamz-data-server","loamz-agents","loamz"]'
+          JS='[]'
           echo "python=$(jq -c --argjson s "$PY" '[.[] | select(. as $x | $s | index($x))]' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
           echo "js=$(jq -c --argjson s "$JS" '[.[] | select(. as $x | $s | index($x))]' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
-          echo "document-intelligence=$(jq -r 'index("document-intelligence") != null' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
-          echo "substrate-data=$(jq -r 'index("substrate-data") != null' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
+          echo "document-intelligence=false" >> "$GITHUB_OUTPUT"
+          echo "substrate-data=false" >> "$GITHUB_OUTPUT"
           echo "deploy=$(jq -r 'index("deploy") != null' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
 
   # ── Python packages in the uv workspace (one lock, Python 3.14) ───────────
@@ -165,6 +182,12 @@ jobs:
       - name: Resolve package directory
         run: |
           case "${{ matrix.package }}" in
+            loamz-data-storage) d="data/storage" ;;
+            loamz-identity) d="identity/python" ;;
+            loamz-data-client) d="data/client" ;;
+            loamz-data-server) d="data/server" ;;
+            loamz-agents) d="agents/library" ;;
+            loamz) d="meta/loamz" ;;
             agent-substrate|substrate-cloud) d="agents/${{ matrix.package }}" ;;
             *) d="data/${{ matrix.package }}" ;;
           esac
@@ -179,9 +202,8 @@ jobs:
         working-directory: ${{ env.PKG_DIR }}
         run: uv run --frozen ruff format --check .
       - name: Import boundaries (import-linter)
-        if: matrix.package == 'agent-substrate' || matrix.package == 'substrate-cloud'
-        working-directory: ${{ env.PKG_DIR }}
-        run: uv run --frozen lint-imports
+        if: matrix.package == 'loamz-agents'
+        run: uv run --frozen --package loamz-agents lint-imports --config .importlinter
       - name: Pyright (non-blocking, as before)
         if: matrix.package == 'agent-substrate'
         continue-on-error: true

@@ -1,0 +1,97 @@
+{{- if .Values.s3.bundled.enabled }}
+{{- $full := printf "%s-seaweedfs" (include "cell.fullname" .) }}
+{{- $b := .Values.s3.buckets }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $full }}
+  labels: {{- include "cell.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "cell.selector" (dict "root" . "component" "seaweedfs") | nindent 4 }}
+  ports:
+    - { name: s3, port: 8333 }
+    - { name: iceberg, port: 8181 }
+    - { name: master, port: 9333 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $full }}
+  labels: {{- include "cell.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ $full }}
+  replicas: 1
+  selector:
+    matchLabels: {{- include "cell.selector" (dict "root" . "component" "seaweedfs") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cell.labels" . | nindent 8 }}
+        app.kubernetes.io/component: seaweedfs
+      annotations:
+        checksum/identities: {{ .Values.s3.buckets | toJson | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: seaweedfs
+          image: {{ .Values.s3.bundled.image }}
+          args:
+            - server
+            - -dir=/data
+            - -ip={{ $full }}
+            - -ip.bind=0.0.0.0
+            - -filer
+            - -s3
+            - -s3.config=/config/s3.json
+            - -s3.port.iceberg=8181
+            - -s3.allowDeleteBucketNotEmpty=false
+            - -s3.allowedOrigins={{ .Values.publicUrls.dataWeb }}
+            - -master.volumeSizeLimitMB=1024
+            - -volume.max=0
+            - -master.telemetry=false
+          ports: [ { name: s3, containerPort: 8333 }, { name: iceberg, containerPort: 8181 }, { name: master, containerPort: 9333 } ]
+          readinessProbe: { tcpSocket: { port: s3 }, periodSeconds: 5 }
+          resources: {{- toYaml .Values.s3.bundled.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: config, mountPath: /config, readOnly: true }
+      volumes:
+        - { name: config, secret: { secretName: {{ if .Values.secrets.existingSecret }}{{ required "s3.bundled.identitiesSecret (key s3.json) is required with secrets.existingSecret" .Values.s3.bundled.identitiesSecret }}{{ else }}{{ $full }}-s3{{ end }} } }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.s3.bundled.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources: { requests: { storage: {{ .Values.s3.bundled.storage }} } }
+---
+# Creates the staging, volumes, agent-file and warehouse (S3 Tables) buckets once SeaweedFS is up.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $full }}-buckets
+  labels: {{- include "cell.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 1000, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: buckets
+          image: {{ .Values.s3.bundled.image }}
+          command: [sh, -ec]
+          args:
+            - |
+              out=$(printf 's3.bucket.create -name {{ $b.staging }}\ns3.bucket.create -name {{ $b.volumes }}\ns3.bucket.create -name {{ $b.agents }}\ns3tables.bucket -create -name {{ $b.warehouse }} -account 000000000000\nexit\n' | weed shell -master={{ $full }}:9333 2>&1)
+              echo "$out" | tail -5
+              if echo "$out" | grep -qi error && ! echo "$out" | grep -qi exist; then exit 1; fi
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+{{- end }}

@@ -25,3 +25,4 @@ async def erase_user_data(body: EraseUserRequest, service: Service) -> ErasureSu
 @router.post("/erase-tenant", response_model=ErasureSummary)
 async def erase_tenant_data(body: EraseTenantRequest, service: Service) -> ErasureSummary:
     return await service.erase_tenant(body.tenant_id)
+

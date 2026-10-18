@@ -35,3 +35,4 @@ async def test_gdpr_erasure(app):
             )
             assert tenant_resp.status_code == 200
             assert tenant_resp.json()["status"] == "completed"
+

@@ -1,0 +1,21 @@
+Substrate cell {{ .Release.Name }} installed in mode "{{ .Values.mode }}".
+
+  Console       {{ .Values.publicUrls.ui }}
+  Data          {{ .Values.publicUrls.dataWeb }}
+  Agent API     {{ .Values.publicUrls.agentApi }}
+  Data API      {{ .Values.publicUrls.dataApi }}
+  Sign-in       {{ .Values.publicUrls.keycloak }}/realms/{{ .Values.keycloak.realm.name }}
+
+{{- if and (not .Values.secrets.existingSecret) .Values.secrets.generate }}
+
+Secrets were generated into {{ include "cell.secretName" . }}. Keycloak admin password:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "cell.secretName" . }} -o jsonpath='{.data.keycloak-admin-password}' | base64 -d
+{{- end }}
+{{- if or (contains "localtest.me" .Values.publicUrls.keycloak) (contains "localtest.me" .Values.publicUrls.ui) }}
+
+The default addresses use *.localtest.me (resolves to 127.0.0.1): port-forward your ingress controller, or set publicUrls.*.
+{{- end }}
+{{- if and .Values.keycloak.enabled (not .Values.keycloak.realm.import) }}
+
+keycloak.realm.import is off: import deploy/keycloak/realm-substrate.json into your Keycloak yourself.
+{{- end }}

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "cell.fullname" . }}-test-health
+  labels: {{- include "cell.labels" . | nindent 4 }}
+  annotations: { "helm.sh/hook": test, "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded" }
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+  containers:
+    - name: probe
+      image: {{ include "cell.image" (dict "root" . "repo" "substrate-data" "override" .Values.data.image) }}
+      command: [python, -c]
+      args:
+        - |
+          import urllib.request as u
+          for url in [
+              "http://{{ include "cell.fullname" . }}-data-api:8020/readyz",
+              "http://{{ include "cell.fullname" . }}-{{ ternary "agent-server:8000" "agent-gateway:8001" (eq .Values.mode "monolith") }}/health",
+              {{- if .Values.keycloak.enabled }}
+              "{{ include "cell.keycloakInternal" . }}/realms/{{ .Values.keycloak.realm.name }}/.well-known/openid-configuration",
+              {{- end }}
+          ]:
+              u.urlopen(url, timeout=10); print("ok", url)
+      securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }

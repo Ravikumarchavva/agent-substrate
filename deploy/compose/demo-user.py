@@ -2,14 +2,15 @@
 
 For a laptop cell only; never run it against a cell other people can reach.
 
-    uv run --package substrate-cloud python deploy/compose/demo-user.py deploy/compose/.env
+    uv run --package loamz-agents python deploy/compose/demo-user.py deploy/compose/.env
 """
 
 import sys
 from pathlib import Path
 
 import httpx
-from substrate.integrations.data._keys import tenant_alias
+
+from loamz.identity.tenancy import tenant_alias
 
 ENV = dict(
     line.split("=", 1)
@@ -17,11 +18,7 @@ ENV = dict(
     if "=" in line and not line.startswith("#")
 )
 KC = f"http://localhost:{ENV.get('PORT_KEYCLOAK', '8080')}"
-HOST = {
-    "Host": ENV.get("KEYCLOAK_PUBLIC_URL", "http://keycloak.localhost:8080").split(
-        "://", 1
-    )[1]
-}
+HOST = {"Host": ENV.get("KEYCLOAK_PUBLIC_URL", "http://keycloak.localhost:8080").split("://", 1)[1]}
 DATA = f"http://localhost:{ENV.get('PORT_DATA_API', '8020')}/api/v1"
 NAME = "demo"
 http = httpx.Client(timeout=30)
@@ -37,7 +34,7 @@ token = http.post(
     },
 ).json()["access_token"]
 admin = {**HOST, "Authorization": f"Bearer {token}"}
-api = f"{KC}/admin/realms/substrate"
+api = f"{KC}/admin/realms/loamz"
 
 orgs = http.get(
     f"{api}/organizations", headers=admin, params={"search": NAME, "exact": "true"}
@@ -53,9 +50,7 @@ else:
     r.raise_for_status()
     org_id = r.headers["Location"].rsplit("/", 1)[1]
 
-users = http.get(
-    f"{api}/users", headers=admin, params={"username": NAME, "exact": "true"}
-).json()
+users = http.get(f"{api}/users", headers=admin, params={"username": NAME, "exact": "true"}).json()
 if users:
     user_id = users[0]["id"]
 else:
@@ -87,7 +82,7 @@ if r.status_code not in (201, 204, 409):
     r.raise_for_status()
 
 cell = http.post(
-    f"{KC}/realms/substrate/protocol/openid-connect/token",
+    f"{KC}/realms/loamz/protocol/openid-connect/token",
     headers=HOST,
     data={
         "grant_type": "client_credentials",
@@ -101,6 +96,4 @@ r = http.post(
     json={"tenant_id": org_id, "alias": tenant_alias(org_id)},
 )
 r.raise_for_status()
-print(
-    f"Sign in at {ENV.get('SUBSTRATE_UI_URL', 'http://localhost:3000')}/chat as {NAME} / {NAME}"
-)
+print(f"Sign in at {ENV.get('SUBSTRATE_UI_URL', 'http://localhost:3000')}/chat as {NAME} / {NAME}")

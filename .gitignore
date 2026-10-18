@@ -28,4 +28,5 @@ data/substrate-data-web/public/monaco/
 # runtime artifacts
 *.log
 .substrate/
+.loamz/
 *.db

@@ -7,7 +7,7 @@
 #
 # Exactly one of the monolith / microservices profiles. Ports are in ../PORTS.md; nothing but the UIs, the agent
 # API, Keycloak and the S3 endpoint is published, and only on BIND_ADDR.
-name: ${COMPOSE_PROJECT_NAME:-substrate-cell}
+name: ${COMPOSE_PROJECT_NAME:-loamz-cell}
 
 x-data-env: &data-env
   # The services are on one private Docker network behind (optionally) a TLS-terminating proxy; plain HTTP to these
@@ -16,8 +16,8 @@ x-data-env: &data-env
   # Controller and workers serve HTTPS with the cell's private CA (cell-init); the API trusts it.
   SUBSTRATE_DATA_INTERNAL_CA_FILE: /tls/ca.crt
   SUBSTRATE_DATA_BEHIND_TLS_PROXY: "true"
-  SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/substrate
-  SUBSTRATE_DATA_OIDC_AUDIENCE: substrate-data
+  SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+  SUBSTRATE_DATA_OIDC_AUDIENCE: loamz-data
   SUBSTRATE_DATA_S3_ENDPOINT_URL: http://seaweedfs:8333
   SUBSTRATE_DATA_ICEBERG_CATALOG_URL: http://seaweedfs:8181
   SUBSTRATE_DATA_WAREHOUSE: ${WAREHOUSE_BUCKET:-warehouse}
@@ -27,8 +27,8 @@ x-data-env: &data-env
   SUBSTRATE_DATA_CONTROLLER_URL: https://data-controller:8040
 
 x-data-image: &data-image
-  image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/substrate-data:${IMAGE_TAG:-local}
-  build: { context: ../.., dockerfile: deploy/docker/substrate-data.Dockerfile }
+  image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/loamz-data:${IMAGE_TAG:-local}
+  build: { context: ../.., dockerfile: deploy/docker/loamz-data.Dockerfile }
 
 x-data-tls: &data-tls
   SUBSTRATE_DATA_TLS_CERT_FILE: /tls/server.crt
@@ -52,8 +52,8 @@ x-worker-env: &worker-env
   SUBSTRATE_DATA_WORKER_MEMORY_LIMIT: ${SUBSTRATE_DATA_WORKER_MEMORY_LIMIT:-2GB}
 
 x-agent-image: &agent-image
-  image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/substrate-agent-server:${IMAGE_TAG:-local}
-  build: { context: ../.., dockerfile: deploy/docker/agent-server.Dockerfile }
+  image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/loamz-agents:${IMAGE_TAG:-local}
+  build: { context: ../.., dockerfile: deploy/docker/loamz-agents.Dockerfile }
 
 x-agent-env: &agent-env
   # SQLAlchemy (asyncpg dialect) wants ssl=, the library's own asyncpg connection wants sslmode=.
@@ -68,8 +68,8 @@ x-agent-env: &agent-env
   OIDC_ADMIN_CLIENT_ID: agent-membership
   OIDC_ADMIN_CLIENT_SECRET: ${AGENT_MEMBERSHIP_CLIENT_SECRET:?run ./gen-env.sh}
   # Keycloak resource-server settings (the verifier in the agent server reads these).
-  OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/substrate
-  OIDC_AUDIENCE: agent-substrate
+  OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+  OIDC_AUDIENCE: loamz-agents
   # Keycloak is on the cell's private network over plain http (TLS terminates at the proxy in front, if any).
   OIDC_INSECURE_HTTP: "true"
   # No collector in the self-host bundle; point OTEL_EXPORTER_OTLP_ENDPOINT at one and unset this to export traces.
@@ -247,7 +247,7 @@ services:
       SUBSTRATE_UI_URL: ${SUBSTRATE_UI_URL:-http://localhost:3000}
       SUBSTRATE_DATA_WEB_URL: ${SUBSTRATE_DATA_WEB_URL:-http://localhost:3011}
     volumes:
-      - ../keycloak/realm-substrate.json:/opt/keycloak/data/import/realm-substrate.json:ro
+      - ../keycloak/realm-loamz.json:/opt/keycloak/data/import/realm-loamz.json:ro
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${PORT_KEYCLOAK:-8080}:8080"
     healthcheck:
@@ -261,7 +261,7 @@ services:
       postgres: { condition: service_healthy }
     restart: unless-stopped
 
-  # ── substrate-data ──────────────────────────────────────────────────────────
+  # ── loamz-data ──────────────────────────────────────────────────────────────
   data-api:
     <<: *data-image
     command: ["serve", "--host", "0.0.0.0", "--port", "8020"]
@@ -282,7 +282,7 @@ services:
       SUBSTRATE_DATA_DOCUMENT_EMBEDDING_URL: ${DOCUMENT_EMBEDDING_URL:-}
       # The agent server signs per-run tokens for its users; the data service fetches its public keys. One name may only
       # read; the other (`-files`) may also change files, documents and memory (scopes still bound every token).
-      SUBSTRATE_DATA_TRUSTED_ISSUERS: '[{"issuer":"agent-substrate","audience":"substrate-data","jwks_uri":"http://agent-server:8000/.well-known/data-token-jwks.json","read_only":true},{"issuer":"agent-substrate-files","audience":"substrate-data","jwks_uri":"http://agent-server:8000/.well-known/data-token-jwks.json","read_only":false}]'
+      SUBSTRATE_DATA_TRUSTED_ISSUERS: '[{"issuer":"loamz-agents","audience":"loamz-data","jwks_uri":"http://agent-server:8000/.well-known/data-token-jwks.json","read_only":true},{"issuer":"loamz-agents-files","audience":"loamz-data","jwks_uri":"http://agent-server:8000/.well-known/data-token-jwks.json","read_only":false}]'
     volumes:
       - ticket-private:/keys:ro
       - internal-tls:/tls:ro
@@ -346,7 +346,7 @@ services:
         for spec in sql:8041 jobs:8042 rag:8043; do
           role=$${spec%%:*}; port=$${spec##*:}
           for i in $$(seq 1 30); do
-            substrate-data attach --name "$$role" --role "$$role" --url "https://data-worker-$$role:$$port" --token-env SUBSTRATE_DATA_WORKER_TOKEN && break
+            loamz-data attach --name "$$role" --role "$$role" --url "https://data-worker-$$role:$$port" --token-env SUBSTRATE_DATA_WORKER_TOKEN && break
             sleep 2
           done
         done
@@ -362,7 +362,7 @@ services:
   # ── Agent server: monolith ──────────────────────────────────────────────────
   agent-server:
     <<: [*agent-image, *nsjail]
-    profiles: [monolith]
+    profiles: [agents, monolith]
     environment:
       <<: *agent-env
       SUBSTRATE_MODE: monolith
@@ -410,15 +410,15 @@ services:
     environment: { <<: *microservice-env, SUBSTRATE_SERVICE: admin }
 
   # ── Web ─────────────────────────────────────────────────────────────────────
-  substrate-ui:
-    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/substrate-ui:${IMAGE_TAG:-local}
+  agents-console:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/loamz-agents-console:${IMAGE_TAG:-local}
     build: { context: ../.., dockerfile: deploy/docker/substrate-ui.Dockerfile }
     environment:
       BACKEND_API_URL: http://${AGENT_UPSTREAM:-agent-server:8000}
       DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/substrate_ui?sslmode=require
-      OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/substrate
-      OIDC_CLIENT_ID: substrate-ui
-      OIDC_CLIENT_SECRET: ${SUBSTRATE_UI_CLIENT_SECRET:?}
+      OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+      OIDC_CLIENT_ID: agents-console
+      OIDC_CLIENT_SECRET: ${AGENTS_CONSOLE_CLIENT_SECRET:-${SUBSTRATE_UI_CLIENT_SECRET:?}}
       SESSION_SECRET: ${UI_SESSION_SECRET:?}
       PUBLIC_URL: ${SUBSTRATE_UI_URL:-http://localhost:3000}
     ports:
@@ -427,14 +427,14 @@ services:
       postgres: { condition: service_healthy }
     restart: unless-stopped
 
-  substrate-data-web:
-    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/substrate-data-web:${IMAGE_TAG:-local}
+  data-workspace:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/loamz-data-workspace:${IMAGE_TAG:-local}
     build: { context: ../.., dockerfile: deploy/docker/substrate-data-web.Dockerfile }
     environment:
       DATA_API_URL: http://data-api:8020
-      SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/substrate
-      WEB_CLIENT_ID: substrate-data-web
-      WEB_CLIENT_SECRET: ${SUBSTRATE_DATA_WEB_CLIENT_SECRET:?}
+      SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+      WEB_CLIENT_ID: data-workspace
+      WEB_CLIENT_SECRET: ${DATA_WORKSPACE_CLIENT_SECRET:-${SUBSTRATE_DATA_WEB_CLIENT_SECRET:?}}
       WEB_SESSION_SECRET: ${WEB_SESSION_SECRET:?}
       WEB_PUBLIC_URL: ${SUBSTRATE_DATA_WEB_URL:-http://localhost:3011}
     ports:

@@ -7,36 +7,35 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "packages": {
-    "agents/agent-substrate": {
+    "data/storage": {
       "release-type": "python",
-      "package-name": "agent-substrate",
-      "component": "agent-substrate"
+      "package-name": "loamz-data-storage",
+      "component": "loamz-data-storage"
     },
-    "agents/substrate-cloud": {
+    "identity/python": {
       "release-type": "python",
-      "package-name": "substrate-cloud",
-      "component": "substrate-cloud"
+      "package-name": "loamz-identity",
+      "component": "loamz-identity"
     },
-    "agents/substrate-ui": {
-      "release-type": "node",
-      "package-name": "substrate-ui",
-      "component": "substrate-ui"
-    },
-    "data/substrate-data": {
+    "data/client": {
       "release-type": "python",
-      "package-name": "substrate-data",
-      "component": "substrate-data"
+      "package-name": "loamz-data-client",
+      "component": "loamz-data-client"
     },
-    "data/substrate-data-client": {
+    "data/server": {
       "release-type": "python",
-      "package-name": "substrate-data-client",
-      "component": "substrate-data-client",
-      "release-as": "0.2.0"
+      "package-name": "loamz-data-server",
+      "component": "loamz-data-server"
     },
-    "data/substrate-data-web": {
-      "release-type": "node",
-      "package-name": "substrate-data-web",
-      "component": "substrate-data-web"
+    "agents/library": {
+      "release-type": "python",
+      "package-name": "loamz-agents",
+      "component": "loamz-agents"
+    },
+    "meta/loamz": {
+      "release-type": "python",
+      "package-name": "loamz",
+      "component": "loamz"
     }
   }
 }

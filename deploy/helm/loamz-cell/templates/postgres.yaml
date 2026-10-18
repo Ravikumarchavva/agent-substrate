@@ -1,0 +1,98 @@
+{{- if .Values.postgres.bundled.enabled }}
+{{- $full := printf "%s-postgres" (include "cell.fullname" .) }}
+{{- $tlsName := printf "%s-tls" $full }}
+{{- $old := lookup "v1" "Secret" .Release.Namespace $tlsName }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $tlsName }}
+  labels: {{- include "cell.labels" . | nindent 4 }}
+type: kubernetes.io/tls
+data:
+  {{- if $old }}
+  tls.crt: {{ index $old.data "tls.crt" }}
+  tls.key: {{ index $old.data "tls.key" }}
+  {{- else }}
+  {{- $ca := genSelfSignedCert $full nil (list $full) 3650 }}
+  tls.crt: {{ $ca.Cert | b64enc }}
+  tls.key: {{ $ca.Key | b64enc }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $full }}-init
+  labels: {{- include "cell.labels" . | nindent 4 }}
+data:
+  10-databases.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    for db in {{ .Values.postgres.databases.keycloak }} {{ .Values.postgres.databases.data }} {{ .Values.postgres.databases.retrieval }} {{ .Values.postgres.databases.ui }}; do
+      psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE DATABASE $db"
+    done
+    for db in "$POSTGRES_DB" {{ .Values.postgres.databases.data }} {{ .Values.postgres.databases.retrieval }}; do
+      psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db" -c 'CREATE EXTENSION IF NOT EXISTS vector' -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'
+    done
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $full }}
+  labels: {{- include "cell.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: {{- include "cell.selector" (dict "root" . "component" "postgres") | nindent 4 }}
+  ports: [ { name: pg, port: 5432 } ]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $full }}
+  labels: {{- include "cell.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ $full }}
+  replicas: 1
+  selector:
+    matchLabels: {{- include "cell.selector" (dict "root" . "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cell.labels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 999, runAsUser: 999, runAsGroup: 999, runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.bundled.image }}
+          args: [postgres, -c, ssl=on, -c, ssl_cert_file=/tls/tls.crt, -c, ssl_key_file=/tls/tls.key]
+          env:
+            - { name: POSTGRES_USER, value: substrate }
+            - { name: POSTGRES_DB, value: {{ .Values.postgres.databases.agent }} }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "postgres-password") }} }
+          ports: [ { name: pg, containerPort: 5432 } ]
+          readinessProbe: { exec: { command: [pg_isready, -U, substrate] }, periodSeconds: 5 }
+          livenessProbe: { exec: { command: [pg_isready, -U, substrate] }, periodSeconds: 20, initialDelaySeconds: 30 }
+          resources: {{- toYaml .Values.postgres.bundled.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: tls, mountPath: /tls, readOnly: true }
+            - { name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+            - { name: run, mountPath: /var/run/postgresql }
+      volumes:
+        # 0640 with the group of the pod (fsGroup 999): the server accepts a key that is root-owned and not world-readable.
+        - { name: tls, secret: { secretName: {{ $tlsName }}, defaultMode: 0640 } }
+        - { name: init, configMap: { name: {{ $full }}-init, defaultMode: 0755 } }
+        - { name: run, emptyDir: {} }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.postgres.bundled.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources: { requests: { storage: {{ .Values.postgres.bundled.storage }} } }
+{{- end }}

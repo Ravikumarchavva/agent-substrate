@@ -1,0 +1,26 @@
+{{- if .Values.console.enabled }}
+{{- $agentUpstream := ternary (printf "http://%s-agent-server:8000" (include "cell.fullname" .)) (printf "http://%s-agent-gateway:8001" (include "cell.fullname" .)) (eq .Values.mode "monolith") }}
+{{- $uiEnv := printf `- name: POSTGRES_PASSWORD
+  valueFrom: { %s }
+- { name: DATABASE_URL, value: "postgresql://%s:$(POSTGRES_PASSWORD)@%s:%s/%s?sslmode=%s" }
+- { name: BACKEND_API_URL, value: %s }
+- { name: OIDC_ISSUER, value: %s }
+- { name: OIDC_CLIENT_ID, value: agents-console }
+- name: OIDC_CLIENT_SECRET
+  valueFrom: { %s }
+- name: SESSION_SECRET
+  valueFrom: { %s }
+- { name: PUBLIC_URL, value: %s }` (include "cell.secretRef" (dict "root" . "key" "postgres-password")) (include "cell.pgUser" .) (include "cell.pgHost" .) (include "cell.pgPort" .) .Values.postgres.databases.ui (include "cell.pgSslmode" .) ($agentUpstream | quote) (include "cell.issuer" . | quote) (include "cell.secretRef" (dict "root" . "key" "ui-client-secret")) (include "cell.secretRef" (dict "root" . "key" "ui-session-secret")) (.Values.publicUrls.ui | quote) }}
+{{- include "cell.workload" (dict "root" . "component" "ui" "repo" "loamz-agents-console" "override" .Values.console.image "port" 3000 "probePath" "/chat" "cfg" .Values.console "env" $uiEnv "writable" (list (dict "name" "next-cache" "path" "/app/agents/substrate-ui/.next/cache"))) }}
+{{- end }}
+{{- if .Values.dataWorkspace.enabled }}
+{{- $webEnv := printf `- { name: DATA_API_URL, value: "http://%s-data-api:8020" }
+- { name: LOAMZ_DATA_OIDC_ISSUER, value: %s }
+- { name: WEB_CLIENT_ID, value: data-workspace }
+- name: WEB_CLIENT_SECRET
+  valueFrom: { %s }
+- name: WEB_SESSION_SECRET
+  valueFrom: { %s }
+- { name: WEB_PUBLIC_URL, value: %s }` (include "cell.fullname" .) (include "cell.issuer" . | quote) (include "cell.secretRef" (dict "root" . "key" "data-web-client-secret")) (include "cell.secretRef" (dict "root" . "key" "web-session-secret")) (.Values.publicUrls.dataWeb | quote) }}
+{{- include "cell.workload" (dict "root" . "component" "data-web" "repo" "loamz-data-workspace" "override" .Values.dataWorkspace.image "port" 3011 "probeTcp" true "probePath" "/" "cfg" .Values.dataWorkspace "env" $webEnv "writable" (list (dict "name" "next-cache" "path" "/app/.next/cache"))) }}
+{{- end }}

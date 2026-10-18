@@ -1,0 +1,53 @@
+{{- if .Values.ingress.enabled }}
+{{- $f := include "cell.fullname" . }}
+{{- $hostOf := dict }}
+{{- $agentSvc := ternary (dict "name" (printf "%s-agent-server" $f) "port" 8000) (dict "name" (printf "%s-agent-gateway" $f) "port" 8001) (eq .Values.mode "monolith") }}
+{{- $routes := list }}
+{{- if and .Values.console.enabled .Values.publicUrls.ui }}
+{{- $routes = append $routes (dict "url" .Values.publicUrls.ui "svc" (printf "%s-ui" $f) "port" 3000) }}
+{{- end }}
+{{- if and .Values.dataWorkspace.enabled .Values.publicUrls.dataWeb }}
+{{- $routes = append $routes (dict "url" .Values.publicUrls.dataWeb "svc" (printf "%s-data-web" $f) "port" 3011) }}
+{{- end }}
+{{- if and .Values.agents.enabled .Values.publicUrls.agentApi }}
+{{- $routes = append $routes (dict "url" .Values.publicUrls.agentApi "svc" $agentSvc.name "port" $agentSvc.port) }}
+{{- end }}
+{{- if .Values.publicUrls.dataApi }}
+{{- $routes = append $routes (dict "url" .Values.publicUrls.dataApi "svc" (printf "%s-data-api" $f) "port" 8020) }}
+{{- end }}
+{{- if .Values.keycloak.enabled }}
+{{- $routes = append $routes (dict "url" .Values.publicUrls.keycloak "svc" (printf "%s-keycloak" $f) "port" 8080) }}
+{{- end }}
+{{- if .Values.s3.bundled.enabled }}
+{{- $routes = append $routes (dict "url" .Values.publicUrls.s3 "svc" (printf "%s-seaweedfs" $f) "port" 8333) }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $f }}
+  labels: {{- include "cell.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - secretName: {{ default (printf "%s-tls" $f) .Values.ingress.tls.secretName }}
+      hosts:
+        {{- range $routes }}
+        - {{ regexReplaceAll "^https?://([^/:]+).*$" .url "${1}" }}
+        {{- end }}
+  {{- end }}
+  rules:
+    {{- range $routes }}
+    - host: {{ regexReplaceAll "^https?://([^/:]+).*$" .url "${1}" }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: {{ .svc }}, port: { number: {{ .port }} } } }
+    {{- end }}
+{{- end }}

@@ -14,6 +14,7 @@ from typing import Any
 from loamz.agents.bootstrap.settings import Settings
 from loamz.agents.kernel.events import EventBus, InMemoryEventBus
 from loamz.agents.kernel.models import ChatModel
+from loamz.agents.kernel.runtime import Runtime
 from loamz.agents.kernel.ports.counters import Counters
 from loamz.agents.kernel.ports.files import FileStore
 from loamz.agents.kernel.telemetry import set_capture_content
@@ -105,11 +106,30 @@ class Container:
             openai_base_url=llm.openai_base_url or None,
         )
 
+    @cached_property
+    def runtime(self) -> Runtime:
+        """The durable engine over `agent_store`. Its worker runs only in processes that serve runs (see `start`)."""
+        return Runtime(
+            self.agent_store,
+            max_concurrency=self.settings.chat.max_concurrent_runs,
+        )
+
     # ── lifecycle ───────────────────────────────────────────────────────────
-    async def start(self) -> None:
+    WORKER_ROLES = frozenset({"all", "runtime", "jobs"})
+
+    async def start(self, roles: set[str] | frozenset[str] | None = None) -> None:
+        """Open the database and bus. The runtime's worker starts only in a process whose roles execute runs; any other
+        process still reads and signals runs through the shared store."""
         await self.database.start()
         await self.event_bus.connect()
+        wanted = set(roles) if roles else set(self.settings.roles)
+        if wanted & self.WORKER_ROLES:
+            await self.runtime.start()
+        else:
+            await self.runtime.store.start()
 
     async def aclose(self) -> None:
+        if "runtime" in self.__dict__:
+            await self.runtime.stop()
         while self._closers:
             await self._closers.pop()()

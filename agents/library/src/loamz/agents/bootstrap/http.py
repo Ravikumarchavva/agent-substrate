@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Annotated, Any
 
 from fastapi import Depends, Request
+from starlette.requests import HTTPConnection
 
 from loamz.agents.bootstrap.container import Container, Provider
 from loamz.agents.kernel.caller import Caller
@@ -22,7 +23,7 @@ from loamz.identity import TokenVerifier
 logger = logging.getLogger(__name__)
 
 
-def container(request: Request) -> Container:
+def container(request: HTTPConnection) -> Container:
     return request.app.state.container
 
 

@@ -105,6 +105,7 @@ class ChatSettings(BaseModel):
         default=40, ge=1, description="Messages of history the model is shown."
     )
     max_iterations: int = Field(default=30, ge=1)
+    max_concurrent_runs: int = Field(default=10, ge=1, description="Runs one worker executes at once.")
     disable_tool_approvals: bool = False
     attachment_pdf_max_chars: int = 20000
     knowledge_base: str = Field(

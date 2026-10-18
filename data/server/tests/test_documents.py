@@ -259,3 +259,12 @@ def test_collection_ids_are_the_published_contract(alice):
 
     name = mine("alice", "ids")
     assert alice.documents.ensure(name)["id"] == collection_id(name)
+
+
+def test_a_collection_says_when_its_topics_need_redrawing_and_is_deleted_whole(alice):
+    cid = alice.documents.ensure(mine("alice", "short-lived"))["id"]
+    alice.documents.add(cid, "a.md", extraction=extraction(prose("harbour")))
+    assert alice.documents.needs_reorganising(cid) in (True, False)
+    assert alice.documents.delete_collection(cid)["documents_removed"] == 1
+    with pytest.raises(NotFoundError):
+        alice.documents.list(cid)

@@ -169,119 +169,119 @@ or be marked deleted with a reason. Tick as ported: `[x]`, deleted: `[-] reason`
 
 ## Data API (113 operations)
 
-- [ ] `GET    /api/v1/audit-events` Audit Events
-- [ ] `GET    /api/v1/audit-events:export` Export Audit Events
-- [ ] `GET    /api/v1/audit-events:verify` Verify Audit Events
-- [ ] `GET    /api/v1/catalogs` List Catalogs
-- [ ] `POST   /api/v1/catalogs` Create Catalog
-- [ ] `DELETE /api/v1/catalogs/{catalog}` Delete Catalog
-- [ ] `GET    /api/v1/catalogs/{catalog}` Get Catalog
-- [ ] `PATCH  /api/v1/catalogs/{catalog}` Update Catalog
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas` List Schemas
-- [ ] `POST   /api/v1/catalogs/{catalog}/schemas` Create Schema
-- [ ] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}` Delete Schema
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}` Get Schema
-- [ ] `PATCH  /api/v1/catalogs/{catalog}/schemas/{schema}` Update Schema
-- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/materialized-views` Create Materialized View
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables` List Tables
-- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables` Create Table
-- [ ] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}` Delete Table
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}` Get Table
-- [ ] `PATCH  /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}` Update Table
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/maintenance-runs` List Runs
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/maintenance-runs/{run_id}` Get Run
-- [ ] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/policy` Delete Policy
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/policy` Get Policy
-- [ ] `PUT    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/policy` Put Policy
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/preview` Preview
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/profile` Profile
-- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}:expire` Expire
-- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}:optimize` Optimize
-- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}:refresh` Refresh Materialized View
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/views` List Views
-- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/views` Create View
-- [ ] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/views/{view}` Delete View
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/views/{view}` Get View
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/views/{view}/preview` Preview View
-- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/volumes/{name}/access` Object Access
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/volumes/{name}/files` Files
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}` Listing
-- [ ] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}` Create
-- [ ] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}/{name}` Unregister
-- [ ] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}/{name}` Get Asset
-- [ ] `GET    /api/v1/collections` List Collections
-- [ ] `DELETE /api/v1/collections/{cid}` Delete Collection
-- [ ] `GET    /api/v1/collections/{cid}/documents` List Documents
-- [ ] `POST   /api/v1/collections/{cid}/documents` Add Document
-- [ ] `DELETE /api/v1/collections/{cid}/documents/{document}` Delete Document
-- [ ] `GET    /api/v1/collections/{cid}/documents/{document}` Get Document
-- [ ] `GET    /api/v1/collections/{cid}/documents/{document}/brief` Brief
-- [ ] `GET    /api/v1/collections/{cid}/documents/{document}/enrichment` Enrichment State
-- [ ] `POST   /api/v1/collections/{cid}/documents/{document}/enrichment:annotate` Annotate
-- [ ] `POST   /api/v1/collections/{cid}/documents/{document}/enrichment:claim` Claim
-- [ ] `POST   /api/v1/collections/{cid}/documents/{document}/enrichment:fail` Fail
-- [ ] `GET    /api/v1/collections/{cid}/documents/{document}/outline` Outline
-- [ ] `GET    /api/v1/collections/{cid}/documents/{document}/read` Read Document
-- [ ] `GET    /api/v1/collections/{cid}/documents/{document}/sections/{section}` Read Section
-- [ ] `POST   /api/v1/collections/{cid}/documents:embed-missing` Embed Missing
-- [ ] `POST   /api/v1/collections/{cid}/documents:reindex` Reindex
-- [ ] `POST   /api/v1/collections/{cid}/enrichment:pending` Pending
-- [ ] `GET    /api/v1/collections/{cid}/images` Images
-- [ ] `GET    /api/v1/collections/{cid}/needs-reorganising` Needs Reorganising
-- [ ] `GET    /api/v1/collections/{cid}/topic-tree` Topic Tree
-- [ ] `GET    /api/v1/collections/{cid}/topics` Browse
-- [ ] `PUT    /api/v1/collections/{cid}/topics` Set Topics
-- [ ] `POST   /api/v1/collections/{cid}:search` Search
-- [ ] `POST   /api/v1/collections:ensure` Ensure Collection
-- [ ] `GET    /api/v1/compute/resources` Resources
-- [ ] `POST   /api/v1/compute/resources` Attach
-- [ ] `PUT    /api/v1/compute/resources/{resource_id}` Update Resource
-- [ ] `GET    /api/v1/compute/resources/{resource_id}/events` Resource Events
-- [ ] `POST   /api/v1/compute/resources/{resource_id}:{action}` Resource Action
-- [ ] `POST   /api/v1/enrichment:pending` Pending All
-- [ ] `POST   /api/v1/erasure-requests` Erase
-- [ ] `POST   /api/v1/exports` Export
-- [ ] `GET    /api/v1/grants/{securable_type}/{full_name}` Get Grants
-- [ ] `PATCH  /api/v1/grants/{securable_type}/{full_name}` Update Grants
-- [ ] `GET    /api/v1/imports` List Imports
-- [ ] `POST   /api/v1/imports` Create Import
-- [ ] `GET    /api/v1/imports/{import_id}` Get Import
-- [ ] `POST   /api/v1/imports/{import_id}:complete` Complete Import
-- [ ] `GET    /api/v1/jobs` Jobs
-- [ ] `GET    /api/v1/jobs/{job_id}` Job
-- [ ] `POST   /api/v1/jobs/{job_id}:cancel` Cancel Job
-- [ ] `GET    /api/v1/me` Me
-- [ ] `POST   /api/v1/memory/records:delete` Delete
-- [ ] `POST   /api/v1/memory/records:erase` Erase
-- [ ] `POST   /api/v1/memory/records:get` Get
-- [ ] `POST   /api/v1/memory/records:query` Query
-- [ ] `POST   /api/v1/memory/records:save` Save
-- [ ] `POST   /api/v1/memory/records:touch` Touch
-- [ ] `GET    /api/v1/overview` Overview
-- [ ] `GET    /api/v1/pipelines` List Pipelines
-- [ ] `POST   /api/v1/pipelines` Create Pipeline
-- [ ] `POST   /api/v1/pipelines/{pipeline_id}:run` Run Pipeline
-- [ ] `GET    /api/v1/search` Search
-- [ ] `GET    /api/v1/statements` List Statements
-- [ ] `POST   /api/v1/statements` Execute
-- [ ] `GET    /api/v1/statements/{statement_id}` Get Statement
-- [ ] `POST   /api/v1/statements/{statement_id}:cancel` Cancel
-- [ ] `POST   /api/v1/tenants` Ensure Tenant
-- [ ] `POST   /api/v1/upload-sessions` Create Session
-- [ ] `POST   /api/v1/upload-sessions/{session_id}:promote` Promote Session
-- [ ] `GET    /api/v1/volumes/{volume}/files` List Files
-- [ ] `DELETE /api/v1/volumes/{volume}/files/{path}` Delete File
-- [ ] `GET    /api/v1/volumes/{volume}/files/{path}` File Metadata
-- [ ] `GET    /api/v1/volumes/{volume}/files/{path}/versions` List Versions
-- [ ] `GET    /api/v1/volumes/{volume}/files/{path}:download-url` Download Url
-- [ ] `POST   /api/v1/volumes/{volume}/files/{path}:restore` Restore File
-- [ ] `POST   /api/v1/volumes/{volume}/files:complete-upload` Complete Upload
-- [ ] `POST   /api/v1/volumes/{volume}/files:copy-prefix` Copy Prefix
-- [ ] `POST   /api/v1/volumes/{volume}/files:delete-prefix` Delete Prefix
-- [ ] `POST   /api/v1/volumes/{volume}/files:initiate-upload` Initiate Upload
-- [ ] `POST   /api/v1/volumes/{volume}/files:sign` Sign
-- [ ] `PUT    /api/v1/volumes/{volume}/quotas` Set Quota
-- [ ] `GET    /api/v1/volumes/{volume}/usage` Usage
+- [x] `GET    /api/v1/audit-events` Audit Events: `data/server/tests/test_agents.py::test_untrusted_agent_tokens_are_rejected[admin-claim]` (integration)
+- [x] `GET    /api/v1/audit-events:export` Export Audit Events: `data/server/tests/test_audit.py::test_the_api_exports_and_verifies_for_admins_only` (integration)
+- [x] `GET    /api/v1/audit-events:verify` Verify Audit Events: `data/server/tests/test_audit.py::test_the_api_exports_and_verifies_for_admins_only` (integration)
+- [x] `GET    /api/v1/catalogs` List Catalogs: `data/server/tests/test_limits.py::test_the_api_enforces_them` (integration)
+- [x] `POST   /api/v1/catalogs` Create Catalog: `data/server/tests/test_control_plane_routes.py::test_a_catalog_is_updated_with_an_etag_and_deleted_when_empty`
+- [x] `DELETE /api/v1/catalogs/{catalog}` Delete Catalog: `data/server/tests/test_control_plane_routes.py::test_a_catalog_is_updated_with_an_etag_and_deleted_when_empty`
+- [x] `GET    /api/v1/catalogs/{catalog}` Get Catalog: `data/server/tests/test_control_plane_routes.py::test_a_catalog_is_updated_with_an_etag_and_deleted_when_empty`
+- [x] `PATCH  /api/v1/catalogs/{catalog}` Update Catalog: `data/server/tests/test_control_plane_routes.py::test_a_catalog_is_updated_with_an_etag_and_deleted_when_empty`
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas` List Schemas: `data/server/tests/test_files_tenants.py::test_provisioning_creates_the_tenant_once_and_is_idempotent` (integration)
+- [x] `POST   /api/v1/catalogs/{catalog}/schemas` Create Schema: `data/server/tests/test_control_plane_routes.py::test_a_catalog_is_updated_with_an_etag_and_deleted_when_empty`
+- [x] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}` Delete Schema: `data/server/tests/test_control_plane_routes.py::test_a_catalog_is_updated_with_an_etag_and_deleted_when_empty`
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}` Get Schema: `data/server/tests/test_platform.py::test_api_contract` (integration)
+- [x] `PATCH  /api/v1/catalogs/{catalog}/schemas/{schema}` Update Schema: `data/server/tests/test_platform.py::test_api_contract` (integration)
+- [x] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/materialized-views` Create Materialized View: `data/server/tests/test_maintenance.py::test_definitions_that_cannot_be_refreshed_incrementally_are_refused_at_creation` (integration)
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables` List Tables: `data/server/tests/test_platform.py::test_views_share_a_slice_without_exposing_the_table` (integration)
+- [x] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables` Create Table: `data/server/tests/test_control_plane_routes.py::test_a_table_is_created_described_and_updated`
+- [x] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}` Delete Table: `data/server/tests/test_agents.py::test_agent_tokens_cannot_change_anything` (integration)
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}` Get Table: `data/server/tests/test_maintenance.py::test_incremental_refresh_reads_only_new_files_and_matches_a_full_recompute` (integration)
+- [x] `PATCH  /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}` Update Table: `data/server/tests/test_control_plane_routes.py::test_a_table_is_created_described_and_updated`
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/maintenance-runs` List Runs: `data/server/tests/test_maintenance.py::test_maintenance_needs_modify_validates_columns_and_runs_one_at_a_time` (integration)
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/maintenance-runs/{run_id}` Get Run: `data/server/tests/test_maintenance.py::test_incremental_refresh_reads_only_new_files_and_matches_a_full_recompute` (integration)
+- [x] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/policy` Delete Policy: `data/server/tests/test_policies.py::test_only_the_owner_or_an_admin_manages_policies_and_bad_ones_are_refused` (integration)
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/policy` Get Policy: `data/server/tests/test_policies.py::test_only_the_owner_or_an_admin_manages_policies_and_bad_ones_are_refused` (integration)
+- [x] `PUT    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/policy` Put Policy: `data/server/tests/test_policies.py::test_only_the_owner_or_an_admin_manages_policies_and_bad_ones_are_refused` (integration)
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/preview` Preview: `data/server/tests/test_platform.py::test_import_query_prune_preview_profile` (integration)
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}/profile` Profile: `data/server/tests/test_platform.py::test_import_query_prune_preview_profile` (integration)
+- [x] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}:expire` Expire: `data/server/tests/test_maintenance.py::test_expiring_snapshots_deletes_only_files_no_snapshot_still_uses` (integration)
+- [x] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}:optimize` Optimize: `data/server/tests/test_maintenance.py::test_maintenance_needs_modify_validates_columns_and_runs_one_at_a_time` (integration)
+- [x] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/tables/{table}:refresh` Refresh Materialized View: `data/server/tests/test_maintenance.py::test_incremental_refresh_reads_only_new_files_and_matches_a_full_recompute` (integration)
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/views` List Views: `data/server/tests/test_assets.py::test_assets_are_real_and_do_not_shadow_views`
+- [x] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/views` Create View: `data/server/tests/test_platform.py::test_view_definition_is_validated_and_authorized_at_creation` (integration)
+- [x] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/views/{view}` Delete View: `data/server/tests/test_platform.py::test_views_follow_their_owner_and_can_be_dropped` (integration)
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/views/{view}` Get View: `data/server/tests/test_platform.py::test_views_follow_their_owner_and_can_be_dropped` (integration)
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/views/{view}/preview` Preview View: `data/server/tests/test_platform.py::test_views_compose_filter_and_join_like_tables` (integration)
+- [x] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/volumes/{name}/access` Object Access: `data/server/tests/test_assets.py::test_assets_need_use_and_kind_specific_grants`
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/volumes/{name}/files` Files: `data/server/tests/test_assets.py::test_volume_bytes_go_directly_to_seaweedfs`
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}` Listing: `data/server/tests/test_assets.py::test_asset_pagination_never_exposes_hidden_names`
+- [x] `POST   /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}` Create: `data/server/tests/test_assets.py::test_asset_pagination_never_exposes_hidden_names`
+- [x] `DELETE /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}/{name}` Unregister: `data/server/tests/test_assets.py::test_assets_need_use_and_kind_specific_grants`
+- [x] `GET    /api/v1/catalogs/{catalog}/schemas/{schema}/{collection}/{name}` Get Asset: `data/server/tests/test_assets.py::test_assets_need_use_and_kind_specific_grants`
+- [x] `GET    /api/v1/collections` List Collections: `data/server/tests/test_documents.py::test_a_collection_is_ensured_once_and_documents_round_trip`
+- [x] `DELETE /api/v1/collections/{cid}` Delete Collection: `data/server/tests/test_documents.py::test_a_collection_says_when_its_topics_need_redrawing_and_is_deleted_whole`
+- [x] `GET    /api/v1/collections/{cid}/documents` List Documents: `data/server/tests/test_documents.py::test_a_collection_is_ensured_once_and_documents_round_trip`
+- [x] `POST   /api/v1/collections/{cid}/documents` Add Document: `data/server/tests/test_memory_erasure.py::test_erasure_removes_one_user_across_domains_and_leaves_the_audit_chain_intact`
+- [x] `DELETE /api/v1/collections/{cid}/documents/{document}` Delete Document: `data/server/tests/test_documents.py::test_a_collection_is_ensured_once_and_documents_round_trip`
+- [x] `GET    /api/v1/collections/{cid}/documents/{document}` Get Document: `data/server/tests/test_memory_erasure.py::test_erasure_removes_one_user_across_domains_and_leaves_the_audit_chain_intact`
+- [x] `GET    /api/v1/collections/{cid}/documents/{document}/brief` Brief: `data/server/tests/test_documents.py::test_enrichment_is_written_back_by_the_caller`
+- [x] `GET    /api/v1/collections/{cid}/documents/{document}/enrichment` Enrichment State: `data/server/tests/test_documents.py::test_enrichment_is_written_back_by_the_caller`
+- [x] `POST   /api/v1/collections/{cid}/documents/{document}/enrichment:annotate` Annotate: `data/server/tests/test_documents.py::test_enrichment_is_written_back_by_the_caller`
+- [x] `POST   /api/v1/collections/{cid}/documents/{document}/enrichment:claim` Claim: `data/server/tests/test_documents.py::test_enrichment_is_written_back_by_the_caller`
+- [x] `POST   /api/v1/collections/{cid}/documents/{document}/enrichment:fail` Fail: `data/server/tests/test_documents.py::test_enrichment_is_written_back_by_the_caller`
+- [x] `GET    /api/v1/collections/{cid}/documents/{document}/outline` Outline: `data/server/tests/test_documents.py::test_a_collection_is_ensured_once_and_documents_round_trip`
+- [x] `GET    /api/v1/collections/{cid}/documents/{document}/read` Read Document: `data/server/tests/test_documents.py::test_a_collection_is_ensured_once_and_documents_round_trip`
+- [x] `GET    /api/v1/collections/{cid}/documents/{document}/sections/{section}` Read Section: `data/server/tests/test_documents.py::test_a_collection_is_ensured_once_and_documents_round_trip`
+- [x] `POST   /api/v1/collections/{cid}/documents:embed-missing` Embed Missing: `data/server/tests/test_documents.py::test_semantic_collections_find_by_meaning_and_reindex_rebuilds_the_vectors`
+- [x] `POST   /api/v1/collections/{cid}/documents:reindex` Reindex: `data/server/tests/test_documents.py::test_a_collection_is_ensured_once_and_documents_round_trip`
+- [x] `POST   /api/v1/collections/{cid}/enrichment:pending` Pending: `data/server/tests/test_documents.py::test_enrichment_is_written_back_by_the_caller`
+- [x] `GET    /api/v1/collections/{cid}/images` Images: `data/server/tests/test_documents.py::test_a_figure_can_be_viewed`
+- [x] `GET    /api/v1/collections/{cid}/needs-reorganising` Needs Reorganising: `data/server/tests/test_documents.py::test_a_collection_says_when_its_topics_need_redrawing_and_is_deleted_whole`
+- [x] `GET    /api/v1/collections/{cid}/topic-tree` Topic Tree: `data/server/tests/test_documents.py::test_enrichment_is_written_back_by_the_caller`
+- [x] `GET    /api/v1/collections/{cid}/topics` Browse: `data/server/tests/test_documents.py::test_enrichment_is_written_back_by_the_caller`
+- [x] `PUT    /api/v1/collections/{cid}/topics` Set Topics: `data/server/tests/test_documents.py::test_enrichment_is_written_back_by_the_caller`
+- [x] `POST   /api/v1/collections/{cid}:search` Search: `data/server/tests/test_documents.py::test_semantic_collections_find_by_meaning_and_reindex_rebuilds_the_vectors`
+- [x] `POST   /api/v1/collections:ensure` Ensure Collection: `data/server/tests/test_documents.py::test_collections_are_invisible_across_users_and_tenants`
+- [x] `GET    /api/v1/compute/resources` Resources: `data/server/tests/test_control_plane_routes.py::test_compute_and_jobs_are_admin_routes_in_front_of_the_controller`
+- [x] `POST   /api/v1/compute/resources` Attach: `data/server/tests/test_agents.py::test_agent_tokens_cannot_change_anything` (integration)
+- [x] `PUT    /api/v1/compute/resources/{resource_id}` Update Resource: `data/server/tests/test_control_plane_routes.py::test_compute_and_jobs_are_admin_routes_in_front_of_the_controller`
+- [x] `GET    /api/v1/compute/resources/{resource_id}/events` Resource Events: `data/server/tests/test_control_plane_routes.py::test_compute_and_jobs_are_admin_routes_in_front_of_the_controller`
+- [x] `POST   /api/v1/compute/resources/{resource_id}:{action}` Resource Action: `data/server/tests/test_control_plane_routes.py::test_compute_and_jobs_are_admin_routes_in_front_of_the_controller`
+- [x] `POST   /api/v1/enrichment:pending` Pending All: `data/server/tests/test_documents.py::test_enrichment_is_written_back_by_the_caller`
+- [x] `POST   /api/v1/erasure-requests` Erase: `data/server/tests/test_memory_erasure.py::test_erasure_removes_one_user_across_domains_and_leaves_the_audit_chain_intact`
+- [x] `POST   /api/v1/exports` Export: `data/server/tests/test_memory_erasure.py::test_export_hands_over_what_is_held_and_tenant_erasure_removes_everything`
+- [x] `GET    /api/v1/grants/{securable_type}/{full_name}` Get Grants: `data/server/tests/test_files_tenants.py::test_provisioning_creates_the_tenant_once_and_is_idempotent` (integration)
+- [x] `PATCH  /api/v1/grants/{securable_type}/{full_name}` Update Grants: `data/server/tests/test_assets.py::test_asset_grant_api_and_non_empty_schema_guard`
+- [x] `GET    /api/v1/imports` List Imports: `data/server/tests/test_control_plane_routes.py::test_statement_and_import_history_belong_to_their_principal`
+- [x] `POST   /api/v1/imports` Create Import: `data/server/tests/test_maintenance.py::test_compaction_merges_small_files_and_changes_no_answer` (integration)
+- [x] `GET    /api/v1/imports/{import_id}` Get Import: `data/server/tests/test_maintenance.py::test_compaction_merges_small_files_and_changes_no_answer` (integration)
+- [x] `POST   /api/v1/imports/{import_id}:complete` Complete Import: `data/server/tests/test_maintenance.py::test_compaction_merges_small_files_and_changes_no_answer` (integration)
+- [x] `GET    /api/v1/jobs` Jobs: `data/server/tests/test_control_plane_routes.py::test_compute_and_jobs_are_admin_routes_in_front_of_the_controller`
+- [x] `GET    /api/v1/jobs/{job_id}` Job: `data/server/tests/test_control_plane_routes.py::test_compute_and_jobs_are_admin_routes_in_front_of_the_controller`
+- [x] `POST   /api/v1/jobs/{job_id}:cancel` Cancel Job: `data/server/tests/test_control_plane_routes.py::test_compute_and_jobs_are_admin_routes_in_front_of_the_controller`
+- [x] `GET    /api/v1/me` Me: `data/server/tests/test_control_plane_routes.py::test_me_and_the_overview_describe_the_caller`
+- [x] `POST   /api/v1/memory/records:delete` Delete: `data/server/tests/test_memory_erasure.py::test_tenant_level_memory_is_written_by_administrators_only`
+- [x] `POST   /api/v1/memory/records:erase` Erase: `data/server/tests/test_memory_erasure.py::test_a_user_erases_their_own_memory_and_nobody_elses`
+- [x] `POST   /api/v1/memory/records:get` Get: `data/server/tests/test_memory_erasure.py::test_records_belong_to_their_user_and_tenant`
+- [x] `POST   /api/v1/memory/records:query` Query: `data/server/tests/test_memory_erasure.py::test_erasure_removes_one_user_across_domains_and_leaves_the_audit_chain_intact`
+- [x] `POST   /api/v1/memory/records:save` Save: `data/server/tests/test_memory_erasure.py::test_records_belong_to_their_user_and_tenant`
+- [x] `POST   /api/v1/memory/records:touch` Touch: `data/server/tests/test_memory_erasure.py::test_records_belong_to_their_user_and_tenant`
+- [x] `GET    /api/v1/overview` Overview: `data/server/tests/test_control_plane_routes.py::test_me_and_the_overview_describe_the_caller`
+- [x] `GET    /api/v1/pipelines` List Pipelines: `data/server/tests/test_platform.py::test_pipeline_writes_a_governed_table` (integration)
+- [x] `POST   /api/v1/pipelines` Create Pipeline: `data/server/tests/test_agents.py::test_agent_tokens_cannot_change_anything` (integration)
+- [x] `POST   /api/v1/pipelines/{pipeline_id}:run` Run Pipeline: `data/server/tests/test_platform.py::test_pipeline_writes_a_governed_table` (integration)
+- [x] `GET    /api/v1/search` Search: `data/server/tests/test_agents.py::test_agent_tokens_follow_grants_and_are_audited` (integration)
+- [x] `GET    /api/v1/statements` List Statements: `data/server/tests/test_agents.py::test_agent_tokens_follow_grants_and_are_audited` (integration)
+- [x] `POST   /api/v1/statements` Execute: `data/server/tests/test_policies.py::test_predicates_on_hidden_values_find_nothing[SELECT` (integration)
+- [x] `GET    /api/v1/statements/{statement_id}` Get Statement: `data/server/tests/test_control_plane_routes.py::test_statement_and_import_history_belong_to_their_principal`
+- [x] `POST   /api/v1/statements/{statement_id}:cancel` Cancel: `data/server/tests/test_agents.py::test_agents_can_cancel_their_own_statements` (integration)
+- [x] `POST   /api/v1/tenants` Ensure Tenant: `data/server/tests/test_files_tenants.py::test_a_catalog_name_cannot_be_taken_over_by_another_tenant` (integration)
+- [x] `POST   /api/v1/upload-sessions` Create Session: `data/server/tests/test_files.py::test_an_upload_session_is_promoted_into_a_volume_by_a_server_side_copy` (integration)
+- [x] `POST   /api/v1/upload-sessions/{session_id}:promote` Promote Session: `data/server/tests/test_files.py::test_an_upload_session_is_promoted_into_a_volume_by_a_server_side_copy` (integration)
+- [x] `GET    /api/v1/volumes/{volume}/files` List Files: `data/server/tests/test_files.py::test_listings_are_prefix_scoped_ordered_paged_and_can_fold_folders` (integration)
+- [x] `DELETE /api/v1/volumes/{volume}/files/{path}` Delete File: `data/server/tests/test_files.py::test_delete_and_prefix_delete_hide_files_without_touching_the_neighbours` (integration)
+- [x] `GET    /api/v1/volumes/{volume}/files/{path}` File Metadata: `data/server/tests/test_files.py::test_encoded_traversal_in_the_url_never_reaches_another_path` (integration)
+- [x] `GET    /api/v1/volumes/{volume}/files/{path}/versions` List Versions: `data/server/tests/test_files.py::test_every_version_is_kept_and_any_can_be_restored` (integration)
+- [x] `GET    /api/v1/volumes/{volume}/files/{path}:download-url` Download Url: `data/server/tests/test_files.py::test_a_delegated_token_reaches_only_its_own_users_folder` (integration)
+- [x] `POST   /api/v1/volumes/{volume}/files/{path}:restore` Restore File: `data/server/tests/test_files.py::test_every_version_is_kept_and_any_can_be_restored` (integration)
+- [x] `POST   /api/v1/volumes/{volume}/files:complete-upload` Complete Upload: `data/server/tests/test_files.py::test_many_small_files_move_with_batch_signing` (integration)
+- [x] `POST   /api/v1/volumes/{volume}/files:copy-prefix` Copy Prefix: `data/server/tests/test_files.py::test_copy_prefix_forks_a_folder_and_the_copies_are_independent` (integration)
+- [x] `POST   /api/v1/volumes/{volume}/files:delete-prefix` Delete Prefix: `data/server/tests/test_files.py::test_delete_and_prefix_delete_hide_files_without_touching_the_neighbours` (integration)
+- [x] `POST   /api/v1/volumes/{volume}/files:initiate-upload` Initiate Upload: `data/server/tests/test_files.py::test_the_async_client_does_the_same_things_concurrently` (integration)
+- [x] `POST   /api/v1/volumes/{volume}/files:sign` Sign: `data/server/tests/test_files.py::test_many_small_files_move_with_batch_signing` (integration)
+- [x] `PUT    /api/v1/volumes/{volume}/quotas` Set Quota: `data/server/tests/test_files.py::test_a_hard_quota_refuses_writes_that_would_pass_it` (integration)
+- [x] `GET    /api/v1/volumes/{volume}/usage` Usage: `data/server/tests/test_files.py::test_a_hard_quota_refuses_writes_that_would_pass_it` (integration)
 
 ## Library public API (agent-substrate)
 
@@ -303,7 +303,7 @@ or be marked deleted with a reason. Tick as ported: `[x]`, deleted: `[-] reason`
 - [ ] `substrate chat`
 - [ ] `substrate serve module:attr`
 - [ ] `substrate-cloud up` / serve
-- [ ] `substrate-data serve|controller|worker --role|attach`
+- [x] `substrate-data serve|controller|worker --role|attach`: `loamz-data serve [--roles]|controller|worker --role sql|jobs|documents|inference|attach` (`data/server/src/loamz/data/server/cli.py`; worker roles covered by `test_compute_manager.py`, `test_inference_routes.py`)
 
 ## End-to-end flows (deploy/compose/e2e.py)
 

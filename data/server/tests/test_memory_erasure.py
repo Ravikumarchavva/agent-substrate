@@ -180,3 +180,15 @@ def test_export_hands_over_what_is_held_and_tenant_erasure_removes_everything(do
     with docs.client("frank", A) as frank:
         assert len(frank.memory.query(user_id="frank")) == 1
     assert docs.app.state.container.store.verify_audit()["ok"]
+
+
+def test_a_user_erases_their_own_memory_and_nobody_elses(docs):
+    with docs.client("gina", A) as gina, docs.client("hal", A) as hal:
+        gina.memory.save(record("gina likes jazz", "m-jazz", user_id="gina"))
+        hal.memory.save(record("hal likes rock", "m-rock", user_id="hal"))
+        assert gina.memory.erase(user_id="gina") == 1
+        with pytest.raises(NotFoundError):
+            gina.memory.get("m-jazz", user_id="gina")
+        assert hal.memory.get("m-rock", user_id="hal")["content"][0]["text"] == "hal likes rock"
+        with pytest.raises(ForbiddenError):
+            gina.memory.erase(user_id="hal")

@@ -110,7 +110,10 @@ class VolumeFileStore:
     async def exists(self, key: str) -> bool:
         tenant, path = split_key(key)
         volume = await asyncio.to_thread(self.volume, tenant)
-        return await asyncio.to_thread(self.catalog.head, volume["id"], normalize_path(path)) is not None
+        return (
+            await asyncio.to_thread(self.catalog.head, volume["id"], normalize_path(path))
+            is not None
+        )
 
     async def delete(self, key: str) -> None:
         tenant, path = split_key(key)
@@ -164,7 +167,9 @@ class VolumeFileStore:
     async def presign_url(self, key: str, *, expires_in: int = 3600) -> str:
         tenant, path = split_key(key)
         volume = await asyncio.to_thread(self.volume, tenant)
-        obj = await asyncio.to_thread(self.catalog.current_object, volume["id"], normalize_path(path))
+        obj = await asyncio.to_thread(
+            self.catalog.current_object, volume["id"], normalize_path(path)
+        )
         return self.files.storage.sign_get(obj["object_key"], expires_in=expires_in)
 
     async def usage_bytes(self, tenant_id: str, *, force: bool = False) -> int:
@@ -174,7 +179,9 @@ class VolumeFileStore:
     @staticmethod
     def _split_prefix(prefix: str) -> tuple[str, str]:
         if not prefix.startswith(TENANT_PREFIX):
-            raise WorkspacePathError(f"invalid prefix {prefix!r}: prefixes start with 'tenants/<tenant>/'")
+            raise WorkspacePathError(
+                f"invalid prefix {prefix!r}: prefixes start with 'tenants/<tenant>/'"
+            )
         tenant, _, rest = prefix[len(TENANT_PREFIX) :].partition("/")
         if not tenant:
             raise WorkspacePathError(f"invalid prefix {prefix!r}: no tenant")

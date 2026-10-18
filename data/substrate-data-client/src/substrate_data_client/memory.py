@@ -33,7 +33,12 @@ class _MemoryCalls:
         return self._do("PUT", f"/memory/records/{quote(record_id, safe='')}", json=record)
 
     def get(
-        self, record_id: str, *, user_id: str | None = None, agent_id: str | None = None, session_id: str | None = None
+        self,
+        record_id: str,
+        *,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        session_id: str | None = None,
     ):
         return self._do(
             "GET",
@@ -42,7 +47,12 @@ class _MemoryCalls:
         )
 
     def delete(
-        self, record_id: str, *, user_id: str | None = None, agent_id: str | None = None, session_id: str | None = None
+        self,
+        record_id: str,
+        *,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        session_id: str | None = None,
     ):
         return self._do(
             "DELETE",

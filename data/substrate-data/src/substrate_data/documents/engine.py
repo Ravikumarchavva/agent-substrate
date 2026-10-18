@@ -91,7 +91,9 @@ class DocumentEngine:
         if embedder is None and settings.document_embedding_url:
             token = settings.document_embedding_token.get_secret_value()
             timeout = settings.document_embedding_timeout_seconds
-            embedder = RemoteEmbedder(settings.document_embedding_url, api_key=token, timeout=timeout)
+            embedder = RemoteEmbedder(
+                settings.document_embedding_url, api_key=token, timeout=timeout
+            )
             reranker = reranker or RemoteReranker(
                 settings.document_embedding_url, api_key=token, timeout=timeout
             )
@@ -111,7 +113,9 @@ class DocumentEngine:
         if url:
             from substrate.integrations.database import postgres_store
 
-            return postgres_store(url, files=settings.retrieval_dir, schema=settings.retrieval_schema)
+            return postgres_store(
+                url, files=settings.retrieval_dir, schema=settings.retrieval_schema
+            )
         return Store.at(settings.retrieval_dir)
 
     @staticmethod
@@ -163,7 +167,9 @@ class DocumentEngine:
         row = await self.store.run(op)
         return _row(row) if row else None
 
-    async def collections_of(self, tenant: str, *, prefix: str | None = None) -> list[CollectionRow]:
+    async def collections_of(
+        self, tenant: str, *, prefix: str | None = None
+    ) -> list[CollectionRow]:
         await self.store.ensure("data_collections", _COLLECTIONS)
 
         async def op(tx):
@@ -173,7 +179,9 @@ class DocumentEngine:
 
         rows = [_row(r) for r in await self.store.run(op)]
         if prefix is not None:
-            rows = [r for r in rows if r.name == prefix or r.name.startswith(prefix.rstrip("/") + "/")]
+            rows = [
+                r for r in rows if r.name == prefix or r.name.startswith(prefix.rstrip("/") + "/")
+            ]
         return rows
 
     async def forget_collections(self, ids: list[str]) -> None:

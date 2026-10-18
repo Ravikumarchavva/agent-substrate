@@ -50,9 +50,17 @@ def test_a_collection_is_ensured_once_and_documents_round_trip(alice):
     first = alice.documents.ensure(name)
     assert alice.documents.ensure(name)["id"] == first["id"]
     cid = first["id"]
-    added = alice.documents.add(cid, "refunds.pdf", extraction=extraction(prose("refund"), prose("warranty"), title="Refunds"))
+    added = alice.documents.add(
+        cid,
+        "refunds.pdf",
+        extraction=extraction(prose("refund"), prose("warranty"), title="Refunds"),
+    )
     assert added["pages"] == 2 and not added["duplicate"]
-    again = alice.documents.add(cid, "refunds.pdf", extraction=extraction(prose("refund"), prose("warranty"), title="Refunds"))
+    again = alice.documents.add(
+        cid,
+        "refunds.pdf",
+        extraction=extraction(prose("refund"), prose("warranty"), title="Refunds"),
+    )
     assert again["duplicate"] is True
     doc = added["document"]
 
@@ -80,8 +88,16 @@ def test_a_collection_is_ensured_once_and_documents_round_trip(alice):
 
 def test_a_figure_can_be_viewed(alice):
     cid = alice.documents.ensure(mine("alice"))["id"]
-    picture = ExtractedImage(data=png(), label=ExtractedImageLabel.CHART, page_number=1, caption="Quarterly sales", id="fig1")
-    added = alice.documents.add(cid, "sales.pdf", extraction=extraction(prose("sales"), images=[picture]))
+    picture = ExtractedImage(
+        data=png(),
+        label=ExtractedImageLabel.CHART,
+        page_number=1,
+        caption="Quarterly sales",
+        id="fig1",
+    )
+    added = alice.documents.add(
+        cid, "sales.pdf", extraction=extraction(prose("sales"), images=[picture])
+    )
     assert added["images"] == 1
     image = alice.documents.image(cid, document=added["document"], page=1)
     assert image.data == png() or image.data[:4] == b"\x89PNG"
@@ -90,7 +106,9 @@ def test_a_figure_can_be_viewed(alice):
 
 def test_uploads_are_read_by_the_document_reader_not_the_control_plane(docs, alice):
     cid = alice.documents.ensure(mine("alice", "raw"))["id"]
-    added = alice.documents.add(cid, "notes.txt", data=(prose("lighthouse") + "\n").encode(), content_type="text/plain")
+    added = alice.documents.add(
+        cid, "notes.txt", data=(prose("lighthouse") + "\n").encode(), content_type="text/plain"
+    )
     assert added["sections"] >= 1
     assert alice.documents.search(cid, "lighthouse")["hits"]
     # no reader configured: the control plane refuses to parse
@@ -138,7 +156,9 @@ def test_scopes_gate_the_routes(docs):
 
 def test_enrichment_is_written_back_by_the_caller(alice):
     cid = alice.documents.ensure(mine("alice", "enrich"))["id"]
-    added = alice.documents.add(cid, "plan.pdf", extraction=extraction(prose("roadmap"), prose("budget"), title="Plan"))
+    added = alice.documents.add(
+        cid, "plan.pdf", extraction=extraction(prose("roadmap"), prose("budget"), title="Plan")
+    )
     doc, enricher = added["document"], {"name": "test-model", "version": "1"}
     assert alice.documents.pending(cid, enricher=enricher) == [doc]
     brief = alice.documents.brief(cid, doc)
@@ -153,7 +173,9 @@ def test_enrichment_is_written_back_by_the_caller(alice):
     assert alice.documents.enrichment_state(cid, doc)["state"] == "done"
     assert alice.documents.pending(cid, enricher=enricher) == []
     info = alice.documents.get(cid, doc)
-    assert info["description"] == "The roadmap and the budget." and info["topics"] == ["planning/roadmap"]
+    assert info["description"] == "The roadmap and the budget." and info["topics"] == [
+        "planning/roadmap"
+    ]
     assert "planning" in [c[0] for c in alice.documents.topics(cid)["children"]]
     assert "planning/roadmap" in alice.documents.topic_tree(cid)
     alice.documents.fail(cid, doc, {"name": "other", "version": "1"}, 2, "boom")
@@ -168,7 +190,9 @@ def test_enrichment_is_written_back_by_the_caller(alice):
 def test_the_audit_log_holds_ids_only_and_still_verifies(docs, alice):
     name = mine("alice", "audited")
     cid = alice.documents.ensure(name)["id"]
-    added = alice.documents.add(cid, "confidential-report-name.pdf", extraction=extraction(prose("falcon")))
+    added = alice.documents.add(
+        cid, "confidential-report-name.pdf", extraction=extraction(prose("falcon"))
+    )
     alice.documents.delete(cid, added["document"])
     store = docs.app.state.services.store
     events = store.audit_events(None, 200)
@@ -195,7 +219,9 @@ def test_semantic_search_fails_soft_to_words(docs, tmp_path_factory, identity, t
 
             raise ServiceUnavailableError("embedder is down")
 
-    service = serve_documents(identity, ticket_keys, tmp_path_factory.mktemp("soft"), embedder=Down())
+    service = serve_documents(
+        identity, ticket_keys, tmp_path_factory.mktemp("soft"), embedder=Down()
+    )
     try:
         with service.client("alice", T1) as client:
             cid = client.documents.ensure(mine("alice", "kb"), semantic=True)["id"]
@@ -205,3 +231,22 @@ def test_semantic_search_fails_soft_to_words(docs, tmp_path_factory, identity, t
             assert found["hits"] and found["note"]
     finally:
         service.served.stop()
+
+
+def test_semantic_collections_find_by_meaning_and_reindex_rebuilds_the_vectors(alice):
+    cid = alice.documents.ensure(mine("alice", "sem"), semantic=True)["id"]
+    refunds = "Customers may return damaged goods within thirty days for a full refund. " * 12
+    shipping = "Orders to Rotterdam ship from the Dutch warehouse in two days by carrier. " * 12
+    alice.documents.add(
+        cid, "handbook.pdf",
+        extraction=extraction(f"# Handbook\n\n## Refunds\n\n{refunds}", f"## Shipping\n\n{shipping}"),
+    )  # fmt: skip
+    found = alice.documents.search(cid, "return damaged goods refund")
+    assert found["note"] is None and "refund" in found["hits"][0]["snippet"].lower()
+    assert (
+        "rotterdam"
+        in alice.documents.search(cid, "Rotterdam warehouse")["hits"][0]["snippet"].lower()
+    )
+    assert alice.documents.reindex(cid) == 1
+    assert alice.documents.search(cid, "Rotterdam warehouse")["hits"]
+    assert alice.documents.embed_missing(cid) == 0

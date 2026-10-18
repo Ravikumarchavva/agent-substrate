@@ -557,7 +557,6 @@ class FileCatalog:
             db.execute("DELETE FROM volume_files WHERE volume_id=?", (volume_id,))
             db.execute("DELETE FROM volume_quotas WHERE volume_id=?", (volume_id,))
 
-
     # ------------------------------------------------------------------ erasure
     def erase_prefix(self, volume_id: str, prefix: str) -> dict[str, Any]:
         """Hard-delete every file under `prefix` with all its versions (live, deleted or purged), for erasure.
@@ -590,7 +589,9 @@ class FileCatalog:
             keys = len(garbage)
         return {"files": len(ids), "versions": versions, "objects": keys, "garbage": garbage}
 
-    def erase_uploads(self, *, created_by: str | None = None, volume_id: str | None = None) -> list[dict]:
+    def erase_uploads(
+        self, *, created_by: str | None = None, volume_id: str | None = None
+    ) -> list[dict]:
         """Forget unfinished uploads of one principal (upload sessions included) or of one volume; returns them
         so the caller can abort multipart uploads and delete their objects."""
         if (created_by is None) == (volume_id is None):

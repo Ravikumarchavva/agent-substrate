@@ -123,7 +123,9 @@ class Identity:
         `scopes` defaults to `data:read`. A token holding a files:* scope is minted by the writable issuer
         (the read-only issuer's tokens can never change anything, whatever they claim)."""
         if issuer is None:
-            writable = scopes and any(s.startswith(("files:", "documents:", "memory:")) for s in scopes)
+            writable = scopes and any(
+                s.startswith(("files:", "documents:", "memory:")) for s in scopes
+            )
             issuer = AGENT_ISSUER_WRITABLE if writable else AGENT_ISSUER
         if scopes is not None:
             extra.setdefault("scope", " ".join(scopes))
@@ -630,6 +632,47 @@ class DocsService:
         )
 
 
+class WordEmbedder:
+    """A bag-of-words 'meaning': texts that share words are close. Enough to test retrieval without a model."""
+
+    model, dimensions, max_input_tokens = "word-embed", 64, 512
+
+    def __init__(self) -> None:
+        from substrate.models import Modality
+
+        self.modalities = frozenset({Modality.TEXT})
+
+    async def embed(self, inputs, *, query: bool = False):
+        import hashlib
+        import re
+
+        from substrate.models.protocols import EmbeddingResult
+        from substrate.types import TextBlock
+
+        vectors = []
+        for item in inputs:
+            text = (
+                item
+                if isinstance(item, str)
+                else " ".join(b.text if isinstance(b, TextBlock) else "FIGURE" for b in item)
+            )
+            vector = [0.0] * 64
+            for word in re.findall(r"[a-z0-9]+", text.lower()):
+                vector[int(hashlib.sha1(word.encode()).hexdigest(), 16) % 64] += 1.0
+            vectors.append(vector)
+        return EmbeddingResult(embeddings=vectors, model=self.model)
+
+
+class WordReranker:
+    model = "word-rerank"
+
+    async def rerank(self, query, passages):
+        import re
+
+        words = set(re.findall(r"[a-z]+", query.lower()))
+        return [float(len(words & set(re.findall(r"[a-z]+", p.lower())))) for p in passages]
+
+
 def serve_documents(
     identity: Identity, ticket_keys: tuple[Path, Path], root: Path, **engine: Any
 ) -> DocsService:
@@ -670,7 +713,13 @@ def serve_documents(
 
 @pytest.fixture(scope="module")
 def docs(identity, ticket_keys, tmp_path_factory):
-    service = serve_documents(identity, ticket_keys, tmp_path_factory.mktemp("docs"))
+    service = serve_documents(
+        identity,
+        ticket_keys,
+        tmp_path_factory.mktemp("docs"),
+        embedder=WordEmbedder(),
+        reranker=WordReranker(),
+    )
     yield service
     service.served.stop()
 

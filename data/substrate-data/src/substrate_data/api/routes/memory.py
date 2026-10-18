@@ -124,7 +124,9 @@ async def get(
     record_id: str, caller: Caller, domain: Domain,
     user_id: OwnerId = None, agent_id: OwnerId = None, session_id: OwnerId = None,
 ):  # fmt: skip
-    namespace = namespace_of(caller, NamespaceIn(user_id=user_id, agent_id=agent_id, session_id=session_id))
+    namespace = namespace_of(
+        caller, NamespaceIn(user_id=user_id, agent_id=agent_id, session_id=session_id)
+    )
     record = await domain.engine.store.memory.get(namespace, record_id)
     if record is None:
         raise not_found("Memory record")

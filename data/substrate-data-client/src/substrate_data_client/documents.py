@@ -68,7 +68,9 @@ class _DocumentCalls:
 
     def collections(self, under: str = ""):
         """Collections at or below `under` (default: the tenant), each with its document count."""
-        return self._do("GET", "/collections", lambda b: b["collections"], params=_params(under=under or None))
+        return self._do(
+            "GET", "/collections", lambda b: b["collections"], params=_params(under=under or None)
+        )
 
     def delete_collection(self, collection: str):
         return self._do("DELETE", f"/collections/{collection}")
@@ -97,7 +99,9 @@ class _DocumentCalls:
             "sha256": sha256,
         }
         return self._do(
-            "POST", f"/collections/{collection}/documents", json={k: v for k, v in body.items() if v is not None}
+            "POST",
+            f"/collections/{collection}/documents",
+            json={k: v for k, v in body.items() if v is not None},
         )
 
     def list(self, collection: str, *, limit: int = 50, after: str | None = None):
@@ -110,7 +114,9 @@ class _DocumentCalls:
 
     def outline(self, collection: str, document: str, *, section: int | None = None):
         return self._do(
-            "GET", f"/collections/{collection}/documents/{_q(document)}/outline", params=_params(section=section)
+            "GET",
+            f"/collections/{collection}/documents/{_q(document)}/outline",
+            params=_params(section=section),
         )
 
     def read(
@@ -125,7 +131,9 @@ class _DocumentCalls:
         params = _params(section=section, offset=offset or None)
         if pages:
             params.update(first_page=pages[0], last_page=pages[1])
-        return self._do("GET", f"/collections/{collection}/documents/{_q(document)}/read", params=params)
+        return self._do(
+            "GET", f"/collections/{collection}/documents/{_q(document)}/read", params=params
+        )
 
     def section(self, collection: str, document: str, position: int, *, offset: int = 0):
         return self._do(
@@ -157,11 +165,16 @@ class _DocumentCalls:
     def reindex(self, collection: str, *, missing_only: bool = False):
         """Rebuild the derived index from the bundle (the source of truth)."""
         return self._do(
-            "POST", f"/collections/{collection}/documents:reindex", lambda b: b["reindexed"], json={"missing_only": missing_only}
+            "POST",
+            f"/collections/{collection}/documents:reindex",
+            lambda b: b["reindexed"],
+            json={"missing_only": missing_only},
         )
 
     def embed_missing(self, collection: str):
-        return self._do("POST", f"/collections/{collection}/documents:embed-missing", lambda b: b["embedded"])
+        return self._do(
+            "POST", f"/collections/{collection}/documents:embed-missing", lambda b: b["embedded"]
+        )
 
     # ------------------------------------------------------------------ search and topics
     def search(self, collection: str, query: str, *, document: str | None = None, limit: int = 8):
@@ -174,7 +187,9 @@ class _DocumentCalls:
         )
 
     def topics(self, collection: str, topic: str = ""):
-        return self._do("GET", f"/collections/{collection}/topics", params=_params(topic=topic or None))
+        return self._do(
+            "GET", f"/collections/{collection}/topics", params=_params(topic=topic or None)
+        )
 
     def topic_tree(self, collection: str):
         return self._do("GET", f"/collections/{collection}/topic-tree", lambda b: b["topics"])
@@ -192,7 +207,12 @@ class _DocumentCalls:
         )
 
     def pending_all(
-        self, matching: str, *, excluding: str | None = None, enricher: dict[str, str] | None = None, limit: int = 100
+        self,
+        matching: str,
+        *,
+        excluding: str | None = None,
+        enricher: dict[str, str] | None = None,
+        limit: int = 100,
     ):
         return self._do(
             "POST",
@@ -202,7 +222,9 @@ class _DocumentCalls:
         )
 
     def needs_reorganising(self, collection: str):
-        return self._do("GET", f"/collections/{collection}/needs-reorganising", lambda b: b["needed"])
+        return self._do(
+            "GET", f"/collections/{collection}/needs-reorganising", lambda b: b["needed"]
+        )
 
     def brief(self, collection: str, document: str):
         return self._do("GET", f"/collections/{collection}/documents/{_q(document)}/brief")
@@ -217,7 +239,9 @@ class _DocumentCalls:
             json={"enricher": enricher, "attempts": attempts},
         )
 
-    def fail(self, collection: str, document: str, enricher: dict[str, str], attempts: int, error: str):
+    def fail(
+        self, collection: str, document: str, enricher: dict[str, str], attempts: int, error: str
+    ):
         return self._do(
             "POST",
             f"/collections/{collection}/documents/{_q(document)}/enrichment:fail",

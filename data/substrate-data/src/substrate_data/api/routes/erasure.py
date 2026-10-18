@@ -51,7 +51,9 @@ def authorize(caller: Principal, body: Target) -> tuple[str, str | None]:
     tenant_admin = TENANT_ADMIN_GROUP in caller.groups and caller.tenant_id == tenant
     itself = body.scope == "user" and caller.tenant_id == tenant and caller.subject == body.subject
     if not (caller.is_admin or tenant_admin or itself):
-        raise forbidden("Only the subject, a tenant administrator or a platform administrator may do this")
+        raise forbidden(
+            "Only the subject, a tenant administrator or a platform administrator may do this"
+        )
     return tenant, body.subject if body.scope == "user" else None
 
 
@@ -86,13 +88,17 @@ async def erase(body: Target, svc: Svc, caller: Caller, domain: Domain, request:
 
     # 1. libraries: the vectors first (so they can be counted), then the catalog and the bundles' index files
     store = engine.store
-    steps["vectors"] = await store.vectors.erase_under(name_prefix) if await store.has("vectors") else 0
+    steps["vectors"] = (
+        await store.vectors.erase_under(name_prefix) if await store.has("vectors") else 0
+    )
     registry = await engine.collections_of(tenant, prefix=name_prefix)
     documents = 0
     for row in registry:
         documents += await engine.library(row).erase_under(row.name)
     if await store.has("library"):
-        documents += await engine.lexical.erase_under(name_prefix)  # collections never registered (written by an older client)
+        documents += await engine.lexical.erase_under(
+            name_prefix
+        )  # collections never registered (written by an older client)
     await engine.forget_collections([r.id for r in registry])
     steps["libraries"] = {"collections": len(registry), "documents": documents}
 
@@ -114,11 +120,18 @@ async def erase(body: Target, svc: Svc, caller: Caller, domain: Domain, request:
         if subject is None:
             pending = await asyncio.to_thread(files.catalog.erase_uploads, volume_id=volume["id"])
         else:
-            for principal_id in {f"user:{subject}", *([caller.id] if caller.subject == subject else [])}:
-                pending += await asyncio.to_thread(files.catalog.erase_uploads, created_by=principal_id)
+            for principal_id in {
+                f"user:{subject}",
+                *([caller.id] if caller.subject == subject else []),
+            }:
+                pending += await asyncio.to_thread(
+                    files.catalog.erase_uploads, created_by=principal_id
+                )
         for upload in pending:
             if upload["upload_id"]:
-                await asyncio.to_thread(files.storage.abort_multipart, upload["object_key"], upload["upload_id"])
+                await asyncio.to_thread(
+                    files.storage.abort_multipart, upload["object_key"], upload["upload_id"]
+                )
             await asyncio.to_thread(files.storage.delete, [upload["object_key"]])
         uploads = len(pending)
     steps["files"] = result

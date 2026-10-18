@@ -48,11 +48,15 @@ class Documents:
     def __init__(self, engine: DocumentEngine, files: Any, *, grants: bool) -> None:
         self.engine = engine
         self.files = files  # FilesService: path policy, volumes
-        self.grants = grants  # check the tenant volume's READ/WRITE_VOLUME grants (volume-backed bundles)
+        self.grants = (
+            grants  # check the tenant volume's READ/WRITE_VOLUME grants (volume-backed bundles)
+        )
 
     def tenant_of(self, caller: Principal) -> str:
         if not caller.tenant_id:
-            raise Problem(403, "tenant-required", "This token names no tenant, so it has no documents")
+            raise Problem(
+                403, "tenant-required", "This token names no tenant, so it has no documents"
+            )
         return caller.tenant_id
 
     def authorize_name(
@@ -64,22 +68,27 @@ class Documents:
         self.files.policy.authorize(caller, rest, action)
         if self.grants:
             volume = tenant_volume(self.files, tenant)
-            svc.store.require(caller, "volume", volume, "WRITE_VOLUME" if action == "write" else "READ_VOLUME")
+            svc.store.require(
+                caller, "volume", volume, "WRITE_VOLUME" if action == "write" else "READ_VOLUME"
+            )
         return tenant, rest
 
     @staticmethod
     def path_of(tenant: str, name: str) -> str:
         prefix = f"tenants/{tenant}/"
         if not name.startswith(prefix) or len(name) > MAX_NAME:
-            raise not_found("Collection")  # another tenant's collection is indistinguishable from none
+            raise not_found(
+                "Collection"
+            )  # another tenant's collection is indistinguishable from none
         rest = name[len(prefix) :]
         parts = rest.split("/")
-        if (
-            not rest
-            or any(
-                not p or p in {".", ".."} or len(p) > MAX_SEGMENT or "\\" in p or any(ord(c) < 32 for c in p)
-                for p in parts
-            )
+        if not rest or any(
+            not p
+            or p in {".", ".."}
+            or len(p) > MAX_SEGMENT
+            or "\\" in p
+            or any(ord(c) < 32 for c in p)
+            for p in parts
         ):
             raise Problem(400, "invalid-request", "Invalid collection name")
         return rest
@@ -128,7 +137,11 @@ def wire(value: Any) -> Any:
         return {f.name: wire(getattr(value, f.name)) for f in dataclasses.fields(value)}
     if isinstance(value, dict | list | tuple):
         items = value.items() if isinstance(value, dict) else enumerate(value)
-        return {str(k): wire(v) for k, v in items} if isinstance(value, dict) else [wire(v) for _, v in items]
+        return (
+            {str(k): wire(v) for k, v in items}
+            if isinstance(value, dict)
+            else [wire(v) for _, v in items]
+        )
     return value
 
 
@@ -279,7 +292,9 @@ async def add_document(
         if len(body.content_base64) > limit * 4 // 3 + 8:
             raise Problem(413, "payload-too-large", "The document exceeds the maximum size")
         if not domain.engine.can_read:
-            raise Problem(503, "reader-unavailable", "No document server is configured to read uploads")
+            raise Problem(
+                503, "reader-unavailable", "No document server is configured to read uploads"
+            )
         try:
             source: Any = base64.b64decode(body.content_base64, validate=True)
         except ValueError:
@@ -288,7 +303,9 @@ async def add_document(
         try:
             source = ExtractionResult.model_validate_json(orjson.dumps(body.extraction))
         except ValueError:
-            raise Problem(400, "invalid-request", "extraction is not a valid ExtractionResult") from None
+            raise Problem(
+                400, "invalid-request", "extraction is not a valid ExtractionResult"
+            ) from None
     try:
         added = await library.add(
             source,
@@ -300,7 +317,11 @@ async def add_document(
             sha256=body.sha256,
         )
     except DocumentError as exc:
-        status, code = (503, "reader-unavailable") if "unavailable" in str(exc) else (422, "unreadable-document")
+        status, code = (
+            (503, "reader-unavailable")
+            if "unavailable" in str(exc)
+            else (422, "unreadable-document")
+        )
         raise Problem(status, code, str(exc)[:500]) from None
     except VectorSpaceError as exc:
         raise Problem(409, "vector-space-mismatch", str(exc)[:500]) from None
@@ -368,7 +389,9 @@ async def read_section(
     offset: int = Query(0, ge=0),
 ):  # fmt: skip
     row, library = await domain.open(svc, caller, cid, "read")
-    found = await library.read(collection=row.name, document=document, section=section, offset=offset)
+    found = await library.read(
+        collection=row.name, document=document, section=section, offset=offset
+    )
     if found is None:
         raise not_found("Section")
     return wire(found)
@@ -412,7 +435,15 @@ async def reindex(
 ):
     row, library = await domain.open(svc, caller, cid, "write")
     count = await library.reindex(collection=row.name, missing_only=body.missing_only)
-    audit(svc, request, caller, "collection.reindex", row.id, documents=count, missing_only=body.missing_only)
+    audit(
+        svc,
+        request,
+        caller,
+        "collection.reindex",
+        row.id,
+        documents=count,
+        missing_only=body.missing_only,
+    )
     return {"reindexed": count}
 
 
@@ -468,7 +499,9 @@ async def set_topics(
 async def pending(cid: str, body: PendingRequest, svc: Svc, caller: Caller, domain: Domain):
     row, library = await domain.open(svc, caller, cid, "read")
     enricher = body.enricher.stub() if body.enricher else None
-    return {"documents": await library.pending(collection=row.name, enricher=enricher, limit=body.limit)}
+    return {
+        "documents": await library.pending(collection=row.name, enricher=enricher, limit=body.limit)
+    }
 
 
 @router.post("/enrichment:pending", dependencies=[READ])
@@ -487,7 +520,9 @@ async def pending_all(body: PendingAll, svc: Svc, caller: Caller, domain: Domain
             domain.authorize_name(svc, caller, name, "read")
         except Problem:
             continue  # another tenant's (or user's) pattern match is not ours
-        items.append({"collection": name, "collection_id": collection_id(name), "document": document})
+        items.append(
+            {"collection": name, "collection_id": collection_id(name), "document": document}
+        )
     return {"documents": items}
 
 
@@ -519,7 +554,10 @@ async def needs_reorganising(cid: str, svc: Svc, caller: Caller, domain: Domain)
 async def claim(cid: str, document: str, body: Claim, svc: Svc, caller: Caller, domain: Domain):
     row, library = await domain.open(svc, caller, cid, "write")
     await library.claim(
-        collection=row.name, document=document, enricher=body.enricher.stub(), attempts=body.attempts
+        collection=row.name,
+        document=document,
+        enricher=body.enricher.stub(),
+        attempts=body.attempts,
     )
     return Response(status_code=204)
 

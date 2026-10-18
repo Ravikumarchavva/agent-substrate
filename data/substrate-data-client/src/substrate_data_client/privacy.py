@@ -38,7 +38,9 @@ class _PrivacyCalls:
 class _ErasureCalls(_PrivacyCalls):
     _path = "/erasure-requests"
 
-    def request(self, subject: str | None = None, *, tenant_id: str | None = None, everything: bool = False):
+    def request(
+        self, subject: str | None = None, *, tenant_id: str | None = None, everything: bool = False
+    ):
         """Erase a subject's data (or, with `everything=True`, the whole tenant's). Returns the receipt."""
         return self._create(subject, tenant_id, everything)
 
@@ -46,7 +48,9 @@ class _ErasureCalls(_PrivacyCalls):
 class _ExportCalls(_PrivacyCalls):
     _path = "/exports"
 
-    def create(self, subject: str | None = None, *, tenant_id: str | None = None, everything: bool = False):
+    def create(
+        self, subject: str | None = None, *, tenant_id: str | None = None, everything: bool = False
+    ):
         """Everything held about a subject (or the tenant) as one JSON manifest."""
         return self._create(subject, tenant_id, everything)
 

@@ -45,6 +45,7 @@ from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.hooks import ChatContext, hooks
 from substrate_cloud.monolith.schemas import ChatRequest
 from substrate_cloud.monolith.services import get_owned_thread
+from substrate_cloud.monolith.services.entitlements import get_entitlements
 from substrate_cloud.monolith.services.agents.service import (
     agent_instructions_block,
     get_owned_agent,
@@ -123,11 +124,35 @@ def plan_quota_key(user: AuthClaims) -> str:
     chatbot — every visitor, anonymous or logged-in, shares one quota so a
     project's BYOK key/plan governs total usage under it, not each visitor
     individually). Falls back to ``sub`` when ``tenant_id`` is unset
-    (``AuthClaims``'s own default — a real JWT always carries one now, see
-    ``verify_token``, but ``AuthClaims`` built directly in-process, e.g. a
+    (``AuthClaims``'s own default: a verified token always names an organization, but ``AuthClaims`` built directly in-process, e.g. a
     single-user test-chat, may not).
     """
     return user.tenant_id if user.tenant_id else user.sub
+
+
+async def enforce_message_entitlement(
+    db: AsyncSession, redis: Any, user: AuthClaims
+) -> None:
+    """Count this message against the tenant's daily limit; 429 when it is spent. No row or no limit means unlimited."""
+    daily_limit = (
+        (await get_entitlements(db, user.tenant_id)).daily_message_limit
+        if user.tenant_id
+        else None
+    )
+    if daily_limit is None or redis is None:
+        return
+    allowed, _ = await check_and_increment(
+        redis, "planquota:message", plan_quota_key(user), limit=daily_limit
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Daily message limit ({daily_limit}) reached. "
+                f"Resets in {seconds_until_reset()} seconds."
+            ),
+            headers={"Retry-After": str(seconds_until_reset())},
+        )
 
 
 @router.post("/chat")
@@ -185,23 +210,10 @@ async def chat(
             ),
         )
 
-    # 2b. Plan-derived daily message quota (when present in token claims)
-    if user.daily_message_limit is not None:
-        quota_key = plan_quota_key(user)
-        redis = getattr(request.app.state, "redis", None)
-        if redis is not None:
-            allowed, remaining = await check_and_increment(
-                redis, "planquota:message", quota_key, limit=user.daily_message_limit
-            )
-            if not allowed:
-                raise HTTPException(
-                    status_code=429,
-                    detail=(
-                        f"Daily message limit ({user.daily_message_limit}) reached. "
-                        f"Resets in {seconds_until_reset()} seconds."
-                    ),
-                    headers={"Retry-After": str(seconds_until_reset())},
-                )
+    # 2b. The tenant's daily message entitlement (set by the platform through cell-admin; none means unlimited)
+    await enforce_message_entitlement(
+        db, getattr(request.app.state, "redis", None), user
+    )
 
     # 3. Build agent with restored memory + per-thread HITL bridge
     try:

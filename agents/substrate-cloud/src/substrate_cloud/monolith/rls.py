@@ -64,6 +64,7 @@ _POLICIES: list[tuple[str, str]] = [
             fk="thread_id", parent="threads", parent_column="tenant_id"
         ),
     ),
+    ("tenant_entitlements", _THREADS_POLICY),
     ("agents", _TENANT_COLUMN_POLICY.format(column="tenant_id")),
     ("groups", _TENANT_COLUMN_POLICY.format(column="tenant_id")),
     ("agent_pairs", _TENANT_COLUMN_POLICY.format(column="tenant_id")),

@@ -833,3 +833,26 @@ class WorkspaceQuota(Base):
 
     def __repr__(self) -> str:
         return f"<WorkspaceQuota(user_id={self.user_id!r}, quota_bytes={self.quota_bytes})>"
+
+
+# ── Entitlements ─────────────────────────────────────────────────────────────
+
+
+class TenantEntitlement(Base):
+    """What a tenant (a Keycloak organization id) is entitled to in this cell.
+
+    Replaces the old ``daily_message_limit`` token claim: the platform sets it (through cell-admin), the cell enforces it. Absence of
+    a row, or a NULL limit, means unlimited. ``features`` carries further named entitlements without a schema change.
+    """
+
+    __tablename__ = "tenant_entitlements"
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    daily_message_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    features: Mapped[Dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    updated_by: Mapped[str] = mapped_column(String, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

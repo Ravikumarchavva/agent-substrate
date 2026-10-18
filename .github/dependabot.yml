@@ -1,11 +1,15 @@
 version: 2
 
-# Grouped minor/patch updates, weekly. Majors arrive as separate PRs.
+# One grouped PR per ecosystem, monthly, minor/patch only. Major versions are upgraded by hand, deliberately.
 updates:
   - package-ecosystem: uv
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     groups:
       python-minor-patch:
         update-types: [minor, patch]
@@ -14,7 +18,11 @@ updates:
   - package-ecosystem: uv
     directory: /data/document-intelligence
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     groups:
       python-minor-patch:
         update-types: [minor, patch]
@@ -23,7 +31,11 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
@@ -31,7 +43,11 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     groups:
       actions-minor-patch:
         update-types: [minor, patch]
@@ -40,28 +56,44 @@ updates:
   - package-ecosystem: docker
     directory: /deploy/docker
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
   - package-ecosystem: docker
     directory: /data/substrate-data/scripts/e2e_agent_sandbox
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
   - package-ecosystem: docker
     directory: /agents/agent-substrate/src/substrate/integrations/tools/code_interpreter/code_interpreter/agent-sandbox
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
   - package-ecosystem: docker
     directory: /agents/substrate-cloud/src/substrate_cloud/deployment/docker/mcp_server
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     groups:
       docker-minor-patch:
         update-types: [minor, patch]

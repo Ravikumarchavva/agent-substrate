@@ -24,9 +24,11 @@ FROM python:3.13-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgl1 libglib2.0-0 libxcb1 libxext6 libsm6 libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --create-home app
-COPY --from=build --chown=app:app /app/data/document-intelligence/.venv /app/.venv
-ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+    && useradd --system --uid 10001 --create-home app \
+    && mkdir -p /models && chown app:app /models
+# Same path as in the build stage: the venv scripts hard-code it.
+COPY --from=build --chown=app:app /app/data/document-intelligence/.venv /app/data/document-intelligence/.venv
+ENV PATH="/app/data/document-intelligence/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 USER app
 WORKDIR /home/app
 EXPOSE 8080

@@ -16,7 +16,7 @@ ssl
 # C extensions
 *.so
 *.parquet
-data
+/data/
 # the store a program opens in its working directory (substrate.connect / Runtime.open default)
 .substrate/
 *.zip

@@ -318,7 +318,7 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
             "TestRedisSessionStore",
         ),
         "ThreadStore": ("TestThreads", "TestPostgresThreads"),
-        "FileStore": ("TestFiles", "TestPostgresFiles", "S3FileStore"),
+        "FileStore": ("TestFiles", "TestPostgresFiles", "DataFileStore"),
         "TaskStore": ("TestTasks", "TestPostgresTasks"),
         "WorkspaceStore": ("TestWorkspaces", "TestPostgresWorkspaces"),
         "GraphStore": ("TestGraph", "TestPostgresGraph"),

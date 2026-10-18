@@ -91,8 +91,9 @@ ocr = ["rapidocr>=3.0.0", "onnxruntime>=1.23.0"]
 # the provider(s) you actually select need to be installed
 anthropic = ["anthropic>=0.95.0", "pillow>=12.0.0"]
 gemini = ["google-genai>=1.73.0", "pillow>=12.0.0"]
-# S3-compatible object storage backend (alternative to the default local-disk store)
-s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
+# governed files through substrate-data's Files domain (integrations.data): the production FileStore. Bytes move between clients and object
+# storage on URLs the data service signs; the agent host holds no storage credentials (ADR 0004 and 0005)
+data = ["substrate-data-client>=0.2,<0.3"]
 # input-safety guardrail: jailbreak + NSFW classifiers (ONNX models via HF Hub) —
 # degrades gracefully if missing (MultimodalSafetyMiddleware fails open), so not core
 safety = [
@@ -144,6 +145,7 @@ pythonpath = ["."]
 # Tests marked ``heavy`` load real models (several GB, tens of seconds) and are left out of a plain run;
 # CI and ``pytest -m ""`` run everything.
 addopts = ["-m", "not heavy"]
+markers = ["integration: needs Docker (a throwaway substrate-data and SeaweedFS); skips without it", "heavy: loads real models"]
 
 
 [tool.ruff]

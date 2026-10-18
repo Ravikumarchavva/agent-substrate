@@ -1935,8 +1935,8 @@ function ChatPageContent() {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background px-4">
         <div className="text-center space-y-6 max-w-sm w-full">
-          <div className="substrate-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center bg-accent text-accent-foreground">
-            <SubstrateMark className="icon-free h-8 w-8" />
+          <div className="substrate-fade-up w-14 h-14 mx-auto flex items-center justify-center">
+            <SubstrateMark className="icon-free h-14 w-14" />
           </div>
           <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
             <h1 className="text-2xl font-semibold">Welcome</h1>
@@ -1954,7 +1954,7 @@ function ChatPageContent() {
             className="substrate-fade-up substrate-press flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-2xl text-sm font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
             style={{ '--stagger': 3, boxShadow: "var(--shadow-md)" } as React.CSSProperties}
           >
-            Continue with Google
+            Sign in
           </button>
           <p className="substrate-fade-up text-xs text-muted" style={{ '--stagger': 4 } as React.CSSProperties}>
             Your conversations are private and secure

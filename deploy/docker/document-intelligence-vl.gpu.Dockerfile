@@ -32,7 +32,7 @@
 # stage essentially verbatim; see that file for the full rationale behind
 # each flag/workaround below (repeated here only where this stage diverges).
 # ─────────────────────────────────────────────────────────────────────────
-FROM nvidia/cuda:13.0.3-cudnn-devel-ubuntu24.04 AS llama-build
+FROM nvidia/cuda:13.4.2-cudnn-devel-ubuntu24.04 AS llama-build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git ca-certificates libssl-dev \
@@ -140,7 +140,7 @@ asyncio.run(ensure_models( \
 # single stage, plus the llama-server binary + baked GGUF models from the
 # two stages above.
 # ─────────────────────────────────────────────────────────────────────────
-FROM nvidia/cuda:13.0.3-cudnn-runtime-ubuntu24.04 AS runtime
+FROM nvidia/cuda:13.4.2-cudnn-runtime-ubuntu24.04 AS runtime
 
 # Same native deps as document-intelligence.gpu.Dockerfile, plus libcurl4
 # (llama-server's own runtime dep, matching llama-server.gpu.Dockerfile's

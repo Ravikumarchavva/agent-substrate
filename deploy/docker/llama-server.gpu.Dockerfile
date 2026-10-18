@@ -33,7 +33,7 @@
 # document-intelligence.gpu.Dockerfile for consistency — this repo has
 # already vetted CUDA 13.0 against the dev GPU's driver (CUDA 13.1), no
 # reason to introduce a second CUDA version to track.
-FROM nvidia/cuda:13.0.3-cudnn-devel-ubuntu24.04 AS build
+FROM nvidia/cuda:13.4.2-cudnn-devel-ubuntu24.04 AS build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git ca-certificates libssl-dev \
@@ -99,7 +99,7 @@ RUN cmake -B build -DGGML_NATIVE=ON -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release -D
 # cudnn-runtime (not devel) — smaller, has the CUDA/cuDNN shared libs the
 # compiled binary needs at runtime, no compiler toolchain. Matches
 # document-intelligence.gpu.Dockerfile's own runtime base exactly.
-FROM nvidia/cuda:13.0.3-cudnn-runtime-ubuntu24.04 AS runtime
+FROM nvidia/cuda:13.4.2-cudnn-runtime-ubuntu24.04 AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl libgomp1 libcurl4 \

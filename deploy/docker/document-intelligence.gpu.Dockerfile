@@ -16,7 +16,7 @@
 # CUDA/cuDNN shared libs actually present, not just a driver) and installs
 # Python 3.13 via uv since the CUDA base image ships none.
 
-FROM nvidia/cuda:13.0.3-cudnn-runtime-ubuntu24.04 AS base
+FROM nvidia/cuda:13.4.2-cudnn-runtime-ubuntu24.04 AS base
 
 # Same native deps as document-intelligence.Dockerfile's base image, see
 # there for why each is needed (libgomp1 for libpaddle.so, libgl1/libglib

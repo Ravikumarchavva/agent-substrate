@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     if [ -f uv.lock ]; then uv sync --frozen --no-dev --no-editable --extra paddle; \
     else uv sync --no-dev --no-editable --extra paddle; fi
 
-FROM python:3.13-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 # libgomp1: paddle's compiled core needs it directly. The rest are OpenCV's runtime libraries.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgl1 libglib2.0-0 libxcb1 libxext6 libsm6 libgomp1 \

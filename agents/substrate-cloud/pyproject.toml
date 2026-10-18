@@ -8,7 +8,7 @@ requires-python = ">=3.13"
 dependencies = [
     "agent-substrate[serve,openai,anthropic,gemini,postgres,redis,scheduler,mcp,tts,tools,logging,web,code,data,safety,sandbox]",
     "pydantic-settings>=2.12.0",
-    "sqlalchemy>=2.0.46",
+    "sqlalchemy>=2.1.4",
     "greenlet>=3.2.4",
     # SQLAlchemy resolves a `postgresql+psycopg://` DATABASE_URL dynamically — nothing imports it by name
     "psycopg[binary]>=3.3.0",

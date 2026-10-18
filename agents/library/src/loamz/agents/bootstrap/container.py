@@ -14,9 +14,9 @@ from typing import Any
 from loamz.agents.bootstrap.settings import Settings
 from loamz.agents.kernel.events import EventBus, InMemoryEventBus
 from loamz.agents.kernel.models import ChatModel
-from loamz.agents.kernel.runtime import Runtime
 from loamz.agents.kernel.ports.counters import Counters
 from loamz.agents.kernel.ports.files import FileStore
+from loamz.agents.kernel.runtime import Runtime
 from loamz.agents.kernel.telemetry import set_capture_content
 from loamz.agents.stores import AgentStore
 from loamz.data.storage.sql import Database, postgres, sqlite

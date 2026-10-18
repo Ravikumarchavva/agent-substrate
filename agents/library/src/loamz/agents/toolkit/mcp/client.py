@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from loamz.agents.toolkit.mcp.tool import MCPTool
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.sse import sse_client
-from mcp.client.stdio import stdio_client
-from mcp.types import CallToolResult
+try:
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.sse import sse_client
+    from mcp.client.stdio import stdio_client
+    from mcp.types import CallToolResult
+except ImportError:
+    ClientSession = None  # type: ignore[assignment,misc]
+    StdioServerParameters = None  # type: ignore[assignment,misc]
+    sse_client = None  # type: ignore[assignment,misc]
+    stdio_client = None  # type: ignore[assignment,misc]
+    CallToolResult = None  # type: ignore[assignment,misc]
 
 
 class MCPClient:
@@ -167,7 +174,7 @@ class MCPClient:
         """Get the current transport type (stdio or sse)."""
         return self._transport_type
 
-    async def list_tools(self) -> list[dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, object]]:
         """List all available tools from the MCP server.
 
         Returns:
@@ -192,7 +199,7 @@ class MCPClient:
         except Exception as e:
             raise RuntimeError(f"Failed to list tools: {e}") from e
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> CallToolResult:
+    async def call_tool(self, name: str, arguments: dict[str, object]) -> CallToolResult:
         """Execute a tool on the MCP server.
 
         Args:
@@ -219,7 +226,7 @@ class MCPClient:
 
         return await MCPTool.from_mcp_client(self)
 
-    async def list_resources(self) -> list[dict[str, Any]]:
+    async def list_resources(self) -> list[dict[str, object]]:
         """List all available resources from the MCP server.
 
         Returns:

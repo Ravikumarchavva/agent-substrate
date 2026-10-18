@@ -31,7 +31,7 @@ for row in facts:
     ws.append([row["item"], row["value"], row["source"]])
 
 for cell in ws["B"][1:]:
-    cell.number_format = '#,##0'  # not raw floats
+    cell.number_format = "#,##0"  # not raw floats
 
 widths = {"A": 28, "B": 16, "C": 14}  # sized to content, not Excel's default
 for col, width in widths.items():
@@ -54,10 +54,8 @@ numfmt, axis_title = axis_number_format(
 chart.y_axis.title = axis_title
 chart.y_axis.numFmt = numfmt
 start_row = 2  # facts start at row 2 (row 1 is the header)
-data = Reference(ws, min_col=2, min_row=1,
-                  max_row=start_row + len(dollar_facts) - 1)
-cats = Reference(ws, min_col=1, min_row=start_row,
-                  max_row=start_row + len(dollar_facts) - 1)
+data = Reference(ws, min_col=2, min_row=1, max_row=start_row + len(dollar_facts) - 1)
+cats = Reference(ws, min_col=1, min_row=start_row, max_row=start_row + len(dollar_facts) - 1)
 chart.add_data(data, titles_from_data=True)
 chart.set_categories(cats)
 style_chart(chart, single_series=True)  # single_series=False for multi-series

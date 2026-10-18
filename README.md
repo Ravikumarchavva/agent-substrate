@@ -1,28 +1,23 @@
-# agent-substrate
+# Loamz
 
-Agents + substrate: an open-source stack for building, running and governing AI agents and the data they work with.
+A governed data platform and durable agents built on it.
 
-| Directory | What it is |
-| --- | --- |
-| [`agents/agent-substrate`](agents/agent-substrate) | The agent library (PyPI: `agent-substrate`): reasoning loop, tools, sandboxes, durable runs. Works with no infrastructure; `agent-substrate[data]` delegates governed data to substrate-data |
-| [`agents/substrate-cloud`](agents/substrate-cloud) | The multi-tenant agent server (monolith or microservices) |
-| [`agents/substrate-ui`](agents/substrate-ui) | The chat UI |
-| [`data/substrate-data`](data/substrate-data) | The governed data platform: catalog, SQL, files, documents and knowledge, memory, policies, audit |
-| [`data/substrate-data-client`](data/substrate-data-client) | Python client (PyPI: `substrate-data-client`) |
-| [`data/substrate-data-web`](data/substrate-data-web) | The data workspace UI |
-| [`data/document-intelligence`](data/document-intelligence), [`embedding-reranker`](data/embedding-reranker), [`inference-pool`](data/inference-pool) | Document extraction and embedding services |
-| `identity/`, `contracts/`, `deploy/` | Shared identity libraries and Keycloak realm; versioned API contracts; deployment (compose, Helm, Terraform) |
-| [`docs/adr`](docs/adr) | Architecture decision records: start with 0003 to 0009 |
+| Directory | Distribution | What it is |
+| --- | --- | --- |
+| [`data/storage`](data/storage) | `loamz-data-storage` | Embeddable storage engine: SQL `Database` (SQLite & Postgres), vectors, memory, files, documents |
+| [`identity/python`](identity/python) | `loamz-identity` | OIDC verifier, JWKS, FastAPI helpers, and multi-tenant isolation rules |
+| [`data/client`](data/client) | `loamz-data-client` | Typed HTTP client for Loamz Data platform API |
+| [`data/server`](data/server) | `loamz-data-server` | Governed data platform: catalog, SQL, tables, compute, files, documents, memory, databases, audit |
+| [`data/reader`](data/reader) | `loamz-data-reader` | High-throughput document reader service (PaddleOCR & layout analysis) |
+| [`data/workspace`](data/workspace) | `data-workspace` | Next.js data workspace application |
+| [`agents/library`](agents/library) | `loamz-agents` | Agent reasoning loop, tool execution, sandboxes, durable runs, and agent server (`[server]`) |
+| [`agents/console`](agents/console) | `agents-console` | Next.js agent chat and operations console |
+| [`identity/oidc-bff`](identity/oidc-bff) | `@loamz/oidc-bff` | TypeScript browser BFF session library (Keycloak authorization code + PKCE) |
+| [`meta/loamz`](meta/loamz) | `loamz` | Convenience metapackage (`pip install "loamz[agents,data]"`) |
 
-The commercial control plane (accounts, billing, provisioning) is a separate private repository, `agent-substrate-platform`. It deploys released versions of this stack and is never in a customer's data path ([ADR 0006](docs/adr/0006-cells-and-control-plane-split.md)).
-
-## Working here
+## Quick Start
 
 ```bash
-make sync     # uv (Python 3.14) and pnpm workspaces, one lockfile each
-make check    # lint, import contracts, tests that need no infrastructure
+make sync     # uv (Python 3.14) and pnpm workspaces
+make check    # lint, import contracts, fast unit test suite
 ```
-
-Each package documents its own commands (`agents/agent-substrate/CLAUDE.md`, `data/substrate-data/README.md`). Changes follow conventional commits; each package is released on its own version.
-
-**Status:** being reorganised from four repositories into this one (history preserved). `deploy/legacy-agents` is the previous compose setup, kept until the unified `substrate-cell` chart replaces it.

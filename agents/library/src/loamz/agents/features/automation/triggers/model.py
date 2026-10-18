@@ -56,4 +56,3 @@ class ConditionOut(BaseModel):
     target_type: str
     target_name: str
     target_params: dict[str, object] = Field(default_factory=dict)
-

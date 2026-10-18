@@ -22,4 +22,3 @@ async def open_feed(body: FeedIn, caller: CallerDep, service: Service) -> Stream
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )
-

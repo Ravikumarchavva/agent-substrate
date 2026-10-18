@@ -11,6 +11,7 @@ from openpyxl.drawing.line import LineProperties
 CHART_ACCENT = "2563EB"  # matches this product's own accent color
 CHART_PALETTE = ["2563EB", "64748B", "0EA5A4", "F59E0B", "9333EA"]
 
+
 def assert_chart_scale_compatible(values: list[float], *, max_ratio: float = 30) -> None:
     """Raise if `values` span more than `max_ratio`x in magnitude."""
     nonzero = [abs(v) for v in values if v]
@@ -23,6 +24,7 @@ def assert_chart_scale_compatible(values: list[float], *, max_ratio: float = 30)
             f"({min(nonzero)}..{max(nonzero)}) — split into separate charts."
         )
 
+
 def axis_number_format(max_abs_value: float, *, already_millions: bool) -> tuple[str, str]:
     """Pick an axis format that won't collapse to "$0M". Excel's trailing-
     comma trick divides by 1,000 per comma — applying it to a value already
@@ -34,8 +36,9 @@ def axis_number_format(max_abs_value: float, *, already_millions: bool) -> tuple
     if max_abs_value >= 1_000_000:
         return '$#,##0,,"M"', "USD (millions)"
     if max_abs_value < 10:
-        return '$#,##0.00', "USD"
-    return '$#,##0', "USD"
+        return "$#,##0.00", "USD"
+    return "$#,##0", "USD"
+
 
 def style_chart(chart, *, single_series: bool = True) -> None:
     """Branded styling + correct axis positions for a horizontal bar chart.
@@ -56,6 +59,7 @@ def style_chart(chart, *, single_series: bool = True) -> None:
         )
     if single_series:
         chart.legend = None
+
 
 def assert_bar_chart_axes_correct(chart) -> None:
     """Re-check axPos on the SAVED file — catches a chart written as fresh

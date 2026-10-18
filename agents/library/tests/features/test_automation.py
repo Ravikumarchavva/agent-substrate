@@ -160,4 +160,3 @@ async def test_pipelines_crud_run_validate(app):
             # Delete pipeline
             del_p = await client.delete("/api/v1/pipelines/etl_flow")
             assert del_p.status_code == 200
-

@@ -1,5 +1,5 @@
 {
-  "name": "@substrate/oidc-bff",
+  "name": "@loamz/oidc-bff",
   "version": "0.1.0",
   "private": true,
   "description": "Authorization-code + PKCE backend-for-frontend session for Keycloak, on the Web Request/Response APIs",

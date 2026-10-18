@@ -13,10 +13,9 @@ from loamz.agents.features.conversations.mcp_apps.model import (
 from loamz.agents.features.conversations.mcp_apps.theme import inject_theme_bridge
 from loamz.agents.features.conversations.threads.service import ThreadsService, threads
 from loamz.agents.kernel.caller import Caller
-from loamz.agents.toolkit import mcp as _mcp_package
 from loamz.data.storage.errors import NotFoundError
 
-APPS_DIR = Path(_mcp_package.__file__).resolve().parent / "apps"
+APPS_DIR = Path(__file__).resolve().parents[3] / "toolkit" / "mcp" / "apps"
 
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; "

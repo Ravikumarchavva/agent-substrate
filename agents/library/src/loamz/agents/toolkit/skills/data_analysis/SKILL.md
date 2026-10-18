@@ -23,8 +23,11 @@ governed data instead of asking for an export:
 2. **Ask SQL for the answer.** In `code_interpreter`:
    ```python
    import loamz.data.client as sd
-   df = sd.sql("SELECT date_trunc('month', ts) AS month, sum(amount) AS revenue "
-               "FROM main.sales.orders WHERE ts >= '2026-01-01' GROUP BY 1 ORDER BY 1")   # polars.DataFrame
+
+   df = sd.sql(
+       "SELECT date_trunc('month', ts) AS month, sum(amount) AS revenue "
+       "FROM main.sales.orders WHERE ts >= '2026-01-01' GROUP BY 1 ORDER BY 1"
+   )  # polars.DataFrame
    ```
    Filter, group and limit **in SQL**; the warehouse is built for it and pulling raw rows into Python is slow
    and refused when large. Filter on the table's partition column (shown by `describe`) so only the

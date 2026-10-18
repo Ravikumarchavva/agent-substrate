@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-from typing import Any
 
 from loamz.agents.kernel.tools import ToolExecutionResult, ToolRisk, ToolType
 from loamz.agents.kernel.types.content import MediaBlock, TextBlock
@@ -52,7 +51,7 @@ class MCPTool:
         client: MCPClient,
         name: str,
         description: str,
-        input_schema: dict[str, Any],
+        input_schema: dict[str, object],
         *,
         risk: ToolRisk = ToolRisk.HIGH,
         idempotent: bool = False,
@@ -77,7 +76,7 @@ class MCPTool:
         self.idempotent = idempotent
         self.client = client
 
-    async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:  # type: ignore[override]
+    async def execute(self, *, ctx: object = None, **kwargs: object) -> ToolExecutionResult:  # type: ignore[override]
         if not self.client.is_connected:
             raise RuntimeError(f"MCP client not connected for tool '{self.name}'")
 

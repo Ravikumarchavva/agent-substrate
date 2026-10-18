@@ -12,9 +12,14 @@ pip install 'loamz-data-client[http2]'   # + HTTP/2 multiplexing for the async c
 ```python
 import loamz.data.client as ld
 
-df = ld.sql("SELECT zone, count(*) AS trips FROM main.nyc.yellow GROUP BY 1")  # polars.DataFrame  [arrow]
-rows = ld.rows("SELECT zone, count(*) AS trips FROM main.nyc.yellow GROUP BY 1")  # JSON rows, no extra
-ld.search("taxi"); ld.describe("main.nyc.yellow")
+df = ld.sql(
+    "SELECT zone, count(*) AS trips FROM main.nyc.yellow GROUP BY 1"
+)  # polars.DataFrame  [arrow]
+rows = ld.rows(
+    "SELECT zone, count(*) AS trips FROM main.nyc.yellow GROUP BY 1"
+)  # JSON rows, no extra
+ld.search("taxi")
+ld.describe("main.nyc.yellow")
 ```
 
 Inside a Loamz code-interpreter sandbox the connection is discovered (`/run/loamz-data`). Elsewhere set

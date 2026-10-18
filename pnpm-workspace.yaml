@@ -1,6 +1,6 @@
 packages:
-  - agents/substrate-ui
-  - data/substrate-data-web
+  - agents/console
+  - data/workspace
   - identity/oidc-bff
 
 allowBuilds:

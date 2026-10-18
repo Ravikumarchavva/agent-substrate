@@ -31,4 +31,3 @@ class PipelineValidationResult(BaseModel):
     pipeline: str
     valid: bool
     errors: list[str] = Field(default_factory=list)
-

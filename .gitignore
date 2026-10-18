@@ -23,7 +23,7 @@ node_modules
 .next
 next-env.d.ts
 *.tsbuildinfo
-data/substrate-data-web/public/monaco/
+data/workspace/public/monaco/
 
 # runtime artifacts
 *.log

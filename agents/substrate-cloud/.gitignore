@@ -1,3 +1,0 @@
-.venv-test/
-# the folder a local run (and the tests that start the app) keep their store and files in
-/data/

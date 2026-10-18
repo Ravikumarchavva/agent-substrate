@@ -412,7 +412,7 @@ services:
   # ── Web ─────────────────────────────────────────────────────────────────────
   agents-console:
     image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/loamz-agents-console:${IMAGE_TAG:-local}
-    build: { context: ../.., dockerfile: deploy/docker/substrate-ui.Dockerfile }
+    build: { context: ../.., dockerfile: deploy/docker/loamz-agents-console.Dockerfile }
     environment:
       BACKEND_API_URL: http://${AGENT_UPSTREAM:-agent-server:8000}
       DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/substrate_ui?sslmode=require
@@ -429,7 +429,7 @@ services:
 
   data-workspace:
     image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/loamz-data-workspace:${IMAGE_TAG:-local}
-    build: { context: ../.., dockerfile: deploy/docker/substrate-data-web.Dockerfile }
+    build: { context: ../.., dockerfile: deploy/docker/loamz-data-workspace.Dockerfile }
     environment:
       DATA_API_URL: http://data-api:8020
       SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
@@ -460,14 +460,15 @@ services:
     volumes: [ "llama-cache:/cache" ]
     restart: unless-stopped
   embedding-reranker:
-    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/embedding-reranker:${IMAGE_TAG:-local}
-    build: { context: ../.., dockerfile: deploy/docker/embedding-reranker.Dockerfile }
+    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/loamz-data:${IMAGE_TAG:-local}
+    build: { context: ../.., dockerfile: deploy/docker/loamz-data.Dockerfile }
     profiles: [ml]
-    command: ["--host", "0.0.0.0", "--port", "8050"]
+    command: ["worker", "--role", "inference", "--host", "0.0.0.0", "--port", "8050"]
     environment:
-      EMBEDDING_RERANKER_PORT: "8050"
-      EMBEDDING_RERANKER_EMBED_SERVER_URL: http://llama-embed:8031
-      EMBEDDING_RERANKER_RERANK_SERVER_URL: http://llama-rerank:8032
+      LOAMZ_DATA_BEHIND_TLS_PROXY: "true"
+      LOAMZ_DATA_INFERENCE_PORT: "8050"
+      LOAMZ_DATA_EMBEDDING_SERVER_URL: http://llama-embed:8031
+      LOAMZ_DATA_RERANK_SERVER_URL: http://llama-rerank:8032
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8050/v1/health', timeout=3)"]
       interval: 15s

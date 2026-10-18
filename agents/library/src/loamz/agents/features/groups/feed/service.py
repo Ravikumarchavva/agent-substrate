@@ -30,4 +30,3 @@ def feed(c: Container) -> FeedService:
 
 
 FeedServiceDep = Annotated[FeedService, None]
-

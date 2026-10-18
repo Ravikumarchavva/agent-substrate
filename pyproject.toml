@@ -5,14 +5,6 @@
 # 3.13 with its own lock (data/document-intelligence/uv.lock) and image.
 [tool.uv.workspace]
 members = [
-    "agents/agent-substrate",
-    "agents/substrate-cloud",
-    "data/substrate-data",
-    "data/substrate-data-client",
-    "data/embedding-reranker",
-    "data/inference-pool",
-    "identity/substrate-identity",
-    # loamz: the rewrite (docs/rewrite/parity.md). The trees above are deleted at the cut-over.
     "data/storage",
     "data/client",
     "data/server",
@@ -20,9 +12,9 @@ members = [
     "agents/library",
     "meta/loamz",
 ]
-exclude = ["data/document-intelligence"]
+exclude = ["data/reader"]
 
-# Indexes are read from the workspace root only. The PaddleOCR indexes live with document-intelligence.
+# Indexes are read from the workspace root only.
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
@@ -30,15 +22,20 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
-agent-substrate = { workspace = true }
-inference-pool = { workspace = true }
-substrate-data-client = { workspace = true }
-substrate-identity = { workspace = true }
 loamz-data-storage = { workspace = true }
 loamz-data-client = { workspace = true }
 loamz-data-server = { workspace = true }
 loamz-identity = { workspace = true }
 loamz-agents = { workspace = true }
+loamz = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.0",
+    "import-linter>=2.11",
+    "pytest>=9.0",
+    "pytest-asyncio>=1.4",
+]
 
 # One style for every loamz package (packages without their own [tool.ruff] inherit this).
 [tool.ruff]

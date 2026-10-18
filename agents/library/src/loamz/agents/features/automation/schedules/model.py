@@ -77,4 +77,3 @@ class ScheduledTaskParseResponse(BaseModel):
 
 class ScheduledTaskFeedbackRequest(BaseModel):
     content: str
-

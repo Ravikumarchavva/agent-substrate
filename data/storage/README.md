@@ -7,7 +7,7 @@ vectors, full-text search, memory and documents. Python 3.13 and 3.14.
 from loamz.data.storage import Storage
 from loamz.data.storage.documents import Library, Reader
 
-storage = Storage.at("./.loamz")                  # or Storage(postgres(dsn, schema="acme"), "/var/lib/loamz")
+storage = Storage.at("./.loamz")  # or Storage(postgres(dsn, schema="acme"), "/var/lib/loamz")
 await storage.files.upload("tenants/acme/a.txt", b"hello")
 await storage.memory.save(record)
 library = Library(storage.database, storage.files)
